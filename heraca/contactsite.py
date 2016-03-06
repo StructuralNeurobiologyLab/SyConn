@@ -23,7 +23,6 @@ import copy
 from processing.axoness import predict_axoness_from_nodes
 from processing.synapticity import parse_synfeature_from_node
 import os
-from processing.mapper import feature_valid_syns, calc_syn_dict
 from processing.learning_rfc import start_multiprocess
 import gc
 __author__ = 'pschuber'
@@ -283,3 +282,158 @@ def convert_to_standard_cs_name(name):
     new_name5 = 'skel_%s_%s_cs%s' % (skel2, skel1, cs_nb)
     new_name6 = 'skel_%s_%s_cs%s' % (skel1, skel2, cs_nb)
     return [new_name1, new_name2, new_name3, new_name4, new_name5, new_name6]
+
+
+def feature_valid_syns(cs_dir, only_az=True, only_syn=True, all_contacts=False):
+    """
+    Returns the features of valid synapses predicted by synapse rfc.
+    :param cs_dir: Path to computed contact sites.
+    :param only_az: Return feature of all contact sites with mapped az.
+    :param only_syn: Returns feature only if synapse was predicted
+    :param all_contacts: Use all contact sites for feature extraction
+    :return: array of features, array of contact site IDS, boolean array of syn-
+    apse prediction
+    """
+    cs_fpaths = []
+    if only_az:
+        search_folder = ['cs_az/', 'cs_p4_az/']
+    elif all_contacts:
+        search_folder = ['cs_az/', 'cs_p4_az/', 'cs/', 'cs_p4/']
+    else:
+        search_folder = ['cs/', 'cs_p4/']
+    sample_list_len = []
+    for k, ending in enumerate(search_folder):
+        curr_dir = cs_dir+ending
+        curr_fpaths = get_filepaths_from_dir(curr_dir, ending='nml')
+        cs_fpaths += curr_fpaths
+        sample_list_len.append(len(curr_fpaths))
+    print "Collecting results of synapse mapping. (%d CS)" % len(cs_fpaths)
+    nb_cpus = cpu_count()
+    pool = Pool(processes=nb_cpus)
+    m = Manager()
+    q = m.Queue()
+    params = [(sample, q) for sample in cs_fpaths]
+    result = pool.map_async(readout_cs_info, params)
+    #result = map(readout_cs_info, params)
+    # monitor loop
+    while True:
+        if result.ready():
+            break
+        else:
+            size = float(q.qsize())
+            stdout.write("\r%0.2f" % (size / len(params)))
+            stdout.flush()
+            time.sleep(1)
+    res = result.get()
+    pool.close()
+    pool.join()
+    res = arr(res)
+    non_instances = arr([isinstance(el, np.ndarray) for el in res[:,0]])
+    cs_infos = res[non_instances]
+    features = arr([el.astype(np.float) for el in cs_infos[:,0]], dtype=np.float)
+    if not only_az or not only_syn or all_contacts:
+        syn_pred = np.ones((len(features), ))
+    else:
+        rfc_syn = joblib.load('/lustre/pschuber/gt_syn_mapping/rfc/rfc_syn.pkl')
+        syn_pred = rfc_syn.predict(features)
+    axoness_info = cs_infos[:, 1]#[syn_pred.astype(np.bool)]
+    error_cnt = np.sum(~non_instances)
+    #features = features[syn_pred.astype(np.bool)]
+    print "Found %d synapses with axoness information. Gathering all" \
+          " contact sites with valid pre/pos information." % len(axoness_info)
+    syn_fpaths = arr(cs_fpaths)[non_instances][syn_pred.astype(np.bool)]
+    false_cnt = np.sum(~syn_pred.astype(np.bool))
+    true_cnt = np.sum(syn_pred)
+    print "\nTrue synapses:", true_cnt / float(true_cnt+false_cnt)
+    print "False synapses:", false_cnt / float(true_cnt+false_cnt)
+    print "error count:", error_cnt
+    return features, axoness_info, syn_pred.astype(np.bool)
+
+
+def readout_cs_info(args):
+    """
+    Helper function of feature_valid_syns
+    :param args: tuple of path to file and queue
+    :return: array of synapse features, str contact site ID
+    """
+    cspath, q = args
+    if q is not None:
+        q.put(1)
+    cs = read_pair_cs(cspath)
+    for node in cs.getNodes():
+        if 'center' in node.getComment():
+            feat = parse_synfeature_from_node(node)
+            break
+    return feat, cs.getComment()
+
+
+def calc_syn_dict(features, axoness_info, get_all=False):
+    """
+    Creates dictionary of synapses. Keys are ids of pre cells and values are
+    dictionaries of corresponding synapses with post cell ids.
+    :param features: synapse feature
+    :param axoness_info: string containing axoness information of cells
+    :return: filtered features and axoness info, syn_dict and list of all post
+    cell ids
+    """
+    """
+    """
+    total_size = float(len(axoness_info))
+    ax_ax_cnt = 0
+    den_den_cnt = 0
+    all_post_ids = []
+    pre_dict = {}
+    val_syn_ixs = []
+    valid_syn_array = np.ones_like(features)
+    axoness_dict = {}
+    for k, ax_info in enumerate(axoness_info):
+        stdout.write("\r%0.2f" % (k / total_size))
+        stdout.flush()
+        cell1, cell2 = re.findall('(\d+)axoness(\d+)', ax_info)
+        cs_nb = re.findall('cs(\d+)', ax_info)[0]
+        cell_ids = arr([cell1[0], cell2[0]], dtype=np.int)
+        cell_axoness = arr([cell1[1], cell2[1]], dtype=np.int)
+        axoness_entry = {str(cell1[0]): cell1[1], str(cell2[0]): cell2[1]}
+        axoness_dict[cs_nb + '_' + cell1[0] + '_' + cell2[0]] = axoness_entry
+        if cell_axoness[0] == cell_axoness[1]:
+            if cell_axoness[0] == 1:
+                ax_ax_cnt += 1
+                # if ax_ax_cnt < 20:
+                #     print "AX:", syn_fpaths[k]
+            else:
+                den_den_cnt += 1
+                # if den_den_cnt < 20:
+                #     print "den:", syn_fpaths[k]
+                valid_syn_array[k] = 0
+                if not get_all:
+                    continue
+        val_syn_ixs.append(k)
+        pre_ix = np.argmax(cell_axoness)
+        pre_id = cell_ids[pre_ix]
+        if pre_ix == 0:
+            post_ix = 1
+        else:
+            post_ix = 0
+        post_id = cell_ids[post_ix]
+        all_post_ids += [post_id]
+        syn_dict = {}
+        syn_dict['post_id'] = post_id
+        syn_dict['post_axoness'] = cell_axoness[post_ix]
+        syn_dict['cs_area'] = features[k, 1]
+        syn_dict['az_size_abs'] = features[k, 2]
+        syn_dict['az_size_rel'] = features[k, 3]
+        if pre_id in pre_dict.keys():
+            syns = pre_dict[pre_id]
+            if post_id in syns.keys():
+                syns[post_id]['cs_area'] += features[k, 1]
+                syns[post_id]['az_size_abs'] += features[k, 2]
+            else:
+                syns[post_id] = syn_dict
+        else:
+            syns = {}
+            syns[post_id] = syn_dict
+            pre_dict[pre_id] = syns
+    print "Axon-Axon synapse:", ax_ax_cnt
+    print "Dendrite-Dendrite synapse", den_den_cnt
+    return features[val_syn_ixs], axoness_info[val_syn_ixs], pre_dict,\
+           all_post_ids, valid_syn_array, axoness_dict

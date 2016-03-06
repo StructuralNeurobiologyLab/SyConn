@@ -470,3 +470,71 @@ def create_skel(dh, skel_source, id=None, soma=None):
     skel._mem_path = dh._mem_path
     skel.nb_cpus = dh.nb_cpus
     return skel
+
+
+def helper_get_voxels(obj):
+    """
+    Helper function to receive object voxels.
+    :param obj: SegmentationObject
+    :return: array voxels
+    """
+    try:
+        voxels = obj.voxels
+    except KeyError:
+        return np.array([])
+    return voxels
+
+
+def helper_get_hull_voxels(obj):
+    """
+    Helper function to receive object hull voxels.
+    :param obj: SegmentationObject
+    :return: array hull voxels
+    """
+
+    return obj.hull_voxels
+
+
+def hull2text(hull_coords, normals, path):
+    """
+    Writes hull coordinates and normals to xyz file. Each line corresponds to
+    coordinates and normal vector of one point x y z n_x n_y n_z.
+    :param hull_coords: array
+    :param normals: array
+    :param path: str
+    """
+    print "Writing hull to .xyz file.", path
+    # add ray-end-points to nml and to txt file (incl. normals)
+    file = open(path, 'wb')
+    for i in range(hull_coords.shape[0]):
+        end_point = hull_coords[i]
+        normal = normals[i]
+        file.write("%d %d %d %0.4f %0.4f %0.4f\n" %
+                   (end_point[0], end_point[1], end_point[2], normal[0],
+                    normal[1], normal[2]))
+    file.close()
+
+
+def obj_hull2text(id_list, hull_coords_list, path):
+    """
+    Writes object hull coordinates and corresponding object ids to txt file.
+    Each line corresponds to id and coordinate vector of one object:
+     id x y z
+    :param id_list: array
+    :param hull_coords_list: array
+    :param path: str
+    """
+    print "Writing object hull to .txt file.", path
+    # add ray-end-points to nml and to txt file (incl. normals)
+    file = open(path, 'wb')
+    for i in range(len(hull_coords_list)):
+        coord = hull_coords_list[i]
+        file.write("%d %d %d\n" % (coord[0], coord[1], coord[2]))
+    file.close()
+    if id_list == []:
+        return
+    file = open(path[:-4]+'_id.txt', 'wb')
+    for i in range(len(hull_coords_list)):
+        id = id_list[i]
+        file.write("%d\n" % id)
+    file.close()

@@ -16,6 +16,7 @@ except:
     from dataset_utils import knossosDataset as KnossosDataset
 import networkx as nx
 from heraca.utils.math import *
+from hull_extraction import outlier_detection
 from ChunkUtils import segmentationDataset
 from NewSkeleton import SkeletonNode
 import NewSkeletonUtils as nsu
@@ -55,6 +56,77 @@ from synapticity import parse_synfeature_from_node
 from learning_rfc import start_multiprocess
 import gc
 import socket
+
+
+def node_id2key(segdataobject, node_ids, filter_size):
+    """
+    Maps list indices in node_ids to keys of SegmentationObjects. Filters
+    objects bigger than filter_size.
+    :param segdataobject: SegmentationDataset of object type currently processed
+    :param node_ids: List of list containing annotated object ids for each node
+    :param filter_size: int minimum number of voxels of object
+    :return: List of objects keys
+    """
+
+    for node in node_ids:
+        for obj in node:
+            if segdataobject.sizes[obj] < filter_size:
+                node[node.index(obj)] = -1
+            else:
+                key = segdataobject.ids[obj]
+                node[node.index(obj)] = key
+    node_ids = [filter(lambda a: a != -1, node) for node in node_ids]
+    return node_ids
+
+
+def syns_btw_annos(anno_a, anno_b, max_hull_dist, concom_dist):
+    """
+    Computes contact sites between two annotation objects and returns hull
+     points of both skeletons near contact site.
+    :param anno_a: Annotation object A
+    :param anno_b: Annotation object B
+    :param max_hull_dist: Maximum distance between skeletons in nm
+    :return: List of hull coordinates for each contact site.
+    """
+    hull_a = anno_a._hull_coords
+    hull_b = anno_b._hull_coords
+    tree_a = spatial.cKDTree(hull_a)
+    tree_b = spatial.cKDTree(hull_b)
+    if len(hull_a) == 0 or len(hull_b) == 0:
+        print "One skeleton hull is empty!! Skipping pair."
+        return [], []
+    contact_ids = tree_a.query_ball_tree(tree_b, max_hull_dist)
+    num_neighbours = arr([len(sublist) for sublist in contact_ids])
+    contact_coords_a = hull_a[num_neighbours>0]
+    contact_ids_b = set([id for sublist in contact_ids for id in sublist])
+    contact_coords_b = hull_b[list(contact_ids_b)]
+    if contact_coords_a.ndim == 1:
+        contact_coords_a = contact_coords_a[None, :]
+    if contact_coords_b.ndim == 1:
+        contact_coords_b = contact_coords_a[None, :]
+    contact_coords = np.concatenate((contact_coords_a, contact_coords_b), axis=0)
+    if contact_coords.shape[0] >= 0.3*(len(hull_a)+len(hull_b)):
+        print "Found too many contact_coords, " \
+              "assuming similar skeleton comparison."
+        return [], []
+    if contact_coords.shape[0] == 0:
+        return [], []
+    pdists = spatial.distance.pdist(contact_coords)
+    pdists[pdists > concom_dist] = 0
+    pdists = sparse.csr_matrix(spatial.distance.squareform(pdists))
+    nb_cc, labels = sparse.csgraph.connected_components(pdists)
+    cs_list = []
+    for label in set(labels):
+        curr_label_ixs = labels == label
+        cs_list.append(contact_coords[curr_label_ixs])
+    tree_a_b = spatial.cKDTree(np.concatenate((hull_a, hull_b), axis=0))
+    contact_site_coord_ids = []
+    min_id_b = len(hull_a)
+    for cs in cs_list:
+        ids_temp = tree_a_b.query(cs, 1)[1]
+        in_b = arr(ids_temp>=min_id_b, dtype=np.bool)
+        contact_site_coord_ids.append(in_b)
+    return cs_list, contact_site_coord_ids
 
 
 class SkeletonMapper(object):
@@ -927,6 +999,62 @@ class SkeletonMapper(object):
               (len(mito)+len(p4)+len(az), self.id)
         return mito, p4, az
 
+
+def get_radii_hull(args):
+    """Wrapper-function for point cloud extraction from membrane prediction.
+    Gets a bounding box with nodes, loads the membrane prediction for these
+    and then calculates the radius and hull at each skeleton node.
+    """
+    # node attribute contains skel_interpolation, orthogonal plane and
+    # bool if node is end node
+    box, node_attr = args[0]
+    q = args[1]
+    scaling = args[2]
+    mem_path = args[3]
+    nb_rays = args[4]
+    thresh_factor = args[5]
+    max_dist_mult = args[6]
+    kd = KnossosDataset()
+    kd.initialize_from_knossos_path(mem_path)
+    mem_shape = kd.boundary
+    ray_buffer = arr([2000, 2000, 2000])/scaling
+    prop_offset = np.max([np.min(box, axis=0) - ray_buffer,
+                          [0,0,0]], axis=0).astype(np.int)
+    prop_size = np.min([np.max(box, axis=0) + ray_buffer, mem_shape],
+                       axis=0) - prop_offset
+    assert np.prod(prop_size) < 10e9, "Bounding box too big!"
+    mem = kd.from_raw_cubes_to_matrix(prop_size.astype(np.int32),
+                                      prop_offset.astype(np.int32),
+                                      show_progress=False)
+    # thresholding membrane!!
+    mem[mem <= 0.4*mem.max()] = 0
+    #mem = pre_process_volume(mem)
+    mem = mem.astype(np.uint8)
+    threshold = mem.max() * thresh_factor
+    #iterate over every node
+    avg_radius_list = []
+    all_points = []
+    ids = []
+    val_list = []
+    todo_list = zip(list(box), [nb_rays] * len(box), list(node_attr))
+    for el in todo_list:
+        try:
+            radius, ix, membrane_points, vals = ray_casting.ray_casting(
+                el[0], el[1], el[2][0], el[2][1], el[2][2],
+                scaling, threshold, prop_offset, mem, el[2][3], max_dist_mult)
+        except IndexError, e:
+            print "Problem at ray_casting part.", el
+            print e
+            print mem.shape
+        all_points.append(arr(membrane_points, dtype=np.float32))
+        avg_radius_list.append(radius)
+        ids.append(ix)
+        val_list.append(vals)
+    q.put(ids)
+    del(mem)
+    return avg_radius_list, ids, all_points, val_list
+
+
 # SynapseMapper
 
 def read_pair_cs(pair_path):
@@ -1368,156 +1496,31 @@ def max_nodes_in_path(anno, source_node, max_number):
     return reachable_nodes
 
 
-def feature_valid_syns(cs_dir, only_az=True, only_syn=True, all_contacts=False):
+def calc_overlap(point_list_a, point_list_b, max_dist):
     """
-    Returns the features of valid synapses predicted by synapse rfc.
-    :param cs_dir: Path to computed contact sites.
-    :param only_az: Return feature of all contact sites with mapped az.
-    :param only_syn: Returns feature only if synapse was predicted
-    :param all_contacts: Use all contact sites for feature extraction
-    :return: array of features, array of contact site IDS, boolean array of syn-
-    apse prediction
+    Calculates the portion of points in list b being similar (distance max_dist)
+    to points from list a.
+    :param point_list_a:
+    :param point_list_b:
+    :param max_dist:
+    :return: Portion of similar points over number of points of list b and vice
+    versa, overlap area in nm^2, centercoord of overlap area and coord_list of
+    overlap points in point_list_b
     """
-    cs_fpaths = []
-    if only_az:
-        search_folder = ['cs_az/', 'cs_p4_az/']
-    elif all_contacts:
-        search_folder = ['cs_az/', 'cs_p4_az/', 'cs/', 'cs_p4/']
-    else:
-        search_folder = ['cs/', 'cs_p4/']
-    sample_list_len = []
-    for k, ending in enumerate(search_folder):
-        curr_dir = cs_dir+ending
-        curr_fpaths = get_filepaths_from_dir(curr_dir, ending='nml')
-        cs_fpaths += curr_fpaths
-        sample_list_len.append(len(curr_fpaths))
-    print "Collecting results of synapse mapping. (%d CS)" % len(cs_fpaths)
-    nb_cpus = cpu_count()
-    pool = Pool(processes=nb_cpus)
-    m = Manager()
-    q = m.Queue()
-    params = [(sample, q) for sample in cs_fpaths]
-    result = pool.map_async(readout_cs_info, params)
-    #result = map(readout_cs_info, params)
-    # monitor loop
-    while True:
-        if result.ready():
-            break
-        else:
-            size = float(q.qsize())
-            stdout.write("\r%0.2f" % (size / len(params)))
-            stdout.flush()
-            time.sleep(1)
-    res = result.get()
-    pool.close()
-    pool.join()
-    res = arr(res)
-    non_instances = arr([isinstance(el, np.ndarray) for el in res[:,0]])
-    cs_infos = res[non_instances]
-    features = arr([el.astype(np.float) for el in cs_infos[:,0]], dtype=np.float)
-    if not only_az or not only_syn or all_contacts:
-        syn_pred = np.ones((len(features), ))
-    else:
-        rfc_syn = joblib.load('/lustre/pschuber/gt_syn_mapping/rfc/rfc_syn.pkl')
-        syn_pred = rfc_syn.predict(features)
-    axoness_info = cs_infos[:, 1]#[syn_pred.astype(np.bool)]
-    error_cnt = np.sum(~non_instances)
-    #features = features[syn_pred.astype(np.bool)]
-    print "Found %d synapses with axoness information. Gathering all" \
-          " contact sites with valid pre/pos information." % len(axoness_info)
-    syn_fpaths = arr(cs_fpaths)[non_instances][syn_pred.astype(np.bool)]
-    false_cnt = np.sum(~syn_pred.astype(np.bool))
-    true_cnt = np.sum(syn_pred)
-    print "\nTrue synapses:", true_cnt / float(true_cnt+false_cnt)
-    print "False synapses:", false_cnt / float(true_cnt+false_cnt)
-    print "error count:", error_cnt
-    return features, axoness_info, syn_pred.astype(np.bool)
-
-
-def readout_cs_info(args):
-    """
-    Helper function of feature_valid_syns
-    :param args: tuple of path to file and queue
-    :return: array of synapse features, str contact site ID
-    """
-    cspath, q = args
-    if q is not None:
-        q.put(1)
-    cs = read_pair_cs(cspath)
-    for node in cs.getNodes():
-        if 'center' in node.getComment():
-            feat = parse_synfeature_from_node(node)
-            break
-    return feat, cs.getComment()
-
-
-def calc_syn_dict(features, axoness_info, get_all=False):
-    """
-    Creates dictionary of synapses. Keys are ids of pre cells and values are
-    dictionaries of corresponding synapses with post cell ids.
-    :param features: synapse feature
-    :param axoness_info: string containing axoness information of cells
-    :return: filtered features and axoness info, syn_dict and list of all post
-    cell ids
-    """
-    """
-    """
-    total_size = float(len(axoness_info))
-    ax_ax_cnt = 0
-    den_den_cnt = 0
-    all_post_ids = []
-    pre_dict = {}
-    val_syn_ixs = []
-    valid_syn_array = np.ones_like(features)
-    axoness_dict = {}
-    for k, ax_info in enumerate(axoness_info):
-        stdout.write("\r%0.2f" % (k / total_size))
-        stdout.flush()
-        cell1, cell2 = re.findall('(\d+)axoness(\d+)', ax_info)
-        cs_nb = re.findall('cs(\d+)', ax_info)[0]
-        cell_ids = arr([cell1[0], cell2[0]], dtype=np.int)
-        cell_axoness = arr([cell1[1], cell2[1]], dtype=np.int)
-        axoness_entry = {str(cell1[0]): cell1[1], str(cell2[0]): cell2[1]}
-        axoness_dict[cs_nb + '_' + cell1[0] + '_' + cell2[0]] = axoness_entry
-        if cell_axoness[0] == cell_axoness[1]:
-            if cell_axoness[0] == 1:
-                ax_ax_cnt += 1
-                # if ax_ax_cnt < 20:
-                #     print "AX:", syn_fpaths[k]
-            else:
-                den_den_cnt += 1
-                # if den_den_cnt < 20:
-                #     print "den:", syn_fpaths[k]
-                valid_syn_array[k] = 0
-                if not get_all:
-                    continue
-        val_syn_ixs.append(k)
-        pre_ix = np.argmax(cell_axoness)
-        pre_id = cell_ids[pre_ix]
-        if pre_ix == 0:
-            post_ix = 1
-        else:
-            post_ix = 0
-        post_id = cell_ids[post_ix]
-        all_post_ids += [post_id]
-        syn_dict = {}
-        syn_dict['post_id'] = post_id
-        syn_dict['post_axoness'] = cell_axoness[post_ix]
-        syn_dict['cs_area'] = features[k, 1]
-        syn_dict['az_size_abs'] = features[k, 2]
-        syn_dict['az_size_rel'] = features[k, 3]
-        if pre_id in pre_dict.keys():
-            syns = pre_dict[pre_id]
-            if post_id in syns.keys():
-                syns[post_id]['cs_area'] += features[k, 1]
-                syns[post_id]['az_size_abs'] += features[k, 2]
-            else:
-                syns[post_id] = syn_dict
-        else:
-            syns = {}
-            syns[post_id] = syn_dict
-            pre_dict[pre_id] = syns
-    print "Axon-Axon synapse:", ax_ax_cnt
-    print "Dendrite-Dendrite synapse", den_den_cnt
-    return features[val_syn_ixs], axoness_info[val_syn_ixs], pre_dict,\
-           all_post_ids, valid_syn_array, axoness_dict
+    point_list_a = arr(point_list_a)
+    point_list_b = arr(point_list_b)
+    tree_a = spatial.cKDTree(point_list_a)
+    near_ids = tree_a.query_ball_point(point_list_b, max_dist)
+    total_id_list = list(set([id for sublist in near_ids for id in sublist]))
+    overlap_area = convex_hull_area(point_list_a[total_id_list]) / 1.e6
+    nb_unique_neighbors = np.sum([1 for sublist in near_ids if len(sublist) > 0])
+    portion_b = nb_unique_neighbors / float(len(point_list_b))
+    tree_b = spatial.cKDTree(point_list_b)
+    near_ids = tree_b.query_ball_point(point_list_a, max_dist)
+    nb_unique_neighbors = np.sum([1 for sublist in near_ids if len(sublist) > 0])
+    total_id_list = list(set([id for sublist in near_ids for id in sublist]))
+    portion_a = nb_unique_neighbors / float(len(point_list_a))
+    near_ixs = [ix for sublist in near_ids for ix in sublist]
+    center_coord = np.mean(arr(point_list_b)[arr(near_ixs)], axis=0)
+    return portion_b, portion_a, overlap_area, center_coord,\
+           point_list_b[total_id_list]

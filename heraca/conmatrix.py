@@ -2,14 +2,6 @@
 __author__ = 'pschuber'
 import matplotlib
 matplotlib.use('Agg')
-try:
-    from NewSkeleton import annotationUtils as au
-except:
-    import annotationUtils as au
-try:
-    from NewSkeleton.NewSkeletonUtils import annotation_from_nodes
-except:
-    from NewSkeletonUtils import annotation_from_nodes
 import os
 import re
 import numpy as np
@@ -20,9 +12,15 @@ from sklearn.metrics import precision_recall_curve
 import scipy.spatial
 import community
 import networkx as nx
-import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn.apionly as sns
+from mpl_toolkits.axes_grid1 import make_axes_locatable
+import seaborn as sb
+from matplotlib import colors
+from matplotlib import pyplot as pp
+from matplotlib import gridspec
 from NewSkeleton import NewSkeleton
-from processing.mapper import feature_valid_syns, calc_syn_dict
+from contactsite import feature_valid_syns, calc_syn_dict
 from processing.learning_rfc import plot_pr
 from contactsite import convert_to_standard_cs_name
 from processing.cell_types import load_celltype_feats,\
@@ -31,18 +29,18 @@ from processing.cell_types import load_celltype_feats,\
 from utils.datahandler import get_skelID_from_path, get_filepaths_from_dir,\
  write_obj2pkl, load_pkl2obj
 from processing.learning_rfc import cell_classification
-import seaborn.apionly as sns
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-import seaborn as sb
-from matplotlib import colors
 try:
     from NewSkeleton import annotationUtils as au
 except:
     import annotationUtils as au
-import matplotlib.gridspec as gridspec
-import pandas as pd
-from matplotlib import pyplot as pp
-from matplotlib import gridspec
+try:
+    from NewSkeleton import annotationUtils as au
+except:
+    import annotationUtils as au
+try:
+    from NewSkeleton.NewSkeletonUtils import annotation_from_nodes
+except:
+    from NewSkeletonUtils import annotation_from_nodes
 
 
 def type_sorted_wiring(gt_path='/lustre/pschuber/gt_cell_types/',
