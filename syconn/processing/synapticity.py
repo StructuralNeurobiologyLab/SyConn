@@ -1,23 +1,16 @@
-__author__ = 'philipp'
-try:
-    from NewSkeleton import annotationUtils as au
-except:
-    import annotationUtils as au
-try:
-    from NewSkeleton.NewSkeletonUtils import annotation_from_nodes
-except:
-    from NewSkeletonUtils import annotation_from_nodes
 import os
 import re
-import numpy as np
-from heraca.utils.datahandler import get_filepaths_from_dir
-from multiprocessing import Pool, Manager, cpu_count
-from sys import stdout
 import time
+from sys import stdout
+import numpy as np
+from multiprocessing import Pool, Manager, cpu_count
 from numpy import array as arr
 from scipy import spatial
-from NewSkeleton import NewSkeleton, SkeletonAnnotation
+
 from learning_rfc import save_train_clf
+from syconn.utils.datahandler import get_filepaths_from_dir
+from syconn.utils.newskeleton import NewSkeleton, SkeletonAnnotation
+
 try:
     import DatasetUtils
 except:
@@ -29,6 +22,8 @@ except:
         from dataset_utils import knossosDataset as kd
     except:
         from knossos_utils import KnossosDataset as kd
+
+__author__ = 'philipp'
 
 
 def save_synapse_clf(gt_path, clf_used='rf'):

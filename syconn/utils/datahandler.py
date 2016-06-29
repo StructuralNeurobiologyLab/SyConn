@@ -1,51 +1,44 @@
-__author__ = 'pschuber'
-try:
-    from NewSkeleton import annotationUtils as au
-except:
-    import annotationUtils as au
-try:
-    from NewSkeleton.NewSkeletonUtils import annotation_from_nodes
-except:
-    from NewSkeletonUtils import annotation_from_nodes
 import os
 from multiprocessing import cpu_count
+
+from syconn.utils import annotationUtils as au
+
 try:
     import ChunkUtils as cu
 except:
     import Sven.functional.ChunkUtils as cu
-from heraca.utils.math import *
+from basics import *
 import zipfile
 import numpy as np
-from NewSkeleton import NewSkeleton, SkeletonAnnotation
+from syconn.utils.newskeleton import SkeletonAnnotation
+from syconn.processing.mapper import SkeletonMapper
 import tempfile
 from numpy import array as arr
 import shutil
 from scipy import spatial
+__author__ = 'pschuber'
 
 
-class DataHandlerObject(object):
+class DataHandler(object):
     """Initialized with paths or cell components (SegmentationObjects), path to
     membrane prediction and source path of traced skeletons (to be computed).
     DataHandler is needed for further processing.
     :param datapath: Used as output path for all computations
     """
+    def __init__(self, wd, scaling=(9., 9., 20.)):
 
-    def __init__(self, working_dir, scaling=(9., 9., 20.), load_obj=False):
-        p4_source = working_dir + '/ultrastructures/obj_p4_1037_3d_5/'
-        az_source = working_dir + '/ultrastructures/obj_az_1037_3d_3/'
-        mito_source = working_dir + '/ultrastructures/obj_mito_1037_3d_8/'
-        skeleton_source = working_dir + '/tracings/'
-        mempath = working_dir + "/chunkdatasets/j0126_3d_rrbarrier/"
-        datapath = working_dir + '/neurons/m_consensi_rr/'
+        p4_source = wd + '/obj_p4/'
+        az_source = wd + '/obj_az'
+        mito_source = wd + '/obj_mito/',
+        skeleton_source = wd + '/tracings/',
+        mempath = "/lustre/sdorkenw/j0126_3d_rrbarrier/", #TODO
+        datapath = wd + '/neurons/'
         self.nb_cpus = cpu_count()
-        self._data_path = datapath
-        self._skeleton_path = skeleton_source
+        self.data_path = datapath
+        self.skeleton_path = skeleton_source
         if not os.path.exists(datapath):
             os.makedirs(datapath)
-        for folder in ['nml_obj/']:
-            if not os.path.exists(datapath+folder):
-                os.makedirs(datapath+folder)
-        self._mem_path = mempath
+        self.mem_path = mempath
         self.scaling = arr(scaling)
         self.skeletons = {}
         self.mem = None
@@ -53,35 +46,16 @@ class DataHandlerObject(object):
         object_dict = {0: "mitos", 1: "p4", 2: "az"}
         objects = [None, None, None]
         for i, source in enumerate([mito_source, p4_source, az_source]):
-            try:
-                if type(source) is str:
-                    object = cu.load_dataset(source)
-                    object.init_properties()
-                    print "Initialized %s objects." % object_dict[i]
-                else:
-                    object = source
-                objects[i] = object
-            except Exception, e:
-                print e
-                #print "Could not initialize SegmentationDataObjects."
+            if type(source) is str:
+                obj = cu.load_dataset(source)
+                obj.init_properties()
+                print "Initialized %s objects." % object_dict[i]
+            else:
+                obj = source
+            objects[i] = obj
         self.mitos = objects[0]
         self.p4 = objects[1]
         self.az = objects[2]
-
-
-def dh_gt():
-    """
-    Wrapper function to initialize DataHandler for groundtruth evaluation.
-    :return: DataHandler object
-    """
-    dest_path='/home/pschuber/data/gt/'
-    p4path='/lustre/temp/sdorkenw/j0126_paper/obj_p4_37_gen4/'
-    azpath='/lustre/temp/sdorkenw/j0126_paper/obj_az_37_gen4/'
-    mitopath='/lustre/temp/sdorkenw/j0126_paper/obj_mito_37_gen4/'
-    mempath="/lustre/sdorkenw/j0126_membrane/"
-    dh = DataHandlerObject(datapath=dest_path, p4_source=p4path,
-                      az_source=azpath, mito_source=mitopath, mempath=mempath)
-    return dh
 
 
 def load_ordered_mapped_skeleton(path):
@@ -107,7 +81,6 @@ def load_ordered_mapped_skeleton(path):
             c = anno.getComment()
             if c == '':
                 continue
-            #print c, anno_dict[c], len(anno.getNodes())
             if 'p4' in c:
                 c = 'p4'
             elif 'az' in c:
@@ -137,6 +110,8 @@ def load_files_from_kzip(path, load_mitos):
     """
     coord_list = [np.zeros((0, 3)), np.zeros((0, 3)),
                   np.zeros((0, 3)), np.zeros((0, 3))]
+    hull_normals = [np.zeros((0, 3)), np.zeros((0, 3)),
+                  np.zeros((0, 3)), np.zeros((0, 3))]
     # id_list of cell objects
     id_list = [np.zeros((0, )), np.zeros((0, )), np.zeros((0, ))]
     zf = zipfile.ZipFile(path, 'r')
@@ -154,7 +129,7 @@ def load_files_from_kzip(path, load_mitos):
             data = data.reshape(data.shape[0]/3, 3)
         coord_list[i] = data.astype(np.uint32)
     for i, filename in enumerate(['mitos_id.txt', 'p4_id.txt', 'az_id.txt']):
-        if i == 0 and load_mitos != True:
+        if i == 0 and load_mitos is not True:
             continue
         data = np.fromstring(zf.read(filename), sep=' ')
         if data[0] == -1:
@@ -200,31 +175,38 @@ def load_anno_list(nml_list, load_mitos=True, append_obj=True):
 
 
 def load_mapped_skeleton(path, append_obj, load_mitos):
-        try:
-            mapped_skel = load_ordered_mapped_skeleton(path)
-        except IOError as e:
-            print "Skipped", path
-            print e
-            return
-        if append_obj:
-            skel = mapped_skel[0]
-            if 'k.zip' in os.path.basename(path):
-                path = path[:-5]
-            if 'nml' in os.path.basename(path):
-                path = path[:-3]
-            coord_list, id_list, hull_normals = load_files_from_kzip(path + 'k.zip',
-                                                                     load_mitos)
-            mito_hull_ids, p4_hull_ids, az_hull_ids = id_list
-            hull, mitos, p4, az = coord_list
-            skel._hull_coords = hull
-            skel.mito_hull_coords = mitos
-            skel.mito_hull_ids = mito_hull_ids
-            skel.p4_hull_coords = p4
-            skel.p4_hull_ids = p4_hull_ids
-            skel.az_hull_coords = az
-            skel.az_hull_ids = az_hull_ids
-            skel._hull_normals = hull_normals
-        return mapped_skel
+    """
+
+    :param path:
+    :param append_obj:
+    :param load_mitos:
+    :return:
+    """
+    try:
+        mapped_skel = load_ordered_mapped_skeleton(path)
+    except IOError as e:
+        print "Skipped", path
+        print e
+        return
+    if append_obj:
+        skel = mapped_skel[0]
+        if 'k.zip' in os.path.basename(path):
+            path = path[:-5]
+        if 'nml' in os.path.basename(path):
+            path = path[:-3]
+        coord_list, id_list, hull_normals = \
+            load_files_from_kzip(path + 'k.zip', load_mitos)
+        mito_hull_ids, p4_hull_ids, az_hull_ids = id_list
+        hull, mitos, p4, az = coord_list
+        skel._hull_coords = hull
+        skel.mito_hull_coords = mitos
+        skel.mito_hull_ids = mito_hull_ids
+        skel.p4_hull_coords = p4
+        skel.p4_hull_ids = p4_hull_ids
+        skel.az_hull_coords = az
+        skel.az_hull_ids = az_hull_ids
+        skel._hull_normals = hull_normals
+    return mapped_skel
 
 
 def get_filepaths_from_dir(dir, ending='k.zip'):
@@ -234,13 +216,11 @@ def get_filepaths_from_dir(dir, ending='k.zip'):
     :param ending: str Ending of files
     :return: list of paths to files
     """
-    files = [os.path.join(dir, f) for f in
-                next(os.walk(dir))[2] if ending in f]
+    files = [os.path.join(dir, f) for f in next(os.walk(dir))[2] if ending in f]
     return files
 
 
-def get_paths_of_skelID(id_list, traced_skel_dir='/lustre/pschuber'
-                                '/consensi_fuer_joergen/consensi_fuer_phil/'):
+def get_paths_of_skelID(id_list, traced_skel_dir):
     """
     Gather paths to kzip of skeletons with ID in id_list
     :param id_list: list of str of skeleton ID's
@@ -258,16 +238,6 @@ def get_paths_of_skelID(id_list, traced_skel_dir='/lustre/pschuber'
             wanted_paths.append(None)
             pass
     return wanted_paths
-
-
-def writes_svens_az_to_REASONABLE_format():
-    annos = au.loadj0126NML('/lustre/pschuber/size_estimation_m_schramm.234.k.zip')
-    for ii, anno in enumerate(annos):
-        dummy_skel = NewSkeleton()
-        dummy_anno = SkeletonAnnotation()
-        dummy_anno.setComment(anno.getComment())
-        dummy_skel.add_annotation(anno)
-        dummy_skel.to_kzip('/lustre/pschuber/svens_az/give_syn%d.k.zip' % ii)
 
 
 def supp_fname_from_fpath(fpath):

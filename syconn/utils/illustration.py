@@ -1,102 +1,25 @@
 # -*- coding: utf-8 -*-
 __author__ = 'pschuber'
-from mayavi import mlab
-import matplotlib.pyplot as plt
 import matplotlib.cm as cmx
 import matplotlib.colors as colors
-import re
-import annotationUtils as au
-from Visualization.plotting import add_anno_to_mayavi_window
-import os
-import shutil
-import numpy as np
-from numpy import array as arr
-from scipy import spatial
-from multiprocessing import Pool, cpu_count
-from heraca.utils.math import get_box_coords, get_normals
-from heraca.utils.datahandler import DataHandlerObject as data_handler
-from Philipp.annotator.map_apps import annotate_annos, remap_skeletons
-from heraca.utils.datahandler import *
-from heraca.processing.synapticity import syn_sign_prediction
-from contactsite import convert_to_standard_cs_name
-from heraca.processing.dense_cube import get_dense_bounding_box
-from NewSkeleton import NewSkeleton, SkeletonAnnotation, SkeletonNode
-from heraca.processing.cell_types import load_celltype_feats
-from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+try:
+    from mayavi import mlab
+except ImportError, e:
+    print "Could not load mayavi. Please install vtk and then mayavi."
+from multiprocessing import Pool
 from scipy import stats
-from heraca.processing.features import get_obj_density
+from sklearn.decomposition import PCA
 
-
-def add_anno_to_mayavi_window(anno, node_scaling=1.0, override_node_radius=500.,
-                              edge_radius = 250., show_outline = False,
-                              dataset_identifier='',opacity=1):
-    '''
-    Adds an annotation to a currently open mayavi plotting window
-    Parameters: anno: annotation object
-    node_scaling: float, scaling factor for node radius
-    edge_radius: float, radius of tubes for each edge
-    '''
-
-    # plot the nodes
-    # x, y, z are numpy arrays, s as well
-    if type(anno) == list:
-        nodes = []
-        for this_anno in anno:
-            nodes.extend(this_anno.getNodes())
-        color = anno[0].color
-    else:
-        nodes = list(anno.getNodes())
-        color = anno.color
-    coords = np.array([node.getCoordinate_scaled() for node in nodes]) * node_scaling
-    sc = np.hsplit(coords, 3)
-
-    # separate x, y and z; mlab needs that
-    #datasetDims = np.array(anno.datasetDims)
-    x = [el[0] for el in sc[0].tolist()]
-    y = [el[0] for el in sc[1].tolist()]
-    z = [el[0] for el in sc[2].tolist()]
-    if override_node_radius > 0.:
-        s = [override_node_radius]*len(nodes)
-    else:
-        s = [node.getDataElem('radius') for node in nodes]
-    s = np.array(s)
-    s = s * node_scaling
-    #s[0] = 5000
- #extent=[1, 108810, 1, 106250, 1, 115220]
-    #raise
-    pts = mlab.points3d(x, y, z, s, color=color, scale_factor=1.0,
-                        opacity=opacity)
-    # dict for faster lookup, nodes.index(node) adds O(n^2)
-    nodeIndexMapping = {}
-    for nodeIndex, node in enumerate(nodes):
-        nodeIndexMapping[node] = nodeIndex
-    edges = []
-    for node in nodes:
-        for child in node.getChildren():
-            try:
-                edges.append((nodeIndexMapping[node], nodeIndexMapping[child]))
-            except:
-                print 'Phantom child node, annotation object inconsistent'
-
-    # plot the edges
-    pts.mlab_source.dataset.lines = np.array(edges)
-    pts.mlab_source.update()
-    tube = mlab.pipeline.tube(pts, tube_radius = edge_radius)
-    mlab.pipeline.surface(tube, color = anno.color)
-
-    if show_outline:
-        if dataset_identifier == 'j0126':
-            mlab.outline(extent=(0,108810,0,106250,0,115220), opacity=0.5,
-                         line_width=5.)
-        elif dataset_identifier == 'j0251':
-            mlab.outline(extent=(0,270000,0,270000,0,387350), opacity=0.5,
-                         line_width=5.)
-        elif dataset_identifier == 'j0256':
-            mlab.outline(extent=(0,166155,0,166155,0,77198), opacity=0.5,
-                         line_width=1., color=(0.5,0.5,0.5))
-        else:
-            print('Please add a dataset identifier string')
-    return
+from syconn.contactsites import convert_to_standard_cs_name
+from syconn.brainqueries import annotate_annos, remap_skeletons, \
+    get_dense_bounding_box
+from syconn.processing.cell_types import load_celltype_feats
+from syconn.processing.features import get_obj_density
+from syconn.processing.synapticity import syn_sign_prediction
+from syconn.utils.datahandler import *
+from syconn.utils.newskeleton import NewSkeleton, SkeletonAnnotation,\
+    SkeletonNode
 
 
 def init_skel_vis(skel, min_pos, max_pos, hull_visualization=True, op=0.15,
@@ -515,19 +438,19 @@ def plot_obj(dh, paths=['/home/pschuber/Desktop/skel2skel/nml_obj/pre_04.k.zip',
     #                                             min_pos[2], max_pos[2]])
 
 
-def write_cs_p4_syn_skels(dest_path='/lustre/pschuber/figures/shawns_figure/',
-                       dh=None, renew=False):
+def write_cs_p4_syn_skels(wd, dh=None, renew=False):
     """
     Plot workflow figure and save it!
     :param dest_path: str path to destination directory
     :param dh: DataHandler
     :param renew: Mapped skeletons
     """
+    dest_path = wd + '/figures/',
     source = get_paths_of_skelID(['227', '83', '216'])
-    paths = get_paths_of_skelID(['227', '83', '216'], traced_skel_dir='/lustre/pschuber/'
-                                            'm_consensi_relu/nml_obj/')
+    paths = get_paths_of_skelID(['227', '83', '216'],
+                                traced_skel_dir=wd + '/neurons/')
     if dh is None:
-        dh = data_handler()
+        dh = DataHandler(wd)
     if renew:
         annotate_annos(source, dh=dh, overwrite=True, write_obj_voxel=True)
     print "Plotting skeletons", paths
@@ -547,10 +470,6 @@ def write_cs_p4_syn_skels(dest_path='/lustre/pschuber/figures/shawns_figure/',
      31.992829913950441,
      1217.3956294932052,
      arr([ 5130.        ,  4997.59985352,  6092.        ]))
-    # v_zoom = (-57.987760746934612,
-    #  89.17356191857607,
-    #  1898.4020718327083,
-    #  arr([ 5130.        ,  4965.54980469,  6092.        ]))
     mlab.view(*v_zoom)
     write_img2png(dest_path, 'cs_p4_syn_plot.png', mag=2)
 
@@ -565,8 +484,6 @@ def write_new_syn_cs(dest_path='/lustre/pschuber/figures/shawns_figure/',
     """
     source = get_paths_of_skelID(['548', '88'])
     paths = get_filepaths_from_dir('/lustre/pschuber/figures/syns/nml_obj/')
-    #paths = get_paths_of_skelID(['548', '88'], traced_skel_dir='/lustre/pschuber/'
-    #                                        'm_consensi_relu/nml_obj/')
     if dh is None:
         dh = data_handler()
     if renew:
@@ -606,8 +523,6 @@ def write_workflow_fig(dest_path='/lustre/pschuber/figures/spines/',
     :param renew: Mapped skeletons
     """
     source = get_paths_of_skelID(['120', '518'])
-    # paths = get_paths_of_skelID(['120', '518'], traced_skel_dir='/lustre/pschuber/'
-    #                                         'consensi_fuer_joergen/nml_obj/')
     paths = get_paths_of_skelID(['548', '88'], traced_skel_dir='/lustre/pschuber/'
                                                 'mapped_soma_tracings/nml_obj/')
     if renew:
@@ -951,19 +866,52 @@ def write_axoness_cell(skel_path=None):
 
 
 def write_myelin_cell(skel_path=None):
-    if skel_path is None:
-        skel_path = get_paths_of_skelID(['190'], '/lustre/pschuber/mapped_soma_tracings/nml_obj/')[0]
-    skel, _, _, _, _ = load_mapped_skeleton(skel_path, True, False)
+    max_myelin_nbs = 0
+    myelin_nb_l = []
+    all_paths = get_filepaths_from_dir('/lustre/pschuber/mapped_soma_tracings/nml_obj/')
+    for skel_path in all_paths:
+        # if skel_path is None:
+        #     skel_path = get_paths_of_skelID(['190'], '/lustre/pschuber/mapped_soma_tracings/nml_obj/')[0]
+        skel, _, _, _, _ = load_mapped_skeleton(skel_path, True, False)
+        hull = skel._hull_coords
+        # print len(hull)
+        normals = skel._hull_normals
+        normals = normals[hull[:, 0] < 110000]
+        hull = hull[hull[:, 0] < 110000]
+        normals = normals[hull[:, 1] < 110000]
+        hull = hull[hull[:, 1] < 110000]
+        normals = normals[hull[:, 2] < 110000]
+        hull = hull[hull[:, 2] < 110000]
+        # print len(hull)
+        node_coords = []
+        myelin_ids = []
+        for ii, n in enumerate(skel.getNodes()):
+            node_coords.append(n.getCoordinate_scaled())
+            if n.data['myelin_pred'] == '1':
+                myelin_ids.append(ii)
+        print "Found %d myelin nodes." % len(myelin_ids)
+        print "Assigning hull points."
+        myelin_nb_l.append(len(myelin_ids))
+        if len(myelin_ids) > max_myelin_nbs:
+            max_myelin_nbs = len(myelin_ids)
+            max_path = skel_path
+    skel, _, _, _, _ = load_mapped_skeleton(max_path, True, False)
     hull = skel._hull_coords
+    # print len(hull)
     normals = skel._hull_normals
+    normals = normals[hull[:, 0] < 110000]
+    hull = hull[hull[:, 0] < 110000]
+    normals = normals[hull[:, 1] < 110000]
+    hull = hull[hull[:, 1] < 110000]
+    normals = normals[hull[:, 2] < 110000]
+    hull = hull[hull[:, 2] < 110000]
+    # print len(hull)
     node_coords = []
     myelin_ids = []
     for ii, n in enumerate(skel.getNodes()):
         node_coords.append(n.getCoordinate_scaled())
         if n.data['myelin_pred'] == '1':
             myelin_ids.append(ii)
-    print "found %d myelin nodes." % len(myelin_ids)
-    print "Assigning hull points."
     skel_tree = spatial.cKDTree(node_coords)
     dist, nn_ixs = skel_tree.query(hull, k=1)
     myelin_hull = []
@@ -977,9 +925,11 @@ def write_myelin_cell(skel_path=None):
         else:
             normal_hull.append(hull[ii])
             normal_hull_normals.append(normals[ii])
+    print "Found:\n", arr(all_paths)[np.argsort(myelin_nb_l)[-10:]], "with nodes:\n",\
+    np.sort(myelin_nb_l)[-10:]
     dest = '/lustre/pschuber/figures/hulls/myelin/'
-    hull2text(arr(myelin_hull)/10, arr(myelin_hull_normals), dest + 'myelin_hull.xyz')
-    hull2text(arr(normal_hull, dtype=np.int)/10, arr(normal_hull_normals), dest + 'normal_hull.xyz')
+    hull2text(arr(myelin_hull)/10., arr(myelin_hull_normals), dest + 'myelin_hull.xyz')
+    hull2text(arr(normal_hull, dtype=np.int)/10., arr(normal_hull_normals), dest + 'normal_hull.xyz')
 
 
 def get_celltype_samples():
@@ -1194,7 +1144,7 @@ def plot_csarea_nbsyns(pre=0, post=1):
         nb_syns = len(v['sizes_area'])
         nb_syn_l.append(nb_syns)
         # nb_cs_l.append(nb_cs)
-        syn_area_l += list(np.array(v['sizes_area'])[np.array(v['sizes_area']) != 0])
+        syn_area_l += list(np.array(v['sizes_area'])[np.array(v['sizes_area'])!=0])
         cum_syn_area_l.append(v['total_size_area'])
         cs_area_l.append(v['total_cs_area'])
     print "Plotting %d points." % len(syn_area_l)
@@ -1333,7 +1283,8 @@ def plot_ray_proba(nb):
     plt.show()
 
 
-def plot_obj_density(recompute=False, obj='mito', property='axoness_pred', value=1):
+def plot_obj_density(recompute=False, obj='mito', property='axoness_pred', value=1,
+                     return_abs_density=True):
     """
     Plots two keys of phildict as scatter plot.
     :return:
@@ -1342,40 +1293,150 @@ def plot_obj_density(recompute=False, obj='mito', property='axoness_pred', value
                                         'consensi_celltype_labels_reviewed3.pkl')
     cell_type_pred_dict = load_pkl2obj('/lustre/pschuber/gt_cell_types/'
                                        'loo_cell_pred_dict_novel.pkl')
-    if not os.path.isfile("/lustre/pschuber/figures/obj_densities_vol.npy") or\
-        recompute:
+    if return_abs_density:
+        dest_path = "/lustre/pschuber/figures/%s_densities_axoness%d.npy" %\
+                        (obj, value)
+    else:
+        dest_path = "/lustre/pschuber/figures/%s_densities_axoness%d_vol.npy" %\
+                        (obj, value)
+    if not os.path.isfile(dest_path) or recompute:
         obj_densities = [[], [], [], []]
         for k, v in cell_type_pred_dict.iteritems():
             cell_path = get_paths_of_skelID([k], '/lustre/pschuber/'
                         'mapped_soma_tracings/nml_obj/')[0]
             obj_density = get_obj_density(cell_path, property=property,
-                                           value=value, obj=obj)
+                                           value=value, obj=obj,
+                                          return_abs_density=return_abs_density)
             obj_densities[int(v)].append(obj_density)
-            np.save("/lustre/pschuber/figures/%s_densities_axoness%d_vol.npy" %\
-                    (obj, value), obj_densities)
-    else:
-        obj_densities = np.load("/lustre/pschuber/figures/%s_densities_vol.npy" %
-                                obj)
 
-    # ax = plt.subplot(111)
-    # ax.tick_params(axis='x', which='major', labelsize=20, direction='out',
-    #                length=4, width=3,  right="off", top="off", pad=10)
-    # ax.tick_params(axis='y', which='major', labelsize=20, direction='out',
-    #                length=4, width=3,  right="off", top="off", pad=10)
-    #
-    # ax.tick_params(axis='x', which='minor', labelsize=12, direction='out',
-    #                length=0, width=1, right="off", top="off", pad=10)
-    # ax.tick_params(axis='y', which='minor', labelsize=12, direction='out',
-    #                length=0, width=1, right="off", top="off", pad=10)
-    # colors = ["0.1", "0.3", "0.5", "0.7"]
-    # for i in range(4):
-    #     class_density = arr(obj_densities[i])[arr(obj_densities[i]) != 0]
-    #     print "Number of cells in class %d:\t %d" % (i, len(class_density))
-    #     ax.hist(class_density, bins=20, normed=True, range=(0, 1), color=colors[i])
-    #     ax.errorbar([np.mean(class_density)], [10], xerr=np.std(class_density)/np.log(len(class_density)),
-    #             ecolor=colors[i], color=colors[i])
-    #     ax.vlines(np.mean(class_density), 0, 15, linestyle='dashed', color=colors[i])
-    # plt.legend(["ExAx", "MSN", "GP", "FS"], loc="upper right", fontsize=20)
-    # plt.xlabel(u"%s density [nm$^{-1}$]" % obj, fontsize=24)
-    # plt.ylabel("Relative counts", fontsize=24)
-    # plt.show()
+            np.save(dest_path, obj_densities)
+    else:
+        obj_densities = np.load(dest_path)
+
+
+def plot_meansyn_celltypes(pre=0, post=1):
+    """
+    Plots two keys of phildict as scatter plot.
+    :return:
+    """
+    syn_props = load_pkl2obj('/lustre/sdorkenw/synapse_matrices/phil_dict.pkl')
+    cell_type_pred_dict = load_pkl2obj('/lustre/pschuber/gt_cell_types/loo_cell_pred_dict_novel.pkl')
+    nb_syn_l = []
+    syns_from_axon_to_post = []
+    for k, v in syn_props.iteritems():
+        if v['total_size_area'] == 0:
+            continue
+        id1, id2 = re.findall('(\d+)_(\d+)', k)[0]
+        try:
+            type1 = cell_type_pred_dict[int(id1)]
+            type2 = cell_type_pred_dict[int(id2)]
+        except:
+            continue
+        if (type1 != pre) or (type2 != post):
+            continue
+        if np.any(np.array(v['partner_axoness']) == 1):
+            indiv_syn_sizes = np.array(v['sizes_area'])
+            indiv_syn_axoness = (indiv_syn_sizes == 1)[indiv_syn_sizes != 0]
+            nb_syns = len(indiv_syn_sizes[indiv_syn_sizes != 0][~indiv_syn_axoness])
+        else:
+            nb_syns = len(np.array(v['sizes_area'])[np.array(v['sizes_area']) != 0])
+        if nb_syns == 0:
+            continue
+        syns_from_axon_to_post += [nb_syns]
+    np.save('/lustre/pschuber/figures/synapse_cum/meansyns_from%d_to%d.npy' %
+            (pre, post), arr(syns_from_axon_to_post))
+
+
+def calc_meansyns_wrapper():
+    for i in range(4):
+        for j in range(1,4):
+            plot_meansyn_celltypes(i, j)
+
+
+def add_anno_to_mayavi_window(anno, node_scaling=1.0, override_node_radius=500.,
+                              edge_radius=250., show_outline=False,
+                              dataset_identifier='', opacity=1):
+        '''
+
+        Adds an annotation to a currently open mayavi plotting window
+
+        Parameters: anno: annotation object
+        node_scaling: float, scaling factor for node radius
+        edge_radius: float, radius of tubes for each edge
+
+        '''
+
+        # plot the nodes
+        # x, y, z are numpy arrays, s as well
+
+        if type(anno) == list:
+            nodes = []
+            for this_anno in anno:
+                nodes.extend(this_anno.getNodes())
+            color = anno[0].color
+        else:
+            nodes = list(anno.getNodes())
+            color = anno.color
+
+        coords = np.array(
+            [node.getCoordinate_scaled() for node in nodes]) * node_scaling
+
+        sc = np.hsplit(coords, 3)
+
+        # separate x, y and z; mlab needs that
+        # datasetDims = np.array(anno.datasetDims)
+
+
+        x = [el[0] for el in sc[0].tolist()]
+        y = [el[0] for el in sc[1].tolist()]
+        z = [el[0] for el in sc[2].tolist()]
+        if override_node_radius > 0.:
+            s = [override_node_radius] * len(nodes)
+        else:
+            s = [node.getDataElem('radius') for node in nodes]
+
+        s = np.array(s)
+        s = s * node_scaling
+        # s[0] = 5000
+        # extent=[1, 108810, 1, 106250, 1, 115220]
+        # raise
+        pts = mlab.points3d(x, y, z, s, color=color, scale_factor=1.0,
+                            opacity=opacity)
+
+        # dict for faster lookup, nodes.index(node) adds O(n^2)
+        nodeIndexMapping = {}
+        for nodeIndex, node in enumerate(nodes):
+            nodeIndexMapping[node] = nodeIndex
+
+        edges = []
+        for node in nodes:
+            for child in node.getChildren():
+                try:
+                    edges.append(
+                        (nodeIndexMapping[node], nodeIndexMapping[child]))
+                except:
+                    print 'Phantom child node, annotation object inconsistent'
+
+        # plot the edges
+        pts.mlab_source.dataset.lines = np.array(edges)
+        pts.mlab_source.update()
+        tube = mlab.pipeline.tube(pts, tube_radius=edge_radius)
+        mlab.pipeline.surface(tube, color=anno.color)
+
+        if show_outline:
+            if dataset_identifier == 'j0126':
+                mlab.outline(extent=(0, 108810, 0, 106250, 0, 115220),
+                             opacity=0.5,
+                             line_width=5.)
+            elif dataset_identifier == 'j0251':
+                mlab.outline(extent=(0, 270000, 0, 270000, 0, 387350),
+                             opacity=0.5,
+                             line_width=5.)
+            elif dataset_identifier == 'j0256':
+                mlab.outline(extent=(0, 166155, 0, 166155, 0, 77198),
+                             opacity=0.5,
+                             line_width=1., color=(0.5, 0.5, 0.5))
+            else:
+                print('Please add a dataset identifier string')
+
+        return

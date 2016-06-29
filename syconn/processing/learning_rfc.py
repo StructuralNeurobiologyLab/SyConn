@@ -1,6 +1,6 @@
 import numpy as np
 from multiprocessing import Pool, Manager, cpu_count, Process
-import multiprocessing.pool
+import multi_proc.pool
 import time
 from sklearn.externals import joblib
 from sklearn import cross_validation
@@ -15,16 +15,7 @@ from collections import Counter
 import shutil
 import os
 import matplotlib.patches as patches
-from heraca.utils.datahandler import load_ordered_mapped_skeleton
 from sklearn.decomposition import PCA
-try:
-    from NewSkeleton import annotationUtils as au
-except:
-    import annotationUtils as au
-try:
-    from NewSkeleton.NewSkeletonUtils import annotation_from_nodes
-except:
-    from NewSkeletonUtils import annotation_from_nodes
 
 __author__ = 'pschuber'
 
@@ -390,9 +381,9 @@ def start_multiprocess(func, params, debug=False, nb_cpus=None):
             pass
         daemon = property(_get_daemon, _set_daemon)
 
-    # We sub-class multiprocessing.pool.Pool instead of multiprocessing.Pool
+    # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
     # because the latter is only a wrapper function, not a proper class.
-    class MyPool(multiprocessing.pool.Pool):
+    class MyPool(multi_proc.pool.Pool):
         Process = NoDaemonProcess
     if nb_cpus is None:
         nb_cpus = max(cpu_count() - 2, 1)

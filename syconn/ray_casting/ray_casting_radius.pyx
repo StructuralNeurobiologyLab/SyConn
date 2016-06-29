@@ -1,4 +1,4 @@
-#!python2
+#!python
 #cython: boundscheck=False
 import numpy as np
 from libc.math cimport isnan, sqrt
@@ -26,14 +26,14 @@ def rotation_matrix(axis, theta):
                      [2*(bd+ac), 2*(cd-ab), aa+dd-bb-cc]])
 
 
-def ray_casting(np.ndarray[np.int64_t, ndim=1] node_pos, int nb,
+def ray_casting_radius(np.ndarray[np.int64_t, ndim=1] node_pos, int nb,
                       np.ndarray[np.float64_t, ndim=1] skel_interp,
                       np.ndarray[np.float64_t, ndim=1]orth_plane, unsigned int ix,
                       np.ndarray[np.int64_t, ndim=1] scaling,
                       float threshold, np.ndarray[np.int64_t, ndim=1] prop_offset,
                       np.ndarray[np.uint8_t, ndim=3] mem, bint end_node,
                       float max_dist_multi):
-# def ray_casting(np.ndarray node_pos, int nb, np.ndarray skel_interp,
+# def ray_casting_radius(np.ndarray node_pos, int nb, np.ndarray skel_interp,
 #                        np.ndarray orth_plane, unsigned int ix , np.ndarray scaling,
 #                        float threshold, np.ndarray prop_offset, np.ndarray mem, bint end_node):
     """calculates the radius for the given node, using position of node node_pos, its index ix to get its

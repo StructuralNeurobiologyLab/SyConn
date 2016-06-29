@@ -1,18 +1,10 @@
-
 import numpy as np
 from scipy import spatial
 from numpy import array as arr
-from heraca.processing import ray_casting
-import time
-try:
-    from DatasetUtils import knossosDataset as KnossosDataset
-except:
-    from dataset_utils import knossosDataset as KnossosDataset
-from scipy import ndimage, sparse
-import networkx
+from math import pow, sqrt, ceil
+from scipy import ndimage
 from scipy.spatial import ConvexHull
 import re
-import cPickle as pickle
 __author__ = 'pschuber'
 
 
@@ -236,3 +228,188 @@ def get_normals(hull, number_fitnodes=12):
                       np.abs(hull[ii] - np.mean(nearest_nodes, axis=0))
         normals[ii] = normal * normal_sign
     return normals
+
+
+def calc_overlap(point_list_a, point_list_b, max_dist):
+    """
+    Calculates the portion of points in list b being similar (distance max_dist)
+    to points from list a.
+    :param point_list_a:
+    :param point_list_b:
+    :param max_dist:
+    :return: Portion of similar points over number of points of list b and vice
+    versa, overlap area in nm^2, centercoord of overlap area and coord_list of
+    overlap points in point_list_b
+    """
+    point_list_a = arr(point_list_a)
+    point_list_b = arr(point_list_b)
+    tree_a = spatial.cKDTree(point_list_a)
+    near_ids = tree_a.query_ball_point(point_list_b, max_dist)
+    total_id_list = list(set([id for sublist in near_ids for id in sublist]))
+    overlap_area = convex_hull_area(point_list_a[total_id_list]) / 1.e6
+    nb_unique_neighbors = np.sum([1 for sublist in near_ids if len(sublist) > 0])
+    portion_b = nb_unique_neighbors / float(len(point_list_b))
+    tree_b = spatial.cKDTree(point_list_b)
+    near_ids = tree_b.query_ball_point(point_list_a, max_dist)
+    nb_unique_neighbors = np.sum([1 for sublist in near_ids if len(sublist) > 0])
+    total_id_list = list(set([id for sublist in near_ids for id in sublist]))
+    portion_a = nb_unique_neighbors / float(len(point_list_a))
+    near_ixs = [ix for sublist in near_ids for ix in sublist]
+    center_coord = np.mean(arr(point_list_b)[arr(near_ixs)], axis=0)
+    return portion_b, portion_a, overlap_area, center_coord,\
+           point_list_b[total_id_list]
+
+
+###################### TODO
+
+def tuple_to_string(coordinate, sep=', ', dl='(', dr=')'):
+    return dl + sep.join([str(x) for x in coordinate]) + dr
+
+def coordinate_from_string(coord_string):
+    coordinate_expression = '[(\[]{0,1}\s*(?P<x>-?\d+)\s*[,;]\s*(' \
+                            '?P<y>-?\d+)\s*[,;]\s*(?P<z>-?\d+)\s*[)\]{0,1}]'
+    try:
+        x = int(re.search(coordinate_expression, coord_string).group('x'))
+        y = int(re.search(coordinate_expression, coord_string).group('y'))
+        z = int(re.search(coordinate_expression, coord_string).group('z'))
+    except (AttributeError, ValueError, TypeError):
+        return (None, None, None)
+
+    return (x, y, z)
+
+def coordinate_to_ewkt(coordinate, scale='dataset'):
+    if isinstance(scale, str):
+        scale = (1.0, 1.0, 1.0)
+
+    coordinate = (coordinate[0] * scale[0],
+                  coordinate[1] * scale[1],
+                  coordinate[2] * scale[2])
+
+    return "POINT(%s)" % (" ".join([str(x) for x in coordinate]),)
+
+def has_equal_dimensions(c):
+    """
+    Return True if container types in iterable c have equal number of of
+    elements, False otherwise.
+
+    Example
+    -------
+
+    >>> a = set(range(0, 10))
+    >>> b = range(0, 10)
+    >>> has_equal_dimensions([a, b])
+    True
+    >>> a.add(100)
+    >>> has_equal_dimensions([a, b])
+    False
+    """
+
+    lens = [len(x) for x in c]
+    if True in [bool(x - y) for x, y in zip(lens, lens[1:])]:
+        return False
+    else:
+        return True
+
+def average_coordinate(c):
+    """
+    Return the average coordinate (center of gravity) for an iterable of
+    coordinates.
+
+    Parameters
+    ----------
+
+    c : iterable of coordinates
+        Coordinates are represented as lists and must have the same number of
+        dimensions.
+
+    Returns
+    -------
+
+    avg_coordinate : iterable
+
+    Example
+    -------
+
+    >>> average_coordinate([[1, 2, 3], [4, 5, 6]])
+    [2.5, 3.5, 4.5]
+    >>> average_coordinate([])
+    []
+    """
+
+    if not has_equal_dimensions(c):
+        raise Exception('All coordinates must have equal number of dimensions '
+            'to calculate average.')
+
+    avg_coordinate = [sum([float(y) for y in x]) / len(x) for x in zip(*c)]
+
+    return avg_coordinate
+
+def euclidian_distance(c1, c2):
+    return sqrt(pow((c2[0] - c1[0]), 2) +
+     pow((c2[1] - c1[1]), 2) +
+     pow((c2[2] - c1[2]), 2))
+
+def interpolate_between(c1, c2):
+    """
+    Return list of coordinates from c1 to c2, including them. Coordinates
+    are spaced by (approximately) one length unit.
+    """
+
+    delta = FloatCoordinate(c1) - FloatCoordinate(c2)
+    dist = int(ceil(euclidian_distance(c1, c2)))
+    step = delta / dist
+
+    return [list(step * cur_step + c1) for cur_step in range(0, dist + 1)]
+
+class Coordinate(list):
+    """
+    Represents a coordinate of arbitrary dimensionality.
+    """
+    def __init__(self, c):
+        """
+        Parameters
+        ----------
+
+        c : Iterable of numeric types
+            Represents the coordinate.
+        """
+        list.__init__(self, c)
+
+    def __eq__(self, other):
+        if sum([x == y for x, y in zip(self, other)]) == len(self):
+            return True
+        else:
+            return False
+
+    def __add__(self, other):
+        return type(self)([x + y for x, y in zip(self, other)])
+
+    def __sub__(self, other):
+        return type(self)([x - y for x, y in zip(self, other)])
+
+    def __mul__(self, other):
+        try:
+            other[0]
+            # element-wise multiplication
+            return type(self)([x * y for x, y in zip(self, other)])
+        except TypeError:
+            # scalar multiplication
+            return type(self)([x * other for x in self])
+
+
+    def __div__(self, other):
+        try:
+            # scalar multiplication
+            return type(self)([x / other for x in self])
+        except TypeError:
+            # element-wise multiplication
+            return type(self)([x / y for x, y in zip(self, other)])
+
+class FloatCoordinate(Coordinate):
+    """
+    Represent a coordinate of arbitrary dimensionality, using floats.
+    """
+
+    def __init__(self, c):
+        c = [float(x) for x in c]
+        super(FloatCoordinate, self).__init__(c)

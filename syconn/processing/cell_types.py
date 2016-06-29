@@ -1,36 +1,19 @@
 # -*- coding: utf-8 -*-
-__author__ = 'pschuber'
-import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-import os
-import shutil
-from numpy import array as arr
-import numpy as np
-from scipy import spatial
-try:
-    from NewSkeleton import annotationUtils as au
-except:
-    import annotationUtils as au
-try:
-    from NewSkeleton.NewSkeletonUtils import annotation_from_nodes
-except:
-    from NewSkeletonUtils import annotation_from_nodes
-from heraca.utils.datahandler import get_filepaths_from_dir,\
+from sklearn.metrics import precision_recall_curve,\
+    precision_recall_fscore_support, accuracy_score
+from learning_rfc import *
+from syconn.processing.features import *
+from syconn.utils.datahandler import get_filepaths_from_dir,\
     load_ordered_mapped_skeleton, load_mapped_skeleton, get_paths_of_skelID,\
     write_obj2pkl, load_pkl2obj, get_skelID_from_path
-from learning_rfc import save_train_clf,\
-    feature_importance, start_multiprocess, init_clf
-import heraca.neuron as neuron
-from sklearn.externals import joblib
-try:
-    from NewSkeleton import annotationUtils as au
-except:
-    import annotationUtils as au
+from syconn.utils.neuron import Neuron
 
+__author__ = 'pschuber'
 
 rf_params = {'n_estimators': 4000, 'oob_score': True, 'n_jobs': -1,
              'class_weight': 'balanced', 'max_features': 0.66}
+
 
 def get_cell_type_labels():
     labels = {}

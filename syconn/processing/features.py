@@ -1,24 +1,16 @@
-import numpy as np
-from numpy import array as arr
-import networkx as nx
-from scipy import spatial
 import copy
-from collections import Counter
 import os
 import zipfile
-from heraca.utils.datahandler import load_objpkl_from_kzip, \
-    load_ordered_mapped_skeleton
-from NewSkeleton import remove_from_zip
+from collections import Counter
+import networkx as nx
+import numpy as np
+from numpy import array as arr
+from scipy import spatial
+from syconn.utils import annotationUtils as au
 from learning_rfc import write_feat2csv, cell_classification
-try:
-    from NewSkeleton import annotationUtils as au
-except:
-    import annotationUtils as au
-try:
-    from NewSkeleton.NewSkeletonUtils import annotation_from_nodes
-except:
-    from NewSkeletonUtils import annotation_from_nodes
-
+from syconn.utils.datahandler import load_objpkl_from_kzip, \
+    load_ordered_mapped_skeleton
+from syconn.utils.newskeleton import remove_from_zip
 
 
 def node_branch_end_distance(nml):

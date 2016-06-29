@@ -1,30 +1,20 @@
-import networkx as nx
-import copy
+__author__ = 'philipp'
 import os
-import numpy as np
 import re
-from multiprocessing import Pool, Manager, cpu_count
-from sys import stdout
 import time
+from sys import stdout
+import networkx as nx
+import numpy as np
+from multiprocessing import Pool, Manager, cpu_count
 from numpy import array as arr
 from sklearn.externals import joblib
-try:
-    from NewSkeleton import annotationUtils as au
-except:
-    import annotationUtils as au
-try:
-    from NewSkeleton.NewSkeletonUtils import annotation_from_nodes
-except:
-    from NewSkeletonUtils import annotation_from_nodes
-from heraca.utils.datahandler import get_filepaths_from_dir, \
-    load_ordered_mapped_skeleton, get_skelID_from_path
-from NewSkeleton import NewSkeleton, SkeletonAnnotation
-from learning_rfc import cell_classification, save_train_clf, load_csv2feat
 from features import assign_property2node, majority_vote,\
     update_property_feat_kzip, morphology_feature
-
-
-__author__ = 'philipp'
+from learning_rfc import cell_classification, save_train_clf, load_csv2feat
+from syconn.utils import annotationUtils as au
+from syconn.utils.datahandler import get_filepaths_from_dir, \
+    load_ordered_mapped_skeleton, get_skelID_from_path
+from syconn.utils.newskeleton import NewSkeleton, SkeletonAnnotation
 
 
 def save_axoness_clf(gt_path='/lustre/pschuber/gt_axoness/',
@@ -250,7 +240,7 @@ def majority_processes(anno):
             hns.append(node)
         if int(node.data["axoness_pred"]) == 2:
             soma_node_nb += 1
-            soma_nodes_ids.append(node.getID())
+            soma_node_ids.append(node.getID())
     if soma_node_nb != 0:
         grow_out_soma(anno)
         majority_vote(anno, 'axoness', 3000)
@@ -270,11 +260,7 @@ def majority_processes(anno):
             for node in nx.dfs_preorder_nodes(graph, hn):
                 # if branch point stop
                 if node.degree() == 1:
-                    used_hn_ids.append(node.getID()) # probably redundant if iterate over
-                                                # source node
-                    # avoid false positive axon/dendrite branch point at soma
-                # if int(node.data["dist2soma"]) <= 200:
-                #     break
+                    used_hn_ids.append(node.getID())
                 if int(node.data["axoness_pred"]) == 2:
                     if len(axoness_found) == 0:
                         break

@@ -1,15 +1,8 @@
-try:
-    from NewSkeleton import annotationUtils as au
-except Exception, e:
-    import annotationUtils as au
-try:
-    from NewSkeleton.NewSkeletonUtils import annotation_from_nodes
-except Exception, e:
-    from NewSkeletonUtils import annotation_from_nodes
-from heraca.utils.datahandler import get_filepaths_from_dir
+from syconn.utils.datahandler import get_filepaths_from_dir
 from learning_rfc import save_train_clf
 from features import morphology_feature, assign_property2node
 import networkx as nx
+
 __author__ = 'philipp'
 
 
