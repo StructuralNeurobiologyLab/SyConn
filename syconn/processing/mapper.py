@@ -1,4 +1,4 @@
-import cPickle as pickle
+from syconn.ray_casting.ray_casting_radius import ray_casting_radius
 import copy
 import gc
 import socket
@@ -1007,7 +1007,7 @@ def get_radii_hull(args):
     todo_list = zip(list(box), [nb_rays] * len(box), list(node_attr))
     for el in todo_list:
         try:
-            radius, ix, membrane_points, vals = ray_casting.ray_casting_radius(
+            radius, ix, membrane_points, vals = ray_casting_radius(
                 el[0], el[1], el[2][0], el[2][1], el[2][2],
                 scaling, threshold, prop_offset, mem, el[2][3], max_dist_mult)
         except IndexError, e:

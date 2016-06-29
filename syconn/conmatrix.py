@@ -7,7 +7,6 @@ import seaborn.apionly as sns
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from numpy import array as arr
 
-from NewSkeleton import newskeleton
 from syconn.processing.cell_types import load_celltype_feats,\
     load_celltype_probas, get_id_dict_from_skel_ids, load_celltype_gt
 from syconn.processing.learning_rfc import cell_classification

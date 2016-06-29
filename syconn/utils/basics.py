@@ -8,6 +8,13 @@ import re
 __author__ = 'pschuber'
 
 
+def negative_to_zero(a):
+    if a > 0:
+        return a
+    else:
+        return 0
+
+
 def get_orth_plane(node_com):
     """
     Calculates orthogonal plane and skeleton interpolation for each node.

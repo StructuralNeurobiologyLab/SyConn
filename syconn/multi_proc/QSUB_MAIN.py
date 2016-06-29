@@ -7,7 +7,7 @@ import string
 import subprocess
 import sys
 import time
-import HelperUtils as hu
+from syconn.utils.basics import negative_to_zero
 
 
 def QSUB_script(params, name, queue='somaq', sge_additional_flags='',
@@ -99,7 +99,7 @@ def QSUB_script(params, name, queue='somaq', sge_additional_flags='',
                 sys.stdout.write('\rAll jobs were finished in %.2fs\n' % (time.time()-time_start))
                 break
             else:
-                progress = 100*(len(params)-hu.negative_to_zero(nb_lines))/float(len(params))
+                progress = 100*(len(params)- negative_to_zero(nb_lines))/float(len(params))
                 sys.stdout.write('\rProgress: %.2f%% in %.2fs' % (progress, time.time()-time_start))
                 sys.stdout.flush()
             time.sleep(.25)

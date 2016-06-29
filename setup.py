@@ -1,25 +1,18 @@
-from distutils.core import setup
+try:
+    from setuptools import setup, find_packages
+except ImportError:
+    from distutils.core import setup, find_packages
 from distutils.extension import Extension
 import numpy as np
 try:
     from Cython.Distutils import build_ext
+    from Cython.Build import cythonize
 except ImportError:
-    use_cython = False
-    #ImportError("Cython not installed. Please install it manually before "
-    #                  "running this setup using 'pip install cython'")
-else:
-    use_cython = True
-cmdclass = { }
-if use_cython:
-    cmdclass = {'build_ext': build_ext}
-    ext_modules = [Extension("syconn.ray_casting",
-                             ["syconn/ray_casting/ray_casting_radius.pyx"],
-                             include_dirs=[np.get_include()])]
-else:
-    ext_modules = [
-        Extension("syconn.ray_casting", ["syconn/raycasting/ray_casting.c"])]
-
-
+    print "Couldnt find Cython."
+cmdclass = {'build_ext': build_ext}
+ext_modules = [Extension("syconn.ray_casting.ray_casting_radius",
+                         ["syconn/ray_casting/ray_casting_radius.pyx"],
+                         include_dirs=[np.get_include()], language="c++")]
 config = {
     'description': 'Analysis pipeline for EM raw data based on deep and '
                    'supervised learning to extract high level biological'
@@ -30,13 +23,15 @@ config = {
     'author_email': 'My email.',
     'version': '0.1',
     'install_requires': ['nose', 'matplotlib', 'sklearn', 'networkx', 'numpy',
-                         'scipy', 'seaborn', 'knossos_python_tools'],
-    'packages': ['syconn'],
+                         'scipy', 'seaborn', 'knossos_python_tools',
+                         'elektronn'],
     'scripts': [],  'cmdclass': cmdclass, 'ext_modules': ext_modules,
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_python_'
                          'tools/tarball/master#egg=knossos_python_tools'],
-    'include_dirs': [np.get_include()]
+    'include_dirs': [np.get_include()],
+    'package_data': {'syconn': ['ray_casting/*.so']},
+    'packages': find_packages(), ' include_package_data': True,
 }
 setup(**config)
 # compile ray casting c function

@@ -1,6 +1,5 @@
 import numpy as np
 from multiprocessing import Pool, Manager, cpu_count, Process
-import multi_proc.pool
 import time
 from sklearn.externals import joblib
 from sklearn import cross_validation

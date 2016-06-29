@@ -9,23 +9,6 @@ cdef extern from "limits.h":
 DTYPE = np.float
 DTYPE_i = np.int
 
-def rotation_matrix(axis, theta):
-    """
-    Return the rotation matrix associated with counterclockwise rotation about
-    the given axis by theta radians.
-    """
-    axis = np.asarray(axis)
-    theta = np.asarray(theta)
-    axis = axis/np.sqrt(np.dot(axis, axis))
-    a = np.cos(theta/2)
-    b, c, d = -axis*np.sin(theta/2)
-    aa, bb, cc, dd = a*a, b*b, c*c, d*d
-    bc, ad, ac, ab, bd, cd = b*c, a*d, a*c, a*b, b*d, c*d
-    return np.array([[aa+bb-cc-dd, 2*(bc+ad), 2*(bd-ac)],
-                     [2*(bc-ad), aa+cc-bb-dd, 2*(cd+ab)],
-                     [2*(bd+ac), 2*(cd-ab), aa+dd-bb-cc]])
-
-
 def ray_casting_radius(np.ndarray[np.int64_t, ndim=1] node_pos, int nb,
                       np.ndarray[np.float64_t, ndim=1] skel_interp,
                       np.ndarray[np.float64_t, ndim=1]orth_plane, unsigned int ix,
@@ -33,9 +16,6 @@ def ray_casting_radius(np.ndarray[np.int64_t, ndim=1] node_pos, int nb,
                       float threshold, np.ndarray[np.int64_t, ndim=1] prop_offset,
                       np.ndarray[np.uint8_t, ndim=3] mem, bint end_node,
                       float max_dist_multi):
-# def ray_casting_radius(np.ndarray node_pos, int nb, np.ndarray skel_interp,
-#                        np.ndarray orth_plane, unsigned int ix , np.ndarray scaling,
-#                        float threshold, np.ndarray prop_offset, np.ndarray mem, bint end_node):
     """calculates the radius for the given node, using position of node node_pos, its index ix to get its
     corresponding value in the "global" orth. plane array and skeleton interpolation. Nb is the number of
     rays used to estimate the radius.
@@ -116,3 +96,19 @@ def ray_casting_radius(np.ndarray[np.int64_t, ndim=1] node_pos, int nb,
         if point_dist < max_dist_multi*radius:
             resulting_points.append(membrane_points[i])
     return radius, ix, resulting_points, vals2
+
+def rotation_matrix(axis, theta):
+    """
+    Return the rotation matrix associated with counterclockwise rotation about
+    the given axis by theta radians.
+    """
+    axis = np.asarray(axis)
+    theta = np.asarray(theta)
+    axis = axis/np.sqrt(np.dot(axis, axis))
+    a = np.cos(theta/2)
+    b, c, d = -axis*np.sin(theta/2)
+    aa, bb, cc, dd = a*a, b*b, c*c, d*d
+    bc, ad, ac, ab, bd, cd = b*c, a*d, a*c, a*b, b*d, c*d
+    return np.array([[aa+bb-cc-dd, 2*(bc+ad), 2*(bd-ac)],
+                     [2*(bc-ad), aa+cc-bb-dd, 2*(cd+ab)],
+                     [2*(bd+ac), 2*(cd-ab), aa+dd-bb-cc]])

@@ -11,7 +11,7 @@ from basics import *
 import zipfile
 import numpy as np
 from syconn.utils.newskeleton import SkeletonAnnotation
-from syconn.processing.mapper import SkeletonMapper
+import cPickle as pickle
 import tempfile
 from numpy import array as arr
 import shutil
@@ -410,36 +410,6 @@ def load_pkl2obj(path):
     with open(path, 'rb') as input:
         objects = pickle.load(input)
     return objects
-
-
-def create_skel(dh, skel_source, id=None, soma=None):
-    """
-    Creates MappedSkeleton object using DataHandler and number/id of nml file
-    or annotation object directly.
-    :param dh: DataHandlerObject
-    :param skel_source: ID/number of nml file or annotation object
-    :param id: extracted from path or should be given if skel_source is
-    annotation object
-    :return: MappedSkeleton object
-    """
-    if np.isscalar(skel_source):
-        assert skel_source < len(dh._skeleton_files)
-        id = int(re.findall('.*?([\d]+)', dh._skeleton_files[skel_source])[-3])
-        print "--- Initializing skeleton %d with %d cores from path." %\
-              (id, dh.nb_cpus)
-        skel_path = get_paths_of_skelID([id])[0]
-        print "Skeleton %d does not exist yet. Building from scratch." % id
-        skel = SkeletonMapper(skel_path, dh.scaling, soma=soma)
-    else:
-        print "--- Initializing skeleton %d with %d cores from annotation" \
-              " object." % (id, dh.nb_cpus)
-        if id in dh.skeletons.keys():
-             return dh.skeletons[id]
-        skel = SkeletonMapper(skel_source, dh.scaling, id=id, soma=soma)
-    skel._data_path = dh._data_path
-    skel._mem_path = dh._mem_path
-    skel.nb_cpus = dh.nb_cpus
-    return skel
 
 
 def helper_get_voxels(obj):
