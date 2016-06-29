@@ -23,6 +23,7 @@ from learning_rfc import cell_classification, save_train_clf, load_csv2feat
 from features import assign_property2node, majority_vote,\
     update_property_feat_kzip, morphology_feature
 
+
 __author__ = 'philipp'
 
 
@@ -98,6 +99,9 @@ def load_axon_gt(gt_path):
 
 
 def predict_axoness_mappedskel(fname_skel=[], recompute_feat=False):
+    if fname_skel == []:
+        mapped_skel_dir='/lustre/pschuber/consensi_fuer_joergen/nml_obj/'
+        fname_skel = get_filepaths_from_dir(mapped_skel_dir)
     nb_cpus = cpu_count()
     pool = Pool(processes=nb_cpus)
     m = Manager()
