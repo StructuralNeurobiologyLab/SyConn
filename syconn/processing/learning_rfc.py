@@ -15,6 +15,7 @@ import shutil
 import os
 import matplotlib.patches as patches
 from sklearn.decomposition import PCA
+import multiprocessing.pool
 
 __author__ = 'pschuber'
 
@@ -382,7 +383,7 @@ def start_multiprocess(func, params, debug=False, nb_cpus=None):
 
     # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
     # because the latter is only a wrapper function, not a proper class.
-    class MyPool(multi_proc.pool.Pool):
+    class MyPool(multiprocessing.pool.Pool):
         Process = NoDaemonProcess
     if nb_cpus is None:
         nb_cpus = max(cpu_count() - 2, 1)

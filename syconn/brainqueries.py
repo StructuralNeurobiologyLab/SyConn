@@ -1,14 +1,14 @@
 from itertools import combinations
-from syconn.utils import newskeleton
+from syconn.utils.newskeleton import NewSkeleton
 from multi_proc import QSUB_MAIN as qm
 from utils.datahandler import *
 from contactsites import write_summaries
 from processing.features import calc_prop_feat_dict
-from processing.learning_rfc import write_feat2csv, load_rfcs, \
+from processing.learning_rfc import write_feat2csv, load_rfcs,\
     start_multiprocess
-from processing.mapper import SkeletonMapper, \
-    similarity_check_star, prepare_syns_btw_annos
+from processing.mapper import SkeletonMapper, prepare_syns_btw_annos
 __author__ = 'pschuber'
+__QSUB__ = True
 
 
 def QSUB_mapping(wd):
@@ -21,12 +21,15 @@ def QSUB_mapping(wd):
     anno_list = [os.path.join(skel_dir, f) for f in
                 next(os.walk(skel_dir))[2] if 'k.zip' in f]
     np.random.shuffle(anno_list)
-    print "Found %d mapped Skeletons." % len(anno_list)
+    print "Found %d cell tracings." % len(anno_list)
     list_of_lists = [[anno_list[i::60], output_dir] for i in xrange(60)]
-    qm.QSUB_script(list_of_lists, 'skeleton_mapping', queue='somaqnodes',
-                work_folder="/home/pschuber/QSUB/", username="pschuber",
-                python_path="/home/pschuber/anaconda/bin/python",
-                path_to_scripts="/home/pschuber/skeleton-analysis/Philipp/QSUB")
+    if __QSUB__:
+        qm.QSUB_script(list_of_lists, 'skeleton_mapping', queue='somaqnodes',
+                    work_folder="/home/pschuber/QSUB/", username="pschuber",
+                    python_path="/home/pschuber/anaconda/bin/python",
+                    path_to_scripts="/home/pschuber/skeleton-analysis/Philipp/QSUB")
+    else:
+        start_multiprocess(annotate_annos, list_of_lists, nb_cpus=1)
 
 
 def annotate_annos(wd, anno_list, map_objects=True, method='hull', radius=1200,
@@ -34,10 +37,10 @@ def annotate_annos(wd, anno_list, map_objects=True, method='hull', radius=1200,
                    create_hull=True,
                    max_dist_mult=1.4, save_files=True, detect_outlier=True,
                    dh=None, overwrite=False, nb_neighbors=20,
-                   nb_hull_vox=500,
+                   nb_hull_vox=500, context_range=6000,
                    neighbor_radius=220, nb_rays=20, nb_voting_neighbors=100,
                    write2pkl=False, write_obj_voxel=True, output_dir=None,
-                   load_mapped_skeletons=True, az_min_votes=346):
+                   load_mapped_skeletons=True):
         """
         Example function how to annotate skeletons. Mappes a list of paths to nml
         files to objects given in DataHandler (use dh-keyword for warmstart).
@@ -136,15 +139,14 @@ def annotate_annos(wd, anno_list, map_objects=True, method='hull', radius=1200,
                 print "Couldn't load annotation file from", filepath
                 continue
             path = dh.data_path + 'nml_obj/' + re.findall('[^/]+$', filepath)[0]
-            skel = create_skel(dh, annotation, id=id, soma=soma)
-            skel.az_min_votes = az_min_votes
+            skel = create_skel(dh, annotation, id=id, soma=soma,
+                               context_range=context_range)
             skel.write_obj_voxel = write_obj_voxel
             if create_hull:
                 skel.hull_sampling(detect_outlier=detect_outlier, thresh=thresh,
                                    nb_neighbors=nb_neighbors,
                                    neighbor_radius=neighbor_radius,
                                    max_dist_mult=max_dist_mult)
-
             if map_objects:
                 skel.annotate_objects(dh, radius, method, thresh,
                                       filter_size, nb_hull_vox=nb_hull_vox,
@@ -169,33 +171,31 @@ def annotate_annos(wd, anno_list, map_objects=True, method='hull', radius=1200,
                                re.findall('[^/]+$', filepath)[0])
 
 
-def QSUB_remapping(anno_list=[],
-                   dest_dir='/lustre/pschuber/m_consensi_rr/nml_obj/',
-                   az_kd_set='/lustre/sdorkenw/j0126_cset/obj_az_1037_3d_3/',
-                   az_size_threshold=250, min_votes_az=346,
-                   recalc_prop_only=False, method='hull', dist=6000, supp=''):
+def QSUB_remapping(anno_list=[], dest_dir=None, recalc_prop_only=False,
+                   method='hull', dist=6000, supp=''):
     """
     Run annotate annos on available cluster nodes defined by somaqnodes.
     :param anno_list: str Paths to skeleton nml / kzip files
     :param dest_dir: str Directory path to store mapped skeletons
     """
-    if anno_list is []:
-        anno_list = [os.path.join(dest_dir, f) for f in
-                     next(os.walk(dest_dir))[2] if 'k.zip' in f]
     np.random.shuffle(anno_list)
     if dest_dir is not None and not os.path.isdir(dest_dir):
         os.makedirs(dest_dir)
     print "Found %d mapped Skeletons. Remapping with context range of %d" % \
           (len(anno_list), dist)
-    nb_processes = np.max((len(anno_list) / 3, 3))
-    list_of_lists = [[anno_list[i::nb_processes], dest_dir, az_kd_set,
-                      az_size_threshold, min_votes_az, recalc_prop_only, method,
-                      dist] for i in xrange(nb_processes)]
-    qm.QSUB_script(list_of_lists, 'skeleton_remapping', queue='somaqnodes',
-                   work_folder="/home/pschuber/QSUB/" + supp + "/",
-                   username="pschuber",
-                   python_path="/home/pschuber/anaconda/bin/python",
-                   path_to_scripts="/home/pschuber/skeleton-analysis/Philipp/QSUB")
+
+    if __QSUB__:
+        nb_processes = np.max((len(anno_list) / 3, 3))
+        list_of_lists = [[anno_list[i::nb_processes], dest_dir, recalc_prop_only,
+                          method, dist] for i in xrange(nb_processes)]
+        qm.QSUB_script(list_of_lists, 'skeleton_remapping', queue='somaqnodes',
+                       work_folder="/home/pschuber/QSUB/" + supp + "/",
+                       username="pschuber",
+                       python_path="/home/pschuber/anaconda/bin/python",
+                       path_to_scripts="/home/pschuber/skeleton-analysis/Philipp/QSUB")
+    else:
+        start_multiprocess(remap_skeletons, [anno_list, dest_dir, recalc_prop_only,
+                          method, dist], nb_cpus=1)
 
 
 def remap_skeletons(wd, mapped_skel_paths=[], dh=None, method='hull', radius=1200,
@@ -259,8 +259,6 @@ def remap_skeletons(wd, mapped_skel_paths=[], dh=None, method='hull', radius=120
             new_skel.obj_min_votes['mitos'] = mito_min_votes
             new_skel.obj_min_votes['p4'] = p4_min_votes
             new_skel.obj_min_votes['az'] = az_min_votes
-            # uncomment to sample all to create voting value for obj.-mapping eval
-            # new_skel.obj_min_votes = {'mitos': 0, 'az':0, 'p4':0}
             new_skel.write_obj_voxel = write_obj_voxel
             new_skel.annotate_objects(
                 dh, radius, method, thresh, filter_size,
@@ -268,23 +266,19 @@ def remap_skeletons(wd, mapped_skel_paths=[], dh=None, method='hull', radius=120
                 nb_voting_neighbors=nb_voting_neighbors, nb_rays=nb_rays,
                 nb_neighbors=nb_neighbors, neighbor_radius=neighbor_radius,
                 max_dist_mult=max_dist_mult)
-        # predict axoness and write to uninterpolated anno
-        # new_skel._property_features = {}
-        # new_skel._property_features['axoness'] = load_csv2feat(path)[0]
-        # new_skel._property_features['spiness'] = load_csv2feat(path,
-        #                                                        property='spiness')[0]
-        if rfc_spiness != None:
+        if rfc_spiness is not None:
             new_skel._property_features, new_skel.property_feat_names = \
                 calc_prop_feat_dict(new_skel, context_range)
             new_skel.predict_property(rfc_spiness, 'spiness',
-                                      max_neck2endpoint_dist=max_neck2endpoint_dist,
-                                      max_head2endpoint_dist=max_head2endpoint_dist)
-        if rfc_spiness != None and rfc_axoness != None:
+                                max_neck2endpoint_dist=max_neck2endpoint_dist,
+                                max_head2endpoint_dist=max_head2endpoint_dist)
+            new_skel._property_features = None
+        if rfc_spiness is not None and rfc_axoness is not None:
             new_skel.predict_property(rfc_axoness, 'axoness')
         if save_files and not recalc_prop_only:
             new_skel.write2kzip(path)
         if save_files and recalc_prop_only:
-            dummy_skel = newskeleton()
+            dummy_skel = NewSkeleton()
             dummy_skel.add_annotation(new_skel.old_anno)
             dummy_skel.add_annotation(mito)
             dummy_skel.add_annotation(p4)
@@ -302,7 +296,7 @@ def remap_skeletons(wd, mapped_skel_paths=[], dh=None, method='hull', radius=120
         print "Remapped skeleton %s successfully." % path
 
 
-def create_skel(dh, skel_source, id=None, soma=None):
+def create_skel(dh, skel_source, id=None, soma=None, context_range=6000):
     """
     Creates MappedSkeleton object using DataHandler and number/id of nml file
     or annotation object directly.
@@ -328,15 +322,15 @@ def create_skel(dh, skel_source, id=None, soma=None):
               " object." % (id, dh.nb_cpus)
         if id in dh.skeletons.keys():
              return dh.skeletons[id]
-        skel = SkeletonMapper(skel_source, dh.scaling, id=id, soma=soma)
+        skel = SkeletonMapper(skel_source, dh.scaling, id=id, soma=soma,
+                              context_range=context_range)
     skel._data_path = dh.data_path
     skel._mem_path = dh.mem_path
     skel.nb_cpus = dh.nb_cpus
     return skel
 
 
-def QSUB_synapse_mapping(source_path='/lustre/pschuber/m_consensi_rr/nml_obj/',
-                         max_hull_dist=60):
+def QSUB_synapse_mapping(source_path, max_hull_dist=60):
     """
     Finds synapses between skeletons and writes each contact site with at least
     p4 to a nml file. Afterwards these are collected and compressed to one
@@ -351,191 +345,15 @@ def QSUB_synapse_mapping(source_path='/lustre/pschuber/m_consensi_rr/nml_obj/',
         if not os.path.exists(cs_path+ending):
             os.makedirs(cs_path+ending)
     anno_permutations = list(combinations(nml_list, 2))
-    def chunkify(lst, n):
-        return [[list(lst[i::n]), cs_path, max_hull_dist] for i in xrange(n)]
-    list_of_lists = chunkify(anno_permutations, 300)
-    qm.QSUB_script(list_of_lists, 'synapse_mapping', queue='somaqnodes',
-                work_folder="/home/pschuber/QSUB/", username="pschuber",
-                python_path="/home/pschuber/anaconda/bin/python",
-                path_to_scripts="/home/pschuber/skeleton-analysis/Philipp/QSUB")
+    if __QSUB__:
+        def chunkify(lst, n):
+            return [[list(lst[i::n]), cs_path, max_hull_dist] for i in xrange(n)]
+        list_of_lists = chunkify(anno_permutations, 300)
+        qm.QSUB_script(list_of_lists, 'synapse_mapping', queue='somaqnodes',
+                    work_folder="/home/pschuber/QSUB/", username="pschuber",
+                    python_path="/home/pschuber/anaconda/bin/python",
+                    path_to_scripts="/home/pschuber/skeleton-analysis/Philipp/QSUB")
+    else:
+        start_multiprocess(prepare_syns_btw_annos, [anno_permutations, cs_path,
+                                                    max_hull_dist], nb_cpus=1)
     write_summaries(cs_path)
-
-
-def annotate_dense_vol():
-    # path='/lustre/pschuber/dense_vol_tracings/gt_skeletons.117.k.zip'
-    # skels = au.loadj0126NML(path)
-    # cnt = 0
-    # for ii, skel in enumerate(skels):
-    #     dest_path = '/lustre/pschuber/dense_vol_tracings/source/' \
-    #                 'iter_0_%d.k.zip' % ii
-    #     if os.path.exists(dest_path):
-    #         continue
-    #     print "Writing skel", skel
-    #     dummy_skel = NewSkeleton()
-    #     dummy_skel.add_annotation(skel)
-    #     cnt += 1
-    #     dummy_skel.to_kzip(dest_path)
-    # print "Wrote %d files to source folder." % cnt
-    # skel_paths = get_unique_skeletons('/lustre/pschuber/dense_vol_tracings/source/')
-    # QSUB_mapping(skel_dir='/lustre/pschuber/dense_vol_tracings/source/',
-    #              output_dir='/lustre/pschuber/dense_vol_tracings_shrinked/')
-    dest_paths = get_filepaths_from_dir('/lustre/pschuber/dense_vol_tracings_shrinked/nml_obj/')
-    # QSUB_synapse_mapping(source_path='/lustre/pschuber/dense_vol_tracings/nml_obj/')
-    start_multiprocess(helper_write_dense_vol_skel_hull, dest_paths, nb_cpus=10,
-                       debug=False)
-
-
-def get_unique_skeletons(skel_dir):
-    """
-    Gets unique skeleton paths in skeleton folder.
-    :param skel_dir: Path to folder containing skeleton files ending with k.zip
-    :return: list of skeleton paths which are unique
-    """
-    skel_paths = get_filepaths_from_dir(skel_dir)
-    unique_skel_paths = []
-    start_multiprocess(similarity_check_star, list(combinations(skel_paths, 2)))
-    return 0
-
-
-def helper_write_dense_vol_skel_hull(path):
-    min, max = get_dense_bounding_box()
-    min *= np.array([9, 9, 20])
-    max *= np.array([9, 9, 20])
-    final_coords = []
-    final_normals = []
-    dir, fname = os.path.split(path)
-    skel = load_mapped_skeleton(path, True, True)[0]
-    for ii, coord in enumerate(skel._hull_coords):
-        if np.any(coord < min) or np.any(coord > max):
-            continue
-        final_coords.append(coord / arr([9, 9, 20]))
-        final_normals.append(skel._hull_normals[ii])
-    skel._hull_coords = arr(final_coords)
-    skel._hull_normals = arr(final_normals)
-    hull_coords = get_dense_hull(skel)
-    np.save(dir + '/hull_' + fname[:-5] + 'npy', np.array(hull_coords))
-
-
-def get_dense_hull(skel):
-    skel_hull = skel._hull_coords
-    min_bb = np.min(skel_hull, axis=0)
-    max_bb = np.max(skel_hull, axis=0)
-    print "Computing dense hull for bounding box with volume", np.prod(max_bb-min_bb)
-    dense_bb = np.mgrid[min_bb[0]:max_bb[0], min_bb[1]:max_bb[1],
-               min_bb[2]:max_bb[2]].reshape(3,-1).T
-
-    nb_voting_neighbors = 20
-    tree = spatial.cKDTree(skel_hull)
-
-    def check_hull_normals(obj_coord, hull_coords, dir_vecs):
-        obj_coord = obj_coord[None, :]
-        left_side = np.inner(obj_coord, dir_vecs)
-        right_side = np.sum(dir_vecs * hull_coords, axis=1)
-        sign = np.sign(left_side - right_side)
-        return np.sum(sign) < 0
-
-    dists, obj_lookup_IDs = tree.query(dense_bb, k=nb_voting_neighbors)
-    annotated_hull_ixs = []
-    for i in range(len(obj_lookup_IDs)):
-        current_ids = obj_lookup_IDs[i]
-        is_in_hull = check_hull_normals(dense_bb[i], skel_hull[current_ids],
-                                        skel._hull_normals[current_ids])
-        if is_in_hull:
-            annotated_hull_ixs.append(i)
-    dense_hull = dense_bb[annotated_hull_ixs]
-    print "removed %d voxels from skeleton %s" % (len(dense_bb)-len(dense_hull),
-                                                  skel.filename)
-    return dense_hull
-
-
-def get_dense_bounding_box():
-    node_coords = []
-    skel_paths = get_filepaths_from_dir('/lustre/pschuber/dense_vol_tracings/source/')
-    for path in skel_paths:
-        try:
-            node_coords += [node.getCoordinate() for node in
-                      au.loadj0126NML(path)[0].getNodes()]
-        except Exception, e:
-            print e
-            print "Couldnt load", path
-    return np.min(node_coords, axis=0), np.max(node_coords, axis=0)
-
-
-def find_boundary_cs():
-    dic = load_pkl2obj('/lustre/pschuber/dense_vol_tracings/nml_obj/'
-                       'contact_sites_new/cs_dict_all.pkl')
-    print "Found %d cs in total." % len(dic.keys())
-    min, max = get_dense_bounding_box()
-    cnt = 0
-    for k, val in dic.iteritems():
-        cc = val['center_coord']
-        if np.any(cc < (min + np.array([10, 10, 5]))) or \
-                np.any(cc > (max - np.array([10, 10, 5]))):
-            print cc, k
-            cnt += 1
-    print cnt
-
-
-def rewrite_task_numbers():
-    skel_paths = get_filepaths_from_dir('/lustre/pschuber/consensi_fuer_joergen/consensi_fuer_phil/')
-    dest_dir = '/lustre/pschuber/soma_tracings_done/'
-    old_paths = get_filepaths_from_dir(dest_dir)
-    for ii, orig_path in enumerate(skel_paths):
-        dir, fname = os.path.split(orig_path)
-        for old_path in old_paths:
-            if 'task%d.' % ii in old_path:
-                shutil.move(old_path, dest_dir+fname)
-                print "Found", ii, "in", old_path
-                print "From %s to %s" %(old_path, dest_dir+fname)
-                break
-
-
-def map_myelin2gt():
-    annos = au.loadj0126NML('/lustre/pschuber/myelin_seeds.034.k.zip')
-    dummy_skel = newskeleton()
-    for i, anno in enumerate(annos):
-        print "Skeleton", i
-        mapped_skel = SkeletonMapper(anno, [9., 9., 20.], id=i)
-        mapped_skel.calc_myelinisation()
-        dummy_skel.add_annotation(mapped_skel.old_anno)
-    dummy_skel.to_kzip('/lustre/pschuber/myelin_seeds_mapped.k.zip')
-
-
-def test_new_cs_annotation():
-    nml_list = get_filepaths_from_dir('/home/pschuber/Documents/MPI/'
-                                      'dense_vol_tracings/nml_obj/')
-    cs_path = '/home/pschuber/Documents/MPI/cs_test/'
-    for ending in ['', 'cs', 'cs_p4', 'cs_az', 'cs_p4_az', 'pairwise',
-                   'overlap_vx']:
-        if not os.path.exists(cs_path+ending):
-            os.makedirs(cs_path+ending)
-    anno_permutations = list(combinations(nml_list, 2))
-    prepare_syns_btw_annos(anno_permutations, cs_path)
-
-
-def write_soma_to_mapped_skels():
-    dest_dir = '/lustre/pschuber/mapped_soma_tracings/nml_obj/'
-    soma_dir = '/lustre/pschuber/soma_tracings_done/'
-    for p in get_filepaths_from_dir(dest_dir):
-        skel, mito, p4, az, soma_old = load_ordered_mapped_skeleton(p)
-        print "Found soma with %d nodes in mapped skel %s." % \
-              (len(soma_old.getNodes()), skel.filename)
-        skel_id = get_skelID_from_path(p)
-        soma_skel_path = get_paths_of_skelID([str(skel_id)], traced_skel_dir=soma_dir)[0]
-        _, _, _, _, soma = load_ordered_mapped_skeleton(soma_skel_path)
-        if len(soma.getNodes()) == 0:
-            print "Skipping %s beacuse soma is empty." % skel.filename
-            continue
-        if len(soma.getNodes()) == len(soma_old.getNodes()):
-            continue
-        soma.setComment("soma")
-        print "Found corresponding soma %s with %d nodes. Adding it to mapped" \
-              "skeleton." % (soma.getComment(), len(soma.getNodes()))
-        dummy_skel = newskeleton()
-        dummy_skel.add_annotation(skel)
-        dummy_skel.add_annotation(mito)
-        dummy_skel.add_annotation(p4)
-        dummy_skel.add_annotation(az)
-        dummy_skel.add_annotation(soma)
-        dummy_skel.to_kzip(p)
-

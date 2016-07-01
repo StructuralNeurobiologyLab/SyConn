@@ -8,14 +8,20 @@ from syconn.utils.datahandler import get_filepaths_from_dir,\
     load_ordered_mapped_skeleton, load_mapped_skeleton, get_paths_of_skelID,\
     write_obj2pkl, load_pkl2obj, get_skelID_from_path
 from syconn.utils.neuron import Neuron
-
 __author__ = 'pschuber'
 
 rf_params = {'n_estimators': 4000, 'oob_score': True, 'n_jobs': -1,
              'class_weight': 'balanced', 'max_features': 0.66}
 
+rf_params_nodewise = {'n_estimators': 2000, 'oob_score': True, 'n_jobs': -1,
+                      'class_weight': 'balanced', 'max_features': 'auto'}
+
 
 def get_cell_type_labels():
+    """
+
+    :return:
+    """
     labels = {}
     labels["HVC"] = 0
     labels["LMAN"] = 0
@@ -27,6 +33,10 @@ def get_cell_type_labels():
 
 
 def get_cell_type_classes_dict():
+    """
+
+    :return:
+    """
     label_strings_dict = {}
     label_strings_dict[0] = "Excitatory Axons"
     label_strings_dict[1] = "Medium spiny Neurons"
@@ -49,12 +59,11 @@ def save_cell_type_clf(gt_path='/lustre/pschuber/gt_cell_types/',
     :param gt_path: str to directory of axoness ground truth
     :param clf_used: 'rf' or 'svm'
     """
-    X_cells_types, Y_cells_types = load_celltype_gt(gt_path, load_data=load_data)
+    X_cells_types, Y_cells_types = load_celltype_gt(load_data=load_data)
     save_train_clf(X_cells_types, Y_cells_types, clf_used, gt_path, params=rf_params)
 
 
-def load_celltype_gt(gt_path="/lustre/pschuber/gt_cell_types/",
-                     load_data=True, return_ids=False):
+def load_celltype_gt(load_data=True, return_ids=False):
     """
     (HVC, LMAN, STN) => excitatory axons (0)
     (MSN) => medium spiny neuron (1)
@@ -75,7 +84,7 @@ def load_celltype_gt(gt_path="/lustre/pschuber/gt_cell_types/",
     return x, y.astype(np.uint)
 
 
-def find_cell_types_from_dict(cell_type='MSN', skel_dir='/lustre/pschuber/mapped_soma_tracings/nml_obj/'):
+def find_cell_types_from_dict(cell_type, skel_dir):
     """
     returns list containing all paths of cells of type cell_type.
     """
@@ -89,14 +98,10 @@ def find_cell_types_from_dict(cell_type='MSN', skel_dir='/lustre/pschuber/mapped
     label_dict = get_cell_type_labels()
     if cell_type in label_dict.keys():
         cell_type = label_dict.values()[label_dict.keys().index(cell_type)]
-    # dummyskel = NewSkeleton()
     for key, value in cell_type_dict.iteritems():
         if value == cell_type:
             path = get_paths_of_skelID([str(key)], traced_skel_dir=skel_dir)[0]
             fpaths.append(path)
-            # skel = load_ordered_mapped_skeleton(key)[0]
-            # dummyskel.add_annotation(skel)
-    # dummyskel.toNml('/lustre/pschuber/%s_list.nml' % cell_type)
     return fpaths
 
 
@@ -133,57 +138,6 @@ def get_id_dict_from_skel_ids(skel_ids):
     return id_dict, rev_id_dict
 
 
-def write_consensi_labels():
-    """
-    Match gt skels with consensi skel ids
-    writes dictionary of skel_ids with corresponding label
-    :return:
-    """
-    skel_gt_path = '/lustre/pschuber/gt_cell_types/current_celltype_gt.k.zip'
-    consensi_skel = get_filepaths_from_dir('/lustre/pschuber/m_consensi_rr/'
-                                           'nml_obj/')
-    gt_skels = au.loadj0126NML(skel_gt_path)
-    consensi_celltype_label = {}
-    cellname2label_dict = get_cell_type_labels()
-    coords = []
-    for ii, skel in enumerate(gt_skels):
-        for node in skel.getNodes():
-            coords.append(node.getCoordinate_scaled())
-            break
-    nml_tree = spatial.cKDTree(coords)
-    for kk, skel_inner_path in enumerate(consensi_skel):
-        skel_inner = load_ordered_mapped_skeleton(skel_inner_path)[0]
-        skel_coords = []
-        for node in skel_inner.getNodes():
-            skel_coords.append(node.getCoordinate_scaled())
-        near_gt = nml_tree.query_ball_point(skel_coords, 1)
-        nb_equal = list(set([id for sublist in near_gt for id in sublist]))[0]
-        print set([id for sublist in near_gt for id in sublist])
-        skel_ID = get_skelID_from_path(skel_inner.filename)
-        gt_skel = gt_skels[nb_equal]
-        try:
-            class_nb = cellname2label_dict[gt_skel.getComment()]
-            consensi_celltype_label[skel_ID] = class_nb
-            print class_nb
-        except KeyError:
-            print "Didnt find", gt_skel.getComment()
-    # for ii, skel in enumerate(gt_skels):
-    #     print "%d/%d" % (ii, len(gt_skels))
-    #     for kk, skel_inner_path in enumerate(consensi_skel):
-    #         if skel_inner_path in did_skels:
-    #             continue
-    #         skel_inner = load_ordered_mapped_skeleton(skel_inner_path)[0]
-    #         if similarity_check(skel, skel_inner):
-    #             did_skels.append(skel_inner_path)
-    #             skel_ID = get_skelID_from_path(skel_inner.filename)
-    #             consensi_celltype_label[skel_ID] = skel.getComment()
-    #             break
-    #         if kk == len(consensi_skel):
-    #             print "Didnt find gt value for %s", skel_inner.filename
-    write_obj2pkl(consensi_celltype_label, '/lustre/pschuber/gt_cell_types/'
-                                           'consensi_celltype_labels2.pkl')
-
-
 def load_cell_gt(skel_ids):
     """
     Load cell types of skel ids
@@ -198,8 +152,6 @@ def load_cell_gt(skel_ids):
             skel_labels[i] = class_nb
         except KeyError:
             pass
-            #print "Didnt find", skel_ids[i]
-            #class_nb = -1
     print "Using %d/%d labeled skeletons as GT for cell type RFC training." % \
           (len(skel_labels[skel_labels != -1]), len(skel_labels))
     return skel_labels
@@ -218,9 +170,7 @@ def load_celltype_feats(gt_path='/lustre/pschuber/gt_cell_types/'):
         skeleton_feats.append(val)
         skeleton_ids.append(key)
     ixs = np.argsort(skeleton_ids)
-    return arr(skeleton_ids)[ixs], arr(skeleton_feats)[ixs]#[:, (11, 3, 22, 55,
-        # 21, 29, 10, 6, 14, 9, 17, 0, 47, 12, 8, 18, 7,
-        # 13, 52, 1, 19, 44, 39, 5, 4, 51, 33, 46)]
+    return arr(skeleton_ids)[ixs], arr(skeleton_feats)[ixs]
 
 
 def load_celltype_probas(gt_path='/lustre/pschuber/gt_cell_types/'):
@@ -287,9 +237,7 @@ def write_feats_importance(gt_path='/lustre/pschuber/gt_cell_types/',
     Writes out feature importances and feature names to gt_dir
     """
     save_cell_type_clf(gt_path, load_data=load_data, clf_used=clf_used)
-    feat_names = np.load(gt_path + 'feat_names.npy')#[(11, 3, 22, 55,
-        # 21, 29, 10, 6, 14, 9, 17, 0, 47, 12, 8, 18, 7,
-        # 13, 52, 1, 19, 44, 39, 5, 4, 51, 33, 46),]
+    feat_names = np.load(gt_path + 'feat_names.npy')
 
     rf = joblib.load(gt_path + '/%s/%s.pkl' % (clf_used, clf_used))
     skeleton_ids, skeleton_feats = load_celltype_feats(gt_path)
@@ -298,10 +246,6 @@ def write_feats_importance(gt_path='/lustre/pschuber/gt_cell_types/',
     print "# of feats and feat-names:", skeleton_feats.shape[1], len(feat_names)
     for ii, proba in enumerate(skel_type_probas):
         proba_dict[skeleton_ids[ii]] = proba
-
-    proba_dict = load_pkl2obj(gt_path + '/wiring/celltype_proba_dict.pkl')
-    # np.save(gt_path + '/wiring/skel_ids.npy', skel_ids)
-    # np.save(gt_path + '/wiring/skel_type_probas.npy', skel_type_probas)
 
     importances = rf.feature_importances_
     feature_importance(rf, save_path='/home/pschuber/figures/cell_types/'
@@ -329,14 +273,7 @@ def draw_feat_hist(gt_path='/lustre/pschuber/gt_cell_types/', k=15,
     label_strings_dict[2] = "Pallidal-like Neurons"
     label_strings_dict[3] = "Inhibitory Interneurons"
     importances = np.load(gt_path + 'feat_importances.npy')
-    feat_names = np.load(gt_path + 'feat_names.npy')#[(11, 3, 22, 55,
-        # 21, 29, 10, 6, 14, 9, 17, 0, 47, 12, 8, 18, 7,
-        # 13, 52, 1, 19, 44, 39, 5, 4, 51, 33, 46),]
-
-    #feats = np.load(gt_path + 'wiring/skeleton_feats.npy')
-    #skel_ids = np.load(gt_path + 'wiring/skel_ids.npy')
-    #skel_type_probas = np.load('/lustre/pschuber/gt_cell_types/wiring/'
-    #                           'skel_type_probas.npy')
+    feat_names = np.load(gt_path + 'feat_names.npy')
     skel_ids, feats = load_celltype_feats(gt_path)
     skel_ids2, skel_type_probas = load_celltype_probas(gt_path)
     assert np.all(np.equal(skel_ids, skel_ids2)), "Skeleton ordering wrong for"\
@@ -394,322 +331,12 @@ def draw_feat_hist(gt_path='/lustre/pschuber/gt_cell_types/', k=15,
         plt.savefig(fig_path + "/feat%dhist%d.png" % (n, len(classes)), dpi=600)
 
 
-def get_soma_tasks_names():
-    soma_task_p = '/lustre/pschuber/soma_tracing_skels/'
-    find_ids = ['241', '190', '31', '496']
-    paths = get_filepaths_from_dir(soma_task_p)
-    for path in paths:
-        skels = au.loadj0126NML(path)
-        if skels[0].comment in find_ids:
-            print path
-
-
-def write_wrong_predicted_celltypes():
-    gt_path='/lustre/pschuber/gt_cell_types/'
-    gt_dict = load_pkl2obj('/lustre/pschuber/gt_cell_types/'
-                                           'consensi_celltype_labels2.pkl')
-    proba_dict = proba_dict = load_pkl2obj(gt_path + '/wiring/celltype_proba_dict.pkl')
-    for k, v in gt_dict.iteritems():
-        if (v==3) and (v != np.argmax(proba_dict[k])):
-            print k, v, np.argmax(proba_dict[k])
-
-
-def write_classes2_3():
-    for i in [2,3]:
-        paths=find_cell_types_from_dict(cell_type=i)
-        for p in paths:
-            dir, fname = os.path.split(p)
-            shutil.copyfile(p, '/lustre/pschuber/cell_types_analysis/rare_classes/'
-                            '%s' % (fname))
-            print "Writing", fname
-
-
-def grid_search_rfc_params():
-    gt_path='/lustre/pschuber/gt_cell_types/'
-    X, Y = load_celltype_gt(gt_path, load_data=True)
-    mean_l = []
-    std_l = []
-    params_l = []
-    for weights in [None, 'balanced']:
-        for max_feats in [0.2, 0.33, 0.4, 0.5, 0.66, int(np.sqrt(X.shape[1]))]:
-            for nb_trees in np.arange(2000, 6000, 1000):
-                vals = []
-                clf = init_clf('rf', params={'n_estimators': nb_trees,
-                                             'max_features': max_feats,
-                                             'oob_score': True,
-                                             'class_weight': weights})
-                for i in range(5):
-                    clf.fit(X, Y)
-                    vals.append(clf.oob_score_)
-                mean_l.append(np.mean(vals))
-                std_l.append(np.std(vals))
-                print "oob-score of %0.4f +- %0.4f" % (np.mean(vals), np.std(vals))
-                print "Params:", [max_feats, nb_trees, weights]
-                params_l.append([max_feats, nb_trees, weights])
-    opt_oob = np.max(mean_l)
-    opt_std = std_l[np.argmax(mean_l)]
-    print "Found optimal params with oob-score of %0.4f +- %0.4f" % (opt_oob, opt_std)
-    print params_l[np.argmax(mean_l)]
-
-
-rf_params_nodewise = {'n_estimators': 2000, 'oob_score': True, 'n_jobs': -1,
-             'class_weight': 'balanced', 'max_features': 'auto'}
-
-
-def feature_context_eval_nodewise(fig_path='/lustre/pschuber/figures/'
-                                  'cell_types_nodewise/', load_data=True):
+def feat_calc_helper(params):
     """
-    Calculates performance of nodewise celltype classification in given certain
-    window ranges (250, 130000, 52)
-    :param fig_path: path where to store results.
-    :param load_data: if false recomputes the leave-one-out procedure
-    :return: None
-    """
-    prec_den = []
-    prec_ax = []
-    prec_soma = []
-    rec_den = []
-    rec_ax = []
-    rec_soma = []
-    cell_acc_total = []
-    fs_den = []
-    fs_ax = []
-    fs_soma = []
-    dists = np.linspace(250, 13000, 52)
-    for dist in dists:
-        print "Processing Context Range:", dist
-        try:
-            prec, rec, fs, cell_acc = first_celltypes_nodewise_eval(
-            load_data=load_data, fig_path='/lustre/pschuber/'
-            'figures/cell_types_nodewise/%d/' % dist, dist=dist)
-        except:
-            print "Skipped", dist
-            continue
-        prec_den.append(prec[0])
-        prec_ax.append(prec[1])
-        prec_soma.append(prec[2])
-        rec_den.append(rec[0])
-        rec_ax.append(rec[1])
-        rec_soma.append(rec[2])
-        fs_den.append(fs[0])
-        fs_ax.append(fs[1])
-        fs_soma.append(fs[2])
-        cell_acc_total += [cell_acc]
-    dists = np.array(dists, dtype=np.float) / 1000
-    plt.figure()
-    plt.plot(dists, cell_acc_total)
-    plt.xlabel(u'Context Range [µm]')
-    plt.ylabel('Accuracy of Cell Prediction')
-    plt.savefig(fig_path+'/cell_pred_accuracy_context_eval.png')
 
-    plot_pr([prec_den, prec_ax, prec_soma], [rec_den, rec_ax, rec_soma],
-            legend_labels=['Dendrite', 'Axon', 'Soma'], title='')
-    plt.savefig(fig_path+'/pr_nodewise_pred_context_eval.png')
-
-    plt.figure()
-    plot_pr([fs_den, fs_ax, fs_soma], [np.array(dists)*2]*3,
-            legend_labels=['Dendrite', 'Axon', 'Soma'],
-            colorVals=['0.6', [0.841, 0.138, 0.133, 1.], '0.32'],
-            xlabel=u'Context Range [µm]', r_x=[0, np.max(dists) * 2],
-            save_path=fig_path+'/node_pred_fscore_context_eval.png',
-            ylabel='F-Score', l_pos="lower right")
-
-
-def first_celltypes_nodewise_eval(load_data=True, dist=6000,
-                                  fig_path='/lustre/pschuber/figures/'
-                                           'cell_types_nodewise/',
-                                  recompute=False, plot=True):
-    """
-    evaluates performance of nodewise celltype classification for a single
-    context range. The latter defines the window in which to calculate context
-    features.
-    :param load_data: load data from stored files
-    :param dist: context range in nm (total range is 2*dist)
-    :param fig_path: destination folder results
+    :param params:
     :return:
     """
-    X_cells, Y_cells = load_gt_celltype_nodewise(max_nn_dist=dist, recompute=recompute)
-    if not os.path.exists(fig_path):
-        os.makedirs(fig_path)
-    if not load_data:
-        print "Predicting %d cells." % len(X_cells)
-        print "Feautre dimensionality:", X_cells[0].shape[1]
-        res = []
-        loo = cross_validation.LeaveOneOut(len(X_cells))
-        node_proba_res = []
-        node_gt_res = []
-        node_pred_res = []
-        # llo with whole cells
-        for train_ixs, test_ixs in loo:
-            X_train = arr([item for sublist in arr(X_cells)[train_ixs] for
-                           item in sublist.tolist()])
-            y_train = arr([item for sublist in arr(Y_cells)[train_ixs] for
-                           item in sublist.tolist()])
-            rf = RandomForestClassifier(**rf_params_nodewise)
-            rf.fit(X_train, y_train)
-            X_single_cell = X_cells[test_ixs][0]
-            node_pred = rf.predict(X_single_cell)
-            node_pred_res += node_pred.tolist()
-            node_proba = rf.predict_proba(X_single_cell)
-            node_proba_res += node_proba.tolist()
-            node_gt_res += Y_cells[test_ixs][0].tolist()
-            cell_pred = cell_classification(node_pred)
-            res.append(Y_cells[test_ixs][0][0] == cell_pred)
-            print test_ixs, "\t",\
-                np.sum(node_pred == Y_cells[test_ixs][0])/float(len(node_pred)),\
-                cell_pred, Y_cells[test_ixs][0][0]
-        node_proba_res = arr(node_proba_res)
-        node_gt_res = arr(node_gt_res)
-        node_pred_res = arr(node_pred_res)
-        np.save(fig_path+'cell_pred_gt_node_proba_res.npy', node_proba_res)
-        np.save(fig_path+'cell_pred_gt_node_gt_res.npy', node_gt_res)
-        np.save(fig_path+'cell_pred_gt_node_pred_res.npy', node_pred_res)
-        np.save(fig_path+'cell_pred_gt_res.npy', res)
-    else:
-        node_proba_res = np.load(fig_path+'cell_pred_gt_node_proba_res.npy')
-        node_gt_res = np.load(fig_path+'cell_pred_gt_node_gt_res.npy')
-        node_pred_res = np.load(fig_path+'cell_pred_gt_node_pred_res.npy')
-        res = np.load(fig_path+'cell_pred_gt_res.npy')
-    print "Support:", np.sum(node_gt_res == 0), np.sum(node_gt_res == 1),\
-            np.sum(node_gt_res == 2)
-    y_test_0 = np.zeros_like(node_gt_res)
-    y_test_0[node_gt_res == 0] = 1
-    y_test_1 = np.zeros_like(node_gt_res)
-    y_test_1[node_gt_res == 1] = 1
-    y_test_2 = np.zeros_like(node_gt_res)
-    y_test_2[node_gt_res == 2] = 1
-    y_test_3 = np.zeros_like(node_gt_res)
-    y_test_3[node_gt_res == 3] = 1
-    prec, rec, tr = precision_recall_curve(y_test_0, node_proba_res[:, 0])
-    fs = fscore(rec, prec)
-
-    if plot:
-        label_strings_dict = {}
-        label_strings_dict[0] = "Excitatory Axons"
-        label_strings_dict[1] = "Medium spiny Neurons"
-        label_strings_dict[2] = "Pallidal-like Neurons"
-        label_strings_dict[3] = "Inhibitory Interneurons"
-        # find threshold for precision value
-        tresh4prec = .9
-        prec_l = []
-        rec_l = []
-        t_l = []
-        fopt_l = []
-        topt_l = []
-        prec, rec, t = precision_recall_curve(y_test_0, node_proba_res[:, 0])
-        prec_l.append(prec)
-        rec_l.append(rec)
-        f_scores = fscore(rec, prec)
-        fopt_l.append(np.max(f_scores))
-        topt_l.append(t[np.argmax(f_scores)])
-        t_l.append(t)
-        print "[0] Threshold for precision bigger than %0.2f:" % tresh4prec,\
-            t[np.argmax(tresh4prec <= prec)]
-        plt.close()
-        prec, rec, t = precision_recall_curve(y_test_1, node_proba_res[:, 1])
-        prec_l.append(prec)
-        rec_l.append(rec)
-        f_scores = fscore(rec, prec)
-        fopt_l.append(np.max(f_scores))
-        topt_l.append(t[np.argmax(f_scores)])
-        t_l.append(t)
-        print "[1]Threshold for precision bigger than %0.2f:" % tresh4prec,\
-            t[np.argmax(tresh4prec <= prec)]
-
-        prec, rec, t = precision_recall_curve(y_test_2, node_proba_res[:, 2])
-        prec_l.append(prec)
-        rec_l.append(rec)
-        f_scores = fscore(rec, prec)
-        fopt_l.append(np.max(f_scores))
-        topt_l.append(t[np.argmax(f_scores)])
-        t_l.append(t)
-        print "[2]Threshold for precision bigger than %0.2f:" % tresh4prec,\
-            t[np.argmax(tresh4prec <= prec)]
-
-        prec, rec, t = precision_recall_curve(y_test_3, node_proba_res[:, 3])
-        prec_l.append(prec)
-        rec_l.append(rec)
-        f_scores = fscore(rec, prec)
-        fopt_l.append(np.max(f_scores))
-        topt_l.append(t[np.argmax(f_scores)])
-        t_l.append(t)
-        print "[3]Threshold for precision bigger than %0.2f:" % tresh4prec,\
-            t[np.min((np.argmax(tresh4prec <= prec), len(t)-1))]
-
-        new_colors = ["0.1", "0.3", "0.5", "0.82"]
-        plot_pr(prec_l, rec_l, title='', legend_labels=label_strings_dict.values(),
-                r=[0., 1.01], r_x=[0., 1.01], colorVals=new_colors, ls=20)
-        plt.savefig('/lustre/pschuber/figures/cell_types_nodewise/'
-                    'clf_all_big.png', dpi=300)
-        plt.close()
-        plot_pr(prec_l, rec_l, title='', legend_labels=label_strings_dict.values(),
-                r=[0.5, 1.01], r_x=[0.5, 1.01], colorVals=new_colors, ls=20)
-        plt.savefig('/lustre/pschuber/figures/cell_types_nodewise/'
-                    'clf_all.png', dpi=300)
-        plt.close()
-
-
-    print "optimal threshold for 0 at %0.3f with fs %0.3f" % \
-          (tr[np.argmax(fs)], np.max(fs))
-    # plot_pr(prec, rec, title='ExAx Classification')
-    # plt.savefig(fig_path+'node_clf_pr_0.png', dpi=300)
-    # plt.close()
-    prec, rec, tr = precision_recall_curve(y_test_1, node_proba_res[:, 1])
-    fs = fscore(rec, prec)
-    print "optimal threshold for 1 at %0.3f with fs %0.3f" % \
-          (tr[np.argmax(fs)], np.max(fs))
-    print "fs at threshold=0.5", fs[np.argmax(tr>0.5)]
-    # plot_pr(prec, rec, title='MSN Classification')
-    # plt.savefig(fig_path+'node_clf_pr_msn.png', dpi=300)
-    # plt.close()
-    prec, rec, tr = precision_recall_curve(y_test_2, node_proba_res[:, 2])
-    fs = fscore(rec, prec)
-    print "optimal threshold for 2 at %0.3f with fs %0.3f" % \
-          (tr[np.argmax(fs)], np.max(fs))
-    # plot_pr(prec, rec, title='GP Classification')
-    # plt.savefig(fig_path + 'node_clf_pr_gp.png', dpi=300)
-    # plt.close()
-    prec, rec, tr = precision_recall_curve(y_test_3, node_proba_res[:, 3])
-    fs = fscore(rec, prec)
-    print "optimal threshold for 3 at %0.3f with fs %0.3f" % \
-          (tr[np.argmax(fs)], np.max(fs))
-    # plot_pr(prec, rec, title='FS Classification')
-    # plt.savefig(fig_path + 'node_clf_pr_fs.png', dpi=300)
-    # plt.close()
-    prec, rec, fs, supp = precision_recall_fscore_support(node_gt_res, node_pred_res)
-    print 'Multiclass Classification', prec, rec, fs, supp
-    print "Weighted F-score mean:", np.sum(fs * supp) / np.sum(supp)
-    print 'Multiclass Accuracy:', accuracy_score(node_gt_res, node_pred_res)
-    cell_acc = np.sum(res) / float(len(res))
-    print "Cell classification acc. (%d cells):\t%0.4f" % (len(res), cell_acc)
-    return prec, rec, fs, cell_acc
-
-
-def load_gt_celltype_nodewise(recompute=False, max_nn_dist=6000):
-    gt_path = '/lustre/pschuber/gt_cell_types_nodewise/'
-    if not os.path.isfile(gt_path+'nodeswise_gt_x_%d.npy' % max_nn_dist)\
-            or recompute:
-        print "Recomputing features for nodewise celltype prediction." \
-              "Saving it to %s." % gt_path
-        _, cell_labels, skel_ids = load_celltype_gt(return_ids=True)
-        skel_paths = get_paths_of_skelID(skel_ids, "/lustre/pschuber/"
-                                        "mapped_soma_tracings/nml_obj/")
-        res = start_multiprocess(feat_calc_helper, zip(skel_paths, cell_labels),
-                                 nb_cpus=16, debug=False)
-        x_total = []
-        y_total = []
-        for el in res:
-            x_total.append(el[0])
-            y_total.append(el[1])
-        np.save(gt_path+'nodeswise_gt_x_%d.npy' % max_nn_dist, arr(x_total))
-        np.save(gt_path+'nodeswise_gt_y_%d.npy' % max_nn_dist, arr(y_total))
-    else:
-        x_total = np.load(gt_path+'nodeswise_gt_x_%d.npy' % max_nn_dist)
-        y_total = np.load(gt_path+'nodeswise_gt_y_%d.npy' % max_nn_dist)
-    return x_total, y_total
-
-
-def feat_calc_helper(params):
     skel_path, cell_label = params
     skel = load_ordered_mapped_skeleton(skel_path)[0]
     morph_feat, spine_feat, node_feat_ids = morphology_feature_celltypes(skel_path)
@@ -797,7 +424,7 @@ def morphology_feature_celltypes(source, max_nn_dist=6000):
 
 
 def objfeat2skelnode_cellnodes(node_coords, node_radii, node_ids,
-                               nearby_node_list, obj_dict, scaling, is_az=False):
+                               nearby_node_list, obj_dict, scaling):
     """
     Calculate features of SegmentationDatasetObjects along Skeleton.
     :param node_coords:
@@ -809,7 +436,6 @@ def objfeat2skelnode_cellnodes(node_coords, node_radii, node_ids,
     :return: array of dimension nb_skelnodes x 2. The two features are:
     absolute number of assigned objects and mean voxel size of the objects.
     """
-    # TODO: add az sign.
     skeleton_tree = spatial.cKDTree(node_coords)
     nb_skelnodes = len(node_coords)
     obj_assignment = [[] for i in range(nb_skelnodes)]

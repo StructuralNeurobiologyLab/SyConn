@@ -8,7 +8,7 @@ try:
     from Cython.Distutils import build_ext
     from Cython.Build import cythonize
 except ImportError:
-    print "Couldnt find Cython."
+    raise ImportError('Cython not find, please install manually beforehand.')
 cmdclass = {'build_ext': build_ext}
 ext_modules = [Extension("syconn.ray_casting.ray_casting_radius",
                          ["syconn/ray_casting/ray_casting_radius.pyx"],
@@ -24,7 +24,7 @@ config = {
     'version': '0.1',
     'install_requires': ['nose', 'matplotlib', 'sklearn', 'networkx', 'numpy',
                          'scipy', 'seaborn', 'knossos_python_tools',
-                         'elektronn'],
+                         'elektronn', 'cython'],
     'scripts': [],  'cmdclass': cmdclass, 'ext_modules': ext_modules,
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_python_'

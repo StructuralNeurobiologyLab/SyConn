@@ -12,8 +12,7 @@ from scipy import stats
 from sklearn.decomposition import PCA
 
 from syconn.contactsites import convert_to_standard_cs_name
-from syconn.brainqueries import annotate_annos, remap_skeletons, \
-    get_dense_bounding_box
+from syconn.brainqueries import annotate_annos, remap_skeletons
 from syconn.processing.cell_types import load_celltype_feats
 from syconn.processing.features import get_obj_density
 from syconn.processing.synapticity import syn_sign_prediction
@@ -485,14 +484,10 @@ def write_new_syn_cs(dest_path='/lustre/pschuber/figures/shawns_figure/',
     source = get_paths_of_skelID(['548', '88'])
     paths = get_filepaths_from_dir('/lustre/pschuber/figures/syns/nml_obj/')
     if dh is None:
-        dh = data_handler()
+        dh = DataHandler()
     if renew:
         annotate_annos(source, dh=dh, overwrite=True, write_obj_voxel=True)
     print "Plotting skeletons", paths
-    cs_file_path = get_cs_path(paths)
-    # min_pos, max_pos, center_coord = get_box_from_cs_nml(cs_file_path, cs_nb=1,
-    #                                                      offset=(150, 150, 150))
-    # print center_coord
     center_coord = np.array([2475, 2215, 540])*np.array([9., 9., 20.]) / 10.
     offset = np.array([200, 200, 200])
     min_pos, max_pos = [center_coord - offset, center_coord + offset]
@@ -527,7 +522,7 @@ def write_workflow_fig(dest_path='/lustre/pschuber/figures/spines/',
                                                 'mapped_soma_tracings/nml_obj/')
     if renew:
         if dh is None:
-            dh = data_handler()
+            dh = DataHandler()
         annotate_annos(source, dh=dh, overwrite=True, write_obj_voxel=True)
     print "Plotting skeletons", paths
     cs_file_path = get_cs_path(paths)
@@ -951,9 +946,14 @@ def get_celltype_samples():
 
 
 def neck_head_az_size_hist(cs_dir, recompute=False):
+    """
+
+    :param cs_dir:
+    :param recompute:
+    :return:
+    """
     prop_dict = load_pkl2obj(cs_dir + '/property_dict.pkl')
     cs_dict = load_pkl2obj(cs_dir + '/cs_dict.pkl')
-    # cell_preds = load_pkl2obj('/lustre/pschuber/gt_cell_types/cell_pred_dict.pkl')
     consensi_celltype_label = load_pkl2obj('/lustre/pschuber/gt_cell_types/'
                                         'consensi_celltype_labels_reviewed3.pkl')
     spine_types = [[], [], []]
@@ -971,7 +971,7 @@ def neck_head_az_size_hist(cs_dir, recompute=False):
                 except KeyError:
                     continue
             if key is None:
-                print "Didnt find CS with key %s" % k
+                print "Didnt find CS with key %s" % old_key
             skel_ids = val.keys()
             skel1, skel2 = val.values()
             ax1 = skel1["axoness"]
@@ -1077,26 +1077,6 @@ def loc_syn_type_plot(data, save_path="/lustre/sdorkenw/figures/" \
     plt.tight_layout()
     plt.savefig(save_path, dpi=300)
     # plt.show(block=False)
-
-
-def plot_dense_tracings():
-    path='/lustre/pschuber/dense_vol_tracings/gt_skeletons.117.k.zip'
-    skels = au.loadj0126NML(path)
-    min_pos, max_pos = get_dense_bounding_box()
-    min_pos = min_pos * np.array([9, 9, 20])/10.
-    max_pos = max_pos * np.array([9, 9, 20])/10.
-    mlab.figure()
-    cmap = get_cmap(len(skels), 'Paired')
-    for ii, skel in enumerate(skels):
-        plot_skel(skel, min_pos, max_pos, color=cmap(ii))
-    # mlab.figure()
-    # cmap = get_cmap(len(skels), 'Accent')
-    # for ii, skel in enumerate(skels):
-    #     plot_skel(skel, min_pos, max_pos, color=cmap(ii))
-    # mlab.figure()
-    # cmap = get_cmap(len(skels), 'Dark2')
-    # for ii, skel in enumerate(skels):
-    #     plot_skel(skel, min_pos, max_pos, color=cmap(ii))
 
 
 def get_cmap(N, cmap):

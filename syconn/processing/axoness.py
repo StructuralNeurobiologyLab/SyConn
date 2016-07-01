@@ -17,78 +17,13 @@ from syconn.utils.datahandler import get_filepaths_from_dir, \
 from syconn.utils.newskeleton import NewSkeleton, SkeletonAnnotation
 
 
-def save_axoness_clf(gt_path='/lustre/pschuber/gt_axoness/',
-                             clf_used='rf'):
-    """
-    Save axoness clf specified by clf_used to gt_directory.
-    :param gt_path: str to directory of axoness ground truthsvnm
-    :param clf_used: 'rf' or 'svm'
-    """
-    dendrite_features, axon_features, soma_feature, \
-    skelnode_gt = load_axon_gt(gt_path)
-    X_cells = arr(dendrite_features + axon_features + soma_feature)
-    X_train = arr([item for sublist in X_cells for item in sublist])
-    y_train = arr([item for sublist in skelnode_gt for item in sublist])
-    x, y = load_axon_gt_cell()
-    X_train = np.concatenate((X_train, x), axis=0)
-    y_train = np.concatenate((y_train, y))
-    save_train_clf(X_train, y_train, clf_used, gt_path)
-
-
-def load_axon_gt_cell(recompute=False):
-    anno_path = '/lustre/pschuber/gt_axoness/nml_obj/' \
-                'axoness_gt_190.k.zip'
-    if not os.path.isfile(anno_path+'.npy') or recompute:
-        skel = load_ordered_mapped_skeleton(anno_path)[0]
-
-        morph_feat, spine_feat, node_feat_ids = morphology_feature(anno_path)
-        node_feats = np.concatenate((morph_feat, spine_feat), axis=1)
-        skel_nodes = skel.getNodes()
-        x = np.zeros((len(skel_nodes), 24))
-        y = np.zeros(len(skel_nodes))
-        for ii, node in enumerate(skel_nodes):
-            node_id = node.getID()
-            x[ii] = node_feats[node_feat_ids == node_id]
-            y[ii] = int(re.findall('gt_ax(\d+)', node.getComment())[0])
-        np.save(anno_path+'_x.npy', x)
-        np.save(anno_path+'_y.npy', y)
-    else:
-        x = np.load(anno_path+'_x.npy')
-        y = np.load(anno_path+'_y.npy')
-    return x, y
-
-
-def load_axon_gt(gt_path):
-    gt_axon_files = get_filepaths_from_dir(gt_path+'axon/nml_obj/')
-    gt_dendrite_files = get_filepaths_from_dir(gt_path+'dendrite/nml_obj/')
-    gt_soma_files = get_filepaths_from_dir(gt_path+'soma/nml_obj/')
-    axon_features = []
-    dendrite_features = []
-    soma_features = []
-    skelnode_gt = []
-    for dendrite_fname in gt_dendrite_files:
-        input, header = load_csv2feat(dendrite_fname)
-        curr_feat = input[:, 1:]
-        dendrite_features.append(curr_feat)
-        skelnode_gt.append([0]*curr_feat.shape[0])
-    print "Computed dendrite feature from groundtruth."
-    for axon_fname in gt_axon_files:
-        input, header = load_csv2feat(axon_fname)
-        curr_feat = input[:, 1:]
-        axon_features.append(curr_feat)
-        skelnode_gt.append([1]*curr_feat.shape[0])
-    print "Computed axon feature from groundtruth."
-    for soma_fname in gt_soma_files:
-        input, header = load_csv2feat(soma_fname)
-        curr_feat = input[:, 1:]
-        soma_features.append(curr_feat)
-        skelnode_gt.append([2]*curr_feat.shape[0])
-    print "Computed soma feature from groundtruth."
-    skelnode_gt = arr(skelnode_gt)
-    return dendrite_features, axon_features, soma_features, skelnode_gt
-
-
 def predict_axoness_mappedskel(fname_skel=[], recompute_feat=False):
+    """
+
+    :param fname_skel:
+    :param recompute_feat:
+    :return:
+    """
     if fname_skel == []:
         mapped_skel_dir='/lustre/pschuber/consensi_fuer_joergen/nml_obj/'
         fname_skel = get_filepaths_from_dir(mapped_skel_dir)
@@ -97,7 +32,6 @@ def predict_axoness_mappedskel(fname_skel=[], recompute_feat=False):
     m = Manager()
     q = m.Queue()
     params = [(path, q, recompute_feat) for path in fname_skel]
-    # result = pool.map_async(predict_axoness_of_single_mappedskel, params)
     result = map(predict_axoness_of_single_mappedskel, params)
     # monitor loop
     while True:
@@ -114,6 +48,11 @@ def predict_axoness_mappedskel(fname_skel=[], recompute_feat=False):
 
 
 def predict_axoness_of_single_mappedskel(args):
+    """
+
+    :param args:
+    :return:
+    """
     path, q, recompute_feat = args
     anno, mitos, p4, az = load_ordered_mapped_skeleton(path)
     rfc_axoness = joblib.load('/lustre/pschuber/gt_axoness/rfc/rfc_axoness.pkl')
@@ -143,8 +82,7 @@ def predict_axoness_of_single_mappedskel(args):
             node.setComment("".join(help_list))
         for ii in range(len(proba[k])):
             node.setDataElem('axoness_proba%d' % ii, proba[k, ii])
-    #majority_vote(anno, 'axoness', 6000)
-    majority_vote(anno, 'axoness', 3000)
+    majority_vote(anno, 'axoness', 6000)
     grow_out_soma(anno)
     majority_processes(anno)
     dummy_skel = NewSkeleton()
@@ -179,9 +117,8 @@ def predict_axoness_from_node_comments(anno):
             except IndexError:
                 skel_id = re.findall('syn(\d+).k.zip', n_comment)[0]
             axoness[ids.index(skel_id)] += [int(axoness_class)]
-        #anno.addNode(node)
-    axoness_0 = cell_classification(arr(axoness[0])) # int(np.round(np.mean(axoness[0])))
-    axoness_1 = cell_classification(arr(axoness[1])) # int(np.round(np.mean(axoness[1])))
+    axoness_0 = cell_classification(arr(axoness[0]))
+    axoness_1 = cell_classification(arr(axoness[1]))
     axoness_comment = ids[0]+'axoness'+str(axoness_0) \
     + '_' + ids[1]+'axoness'+str(axoness_1)
     anno.appendComment(axoness_comment)
@@ -329,6 +266,10 @@ def grow_out_soma(anno, max_dist=700):
 
 
 def get_soma_tracing_task_skels():
+    """
+
+    :return:
+    """
     paths = get_filepaths_from_dir('/lustre/pschuber/st250_pt3_minvotes18/'
                                    'nml_obj/')
     dest_path = '/lustre/pschuber/soma_tracing_skels/'

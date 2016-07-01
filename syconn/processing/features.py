@@ -11,63 +11,13 @@ from learning_rfc import write_feat2csv, cell_classification
 from syconn.utils.datahandler import load_objpkl_from_kzip, \
     load_ordered_mapped_skeleton
 from syconn.utils.newskeleton import remove_from_zip
-
-
-def node_branch_end_distance(nml):
-    """
-    Calculate distances to next branch and end point for each node.
-    :param nml: SkeletonAnnotation loaded file
-    :return n features in n x 2 array, node ids with length n
-    """
-    # nml = load_ordered_mapped_skeleton(path_to_file)[0]
-    nodes = nml.getNodes()
-    graph = au.annotation_to_nx_graph(nml)
-    dic = au.nx.degree(graph)
-
-    end = []
-    for key, value in dic.items():
-        if value == 1:
-            end.append(key)
-
-    bran = []
-    for key, value in dic.items():
-        if value >= 3:
-            bran.append(key)
-
-    features = []
-    Y = []
-    for node in graph.nodes():
-        Y.append(node.getID())
-        node_to_all_endnode = []
-        node_to_all_branchpoint = []
-        single_node_feature = []
-        for endnode in end:
-            node_to_all_endnode.append(node.distance_scaled(endnode))
-
-        if len(node_to_all_endnode) != 0:
-            distance2endpoint = min(node_to_all_endnode)
-        else:
-            distance2endpoint = np.float32(99999999)
-
-        # distance2endpoint = min(node_to_all_endnode)
-        node.data["endpointdistance"] = distance2endpoint
-        single_node_feature.append(distance2endpoint)
-
-        for branchpoint in bran:
-            node_to_all_branchpoint.append(node.distance_scaled(branchpoint))
-        if len(node_to_all_branchpoint) != 0:
-            distance2branchpoint = min(node_to_all_branchpoint)
-        else:
-            distance2branchpoint = np.float32(99999999)
-        single_node_feature.append(distance2branchpoint)
-        features.append(single_node_feature)
-        node.data["branchpointdistance"] = distance2branchpoint
-    X = np.array(features)
-    Y = np.array(Y)
-    return X, Y
+from syconn.utils.basics import euclidian_distance
 
 
 def update_property_feat_kzip_star(args):
+    """
+    Helper function for update_property_feat_kzip
+    """
     update_property_feat_kzip(*args)
 
 
@@ -75,8 +25,9 @@ def update_property_feat_kzip(path2kzip, dist=6000):
     """
     Recompute axoness feature of skeleton at path2kzip and writes it to .k.zip
     :param path2kzip: str Path to mapped skeleton
+    :param dist
     """
-    prop_dict, property_feat_names = calc_prop_feat_dict(path2kzip)
+    prop_dict, property_feat_names = calc_prop_feat_dict(path2kzip, dist)
     for prop, feat in prop_dict.iteritems():
         path2csv = path2kzip[:-6] + '_%s_feat.csv' % prop
         write_feat2csv(path2csv, feat, property_feat_names[prop])
@@ -92,16 +43,16 @@ def update_property_feat_kzip(path2kzip, dist=6000):
         os.remove(path2csv)
 
 
-def calc_prop_feat_dict(source):
+def calc_prop_feat_dict(source, dist=6000):
     """
     Calculates property feature
     :param source:
     :return: Dictionary of property features
     """
-    print "Calculating morphological features."
+    print "Calculating morphological features with context range %d." % dist
     property_features = {}
     property_feat_names = {}
-    morph_feat, spinehead_feats, node_ids = morphology_feature(source)
+    morph_feat, spinehead_feats, node_ids = morphology_feature(source, dist)
     morph_info = np.concatenate((node_ids[:, None],
                                  morph_feat.astype(np.float32)), axis=1)
     property_features["axoness"] = np.concatenate((morph_info,
@@ -161,7 +112,7 @@ def morphology_feature(source, max_nn_dist=6000):
     rad_feat, spinehead_feat = radfeat2skelnode(nearby_node_list)
     morph_feat = np.concatenate((rad_feat, m_feat, p4_feat, az_feat),
                                 axis=1)
-    dist_feature, ids = node_branch_end_distance(anno)
+    dist_feature, ids = node_branch_end_distance(anno, max_nn_dist)
     sort_ix = np.argsort(ids)
     ids = ids[sort_ix]
     dist_feature = dist_feature[sort_ix]
@@ -483,7 +434,8 @@ def majority_vote(anno, property='axoness', max_dist=5000):
         new_node.setDataElem(property+'_pred', new_ax)
 
 
-def get_obj_density(source, property='axoness_pred', value=1, obj='mito'):
+def get_obj_density(source, property='axoness_pred', value=1, obj='mito',
+                    return_abs_density=True):
     """
     Calculate pathlength of nodes using edges.
     :param anno: list of SkeletonAnnotation
@@ -525,12 +477,12 @@ def get_obj_density(source, property='axoness_pred', value=1, obj='mito'):
     nb_skelnodes = len(node_coords)
     obj_assignment = [[] for i in range(nb_skelnodes)]
     nb_objs = len(obj_dict.keys())
-    hull_samples = np.zeros((nb_objs, 200, 3))
+    hull_samples = np.zeros((nb_objs, 500, 3))
     key_list = []
     for i, obj_key in enumerate(obj_dict.keys()):
         obj_object = obj_dict[obj_key]
         m_hull = obj_object.hull_voxels * anno.scaling
-        random_ixs = np.random.choice(np.arange(len(m_hull)), size=200)
+        random_ixs = np.random.choice(np.arange(len(m_hull)), size=500)
         hull_samples[i] = m_hull[random_ixs]
         key_list.append(obj_key)
     for i in range(nb_objs):
@@ -545,10 +497,60 @@ def get_obj_density(source, property='axoness_pred', value=1, obj='mito'):
             continue
         assigned_objs += obj_assignment[node_ids.index(node_ids[k])]
     assigned_objs = list(set(assigned_objs))
+    if pathlength == 0:
+        return 0
+    if return_abs_density:
+        return len(assigned_objs) / pathlength * 1000.
     obj_vols = []
     for key in assigned_objs:
         obj_vols.append(obj_dict[key].size * (9*9*20))
-    if pathlength == 0:
-        return 0
     obj_density = np.sum(obj_vols) / pathlength * 1000.
     return obj_density
+
+
+def node_branch_end_distance(nml, dist):
+    graph = au.annotation_to_nx_graph(nml)
+    dic = au.nx.degree(graph)
+
+    end = []
+    for key, value in dic.items():
+        if value == 1:
+            end.append(key)
+
+    bran = []
+    for key, value in dic.items():
+        if value >= 3:
+            bran.append(key)
+
+    features = []
+    Y = []
+    for node in graph.nodes():
+        Y.append(node.getID())
+        node_to_all_endnode = [dist]
+        node_to_all_branchpoint = [dist]
+        single_node_feature = []
+        for endnode in end:
+            node_to_all_endnode.append(node.distance_scaled(endnode))
+
+        if len(node_to_all_endnode) != 0:
+            distance2endpoint = min(node_to_all_endnode)
+        else:
+            distance2endpoint = np.float32(99999999)
+
+        # distance2endpoint = min(node_to_all_endnode)
+        node.data["endpointdistance"] = distance2endpoint
+        single_node_feature.append(distance2endpoint)
+
+        for branchpoint in bran:
+            node_to_all_branchpoint.append(node.distance_scaled(branchpoint))
+        if len(node_to_all_branchpoint) != 0:
+            distance2branchpoint = min(node_to_all_branchpoint)
+        else:
+            distance2branchpoint = np.float32(99999999)
+        single_node_feature.append(distance2branchpoint)
+        features.append(single_node_feature)
+        node.data["branchpointdistance"] = distance2branchpoint
+    X = np.array(features)
+    print "Max occuring distance:", np.max(features)
+    Y = np.array(Y)
+    return X, Y

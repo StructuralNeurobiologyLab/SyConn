@@ -12,13 +12,8 @@ from syconn.processing.cell_types import load_celltype_feats,\
 from syconn.processing.learning_rfc import cell_classification
 from syconn.utils.datahandler import get_filepaths_from_dir, write_obj2pkl,\
     load_pkl2obj
-
-try:
-    from syconn.utils import annotationUtils as au, newskeleton
-except:
-    import annotationUtils as au
+from syconn.utils import annotationUtils as au, newskeleton
 import matplotlib
-matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib import pyplot as pp
 from matplotlib import gridspec
@@ -69,7 +64,6 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
     assert np.all(np.equal(skeleton_ids, skeleton_ids2)), "Skeleton ordering wrong for"\
                                                   "probabilities and features."
     bool_arr = np.zeros(len(skeleton_ids))
-    cell_type_pred_dict = {}
     # load loo results of evaluation
     cell_type_pred_dict = load_pkl2obj(wd + '/celltypes/'
                                             'loo_cell_pred_dict_novel.pkl')

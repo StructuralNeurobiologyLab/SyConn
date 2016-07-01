@@ -9,6 +9,11 @@ __author__ = 'pschuber'
 
 
 def negative_to_zero(a):
+    """
+    Sets negative values of array a to zero.
+    :param a: numpy array
+    :return: array a with non negativ values.
+    """
     if a > 0:
         return a
     else:
@@ -63,13 +68,12 @@ def rotation_matrix(axis, theta):
     :return: rotation matrix associated with counterclockwise rotation about
     the given axis by theta radians.
     """
-
     axis = np.asarray(axis)
     theta = np.asarray(theta)
-    axis = axis/np.sqrt(np.dot(axis, axis))
-    a = np.cos(theta/2)
-    b, c, d = -axis*np.sin(theta/2)
-    aa, bb, cc, dd = a*a, b*b, c*c, d*d
+    axis = axis / np.sqrt(np.dot(axis, axis))
+    a = np.cos(theta / 2)
+    b, c, d = -axis * np.sin(theta / 2)
+    aa, bb, cc, dd = a * a, b * b, c * c, d * d
     bc, ad, ac, ab, bd, cd = b*c, a*d, a*c, a*b, b*d, c*d
     return np.array([[aa+bb-cc-dd, 2*(bc+ad), 2*(bd-ac)],
                      [2*(bc-ad), aa+cc-bb-dd, 2*(cd+ab)],
@@ -98,17 +102,11 @@ def unit_normal(a, b, c):
     :param a, b, c: Each is an array of length 3
     :return: unit normal vector
     """
-    x = np.linalg.det([[1, a[1], a[2]],
-         [1, b[1], b[2]],
-         [1, c[1], c[2]]])
-    y = np.linalg.det([[a[0], 1, a[2]],
-         [b[0], 1, b[2]],
-         [c[0], 1, c[2]]])
-    z = np.linalg.det([[a[0], a[1], 1],
-         [b[0], b[1], 1],
-         [c[0], c[1], 1]])
+    x = np.linalg.det([[1, a[1], a[2]], [1, b[1], b[2]], [1, c[1], c[2]]])
+    y = np.linalg.det([[a[0], 1, a[2]], [b[0], 1, b[2]], [c[0], 1, c[2]]])
+    z = np.linalg.det([[a[0], a[1], 1], [b[0], b[1], 1], [c[0], c[1], 1]])
     magnitude = (x**2 + y**2 + z**2)**.5
-    return (x/magnitude, y/magnitude, z/magnitude)
+    return x / magnitude, y / magnitude, z / magnitude
 
 
 def poly_area(poly):
@@ -117,19 +115,19 @@ def poly_area(poly):
     :param poly: list of points
     :return: area of input polygon
     """
-    if len(poly) < 3: # not a plane - no area
+    if len(poly) < 3:
         return 0
     total = [0, 0, 0]
-    N = len(poly)
-    for i in range(N):
+    n = len(poly)
+    for i in range(n):
         vi1 = poly[i]
-        vi2 = poly[(i+1) % N]
+        vi2 = poly[(i+1) % n]
         prod = np.cross(vi1, vi2)
         total[0] += prod[0]
         total[1] += prod[1]
         total[2] += prod[2]
     result = np.dot(total, unit_normal(poly[0], poly[1], poly[2]))
-    return abs(result/2)
+    return abs(result / 2)
 
 
 def convex_hull_area(pts):
@@ -186,8 +184,7 @@ def helper_samllest_dist(args):
     ixs, annotation_ids, dists = args
     smallest_dists = np.ones((len(ixs, ))) * np.inf
     for i, ix in enumerate(ixs):
-        smallest_dists[i] = np.min(dists[annotation_ids==ix])
-
+        smallest_dists[i] = np.min(dists[annotation_ids == ix])
     return ixs, smallest_dists
 
 
@@ -218,7 +215,7 @@ def get_normals(hull, number_fitnodes=12):
     normals = np.zeros_like(hull, dtype=np.float)
     hull_tree = spatial.cKDTree(hull)
     dists, nearest_nodes_ixs = hull_tree.query(hull, k=number_fitnodes,
-                                         distance_upper_bound=1000)
+                                                distance_upper_bound=1000)
     for ii, nearest_ixs in enumerate(nearest_nodes_ixs):
         nearest_nodes = hull[nearest_ixs[dists[ii] != np.inf]]
         ch = ConvexHull(nearest_nodes, qhull_options='QJ Pp')

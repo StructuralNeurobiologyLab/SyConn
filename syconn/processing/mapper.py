@@ -29,81 +29,10 @@ from syconn.utils.newskeleton import from_skeleton_to_mergelist
 from synapticity import parse_synfeature_from_node
 
 
-def node_id2key(segdataobject, node_ids, filter_size):
-    """
-    Maps list indices in node_ids to keys of SegmentationObjects. Filters
-    objects bigger than filter_size.
-    :param segdataobject: SegmentationDataset of object type currently processed
-    :param node_ids: List of list containing annotated object ids for each node
-    :param filter_size: int minimum number of voxels of object
-    :return: List of objects keys
-    """
-
-    for node in node_ids:
-        for obj in node:
-            if segdataobject.sizes[obj] < filter_size:
-                node[node.index(obj)] = -1
-            else:
-                key = segdataobject.ids[obj]
-                node[node.index(obj)] = key
-    node_ids = [filter(lambda a: a != -1, node) for node in node_ids]
-    return node_ids
-
-
-def syns_btw_annos(anno_a, anno_b, max_hull_dist, concom_dist):
-    """
-    Computes contact sites between two annotation objects and returns hull
-     points of both skeletons near contact site.
-    :param anno_a: Annotation object A
-    :param anno_b: Annotation object B
-    :param max_hull_dist: Maximum distance between skeletons in nm
-    :return: List of hull coordinates for each contact site.
-    """
-    hull_a = anno_a._hull_coords
-    hull_b = anno_b._hull_coords
-    tree_a = spatial.cKDTree(hull_a)
-    tree_b = spatial.cKDTree(hull_b)
-    if len(hull_a) == 0 or len(hull_b) == 0:
-        print "One skeleton hull is empty!! Skipping pair."
-        return [], []
-    contact_ids = tree_a.query_ball_tree(tree_b, max_hull_dist)
-    num_neighbours = arr([len(sublist) for sublist in contact_ids])
-    contact_coords_a = hull_a[num_neighbours>0]
-    contact_ids_b = set([id for sublist in contact_ids for id in sublist])
-    contact_coords_b = hull_b[list(contact_ids_b)]
-    if contact_coords_a.ndim == 1:
-        contact_coords_a = contact_coords_a[None, :]
-    if contact_coords_b.ndim == 1:
-        contact_coords_b = contact_coords_a[None, :]
-    contact_coords = np.concatenate((contact_coords_a, contact_coords_b), axis=0)
-    if contact_coords.shape[0] >= 0.3*(len(hull_a)+len(hull_b)):
-        print "Found too many contact_coords, " \
-              "assuming similar skeleton comparison."
-        return [], []
-    if contact_coords.shape[0] == 0:
-        return [], []
-    pdists = spatial.distance.pdist(contact_coords)
-    pdists[pdists > concom_dist] = 0
-    pdists = sparse.csr_matrix(spatial.distance.squareform(pdists))
-    nb_cc, labels = sparse.csgraph.connected_components(pdists)
-    cs_list = []
-    for label in set(labels):
-        curr_label_ixs = labels == label
-        cs_list.append(contact_coords[curr_label_ixs])
-    tree_a_b = spatial.cKDTree(np.concatenate((hull_a, hull_b), axis=0))
-    contact_site_coord_ids = []
-    min_id_b = len(hull_a)
-    for cs in cs_list:
-        ids_temp = tree_a_b.query(cs, 1)[1]
-        in_b = arr(ids_temp>=min_id_b, dtype=np.bool)
-        contact_site_coord_ids.append(in_b)
-    return cs_list, contact_site_coord_ids
-
-
 class SkeletonMapper(object):
     """Class to handle mapping of individual skeleton/annotation."""
 
-    def __init__(self, source, scaling, id=None, soma=None):
+    def __init__(self, source, scaling, id=None, soma=None, context_range=6000):
         self.type = 'mapped_skeleton'
         init_anno = SkeletonAnnotation()
         init_anno.scaling = [9, 9, 20]
@@ -147,12 +76,12 @@ class SkeletonMapper(object):
         self.mapping_info['mitos'] = {}
         self.mapping_info['p4'] = {}
         self._myelin_ds_path = "/lustre/sdorkenw/j0126_myelin_in/"
-        self.az_min_votes = 346
+        self.az_min_votes = 235
         # evaluated by precision-recall using 500 object hull voxel
         # 235 0.997642899234
         # 191 0.98241358399
         # 346 0.986725663717
-        self.obj_min_votes = {'mitos': 235, 'p4': 191, 'az': self.az_min_votes}#26}
+        self.obj_min_votes = {'mitos': 68, 'p4': 111, 'az': self.az_min_votes}#26}
         # stores hull and radius estimation of each ray and node
         self._hull_coords = None
         self._hull_normals = None
@@ -164,6 +93,7 @@ class SkeletonMapper(object):
         # init skeleton nodes
         self._property_features = None
         self.property_feat_names = None
+        self.context_range = context_range
         self.anno.interpolate_nodes()
         if len(self.soma.getNodes()) != 0:
             self.merge_soma_tracing()
@@ -260,7 +190,7 @@ class SkeletonMapper(object):
         self.anno = nsu.merge_annotations(self.anno, self.soma)
 
 
-    def annotate_objects(self, dh, radius=1200, method='kd', thresh=2.2,
+    def annotate_objects(self, dh, radius=1200, method='hull', thresh=2.2,
                          filter_size=[0, 0, 0], nb_neighbors=20, nb_hull_vox=500,
                          neighbor_radius=220, detect_outlier=True, nb_rays=20,
                          nb_voting_neighbors=100, max_dist_mult=1.4):
@@ -528,13 +458,11 @@ class SkeletonMapper(object):
         print "Getting map info of %d %s objects with %d cpus." % \
               (len(keys), objtype, self.nb_cpus)
         mapped_obj_ids = arr(from_skeleton_to_mergelist(
-            cset, self.anno, 'watershed_150_20_10_3', 'labels', rand_voxels,
+            cset, self.anno, 'watershed_150_20_10_3_unique', 'labels', rand_voxels,
             obj_ids, nb_processes=self.nb_cpus, mergelist_path=mergelist_path))
         annotation_ids_new = []
         unique_obj_ids = list(set(obj_ids))
-        min_votes = 1 #nb_hull_vox / 2
-        if aztrue:
-            min_votes = 1
+        min_votes = self.obj_min_votes[objtype]
         for i in range(len(obj_voxel_coords)):
             id = curr_objects[i].obj_id
             inside_votes = np.sum(mapped_obj_ids[mapped_obj_ids[:, 0]==id][:,1])
@@ -728,17 +656,18 @@ class SkeletonMapper(object):
         radii = []
         hull_list = []
         vals= []
-        # collect node ids and corresponding radii
+
         for cnt, el in enumerate(outputs):
             radii += list(el[0])
             ixs += list(el[1])
             hull_list += list(el[2])
             vals += list(el[3])
+
         # sort to match self.node_ids ordering
         ixs = arr(ixs)
         ixs_sorted = np.argsort(ixs)
         radii_sorted = arr(radii)[ixs_sorted]
-        vals_sorted = arr(vals)[ixs_sorted]
+        #vals_sorted = arr(vals)[ixs_sorted]
         # radii_sorted = gaussian_filter1d(radii_sorted, 1.2)
         # np.save("/home/pschuber/membrane_probas_skel1.npy", vals_sorted)
         # np.save("/home/pschuber/membrane_radii_skel1.npy", radii_sorted)
@@ -748,6 +677,7 @@ class SkeletonMapper(object):
         elif not (ixs[ixs_sorted] == np.arange(len(self.node_com))).all():
             print "WARNING: Original node_ids differ from returned" \
                   " ids in membrane radius result."
+            raise()
             print ixs[ixs_sorted]
         coord_list = []
         for i, node in enumerate(self.nodes):
@@ -759,25 +689,17 @@ class SkeletonMapper(object):
             ix_node = big_skel_tree.query(node.getCoordinate(), 1)[1]
             node.setDataElem("radius", np.max((radii_sorted[ix_node], 1.)))
         self.anno.nodes = set(self.nodes)
-        # prepare hull coordinates
-        # hull_coords = arr(hull_list)
         hull_coords = arr([pt for sub in hull_list for pt in sub])*self.scaling
         hull_coords = np.nan_to_num(hull_coords).astype(np.float32)
-        #assert len(origin_of_hull_points) == len(hull_coords), "Different shape"
         if detect_outlier:
             hull_coords_ix = outlier_detection(hull_coords, nb_neighbors,
                                             neighbor_radius)
             hull_coords = hull_coords[hull_coords_ix]
-            #origin_of_hull_points = arr(origin_of_hull_points)[hull_coords_ix]
-            #hull_coords = outlier_detection(hull_coords, nb_neighbors,
-            #                                neighbor_radius)
-        #self._origin_of_hull_points = arr(self.node_ids)[origin_of_hull_points]
-        #assert len(origin_of_hull_points) == len(hull_coords), "Different shape"
         self._hull_coords = hull_coords
         self._skel_radius = radii_sorted
 
     def calc_myelinisation(self):
-        assert self._myelin_ds_path != None, "Myelin dataset not found."
+        assert self._myelin_ds_path is not None, "Myelin dataset not found."
         test_box = (10, 10, 5)
         true_thresh = 100.
         j0126_myelin_inside_ds = KnossosDataset()
@@ -806,42 +728,40 @@ class SkeletonMapper(object):
     def property_features(self):
         if self._property_features is None:
             self._property_features, self.property_feat_names = \
-                calc_prop_feat_dict(self)
+                calc_prop_feat_dict(self, self.context_range)
         return self._property_features
 
-    def predict_property(self, rf, property, max_neck2endpoint_dist=3000,
+    def predict_property(self, rf, prop, max_neck2endpoint_dist=3000,
                          max_head2endpoint_dist=600):
-        property_feature = self.property_features[property][:, 1:]
+        property_feature = self.property_features[prop][:, 1:]
         print "Predicting %s using %d features." % \
-              (property, property_feature.shape[1])
+              (prop, property_feature.shape[1])
         proba = rf.predict_proba(property_feature)
         pred = rf.predict(property_feature)
-        node_ids = self.property_features[property][:, 0]
+        node_ids = self.property_features[prop][:, 0]
         for k, node_id in enumerate(node_ids):
             node = self.old_anno.getNodeByID(node_id)
-            if property == 'spiness' and 'axoness' in node.data.keys():
+            if prop == 'spiness' and 'axoness' in node.data.keys():
                 if int(node.data['axoness_pred']) != 0:
                     continue
             node_comment = node.getComment()
-            ax_ix = node_comment.find(property)
+            ax_ix = node_comment.find(prop)
             node_pred = int(pred[k])
             if ax_ix == -1:
-                node.appendComment(property+'%d' % node_pred)
+                node.appendComment(prop+'%d' % node_pred)
             else:
                 help_list = list(node_comment)
                 help_list[ax_ix+7] = str(node_pred)
                 node.setComment("".join(help_list))
             for ii in range(proba.shape[1]):
-                node.setDataElem(property+'_proba%d' % ii, proba[k, ii])
-            node.setDataElem(property+'_pred', node_pred)
-            if property == 'spiness':
-                node.setDataElem('branch_dist', property_feature[k, -1])
-                node.setDataElem('end_dist', property_feature[k, -2])
-        if property == 'axoness':
-            #majority_processes(self.old_anno)
+                node.setDataElem(prop+'_proba%d' % ii, proba[k, ii])
+            node.setDataElem(prop+'_pred', node_pred)
+            node.setDataElem('branch_dist', property_feature[k, -1])
+            node.setDataElem('end_dist', property_feature[k, -2])
+        if prop == 'axoness':
             majority_vote(self.old_anno, 'axoness', 25000)
             pass
-        if property == 'spiness':
+        if prop == 'spiness':
             assign_neck(self.old_anno,
                         max_head2endpoint_dist=max_head2endpoint_dist,
                         max_neck2endpoint_dist=max_neck2endpoint_dist)
@@ -939,6 +859,7 @@ class SkeletonMapper(object):
             files.append(feat_path)
         for path_to_file in files:
             write_data2kzip(kzip_path, path_to_file)
+
         print "Mapped skeleton %s saved successfully at %s." % (self.id,
                                                                 kzip_path)
 
@@ -966,6 +887,52 @@ class SkeletonMapper(object):
         print "Found %d voxels to plot for skeleton %s." % \
               (len(mito)+len(p4)+len(az), self.id)
         return mito, p4, az
+
+
+def node_id2key(segdataobject, node_ids, filter_size):
+    """
+    Maps list indices in node_ids to keys of SegmentationObjects. Filters
+    objects bigger than filter_size.
+    :param segdataobject: SegmentationDataset of object type currently processed
+    :param node_ids: List of list containing annotated object ids for each node
+    :param filter_size: int minimum number of voxels of object
+    :return: List of objects keys
+    """
+
+    for node in node_ids:
+        for obj in node:
+            if segdataobject.sizes[obj] < filter_size:
+                node[node.index(obj)] = -1
+            else:
+                key = segdataobject.ids[obj]
+                node[node.index(obj)] = key
+    node_ids = [filter(lambda a: a != -1, node) for node in node_ids]
+    return node_ids
+
+
+def outlier_detection(point_list, min_num_neigh, radius):
+    """
+    Finds hull outlier using point density criterion.
+    :param point_list: List of coordinates
+    :param min_num_neigh: int Minimum number of neighbors, s.t. hull-point survives.
+    :param radius: int Radius in nm to look for neighbors
+    :return: Cleaned point cloud
+    """
+    print "Starting outlier detection."
+    if np.array(point_list).ndim != 2:
+        points = np.array([point for sublist in point_list for point in sublist])
+    else:
+        points = np.array(point_list)
+    tree = spatial.cKDTree(points)
+    nb_points = float(len(points))
+    print "Old #points:\t%d" % nb_points
+    new_points = np.ones((len(points), )).astype(np.bool)
+    for ii, coord in enumerate(points):
+        neighbors = tree.query_ball_point(coord, radius)
+        num_neighbors = len(neighbors)
+        new_points[ii] = num_neighbors>=min_num_neigh
+    print "Found %d outlier." % np.sum(~new_points)
+    return np.array(new_points)
 
 
 def get_radii_hull(args):
@@ -1039,11 +1006,6 @@ def read_pair_cs(pair_path):
         if '_hull' in n_comment:
             continue
         new_anno.addNode(node)
-    #new_anno = copy.copy(pairwise_anno)
-    # for node in list(new_anno.getNodes()):
-    #     n_comment = node.getComment()
-    #     if '_hull' in n_comment:
-    #         new_anno.removeNode(node)
     return new_anno
 
 
@@ -1064,9 +1026,9 @@ def prepare_syns_btw_annos(pairwise_paths, dest_path, max_hull_dist=60,
     if sname[:6] in ['soma01', 'soma02', 'soma03', 'soma04', 'soma05']:
         nb_cpus = np.min((2, cpu_count()-1))
     else:
-        nb_cpus = np.min((8, cpu_count()-1))
+        nb_cpus = np.max(np.min((16, cpu_count()-1)), 1)
     params = [(a, b, max_hull_dist, concom_dist, dest_path) for a, b in pairwise_paths]
-    _ = start_multiprocess(syn_btw_anno_pair, params, nb_cpus=nb_cpus)
+    _ = start_multiprocess(syn_btw_anno_pair, params, nb_cpus=nb_cpus, debug=False)
 
 
 def similarity_check(skel_a, skel_b):
@@ -1118,33 +1080,25 @@ def syn_btw_anno_pair(params):
         a = load_anno_list([path_a], load_mitos=False)[0]
         az_dict = load_objpkl_from_kzip(path_a)[2].object_dict
         b = load_anno_list([path_b], load_mitos=False)[0]
-
-        # # print "Soma (%s, %s) lengths: %d and %d" % (a[-1].filename, b[-1].filename,\
-        # #                             len(a[-1].getNodes()), len(b[-1].getNodes()))
-        # if (len(a[-1].getNodes())==0) and (len(b[-1].getNodes())==0):
-        #     print "Skipping skel %s and skel %s because no soma involved." % (\
-        #         a[0].filename, b[0].filename)
-        #     return
-
-
+        id2skel = lambda x: str(a[0].filename) if np.int(x) == 0 else str(b[0].filename)
         az_dict.update(load_objpkl_from_kzip(path_b)[2].object_dict)
         scaling = a[0].scaling
-        match = re.search(r'iter_\d+_(\d+)', a[0].filename)
+        match = re.search(r'iter_0_(\d+)', a[0].filename)
         if match:
             a[0].filename = match.group(1)
-        match = re.search(r'iter_\d+_(\d+)', b[0].filename)
+        match = re.search(r'iter_0_(\d+)', b[0].filename)
         if match:
             b[0].filename = match.group(1)
+        annotation_name = 'skel_' + a[0].filename + '_' + b[0].filename
         # DO similarity check and skip combination if true
-        if similarity_check(a[0], b[0]):
-            print "Skipping nearly identical skeletons: %s and %s, " \
-                  "because of similarity check." % (a[0].filename, b[0].filename)
-            return None
         if a[0].filename == b[0].filename:
-            print "Skipping nearly identical skeletons: %s and %s, " \
-                  "because of identical ID." % (a[0].filename, b[0].filename)
+            print "\n Skipping nearly identical skeletons: %s and %s, " \
+                  "because of identical ID.\n " % (a[0].filename, b[0].filename)
             return None
-        #print "Checking %s and %s." % (a[0].filename, b[0].filename)
+        if similarity_check(a[0], b[0]):
+            print "\n Skipping nearly identical skeletons: %s and %s, " \
+                  "because of similarity check.\n" % (a[0].filename, b[0].filename)
+            return None
         csites, csite_ids = syns_btw_annos(a[0], b[0], max_hull_dist, concom_dist)
         if len(csites) == 0:
             return None
@@ -1156,8 +1110,7 @@ def syn_btw_anno_pair(params):
             print a, b
             print a[0].filename, b[0].filename
             return
-        id2skel = lambda x: str(a[0].filename) if np.int(x) == 0 else str(b[0].filename)
-        annotation_name = 'skel_'+a[0].filename+'_'+b[0].filename
+
         # save information about pairwise csites in one nml
         pairwise_anno = SkeletonAnnotation()
         pairwise_anno.appendComment(annotation_name)
@@ -1180,9 +1133,6 @@ def syn_btw_anno_pair(params):
             az_tree = spatial.cKDTree(az_hull_voxel)
         else:
             az_tree = None
-            # print "Could not find az hull voxel/ids in both  skeletons %s and "\
-            #       "%s. Setting to None!" % (a[0].filename, b[0].filename)
-
         # get p4_objects with hull voxels if available
         p4_nodes = list(a[2].getNodes()) + list(b[2].getNodes())
         p4_ids = []
@@ -1200,8 +1150,6 @@ def syn_btw_anno_pair(params):
             p4_tree = spatial.cKDTree(p4_hull_voxel)
         else:
             p4_tree = None
-            # print "Could not find p4 hull voxel/ids in both  skeletons %s and "\
-                  # "%s. Setting to None!" % (a[0].filename, b[0].filename)
 
         # iterate over all contact sites between skeletons, calc skeleton
         # kd-tree in advance
@@ -1251,13 +1199,13 @@ def syn_btw_anno_pair(params):
                 pairwise_anno.addNode(node)
             mean_cs_area = np.mean((csb_area, csa_area))
             if mean_cs_area < min_cs_area:
+                print "Skipping cs because of area:", mean_cs_area
                 continue
 
             # get hull distance
             csa_tree = spatial.cKDTree(csa_points)
             dist, ixs = csa_tree.query(csb_points, 1)
             cs_dist = np.min(dist)
-
             # check p4 and az
             if az_tree is not None:
                 near_az_ixs = az_tree.query_ball_point(csite, max_az_dist)
@@ -1268,7 +1216,6 @@ def syn_btw_anno_pair(params):
             overlap = 0
             abs_ol = 0
             overlap_cs = 0
-            center_coord = None
             overlap_area = 0
             overlap_coords = np.array([])
             for az_id in near_az_ids:
@@ -1278,11 +1225,6 @@ def syn_btw_anno_pair(params):
                 overlap_new, overlap_cs_new, overlap_area_new, center_coord_new,\
                 overlap_coords_new = calc_overlap(csite, curr_az_voxel, vx_overlap_dist)
                 abs_ol_new = overlap_new*len(curr_az_voxel)
-                print overlap_new, overlap_cs_new, overlap_area_new
-                # if overlap_new < 0.4:
-                #     print "Az thrown away because too less overlap (%0.6f) " \
-                #           "with contact site." % overlap_new
-                #     return None
                 old_comment = node.getComment()
                 node.setPureComment(csite_name + 'relol%0.3f_absol%d' %
                                     (overlap_new, abs_ol_new) + old_comment)
@@ -1293,7 +1235,6 @@ def syn_btw_anno_pair(params):
                     abs_ol = abs_ol_new
                     overlap_cs = overlap_cs_new
                     overlap_area = overlap_area_new
-                    center_coord = center_coord_new
                     overlap_coords = overlap_coords_new
             if p4_tree is not None:
                 near_p4_ixs = p4_tree.query_ball_point(csite, max_p4_dist)
@@ -1316,8 +1257,6 @@ def syn_btw_anno_pair(params):
             cs_center = np.sum(csite, axis=0) / float(len(csite))
             cs_center_ix = csite_tree.query(cs_center)[1]
             cs_center = csite[cs_center_ix]
-            # if center_coord is not None:
-            #     cs_center = center_coord
             node = SkeletonNode().from_scratch(contact_site_anno,
                                                cs_center[0]/scaling[0],
                                                cs_center[1]/scaling[1],
@@ -1432,7 +1371,7 @@ def syn_btw_anno_pair(params):
         pairwise_anno.appendComment('%dcs' % (i+1))
         dummy_skel = NewSkeleton()
         dummy_skel.add_annotation(pairwise_anno)
-        print "Writing", dest_path+'pairwise/'+annotation_name+'.nml'
+        #print "Writing", dest_path+'pairwise/'+annotation_name+'.nml'
         dummy_skel.toNml(dest_path+'pairwise/'+annotation_name+'.nml')
         del(dummy_skel)
         gc.collect()
@@ -1440,7 +1379,9 @@ def syn_btw_anno_pair(params):
         # skelnode a,b and found p4, az as lists
                 #return pairwise_anno.getcomment(), pairwise_anno.getnodes()
     except Exception, e:
-        print "Could not compute %s and %s. %s" % (path_a, path_b, e)
+        print "----------------------------\n" \
+              "WARNING!! \n" \
+              "oCuld not compute %s and %s. \n%s\n" % (path_a, path_b, e)
         return 0
 
 
@@ -1462,7 +1403,7 @@ def max_nodes_in_path(anno, source_node, max_number):
     return reachable_nodes
 
 
-def feature_valid_syns(cs_dir, only_az=True, only_syn=True, all_contacts=False):
+def feature_valid_syns(cs_dir, clf_path, only_az=True, only_syn=True, all_contacts=False):
     """
     Returns the features of valid synapses predicted by synapse rfc.
     :param cs_dir: Path to computed contact sites.
@@ -1512,7 +1453,7 @@ def feature_valid_syns(cs_dir, only_az=True, only_syn=True, all_contacts=False):
     if not only_az or not only_syn or all_contacts:
         syn_pred = np.ones((len(features), ))
     else:
-        rfc_syn = joblib.load('/lustre/pschuber/gt_syn_mapping/rfc/rfc_syn.pkl')
+        rfc_syn = joblib.load(clf_path)
         syn_pred = rfc_syn.predict(features)
     axoness_info = cs_infos[:, 1]#[syn_pred.astype(np.bool)]
     error_cnt = np.sum(~non_instances)
@@ -1617,26 +1558,57 @@ def calc_syn_dict(features, axoness_info, get_all=False):
            all_post_ids, valid_syn_array, axoness_dict
 
 
-def outlier_detection(point_list, min_num_neigh, radius):
+def syns_btw_annos(anno_a, anno_b, max_hull_dist, concom_dist):
     """
-    Finds hull outlier using point density criterion.
-    :param point_list: List of coordinates
-    :param min_num_neigh: int Minimum number of neighbors, s.t. hull-point survives.
-    :param radius: int Radius in nm to look for neighbors
-    :return: Cleaned point cloud
+    Computes contact sites between two annotation objects and returns hull
+     points of both skeletons near contact site.
+    :param anno_a: Annotation object A
+    :param anno_b: Annotation object B
+    :param max_hull_dist: Maximum distance between skeletons in nm
+    :return: List of hull coordinates for each contact site.
     """
-    print "Starting outlier detection."
-    if np.array(point_list).ndim != 2:
-        points = np.array([point for sublist in point_list for point in sublist])
-    else:
-        points = np.array(point_list)
-    tree = spatial.cKDTree(points)
-    nb_points = float(len(points))
-    print "Old #points:\t%d" % nb_points
-    new_points = np.ones((len(points), )).astype(np.bool)
-    for ii, coord in enumerate(points):
-        neighbors = tree.query_ball_point(coord, radius)
-        num_neighbors = len(neighbors)
-        new_points[ii] = num_neighbors>=min_num_neigh
-    print "Found %d outlier." % np.sum(~new_points)
-    return np.array(new_points)
+    hull_a = anno_a._hull_coords
+    hull_b = anno_b._hull_coords
+    tree_a = spatial.cKDTree(hull_a)
+    tree_b = spatial.cKDTree(hull_b)
+    if len(hull_a) == 0 or len(hull_b) == 0:
+        print "One skeleton hull is empty!! Skipping pair."
+        return [], []
+    contact_ids = tree_a.query_ball_tree(tree_b, max_hull_dist)
+    num_neighbours = arr([len(sublist) for sublist in contact_ids])
+    contact_coords_a = hull_a[num_neighbours>0]
+    contact_ids_b = set([id for sublist in contact_ids for id in sublist])
+    contact_coords_b = hull_b[list(contact_ids_b)]
+    if contact_coords_a.ndim == 1:
+        contact_coords_a = contact_coords_a[None, :]
+    if contact_coords_b.ndim == 1:
+        contact_coords_b = contact_coords_a[None, :]
+    contact_coords = np.concatenate((contact_coords_a, contact_coords_b), axis=0)
+    if contact_coords.shape[0] >= 0.3*(len(hull_a)+len(hull_b)):
+        print "Found too many contact_coords, " \
+              "assuming similar skeleton comparison."
+        return [], []
+    if contact_coords.shape[0] == 0:
+        return [], []
+    pdists = spatial.distance.pdist(contact_coords)
+    pdists[pdists > concom_dist] = 0
+    pdists = sparse.csr_matrix(spatial.distance.squareform(pdists))
+    nb_cc, labels = sparse.csgraph.connected_components(pdists)
+    cs_list = []
+    for label in set(labels):
+        curr_label_ixs = labels == label
+        cs_list.append(contact_coords[curr_label_ixs])
+    print "Found %d contact sites for anno %s and %s." % \
+         (nb_cc, anno_a.filename, anno_b.filename)
+    # extract annotation ids
+    tree_a_b = spatial.cKDTree(np.concatenate((hull_a, hull_b), axis=0))
+    contact_site_coord_ids = []
+    min_id_b = len(hull_a)
+    for cs in cs_list:
+        # map the contact site to each coordinate
+        ids_temp = tree_a_b.query(cs, 1)[1]
+        in_b = arr(ids_temp>=min_id_b, dtype=np.bool)
+        contact_site_coord_ids.append(in_b)
+    return cs_list, contact_site_coord_ids
+
+

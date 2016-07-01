@@ -5,23 +5,11 @@ from sys import stdout
 import numpy as np
 from multiprocessing import Pool, Manager, cpu_count
 from numpy import array as arr
-from scipy import spatial
 
 from learning_rfc import save_train_clf
 from syconn.utils.datahandler import get_filepaths_from_dir
-from syconn.utils.newskeleton import NewSkeleton, SkeletonAnnotation
-
-try:
-    import DatasetUtils
-except:
-    import dataset_utils as DatasetUtils
-try:
-    from DatasetUtils import knossosDataset as kd
-except:
-    try:
-        from dataset_utils import knossosDataset as kd
-    except:
-        from knossos_utils import KnossosDataset as kd
+from knossos_utils.knossosdataset import KnossosDataset as kd
+import syconn.utils.annotationUtils as au
 
 __author__ = 'philipp'
 
@@ -43,6 +31,11 @@ def save_synapse_clf(gt_path, clf_used='rf'):
 
 
 def helper_load_az_feat(args):
+    """
+
+    :param args:
+    :return:
+    """
     path, cs_path, q = args
     anno = au.loadj0126NML(path)[0]
     anno_nodes = list(anno.getNodes())
@@ -52,81 +45,6 @@ def helper_load_az_feat(args):
             break
     q.put(1)
     return center_coords, path
-
-
-def update_syn_gt(gt_path='/lustre/pschuber/gt_syn_mapping/',
-    cs_path='/lustre/pschuber/m_consensi_rr/nml_obj/contact_sites_new3/'):
-
-    # get all contact sites with AZ
-    all_az_samples = [path for path in get_filepaths_from_dir(cs_path+'cs_az/',
-                                                              ending='nml')] +\
-                    [path for path in get_filepaths_from_dir(cs_path+'cs_p4_az/',
-                                                            ending='nml')]
-    nb_cpus = cpu_count()
-    pool = Pool(processes=nb_cpus)
-    m = Manager()
-    q = m.Queue()
-    params = [(sample, cs_path, q) for sample in all_az_samples]
-    result = pool.map_async(helper_load_az_feat, params)
-    #result = map(helper_load_az_feat, params)
-    # monitor loop
-    while True:
-        if result.ready():
-            break
-        else:
-            size = float(q.qsize())
-            stdout.write("\r%0.2f" % (size / len(params)))
-            stdout.flush()
-            time.sleep(4)
-    res = result.get()
-    pool.close()
-    pool.join()
-    res = arr(res)
-    coords = arr(res[:, 0].tolist(), dtype=np.int)
-    names = res[:, 1]
-    azsample_tree = spatial.cKDTree(coords)
-    # get coords and vals of GT
-    sample_nodes = []
-    gt_files = ['cs_az_sampling_gt.k.zip', 'cs_p4_az_sampling_gt.k.zip']
-    gt_az_samples = au.loadj0126NML(gt_path+gt_files[0])
-    gt_az_p4_samples = au.loadj0126NML(gt_path+gt_files[1])
-    for anno in (gt_az_p4_samples + gt_az_samples):
-        sample_nodes += list(anno.getNodes())
-    gt_coords = []
-    gt_values = []
-    for node in sample_nodes:
-        node_comment = node.getComment()
-        if 'True' in node_comment or 'False' in node_comment:
-            gt_coords.append(node.getCoordinate_scaled())
-            gt_values.append('True' in node_comment)
-    dists, ixs = azsample_tree.query(gt_coords, 1)
-    max_dist = 200
-    print "\nCS distance bigger than %d for %d/%d samples." % \
-    (max_dist, np.sum(dists >= max_dist), len(dists))
-    ix_gt = np.arange(len(gt_coords))
-    ix_gt = ix_gt[dists < max_dist]
-    ixs = ixs[dists < max_dist]
-    if not os.path.exists(gt_path+'updated_gt3/'):
-        os.makedirs(gt_path+'updated_gt3/')
-    for k, ix in enumerate(ixs):
-        try:
-            label = gt_values[ix_gt[k]]
-            sample = names[ix]
-            head, tail = os.path.split(sample)
-            anno = au.loadj0126NML(sample)[0]
-            for node in anno.getNodes():
-                if 'center' in node.getComment():
-                    node.appendComment(str(label))
-                    #print node.data['syn_feat']
-            dest_path = gt_path+'updated_gt3/'+tail
-            dummy_skel = NewSkeleton()
-            dummy_anno = SkeletonAnnotation()
-            dummy_anno.setComment(anno.getComment())
-            dummy_skel.add_annotation(anno)
-            dummy_skel.toNml(dest_path)
-            #print "Copied GT synapse to %s." % dest_path
-        except TypeError:
-            raise('Problem')
 
 
 def calc_syn_feature(gt_samples, ignore_keys=['Barrier', 'Skel'],
@@ -154,8 +72,6 @@ def calc_syn_feature(gt_samples, ignore_keys=['Barrier', 'Skel'],
     params = [(sample, ignore_keys, detailed_cs_dir,
                q, new_data, test_data) for sample in gt_samples]
     result = pool.map_async(pairwise_syn_feature_calc, params)
-    #result = map(pairwise_syn_feature_calc, params)
-    # monitor loop
     while True:
         if result.ready():
             break
@@ -203,20 +119,17 @@ def pairwise_syn_feature_calc(args):
                     return
             gt_value = 'True' in node_comment
             break
-    #feat = re.findall('[\d.e+e-]+', node.data['syn_feat'])
-    #feat = arr([float(f) for f in feat])
     feat = parse_synfeature_from_node(node)
     return feat, np.array(gt_value)
 
 
-def parse_synfeature_from_txt(txt, feature_names=
-                ['dist', 'area', 'areaol', 'relol', 'absol', 'csrelol']):
+def parse_synfeature_from_txt(txt):
     """
     Parases values of features from string.
     :param txt: String with values of feature_names, like 'area1.5_dist2.3'
     :return: array of float values for each feature
     """
-    #TODO: OUTDATED
+    feature_names = ['dist', 'area', 'areaol', 'relol', 'absol', 'csrelol']
     feat_arr = np.zeros((len(feature_names, )))
     for k, name in enumerate(feature_names):
         matches = re.findall('%s(\d+.\d+)' % name, txt)
@@ -226,15 +139,14 @@ def parse_synfeature_from_txt(txt, feature_names=
     return feat_arr
 
 
-def parse_synfeature_from_node(node, feature_names=
-                ['cs_dist', 'mean_cs_area', 'overlap_area', 'overlap',
-                 'abs_ol', 'overlap_cs']):
+def parse_synfeature_from_node(node):
     """
     Parases values of features from string.
     :param node: node with values of feature_names
     :return: array of float values for each feature
     """
-
+    feature_names = ['cs_dist', 'mean_cs_area', 'overlap_area', 'overlap',
+                     'abs_ol', 'overlap_cs']
     feat_arr = np.zeros((len(feature_names, )))
     for k, feat_name in enumerate(feature_names):
         feat = float(node.data[feat_name])

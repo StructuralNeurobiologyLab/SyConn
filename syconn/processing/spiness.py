@@ -1,7 +1,11 @@
 from syconn.utils.datahandler import get_filepaths_from_dir
 from learning_rfc import save_train_clf
-from features import morphology_feature, assign_property2node
+from features import morphology_feature, assign_property2node, \
+    node_branch_end_distance
+from syconn.utils.datahandler import load_ordered_mapped_skeleton
 import networkx as nx
+import numpy as np
+import syconn.utils.annotationUtils as au
 
 __author__ = 'philipp'
 
@@ -30,6 +34,7 @@ def load_node_gt(path_to_file):
     Y = np.array(Comment)
     id = np.array(id_list)
     return Y, id
+
 
 def save_spiness_clf(gt_path, recompute=False, clf_used='rf'):
     """
@@ -60,8 +65,8 @@ def load_spine_gt(gt_path, recompute=False):
             Y += y.tolist()
             for id in idgt:
                 X.append(all_x[idfeat == id])
-        X = arr(X)
-        Y = arr(Y)
+        X = np.array(X)
+        Y = np.array(Y)
         np.save(gt_path + 'spine_feature.npy', X)
         np.save(gt_path + 'spine_label.npy', Y)
     else:
@@ -74,14 +79,14 @@ def load_spine_gt(gt_path, recompute=False):
     return X[:, 0, :], Y
 
 
-def collect_spineheads(anno):
+def collect_spineheads(anno, dist=6000):
     """
     Searches nodes in annotation for nodes with spinehead prediciton
     and returns them as list (no copy!).
     """
     nodes = anno.getNodes()
     # get distances to endpoints, stored as first
-    _ = node_branch_end_distance(anno)
+    _ = node_branch_end_distance(anno, dist)
     spineheads = []
     for node in nodes:
         if int(node.data["spiness_pred"]) == 1 and (node.degree() == 1):
@@ -96,7 +101,7 @@ def assign_neck(anno, max_head2endpoint_dist=600, max_neck2endpoint_dist=3000):
     :param anno: AnnotationObject containing spiness prediction of class
     head (1) and shaft (0). Key for prediction is "spiness_pred"
     """
-    headnodes = collect_spineheads(anno)
+    headnodes = collect_spineheads(anno, dist=np.inf)
     hn_ids = [n.ID for n in headnodes]
     for node in anno.getNodes():
         if node.ID in hn_ids:

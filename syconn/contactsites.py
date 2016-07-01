@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import copy
 import gc
-import os
 import re
 import time
 from multiprocessing import Pool, Manager, cpu_count
@@ -21,7 +20,6 @@ from syconn.utils.datahandler import get_filepaths_from_dir, \
     load_ordered_mapped_skeleton, get_paths_of_skelID
 from syconn.utils.datahandler import write_obj2pkl, load_pkl2obj
 from syconn.utils.newskeleton import NewSkeleton, SkeletonAnnotation
-
 __author__ = 'pschuber'
 
 
@@ -51,7 +49,6 @@ def collect_contact_sites(cs_dir, only_az=False):
     q = m.Queue()
     params = [(sample, q) for sample in cs_fpaths]
     result = pool.map_async(calc_cs_node, params)
-    #result = map(calc_cs_node, params)
     while True:
         if result.ready():
             break
@@ -73,24 +70,21 @@ def collect_contact_sites(cs_dir, only_az=False):
                 feats.append(feat)
                 svens_res.append(feat[2])
                 svens_res2.append(node.getCoordinate())
-    #np.save('/lustre/pschuber/svens_az/absol.npy', arr(svens_res, dtype=np.float))
-    #np.save('/lustre/pschuber/svens_az/coord.npy', arr(svens_res2, dtype=np.int))
     res = arr(res)
     feats = arr(feats)
     assert len(res) == len(feats), 'feats and nodes have different length!'
     return res, feats
 
 
-def write_summaries(cs_dir, eval_sampling=False, write_syn_sum=False):
+def write_summaries(wd):
     """
     Write information about contact sites and synapses.
-    :param cs_dir: String Path to contact_sites_new folder of mapped skeletons
+    :param wd: String Path to working directory of SyConn
+    :param eval
     :return:
     """
+    cs_dir = wd + '/contactsites/'
     cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_az=True)
-    if write_syn_sum:
-        write_syn_summary(cs_nodes, cs_dir, eval_sampling)
-        return
     write_cs_summary(cs_nodes, cs_feats, cs_dir)
     cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_az=False)
     features, axoness_info, syn_pred = feature_valid_syns(cs_dir, only_az=True,
@@ -101,23 +95,23 @@ def write_summaries(cs_dir, eval_sampling=False, write_syn_sum=False):
     write_obj2pkl(ax_dict, cs_dir + 'axoness_dict.pkl')
     write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='_all', syn_only=False)
     features, axoness_info, syn_pred = feature_valid_syns(cs_dir, only_az=False,
-                                                          only_syn=False, all_contacts=True)
+                                                          only_syn=False,
+                                                          all_contacts=True)
     features, axoness_info, pre_dict, all_post_ids, valid_syn_array, ax_dict =\
         calc_syn_dict(features, axoness_info, get_all=True)
     write_obj2pkl(pre_dict, cs_dir + 'pre_dict_all.pkl')
     write_obj2pkl(ax_dict, cs_dir + 'axoness_dict_all.pkl')
     gc.collect()
-    get_spine_summary(cs_nodes, cs_feats, cs_dir)
+    write_property_dict(cs_dir)
 
 
-def write_cs_summary(cs_nodes, cs_feats, cs_dir, clf_path='/lustre/pschuber/'
-                    'gt_syn_mapping/updated_gt3/rf/rf_syn.pkl', supp='',
-                     syn_only=True):
+def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
     """
     Writs contact site summary of all contact sites without sampling.
     :param cs_dir:
     :return:
     """
+    clf_path = cs_dir + '/../models/rf_synapses/rf_syn.pkl'
     print "\nUsing %s for synapse prediction." % clf_path
     rfc_syn = joblib.load(clf_path)
     dummy_skel = NewSkeleton()
@@ -127,7 +121,6 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, clf_path='/lustre/pschuber/'
     preds = rfc_syn.predict(cs_feats)
     cnt = 0
     cs_dict = {}
-    # only write certain number of syns to cs_summary, s.t. isotropic distribution
     for syn_nodes in cs_nodes:
         for node in syn_nodes:
             if 'center' in node.getComment():
@@ -172,161 +165,6 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, clf_path='/lustre/pschuber/'
     print "Saved CS summary at %s." % fname
 
 
-def write_syn_summary(cs_nodes, cs_dir, eval_sampling, pred_syn=True,
-        clf_path='/lustre/pschuber/gt_syn_mapping/updated_gt3/rf/rf_syn.pkl'):
-    """
-    Writes all synapses (i.e. using synapse prediction) to summary file if
-     pred_syn=True. Otherwise writes all CS with synapse prediction!
-     If eval_sampling synapses/cs are sampled isotropically.
-    :param cs_dir:
-    :return:
-    """
-    axoness_dict = load_pkl2obj(cs_dir + 'axoness_dict.pkl')
-    print "Using %s for synapse prediction." % clf_path
-    rfc_syn = joblib.load(clf_path)
-    dummy_skel = NewSkeleton()
-    feats = []
-    # calculate volume binning
-    box_extent, tree1, tree2 = get_boxes_extent()
-    box_cnt = np.zeros((len(box_extent), ))
-    #count number of syns per binning
-    nb_cc_cs = 0
-    for syn_nodes in cs_nodes:
-        for node in syn_nodes:
-            if 'center' in node.getComment():
-                bool_arr = coord_in_boxes(node.getCoordinate(), box_extent,
-                                          tree1, tree2)
-                if np.sum(bool_arr) == 0:
-                    nb_cc_cs += 1
-                box_cnt[bool_arr] += 1
-                feat = node.data['syn_feat']
-                feats.append(feat)
-    print "Box counts: %d \t %0.4f \t %0.4f" % (len(box_cnt), np.mean(box_cnt),
-                                                np.std(box_cnt))
-    probas = rfc_syn.predict_proba(feats)
-    preds = rfc_syn.predict(feats)
-    print "Found %d CS in total (out: %d, in: %d) and %d synapses." % \
-          (len(cs_nodes), np.sum(box_cnt), nb_cc_cs, np.sum(preds))
-
-    # only write certain number of syns to cs_summary, s.t. isotropic distribution
-    if eval_sampling:
-        max_cnt = 2
-        print np.min((np.min(box_cnt), 10))
-    else:
-        max_cnt = np.inf
-    box_cnt = np.zeros((len(box_extent), ))
-    cnt = 0
-    for syn_nodes in cs_nodes:
-        dummy_anno = SkeletonAnnotation()
-        for node in syn_nodes:
-            if 'center' in node.getComment():
-                cs_comment = node.getComment()
-                skel_ids = re.findall('skel_(\d+_\d+)', cs_comment)[0]
-                cs_nb = re.findall('cs(\d+_)', cs_comment)[0]
-                anno_comment = cs_nb + skel_ids
-                dummy_anno.setComment(anno_comment)
-                proba = probas[cnt]
-                pred = preds[cnt]
-                cnt += 1
-                if pred_syn:
-                    if pred == 0:
-                        continue
-                bool_arr = coord_in_boxes(node.getCoordinate(), box_extent, tree1,
-                                          tree2)
-                if box_cnt[bool_arr] >= max_cnt:
-                    continue
-                if np.sum(bool_arr) == 0:
-                    continue
-                box_cnt[bool_arr] += 1
-                node.data['syn_proba'] = proba
-                node.data['syn_pred'] = pred
-                for dummy_node in syn_nodes:
-                    comment = dummy_node.getComment()
-                    if 'skelnode' in comment:
-                        id = re.findall('skelnode(\d+)', comment)[0]
-                        axoness = axoness_dict[anno_comment][id]
-                        function_comment = 'post'
-                        if int(axoness) == 1:
-                            function_comment = 'pre'
-                        dummy_node.setComment(function_comment + '_' + id)
-                    else:
-                        dummy_node.setComment('cleft')
-                    dummy_anno.addNode(dummy_node)
-                dummy_skel.add_annotation(dummy_anno)
-    skel_fp = get_filepaths_from_dir('/lustre/pschuber/m_consensi_rr/nml_obj/')
-    print "Adding %d cell tracings." % len(skel_fp)
-    for fp in skel_fp:
-        annotation = load_ordered_mapped_skeleton(fp)[0]
-        id = re.findall('iter_0_(\d+)-', fp)[0]
-        annotation.setComment(id)
-        dummy_skel.add_annotation(annotation)
-    print "Looked at %d CS." % cnt
-    fname = cs_dir + 'syn_summary.k.zip'
-    if eval_sampling:
-        fname = fname[:-6] + '_eval_test.k.zip'
-    dummy_skel.to_kzip(fname)
-    print "Box counts: %d \t %0.4f \t %0.4f" % (len(box_cnt), np.mean(box_cnt),
-                                                np.std(box_cnt))
-    print "Saved sampled syn summary at %s." % fname
-
-
-def coord_in_boxes(coord, boxes, tree1, tree2):
-    """
-    Check if coordinate is in one of the boxes using tree1
-    :return: bool Inside any box or not
-    """
-    bool_arr = np.zeros((len(boxes), ), dtype=np.bool)
-    res1 = tree1.query(coord, k=40)
-    # res2 = tree2.query(coord, k=30)
-    # inter = list(set(res1[1]).intersection(res2[1]))
-    for k in res1[1]:
-        box_extent = boxes[k]
-        inside = np.all(coord >= box_extent[0]) and np.all(coord <= box_extent[1])
-        if inside:
-            bool_arr[k] = True
-            break
-    return bool_arr
-
-
-def get_boxes_extent():
-    """
-    Calculate volume binning of j0126.
-    :return: arr Box extent of every 3D bin except center cube,
-    tree1 cKDTree containing all offset coordinates, tree2 containing coordinates
-    of offset+extent.
-    """
-    cc_coord = np.array([4885, 4757, 2630])
-    cc_size = np.array([1110, 1110, 480])
-    box_size = cc_size
-    ds_extent = np.array([10880, 10624,  5760])
-    box_origin = np.array(cc_coord)
-    while np.any(box_origin>0):
-        box_origin -= box_size
-    print box_origin
-    nb_boxes = np.ceil(1.0 * (ds_extent - box_origin) / box_size ).astype(np.int)
-    print nb_boxes
-    boxes_extent = []
-    cnt = 0
-    for i in range(nb_boxes[0]):
-        for j in range( nb_boxes[1]):
-            for k in range(nb_boxes[2]):
-                cnt_arr = np.array([i,j,k])
-                offset = cnt_arr*box_size + box_origin
-                box_extent = [offset, offset + box_size]
-                inside_cc = np.all(box_extent[0] > cc_coord) and \
-                np.all(box_extent[0] <= cc_size+cc_coord)
-                if inside_cc:
-                    cnt += 1
-                    continue
-                boxes_extent.append(box_extent)
-    print "#inside cc:", cnt
-    print "#boxes", len(boxes_extent)
-    boxes_extent = np.array(boxes_extent)
-    tree1 = spatial.KDTree(boxes_extent[:, 1])
-    tree2 = spatial.KDTree(boxes_extent[:, 0])
-    return boxes_extent, tree1, tree2
-
-
 def calc_cs_node(args):
     """
     Helper function. Calculates three nodes for given contantct site annotation
@@ -347,7 +185,6 @@ def calc_cs_node(args):
             try:
                 feat = parse_synfeature_from_node(node)
             except KeyError:
-                #feat = parse_synfeature_from_txt(n_comment)
                 feat = re.findall('[\d.e+e-]+', node.data['syn_feat'])
                 feat = arr([float(f) for f in feat])
             center_node = copy.copy(node)
@@ -386,7 +223,7 @@ def calc_cs_node(args):
     return syn_nodes
 
 
-def get_spine_summary(syn_nodes, cs_feats, cs_dir):
+def get_spine_summary(syn_nodes, cs_dir):
     """
     Write out dictionary containing spines (dictionaries) with contact site name
     and spine number as key. The spine dictionary contains three values
@@ -427,62 +264,13 @@ def get_spine_dict(spine_node, max_dist=100):
     return spine
 
 
-def get_cs_coords(path='/lustre/pschuber/m_consensi_rr/nml_obj/contact_sites_new2/',
-                  dest_path='/lustre/pschuber/m_consensi_rr/cs_coords1.npy'):
-    cs_nodes, cs_feats = collect_contact_sites(path)
-    coords = np.zeros((len(cs_nodes), 3))
-    for ii, nodes in enumerate(cs_nodes):
-        coords[ii] = nodes[-1].getCoordinate()
-    np.save(dest_path, coords)
-    print "Saved coords at %s." % dest_path
-
-
-def check_cs_determination(recompute=False):
+def update_axoness_dict(cs_dir, syn_only=True):
     """
-    Determine determination of contact site calculation by comparing coordinates.
+
+    :param cs_dir:
+    :param syn_only:
     :return:
     """
-    if recompute:
-        get_cs_coords('/lustre/pschuber/m_consensi_rr/nml_obj/contact_sites_new2/',
-                  dest_path='/lustre/pschuber/m_consensi_rr/cs_coords1.npy')
-        get_cs_coords('/lustre/pschuber/m_consensi_rr/nml_obj/contact_sites_new3/',
-                  dest_path='/lustre/pschuber/m_consensi_rr/cs_coords2.npy')
-    coords1 = np.load('/lustre/pschuber/m_consensi_rr/cs_coords1.npy')
-    coords2 = np.load('/lustre/pschuber/m_consensi_rr/cs_coords2.npy')
-    coord1_tree = spatial.cKDTree(coords1)
-    dists, ixs = coord1_tree.query(coords2)
-    max_dist = 1
-    print "Proportion of same coords", np.sum(dists <= max_dist)/float(len(dists))
-
-
-def write_cs_eval(cs_path='/lustre/pschuber/consensi_fuer_joergen/'
-                          'nml_obj/contact_sites_new/',
-                  sample_portion=[0.1, 0.2, 0.2, 0.2]):
-    """
-    Writes out files for evaluation. Contact sites are split in four categories
-    "cs", "cs_p4", "cs_az" and "cs_p4_az".
-    :param cs_path: str Path to pairwise contact sites.
-    :param list of int Portion of files to be sampled from each category
-    """
-    sample_portion = [.5, 0.5, 0.5, 0.5]
-    if not os.path.exists(cs_path+'eval/'):
-        os.makedirs(cs_path+'eval/')
-    for k, ending in enumerate(['cs/', 'cs_p4/', 'cs_az/', 'cs_p4_az/']):
-        curr_dir = cs_path+ending
-        file_paths = get_filepaths_from_dir(curr_dir, ending='nml')
-        portion = sample_portion[k]
-        dummy_skel = NewSkeleton()
-        nb_elements = int(len(file_paths)*portion)
-        rand_ixs = np.random.choice(len(file_paths), size=nb_elements,
-                                    replace=False)
-        for fpath in arr(file_paths)[rand_ixs]:
-            curr_anno = au.loadj0126NML(fpath)[0]
-            dummy_skel.add_annotation(curr_anno)
-        print "Writing", cs_path+'eval/'+ending[:-1]+'_sampling_helmstaedter.nml'
-        dummy_skel.toNml(cs_path+'eval/'+ending[:-1]+'_sampling_helmstaedter.nml')
-
-
-def update_axoness_dict(cs_dir, syn_only=True):
     print "Writing axoness dictionary with syn_only=%s." % (str(syn_only))
     if syn_only:
         dict_path = cs_dir + 'cs_dict.pkl'
@@ -518,6 +306,11 @@ def update_axoness_dict(cs_dir, syn_only=True):
 
 
 def update_single_cs_axoness(params):
+    """
+
+    :param params:
+    :return:
+    """
     center_coord = params[0]
     key = params[1]
     cs_nb, skel1, skel2 = re.findall('(\d+)_(\d+)_(\d+)', key)[0]
@@ -542,6 +335,11 @@ def update_single_cs_axoness(params):
 
 
 def convert_to_standard_cs_name(name):
+    """
+
+    :param name:
+    :return:
+    """
     cs_nb, skel1, skel2 = re.findall('(\d+)_(\d+)_(\d+)', name)[0]
     new_name1 = 'skel_%s_%s_cs%s_az' % (skel1, skel2, cs_nb)
     new_name2 = 'skel_%s_%s_cs%s_p4_az' % (skel1, skel2, cs_nb)
@@ -553,6 +351,11 @@ def convert_to_standard_cs_name(name):
 
 
 def update_property_dict(cs_dir):
+    """
+
+    :param cs_dir:
+    :return:
+    """
     ax_dict = load_pkl2obj(cs_dir + 'axoness_dict.pkl')
     cs_dict = load_pkl2obj(cs_dir + 'cs_dict.pkl')
     ax_keys = ax_dict.keys()
@@ -563,7 +366,7 @@ def update_property_dict(cs_dir):
         for var in new_names:
             try:
                 center_coord = cs_dict[var]['center_coord']
-                param = (center_coord, k)
+                param = (center_coord, k, cs_dir)
                 break
             except KeyError:
                 continue
@@ -587,9 +390,10 @@ def update_single_cs_properties(params):
     """
     center_coord = params[0]
     key = params[1]
+    cs_dir = params[2]
     cs_nb, skel1, skel2 = re.findall('(\d+)_(\d+)_(\d+)', key)[0]
     skel1_path, skel2_path = get_paths_of_skelID([skel1, skel2],
-            traced_skel_dir='/lustre/pschuber/st250_pt3_minvotes18/nml_obj/')
+            traced_skel_dir=cs_dir + '/../neurons/')
     skel1_anno = load_ordered_mapped_skeleton(skel1_path)[0]
     skel2_anno = load_ordered_mapped_skeleton(skel2_path)[0]
     a_nodes = [node for node in skel1_anno.getNodes()]
@@ -610,88 +414,21 @@ def update_single_cs_properties(params):
 
 
 def write_property_dict(cs_dir):
+    """
+
+    :param cs_dir:
+    :return:
+    """
     new_property_dict = update_property_dict(cs_dir)
     write_obj2pkl(new_property_dict, cs_dir + 'property_dict.pkl')
 
 
-def write_joergen_plot(cs_dir, gt_path='/lustre/pschuber/gt_cell_types/',
-                       recompute=False):
-    # find exitatory axon - medium spiny synapses
-    if not os.path.isfile(gt_path + '/wiring/joergen_plot.npy') or recompute:
-        prop_dict = load_pkl2obj(cs_dir + 'property_dict.pkl')
-        cell_type_dict = load_pkl2obj(gt_path + 'cell_pred_dict.pkl')
-        cs_dict = load_pkl2obj(cs_dir + 'cs_dict.pkl')
-        #cell_type_dict = load_pkl2obj('/lustre/pschuber/gt_cell_types/'
-        #                                       'consensi_celltype_labels2.pkl')
-        syn_props = load_pkl2obj('/lustre/sdorkenw/synapse_matrices/phil_dict_all.pkl')
-        ex_axons = []
-        med_spiny_neurons = []
-        for pair_name, pair in syn_props.iteritems():
-            if pair['total_size_area'] != 0:
-                skel_id1, skel_id2 = re.findall('(\d+)_(\d+)', pair_name)[0]
-                skel_id1 = int(skel_id1)
-                skel_id2 = int(skel_id2)
-                try:
-                    if (cell_type_dict[skel_id1] == 0) and (cell_type_dict[skel_id2] == 1):
-                        ex_axons.append(skel_id1)
-                        med_spiny_neurons.append(skel_id2)
-                except KeyError:
-                    print "Skipping %d and %d" % (skel_id1, skel_id2)
-        # get cell properties
-        coords = {}
-        shaft_syn_frac = {}
-        for med_spiny in med_spiny_neurons:
-            syn_cnt = 0
-            shaft_cnt = 0
-            for k, val in prop_dict.iteritems():
-                if str(med_spiny) in val.keys():
-                    syn_cnt += 1
-                    if int(val[str(med_spiny)]['spiness']) == 0:
-                        shaft_cnt += 1
-                        new_names = convert_to_standard_cs_name(k)
-                        for var in new_names:
-                            try:
-                                center_coord = cs_dict[var]['center_coord']
-                                coords[k] = center_coord
-                                break
-                            except KeyError:
-                                continue
-            shaft_syn_frac[med_spiny] = shaft_cnt / float(syn_cnt)
-        branch_density = {}
-        celltype_feats = load_pkl2obj(gt_path + '/wiring/skel_feat_dict.pkl')
-        for ex_ax in ex_axons:
-            branch_density[ex_ax] = celltype_feats[ex_ax][0]
-        # draw plot
-        x = []
-        y = []
-        for i in range(len(ex_axons)):
-            ex_ax = ex_axons[i]
-            med_sp = med_spiny_neurons[i]
-            y.append(shaft_syn_frac[med_sp])
-            x.append(branch_density[ex_ax])
-        plot_arr = np.array([x, y])
-        pair_arr = np.array([ex_axons, med_spiny_neurons])
-        np.save(gt_path + '/wiring/joergen_plot.npy', plot_arr)
-        np.save(gt_path + '/wiring/joergen_plot_pair_ids.npy', pair_arr)
-        write_obj2pkl(coords, gt_path + '/wiring/syn_coords.npy')
-    else:
-        plot_arr = np.load(gt_path + '/wiring/joergen_plot.npy')
-        pair_arr = np.load(gt_path + '/wiring/joergen_plot_pair_ids.npy')
-        coords = load_pkl2obj(gt_path + '/wiring/syn_coords.npy')
-    import matplotlib.pyplot as plt
-    plt.figure()
-    plt.plot(plot_arr[0], plot_arr[1], 'o')
-    print "Found %d cell pairs of medium spiny neurons and excitatory axons." %\
-        len(plot_arr[0])
-    plt.xlabel(u'Branch Point Density [µm$^3$]')
-    plt.ylabel('Fraction of Shaft Synapses')
-    plt.title('Synapses: Medium Spiny Neuron -- Excitatory Axons')
-    plt.ylim(-0.1, 1.1)
-    plt.show(block=False)
-    raise()
-
-
 def write_axoness_dicts(cs_dir):
+    """
+
+    :param cs_dir:
+    :return:
+    """
     new_ax_all = update_axoness_dict(cs_dir, syn_only=False)
     write_obj2pkl(new_ax_all, cs_dir + '/axoness_dict_all.pkl')
     # new_ax = update_axoness_dict(cs_dir, syn_only=True)
@@ -699,6 +436,11 @@ def write_axoness_dicts(cs_dir):
 
 
 def get_number_cs_details(cs_path):
+    """
+
+    :param cs_path:
+    :return:
+    """
     az_samples = [path for path in
                        get_filepaths_from_dir(cs_path+'cs_az/', ending='nml')]
     az_p4_samples = [path for path in
@@ -709,4 +451,5 @@ def get_number_cs_details(cs_path):
                        get_filepaths_from_dir(cs_path+'cs/', ending='nml')]
     cs_only = len(p4_samples) + len(cs_samples)
     syn_only= len(az_samples)+len(az_p4_samples)
-    print "Found %d syn-candidates and %d contact sites." % (syn_only, cs_only+syn_only)
+    print "Found %d syn-candidates and %d contact sites." % (syn_only,
+                                                             cs_only+syn_only)

@@ -20,8 +20,6 @@ try:
 except:
     qsub_available = False
 
-print "ChunkUtils v2.2"
-
 
 def get_rel_path(obj_name, filename, postfix=""):
     if len(re.findall("[\d]+", filename)) > 0:
