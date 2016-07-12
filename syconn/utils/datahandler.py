@@ -28,7 +28,7 @@ class DataHandler(object):
     def __init__(self, wd, scaling=(9., 9., 20.)):
 
         p4_source = wd + '/obj_p4/'
-        az_source = wd + '/obj_az'
+        az_source = wd + '/obj_az/'
         mito_source = wd + '/obj_mito/',
         skeleton_source = wd + '/tracings/',
         mempath = "/lustre/sdorkenw/j0126_3d_rrbarrier/", #TODO

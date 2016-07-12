@@ -9,24 +9,21 @@ from multiprocessing import Pool, Manager, cpu_count
 from numpy import array as arr
 from sklearn.externals import joblib
 from features import assign_property2node, majority_vote,\
-    update_property_feat_kzip, morphology_feature
-from learning_rfc import cell_classification, save_train_clf, load_csv2feat
+    update_property_feat_kzip
+from learning_rfc import cell_classification, load_csv2feat
 from syconn.utils import annotationUtils as au
 from syconn.utils.datahandler import get_filepaths_from_dir, \
     load_ordered_mapped_skeleton, get_skelID_from_path
 from syconn.utils.newskeleton import NewSkeleton, SkeletonAnnotation
 
 
-def predict_axoness_mappedskel(fname_skel=[], recompute_feat=False):
+def predict_axoness_mappedskel(fname_skel, recompute_feat=False):
     """
 
     :param fname_skel:
     :param recompute_feat:
     :return:
     """
-    if fname_skel == []:
-        mapped_skel_dir='/lustre/pschuber/consensi_fuer_joergen/nml_obj/'
-        fname_skel = get_filepaths_from_dir(mapped_skel_dir)
     nb_cpus = cpu_count()
     pool = Pool(processes=nb_cpus)
     m = Manager()
@@ -42,7 +39,7 @@ def predict_axoness_mappedskel(fname_skel=[], recompute_feat=False):
             stdout.write("\r%0.2f" % (size / len(params)))
             stdout.flush()
             time.sleep(4)
-    res = result.get()
+    _ = result.get()
     pool.close()
     pool.join()
 
@@ -101,7 +98,6 @@ def predict_axoness_from_node_comments(anno):
     :param anno: AnnotationObject containing one contact site.
     :return: arr Skeleton IDS, arr Skeleton axoness
     """
-    #TODO: OUTDATED
     axoness = [[], []]
     cs_comment = anno.getComment()
     try:
@@ -132,20 +128,17 @@ def predict_axoness_from_nodes(anno):
     :return: arr Skeleton IDS, arr Skeleton axoness
     """
     axoness = [[], []]
-    cs_comment = anno.getComment()
     ids = []
     for node in list(anno.getNodes()):
         n_comment = node.getComment()
         if '_center' in n_comment:
             ids = [int(node.data['adj_skel1'])]
             ids.append(int(node.data['adj_skel2']))
-            center_node = node
             break
     for node in list(anno.getNodes()):
         n_comment = node.getComment()
         if 'skelnode' in n_comment:
             axoness_class = node.data['axoness_pred']
-            #skel_id = int(node.data['skel_id'])
             try:
                 skel_id = int(re.findall('(\d+)_skelnode', n_comment)[0])
             except IndexError:
@@ -155,7 +148,6 @@ def predict_axoness_from_nodes(anno):
     axoness_1 = int(np.round(np.mean(axoness[1])))
     axoness_comment = str(ids[0]) + 'axoness' + str(axoness_0) \
     + '_' + str(ids[1]) + 'axoness' + str(axoness_1)
-    #TODO: save mean axoness at center node!
     anno.appendComment(axoness_comment)
     return arr(ids), arr([axoness_0, axoness_1])
 

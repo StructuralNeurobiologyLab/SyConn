@@ -281,46 +281,6 @@ class Neuron(object):
                     'all_path_length_um']
 
 
-
-
-            # self.syn_density = calc_syn_density(self)
-            # features to use
-            # => total branch density
-            # => higher order branch densities
-            # vesicle cloud density
-            # az density
-            # vesicle cloud mean size
-            # az mean size
-            # mito density
-            # mito mean size
-            # spatial regularity features, local clustering of things
-            # => tortuosity, defined as arc-choord: take end points with max
-            # euclidian distance, divide by shortest path between the two
-            # caulescence: http://www.ncbi.nlm.nih.gov/pmc/articles/PMC2978053/
-            # radius of neuron
-
-            # pruned = au.prune_stub_branches(anno_to_use) # this is dangerous,
-            # in place mod?
-            # pruned_nxg = au.annotation_to_nx_graph(pruned)
-            # self.num_pruned_branch_p = num_branch_points_of_nx_graph(pruned_nxg)
-            # self.pruned_path_length_um = pruned.physical_length()/1000.
-            # if self.pruned_path_length_um > 0.0:
-            #    self.pruned_branch_density = self.num_pruned_branch_p /\
-            #                                self.pruned_path_length_um
-
-            # if self.synapses:
-            #
-            # DO NOT SUM UP TO THE TOTAL LENGTH, AS NODES ARE DELETED
-            # self.branch_lengths = get_annotation_branch_lengths(
-            # self.annotations[0])
-
-            # def analyse_branch_prob_for_as_synapses(cc_syns, b_shelf):
-            # get prob for axons
-            # associate cc syns with axons, use strict cutoff
-
-            #
-
-
 def num_end_points_of_nx_graph(nx_graph):
     return len(list({k for k, v in nx_graph.degree().iteritems() if v == 1}))
 
@@ -369,8 +329,6 @@ def cell_morph_properties(mapped_annotation):
     type_feats = celltype_axoness_feature(mapped_annotation)
     object_feats = calc_obj_feat(mapped_annotation)
     return object_feats, rad_feats, type_feats, spiness_feats
-    # cell_morph_feats = np.concatenate((object_feats, rad_feats, type_feats), 1)
-    # return cell_morph_feats # 37 feats
 
 
 def calc_obj_feat(mapped_annotation):

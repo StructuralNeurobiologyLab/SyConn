@@ -88,7 +88,7 @@ def annotate_annos(wd, anno_list, map_objects=True, method='hull', radius=1200,
                 output_dir = dh.data_path
         if not overwrite:
             existing_skel = [re.findall('[^/]+$', os.path.join(dp, f))[0] for
-                             dp, dn, filenames in os.walk(output_dir + 'nml_obj/')
+                             dp, dn, filenames in os.walk(output_dir)
                              for f in filenames if 'k.zip' in f]
         else:
             existing_skel = []
@@ -171,7 +171,7 @@ def annotate_annos(wd, anno_list, map_objects=True, method='hull', radius=1200,
                                re.findall('[^/]+$', filepath)[0])
 
 
-def QSUB_remapping(anno_list=[], dest_dir=None, recalc_prop_only=False,
+def QSUB_remapping(anno_list, dest_dir=None, recalc_prop_only=False,
                    method='hull', dist=6000, supp=''):
     """
     Run annotate annos on available cluster nodes defined by somaqnodes.
@@ -198,7 +198,7 @@ def QSUB_remapping(anno_list=[], dest_dir=None, recalc_prop_only=False,
                           method, dist], nb_cpus=1)
 
 
-def remap_skeletons(wd, mapped_skel_paths=[], dh=None, method='hull', radius=1200,
+def remap_skeletons(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
                     thresh=2.2, filter_size=[2786, 1594, 250],
                     max_dist_mult=1.4,
                     save_files=True, nb_neighbors=20, nb_hull_vox=500,
