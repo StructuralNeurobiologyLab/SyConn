@@ -456,7 +456,7 @@ def get_cum_pos(den_ranges, ax_ranges, den_pos, ax_pos):
 
 
 def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
-                binary, big_entries=False, add_fname='', maj_vote=[]):
+                binary, big_entries=False, add_fname='', maj_vote):
     """
     :param wiring:
     :param den_borders:
@@ -465,6 +465,7 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
     :param confidence_lvl:
     :param binary:
     :param add_fname:
+    :param maj_vote:
     :param big_entries: changes entries to 3x3 squares
     :return:
     """

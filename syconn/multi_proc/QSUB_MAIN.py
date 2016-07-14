@@ -8,6 +8,7 @@ import subprocess
 import sys
 import time
 from syconn.utils.basics import negative_to_zero
+__QSUB__ = True  # TODO: global flag, set according to QSUB existence
 
 
 def QSUB_script(params, name, queue='somaq', sge_additional_flags='',

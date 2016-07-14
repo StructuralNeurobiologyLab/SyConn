@@ -31,34 +31,36 @@ from synapticity import parse_synfeature_from_node
 
 class SkeletonMapper(object):
     """Class to handle mapping of individual skeleton/annotation."""
-
-    def __init__(self, source, scaling, id=None, soma=None, context_range=6000):
+    def __init__(self, source, scaling, ix=None, soma=None, mem_path=None,
+                 context_range=6000):
         self.type = 'mapped_skeleton'
         init_anno = SkeletonAnnotation()
         init_anno.scaling = [9, 9, 20]
         init_anno.appendComment('soma')
         self.soma = init_anno
         if type(source) is str:
-            self.id = re.findall('[^/]+$', source)[0][:-4]
+            self.ix = re.findall('[^/]+$', source)[0][:-4]
             self._path = source
-            try:
-                self.old_anno = load_ordered_mapped_skeleton(source)[0]
-                anno, self.soma = load_ordered_mapped_skeleton(source)[0, 4]
-            except:
-                self.old_anno = au.loadj0126NML(source)[0]
-                self.anno = au.loadj0126NML(source)[0]
+            self.old_anno = load_ordered_mapped_skeleton(source)[0]
+            anno, self.soma = load_ordered_mapped_skeleton(source)[0, 4]
         else:
             self._path = None
-            self.id = id
+            self.ix = ix
             self.old_anno = source
             self.anno = copy.deepcopy(source)
             if soma is not None:
                 self.soma = soma
-        #init objects
+        # init objects
         self.mitos = None
         self.p4 = None
         self.az = None
         # init annotation-paramaters
+        self.detect_outlier = None
+        self.neighbor_radius = None
+        self.nb_neighbors = None
+        self.nb_rays = None
+        self.nb_hull_vox = None
+        self.nb_voting_neighbors = None
         self.scaling = arr(scaling, dtype=np.int)
         self.nb_cpus = max(int(cpu_count()-1), 1)
         self.annotation_method = 'hull'
@@ -69,8 +71,7 @@ class SkeletonMapper(object):
         self.write_obj_voxel = False
         self._cset_path = '/lustre/sdorkenw/j0126_watershed_map/'
         self._cset = None
-        self._data_path = ''
-        self._mem_path = None
+        self._mem_path = mem_path
         self.mapping_info = {}
         self.mapping_info['az'] = {}
         self.mapping_info['mitos'] = {}
@@ -81,7 +82,7 @@ class SkeletonMapper(object):
         # 235 0.997642899234
         # 191 0.98241358399
         # 346 0.986725663717
-        self.obj_min_votes = {'mitos': 68, 'p4': 111, 'az': self.az_min_votes}#26}
+        self.obj_min_votes = {'mitos': 68, 'p4': 111, 'az': self.az_min_votes}
         # stores hull and radius estimation of each ray and node
         self._hull_coords = None
         self._hull_normals = None
@@ -140,14 +141,9 @@ class SkeletonMapper(object):
                     soma_node_ixs = arr(skel_tree.query(soma_coords_pure, k=1)[1])
                     com_soma = np.mean(soma_coords_pure, axis=0)
                     dist, nn_ixs = skel_tree.query(hull_coords, k=1)
-                    #soma_hull_ixs = []
                     for ii, ix in enumerate(nn_ixs):
                         if ix in soma_node_ixs:
-                            #soma_hull_ixs.append(ii)
                             hull_normals[ii] = hull_coords[ii] - com_soma
-                    # soma_hull_ixs = arr(soma_hull_ixs)
-                    # soma_normals = get_normals(hull_coords[soma_hull_ixs])
-                    # hull_normals[soma_hull_ixs] = soma_normals
             self._hull_normals = hull_normals
         return self._hull_normals
 
@@ -189,10 +185,10 @@ class SkeletonMapper(object):
         self.soma.interpolate_nodes(150)
         self.anno = nsu.merge_annotations(self.anno, self.soma)
 
-
     def annotate_objects(self, dh, radius=1200, method='hull', thresh=2.2,
-                         filter_size=[0, 0, 0], nb_neighbors=20, nb_hull_vox=500,
-                         neighbor_radius=220, detect_outlier=True, nb_rays=20,
+                         filter_size=(0, 0, 0), nb_neighbors=20,
+                         nb_hull_vox=500, neighbor_radius=220,
+                         detect_outlier=True, nb_rays=20,
                          nb_voting_neighbors=100, max_dist_mult=1.4):
         """
         Creates self.object with annotated objects as SegmentationDataset, where
@@ -234,7 +230,7 @@ class SkeletonMapper(object):
             radius = [radius] * 3
         self.kd_radius = radius
         self.kd_radius = radius
-        self.filter_size = filter_size
+        self.filter_size = arr(filter_size)
         self.annotation_method = method
         self.thresh = thresh
         self.detect_outlier = detect_outlier
@@ -257,7 +253,7 @@ class SkeletonMapper(object):
             nb_obj_found = len(set([element for sublist in self.mitos._node_ids for
                                     element in sublist]))
             print "[%s] Found %d %s using size filter %d" % \
-                  (self.id, nb_obj_found, 'mitos', filter_size[0])
+                  (self.ix, nb_obj_found, 'mitos', filter_size[0])
             # store annotated segmentation objects
             for i in range(len(self.nodes)):
                 mito_keys = self.mitos._node_ids[i]
@@ -276,7 +272,7 @@ class SkeletonMapper(object):
             nb_obj_found = len(set([element for sublist in self.p4._node_ids for
                                     element in sublist]))
             print "[%s] Found %d %s using size filter %d" % \
-                  (self.id, nb_obj_found, 'p4', filter_size[1])
+                  (self.ix, nb_obj_found, 'p4', filter_size[1])
             for i in range(len(self.nodes)):
                 p4_keys = self.p4._node_ids[i]
                 for k in p4_keys:
@@ -294,7 +290,7 @@ class SkeletonMapper(object):
             nb_obj_found = len(set([element for sublist in self.az._node_ids for
                                     element in sublist]))
             print "[%s] Found %d %s using size filter %d" % \
-                  (self.id, nb_obj_found, 'az', filter_size[2])
+                  (self.ix, nb_obj_found, 'az', filter_size[2])
             for i in range(len(self.nodes)):
                 az_keys = self.az._node_ids[i]
                 for k in az_keys:
@@ -310,7 +306,7 @@ class SkeletonMapper(object):
                 print e
                 print "Myelin prediction failed for %s." % self.old_anno.filename
         print "--- Skeleton #%s fully annotated after %0.2f seconds with" \
-              " '%s'-criterion" % (self.id, time.time() - start,
+              " '%s'-criterion" % (self.ix, time.time() - start,
                                    self.annotation_method)
 
     def annotate_object(self, objects, radius, method, objtype):
@@ -454,22 +450,21 @@ class SkeletonMapper(object):
             rand_ixs = np.random.randint(len(curr_voxels), size=nb_hull_vox)
             rand_voxels += curr_voxels[rand_ixs].tolist()
             obj_ids += [curr_obj_id] * nb_hull_vox
-        mergelist_path = '/home/pschuber/data/gt/nml_obj/'+str(self.id)
+        mergelist_path = '/home/pschuber/data/gt/nml_obj/'+str(self.ix)
         print "Getting map info of %d %s objects with %d cpus." % \
               (len(keys), objtype, self.nb_cpus)
         mapped_obj_ids = arr(from_skeleton_to_mergelist(
             cset, self.anno, 'watershed_150_20_10_3_unique', 'labels', rand_voxels,
             obj_ids, nb_processes=self.nb_cpus, mergelist_path=mergelist_path))
         annotation_ids_new = []
-        unique_obj_ids = list(set(obj_ids))
         min_votes = self.obj_min_votes[objtype]
         for i in range(len(obj_voxel_coords)):
-            id = curr_objects[i].obj_id
-            inside_votes = np.sum(mapped_obj_ids[mapped_obj_ids[:, 0]==id][:,1])
+            ix = curr_objects[i].obj_id
+            inside_votes = np.sum(mapped_obj_ids[mapped_obj_ids[:, 0]==ix][:,1])
             if inside_votes >= min_votes:
                 annotation_ids_new.append(red_ids[i])
-            self.mapping_info[objtype][id] = inside_votes
-        return [[]]*(len(self.nodes)-1)+[annotation_ids_new]
+            self.mapping_info[objtype][ix] = inside_votes
+        return [[]]*(len(self.nodes)-1) + [annotation_ids_new]
 
     def _annotate_with_hull(self, data, radius, objtype):
         """
@@ -535,30 +530,14 @@ class SkeletonMapper(object):
                 is_in_hull += check_hull_normals(voxel, points[vx_near_cellixs],
                                             self.hull_normals[vx_near_cellixs])
             if is_in_hull >= min_votes:
-                #append global object ID
                 annotation_ids_new.append(red_ids[i])
             self.mapping_info[objtype][curr_obj_id] = is_in_hull
-        # for i in range(len(obj_lookup_IDs)):
-        #     curr_obj_id = curr_objects[i].obj_id
-        #     current_ids = obj_lookup_IDs[i]
-        #     curr_voxels = curr_object_voxels[i]
-        #     rand_ixs = np.random.randint(len(curr_voxels), size=nb_hull_vox)
-        #     rand_voxels = curr_voxels[rand_ixs] * self.scaling
-        #     is_in_hull = 0
-        #     for voxel in rand_voxels:
-        #         is_in_hull += check_hull_normals(voxel, points[current_ids],
-        #                                          self.hull_normals[current_ids])
-        #     if is_in_hull >= min_votes:
-        #         #append global object ID
-        #         annotation_ids_new.append(red_ids[i])
-        #     self.mapping_info[objtype][curr_obj_id] = is_in_hull
         return [[]]*(len(self.nodes)-1)+[annotation_ids_new]
 
     def hull_sampling(self, thresh=2.5, nb_rays=20, nb_neighbors=40,
                       neighbor_radius=220, detect_outlier=True,
                       max_dist_mult=1.5):
         """
-        :param mem_path: str Path to membrane of segmentation object, e.g. seg.mem
         :param thresh: float Multiplicator of maximum occurring prediction value
          after which membrane is triggered active.
         :param nb_rays: int Number of rays send at each skeleton node
@@ -579,15 +558,16 @@ class SkeletonMapper(object):
               " outlier-detetion=%s" % (self.scaling, thresh*255.0,
                                         str(detect_outlier))
         mem_path = self._mem_path
+        assert mem_path is not None, "Path to barrier must be given!"
         kd = KnossosDataset()
         kd.initialize_from_knossos_path(mem_path)
         used_node_ix = []
         coms = []
         mem_pos = np.array([0, 0, 0], dtype=np.int)
         mem_shape = kd.boundary
-        #compute orthogonal plane to linear interpolated skeleton at each com
+        # compute orthogonal plane to linear interpolated skeleton at each com
         orth_plane, skel_interp = get_orth_plane(self.node_com)
-        #test and rewrite node positions of skeleton_data
+        # test and rewrite node positions of skeleton_data
         for i, com in enumerate(self.node_com):
             com = (np.array(com) - mem_pos) / self.scaling
             smaller_zero = np.any(com < 0)
@@ -655,8 +635,7 @@ class SkeletonMapper(object):
         ixs = []
         radii = []
         hull_list = []
-        vals= []
-
+        vals = []
         for cnt, el in enumerate(outputs):
             radii += list(el[0])
             ixs += list(el[1])
@@ -667,18 +646,12 @@ class SkeletonMapper(object):
         ixs = arr(ixs)
         ixs_sorted = np.argsort(ixs)
         radii_sorted = arr(radii)[ixs_sorted]
-        #vals_sorted = arr(vals)[ixs_sorted]
-        # radii_sorted = gaussian_filter1d(radii_sorted, 1.2)
-        # np.save("/home/pschuber/membrane_probas_skel1.npy", vals_sorted)
-        # np.save("/home/pschuber/membrane_radii_skel1.npy", radii_sorted)
         # check result
         if len(ixs) != len(self.node_com):
-            print "WARNING: Some nodes missing!"
+            raise RuntimeError("Tracing nodes during hull mapping missing!")
         elif not (ixs[ixs_sorted] == np.arange(len(self.node_com))).all():
-            print "WARNING: Original node_ids differ from returned" \
-                  " ids in membrane radius result."
-            raise()
-            print ixs[ixs_sorted]
+            raise RuntimeError("Original tracing node indices differ from "
+                               "returned indices in membrane radius result.")
         coord_list = []
         for i, node in enumerate(self.nodes):
             node.setDataElem("radius", radii_sorted[i])
@@ -693,7 +666,7 @@ class SkeletonMapper(object):
         hull_coords = np.nan_to_num(hull_coords).astype(np.float32)
         if detect_outlier:
             hull_coords_ix = outlier_detection(hull_coords, nb_neighbors,
-                                            neighbor_radius)
+                                               neighbor_radius)
             hull_coords = hull_coords[hull_coords_ix]
         self._hull_coords = hull_coords
         self._skel_radius = radii_sorted
@@ -777,7 +750,7 @@ class SkeletonMapper(object):
                   (path[:-4]+'_old.pkl')
         with open(path, 'wb') as output:
            pickle.dump(self, output, -1)
-           print "Skeleton %s saved successfully at %s." % (self.id, path)
+           print "Skeleton %s saved successfully at %s." % (self.ix, path)
 
     def write2kzip(self, path):
         """
@@ -860,7 +833,7 @@ class SkeletonMapper(object):
         for path_to_file in files:
             write_data2kzip(kzip_path, path_to_file)
 
-        print "Mapped skeleton %s saved successfully at %s." % (self.id,
+        print "Mapped skeleton %s saved successfully at %s." % (self.ix,
                                                                 kzip_path)
 
     def get_plot_obj(self):
@@ -885,7 +858,7 @@ class SkeletonMapper(object):
         az = arr([element for sublist in voxel_list[2] for element in sublist],
                         dtype=np.uint32) * (self.scaling / 10)
         print "Found %d voxels to plot for skeleton %s." % \
-              (len(mito)+len(p4)+len(az), self.id)
+              (len(mito)+len(p4)+len(az), self.ix)
         return mito, p4, az
 
 
@@ -961,32 +934,26 @@ def get_radii_hull(args):
     mem = kd.from_raw_cubes_to_matrix(prop_size.astype(np.int32),
                                       prop_offset.astype(np.int32),
                                       show_progress=False)
-    # thresholding membrane!!
+    # thresholding membrane
     mem[mem <= 0.4*mem.max()] = 0
-    #mem = pre_process_volume(mem)
     mem = mem.astype(np.uint8)
     threshold = mem.max() * thresh_factor
-    #iterate over every node
+    # iterate over every node
     avg_radius_list = []
     all_points = []
     ids = []
     val_list = []
     todo_list = zip(list(box), [nb_rays] * len(box), list(node_attr))
     for el in todo_list:
-        try:
-            radius, ix, membrane_points, vals = ray_casting_radius(
-                el[0], el[1], el[2][0], el[2][1], el[2][2],
-                scaling, threshold, prop_offset, mem, el[2][3], max_dist_mult)
-        except IndexError, e:
-            print "Problem at ray_casting part.", el
-            print e
-            print mem.shape
+        radius, ix, membrane_points, vals = ray_casting_radius(
+            el[0], el[1], el[2][0], el[2][1], el[2][2],
+            scaling, threshold, prop_offset, mem, el[2][3], max_dist_mult)
         all_points.append(arr(membrane_points, dtype=np.float32))
         avg_radius_list.append(radius)
         ids.append(ix)
         val_list.append(vals)
     q.put(ids)
-    del(mem)
+    del mem
     return avg_radius_list, ids, all_points, val_list
 
 
@@ -1049,7 +1016,7 @@ def similarity_check(skel_a, skel_b):
     similar = nb_equal > 10
     if similar:
         print "Skeletons %s and %s are similar, choosing first one " \
-      "arbitarily." % (skel_a.filename, skel_b.filename)
+              % (skel_a.filename, skel_b.filename)
     return similar
 
 
@@ -1298,7 +1265,6 @@ def syn_btw_anno_pair(params):
             a_source_node_nn = a_skel_node_list[a_nearest_sn_ixs[1]]
             mean_radius = np.mean([a_source_node.data['radius'],
                                    a_source_node_nn.data['radius']])
-            #a_nearest_coords = a_skel_node_coords[a_skel_node_ids]
             for j, node in enumerate(a_nn):
                 if j == 0:
                     comment = csite_name+a[0].filename+'_skelnode'+\
@@ -1357,27 +1323,17 @@ def syn_btw_anno_pair(params):
                 cs_destpath += 'cs_az/'
             elif not p4_bool and not az_bool:
                 cs_destpath += 'cs/'
-            #print "Writing", cs_destpath+contact_site_name+'.nml'
             dummy_skel.toNml(cs_destpath+contact_site_name+'.nml')
-            # write feature to txt
-            # file = open(dest_path+'feature/'+contact_site_name+'.txt', 'wb')
-            # file.write("dist%0.4f \t relol%0.3f \t absol%d \t csrelol%0.3f"
-            #            "\t area%0.3f" % (cs_dist, overlap, abs_ol, overlap_cs,
-            #                              mean_cs_area))
-            # file.close()
         if len(pairwise_anno.getNodes()) == 0:
             print "Did not found any node in annotation object."
             return None
         pairwise_anno.appendComment('%dcs' % (i+1))
         dummy_skel = NewSkeleton()
         dummy_skel.add_annotation(pairwise_anno)
-        #print "Writing", dest_path+'pairwise/'+annotation_name+'.nml'
         dummy_skel.toNml(dest_path+'pairwise/'+annotation_name+'.nml')
-        del(dummy_skel)
+        del dummy_skel
         gc.collect()
         return 0
-        # skelnode a,b and found p4, az as lists
-                #return pairwise_anno.getcomment(), pairwise_anno.getnodes()
     except Exception, e:
         print "----------------------------\n" \
               "WARNING!! \n" \
