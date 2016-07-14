@@ -78,10 +78,6 @@ class SkeletonMapper(object):
         self.mapping_info['p4'] = {}
         self._myelin_ds_path = "/lustre/sdorkenw/j0126_myelin_in/"
         self.az_min_votes = 235
-        # evaluated by precision-recall using 500 object hull voxel
-        # 235 0.997642899234
-        # 191 0.98241358399
-        # 346 0.986725663717
         self.obj_min_votes = {'mitos': 68, 'p4': 111, 'az': self.az_min_votes}
         # stores hull and radius estimation of each ray and node
         self._hull_coords = None
@@ -171,17 +167,15 @@ class SkeletonMapper(object):
             coords.append(node.getCoordinate()*self.scaling)
             ids.append(node.ID)
             # contains mapped objects
-            node.objects = {}
-            node.objects['p4'] = []
-            node.objects['mitos'] = []
-            node.objects['az'] = []
+            node.objects = {'p4': [], 'mitos': [], 'az': []}
             self.nodes.append(node)
         self.node_com = arr(coords, dtype=np.int)
         self.node_ids = ids
         self.anno.nodes = set(self.nodes)
 
     def merge_soma_tracing(self):
-        print "Merging soma (%d nodes) with original annotation." % (len(self.soma.getNodes()))
+        print "Merging soma (%d nodes) with original annotation." % \
+              (len(self.soma.getNodes()))
         self.soma.interpolate_nodes(150)
         self.anno = nsu.merge_annotations(self.anno, self.soma)
 
@@ -338,7 +332,6 @@ class SkeletonMapper(object):
         :param radius: int Scalar or radii list (in nm)
         :return: List with annotated objects per node, i.e. list of lists
         """
-        # import matplotlib.pyplot as plt
         print "Applying kd-tree with radius %s to %d nodes and %d objects" % \
               (radius, len(self.node_com), len(data.rep_coords))
         coords = arr(data.rep_coords) * self.scaling
@@ -356,9 +349,6 @@ class SkeletonMapper(object):
         annotation_ids = arr([element for sublist in annotation_ids for element
                                                      in sublist])
         dists = arr([element for sublist in dists for element in sublist])
-        # plt.figure()
-        # plt.title('r-distro before sampling')
-        # plt.hist(dists)
         set_of_anno_ids = list(set(annotation_ids))
         print "Found %d objects before sampling." % nb_objects
         if nb_objects <= 400:
@@ -373,7 +363,6 @@ class SkeletonMapper(object):
         final_ids = arr([ix for sub_list in res for ix in sub_list[0]])
         final_dists = arr([dist for sub_list in res for dist in sub_list[1]])
         print "Finished distance calculation of each object."
-        # get weighting func ax*2+1
         max_dist = np.max(final_dists)
         a = -0.95 * max_dist**2
         w_func = lambda x: a*x**(-2)+1
@@ -393,10 +382,6 @@ class SkeletonMapper(object):
             if cnt > 50000:
                 print "breaking sampling because of too many tries!!! WARNING"
                 break
-        # plt.figure()
-        # plt.title('r-distro after sampling')
-        # plt.hist(final_dists[sample_ixs])
-        # plt.show()
         print "Found %d objects." % len(sample_ixs)
         return [[]]*(len(self.nodes)-1)+[list(final_ids[sample_ixs])]
 
@@ -428,13 +413,11 @@ class SkeletonMapper(object):
         whereas for az one object voxel inside is sufficient.
         :param data: SegmentationDataset of cell objects
         :param radius: int Scalar or radii list (in nm)
-        :param aztrue: bool True, if computing az
         :return: List with annotated objects per node, i.e. list of lists
         """
-        aztrue = (objtype == 'az')
         nb_hull_vox = self.nb_hull_vox
         red_ids = self._annotate_with_kdtree(data, radius)
-        red_ids = list(set([id for sublist in red_ids for id in sublist]))
+        red_ids = list(set([ix for sublist in red_ids for ix in sublist]))
         keys = arr(data.ids)[red_ids]
         curr_objects = [data.object_dict[key] for key in keys]
         pool = Pool(processes=self.nb_cpus)
@@ -454,8 +437,9 @@ class SkeletonMapper(object):
         print "Getting map info of %d %s objects with %d cpus." % \
               (len(keys), objtype, self.nb_cpus)
         mapped_obj_ids = arr(from_skeleton_to_mergelist(
-            cset, self.anno, 'watershed_150_20_10_3_unique', 'labels', rand_voxels,
-            obj_ids, nb_processes=self.nb_cpus, mergelist_path=mergelist_path))
+            cset, self.anno, 'watershed_150_20_10_3_unique', 'labels',
+            rand_voxels, obj_ids, nb_processes=self.nb_cpus,
+            mergelist_path=mergelist_path))
         annotation_ids_new = []
         min_votes = self.obj_min_votes[objtype]
         for i in range(len(obj_voxel_coords)):
@@ -475,7 +459,7 @@ class SkeletonMapper(object):
         is mapped to the skeleton.
         :param data: SegmentationDataset of cell objects
         :param radius: int Scalar or radii list (in nm)
-        :param aztrue: bool True, if computing az
+        :param objtype: Cell object type (az, p4, mito)
         :return: List with annotated objects per node, i.e. list of lists
         """
         aztrue = (objtype == 'az')
@@ -484,13 +468,10 @@ class SkeletonMapper(object):
         nb_hull_vox = self.nb_hull_vox
         print "Annotating with hull criterion. Using %d voting neighbors and" \
               " %d hull voxel." % (nb_voting_neighbors, nb_hull_vox)
-        coords = arr(data.rep_coords)
         red_ids = self._annotate_with_kdtree(data, radius=radius)
         red_ids = list(set([id for sublist in red_ids for id in sublist]))
-        red_coords = coords[red_ids]*self.scaling
         points = self.hull_coords
         tree = spatial.cKDTree(points)
-        #print "Got point tree after %0.1f s." % (time.time() - start)
         def check_hull_normals(obj_coord, hull_coords, dir_vecs):
             if not aztrue:
                 obj_coord = obj_coord[None, :]
@@ -503,7 +484,6 @@ class SkeletonMapper(object):
                 mean_dists = np.mean(n_hullnodes_dists)
                 return mean_dists < max_az_dist
 
-        # dists, obj_lookup_IDs = tree.query(red_coords, k=nb_voting_neighbors)
         # here annotation_ids_new contains only one node.
         keys = arr(data.ids)[red_ids]
         curr_objects = [data.object_dict[key] for key in keys]
@@ -839,7 +819,7 @@ class SkeletonMapper(object):
     def get_plot_obj(self):
         """
         Extracts coordinates from annotated SegmentationObjects.
-        :return: Array of object-voxels for each object
+        :return: np.array of object-voxels for each object
         """
         assert self.annotation_method != None, "Objects not initialized!"
         voxel_list = []
@@ -1188,9 +1168,10 @@ def syn_btw_anno_pair(params):
             for az_id in near_az_ids:
                 az_ix = az_id_to_ix[az_id]
                 node = copy.copy(az_nodes[az_ix])
-                curr_az_voxel = np.array(az_dict[az_id].voxels) * scaling #az_hull_voxel[az_ids == az_id]
-                overlap_new, overlap_cs_new, overlap_area_new, center_coord_new,\
-                overlap_coords_new = calc_overlap(csite, curr_az_voxel, vx_overlap_dist)
+                curr_az_voxel = np.array(az_dict[az_id].voxels) * scaling
+                overlap_new, overlap_cs_new, overlap_area_new,\
+                    center_coord_new, overlap_coords_new = calc_overlap(
+                        csite, curr_az_voxel, vx_overlap_dist)
                 abs_ol_new = overlap_new*len(curr_az_voxel)
                 old_comment = node.getComment()
                 node.setPureComment(csite_name + 'relol%0.3f_absol%d' %
@@ -1205,8 +1186,8 @@ def syn_btw_anno_pair(params):
                     overlap_coords = overlap_coords_new
             if p4_tree is not None:
                 near_p4_ixs = p4_tree.query_ball_point(csite, max_p4_dist)
-                near_p4_ids = list(set([p4_ids[id] for sublist in near_p4_ixs.tolist()
-                                        for id in sublist]))
+                near_p4_ids = list(set([p4_ids[ix] for sublist in
+                                   near_p4_ixs.tolist() for ix in sublist]))
             else:
                 near_p4_ids = []
             for p4_id in near_p4_ids:
@@ -1359,16 +1340,17 @@ def max_nodes_in_path(anno, source_node, max_number):
     return reachable_nodes
 
 
-def feature_valid_syns(cs_dir, clf_path, only_az=True, only_syn=True, all_contacts=False):
+def feature_valid_syns(cs_dir, only_az=True, only_syn=True, all_contacts=False):
     """
     Returns the features of valid synapses predicted by synapse rfc.
     :param cs_dir: Path to computed contact sites.
     :param only_az: Return feature of all contact sites with mapped az.
     :param only_syn: Returns feature only if synapse was predicted
     :param all_contacts: Use all contact sites for feature extraction
-    :return: array of features, array of contact site IDS, boolean array of syn-
-    apse prediction
+    :return: np.array of features, array of contact site IDS, boolean
+     array of syn-apse prediction
     """
+    clf_path = cs_dir + '/../models/rf_synapses/rf_syn.pkl'
     cs_fpaths = []
     if only_az:
         search_folder = ['cs_az/', 'cs_p4_az/']
@@ -1389,8 +1371,6 @@ def feature_valid_syns(cs_dir, clf_path, only_az=True, only_syn=True, all_contac
     q = m.Queue()
     params = [(sample, q) for sample in cs_fpaths]
     result = pool.map_async(readout_cs_info, params)
-    #result = map(readout_cs_info, params)
-    # monitor loop
     while True:
         if result.ready():
             break
@@ -1411,12 +1391,10 @@ def feature_valid_syns(cs_dir, clf_path, only_az=True, only_syn=True, all_contac
     else:
         rfc_syn = joblib.load(clf_path)
         syn_pred = rfc_syn.predict(features)
-    axoness_info = cs_infos[:, 1]#[syn_pred.astype(np.bool)]
+    axoness_info = cs_infos[:, 1]
     error_cnt = np.sum(~non_instances)
-    #features = features[syn_pred.astype(np.bool)]
     print "Found %d synapses with axoness information. Gathering all" \
           " contact sites with valid pre/pos information." % len(axoness_info)
-    syn_fpaths = arr(cs_fpaths)[non_instances][syn_pred.astype(np.bool)]
     false_cnt = np.sum(~syn_pred.astype(np.bool))
     true_cnt = np.sum(syn_pred)
     print "\nTrue synapses:", true_cnt / float(true_cnt+false_cnt)

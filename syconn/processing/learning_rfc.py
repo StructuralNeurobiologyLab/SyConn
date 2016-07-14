@@ -1,6 +1,4 @@
 import numpy as np
-from multiprocessing import Pool, Manager, cpu_count, Process
-import time
 from sklearn.externals import joblib
 from sklearn import cross_validation
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
@@ -15,8 +13,6 @@ import shutil
 import os
 import matplotlib.patches as patches
 from sklearn.decomposition import PCA
-import multiprocessing.pool
-
 __author__ = 'pschuber'
 
 rf_params = {'n_estimators': 2000, 'oob_score': True, 'n_jobs': -1,
@@ -42,8 +38,6 @@ def init_clf(clf_used, params=None):
         params_used = lr_params
     else:
         params_used = rf_params
-    #print "Initializing %s-classifier with parameters:" % clf_used
-    #print params_used
     if clf_used == 'svm':
         clf = SVC(**params_used)
     elif clf_used == 'ada_boost':
@@ -57,12 +51,14 @@ def init_clf(clf_used, params=None):
 
 
 def load_rfcs(rf_axoness_p, rf_spiness_p):
-    """
+    """ Load random forest models for axoness and spiness
+
     Loads pickeled Random Forest Classifier for axoness and spiness. If path is
     not valid returns None
-    :param rf_axoness_p: str Path to pickeled axonnes rf directory
-    :param rf_spiness_p: str Path to pickeled spiness rf directory
-    :return: RFC axoness, spiness
+
+    :param rf_axoness_p: Path to pickeled axonnes rf directory
+    :param rf_spiness_p: Path to pickeled spiness rf directory
+    :returns: RFC axoness, spiness or None
     """
     if os.path.isfile(rf_axoness_p):
         rfc_axoness = joblib.load(rf_axoness_p)
@@ -84,7 +80,8 @@ def load_rfcs(rf_axoness_p, rf_spiness_p):
 
 
 def save_train_clf(X, y, clf_used, dir_path, use_pca=False, params=None):
-    """
+    """Train classifier on X and y
+
     Train classifier specified by clf_used to dir_path. Train with features X
     and labels y
     :param X: arr features
@@ -121,20 +118,15 @@ def save_train_clf(X, y, clf_used, dir_path, use_pca=False, params=None):
 
 def three_liner(r_az, p_az, r_p4_az, p_p4_az, pos_az, pos_p4_az,
                 true_az, true_p4_az, true_p4=0.018):
-    tot_p4 = 0#3989
+    tot_p4 = 0
     tot_az = 3456
     tot_p4_az = 4027
-
 
     r = (r_az*tot_az*true_az + r_p4_az*tot_p4_az*true_p4_az) / \
         (tot_p4*true_p4 + tot_az*true_az + tot_p4_az*true_p4_az)
     p = (p_az*tot_az*pos_az + p_p4_az*tot_p4_az*pos_p4_az) / \
         (tot_az*pos_az + tot_p4_az*pos_p4_az)
 
-    # print "Merge Approach"
-    # print "precision:", p
-    # print "recall:", r
-    # print "fscore:", fscore(r, p)
     return r, p
 
 
@@ -174,9 +166,6 @@ def plot_corr(x, y, title='', xr=[-1, -1], yr=[-1, -1], save_path=None, nbins=5,
     ax.spines['right'].set_visible(False)
     ax.spines['top'].set_visible(False)
 
-    # plt.locator_params(axis='x', nbins=nbins)
-    # plt.locator_params(axis='y', nbins=nbins)
-    # plt.title(title)
     if not -1 in xr:
         plt.xlim(xr)
     if not -1 in yr:
@@ -187,10 +176,6 @@ def plot_corr(x, y, title='', xr=[-1, -1], yr=[-1, -1], save_path=None, nbins=5,
     plt.ylabel(ylabel, fontsize=18)
     ax.set_xscale("log")
     ax.set_yscale("log")
-
-    # plt.plot(recall, precision, lw=3)
-    # pl.title('Precision Recall Curve')
-    # plt.show(block=False)
 
     plt.scatter(x, y, s=1, c="0.35")
     if save_path is None:
@@ -231,9 +216,6 @@ def plot_pr(precision, recall, title='', r=[0.67, 1.01], legend_labels=None,
     plt.xlabel(xlabel, fontsize=ls)
     plt.ylabel(ylabel, fontsize=ls)
 
-    # plt.plot(recall, precision, lw=3)
-    # pl.title('Precision Recall Curve')
-    # plt.show(block=False)
     plt.tight_layout()
     if isinstance(recall, list):
         if colorVals is None:
@@ -361,46 +343,6 @@ def loo_proba(x, y, clf_used='rf', use_pca=False, params=None):
         cnt += 1
     # feature_importance(rf)
     return prob, pred
-
-
-def start_multiprocess(func, params, debug=False, nb_cpus=None):
-    """
-
-    :param func:
-    :param params:
-    :return:
-    """
-    # found NoDaemonProcess on stackexchange by Chris Arndt - enables
-    # multprocessed grid search with gpu's
-    class NoDaemonProcess(Process):
-        # make 'daemon' attribute always return False
-        def _get_daemon(self):
-            return False
-
-        def _set_daemon(self, value):
-            pass
-        daemon = property(_get_daemon, _set_daemon)
-
-    # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
-    # because the latter is only a wrapper function, not a proper class.
-    class MyPool(multiprocessing.pool.Pool):
-        Process = NoDaemonProcess
-    if nb_cpus is None:
-        nb_cpus = max(cpu_count() - 2, 1)
-    if debug:
-        nb_cpus = 1
-    print "Computing %d parameters with %d cpus." % (len(params), nb_cpus)
-    start = time.time()
-    if not debug:
-        pool = MyPool(nb_cpus)
-        result = pool.map(func, params)
-        pool.close()
-        pool.join()
-    else:
-        result = map(func, params)
-
-    print "\nTime to compute grid:", time.time() - start
-    return result
 
 
 def cell_classification(node_pred):

@@ -3,10 +3,7 @@ from multiprocessing import cpu_count
 
 from syconn.utils import annotationUtils as au
 
-try:
-    import ChunkUtils as cu
-except:
-    import Sven.functional.ChunkUtils as cu
+from datasets import load_dataset
 from basics import *
 import zipfile
 import numpy as np
@@ -31,7 +28,7 @@ class DataHandler(object):
         az_source = wd + '/obj_az/'
         mito_source = wd + '/obj_mito/',
         skeleton_source = wd + '/tracings/',
-        mempath = "/lustre/sdorkenw/j0126_3d_rrbarrier/", #TODO
+        mempath = "/lustre/sdorkenw/j0126_3d_rrbarrier/"  # TODO
         datapath = wd + '/neurons/'
         self.nb_cpus = cpu_count()
         self.data_path = datapath
@@ -47,7 +44,7 @@ class DataHandler(object):
         objects = [None, None, None]
         for i, source in enumerate([mito_source, p4_source, az_source]):
             if type(source) is str:
-                obj = cu.load_dataset(source)
+                obj = load_dataset(source)
                 obj.init_properties()
                 print "Initialized %s objects." % object_dict[i]
             else:

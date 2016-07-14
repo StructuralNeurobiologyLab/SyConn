@@ -295,8 +295,8 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
     msn_msn_col = entry_1
     # # get max int-> MSN:
     print "Int->MSN"
-    entry_1 = ax_id_dict[371] # ax_borders[0] + 75 #(ax_borders[0]+max_entry[0])[0]
-    entry_2 = ax_id_dict[472] #ax_borders[2] + 6 #(ax_borders[2]+max_entry[1])[0]
+    entry_1 = ax_id_dict[371]
+    entry_2 = ax_id_dict[472]
     print rev_ax_id_dict[entry_2], cell_type_pred_dict[rev_ax_id_dict[entry_2]]
     print rev_ax_id_dict[entry_1], cell_type_pred_dict[rev_ax_id_dict[entry_1]]
     print "Synapse size:", wiring[entry_1, entry_2]
@@ -304,8 +304,8 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
     int_col = entry_1
     # # get max MSN->gp:
     print "MSN->GP"
-    entry_1 = ax_id_dict[578] #[1]ax_borders[1] + 3#190 #(max_entry[0])[0]
-    entry_2 = ax_id_dict[1] #ax_borders[0] + 93#371 #(max_entry[1])[0]
+    entry_1 = ax_id_dict[578]
+    entry_2 = ax_id_dict[1]
     print rev_ax_id_dict[entry_2], cell_type_pred_dict[rev_ax_id_dict[entry_2]]
     print rev_ax_id_dict[entry_1], cell_type_pred_dict[rev_ax_id_dict[entry_1]]
     print "Synapse size:", wiring[entry_1, entry_2]
@@ -318,13 +318,12 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
     msn_col = ax_id_dict[496]
     get_close_up(wiring[:, (msn_row, gp_row, int_row, msn_gp_row, msn_msn_row)],
                  den_borders, [gp_col, msn_col, int_col, msn_gp_col, msn_msn_col])
-    # print "Wrote clouse up of gp in row %d and msn in row %d." % (gp_row, msn_row)
     print "Found %d synapses." % np.sum(wiring != 0)
     if not syn_only:
         supp += '_CS'
-        plot_wiring_cs(wiring, den_borders, ax_borders, max_val, confidence_lvl,
+        plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl,
                     binary, add_fname=supp)
-        plot_wiring_cs(wiring_axoness, den_borders, ax_borders, max_val_axon_axon,
+        plot_wiring_cs(wiring_axoness, den_borders, ax_borders,
                     confidence_lvl, binary, add_fname=supp+'_axon_axon')
 
         plot_wiring_cum_cs(cum_wiring, class_ranges(pure_dendrite_pred),
@@ -335,8 +334,8 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
                         class_ranges(ax_ax_pred), confidence_lvl, binary,
                         add_fname=supp+'_axon_axon')
 
-        plot_wiring_cs(wiring_multiple_syns, den_borders, ax_borders, max_val,
-                    confidence_lvl, binary, add_fname=supp+'_multiple_syns')
+        plot_wiring_cs(wiring_multiple_syns, den_borders, ax_borders,
+                       confidence_lvl, binary, add_fname=supp+'_multiple_syns')
     else:
         supp += ''
         plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
@@ -349,8 +348,7 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
 
         plot_wiring_cum(cum_wiring, class_ranges(dendrite_pred),
                         class_ranges(axon_pred), confidence_lvl, binary,
-                        add_fname=supp, max_val_sym=max_val_sym,
-                        maj_vote=maj_vote)
+                        add_fname=supp, maj_vote=maj_vote)
 
         plot_wiring(wiring_multiple_syns, den_borders, ax_borders, max_val,
                     confidence_lvl, binary, add_fname=supp+'_multiple_syns',
@@ -383,7 +381,6 @@ def get_close_up(wiring, den_borders, col_entries):
                 closeup[i, j] = -wiring[i, j, 1]
             elif wiring[i, j, 2] != 0:
                 closeup[i, j] = wiring[i, j, 2]
-    # closeup = closeup[::-1]
     matplotlib.rcParams.update({'font.size': 14})
     fig = pp.figure()
     # Create scatter plot
@@ -456,7 +453,7 @@ def get_cum_pos(den_ranges, ax_ranges, den_pos, ax_pos):
 
 
 def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
-                binary, big_entries=False, add_fname='', maj_vote):
+                binary, big_entries=False, add_fname='', maj_vote=()):
     """
     :param wiring:
     :param den_borders:
@@ -479,8 +476,8 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
                                  wiring[:, b:]), axis=1)
     intensity_plot = np.zeros((wiring.shape[0], wiring.shape[1]))
     print "Found majority vote for cell types:", maj_vote
-    ax_borders_h = arr([0, ax_borders[0], ax_borders[1], ax_borders[2], wiring.shape[1]])+arr([0, 1, 2, 3, 4])
-    den_borders_h = arr([0, ax_borders[0], ax_borders[1], ax_borders[2], wiring.shape[0]])+arr([0, 1, 2, 3, 4])
+    ax_borders_h = arr([0, ax_borders[0], ax_borders[1], ax_borders[2],
+                        wiring.shape[1]])+arr([0, 1, 2, 3, 4])
     wiring *= -1
     for i in range(wiring.shape[0]):
         for j in range(wiring.shape[1]):
@@ -500,11 +497,9 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
                             (den_pos_i != den_pos) or (ax_pos_j != ax_pos):
                             continue
                         if wiring[i, j, 1] != 0:
-                            #if intensity_plot[i+add_i, j+add_j] >= -wiring[i, j, 1]:
-                                intensity_plot[i+add_i, j+add_j] = (-1)**(syn_sign+1) * wiring[i, j, 1]
+                            intensity_plot[i+add_i, j+add_j] = (-1)**(syn_sign+1) * wiring[i, j, 1]
                         elif wiring[i, j, 2] != 0:
-                            #if intensity_plot[i+add_i, j+add_j] <= wiring[i, j, 2]:
-                                intensity_plot[i+add_i, j+add_j] = (-1)**(syn_sign+1) * wiring[i, j, 2]
+                            intensity_plot[i+add_i, j+add_j] = (-1)**(syn_sign+1) * wiring[i, j, 2]
     if not big_entries:
         np.save('/lustre/pschuber/figures/wiring/connectivity_matrix.npy',
                 intensity_plot)
@@ -519,9 +514,6 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
     gs = gridspec.GridSpec(1, 2, width_ratios=[20, 1])
     gs.update(wspace=0.05, hspace=0.08)
     ax = pp.subplot(gs[0, 0], frameon=False)
-    #dark_blue = sns.diverging_palette(133, 255, center="light", as_cmap=True)
-    dark_blue = sns.diverging_palette(282., 120, s=99., l=50.,
-                                      center="light", as_cmap=True)
 
     cax = ax.matshow(-intensity_plot.transpose(1, 0), cmap=diverge_map(),
                      extent=[0, wiring.shape[0], wiring.shape[1], 0],
@@ -542,7 +534,6 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
 
     cbar_ax = pp.subplot(gs[0, 1])
     cbar_ax.yaxis.set_ticks_position('none')
-    cb = fig.colorbar(cax, cax=cbar_ax, ticks=[])#[tmp_max_val[1], 0, tmp_max_val[0]])
     plt.close()
 
     if not binary:
@@ -556,7 +547,7 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
 
 
 def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
-                    binary, add_fname='', maj_vote=[]):
+                    binary, add_fname='', maj_vote=()):
     # plot intensities, averaged per sector
     nb_cells_per_sector = np.zeros((4, 4))
     intensity_plot = np.zeros((4, 4))
@@ -583,11 +574,6 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
                         np.abs(np.min(intensity_plot))])
     row_sum = np.sum(np.sum(wiring.transpose(1, 0, 2)[::-1], axis=2), axis=1)
     col_sum = np.sum(np.sum(wiring.transpose(1, 0, 2)[::-1], axis=2), axis=0)
-    # for i in range(4):
-    #     if row_sum[i] != 0:
-    #         intensity_plot[i] /= row_sum[i]
-    # intensity_plot[:, :, 1] = intensity_plot[:, :, 1] / max_val[0]
-    # intensity_plot[:, :, 2] = intensity_plot[:, :, 2] / max_val[1]
     max_val_tmp = np.array([np.max(intensity_plot),
                         np.abs(np.min(intensity_plot))])
     intensity_plot[intensity_plot < 0] /= max_val_tmp[1]
@@ -601,22 +587,12 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
     gs = gridspec.GridSpec(2, 3, width_ratios=[10, 1, 0.5], height_ratios=[1, 10])
     gs.update(wspace=0.05, hspace=0.08)
     ax = pp.subplot(gs[1, 0], frameon=False)
-    #dark_blue = sns.diverging_palette(133, 255, center="light", as_cmap=True)
-    dark_blue = sns.diverging_palette(282., 120., s=99., l=50.,
-                                      center="light", as_cmap=True)
     cax = ax.matshow(intensity_plot, cmap=diverge_map(), extent=[0, 4, 0, 4])
     ax.grid(color='k', linestyle='-')
     cbar_ax = pp.subplot(gs[1, 2])
     cbar_ax.yaxis.set_ticks_position('none')
-    cb = fig.colorbar(cax, cax=cbar_ax, ticks=[])#[-1, 0, 1])
-    # cb.ax.set_yticklabels(['         Asym[%0.4f]' % max_val[1], '0',
-    #                        'Sym[%0.4f]         ' % max_val[0]], rotation=90)
-    # if not binary:
-    #     cb.set_label(u'Average Area of Synaptic Junctions [µm$^2$]')
-    # else:
-    #     cb.set_label(u'Average Number of Synaptic Junctions')
     axr = pp.subplot(gs[1, 1], sharey=ax, yticks=[],
-                     xticks=[],#[0, max(row_sum)],
+                     xticks=[],
                      frameon=False,
                      xlim=(np.min(row_sum), np.max(row_sum)), ylim=(0, 4))
     axr.tick_params(axis='x', which='major', right="off", top="off", left="off",
@@ -630,7 +606,7 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
     axr.get_yaxis().tick_left()
     axr.barh(ind, row_sum[::-1], 1, color='0.6', linewidth=0)
     axt = pp.subplot(gs[0, 0], sharex=ax, xticks=[],
-                     yticks=[],#[0, max(col_sum)],
+                     yticks=[],
                      frameon=False, xlim=(0, 4), ylim=(np.min(col_sum),
                                                        np.max(col_sum)))
     axt.tick_params(axis='y', which='major', right="off", bottom="off", top="off",
@@ -643,7 +619,6 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
     axt.get_xaxis().tick_bottom()
     axt.get_yaxis().tick_left()
     axt.bar(ind, col_sum, 1, color='0.6', linewidth=0)
-    # plt.show(block=False)
     plt.close()
     if not binary:
         fig.savefig('/lustre/pschuber/figures/wiring/type_wiring_cum%s_conf'
@@ -764,7 +739,7 @@ def type_sorted_wiring_cs(wd, confidence_lvl=0.8, binary=False,
                     add_fname=supp)
 
 
-def plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl, max_val,
+def plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl,
                 binary, add_fname='_CS'):
     fig = plt.figure()
     ax = plt.gca()
@@ -777,7 +752,7 @@ def plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl, max_val,
         b += k * 1
         wiring = np.concatenate((wiring[:, :b], np.ones((wiring.shape[0], 1, 1)),
                                  wiring[:, b:]), axis=1)
-    im = ax.matshow(np.max(wiring.transpose(1, 0, 2), axis=2), interpolation="none",
+    ax.matshow(np.max(wiring.transpose(1, 0, 2), axis=2), interpolation="none",
                    extent=[0, wiring.shape[0], wiring.shape[1], 0], cmap='gray')
     ax.set_xlabel('Post', fontsize=18)
     ax.set_ylabel('Pre', fontsize=18)
@@ -789,7 +764,7 @@ def plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl, max_val,
     cax = divider.append_axes("right", size="5%", pad=0.1)
     a = np.array([[0, 1]])
     plt.figure()
-    img = plt.imshow(a, cmap='gray')
+    plt.imshow(a, cmap='gray')
     plt.gca().set_visible(False)
     cb = plt.colorbar(cax=cax, ticks=[0, 1])
     if not binary:

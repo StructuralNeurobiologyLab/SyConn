@@ -24,11 +24,15 @@ __author__ = 'pschuber'
 
 
 def collect_contact_sites(cs_dir, only_az=False):
-    """
-    Collects all information about n contact sites.
-    :param cs_dir:
-    :param only_az:
-    :return: list of CS nodes (3 per cs), arr of syn feature (n x #feat)
+    """Collect information about contact sites.
+
+    Collect contact site nodes and corresponding features of all contact sites.
+
+    :param cs_dir: Path to contact site directory
+    :param only_az: If only synapse candidates are to be saved
+    :type cs_dir: str
+    :type only_az: bool
+    :returns: list of CS nodes (3 per cs), arr of syn feature (n x #feat)
     """
     if not only_az:
         search_folder = ['cs_az/', 'cs_p4_az/', 'cs/', 'cs_p4/']
@@ -77,11 +81,11 @@ def collect_contact_sites(cs_dir, only_az=False):
 
 
 def write_summaries(wd):
-    """
-    Write information about contact sites and synapses.
-    :param wd: String Path to working directory of SyConn
-    :param eval
-    :return:
+    """Write information about contact sites and synapses, axoness and
+    connectivity.
+
+    :param wd: Path to working directory of SyConn
+    :type wd: str
     """
     cs_dir = wd + '/contactsites/'
     cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_az=True)
@@ -106,10 +110,15 @@ def write_summaries(wd):
 
 
 def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
-    """
-    Writs contact site summary of all contact sites without sampling.
-    :param cs_dir:
-    :return:
+    """Writs contact site summary of all contact sites without sampling.
+
+    :param cs_nodes: Contact site nodes
+    :param cs_feats: synapse features of contact sites
+    :param cs_dir: path to contact site directory
+    :param supp: supplement
+    :param syn_only: if only synapses are to be saved.
+    :type cs_dir: str
+    :type cs_nodes: list, numpy.array of SkeletonNode.__class__
     """
     clf_path = cs_dir + '/../models/rf_synapses/rf_syn.pkl'
     print "\nUsing %s for synapse prediction." % clf_path
@@ -135,15 +144,9 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
                     dummy_anno.addNode(dummy_node)
                 cnt += 1
                 # add to cs_dict
-                if syn_only and not 'az' in node.getComment():
+                if syn_only and 'az' not in node.getComment():
                     continue
-                try:
-                    try:
-                        overlap_vx = np.load(cs_dir+'/overlap_vx/'+cs_name+'ol_vx.npy')
-                    except:
-                         overlap_vx = np.load(cs_dir+'/overlap_vx/'+cs_name+'ol_vx.pkl.npy')
-                except:
-                    overlap_vx = []
+                overlap_vx = np.load(cs_dir+'/overlap_vx/'+cs_name+'ol_vx.npy')
                 cs = {}
                 cs['overlap_vx'] = overlap_vx
                 cs['syn_pred'] = pred

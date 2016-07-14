@@ -148,12 +148,12 @@ def convex_hull_area(pts):
 
 
 def cell_object_coord_parser(voxel_tree):
-    """
-    Extracts unique voxel coords from object tree list for cell objects
+    """Extracts unique voxel coords from object tree list for cell objects
     'mitos', 'p4' and 'az'.
+
     :param voxel_tree: annotation object containing voxels of cell objects
      ['mitos', 'p4', 'az']
-    :return: coord arrays for 'mitos', 'p4' and 'az'
+    :returns: coord arrays for 'mitos', 'p4' and 'az'
     """
     mito_coords= []
     p4_coords = []

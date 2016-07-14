@@ -5,14 +5,14 @@ import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 try:
     from mayavi import mlab
-except ImportError, e:
+except (ImportError, ValueError), e:
     print "Could not load mayavi. Please install vtk and then mayavi."
 from multiprocessing import Pool
 from scipy import stats
 from sklearn.decomposition import PCA
 
 from syconn.contactsites import convert_to_standard_cs_name
-from syconn.brainqueries import annotate_annos, remap_skeletons
+from syconn.brainqueries import enrich_tracings, remap_tracings
 from syconn.processing.cell_types import load_celltype_feats
 from syconn.processing.features import get_obj_density
 from syconn.processing.synapticity import syn_sign_prediction
@@ -29,7 +29,7 @@ def init_skel_vis(skel, min_pos, max_pos, hull_visualization=True, op=0.15,
             skel.removeNode(node)
     if hull_visualization is True:
         bools = get_box_coords(skel._hull_coords / 10., min_pos, max_pos,
-                                     ret_bool_array=True)
+                               ret_bool_array=True)
         hull_points = skel._hull_coords[bools] / 10.
         hull_normals = skel._hull_normals[bools]
         if save_vx_dir is not None:
@@ -185,11 +185,7 @@ def plot_mapped_skel(path, min_pos, max_pos, color=(1./3, 1./3, 1./3), op=0.1,
     print "Plotting %d object hull voxels." % (len(mitos)+len(p4)+len(az))
     # plot objects
     objects = [mitos, p4, az]
-    # colors = [(0.0, 0.5, 0.4), (0.498, 0.749, 0.4), (1.0, 1.0, 0.4)]
-    # colors = [(68./(68+85+255.), 85./(68+85+255.), 255./(68+85+255.)),
-    #          (129./(129.+255+29), 255./(129.+255+29), 29/(129.+255+29)),
-    #          (255./(255+44+93), 44./(255+44+93), 93./(255+44+93))]
-    colors = [(0./255, 153./255, 255./255), (0.175,0.585,0.301), (0.849,0.138,0.133)] #(0.171, 0.485, 0.731)
+    colors = [(0./255, 153./255, 255./255), (0.175,0.585,0.301), (0.849,0.138,0.133)]
     syn_type_coloers = [(222./255, 102./255, 255./255), (102./255, 255./255, 0./255)]
     for obj, color, plot_b, type in zip(objects, colors, plot_objects,
                                   ['mito', 'p4', 'az']):
@@ -271,16 +267,6 @@ def plot_post_pre(paths=['/home/pschuber/data/skel2skel/nml_obj/pre_04.k.zip',
     pre = paths[1]
     cs_file_path = get_cs_path(paths)
     min_pos, max_pos, center_coord = get_box_from_cs_nml(cs_file_path)
-    #mlab.figure(1, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
-    #mlab.clf()
-    #print "Plotting post-synaptic skeleton"
-    #plot_skel(post)
-    #print "Plotting pre-synaptic skeleton"
-    #plot_skel(pre)
-    #mlab.outline(color=(0.5, 0.5, 0.5), extent=[min_pos[0], max_pos[0],
-    #                                            min_pos[1], max_pos[1],
-    #                                            min_pos[2], max_pos[2]])
-    #write_img2png(paths[0], 'post_pre_pure')
     mlab.figure(2, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
     mlab.clf()
     print "Plotting mapped post-synaptic skeleton"
@@ -289,11 +275,6 @@ def plot_post_pre(paths=['/home/pschuber/data/skel2skel/nml_obj/pre_04.k.zip',
     print "Plotting mapped pre-synaptic skeleton"
     plot_mapped_skel(pre, min_pos, max_pos, color=(1./5, 1./5, 1./2),
                      only_syn=True, cs_path=cs_file_path)
-    # write_img2png(paths[0], 'post_pre_mapped')
-    #mlab.view(azimuth=90, elevation=50, distance='auto', roll=90)
-    # mlab.outline(color=(0.5, 0.5, 0.5), extent=[min_pos[0], max_pos[0],
-    #                                             min_pos[1], max_pos[1],
-    #                                             min_pos[2], max_pos[2]])
     return
 
 
@@ -418,11 +399,10 @@ def plot_obj(dh, paths=['/home/pschuber/Desktop/skel2skel/nml_obj/pre_04.k.zip',
     mitos = get_box_coords(mitos, real_min_pos, real_max_pos)
     print "Plotting %d object hull voxels." % len(mitos)
 
-    #plot objects
+    # plot objects
     mlab.figure(1, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
     mlab.clf()
     objects = [mitos, p4, az]
-    # colors = [(0.0, 0.5, 0.4), (0.498, 0.749, 0.4), (1.0, 1.0, 0.4)]
     colors = [(68./(68+85+255.), 85./(68+85+255.), 255./(68+85+255.)),
              (129./(129.+255+29), 255./(129.+255+29), 29/(129.+255+29)),
              (255./(255+44+93), 44./(255+44+93), 93./(255+44+93))]
@@ -432,9 +412,6 @@ def plot_obj(dh, paths=['/home/pschuber/Desktop/skel2skel/nml_obj/pre_04.k.zip',
             continue
         mlab.points3d(obj[:, 0], obj[:, 1], obj[:, 2], scale_factor=3.5,
                       mode='sphere', color=color, opacity=1.0)
-    # mlab.outline(color=(0.5, 0.5, 0.5), extent=[min_pos[0], max_pos[0],
-    #                                             min_pos[1], max_pos[1],
-    #                                             min_pos[2], max_pos[2]])
 
 
 def write_cs_p4_syn_skels(wd, dh=None, renew=False):
@@ -451,7 +428,7 @@ def write_cs_p4_syn_skels(wd, dh=None, renew=False):
     if dh is None:
         dh = DataHandler(wd)
     if renew:
-        annotate_annos(source, dh=dh, overwrite=True, write_obj_voxel=True)
+        enrich_tracings(source, dh=dh, overwrite=True, write_obj_voxel=True)
     print "Plotting skeletons", paths
     center_coord = arr([5130.,  4901.4,  6092. ])
     offset=arr([300, 300, 300])
@@ -486,7 +463,7 @@ def write_new_syn_cs(dest_path='/lustre/pschuber/figures/shawns_figure/',
     if dh is None:
         dh = DataHandler()
     if renew:
-        annotate_annos(source, dh=dh, overwrite=True, write_obj_voxel=True)
+        enrich_tracings(source, dh=dh, overwrite=True, write_obj_voxel=True)
     print "Plotting skeletons", paths
     center_coord = np.array([2475, 2215, 540])*np.array([9., 9., 20.]) / 10.
     offset = np.array([200, 200, 200])
@@ -523,30 +500,16 @@ def write_workflow_fig(dest_path='/lustre/pschuber/figures/spines/',
     if renew:
         if dh is None:
             dh = DataHandler()
-        annotate_annos(source, dh=dh, overwrite=True, write_obj_voxel=True)
+            enrich_tracings(source, dh=dh, overwrite=True, write_obj_voxel=True)
     print "Plotting skeletons", paths
     cs_file_path = get_cs_path(paths)
 
-    min_pos, max_pos, center_coord = get_box_from_cs_nml(cs_file_path, #cs_nb=2,
+    min_pos, max_pos, center_coord = get_box_from_cs_nml(cs_file_path,
                                                          offset=(3000, 3000, 3000))
-    print center_coord
-    # min_pos, max_pos = [center_coord - offset, center_coord + offset]
     v_zoom = (24.724344563964589,
      37.420854959196014,
      7086.2440000000124,
      arr([ 5862.11725067,  7059.92156165,  4126.19249013]))
-    # v_zoom = (-9.665997679596428, 52.521656358409544, 4000.,
-    # center_coord)
-    # mlab.figure(1, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
-    # mlab.clf()
-    # plot_skel(paths[1], min_pos, max_pos, color=(0.7, 0.7, 0.7),
-    #                  hull_visualization=False)
-    # mlab.figure(1, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
-    # mlab.clf()
-    # plot_mapped_skel(paths[1], min_pos, max_pos, color=(0.7, 0.7, 0.7),
-    #                  hull_visualization=True, color_az=True)
-    # mlab.view(*v_zoom)
-    # write_img2png(dest_path, 'big_skeleton_mapped_hull_new', mag=4)
 
     mlab.figure(1, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
     mlab.clf()
@@ -554,49 +517,6 @@ def write_workflow_fig(dest_path='/lustre/pschuber/figures/spines/',
               hull_visualization=True, vis_property=True)
     mlab.view(*v_zoom)
     write_img2png(dest_path, 'big_skeleton_hull_colored_new', mag=4)
-
-    # min_pos, max_pos, center_coord = get_box_from_cs_nml(cs_file_path,
-    #                                                       offset=(700, 700, 700))
-    # v = (-9.665997679596428, 52.521656358409544, 1774.8214229099817,
-    # center_coord)
-    # mlab.figure(1, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
-    # mlab.clf()
-    # plot_skel(paths[1], min_pos, max_pos, color=(1./2, 1./5, 1./5))
-    # plot_skel(paths[1], min_pos, max_pos, color=(1./2, 1./5, 1./5),
-    #           hull_visualization=True)
-    # mlab.view(*v)
-    # write_img2png(dest_path, 'skeleton', mag=5)
-
-    # single mapped skeleton
-    # print "Plotting mapped skeletons"
-    # cs_file_path = get_cs_path(paths)
-    # mlab.figure(2, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
-    # mlab.clf()
-    # plot_mapped_skel(paths[1], min_pos, max_pos, color=(1./2, 1./5, 1./5),
-    #                 cs_path=cs_file_path)
-    # plot_mapped_skel(paths[1], min_pos, max_pos, color=(1./5, 1./5, 1./2),
-    #                 cs_path=cs_file_path)
-    # mlab.view(*v_zoom)
-    # write_img2png(dest_path, 'mapped_skeleton', mag=5)
-    # mlab.clf()
-
-    # # only objects in bounding box
-    # print "Plotting objects"
-    # mlab.clf()
-    # plot_obj(dh, paths)
-    # mlab.view(*v)
-    # write_img2png(dest_path, 'objects', mag=5)
-    # mlab.clf()
-
-    #
-    # # plot post and pre skeleton with synapse
-    # print "Plotting synapse"
-    # plot_post_pre(paths)
-    # mlab.view(*v)
-    # write_img2png(dest_path, 'synapse', mag=5)
-    # mlab.clf()
-
-    #mlab.close()
 
 
 def write_cell_types(dest_path='/home/pschuber/figures/cell_types/',
@@ -612,7 +532,7 @@ def write_cell_types(dest_path='/home/pschuber/figures/cell_types/',
                         [9, 9, 20.] / 10
     type_names = ['excitory_axon', 'medium_spiny_neuron']
     if rebuild:
-        remap_skeletons(paths, mito_min_votes=35)
+        remap_tracings(paths, mito_min_votes=35)
     for ii, path in enumerate(paths):
         assert os.path.isfile(path), "AnotationObject does not exist."
         print "Plotting skeleton", path

@@ -6,9 +6,18 @@ import shutil
 import string
 import subprocess
 import sys
-import time
 from syconn.utils.basics import negative_to_zero
-__QSUB__ = True  # TODO: global flag, set according to QSUB existence
+from multiprocessing import cpu_count, Process
+import time
+import multiprocessing.pool
+
+
+__QSUB__ = True
+try:
+    subprocess.check_output('qstat', shell=True)
+except subprocess.CalledProcessError:
+    print "QSUB not found, switching to single node multiprocessing."
+    __QSUB__ = False
 
 
 def QSUB_script(params, name, queue='somaq', sge_additional_flags='',
@@ -125,3 +134,50 @@ def delete_jobs_by_name(job_name, username="sdorkenw"):
     process = subprocess.Popen(command,
                 shell=True,
                 stdout=subprocess.PIPE)
+
+
+def start_multiprocess(func, params, debug=False, nb_cpus=None):
+    """
+
+    Parameters
+    ----------
+    func : function
+    params : function parameters
+    debug : bool
+    nb_cpus : int
+
+    Returns
+    -------
+    list of function returns
+    """
+    # found NoDaemonProcess on stackexchange by Chris Arndt - enables
+    # multprocessed grid search with gpu's
+    class NoDaemonProcess(Process):
+        # make 'daemon' attribute always return False
+        def _get_daemon(self):
+            return False
+
+        def _set_daemon(self, value):
+            pass
+        daemon = property(_get_daemon, _set_daemon)
+
+    # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
+    # because the latter is only a wrapper function, not a proper class.
+    class MyPool(multiprocessing.pool.Pool):
+        Process = NoDaemonProcess
+    if nb_cpus is None:
+        nb_cpus = max(cpu_count() - 2, 1)
+    if debug:
+        nb_cpus = 1
+    print "Computing %d parameters with %d cpus." % (len(params), nb_cpus)
+    start = time.time()
+    if not debug:
+        pool = MyPool(nb_cpus)
+        result = pool.map(func, params)
+        pool.close()
+        pool.join()
+    else:
+        result = map(func, params)
+
+    print "\nTime to compute grid:", time.time() - start
+    return result
