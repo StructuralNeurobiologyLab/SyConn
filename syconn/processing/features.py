@@ -1,17 +1,19 @@
 import copy
+import numpy as np
 import os
 import zipfile
 from collections import Counter
-import networkx as nx
-import numpy as np
 from numpy import array as arr
 from scipy import spatial
-from syconn.utils import annotationUtils as au
+
+import networkx as nx
+from syconn.new_skeleton.newskeleton import remove_from_zip
+
 from learning_rfc import write_feat2csv, cell_classification
+from syconn.new_skeleton import annotationUtils as au
+from syconn.utils.basics import euclidian_distance
 from syconn.utils.datahandler import load_objpkl_from_kzip, \
     load_ordered_mapped_skeleton
-from syconn.utils.newskeleton import remove_from_zip
-from syconn.utils.basics import euclidian_distance
 
 
 def update_property_feat_kzip_star(args):

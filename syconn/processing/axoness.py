@@ -1,20 +1,22 @@
 __author__ = 'philipp'
+import numpy as np
 import os
 import re
 import time
-from sys import stdout
-import networkx as nx
-import numpy as np
 from multiprocessing import Pool, Manager, cpu_count
 from numpy import array as arr
+from sys import stdout
+
+import networkx as nx
 from sklearn.externals import joblib
+from syconn.new_skeleton.newskeleton import NewSkeleton, SkeletonAnnotation
+
 from features import assign_property2node, majority_vote,\
     update_property_feat_kzip
 from learning_rfc import cell_classification, load_csv2feat
-from syconn.utils import annotationUtils as au
+from syconn.new_skeleton import annotationUtils as au
 from syconn.utils.datahandler import get_filepaths_from_dir, \
     load_ordered_mapped_skeleton, get_skelID_from_path
-from syconn.utils.newskeleton import NewSkeleton, SkeletonAnnotation
 
 
 def predict_axoness_mappedskel(fname_skel, recompute_feat=False):

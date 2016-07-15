@@ -1,11 +1,13 @@
 from itertools import combinations
-from syconn.utils.newskeleton import NewSkeleton
-from multi_proc.multi_proc_main import __QSUB__, start_multiprocess, QSUB_script
-from utils.datahandler import *
+
 from contactsites import write_summaries
+from multi_proc.multi_proc_main import __QSUB__, start_multiprocess, QSUB_script
 from processing.features import calc_prop_feat_dict
 from processing.learning_rfc import write_feat2csv, load_rfcs
 from processing.mapper import SkeletonMapper, prepare_syns_btw_annos
+from syconn.new_skeleton.newskeleton import NewSkeleton
+from utils.datahandler import *
+
 __author__ = 'pschuber'
 
 # Multiprocessing parameter

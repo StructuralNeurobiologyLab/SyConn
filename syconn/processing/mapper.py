@@ -1,32 +1,32 @@
-from syconn.ray_casting.ray_casting_radius import ray_casting_radius
 import copy
 import gc
 import socket
 import time
 import warnings
 from multiprocessing import Pool, Manager
+from scipy import sparse
 from shutil import copyfile
 from sys import stdout
 
 import networkx as nx
 from knossos_utils import chunky
 from knossos_utils.knossosdataset import KnossosDataset
-from scipy import sparse
 from sklearn.externals import joblib
+from syconn.ray_casting.ray_casting_radius import ray_casting_radius
+from syconn.new_skeleton.newskeleton import NewSkeleton
+from syconn.new_skeleton.newskeleton import SkeletonNode
+from syconn.new_skeleton.newskeleton import from_skeleton_to_mergelist
 
-import syconn.utils.NewSkeletonUtils as nsu
+import syconn.new_skeleton.NewSkeletonUtils as nsu
 from axoness import majority_vote
 from axoness import predict_axoness_from_nodes
 from features import calc_prop_feat_dict
-from ..multi_proc.multi_proc_main import start_multiprocess
 from learning_rfc import write_feat2csv
 from spiness import assign_neck
 from syconn.utils.datahandler import *
 from syconn.utils.datasets import segmentationDataset
-from syconn.utils.newskeleton import NewSkeleton
-from syconn.utils.newskeleton import SkeletonNode
-from syconn.utils.newskeleton import from_skeleton_to_mergelist
 from synapticity import parse_synfeature_from_node
+from ..multi_proc.multi_proc_main import start_multiprocess
 
 
 class SkeletonMapper(object):

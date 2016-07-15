@@ -1,23 +1,25 @@
 # -*- coding: utf-8 -*-
+import matplotlib
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+import numpy as np
 import os
 import re
-
-import numpy as np
-import seaborn.apionly as sns
+from matplotlib import gridspec
+from matplotlib import pyplot as pp
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from numpy import array as arr
 
+import seaborn.apionly as sns
+
+from syconn.new_skeleton import annotationUtils as au
 from syconn.processing.cell_types import load_celltype_feats,\
     load_celltype_probas, get_id_dict_from_skel_ids, load_celltype_gt
 from syconn.processing.learning_rfc import cell_classification
+from new_skeleton.newskeleton import NewSkeleton
 from syconn.utils.datahandler import get_filepaths_from_dir, write_obj2pkl,\
     load_pkl2obj
-from syconn.utils import annotationUtils as au, newskeleton
-import matplotlib
-import matplotlib.pyplot as plt
-from matplotlib import pyplot as pp
-from matplotlib import gridspec
-import matplotlib.colors as mcolors
+
 __author__ = 'pschuber'
 
 
@@ -877,7 +879,7 @@ def get_cs_of_mapped_skel(skel_path):
     """
     dir, filename = os.path.split(skel_path)
     skel_id = re.findall('iter_\d+_(\d+)-', filename)[0]
-    contact_sites_of_skel = newskeleton()
+    contact_sites_of_skel = NewSkeleton()
     contact_sites_of_skel.scaling = [9, 9, 20]
     paths = get_filepaths_from_dir(dir+'/contact_sites/', ending='skel_'+skel_id)
     paths += get_filepaths_from_dir(dir+'/contact_sites/', ending=skel_id+'.nml')

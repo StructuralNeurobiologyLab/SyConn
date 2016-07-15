@@ -1,4 +1,4 @@
-Cython
+cython
 numpy
 matplotlib
 sklearn

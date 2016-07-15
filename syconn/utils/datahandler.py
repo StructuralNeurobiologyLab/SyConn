@@ -1,17 +1,17 @@
-import os
-from multiprocessing import cpu_count
-from syconn.utils.datasets import segmentationDataset
-from syconn.utils import annotationUtils as au
-from datasets import load_dataset
-from basics import *
-import zipfile
-import numpy as np
-from syconn.utils.newskeleton import SkeletonAnnotation
 import cPickle as pickle
-import tempfile
-from numpy import array as arr
+import os
 import shutil
-from scipy import spatial
+import tempfile
+import zipfile
+from multiprocessing import cpu_count
+
+from syconn.new_skeleton.newskeleton import SkeletonAnnotation
+
+from basics import *
+from datasets import load_dataset
+from syconn.new_skeleton import annotationUtils as au
+from syconn.utils.datasets import segmentationDataset
+
 __author__ = 'pschuber'
 
 

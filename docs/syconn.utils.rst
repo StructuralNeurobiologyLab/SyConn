@@ -4,22 +4,6 @@ syconn.utils package
 Submodules
 ----------
 
-syconn.utils.NewSkeletonUtils module
-------------------------------------
-
-.. automodule:: syconn.utils.NewSkeletonUtils
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-syconn.utils.annotationUtils module
------------------------------------
-
-.. automodule:: syconn.utils.annotationUtils
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 syconn.utils.basics module
 --------------------------
 
@@ -48,22 +32,6 @@ syconn.utils.illustration module
 --------------------------------
 
 .. automodule:: syconn.utils.illustration
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-syconn.utils.neuron module
---------------------------
-
-.. automodule:: syconn.utils.neuron
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-syconn.utils.newskeleton module
--------------------------------
-
-.. automodule:: syconn.utils.newskeleton
     :members:
     :undoc-members:
     :show-inheritance:

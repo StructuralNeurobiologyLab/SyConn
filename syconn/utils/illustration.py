@@ -17,7 +17,7 @@ from syconn.processing.cell_types import load_celltype_feats
 from syconn.processing.features import get_obj_density
 from syconn.processing.synapticity import syn_sign_prediction
 from syconn.utils.datahandler import *
-from syconn.utils.newskeleton import NewSkeleton, SkeletonAnnotation,\
+from syconn.new_skeleton.newskeleton import NewSkeleton, SkeletonAnnotation,\
     SkeletonNode
 
 

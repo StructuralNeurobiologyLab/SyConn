@@ -1,16 +1,19 @@
 import copy
 import itertools
-import os
-import networkx as nx
 import numpy as np
-import syconn.utils.annotationUtils as au
+import os
 from scipy import spatial
+
+import networkx as nx
+
+import annotationUtils as au
+from syconn.processing.features import celltype_axoness_feature,\
+    spiness_feats_from_nodes,  radius_feats_from_nodes, az_per_spinehead,\
+    pathlength_of_property
 from syconn.processing.learning_rfc import cell_classification
-from syconn.processing.features import celltype_axoness_feature, spiness_feats_from_nodes, \
-    radius_feats_from_nodes, az_per_spinehead, pathlength_of_property
-from syconn.utils.datahandler import load_objpkl_from_kzip
 from syconn.processing.synapticity import syn_sign_prediction
 from syconn.utils.basics import convex_hull_area
+from syconn.utils.datahandler import load_objpkl_from_kzip
 
 
 class Neuron(object):

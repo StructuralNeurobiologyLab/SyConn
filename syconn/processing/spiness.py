@@ -1,11 +1,13 @@
-from syconn.utils.datahandler import get_filepaths_from_dir
-from learning_rfc import save_train_clf
+import numpy as np
+
+import networkx as nx
+
+import syconn.new_skeleton.annotationUtils as au
 from features import morphology_feature, assign_property2node, \
     node_branch_end_distance
+from learning_rfc import save_train_clf
+from syconn.utils.datahandler import get_filepaths_from_dir
 from syconn.utils.datahandler import load_ordered_mapped_skeleton
-import networkx as nx
-import numpy as np
-import syconn.utils.annotationUtils as au
 
 __author__ = 'philipp'
 

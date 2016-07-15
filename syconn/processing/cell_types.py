@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
-from sklearn.metrics import precision_recall_curve,\
-    precision_recall_fscore_support, accuracy_score
+
 from learning_rfc import *
+from syconn.new_skeleton.neuron import Neuron
 from syconn.processing.features import *
 from syconn.utils.datahandler import get_filepaths_from_dir,\
     load_ordered_mapped_skeleton, load_mapped_skeleton, get_paths_of_skelID,\
     write_obj2pkl, load_pkl2obj, get_skelID_from_path
-from syconn.utils.neuron import Neuron
+
 __author__ = 'pschuber'
 
 rf_params = {'n_estimators': 4000, 'oob_score': True, 'n_jobs': -1,

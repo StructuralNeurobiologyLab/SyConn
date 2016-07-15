@@ -1,17 +1,17 @@
 import copy
+import numpy as np
 import os
 import random
 import re
 from collections import Counter
-
-import networkx as nx
-import numpy as np
 from scipy import spatial
 from scipy.cluster import hierarchy
 
-import syconn.utils.NewSkeletonUtils as nsu
+import networkx as nx
+from newskeleton import SkeletonNode, NewSkeleton, SkeletonAnnotation
+
+import syconn.new_skeleton.NewSkeletonUtils as nsu
 from syconn.utils.basics import euclidian_distance, FloatCoordinate
-from syconn.utils.newskeleton import SkeletonNode, NewSkeleton, SkeletonAnnotation
 
 
 class KDtree:

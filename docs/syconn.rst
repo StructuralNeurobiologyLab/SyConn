@@ -7,6 +7,7 @@ Subpackages
 .. toctree::
 
     syconn.multi_proc
+    syconn.new_skeleton
     syconn.processing
     syconn.ray_casting
     syconn.utils

@@ -1,25 +1,26 @@
 # -*- coding: utf-8 -*-
 import copy
 import gc
+import numpy as np
 import re
 import time
 from multiprocessing import Pool, Manager, cpu_count
-from sys import stdout
-
-import numpy as np
 from numpy import array as arr
 from scipy import spatial
-from sklearn.externals import joblib
+from sys import stdout
 
-from syconn.processing.axoness import predict_axoness_from_nodes
+from sklearn.externals import joblib
+from syconn.new_skeleton.newskeleton import NewSkeleton, SkeletonAnnotation
+
 from syconn.multi_proc.multi_proc_main import start_multiprocess
+from syconn.new_skeleton import annotationUtils as au
+from syconn.processing.axoness import predict_axoness_from_nodes
 from syconn.processing.mapper import feature_valid_syns, calc_syn_dict
 from syconn.processing.synapticity import parse_synfeature_from_node
-from syconn.utils import annotationUtils as au
 from syconn.utils.datahandler import get_filepaths_from_dir, \
     load_ordered_mapped_skeleton, get_paths_of_skelID
 from syconn.utils.datahandler import write_obj2pkl, load_pkl2obj
-from syconn.utils.newskeleton import NewSkeleton, SkeletonAnnotation
+
 __author__ = 'pschuber'
 
 
@@ -32,7 +33,8 @@ def collect_contact_sites(cs_dir, only_az=False):
     :param only_az: If only synapse candidates are to be saved
     :type cs_dir: str
     :type only_az: bool
-    :returns: list of CS nodes (3 per cs), arr of syn feature (n x #feat)
+    :returns: CS nodes (n x 3), synapse feature (n x #feat)
+    :rtype: list of SkeletonNodes, numpy.array
     """
     if not only_az:
         search_folder = ['cs_az/', 'cs_p4_az/', 'cs/', 'cs_p4/']
@@ -174,9 +176,10 @@ def calc_cs_node(args):
     containing center of cs and the nearest skeleton nodes.
     The skeleton nodes containg the property axoness, radius and skel_ID.
     The center contains all above information.
-    :param args: str Filepath to AnnotationObject containing one CS
-                 list to store number of processed cs.
-    :return: Three nodes: nodes of adjacent skeletons and center node of CS
+    :param args: Filepath to AnnotationObject containing one CS
+                 list to store number of processed cs and queue
+    :type args: (str, queue)
+    :returns: Three nodes: nodes of adjacent skeletons and center node of CS
     """
     cs_path, q = args
     anno = au.loadj0126NML(cs_path)[0]
@@ -227,10 +230,10 @@ def calc_cs_node(args):
 
 
 def get_spine_summary(syn_nodes, cs_dir):
-    """
-    Write out dictionary containing spines (dictionaries) with contact site name
+    """Write out dictionary containing spines (dictionaries) with contact site name
     and spine number as key. The spine dictionary contains three values
     'head_diameter', 'branch_dist' and head_proba
+
     :param cs_dir: path to contact site data
     """
     spine_summary = {}
@@ -251,8 +254,8 @@ def get_spine_summary(syn_nodes, cs_dir):
 
 
 def get_spine_dict(spine_node, max_dist=100):
-    """
-    Gather spine information from spine endnote.
+    """Gather spine information from spine endnote
+
     :param spine_node: SkeletonNode containing spine information
     :param max_dist: float Maximum distance from spine head to endpoint in nm
     :return: dict with values 'head_diameter' and 'branch_dist' and 'head_proba'
@@ -309,10 +312,15 @@ def update_axoness_dict(cs_dir, syn_only=True):
 
 
 def update_single_cs_axoness(params):
-    """
+    """Get axoness of adjacent tracings of contact site
 
-    :param params:
-    :return:
+    Find nearest tracing node to representative coordinate of contact site of
+    touching tracings.
+
+    :param params: Representative coordinate and contact site key
+    :type params: tuple (numpy.array, str)
+    :return: contact site key, dictionary of skeleton axoness
+    :rtype: str, dict
     """
     center_coord = params[0]
     key = params[1]
@@ -338,10 +346,11 @@ def update_single_cs_axoness(params):
 
 
 def convert_to_standard_cs_name(name):
-    """
-
-    :param name:
-    :return:
+    """Convert to all possible contact site key combinations
+    :param name: Contact site key
+    :type name: str
+    :return: list of possible key variations
+    :rtype: list of str
     """
     cs_nb, skel1, skel2 = re.findall('(\d+)_(\d+)_(\d+)', name)[0]
     new_name1 = 'skel_%s_%s_cs%s_az' % (skel1, skel2, cs_nb)
@@ -386,8 +395,8 @@ def update_property_dict(cs_dir):
 
 
 def update_single_cs_properties(params):
-    """
-    Helper function of update_property_dict
+    """Helper function of update_property_dict
+
     :param params: center coord and dictionary key (cs/synapse) of axoness dict
     :return: property dict entry with spiness and axoness of CS/synapse
     """

@@ -1,15 +1,16 @@
+import numpy as np
 import os
 import re
 import time
-from sys import stdout
-import numpy as np
 from multiprocessing import Pool, Manager, cpu_count
 from numpy import array as arr
+from sys import stdout
 
+from knossos_utils.knossosdataset import KnossosDataset as kd
+
+import syconn.new_skeleton.annotationUtils as au
 from learning_rfc import save_train_clf
 from syconn.utils.datahandler import get_filepaths_from_dir
-from knossos_utils.knossosdataset import KnossosDataset as kd
-import syconn.utils.annotationUtils as au
 
 __author__ = 'philipp'
 

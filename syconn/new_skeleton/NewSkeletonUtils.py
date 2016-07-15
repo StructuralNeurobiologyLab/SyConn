@@ -1,14 +1,13 @@
 import copy
+import numpy as np
 import re
 import zipfile
 from glob import glob
-
-import numpy as np
 from scipy.spatial import ConvexHull
 
+from syconn.new_skeleton.newskeleton import SkeletonAnnotation, NewSkeleton, SkeletonNode
+from syconn.new_skeleton.newskeleton import integer_checksum
 from syconn.utils.basics import euclidian_distance
-from syconn.utils.newskeleton import SkeletonAnnotation, NewSkeleton, SkeletonNode
-from syconn.utils.newskeleton import integer_checksum
 
 
 class InvalidFileFormatException(Exception):
