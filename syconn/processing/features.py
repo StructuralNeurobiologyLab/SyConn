@@ -7,27 +7,30 @@ from numpy import array as arr
 from scipy import spatial
 
 import networkx as nx
-from syconn.new_skeleton.newskeleton import remove_from_zip
 
 from learning_rfc import write_feat2csv, cell_classification
-from syconn.new_skeleton import annotationUtils as au
+from syconn.utils import skeleton_utils as su
 from syconn.utils.basics import euclidian_distance
 from syconn.utils.datahandler import load_objpkl_from_kzip, \
     load_ordered_mapped_skeleton
+from syconn.utils.skeleton import remove_from_zip
 
 
 def update_property_feat_kzip_star(args):
-    """
-    Helper function for update_property_feat_kzip
+    """Helper function for update_property_feat_kzip
     """
     update_property_feat_kzip(*args)
 
 
 def update_property_feat_kzip(path2kzip, dist=6000):
-    """
-    Recompute axoness feature of skeleton at path2kzip and writes it to .k.zip
-    :param path2kzip: str Path to mapped skeleton
-    :param dist
+    """Recompute axoness feature of skeleton at path2kzip and writes it to
+    .k.zip
+
+    Parameters
+    ----------
+    path2kzip : str
+        Path to mapped skeleton
+    dist : int
     """
     prop_dict, property_feat_names = calc_prop_feat_dict(path2kzip, dist)
     for prop, feat in prop_dict.iteritems():
@@ -46,10 +49,17 @@ def update_property_feat_kzip(path2kzip, dist=6000):
 
 
 def calc_prop_feat_dict(source, dist=6000):
-    """
-    Calculates property feature
-    :param source:
-    :return: Dictionary of property features
+    """Calculates property feature
+
+    Parameters
+    ----------
+    source : SkeletonAnnotation
+    dist : int
+
+    Returns
+    -------
+    dict, list of str
+    Dictionary of property features, list of feature names
     """
     print "Calculating morphological features with context range %d." % dist
     property_features = {}
@@ -72,16 +82,24 @@ def calc_prop_feat_dict(source, dist=6000):
 
 
 def morphology_feature(source, max_nn_dist=6000):
-    """
-    Calculates features for discrimination tasks of neurite identities, such as
+    """Calculates features for discrimination tasks of neurite identities, such as
     axon vs. dendrite or cell types classification. Estimated on interpolated
     skeleton nodes. Features are calculated with a sliding window approach for
     each node. Window is 2*max_nn_dist (nm).
-    :param source: str Path to anno or MappedSkeletonObject
-    :param max_nn_dist: float Radius in which neighboring nodes are found and
-    used for calculating features in nm.
-    :return: array of features for each node. number of nodes x 28 (22 radius
-    feature and 6 object features)
+
+    Parameters
+    ----------
+    source : str
+        Path to anno or MappedSkeletonObject
+    max_nn_dist : float
+        Radius in which neighboring nodes are found and
+        used for calculating features in nm.
+
+    Returns
+    -------
+    numpy.array, numpary.array, list of int
+        two arrays of features for each node. number of nodes x 28 (22 radius
+        feature and 6 object features)
     """
     if isinstance(source, basestring):
         anno = load_ordered_mapped_skeleton(source)[0]
@@ -137,11 +155,17 @@ def morphology_feature(source, max_nn_dist=6000):
 
 
 def radfeat2skelnode(nearby_node_list):
-    """
-    Calculate nodewise radius feature.
-    :param nearby_node_list: list of grouped nodes
-    :return: array of number of nodes times 22 features, containing mean radius,
-    sigma of radii, 20 hist features
+    """Calculate nodewise radius feature
+
+    Parameters
+    ----------
+    nearby_node_list : list of list of SkeletonNodes
+        grouped tracing nodes
+
+    Returns
+    -------
+        array of number of nodes times 22 features, containing mean radius,
+        sigma of radii, 20 hist features
     """
     radius_feat = np.zeros((len(nearby_node_list), 12))
     spiness_given = True
@@ -160,11 +184,20 @@ def radfeat2skelnode(nearby_node_list):
 
 
 def radius_feats_from_nodes(nodes, nb_bins=10, max_rad=5000):
-    """
-    Calculates mean, std and histogram features.
-    :param nodes: list of SkeletonNodes
-    :param nb_bins: int Number of bins for histogramfeatures
-    :return: np.array of radius featurs with dim. nb_bins+2
+    """Calculates mean, std and histogram features
+
+    Parameters
+    ----------
+    nodes : list of SkeletonNodes
+    nb_bins : int
+        Number of bins for histogram features
+    max_rad : int
+        maximum radius to plot on histogram x-axis
+
+    Returns
+    -------
+    np.array
+        radius features with dim. nb_bins+2
     """
     radius_feat = np.zeros((12))
     nn_radius = arr([nn.getDataElem("radius") for nn in nodes])
@@ -279,7 +312,11 @@ def celltype_axoness_feature(anno):
     Calculates axones feature of mapped sekeleton for cell type prediction.
     These include proportion of axon, dendrite and soma pathlengths and maximum
     degree of soma nodes.
-    :return: array of axoness features
+
+    Returns
+    -------
+    np.array (n x 4)
+        axoness features
     """
     type_feats = np.zeros((1, 4))
     all_path_length = anno.physical_length() / 1000.
@@ -293,36 +330,35 @@ def celltype_axoness_feature(anno):
 
 
 def pathlength_of_property(anno, property, value):
-    """
-    Calculate pathlength of nodes using edges.
-    :param anno: list of SkeletonAnnotation
-    :return: length in um
+    """Calculate pathlength of nodes with certain property value
+
+    Parameters
+    ----------
+    anno : SkeletonAnnotation
+        mapped cell tracing
+    property : str
+        spiness / axoness
+    value : int
+        classification result, e.g. 0, 1, 2
+
+    Returns
+    -------
+    int
+        length (in um)
     """
     pathlength = 0
     for from_node, to_node in anno.iter_edges():
         if int(from_node.data[property]) == value and\
-        int(to_node.data[property]) == value:
+                        int(to_node.data[property]) == value:
             pathlength += euclidian_distance(from_node.getCoordinate_scaled(),
                                              to_node.getCoordinate_scaled())
     return pathlength / 1000.
-
-
-def euclidian_distance(c1, c2):
-    return np.sqrt(np.power((c2[0] - c1[0]), 2) +
-     np.power((c2[1] - c1[1]), 2) +
-     np.power((c2[2] - c1[2]), 2))
 
 
 def objfeat2skelnode(node_coords, node_radii, node_ids, nearby_node_list,
                      obj_dict, scaling):
     """
     Calculate features of SegmentationDatasetObjects along Skeleton.
-    :param node_coords:
-    :param node_radii:
-    :param node_ids:
-    :param nearby_node_list:
-    :param obj_dict:
-    :param scaling:
     :return: array of dimension nb_skelnodes x 2. The two features are:
     absolute number of assigned objects and mean voxel size of the objects
     """
@@ -368,7 +404,7 @@ def nodes_in_pathlength(anno, max_path_len):
     :return: list of lists containing reachable nodes in max_path_len where
     outer list has length len(anno.getNodes())
     """
-    skel_graph = au.annotation_to_nx_graph(anno)
+    skel_graph = su.annotation_to_nx_graph(anno)
     list_reachable_nodes = []
     for source_node in anno.getNodes():
         source_node_coord = arr(source_node.getCoordinate_scaled())
@@ -511,8 +547,8 @@ def get_obj_density(source, property='axoness_pred', value=1, obj='mito',
 
 
 def node_branch_end_distance(nml, dist):
-    graph = au.annotation_to_nx_graph(nml)
-    dic = au.nx.degree(graph)
+    graph = su.annotation_to_nx_graph(nml)
+    dic = su.nx.degree(graph)
 
     end = []
     for key, value in dic.items():

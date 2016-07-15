@@ -1,70 +1,58 @@
-syconn.processing package
-=========================
+syconn.processing
+=================
 
-Submodules
-----------
-
-syconn.processing.axoness module
---------------------------------
+syconn.processing.axoness
+-------------------------
 
 .. automodule:: syconn.processing.axoness
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.processing.cell_types module
------------------------------------
+syconn.processing.cell_types
+----------------------------
 
 .. automodule:: syconn.processing.cell_types
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.processing.features module
----------------------------------
+syconn.processing.features
+--------------------------
 
 .. automodule:: syconn.processing.features
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.processing.learning_rfc module
--------------------------------------
+syconn.processing.learning_rfc
+------------------------------
 
 .. automodule:: syconn.processing.learning_rfc
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.processing.mapper module
--------------------------------
+syconn.processing.mapper
+------------------------
 
 .. automodule:: syconn.processing.mapper
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.processing.spiness module
---------------------------------
+syconn.processing.spiness
+-------------------------
 
 .. automodule:: syconn.processing.spiness
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.processing.synapticity module
-------------------------------------
+syconn.processing.synapticity
+-----------------------------
 
 .. automodule:: syconn.processing.synapticity
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-Module contents
----------------
-
-.. automodule:: syconn.processing
     :members:
     :undoc-members:
     :show-inheritance:

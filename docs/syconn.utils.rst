@@ -1,35 +1,32 @@
-syconn.utils package
-====================
+syconn.utils
+============
 
-Submodules
-----------
-
-syconn.utils.basics module
---------------------------
+syconn.utils.basics
+-------------------
 
 .. automodule:: syconn.utils.basics
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.utils.datahandler module
--------------------------------
+syconn.utils.datahandler
+------------------------
 
 .. automodule:: syconn.utils.datahandler
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.utils.datasets module
-----------------------------
+syconn.utils.datasets
+---------------------
 
 .. automodule:: syconn.utils.datasets
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.utils.illustration module
---------------------------------
+syconn.utils.illustration
+-------------------------
 
 .. automodule:: syconn.utils.illustration
     :members:
@@ -37,10 +34,19 @@ syconn.utils.illustration module
     :show-inheritance:
 
 
-Module contents
----------------
+syconn.utils.skeleton_utils
+---------------------------
 
-.. automodule:: syconn.utils
+.. automodule:: syconn.utils.skeleton_utils
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+
+syconn.utils.skeleton
+---------------------
+
+.. automodule:: syconn.utils.skeleton
     :members:
     :undoc-members:
     :show-inheritance:

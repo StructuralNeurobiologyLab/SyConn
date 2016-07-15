@@ -1,46 +1,34 @@
-syconn.multi_proc package
-=========================
+syconn.multi_proc
+=================
 
-Submodules
-----------
-
-syconn.multi_proc.QSUB_skeleton_mapping module
-----------------------------------------------
+syconn.multi_proc.QSUB_skeleton_mapping
+---------------------------------------
 
 .. automodule:: syconn.multi_proc.QSUB_skeleton_mapping
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.multi_proc.QSUB_skeleton_remapping module
-------------------------------------------------
+syconn.multi_proc.QSUB_skeleton_remapping
+-----------------------------------------
 
 .. automodule:: syconn.multi_proc.QSUB_skeleton_remapping
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.multi_proc.QSUB_synapse_mapping module
----------------------------------------------
+syconn.multi_proc.QSUB_synapse_mapping
+--------------------------------------
 
 .. automodule:: syconn.multi_proc.QSUB_synapse_mapping
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.multi_proc.multi_proc_main module
-----------------------------------------
+syconn.multi_proc.multi_proc_main
+---------------------------------
 
 .. automodule:: syconn.multi_proc.multi_proc_main
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-Module contents
----------------
-
-.. automodule:: syconn.multi_proc
     :members:
     :undoc-members:
     :show-inheritance:

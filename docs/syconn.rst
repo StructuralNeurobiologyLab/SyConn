@@ -1,49 +1,34 @@
-syconn package
-==============
-
-Subpackages
------------
+**********
+SyConn API
+**********
 
 .. toctree::
 
-    syconn.multi_proc
-    syconn.new_skeleton
     syconn.processing
-    syconn.ray_casting
+    syconn.multi_proc
     syconn.utils
 
-Submodules
-----------
 
-syconn.brainqueries module
---------------------------
+syconn.brainqueries
+-------------------
 
 .. automodule:: syconn.brainqueries
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.conmatrix module
------------------------
+syconn.conmatrix
+----------------
 
 .. automodule:: syconn.conmatrix
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.contactsites module
---------------------------
+syconn.contactsites
+-------------------
 
 .. automodule:: syconn.contactsites
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-
-Module contents
----------------
-
-.. automodule:: syconn
     :members:
     :undoc-members:
     :show-inheritance:

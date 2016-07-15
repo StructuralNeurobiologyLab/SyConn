@@ -1,21 +1,26 @@
 import numpy as np
-
 import networkx as nx
-
-import syconn.new_skeleton.annotationUtils as au
+import syconn.utils.skeleton_utils as su
 from features import morphology_feature, assign_property2node, \
     node_branch_end_distance
 from learning_rfc import save_train_clf
 from syconn.utils.datahandler import get_filepaths_from_dir
 from syconn.utils.datahandler import load_ordered_mapped_skeleton
-
 __author__ = 'philipp'
 
 
 def load_node_gt(path_to_file):
-    """
-    :param path_to_file: Path to gt file
-    :return node labels and node ids
+    """Load nodewise ground truth
+
+    Parameters
+    ----------
+    path_to_file : str
+        Path to gt file
+
+    Returns
+    -------
+    np.array of int, np.array of int
+    node labels, node ids
     """
     nml = load_ordered_mapped_skeleton(path_to_file)
     nml = nml[0]
@@ -39,19 +44,24 @@ def load_node_gt(path_to_file):
 
 
 def save_spiness_clf(gt_path, recompute=False, clf_used='rf'):
-    """
-    Save spiness clf specified by clf_used to gt_directory.
-    :param gt_path: str to directory of spiness ground truth
-    :param clf_used: 'rf' or 'svm'
+    """Save spiness clf specified by clf_used to gt_directory
+
+    Parameters
+    ----------
+    gt_path : str
+        directory of spiness ground truth
+    recompute : bool
+        recompute features
+    clf_used : str
+        'rf' or 'svm'
     """
     X, y = load_spine_gt(gt_path, recompute=recompute)
     save_train_clf(X, y, clf_used, gt_path)
 
 
 def load_spine_gt(gt_path, recompute=False):
-    """
-    Load spiness ground truth at given path. Set recompute if precomputed data
-    is unwanted.
+    """Load spiness ground truth at given path. Set recompute if precomputed data
+    is unwanted
     """
     if recompute:
         list_path = get_filepaths_from_dir(gt_path)
@@ -97,11 +107,19 @@ def collect_spineheads(anno, dist=6000):
 
 
 def assign_neck(anno, max_head2endpoint_dist=600, max_neck2endpoint_dist=3000):
-    """
-    Assign nodes between spine head node and first node with degree 2 as
+    """Assign nodes between spine head node and first node with degree 2 as
     spine necks inplace.
-    :param anno: AnnotationObject containing spiness prediction of class
     head (1) and shaft (0). Key for prediction is "spiness_pred"
+
+    Parameters
+    ----------
+    anno : SkeletonAnnotation
+        mapped cell tracing
+    max_head2endpoint_dist : int
+        maximum distance between spine head and endpoint on graph
+    max_neck2endpoint_dist : int
+        maximum distance between spine neck and endpoint on graph
+
     """
     headnodes = collect_spineheads(anno, dist=np.inf)
     hn_ids = [n.ID for n in headnodes]
@@ -109,7 +127,7 @@ def assign_neck(anno, max_head2endpoint_dist=600, max_neck2endpoint_dist=3000):
         if node.ID in hn_ids:
             continue
         assign_property2node(node, '0', 'spiness')
-    graph = au.annotation_to_nx_graph(anno)
+    graph = su.annotation_to_nx_graph(anno)
     for hn in headnodes:
         for node in nx.dfs_preorder_nodes(graph, hn):
             # if branch point stop

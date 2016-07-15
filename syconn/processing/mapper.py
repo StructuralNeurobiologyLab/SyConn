@@ -12,12 +12,11 @@ import networkx as nx
 from knossos_utils import chunky
 from knossos_utils.knossosdataset import KnossosDataset
 from sklearn.externals import joblib
+from syconn.utils.skeleton import Skeleton
+from syconn.utils.skeleton import SkeletonNode
+from syconn.utils.skeleton import from_skeleton_to_mergelist
 from syconn.ray_casting.ray_casting_radius import ray_casting_radius
-from syconn.new_skeleton.newskeleton import NewSkeleton
-from syconn.new_skeleton.newskeleton import SkeletonNode
-from syconn.new_skeleton.newskeleton import from_skeleton_to_mergelist
 
-import syconn.new_skeleton.NewSkeletonUtils as nsu
 from axoness import majority_vote
 from axoness import predict_axoness_from_nodes
 from features import calc_prop_feat_dict
@@ -30,11 +29,42 @@ from ..multi_proc.multi_proc_main import start_multiprocess
 
 
 class SkeletonMapper(object):
-    """Class to handle mapping of individual skeleton/annotation."""
-    def __init__(self, source, scaling, ix=None, soma=None, mem_path=None,
-                 context_range=6000):
+    """Class to handle mapping of cell objects (mitochondria, vesicle clouds,
+    synaptic clefts) to tracings. Mapping parameters are saved as attributes.
 
-        self.type = 'mapped_skeleton'
+    Attributes
+    ----------
+    soma : SkeletonAnnotation
+        Soma tracing
+    old_anno : SkeletonAnnotation
+        original tracing where estimated cell radius is saved at each node
+    anno : SkeletonAnnotation
+        interpolated tracing skeleton for hull calculation
+    mitos/p4/az : segmentationDataset
+        Dictionaries in which mapped cell objects are saved
+    ix : int
+        mapped skeleton id
+    write_obj_voxel : bool
+        write object voxel to kzip as binary file
+    """
+
+    def __init__(self, source, scaling, ix=None, soma=None, context_range=6000):
+        """
+
+        Parameters
+        ----------
+        source: SkeletonAnnotation/str
+        scaling: tuple of int
+        ix : int
+        soma : SkeletonAnnotation
+        context_range : int
+        """
+        self.context_range = context_range
+        self.scaling = arr(scaling, dtype=np.int)
+        self._mem_path = '../knossosdatasets/barrier/'
+        self._nb_cpus = max(int(cpu_count()-1), 1)
+        self._cset_path = '../chunkdatasets/j0126_watershed_map/'
+        self._myelin_ds_path = "../knossosdatasets/myelin/"
         init_anno = SkeletonAnnotation()
         init_anno.scaling = [9, 9, 20]
         init_anno.appendComment('soma')
@@ -59,30 +89,23 @@ class SkeletonMapper(object):
             if soma is not None:
                 self.soma = soma
         else:
-            raise RuntimeError('Datatype not understood during __init__'
+            raise RuntimeError('Datatype not understood in __init__'
                                'of SkeletonMapper.')
-        # init annotation-paramaters
-        self.detect_outlier = None
+        # init mapping parameters
+        self.detect_outlier = True
         self.neighbor_radius = None
         self.nb_neighbors = None
         self.nb_rays = None
         self.nb_hull_vox = None
         self.nb_voting_neighbors = None
-        self.scaling = arr(scaling, dtype=np.int)
-        self.nb_cpus = max(int(cpu_count()-1), 1)
         self.annotation_method = 'hull'
         self.kd_radius = 1200
         self.thresh = 2.2
         self.filter_size = [0, 0, 0]
-        self.outlier_detection = True
         self.write_obj_voxel = False
-        self._cset_path = '/lustre/sdorkenw/j0126_watershed_map/'
-        self._cset = None
-        self._mem_path = mem_path
+        self.obj_min_votes = {'mitos': 235, 'p4': 191, 'az': 346}
         self.mapping_info = {'az': {}, 'mitos': {}, 'p4': {}}
-        self._myelin_ds_path = "/lustre/sdorkenw/j0126_myelin_in/"
-        self.az_min_votes = 346
-        self.obj_min_votes = {'mitos': 235, 'p4': 191, 'az': self.az_min_votes}
+        self._cset = None
         # stores hull and radius estimation of each ray and node
         self._hull_coords = None
         self._hull_normals = None
@@ -94,7 +117,6 @@ class SkeletonMapper(object):
         # init skeleton nodes
         self._property_features = None
         self.property_feat_names = None
-        self.context_range = context_range
         self.anno.interpolate_nodes()
         if len(self.soma.getNodes()) != 0:
             self.merge_soma_tracing()
@@ -108,20 +130,28 @@ class SkeletonMapper(object):
 
     @property
     def hull_coords(self):
-        """
-        Scaled hull coordinates of skeleton membrane.
+        """Scaled hull coordinates of skeleton membrane
+
+        Returns
+        -------
+        np.array
+            Coordinate each hull point
         """
         if self._hull_coords is None:
             self.hull_sampling(thresh=self.thresh,
-                               detect_outlier=self.outlier_detection,
+                               detect_outlier=True,
                                nb_rays=40, nb_neighbors=20, neighbor_radius=220,
                                max_dist_mult=1.4)
         return self._hull_coords
 
     @property
     def hull_normals(self):
-        """
-        Normal for each hull point pointing outwards.
+        """Normal for each hull point pointing outwards
+
+        Returns
+        -------
+        np.array
+            Normal vector of each hull point pointing outwards
         """
         if self._hull_normals is None:
             node_coords = arr(self.node_com)
@@ -149,12 +179,16 @@ class SkeletonMapper(object):
 
     @property
     def skel_radius(self):
-        """
-        Radius of membrane at each skeleton node.
+        """Radius of membrane at each skeleton node
+
+        Returns
+        -------
+        np.array
+            cell radius at self.nodes
         """
         if self._skel_radius is None:
             self.hull_sampling(thresh=self.thresh,
-                               detect_outlier=self.outlier_detection,
+                               detect_outlier=True,
                                nb_rays=20, nb_neighbors=40, neighbor_radius=220,
                                max_dist_mult=1.4)
         return self._skel_radius
@@ -162,11 +196,12 @@ class SkeletonMapper(object):
     def _create_nodes(self):
         """Creates sorted node list and corresponding ID- and coordinate-list.
         Enables fast access to node information in same ordering.
+        Setter for node_com, node_ids and nodes attribute.
         """
         coords = []
         ids = []
         self.nodes = []
-        graph = au.annotation_to_nx_graph(self.anno)
+        graph = su.annotation_to_nx_graph(self.anno)
         for i, node in enumerate(nx.dfs_preorder_nodes(graph)):
             coords.append(node.getCoordinate()*self.scaling)
             ids.append(node.ID)
@@ -181,45 +216,55 @@ class SkeletonMapper(object):
         print "Merging soma (%d nodes) with original annotation." % \
               (len(self.soma.getNodes()))
         self.soma.interpolate_nodes(150)
-        self.anno = nsu.merge_annotations(self.anno, self.soma)
+        self.anno = su.merge_annotations(self.anno, self.soma)
 
     def annotate_objects(self, dh, radius=1200, method='hull', thresh=2.2,
                          filter_size=(0, 0, 0), nb_neighbors=20,
                          nb_hull_vox=500, neighbor_radius=220,
                          detect_outlier=True, nb_rays=20,
                          nb_voting_neighbors=100, max_dist_mult=1.4):
-        """
-        Creates self.object with annotated objects as SegmentationDataset, where
-        object is in {mitos, p4, az} (depending on available datasets in Data-
-        Handler)
-        :param dh: DataHandler object containing SegmentationDataObjects
-         mitos, p4, az
-        :param radius: int Radius in nm. Single integer if integer radius is for all
-         objects the same. If list of three integer stick to ordering
-         [mitos, p4, az].
-        :param method: str Either 'kd' for fix radius or 'hull'/'supervoxel' if
-         membrane is available.
-        :param thresh: float Denotes the factor which is multiplied with the maximum
-         membrane probability. The resulting value is used as threshold after
-         which the membrane is assumed to be existant.
-        :param filter_size: int List of integer for each object [mitos, p4, az]
-        :param nb_neighbors: int minimum number of neighbors needed during
-         outlier detection for a single hull point to survive.
-        :param nb_hull_vox: int Number of object hull voxels which are used to
-         estimate spatial proximity to skeleton (inside or outside).
-         Defines minimum votes for az (nb_hull_vox/2) and p4/mito (nb_hull_vox/3).
-        :param neighbor_radius: int Radius (nm) of ball in which to look for supporting
-         hull voxels. Used during outlier detection.
-        :param detect_outlier: bool use outlier-detection if True.
-        :param nb_rays: int Number of rays send at each skeleton node
-         (multiplied by a factor of 5). Defines the angle between two rays
-         (=360 / nb_rays) in the orthogonal plane.
-        :param nb_voting_neighbors: int Number votes of skeleton hull voxels (membrane
-         representation) for object-mapping. Used for p4 and mitos during
-         geometrical position estimation of object nodes.
-        :param max_dist_mult: float Multiplier for radius to estimate maximal
-         distance of hull points to source node.
-        :return:
+        """Creates self.object with annotated objects as SegmentationDataset,
+        where object is in {mitos, p4, az}
+
+        Parameters
+        ----------
+        dh : DataHandler
+            object containing SegmentationDataObjects mitos, p4, az
+        radius : int
+            Radius in nm. Single integer if integer radius is for all
+            objects the same. If list of three integer stick to ordering
+            [mitos, p4, az].
+        method : str
+            Either 'kd' for fix radius or 'hull'/'supervoxel' if
+            membrane is available.
+        thresh : float
+            Denotes the factor which is multiplied with the maximum
+            membrane probability. The resulting value is used as threshold after
+            which the membrane is assumed to be existant.
+        filter_size : int
+            List of integer for each object [mitos, p4, az]
+        nb_neighbors : int
+            minimum number of neighbors needed during
+            outlier detection for a single hull point to survive.
+        nb_hull_vox : int
+            Number of object hull voxels which are used to
+            estimate spatial proximity to skeleton (inside or outside).
+        neighbor_radius : int
+            Radius (nm) of ball in which to look for supporting
+            hull voxels. Used during outlier detection.
+        detect_outlier : bool
+            use outlier-detection if True.
+        nb_rays : int
+            Number of rays send at each skeleton node
+            (multiplied by a factor of 5). Defines the angle between two rays
+            (=360 / nb_rays) in the orthogonal plane.
+        nb_voting_neighbors : int
+            Number votes of skeleton hull voxels (membrane
+            representation) for object-mapping. Used for p4 and mitos during
+            geometrical position estimation of object nodes.
+        max_dist_mult : float
+            Multiplier for radius to estimate maximal distance of hull points
+            to source node.
         """
         start = time.time()
         if radius == 0:
@@ -308,13 +353,22 @@ class SkeletonMapper(object):
                                    self.annotation_method)
 
     def annotate_object(self, objects, radius, method, objtype):
-        """
-        Redirects mapping task to desired method-function.
-        :param objects: SegmentationDataset
-        :param radius: int Radius of kd-tree in units of nm.
-        :param method: str either 'hull', 'kd' or 'supervoxel'
-        :param objtype: string characterising object type
-        :return: list of mapped object ID's
+        """Redirects mapping task to desired method-function
+
+        Parameters
+        ----------
+        objects: SegmentationDataset
+        radius: int
+            Radius of kd-tree in units of nm.
+        method: str
+            either 'hull', 'kd' or 'supervoxel'
+        objtype : string
+            characterising object type
+
+        Returns
+        -------
+        list
+            mapped object ID's
         """
         if method == 'hull':
             node_ids = self._annotate_with_hull(objects, radius, objtype)
@@ -332,9 +386,18 @@ class SkeletonMapper(object):
          such that the objecet distance distribution to its nearest node is
          nearly uniform (assume isotrope distribution at the beginning, i.e.
          ~ r**2).
-        :param data: SegmentationDataset of cell objects
-        :param radius: int Scalar or radii list (in nm)
-        :return: List with annotated objects per node, i.e. list of lists
+
+        Parameters
+        ----------
+        data : SegmentationDataset
+            Dictionary of cell objects
+        radius : int
+            Cell radius at tracing nodes (in nm)
+
+        Returns
+        -------
+        list
+            annotated objects per node, i.e. list of lists
         """
         print "Applying kd-tree with radius %s to %d nodes and %d objects" % \
               (radius, len(self.node_com), len(data.rep_coords))
@@ -358,9 +421,9 @@ class SkeletonMapper(object):
         if nb_objects <= 400:
             return [[]]*(len(self.nodes)-1)+[set_of_anno_ids]
 
-        todo_list = [[list(set_of_anno_ids[i::self.nb_cpus]),
-                      annotation_ids, dists] for i in xrange(self.nb_cpus)]
-        pool = Pool(processes=self.nb_cpus)
+        todo_list = [[list(set_of_anno_ids[i::self._nb_cpus]),
+                      annotation_ids, dists] for i in xrange(self._nb_cpus)]
+        pool = Pool(processes=self._nb_cpus)
         res = pool.map(helper_samllest_dist, todo_list)
         pool.close()
         pool.join()
@@ -392,9 +455,18 @@ class SkeletonMapper(object):
     def _annotate_with_kdtree(self, data, radius):
         """Annotates objects to node if its representative coordinate (data) is
          within radius.
-        :param data: SegmentationDataset of cell objects
-        :param radius: int Scalar or radii list (in nm)
-        :return: List with annotated objects per node, i.e. list of lists
+
+        Parameters
+        ----------
+        data : SegmentationDataset
+            Dictioanry of cell objects
+        radius: int
+            radii list (in nm)
+
+        Returns
+        -------
+        list of list of SegmentationDatasetObjects
+            List with annotated objects per node, i.e. list of lists
         """
         print "Applying kd-tree with radius %s to %d nodes and %d objects" % \
               (radius, len(self.node_com), len(data.rep_coords))
@@ -415,16 +487,27 @@ class SkeletonMapper(object):
         object hull voxels are within supervoxels of this skeleton.
         radius. For mitos and p4 (self.nb_hull_vox / 2) hull voxels are used,
         whereas for az one object voxel inside is sufficient.
-        :param data: SegmentationDataset of cell objects
-        :param radius: int Scalar or radii list (in nm)
-        :return: List with annotated objects per node, i.e. list of lists
+
+        Parameters
+        ----------
+        data : SegmentationDataset
+            Dictioanry of cell objects
+        radius: int
+            radii list (in nm)
+        objtype : str
+            Cell object type (az, p4, mito)
+
+        Returns
+        -------
+        list of list of SegmentationDatasetObjects
+            List with annotated objects per node, i.e. list of lists
         """
         nb_hull_vox = self.nb_hull_vox
         red_ids = self._annotate_with_kdtree(data, radius)
         red_ids = list(set([ix for sublist in red_ids for ix in sublist]))
         keys = arr(data.ids)[red_ids]
         curr_objects = [data.object_dict[key] for key in keys]
-        pool = Pool(processes=self.nb_cpus)
+        pool = Pool(processes=self._nb_cpus)
         obj_voxel_coords = pool.map(helper_get_voxels, curr_objects)
         pool.close()
         pool.join()
@@ -439,10 +522,10 @@ class SkeletonMapper(object):
             obj_ids += [curr_obj_id] * nb_hull_vox
         mergelist_path = '/home/pschuber/data/gt/nml_obj/'+str(self.ix)
         print "Getting map info of %d %s objects with %d cpus." % \
-              (len(keys), objtype, self.nb_cpus)
+              (len(keys), objtype, self._nb_cpus)
         mapped_obj_ids = arr(from_skeleton_to_mergelist(
             cset, self.anno, 'watershed_150_20_10_3_unique', 'labels',
-            rand_voxels, obj_ids, nb_processes=self.nb_cpus,
+            rand_voxels, obj_ids, nb_processes=self._nb_cpus,
             mergelist_path=mergelist_path))
         annotation_ids_new = []
         min_votes = self.obj_min_votes[objtype]
@@ -461,10 +544,20 @@ class SkeletonMapper(object):
         is used to determine in- and outlier coordinates of object hull voxels.
         If sufficient voxels are inside the cloud, the corresponding object
         is mapped to the skeleton.
-        :param data: SegmentationDataset of cell objects
-        :param radius: int Scalar or radii list (in nm)
-        :param objtype: Cell object type (az, p4, mito)
-        :return: List with annotated objects per node, i.e. list of lists
+
+        Parameters
+        ----------
+        data : SegmentationDataset
+            Dictioanry of cell objects
+        radius: int
+            radii list (in nm)
+        objtype : str
+            Cell object type (az, p4, mito)
+
+        Returns
+        -------
+        list of list of SegmentationDatasetObjects
+            List with annotated objects per node, i.e. list of lists
         """
         aztrue = (objtype == 'az')
         max_az_dist = 125.
@@ -521,22 +614,34 @@ class SkeletonMapper(object):
     def hull_sampling(self, thresh=2.5, nb_rays=20, nb_neighbors=40,
                       neighbor_radius=220, detect_outlier=True,
                       max_dist_mult=1.5):
-        """
-        :param thresh: float Multiplicator of maximum occurring prediction value
-         after which membrane is triggered active.
-        :param nb_rays: int Number of rays send at each skeleton node
-        (multiplied by a factor of 5). Defines the angle between two rays
-        (=360 / nb_rays) in the orthogonal plane.
-        :param nb_neighbors: int minimum number of neighbors needed during
-        outlier detection for a single hull point to survive.
-        :param neighbor_radius: int Radius of ball in which to look for supporting
-        hull voxels. Used during outlier detection.
-        :param detect_outlier: bool use outlier-detection if True.
-        :param max_dist_mult: float Multiplier for radius to generate maximal
-        distance of hull points to source node.
-        :return: Average radius per node in (9,9,20) corrected units estimated
-         by rays propagated
-        through Membrane prediction until threshold reached.
+        """ Calculates hull of tracing
+
+        Parameters
+        ----------
+        thresh : float
+            factor of maximum occurring prediction value
+            after which membrane is triggered active.
+        nb_rays : int
+            Number of rays send at each skeleton node
+            (multiplied by a factor of 5). Defines the angle between two rays
+            (=360 / nb_rays) in the orthogonal plane.
+        nb_neighbors : int
+            minimum number of neighbors needed during
+            outlier detection for a single hull point to survive.
+        neighbor_radius : int
+            Radius of ball in which to look for supporting
+            hull voxels. Used during outlier detection.
+        detect_outlier : bool
+            use outlier-detection if True.
+        max_dist_mult : float
+            Multiplier for radius to generate maximal distance of hull points
+            to source node.
+
+        Returns
+        -------
+        numpy.array
+            Average radius per node in (9,9,20) corrected units estimated by
+            rays propagated through Membrane prediction until threshold reached.
         """
         print "Creating hull using scaling %s and threshold %0.2f with" \
               " outlier-detetion=%s" % (self.scaling, thresh*255.0,
@@ -596,13 +701,13 @@ class SkeletonMapper(object):
             node_attr.append((skel_interp[ix], orth_plane[ix], ix, nb_edges<2))
         boxes.append((arr(box), node_attr))
         print "Found %d different boxes." % len(boxes)
-        print "Using %d cpus." % self.nb_cpus
-        pool = Pool(processes=self.nb_cpus)
+        print "Using %d cpus." % self._nb_cpus
+        pool = Pool(processes=self._nb_cpus)
         m = Manager()
         q = m.Queue()
-        result = pool.map_async(get_radii_hull, [(box, q, self.scaling, mem_path,
-                                             nb_rays, thresh, max_dist_mult)
-                                                 for box in boxes])
+        result = pool.map_async(get_radii_hull, [(box, q, self.scaling,
+                                mem_path, nb_rays, thresh, max_dist_mult)
+                                for box in boxes])
         # monitor loop
         while True:
             if result.ready():
@@ -656,6 +761,9 @@ class SkeletonMapper(object):
         self._skel_radius = radii_sorted
 
     def calc_myelinisation(self):
+        """Calculates myelinisation at each node and writes it to
+        node.data["myelin_pred"]
+        """
         assert self._myelin_ds_path is not None, "Myelin dataset not found."
         test_box = (10, 10, 5)
         true_thresh = 100.
@@ -683,6 +791,14 @@ class SkeletonMapper(object):
 
     @property
     def property_features(self):
+        """Getter of property features, calculates axoness/spiness features
+        if necessary
+
+        Returns
+        -------
+        np.array
+            property features
+        """
         if self._property_features is None:
             self._property_features, self.property_feat_names = \
                 calc_prop_feat_dict(self, self.context_range)
@@ -724,9 +840,13 @@ class SkeletonMapper(object):
                         max_neck2endpoint_dist=max_neck2endpoint_dist)
 
     def write2pkl(self, path):
-        """
-        Writes MappedSkeleton object to .pkl file. Path is extracted from
+        """Writes MappedSkeleton object to .pkl file. Path is extracted from
         dh._datapath and MappedSkeleton ID.
+
+        Parameters
+        ----------
+        path: str
+            Path to kzip destination
         """
         if os.path.isfile(path):
             copyfile(path, path[:-4]+'_old.pkl')
@@ -737,13 +857,16 @@ class SkeletonMapper(object):
            print "Skeleton %s saved successfully at %s." % (self.ix, path)
 
     def write2kzip(self, path):
-        """
-        Writes interpolated skeleton (and annotated objects) to nml at path.
+        """Writes interpolated skeleton (and annotated objects) to nml at path.
         If self.write_obj_voxel flag is True a .txt file containing all object
         voxel with id is written in k.zip
-        :param path: str Path to nml destination (should end with .nml)
+
+        Parameters
+        ----------
+        path: str
+            Path to kzip destination
         """
-        object_skel = NewSkeleton()
+        object_skel = Skeleton()
         obj_dict = {0: 'mitos', 1: 'p4', 2: 'az'}
         re_process_skels = []
         # store path to written files for kzip compression
@@ -821,9 +944,12 @@ class SkeletonMapper(object):
                                                                 kzip_path)
 
     def get_plot_obj(self):
-        """
-        Extracts coordinates from annotated SegmentationObjects.
-        :return: np.array of object-voxels for each object
+        """Extracts coordinates from annotated SegmentationObjects
+
+        Returns
+        -------
+        np.array
+            object-voxels for each object
         """
         assert self.annotation_method != None, "Objects not initialized!"
         voxel_list = []
@@ -850,10 +976,17 @@ def node_id2key(segdataobject, node_ids, filter_size):
     """
     Maps list indices in node_ids to keys of SegmentationObjects. Filters
     objects bigger than filter_size.
+
+    Parameters
+    ----------
     :param segdataobject: SegmentationDataset of object type currently processed
     :param node_ids: List of list containing annotated object ids for each node
     :param filter_size: int minimum number of voxels of object
-    :return: List of objects keys
+
+    Returns
+    -------
+    list
+        objects keys
     """
 
     for node in node_ids:
@@ -868,12 +1001,21 @@ def node_id2key(segdataobject, node_ids, filter_size):
 
 
 def outlier_detection(point_list, min_num_neigh, radius):
-    """
-    Finds hull outlier using point density criterion.
-    :param point_list: List of coordinates
-    :param min_num_neigh: int Minimum number of neighbors, s.t. hull-point survives.
-    :param radius: int Radius in nm to look for neighbors
-    :return: Cleaned point cloud
+    """Finds hull outlier using point density criterion
+
+    Parameters
+    ----------
+    point_list: list
+        List of coordinates
+    min_num_neigh: int
+        Minimum number of neighbors, s.t. hull-point survives.
+    radius: int
+        Radius in nm to look for neighbors
+
+    Returns
+    -------
+    numpy.array
+        Cleaned point cloud
     """
     print "Starting outlier detection."
     if np.array(point_list).ndim != 2:
@@ -942,13 +1084,20 @@ def get_radii_hull(args):
 
 
 def read_pair_cs(pair_path):
-    """
-    Helper function to collect pairwise contact site information. Extracts
+    """Helper function to collect pairwise contact site information. Extracts
     axoness prediction.
-    :param pair_path: str path to pairwise contact site nml
-    :return: annotation object without contact site hull voxel
+
+    Parameters
+    ----------
+    pair_path : str
+        path to pairwise contact site kzip
+
+    Returns
+    -------
+    SkeletonAnnotation
+        annotation object without contact site hull voxel
     """
-    pairwise_anno = au.loadj0126NML(pair_path)[0]
+    pairwise_anno = su.loadj0126NML(pair_path)[0]
     predict_axoness_from_nodes(pairwise_anno)
     new_anno = SkeletonAnnotation()
     new_anno.setComment(pairwise_anno.getComment())
@@ -967,33 +1116,50 @@ def prepare_syns_btw_annos(pairwise_paths, dest_path, max_hull_dist=60,
     in nml_list. Adds az, p4 and nearest skeleton nodes to found contact sites.
     Writes 'contact_sites.nml' to nml-path containing contact sites of all
     nml's.
-    :param pairwise_paths: List of pairwise paths to nml's
-    :param dest_path: str Path to directory where to store result of
+
+    Parameters
+    ----------
+    pairwise_paths : list of str
+        List of pairwise paths to nml's
+    dest_path : str
+        Path to directory where to store result of
      synapse mapping
-    :param max_hull_dist: float maximum distance between skeletons in nm
-    :param concom_dist: float Maximum distance of connected components (nm)
+    max_hull_dist : float
+        maximum distance between skeletons in nm
+    concom_dist : float
+        Maximum distance of connected components (nm)
     """
     sname = socket.gethostname()
     if sname[:6] in ['soma01', 'soma02', 'soma03', 'soma04', 'soma05']:
         nb_cpus = np.min((2, cpu_count()-1))
     else:
         nb_cpus = np.max(np.min((16, cpu_count()-1)), 1)
-    params = [(a, b, max_hull_dist, concom_dist, dest_path) for a, b in pairwise_paths]
-    _ = start_multiprocess(syn_btw_anno_pair, params, nb_cpus=nb_cpus, debug=False)
+    params = [(a, b, max_hull_dist, concom_dist, dest_path) for a, b
+              in pairwise_paths]
+    _ = start_multiprocess(syn_btw_anno_pair, params, nb_cpus=nb_cpus)
 
 
 def similarity_check(skel_a, skel_b):
+    """If absolute number of identical nodes is bigger then certain threshold
+    return similar.
+
+    Parameters
+    ----------
+    skel_a : SkeletonAnnotation
+        Skeleton a
+    skel_b: SkeletonAnnotation
+        Skeleton b
+
+    Returns
+    -------
+    bool
+        skel_a and skel_b are similar
     """
-    Chekc if two skeletons are similar.
-    :param skel_a: Skeleton a
-    :param skel_b: Skeleton b
-    :return: bool True if equal
-    """
-    a_coords = arr([node.getCoordinate() for node in
-                                    skel_a.getNodes()]) * skel_a.scaling
+    a_coords = arr([node.getCoordinate() for node in skel_a.getNodes()]) * \
+               skel_a.scaling
     a_coords_sample = a_coords[np.random.randint(0, len(a_coords), 100)]
-    b_coords = arr([node.getCoordinate() for node in
-                                    skel_b.getNodes()]) * skel_b.scaling
+    b_coords = arr([node.getCoordinate() for node in skel_b.getNodes()]) * \
+               skel_b.scaling
     b_tree = spatial.cKDTree(b_coords)
     a_near = b_tree.query_ball_point(a_coords_sample, 1)
     nb_equal = len([id for sublist in a_near for id in sublist])
@@ -1005,6 +1171,7 @@ def similarity_check(skel_a, skel_b):
 
 
 def similarity_check_star(params):
+    """Helper function"""
     skel1 = load_ordered_mapped_skeleton(params[0])[0]
     skel2 = load_ordered_mapped_skeleton(params[1])[0]
     similar = similarity_check(skel1, skel2)
@@ -1016,11 +1183,19 @@ def syn_btw_anno_pair(params):
     Get synapse information between two mapped annotation objects. Details are
     written to pairwise nml (all contact sites between pairs contained) and
     to nml for each contact site.
-    :param path_a: path to mapped annotation object
-    :param path_b: path to mapped annotation object
-    :param max_hull_dist: float maximum distance between skeletons (nm)
-    :param concom_dist: float maximum distance of connected components (nm)
-    :return: None
+
+    Parameters
+    ----------
+    params : list
+        [path_a, path_b, max_hull_dist, concom_dist]
+    path_a : str
+        path to mapped annotation object
+    path_b : str
+        path to mapped annotation object
+    max_hull_dist : float
+        maximum distance between skeletons (nm)
+    concom_dist : float
+        maximum distance of connected components (nm)
     """
     path_a, path_b, max_hull_dist, concom_dist, dest_path = params
     vx_overlap_dist = 80
@@ -1031,7 +1206,8 @@ def syn_btw_anno_pair(params):
         a = load_anno_list([path_a], load_mitos=False)[0]
         az_dict = load_objpkl_from_kzip(path_a)[2].object_dict
         b = load_anno_list([path_b], load_mitos=False)[0]
-        id2skel = lambda x: str(a[0].filename) if np.int(x) == 0 else str(b[0].filename)
+        id2skel = lambda x: str(a[0].filename) if np.int(x) == 0 else\
+            str(b[0].filename)
         az_dict.update(load_objpkl_from_kzip(path_b)[2].object_dict)
         scaling = a[0].scaling
         match = re.search(r'iter_0_(\d+)', a[0].filename)
@@ -1050,17 +1226,9 @@ def syn_btw_anno_pair(params):
             print "\n Skipping nearly identical skeletons: %s and %s, " \
                   "because of similarity check.\n" % (a[0].filename, b[0].filename)
             return None
-        csites, csite_ids = syns_btw_annos(a[0], b[0], max_hull_dist, concom_dist)
+        csites, csite_ids = cs_btw_annos(a[0], b[0], max_hull_dist, concom_dist)
         if len(csites) == 0:
             return None
-        if isinstance(a[0], list) or isinstance(a[1], list) or isinstance(a[2], list)\
-            or isinstance(a[3], list) or isinstance(b[0], list) \
-            or isinstance(b[1], list) or isinstance(b[2], list) \
-            or isinstance(b[3], list):
-            print "Some annotation object is only empty list!"
-            print a, b
-            print a[0].filename, b[0].filename
-            return
 
         # save information about pairwise csites in one nml
         pairwise_anno = SkeletonAnnotation()
@@ -1297,7 +1465,7 @@ def syn_btw_anno_pair(params):
                 except (KeyError, IndexError):
                     pass
             contact_site_anno.setComment(contact_site_name)
-            dummy_skel = NewSkeleton()
+            dummy_skel = Skeleton()
             dummy_skel.add_annotation(contact_site_anno)
             cs_destpath = dest_path
             if p4_bool and az_bool:
@@ -1313,7 +1481,7 @@ def syn_btw_anno_pair(params):
             print "Did not found any node in annotation object."
             return None
         pairwise_anno.appendComment('%dcs' % (i+1))
-        dummy_skel = NewSkeleton()
+        dummy_skel = Skeleton()
         dummy_skel.add_annotation(pairwise_anno)
         dummy_skel.toNml(dest_path+'pairwise/'+annotation_name+'.nml')
         del dummy_skel
@@ -1322,19 +1490,28 @@ def syn_btw_anno_pair(params):
     except Exception, e:
         print "----------------------------\n" \
               "WARNING!! \n" \
-              "oCuld not compute %s and %s. \n%s\n" % (path_a, path_b, e)
+              "Could not compute %s and %s. \n%s\n" % (path_a, path_b, e)
         return 0
 
 
 def max_nodes_in_path(anno, source_node, max_number):
+    """Find specified number of nodes along skeleton from source node (BFS).
+
+    Parameters
+    ----------
+    anno: SkeletonAnnotation
+        tracing on which to search
+    source_node: SkeletonNode
+        Starting node
+    max_number: int
+        Maximum number of nodes
+
+    Returns
+    -------
+    list of SkeletonNodes
+        Tracing nodes up to certain distance from source node
     """
-    Find specified numbner of nodes along skeleton from source node (BFS).
-    :param anno: AnnotationObject
-    :param source_node: SkeletonNode Starting node
-    :param max_number: int Maximum number of nodes
-    :return: list SkeletonNodes including Source node
-    """
-    skel_graph = au.annotation_to_nx_graph(anno)
+    skel_graph = su.annotation_to_nx_graph(anno)
     reachable_nodes = [source_node]
     for edge in nx.bfs_edges(skel_graph, source_node):
         next_node = edge[1]
@@ -1345,14 +1522,23 @@ def max_nodes_in_path(anno, source_node, max_number):
 
 
 def feature_valid_syns(cs_dir, only_az=True, only_syn=True, all_contacts=False):
-    """
-    Returns the features of valid synapses predicted by synapse rfc.
-    :param cs_dir: Path to computed contact sites.
-    :param only_az: Return feature of all contact sites with mapped az.
-    :param only_syn: Returns feature only if synapse was predicted
-    :param all_contacts: Use all contact sites for feature extraction
-    :return: np.array of features, array of contact site IDS, boolean
-     array of syn-apse prediction
+    """Returns the features of valid synapses predicted by synapse rfc
+
+    Parameters
+    ----------
+    cs_dir : str
+        Path to computed contact sites.
+    only_az : bool
+        Return feature of all contact sites with mapped az.
+    only_syn : bool
+        Returns feature only if synapse was predicted
+    all_contacts : bool
+        Use all contact sites for feature extraction
+
+    Returns
+    -------
+    np.array (n x f), np.array (n x 1), np.array (n x 1)
+        features, array of contact site IDS, boolean array of synapse prediction
     """
     clf_path = cs_dir + '/../models/rf_synapses/rf_syn.pkl'
     cs_fpaths = []
@@ -1408,12 +1594,20 @@ def feature_valid_syns(cs_dir, only_az=True, only_syn=True, all_contacts=False):
 
 
 def readout_cs_info(args):
-    """
-    Helper function of feature_valid_syns
-    :param args: tuple of path to file and queue
-    :return: array of synapse features, str contact site ID
+    """Helper function of feature_valid_syns
+
+    Parameters
+    ----------
+    args: tuple
+        path to file and queue
+
+    Returns
+    -------
+    np.array, str
+        synapse features, contact site ID
     """
     cspath, q = args
+    feat = None
     if q is not None:
         q.put(1)
     cs = read_pair_cs(cspath)
@@ -1428,12 +1622,21 @@ def calc_syn_dict(features, axoness_info, get_all=False):
     """
     Creates dictionary of synapses. Keys are ids of pre cells and values are
     dictionaries of corresponding synapses with post cell ids.
-    :param features: synapse feature
-    :param axoness_info: string containing axoness information of cells
-    :return: filtered features and axoness info, syn_dict and list of all post
-    cell ids
-    """
-    """
+
+    Parameters
+    ----------
+    features: np.array
+        synapse feature
+    axoness_info: np.array
+        string containing axoness information of cells
+    get_all : bool
+        collect all contact sites
+
+    Returns
+    -------
+    np.array, np.array, dict, np.array, np.array, dict
+        synapse features, axoness information, connectivity,\
+           post synaptic cell ids, synapse predictions, axoness
     """
     total_size = float(len(axoness_info))
     ax_ax_cnt = 0
@@ -1455,12 +1658,8 @@ def calc_syn_dict(features, axoness_info, get_all=False):
         if cell_axoness[0] == cell_axoness[1]:
             if cell_axoness[0] == 1:
                 ax_ax_cnt += 1
-                # if ax_ax_cnt < 20:
-                #     print "AX:", syn_fpaths[k]
             else:
                 den_den_cnt += 1
-                # if den_den_cnt < 20:
-                #     print "den:", syn_fpaths[k]
                 valid_syn_array[k] = 0
                 if not get_all:
                     continue
@@ -1496,14 +1695,26 @@ def calc_syn_dict(features, axoness_info, get_all=False):
            all_post_ids, valid_syn_array, axoness_dict
 
 
-def syns_btw_annos(anno_a, anno_b, max_hull_dist, concom_dist):
+def cs_btw_annos(anno_a, anno_b, max_hull_dist, concom_dist):
     """
     Computes contact sites between two annotation objects and returns hull
-     points of both skeletons near contact site.
-    :param anno_a: Annotation object A
-    :param anno_b: Annotation object B
-    :param max_hull_dist: Maximum distance between skeletons in nm
-    :return: List of hull coordinates for each contact site.
+    points of both skeletons near contact site.
+
+    Parameters
+    ----------
+    anno_a : SkeletonAnnotation
+        Annotation object A
+    anno_b : SkeletonAnnotation
+        Annotation object B
+    max_hull_dist : int
+        Maximum distance between skeletons in nm
+    concom_dist : int
+        maximum distance of connected components (nm)
+
+    Returns
+    -------
+    list
+        List of hull coordinates for each contact site
     """
     hull_a = anno_a._hull_coords
     hull_b = anno_b._hull_coords

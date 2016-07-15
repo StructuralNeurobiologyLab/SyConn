@@ -6,7 +6,8 @@ from scipy import spatial
 
 import networkx as nx
 
-import annotationUtils as au
+import syconn.utils.skeleton_utils as su
+from syconn.utils.skeleton import Skeleton
 from syconn.processing.features import celltype_axoness_feature,\
     spiness_feats_from_nodes,  radius_feats_from_nodes, az_per_spinehead,\
     pathlength_of_property
@@ -17,7 +18,17 @@ from syconn.utils.datahandler import load_objpkl_from_kzip
 
 
 class Neuron(object):
-    def __init__(self, annotations=[], unique_ID=None):
+    """Class to calculate cell type features, based on results of
+    SkeletonMapper
+
+    Attributes
+    ----------
+    neuron_feature_names : list of str
+        order names of features
+    features : dict of np.array
+        cell type features stored with their feature names
+    """
+    def __init__(self, annotations, unique_ID=None):
 
         # This identifier is always unique. If another neuron object is
         # discovered to be the same biological unit, both need to be merged
@@ -146,6 +157,13 @@ class Neuron(object):
 
     @property
     def neuron_features(self):
+        """Setter for cellt type features
+
+        Returns
+        -------
+        np.array
+            cell type features
+        """
         if self._neuron_features.shape[1] == 0:
             self.neuron_feature_names = np.zeros((1, 0))
             self.set_statistics()
@@ -171,7 +189,7 @@ class Neuron(object):
 
     def to_skeleton_obj(self, only_cons=False):
         if self.annotations:
-            skel_obj = NewSkeleton.NewSkeleton()
+            skel_obj = Skeleton()
             if self.consensus_annotations and only_cons:
                 for cons in self.consensus_annotations:
                     skel_obj.add_annotation(cons)
@@ -193,6 +211,8 @@ class Neuron(object):
             self.annotations = neuron_annos
 
     def set_statistics(self):
+        """Setter for cell type features
+        """
         if len(self.consensus_annotations) > 1:
             for a in self.consensus_annotations:
                 if 'skeleton' in a.comment:
@@ -202,7 +222,7 @@ class Neuron(object):
                 anno_to_use = self.annotations[0]
 
         # for now, the first annotation is used if multiples are present
-        self.nx_g = au.annotation_to_nx_graph(anno_to_use)
+        self.nx_g = su.annotation_to_nx_graph(anno_to_use)
         self.features[
             'all_path_length_um'] = anno_to_use.physical_length() / 1000.
         self.features['num_all_branch_p'] = num_branch_points_of_nx_graph(
@@ -227,13 +247,12 @@ class Neuron(object):
             self.features['sj density'] = 0.
 
             if self.features['all_path_length_um'] > 0.0:
-                self.features['mito density'] = self.features['obj_morphology'] \
+                self.features['mito density'] = self.features['obj_morphology']\
                                                     [0, 2] / self.features[
                                                     'all_path_length_um']
-                self.features['vc density'] = self.features['obj_morphology'] \
-                                                  [0, 5] / self.features[
-                                                  'all_path_length_um']
-                self.features['sj density'] = self.features['obj_morphology'] \
+                self.features['vc density'] = self.features['obj_morphology']\
+                        [0, 5] / self.features['all_path_length_um']
+                self.features['sj density'] = self.features['obj_morphology']\
                                                   [0, 8] / self.features[
                                                   'all_path_length_um']
             self._feature_name_dict['obj_morphology'] = \
@@ -292,10 +311,16 @@ def cell_morph_properties(mapped_annotation):
     """
     Get cell object properties based on mapped annotation object. Find
     total number and size (mean and std) of cell objects.
-    :param mapped_annotation:
-    :return: array 1 x 11 [(mean size, standard deviation of size,
-     total number of objects) for each cell object], radius mean, radius std
-     Ordering of objects: mitos, p4, az
+
+    Parameters
+    ----------
+    mapped_annotation : SkeletonAnnotation
+
+    Returns
+    -------
+    np.array, np.array, np.array, np.array
+        Cell object features (1 x 9), radius features (1 x 14), synapse type
+        features (1 x 8), spiness features (1 x 13)
     """
     skel_nodes = np.array(list(mapped_annotation.getNodes()))
     ax_preds = np.zeros((len(skel_nodes)), dtype=np.uint16)
@@ -311,17 +336,11 @@ def cell_morph_properties(mapped_annotation):
         if len(ax_nodes) == 0:
             continue
         if i == 2:
-            rad_feats[0, ix_begin:] = radius_feats_from_nodes(ax_nodes,
-                                                              nb_bins=10,
-                                                              max_rad=
-                                                              type_rad_ranges[
-                                                                  i])[:2]
+            rad_feats[0, ix_begin:] = radius_feats_from_nodes(
+                ax_nodes, nb_bins=10, max_rad=type_rad_ranges[i])[:2]
         else:
-            rad_feats[0, ix_begin:ix_end] = radius_feats_from_nodes(ax_nodes,
-                                                                    nb_bins=10,
-                                                                    max_rad=
-                                                                    type_rad_ranges[
-                                                                        i])[:6]
+            rad_feats[0, ix_begin:ix_end] = radius_feats_from_nodes(
+                ax_nodes, nb_bins=10, max_rad=type_rad_ranges[i])[:6]
         if i != 2:
             spiness_feats[0, ix_begin:ix_end] = spiness_feats_from_nodes(
                 ax_nodes)
@@ -337,9 +356,16 @@ def cell_morph_properties(mapped_annotation):
 def calc_obj_feat(mapped_annotation):
     """
     Calculates object features. mapped_annotation needs its absolute
-    path in itsattribute filename.
-    :param mapped_annotation: mapped SkeletonAnnotation
-    :return: np.array with object features of dimension (1, 9)
+    path in its attribute 'filename'
+
+    Parameters
+    ----------
+    mapped_annotation : SkeletonAnnotation
+
+    Returns
+    -------
+    np.array
+        object features of dimension (1, 9)
     """
     cell_objects = load_objpkl_from_kzip(mapped_annotation.filename)
     object_features = []
@@ -355,10 +381,16 @@ def calc_obj_feat(mapped_annotation):
 
 
 def calc_syn_type_feats(anno_to_use):
-    """
-    Calculate cell feature based on mapped synapses.
-    :param anno_to_use:
-    :return:
+    """Calculate cell feature based on mapped synapses
+
+    Parameters
+    ----------
+    anno_to_use : SkeletonAnnotation
+
+    Returns
+    -------
+    np.array
+        synapse type features of dimension (1, 8)
     """
     syn_type_feats = np.zeros((1, 8))
     syn_type_feats[0, 0] = -1
@@ -405,7 +437,7 @@ def calc_syn_type_feats(anno_to_use):
             syn_type_feats[0, 6] = np.median(
                 incoming_syn_size[incoming_type == 1])
             syn_type_feats[0, 7] = np.std(incoming_syn_size[incoming_type == 1])
-    return syn_type_feats  # 8 feats
+    return syn_type_feats
 
 
 def num_branch_points_of_nx_graph(nx_graph):
@@ -427,7 +459,7 @@ def get_annotation_branch_lengths(annotation):
 
     # this is necessary to avoid trouble because of in place modifications
     anno = copy.deepcopy(annotation)
-    nx_graph = au.annotation_to_nx_graph(anno)
+    nx_graph = su.annotation_to_nx_graph(anno)
 
     branches = list({k for k, v in nx_graph.degree().iteritems() if v > 2})
     nx_graph.remove_nodes_from(branches)
@@ -452,7 +484,7 @@ def calc_arc_choord(anno, nxg=None):
     """
 
     if not nxg:
-        nxg = au.annoToNXGraph(anno)
+        nxg = su.annoToNXGraph(anno)
 
     # find end nodes
     e_nodes = list({k for k, v in nxg.degree().iteritems() if v == 1})
@@ -463,12 +495,10 @@ def calc_arc_choord(anno, nxg=None):
     for pair in itertools.permutations(e_nodes, 2):
         dists.append((pair, pair[0].distance_scaled(pair[1])))
     dists = sorted(dists, key=lambda x: x[1])
-    most_dist_nodes = dists[-1][0]
     try:
-        path_len = nx.shortest_path_length(nxg,
-                                            source=dists[-1][0][0],
-                                            target=dists[-1][0][1],
-                                            weight='weight')
+        path_len = nx.shortest_path_length(nxg, source=dists[-1][0][0],
+                                           target=dists[-1][0][1],
+                                           weight='weight')
     except:
         print('No path between nodes for tortuosity calculation for neuron %s' %
               anno.filename)

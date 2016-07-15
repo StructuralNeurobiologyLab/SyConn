@@ -82,7 +82,7 @@ def from_skeleton_to_mergelist(cset, skeleton_path, name, hdf5_name,
     else:
         obj_activated = True
     if type(skeleton_path ) == str:
-        skeleton = NewSkeleton().fromNml(skeleton_path)
+        skeleton = Skeleton().fromNml(skeleton_path)
     else:
         skeleton = skeleton_path
     #annos = skeleton.getAnnotations()
@@ -223,7 +223,7 @@ def build_attributes(xml_elem, attributes):
             xml_elem.setAttribute(attr[0], str(attr[1].encode('ascii', 'replace')))
     return
 
-class NewSkeleton:
+class Skeleton:
     def __init__(self):
         # Uninitialized Mandatory
         self.annotations = set()

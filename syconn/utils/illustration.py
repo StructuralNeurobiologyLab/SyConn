@@ -8,17 +8,12 @@ try:
 except (ImportError, ValueError), e:
     print "Could not load mayavi. Please install vtk and then mayavi."
 from multiprocessing import Pool
-from scipy import stats
-from sklearn.decomposition import PCA
 
 from syconn.contactsites import convert_to_standard_cs_name
-from syconn.brainqueries import enrich_tracings, remap_tracings
-from syconn.processing.cell_types import load_celltype_feats
+from syconn.brainqueries import enrich_tracings
 from syconn.processing.features import get_obj_density
 from syconn.processing.synapticity import syn_sign_prediction
 from syconn.utils.datahandler import *
-from syconn.new_skeleton.newskeleton import NewSkeleton, SkeletonAnnotation,\
-    SkeletonNode
 
 
 def init_skel_vis(skel, min_pos, max_pos, hull_visualization=True, op=0.15,
@@ -115,7 +110,6 @@ def coords_from_anno(skel):
     :return: list of array node coordinates
     """
     mito_hulls = skel.mito_hull_coords / 10
-    mito_hull_ids = skel.mito_hull_ids
     p4_hulls = skel.p4_hull_coords / 10
     az_hulls = skel.az_hull_coords / 10
     return mito_hulls, p4_hulls, az_hulls
@@ -123,7 +117,7 @@ def coords_from_anno(skel):
 
 def plot_mapped_skel(path, min_pos, max_pos, color=(1./3, 1./3, 1./3), op=0.1,
                      only_syn=False, cs_path=None, hull_visualization=True,
-                     save_vx_dir=None, plot_objects=[True, True, True],
+                     save_vx_dir=None, plot_objects=(True, True, True),
                      color_az=False):
     """
     Plots the mapped skeleton at path using mayavi. Annotation file must
@@ -237,7 +231,6 @@ def get_cs_path(paths):
     :return: path to pairwise contact site nml
     """
     head, tail = os.path.split(paths[0])
-    head = '/lustre/pschuber/consensi_fuer_joergen/nml_obj/'
     try:
         post_id = re.findall('iter_\d+_(\d+)-', paths[0])[0]
         pre_id = re.findall('iter_\d+_(\d+)-', paths[1])[0]
@@ -256,8 +249,7 @@ def get_cs_path(paths):
     return cs_file_path
 
 
-def plot_post_pre(paths=['/home/pschuber/data/skel2skel/nml_obj/pre_04.k.zip',
-                '/home/pschuber/data/skel2skel/nml_obj/post_04.k.zip']):
+def plot_post_pre(paths):
     """
     Creates mayavi plot of post and pre synaptic neuron.
     :param dh: object DataHandler
@@ -331,8 +323,7 @@ def get_syn_from_cs_nml(path):
     return p4_id, az_id
 
 
-def plot_obj(dh, paths=['/home/pschuber/Desktop/skel2skel/nml_obj/pre_04.k.zip',
-                '/home/pschuber/Desktop/skel2skel/nml_obj/post_04.k.zip']):
+def plot_obj(dh, paths):
     """
     Plots all segmentationDataObjects in certain bounding box found by center coords of
     contact site in contact_site.nml
@@ -470,11 +461,6 @@ def write_new_syn_cs(dest_path='/lustre/pschuber/figures/shawns_figure/',
     min_pos, max_pos = [center_coord - offset, center_coord + offset]
     mlab.figure(1, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
     mlab.clf()
-    view = (13.139370011851103,
- 72.617572162230971,
- 890.03663369265792,
- arr([ 2279.98120117,  2035.88122559,  1080.        ]))
-
     plot_mapped_skel(paths[0], min_pos, max_pos, color=(1., 3/4., 0), op=0.8,
                      hull_visualization=True, save_vx_arr=save_vx_arr)
     plot_mapped_skel(paths[1], min_pos, max_pos, color=(3./4, 3./4, 3./4),
@@ -482,227 +468,7 @@ def write_new_syn_cs(dest_path='/lustre/pschuber/figures/shawns_figure/',
     plot_mapped_skel(paths[2], min_pos, max_pos, color=(1./4, 1./4, 1./4),
                      op=0.8, hull_visualization=True, save_vx_arr=save_vx_arr)
     if not save_vx_arr:
-        mlab.view(*view)
         write_img2png(dest_path, 'test', mag=1)
-
-
-def write_workflow_fig(dest_path='/lustre/pschuber/figures/spines/',
-                       dh=None, renew=False):
-    """
-    Plot workflow figure and save it!
-    :param dest_path: str path to destination directory
-    :param dh: DataHandler
-    :param renew: Mapped skeletons
-    """
-    source = get_paths_of_skelID(['120', '518'])
-    paths = get_paths_of_skelID(['548', '88'], traced_skel_dir='/lustre/pschuber/'
-                                                'mapped_soma_tracings/nml_obj/')
-    if renew:
-        if dh is None:
-            dh = DataHandler()
-            enrich_tracings(source, dh=dh, overwrite=True, write_obj_voxel=True)
-    print "Plotting skeletons", paths
-    cs_file_path = get_cs_path(paths)
-
-    min_pos, max_pos, center_coord = get_box_from_cs_nml(cs_file_path,
-                                                         offset=(3000, 3000, 3000))
-    v_zoom = (24.724344563964589,
-     37.420854959196014,
-     7086.2440000000124,
-     arr([ 5862.11725067,  7059.92156165,  4126.19249013]))
-
-    mlab.figure(1, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
-    mlab.clf()
-    plot_skel(paths[1], min_pos, max_pos, color=(0.7, 0.7, 0.7),
-              hull_visualization=True, vis_property=True)
-    mlab.view(*v_zoom)
-    write_img2png(dest_path, 'big_skeleton_hull_colored_new', mag=4)
-
-
-def write_cell_types(dest_path='/home/pschuber/figures/cell_types/',
-                     offset=2100, rebuild=False):
-    """
-    Plot cell type figures with mapped objexts, axoness and skelet.
-    :param dest_path: str path to destination directory
-    :param rebuild: Mapped skeletons
-    """
-    paths = ['/home/pschuber/data/cell_type_examples/excitatory axons_3.k.zip',
-             '/home/pschuber/data/cell_type_examples/medium spiny neuron_4.k.zip']
-    center_coords = arr([[5788, 5238, 3085], [6058, 3822, 1064]]) * \
-                        [9, 9, 20.] / 10
-    type_names = ['excitory_axon', 'medium_spiny_neuron']
-    if rebuild:
-        remap_tracings(paths, mito_min_votes=35)
-    for ii, path in enumerate(paths):
-        assert os.path.isfile(path), "AnotationObject does not exist."
-        print "Plotting skeleton", path
-        min_pos, max_pos = [center_coords[ii] - offset,
-                            center_coords[ii] + offset]
-        mlab.figure(1, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
-        mlab.clf()
-        plot_skel(path, min_pos, max_pos, color=(0.7, 0.7, 0.7),
-                  hull_visualization=True, vis_property=True)
-        plot_mapped_skel(path, min_pos, max_pos, color=(0.7, 0.7, 0.7),
-                         hull_visualization=False)
-        # mlab.view(*v_zoom)
-        write_img2png(dest_path, type_names[ii], mag=5)
-
-
-def write_synapse_cells(dest_path='/home/pschuber/figures/cell_types/',
-                        offset=700):
-    """
-    Plot synapse types of cell pair.
-    :param dest_path: str path to destination directory
-    """
-    syn_paths = ['/lustre/sdorkenw/synapse_matrices/'
-                 'type_skel_31_496_nbsyn_3.nml',
-                 '/lustre/sdorkenw/synapse_matrices/'
-                 'type_skel_241_190_nbsyn_26.nml']
-    center_coords = arr([[5404, 6825, 4390],  [7212, 5988, 2342]]) * \
-                        [9, 9, 20.] / 10
-    cs_dict = load_pkl2obj('/lustre/pschuber/st250_pt3_minvotes18/nml_obj/'
-                           'contact_sites_new/cs_dict.pkl')
-    for ii, path in enumerate(syn_paths):
-        skel_ids = re.findall('(\d+)_(\d+)', path)[0]
-        skel_paths = get_paths_of_skelID(skel_ids, traced_skel_dir='/lustre/'
-                                         'pschuber/m_consensi_rr/nml_obj/')
-        print "Plotting synapses", path
-        mlab.figure(1, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
-        mlab.clf()
-        synapse_tree = au.loadj0126NML(path)[0]
-        cnt_symm = 0
-        cnt_asym = 0
-        all_ov_vxs = np.zeros((0, 3))
-        for syn in synapse_tree.getNodes():
-            comment = syn.getComment()
-            syn_type, syn_key = re.findall('(\w+); (\w+)', comment)[0]
-            if syn_type == 'asym' or syn_type == 'a':
-                cnt_asym += 1
-                syn_color = tuple(np.array([15, 105, 93]) / 255.)
-            elif syn_type == 'symm' or syn_type == 'y':
-                cnt_symm += 1
-                syn_color = tuple(np.array([0, 0, 139]) / 255.)
-            else:
-                print comment
-                continue
-            if ii == 1:
-                min_pos, max_pos = [center_coords[ii] - offset,
-                    center_coords[ii] + offset]
-                overlap_vx = get_box_coords(cs_dict[syn_key]['overlap_vx'] / 10.,
-                                            min_pos, max_pos)
-            else:
-                overlap_vx = cs_dict[syn_key]['overlap_vx'] / 10.
-                all_ov_vxs = np.concatenate((overlap_vx, all_ov_vxs), axis=0)
-                min_pos, max_pos = [np.min(all_ov_vxs, axis=0) - 100,
-                                    np.max(all_ov_vxs, axis=0) + 100]
-            #print "Found %d synapse voxels" % len(overlap_vx)
-            overlap_vx = overlap_vx[::2]
-            mlab.points3d(overlap_vx[:, 0], overlap_vx[:, 1], overlap_vx[:, 2],
-                          opacity=0.15, scale_factor=4.5, mode='sphere',
-                          color=syn_color)
-        print "Found %d symmetric and %d asymmetric synapses." % (cnt_symm,
-                                                                  cnt_asym)
-        # plot_skel(skel_paths[0], min_pos, max_pos,
-        #                  color=tuple(arr([122, 2, 17])/255.),
-        #                  hull_visualization=True, op=0.4)
-        # plot_skel(skel_paths[1], min_pos, max_pos, color=(0.3, 0.3, 0.3),
-        #                  hull_visualization=True, op=0.4)
-        # write_img2png(dest_path, 'syn_vis'+skel_ids[0]+'_'+skel_ids[1], mag=1)
-
-
-def write_synapse_cells_voxel(dest_path='/lustre/pschuber/figures/syns/'):
-    """
-    Plot synapse types of cell pair.
-    :param dest_path: str path to destination directory
-    """
-    syn_paths = ['/lustre/sdorkenw/synapse_matrices/'
-                 'type_skel_31_496_nbsyn_3.nml',
-                 '/lustre/sdorkenw/synapse_matrices/'
-                 'type_skel_241_190_nbsyn_26.nml', '371_472', '1_578']
-    cs_dict = load_pkl2obj('/lustre/pschuber/st250_pt3_minvotes18/nml_obj/'
-                           'contact_sites_new/cs_dict.pkl')
-    min_pos = np.zeros(3)
-    max_pos = np.array([99999, 99999, 99999])
-    for ii, path in enumerate(syn_paths):
-        if ii < 2:
-            continue
-        skel_ids = re.findall('(\d+)_(\d+)', path)[0]
-        print "Writing hull and synapse voxel of skeleton pair %s and %s." \
-        % (skel_ids[0], skel_ids[1])
-        curr_dest = dest_path + skel_ids[0] + '_' + skel_ids[1] + '/'
-        if not os.path.isdir(curr_dest):
-            os.makedirs(curr_dest)
-        skel_paths = get_paths_of_skelID(skel_ids, traced_skel_dir='/lustre/'
-                                         'pschuber/mapped_soma_tracings/nml_obj/')
-        # print "Writing synapses", path
-        # print "Loaded skels", skel_ids, "from", skel_paths, "writing to", curr_dest
-        # synapse_tree = au.loadj0126NML(path)[0]
-        # cnt_symm = 0
-        # cnt_asym = 0
-        # syn_sym = np.zeros((0, 3))
-        # syn_sym_normals = np.zeros((0, 3))
-        # syn_asym = np.zeros((0, 3))
-        # syn_asym_normals = np.zeros((0, 3))
-        # for syn in synapse_tree.getNodes():
-        #     comment = syn.getComment()
-        #     syn_type, syn_key = re.findall('(\w+); \d+; (\w+)', comment)[0]
-        #     syn_vx = cs_dict[syn_key]['overlap_vx'] / 10.
-        #     syn_vx_normal = calc_obj_normals(syn_vx)
-        #     if syn_type == 'asym' or syn_type == 'a':
-        #         cnt_asym += 1
-        #         syn_asym = np.concatenate((syn_asym, syn_vx), axis=0)
-        #         syn_asym_normals = np.concatenate((syn_asym_normals,
-        #                                            syn_vx_normal), axis=0)
-        #     elif syn_type == 'symm' or syn_type == 'y':
-        #         cnt_symm += 1
-        #         syn_sym = np.concatenate((syn_sym, syn_vx), axis=0)
-        #         syn_sym_normals = np.concatenate((syn_sym_normals,
-        #                                           syn_vx_normal), axis=0)
-        #     else:
-        #         print comment
-        #         continue
-        write_syns_as_types(skel_paths[0], curr_dest)
-        write_syns_as_types(skel_paths[1], curr_dest)
-        # print "Normal shape:", syn_sym_normals.shape
-        # print "Normal shape:", syn_asym_normals.shape
-        # print "%d sym synapse voxel with shape %s" % (len(syn_sym),
-        #                                              str(syn_sym.shape))
-        # print "%d asym synapse voxel with shape %s" % (len(syn_asym),
-        #                                               str(syn_asym.shape))
-        # hull2text(syn_sym, syn_sym_normals, curr_dest + 'syn_sym.xyz')
-        # hull2text(syn_asym, syn_asym_normals, curr_dest + 'syn_asym.xyz')
-        # print "Found %d symmetric and %d asymmetric synapses." % (cnt_symm,
-        #                                                           cnt_asym)
-        plot_mapped_skel(skel_paths[0], min_pos, max_pos, save_vx_dir=curr_dest,
-                  hull_visualization=True, plot_objects=[True, True, True])
-        plot_mapped_skel(skel_paths[1], min_pos, max_pos, save_vx_dir=curr_dest,
-                  hull_visualization=True, plot_objects=[True, True, True])
-
-
-def write_syns_as_types(path, dest_dir):
-    skel = load_mapped_skeleton(path, True, False)[0]
-    az_dict = load_objpkl_from_kzip(path)[2]
-    voxel_lists = [[], []]
-    normal_list = [[], []]
-    dummy_skel = NewSkeleton()
-    dummy_anno = SkeletonAnnotation()
-    dummy_anno.scaling = [9, 9, 20]
-    for val in az_dict.object_dict.values():
-        type = syn_sign_prediction(val.voxels)
-        # voxel_lists[type] += list(val.hull_voxels)
-        # syn_vx_normal = calc_obj_normals(val.hull_voxels)
-        # normal_list[type] += list(syn_vx_normal)
-        node = SkeletonNode().from_scratch(
-            dummy_anno, val.rep_coord[0], val.rep_coord[1],
-            val.rep_coord[2], radius=(val.size/4./np.pi*3)**(1/3.))
-        node.setPureComment('%d' % type)
-        dummy_anno.addNode(node)
-    dummy_skel.add_annotation(dummy_anno)
-    dummy_skel.to_kzip(dest_dir + skel.filename + 'syn_anno.k.zip')
-    # hull2text(np.array(voxel_lists[0]), np.array(normal_list[0]),
-    #           dest_dir + skel.filename + 'syn_asym.xyz')
-    # hull2text(np.array(voxel_lists[1]), np.array(normal_list[1]),
-    #           dest_dir + skel.filename + 'syn_sym.xyz')
 
 
 def calc_obj_normals(object_vx):
@@ -715,22 +481,6 @@ def calc_obj_normals(object_vx):
     normals = object_vx - center_coords
     normals /= np.linalg.norm(normals)
     return normals
-
-
-def write_cell_type_cells():
-    """
-    Plot synapse types of cell pair.
-    :param dest_path: str path to destination directory
-    """
-    paths = ['/home/pschuber/data/cell_type_examples/excitatory axons_3.k.zip',
-             '/home/pschuber/data/cell_type_examples/medium spiny neuron_4.k.zip']
-    min_pos = np.zeros(3)
-    max_pos = np.array([99999, 99999, 99999])
-    for path in paths:
-        plot_mapped_skel(path, min_pos, max_pos,
-                         save_vx_dir='/lustre/pschuber/gt_cell_types/cells_vx/',
-                         color=tuple(arr([122, 2, 17])/255.),
-                         hull_visualization=True, op=0.4)
 
 
 def write_axoness_cell(skel_path=None):
@@ -780,91 +530,6 @@ def write_axoness_cell(skel_path=None):
     hull2text(arr(dend_hull), arr(dend_hull_normals), dest + 'dend.xyz')
 
 
-def write_myelin_cell(skel_path=None):
-    max_myelin_nbs = 0
-    myelin_nb_l = []
-    all_paths = get_filepaths_from_dir('/lustre/pschuber/mapped_soma_tracings/nml_obj/')
-    for skel_path in all_paths:
-        # if skel_path is None:
-        #     skel_path = get_paths_of_skelID(['190'], '/lustre/pschuber/mapped_soma_tracings/nml_obj/')[0]
-        skel, _, _, _, _ = load_mapped_skeleton(skel_path, True, False)
-        hull = skel._hull_coords
-        # print len(hull)
-        normals = skel._hull_normals
-        normals = normals[hull[:, 0] < 110000]
-        hull = hull[hull[:, 0] < 110000]
-        normals = normals[hull[:, 1] < 110000]
-        hull = hull[hull[:, 1] < 110000]
-        normals = normals[hull[:, 2] < 110000]
-        hull = hull[hull[:, 2] < 110000]
-        # print len(hull)
-        node_coords = []
-        myelin_ids = []
-        for ii, n in enumerate(skel.getNodes()):
-            node_coords.append(n.getCoordinate_scaled())
-            if n.data['myelin_pred'] == '1':
-                myelin_ids.append(ii)
-        print "Found %d myelin nodes." % len(myelin_ids)
-        print "Assigning hull points."
-        myelin_nb_l.append(len(myelin_ids))
-        if len(myelin_ids) > max_myelin_nbs:
-            max_myelin_nbs = len(myelin_ids)
-            max_path = skel_path
-    skel, _, _, _, _ = load_mapped_skeleton(max_path, True, False)
-    hull = skel._hull_coords
-    # print len(hull)
-    normals = skel._hull_normals
-    normals = normals[hull[:, 0] < 110000]
-    hull = hull[hull[:, 0] < 110000]
-    normals = normals[hull[:, 1] < 110000]
-    hull = hull[hull[:, 1] < 110000]
-    normals = normals[hull[:, 2] < 110000]
-    hull = hull[hull[:, 2] < 110000]
-    # print len(hull)
-    node_coords = []
-    myelin_ids = []
-    for ii, n in enumerate(skel.getNodes()):
-        node_coords.append(n.getCoordinate_scaled())
-        if n.data['myelin_pred'] == '1':
-            myelin_ids.append(ii)
-    skel_tree = spatial.cKDTree(node_coords)
-    dist, nn_ixs = skel_tree.query(hull, k=1)
-    myelin_hull = []
-    myelin_hull_normals = []
-    normal_hull = []
-    normal_hull_normals = []
-    for ii, ix in enumerate(nn_ixs):
-        if ix in myelin_ids:
-            myelin_hull.append(hull[ii])
-            myelin_hull_normals.append(normals[ii])
-        else:
-            normal_hull.append(hull[ii])
-            normal_hull_normals.append(normals[ii])
-    print "Found:\n", arr(all_paths)[np.argsort(myelin_nb_l)[-10:]], "with nodes:\n",\
-    np.sort(myelin_nb_l)[-10:]
-    dest = '/lustre/pschuber/figures/hulls/myelin/'
-    hull2text(arr(myelin_hull)/10., arr(myelin_hull_normals), dest + 'myelin_hull.xyz')
-    hull2text(arr(normal_hull, dtype=np.int)/10., arr(normal_hull_normals), dest + 'normal_hull.xyz')
-
-
-def get_celltype_samples():
-    gt_path='/lustre/pschuber/gt_cell_types/'
-    dest = '/lustre/pschuber/figures/hulls/cell_type_samples/'
-    cell_type_pred_dict = load_pkl2obj(gt_path + 'cell_pred_dict.pkl')
-    type_dict = {0: [], 1: [], 2: [], 3: []}
-    for k, v in cell_type_pred_dict.iteritems():
-        type_dict[v].append(k)
-    sample_list = []
-    for k, v in type_dict.iteritems():
-        sample_ids = np.random.randint(0, len(v), 3)
-        paths = get_paths_of_skelID(arr(v)[sample_ids],
-                    traced_skel_dir='/lustre/pschuber/mapped_soma_tracings/nml_obj/')
-        for p in paths:
-            print "Copy file from", p
-            dir, fname = os.path.split(p)
-            shutil.copyfile(p, dest+'type'+str(k)+'_'+fname)
-
-
 def neck_head_az_size_hist(cs_dir, recompute=False):
     """
 
@@ -875,7 +540,7 @@ def neck_head_az_size_hist(cs_dir, recompute=False):
     prop_dict = load_pkl2obj(cs_dir + '/property_dict.pkl')
     cs_dict = load_pkl2obj(cs_dir + '/cs_dict.pkl')
     consensi_celltype_label = load_pkl2obj('/lustre/pschuber/gt_cell_types/'
-                                        'consensi_celltype_labels_reviewed3.pkl')
+                              'consensi_celltype_labels_reviewed3.pkl')
     spine_types = [[], [], []]
     syn_types = [[], [], []]
     az_sizes = [[], [], []]
@@ -885,7 +550,6 @@ def neck_head_az_size_hist(cs_dir, recompute=False):
             new_names = convert_to_standard_cs_name(old_key)
             for var in new_names:
                 try:
-                    center_coord = cs_dict[var]['center_coord']
                     key = var
                     break
                 except KeyError:
@@ -976,7 +640,7 @@ def loc_syn_type_plot(data, save_path="/lustre/sdorkenw/figures/" \
 
     ax.set_ylabel("Ratio of symmetric Synapses", fontsize=26)
 
-    ind = np.arange(3)                # the x locations for the groups
+    ind = np.arange(3)
 
     width = .6
 
@@ -987,16 +651,11 @@ def loc_syn_type_plot(data, save_path="/lustre/sdorkenw/figures/" \
            align='center',
            label='contact site evaluation')
 
-    # plt.legend(loc="upper left", frameon=False, prop={'size': 22})
-
-    # plt.xlim([-0.5, len(data)])
     plt.xticks(ind, names, rotation=0, fontsize=22)
-    # ax.yaxis.set_major_locator(mticker.FixedLocator(np.logspace(0, 12, num=4, base=10.)))
     ax.set_ylim(0., 1)
 
     plt.tight_layout()
     plt.savefig(save_path, dpi=300)
-    # plt.show(block=False)
 
 
 def get_cmap(N, cmap):
@@ -1048,22 +707,7 @@ def plot_csarea_nbsyns(pre=0, post=1):
         cum_syn_area_l.append(v['total_size_area'])
         cs_area_l.append(v['total_cs_area'])
     print "Plotting %d points." % len(syn_area_l)
-    # plt.figure()
-    # ax = plt.subplot(111)
-    # ax.scatter(np.array(cs_area_l), np.array(nb_cs_l))
-    # plt.xlabel('contact size area in square microns')
-    # plt.ylabel('Number of cs')
-    # plt.figure()
-    # ax = plt.subplot(111)
-    # ax.scatter(np.array(syn_area_l), np.array(nb_syn_l))
-    # plt.xlabel('synapse area in square microns')
-    # plt.ylabel('Number of syns')
-    # plt.figure()
-    # ax = plt.subplot(111)
-    # ax.scatter(np.array(cs_area_l), np.array(nb_syn_l))
-    # plt.xlabel('contact size area in square microns')
-    # plt.ylabel('Number of syns')
-# Use the histogram function to bin the data
+
     counts, bin_edges = np.histogram(np.array(syn_area_l), bins=50)
     counts_nb_syns, bin_edges_nb_syns = np.histogram(np.array(nb_syn_l), bins=30)
     counts_cum, bin_edges_cum = np.histogram(np.array(cum_syn_area_l), bins=30)
@@ -1089,101 +733,9 @@ def plot_csarea_nbsyns(pre=0, post=1):
     np.save('/lustre/pschuber/figures/synapse_cum/%d_%d.npy' % (pre, post), save)
     np.save('/lustre/pschuber/figures/synapse_cum/nb_syns_%d_%d.npy' % (pre, post), save_nb_syns)
     np.save('/lustre/pschuber/figures/synapse_cum/cum_%d_%d.npy' % (pre, post), save_cum)
-    # plt.show(block=False)
-    # plt.savefig('/lustre/pschuber/figures/synapse_cum/%d_%d.png' % (pre, post))
 
 
-def plot_msn_spinedensities():
-    gpi_msn = [21,  62,  73, 136, 148, 167, 170, 227, 261, 270, 307, 321, 354,
-               371, 377, 385, 397, 402, 404, 416, 496, 508, 511]
-    gpe_msn = [ 1,   5,  21,  23,  29,  29,  43,  58,  66,  73, 115, 116, 182,
-                187, 223, 364, 397, 423, 429, 455, 480, 582, 588, 606, 611, 675]
-    # gpi_skel_paths = get_paths_of_skelID(gpi_msn)
-    # gpe_skel_paths = get_paths_of_skelID(gpe_msn)
-    gpi_densities = []
-    gpe_densities = []
-    feat_names = np.load('/lustre/pschuber/gt_cell_types/feat_names.npy')
-    feat_ix = np.where(feat_names == 'sh density (dend.)')[0][0]
-    skeleton_ids, skeleton_feats = load_celltype_feats('/lustre/pschuber/gt_cell_types/')
-    assert skeleton_feats.shape[1] == len(feat_names), "Features corrupted."
-    for id in gpi_msn:
-        cell_ix = np.where(skeleton_ids == id)[0][0]
-        gpi_densities.append(skeleton_feats[cell_ix][feat_ix])
-    for id in gpe_msn:
-        cell_ix = np.where(skeleton_ids == id)[0][0]
-        gpe_densities.append(skeleton_feats[cell_ix][feat_ix])
-    fig, ax = plt.subplots()
-    ax.hist(arr(gpi_densities), normed=True, range=[0, 0.7], alpha=0.8,
-            bins=20, label='GPi')
-    ax.hist(arr(gpe_densities), normed=True, range=[0, 0.7], alpha=0.8,
-            bins=20, label='GPe')
-    plt.xlabel('sh density [um^-1]')
-    plt.legend()
-    plt.show(block=False)
-    print "Mean of GPe: %0.4f and GPi: %0.4f" % (np.mean(gpe_densities),
-                                                 np.mean(gpi_densities))
-    print "T-test:", stats.ttest_ind(arr(gpi_densities), arr(gpe_densities), False)
-    msn_feats = []
-    all_densities = []
-    cell_type_pred_dict = load_pkl2obj('/lustre/pschuber/gt_cell_types/cell_pred_dict.pkl')
-    for k, v in cell_type_pred_dict.iteritems():
-        if v == 1:
-            cell_ix = np.where(skeleton_ids == k)[0][0]
-            gpi_densities.append(skeleton_feats[cell_ix][feat_ix])
-            msn_feats.append(skeleton_feats[cell_ix])
-    fig, ax = plt.subplots()
-    ax.hist(arr(gpi_densities), normed=True, range=[0, 0.7], alpha=0.8,
-            bins=40)
-    plt.show(block=False)
-    pca = PCA(n_components=2)
-    msn_feats = pca.fit_transform(msn_feats)
-    plt.scatter(msn_feats[:, 0], msn_feats[:, 1])
-    plt.show()
-    raise()
-
-
-def plot_ray_proba(nb):
-    probas = np.load("/home/pschuber/membrane_probas_skel1.npy")
-    radii = np.load("//home/pschuber/membrane_radii_skel1.npy") * 10
-    fig, ax = plt.subplots()
-    ax.tick_params(axis='x', which='major', labelsize=22, direction='out',
-                   length=4, width=3,  right="off", top="off", pad=10)
-    ax.tick_params(axis='y', which='major', labelsize=22, direction='out',
-                   length=4, width=3,  right="off", top="off", pad=10)
-
-    ax.tick_params(axis='x', which='minor', labelsize=12, direction='out',
-                   length=0, width=1, right="off", top="off", pad=10)
-    ax.tick_params(axis='y', which='minor', labelsize=12, direction='out',
-                   length=0, width=1, right="off", top="off", pad=10)
-    for ii, label in enumerate(ax.yaxis.get_ticklabels()):
-        if (ii==len(ax.yaxis.get_ticklabels())-1):
-            label.set_visible(False)
-        if ii % 2 == 0:
-            continue
-        label.set_visible(False)
-    plt.xticks(np.arange(0, radii[nb]+50, 25))
-    for ii, label in enumerate(ax.xaxis.get_ticklabels()):
-        if ii==len(ax.xaxis.get_ticklabels())-1:
-            label.set_visible(False)
-        if ii % 2 == 0:
-            continue
-        label.set_visible(False)
-    ax.spines['left'].set_linewidth(3)
-    ax.spines['bottom'].set_linewidth(3)
-    ax.spines['right'].set_visible(False)
-    ax.spines['top'].set_visible(False)
-    ax.plot(np.linspace(0, radii[nb], len(probas[nb][0])),
-             np.cumsum(probas[nb][0])/255., '0.3', lw=7)
-    plt.hlines(2.2, 0, radii[nb], 'r', lw=7)
-    ax.set_xlabel('Ray travel distance [nm]', fontsize=26)
-    ax.set_ylabel('Cumulated membrane prob.', fontsize=26)
-    plt.xlim(0, radii[nb])
-    plt.tight_layout()
-    plt.savefig("/lustre/pschuber/figures/ray_casting.png", dpi=600)
-    plt.show()
-
-
-def plot_obj_density(recompute=False, obj='mito', property='axoness_pred', value=1,
+def get_obj_density(recompute=False, obj='mito', property='axoness_pred', value=1,
                      return_abs_density=True):
     """
     Plots two keys of phildict as scatter plot.
@@ -1212,6 +764,7 @@ def plot_obj_density(recompute=False, obj='mito', property='axoness_pred', value
             np.save(dest_path, obj_densities)
     else:
         obj_densities = np.load(dest_path)
+    return obj_densities
 
 
 def plot_meansyn_celltypes(pre=0, post=1):
@@ -1256,19 +809,16 @@ def calc_meansyns_wrapper():
 def add_anno_to_mayavi_window(anno, node_scaling=1.0, override_node_radius=500.,
                               edge_radius=250., show_outline=False,
                               dataset_identifier='', opacity=1):
-        '''
+        """Adds an annotation to a currently open mayavi plotting window
 
-        Adds an annotation to a currently open mayavi plotting window
-
-        Parameters: anno: annotation object
-        node_scaling: float, scaling factor for node radius
-        edge_radius: float, radius of tubes for each edge
-
-        '''
-
-        # plot the nodes
-        # x, y, z are numpy arrays, s as well
-
+        Parameters
+        ----------
+        anno: annotation object
+        node_scaling: float
+            scaling factor for node radius
+        edge_radius: float
+            radius of tubes for each edge
+        """
         if type(anno) == list:
             nodes = []
             for this_anno in anno:
@@ -1277,16 +827,9 @@ def add_anno_to_mayavi_window(anno, node_scaling=1.0, override_node_radius=500.,
         else:
             nodes = list(anno.getNodes())
             color = anno.color
-
         coords = np.array(
             [node.getCoordinate_scaled() for node in nodes]) * node_scaling
-
         sc = np.hsplit(coords, 3)
-
-        # separate x, y and z; mlab needs that
-        # datasetDims = np.array(anno.datasetDims)
-
-
         x = [el[0] for el in sc[0].tolist()]
         y = [el[0] for el in sc[1].tolist()]
         z = [el[0] for el in sc[2].tolist()]
@@ -1294,20 +837,14 @@ def add_anno_to_mayavi_window(anno, node_scaling=1.0, override_node_radius=500.,
             s = [override_node_radius] * len(nodes)
         else:
             s = [node.getDataElem('radius') for node in nodes]
-
         s = np.array(s)
         s = s * node_scaling
-        # s[0] = 5000
-        # extent=[1, 108810, 1, 106250, 1, 115220]
-        # raise
         pts = mlab.points3d(x, y, z, s, color=color, scale_factor=1.0,
                             opacity=opacity)
-
         # dict for faster lookup, nodes.index(node) adds O(n^2)
         nodeIndexMapping = {}
         for nodeIndex, node in enumerate(nodes):
             nodeIndexMapping[node] = nodeIndex
-
         edges = []
         for node in nodes:
             for child in node.getChildren():
@@ -1316,7 +853,6 @@ def add_anno_to_mayavi_window(anno, node_scaling=1.0, override_node_radius=500.,
                         (nodeIndexMapping[node], nodeIndexMapping[child]))
                 except:
                     print 'Phantom child node, annotation object inconsistent'
-
         # plot the edges
         pts.mlab_source.dataset.lines = np.array(edges)
         pts.mlab_source.update()
@@ -1338,5 +874,3 @@ def add_anno_to_mayavi_window(anno, node_scaling=1.0, override_node_radius=500.,
                              line_width=1., color=(0.5, 0.5, 0.5))
             else:
                 print('Please add a dataset identifier string')
-
-        return

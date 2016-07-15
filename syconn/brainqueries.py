@@ -5,7 +5,7 @@ from multi_proc.multi_proc_main import __QSUB__, start_multiprocess, QSUB_script
 from processing.features import calc_prop_feat_dict
 from processing.learning_rfc import write_feat2csv, load_rfcs
 from processing.mapper import SkeletonMapper, prepare_syns_btw_annos
-from syconn.new_skeleton.newskeleton import NewSkeleton
+from syconn.utils.skeleton import Skeleton
 from utils.datahandler import *
 
 __author__ = 'pschuber'
@@ -19,9 +19,7 @@ kwargs = {'work_folder': "/home/pschuber/QSUB/", 'username': "pschuber",
 
 
 def enrich_tracings_all(wd):
-    """Enrich tracings from biological data
-
-    Run :func: 'enrich_tracings' on available cluster nodes defined by
+    """Run :func: 'enrich_tracings' on available cluster nodes defined by
     somaqnodes or using multiprocessing.
 
     Parameters
@@ -49,9 +47,7 @@ def enrich_tracings(wd, anno_list, map_objects=True, method='hull', radius=1200,
                     nb_hull_vox=500, context_range=6000,
                     neighbor_radius=220, nb_rays=20, nb_voting_neighbors=100,
                     write_obj_voxel=True, output_dir=None):
-    """Enrich tracings with biological data
-
-    Enriches a list of paths (to tracings) using dataset in working
+    """Enriches a list of paths (to tracings) using dataset in working
     directory. Writes enriched tracings to 'neuron' folder, or to
     ouput directory if specified.
 
@@ -95,9 +91,8 @@ def enrich_tracings(wd, anno_list, map_objects=True, method='hull', radius=1200,
     nb_voting_neighbors : int
         Number votes of skeleton hull voxels
         (membrane representation) for object-mapping.
-    dh: DataHandler.__class__
-        object containing SegmentationDataObjects
-        mitos, p4, az
+    dh: DataHandler
+        object containing SegmentationDataObjects mitos, p4, az
     create_hull : bool
         create skeleton membrane estimation
     max_dist_mult : float
@@ -194,7 +189,7 @@ def enrich_tracings(wd, anno_list, map_objects=True, method='hull', radius=1200,
 
 def remap_tracings_all(anno_list, dest_dir=None, recalc_prop_only=False,
                        method='hull', context_range=6000):
-    """Runs remap_tracings on available cluster nodes defined by
+    """Run remap_tracings on available cluster nodes defined by
     somaqnodes or using single node multiprocessing.
 
     Parameters
@@ -247,7 +242,8 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
         Path to working directory
     mapped_skel_paths : list of str
         Paths to tracings
-    dh: DataHandler.__class_
+    dh: DataHandler
+        object containing SegmentationDataObjects mitos, p4, az
     output_dir : str
         path to output dir. If none, use given path
     write_obj_voxel : bool
@@ -356,7 +352,7 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
         if not recalc_prop_only:
             new_skel.write2kzip(path)
         else:
-            dummy_skel = NewSkeleton()
+            dummy_skel = Skeleton()
             dummy_skel.add_annotation(new_skel.old_anno)
             dummy_skel.add_annotation(mito)
             dummy_skel.add_annotation(p4)
@@ -375,9 +371,7 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
 
 
 def detect_synapses(wd):
-    """Detect synapses between tracings
-
-     Detects contact sites between enriched tracings and writes contact site
+    """Detects contact sites between enriched tracings and writes contact site
      summary and synapse summary to working directory.
 
     Parameters

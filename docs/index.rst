@@ -9,14 +9,18 @@ Welcome to SyConn's documentation!
 Contents:
 
 .. toctree::
-   :maxdepth: 2
+   :maxdepth: 1
 
-   modules
+   GettingStarted
+   installation
+   Examples
+
+   syconn
 
 Indices and tables
 ==================
 
-* :ref:`genindex`
-* :ref:`modindex`
-* :ref:`search`
+:ref:`genindex`
+:ref:`modindex`
+:ref:`search`
 

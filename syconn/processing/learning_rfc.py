@@ -51,14 +51,19 @@ def init_clf(clf_used, params=None):
 
 
 def load_rfcs(rf_axoness_p, rf_spiness_p):
-    """ Load random forest models for axoness and spiness
-
-    Loads pickeled Random Forest Classifier for axoness and spiness. If path is
+    """Loads pickeled Random Forest Classifier for axoness and spiness. If path is
     not valid returns None
 
-    :param rf_axoness_p: Path to pickeled axonnes rf directory
-    :param rf_spiness_p: Path to pickeled spiness rf directory
-    :returns: RFC axoness, spiness or None
+    Parameters
+    ----------
+    rf_axoness_p : str
+        Path to pickeled axonnes rf directory
+    rf_spiness_p : str
+        Path to pickeled spiness rf directory
+
+    Returns
+    -------
+        RFC axoness, spiness or None
     """
     if os.path.isfile(rf_axoness_p):
         rfc_axoness = joblib.load(rf_axoness_p)
@@ -80,15 +85,24 @@ def load_rfcs(rf_axoness_p, rf_spiness_p):
 
 
 def save_train_clf(X, y, clf_used, dir_path, use_pca=False, params=None):
-    """Train classifier on X and y
-
-    Train classifier specified by clf_used to dir_path. Train with features X
+    """Train classifier specified by clf_used to dir_path. Train with features X
     and labels y
-    :param X: arr features
-    :param y: arr labels
-    :param clf_used: 'rf' or 'svm' for RandomForest or SupportVectorMachine,
-     respectively
-    :param dir_path: directory where to save pkl files of clf
+
+    Parameters
+    ----------
+    X : np.array
+        features
+    y : np.array
+        labels
+    clf_used : str
+        'rf' or 'svm' for RandomForest or SupportVectorMachine, respectively
+    dir_path : str
+        directory where to save pkl files of clf
+    use_pca : bool
+        flag if pca should be performed
+    params: dict
+        parameters for classifier
+
     """
     print "Start saving procedure for clf %s with features of shape %s." %\
           (clf_used, X.shape)
@@ -116,20 +130,6 @@ def save_train_clf(X, y, clf_used, dir_path, use_pca=False, params=None):
     print "%s-Classifier written to %s" % (clf_used, clf_dir)
 
 
-def three_liner(r_az, p_az, r_p4_az, p_p4_az, pos_az, pos_p4_az,
-                true_az, true_p4_az, true_p4=0.018):
-    tot_p4 = 0
-    tot_az = 3456
-    tot_p4_az = 4027
-
-    r = (r_az*tot_az*true_az + r_p4_az*tot_p4_az*true_p4_az) / \
-        (tot_p4*true_p4 + tot_az*true_az + tot_p4_az*true_p4_az)
-    p = (p_az*tot_az*pos_az + p_p4_az*tot_p4_az*pos_p4_az) / \
-        (tot_az*pos_az + tot_p4_az*pos_p4_az)
-
-    return r, p
-
-
 def novel_multiclass_prediction(f_scores, thresholds, probs):
     pred = -1 * np.ones((len(probs), ))
     tprobs = np.array(probs > thresholds, dtype=np.int)
@@ -140,6 +140,22 @@ def novel_multiclass_prediction(f_scores, thresholds, probs):
 
 
 def fscore(rec, prec, beta=1.):
+    """Calculates f-score with beta value
+
+    Parameters
+    ----------
+    rec : np.array
+        recall
+    prec : np.array
+        precision
+    beta : float
+        weighting of precision
+
+    Returns
+    -------
+    np.array
+        f-score
+    """
     prec = np.array(prec)
     rec = np.array(rec)
     f_score = (1. + beta**2) * (prec * rec) / (beta**2 * prec + rec)
@@ -243,9 +259,12 @@ def plot_pr(precision, recall, title='', r=[0.67, 1.01], legend_labels=None,
 
 
 def feature_importance(rf, save_path=None):
-    """
-    Plots feature importance of sklearn RandomForest.
-    :param rf: RandomForestClassifier of sklearn
+    """Plots feature importance of sklearn RandomForest
+
+    Parameters
+    ----------
+    rf : RandomForestClassifier
+    save_path : str
     """
     importances = rf.feature_importances_
     nb = len(importances)
@@ -256,8 +275,8 @@ def feature_importance(rf, save_path=None):
     # Print the feature ranking
     print("Feature ranking:")
     for f in range(nb):
-        print("%d. feature %d (%f)" % (f + 1, indices[f],
-                                       importances[indices[f]]))
+        print("%d. feature %d (%f)" %
+              (f + 1, indices[f], importances[indices[f]]))
 
     # Plot the feature importances of the forest
     pl.figure()
@@ -271,16 +290,19 @@ def feature_importance(rf, save_path=None):
     pl.close()
 
 
-def write_feat2csv(fpath, feat_arr, feat_names=[]):
+def write_feat2csv(fpath, feat_arr, feat_names=None):
+    """Writes array with column names to csv file
+
+    Parameters
+    ----------
+    fpath: str
+        Path to file
+    feat_arr : np.array
+        feature array
+    feat_names : list of str
+        feature names
     """
-    Writes array with column names to csv file at fpath
-    :param fpath: str Path to file
-    :param feat_arr: NumpyArray 2D shape
-    :param feat_names: list of strings, same length as  length of last array
-    dimension
-    :return:
-    """
-    if feat_names is [] or (len(feat_names) != feat_arr.shape[1]):
+    if feat_names is None or (len(feat_names) != feat_arr.shape[1]):
         df = pd.DataFrame(feat_arr)
         print feat_arr.shape, len(feat_names)
     else:
@@ -289,16 +311,24 @@ def write_feat2csv(fpath, feat_arr, feat_names=[]):
     return
 
 
-def load_csv2feat(fpath, property='axoness'):
-    """
-    Load csvfile from kzip and return numpy array and list of header names.
+def load_csv2feat(fpath, prop='axoness'):
+    """Load csvfile from kzip and return numpy array and list of header names.
     List line is supposed to be the probability prediction.
-    :param fpath: str Source file path
-    :return: NumpyArray, List of strings
+
+    Parameters
+    ----------
+    fpath : str
+        Source file path
+    prop : str
+        property which should be loaded
+    Returns
+    -------
+    np.array, list of str
+        features, feature names
     """
     zf = zipfile.ZipFile(fpath, 'r')
     df = pd.DataFrame()
-    for filename in ['%s_feat.csv' % property]:
+    for filename in ['%s_feat.csv' % prop]:
         temp = tempfile.TemporaryFile()
         temp.write(zf.read(filename))
         temp.seek(0)
@@ -307,6 +337,26 @@ def load_csv2feat(fpath, property='axoness'):
 
 
 def loo_proba(x, y, clf_used='rf', use_pca=False, params=None):
+    """Perform leave-one-out
+
+    Parameters
+    ----------
+    x : np.array
+        features
+    y : np.array
+        labels
+    clf_used : str
+        classifier
+    use_pca : bool
+        perform principal component analysis on features x in advance
+    params : dict
+        parameter for classifier
+
+    Returns
+    -------
+    np.array, np.array
+        class probability, hard classification
+    """
     print "Performing LOO with %s and %d features. Using PCA: %s" % \
           (clf_used, x.shape[1], str(use_pca))
     if use_pca:
@@ -341,14 +391,21 @@ def loo_proba(x, y, clf_used='rf', use_pca=False, params=None):
         else:
             print test_ixs, "\t", prob[cnt], pred[cnt], y[test_ixs], "\t WRONG"
         cnt += 1
-    # feature_importance(rf)
     return prob, pred
 
 
 def cell_classification(node_pred):
-    """
-    :param node_pred: array of integers
-    :return: maximum occuring integer in array
+    """Perform majority vote
+
+    Parameters
+    ----------
+    node_pred : np.array of int
+        arbitrary array of integer
+
+    Returns
+    -------
+    int
+        maximum occurring integer in array
     """
     if len(node_pred) == 0:
         return np.zeros(0)

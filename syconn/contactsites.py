@@ -10,31 +10,37 @@ from scipy import spatial
 from sys import stdout
 
 from sklearn.externals import joblib
-from syconn.new_skeleton.newskeleton import NewSkeleton, SkeletonAnnotation
 
 from syconn.multi_proc.multi_proc_main import start_multiprocess
-from syconn.new_skeleton import annotationUtils as au
+from syconn.utils import skeleton_utils as su
 from syconn.processing.axoness import predict_axoness_from_nodes
 from syconn.processing.mapper import feature_valid_syns, calc_syn_dict
 from syconn.processing.synapticity import parse_synfeature_from_node
 from syconn.utils.datahandler import get_filepaths_from_dir, \
     load_ordered_mapped_skeleton, get_paths_of_skelID
 from syconn.utils.datahandler import write_obj2pkl, load_pkl2obj
+from syconn.utils.skeleton import Skeleton, SkeletonAnnotation
 
 __author__ = 'pschuber'
 
 
 def collect_contact_sites(cs_dir, only_az=False):
-    """Collect information about contact sites.
+    """Collect contact site nodes and corresponding features of all contact sites.
 
-    Collect contact site nodes and corresponding features of all contact sites.
+    Parameters
+    ----------
+    cs_dir : str
+        Path to contact site directory
+    only_az : bool
+        If only synapse candidates are to be saved
+    cs_dir : str
+        path to contact site directory
+    only_az : bool
 
-    :param cs_dir: Path to contact site directory
-    :param only_az: If only synapse candidates are to be saved
-    :type cs_dir: str
-    :type only_az: bool
-    :returns: CS nodes (n x 3), synapse feature (n x #feat)
-    :rtype: list of SkeletonNodes, numpy.array
+    Returns
+    -------
+    list of SkeletonNodes, np.array
+        CS nodes (n x 3), synapse feature (n x #feat)
     """
     if not only_az:
         search_folder = ['cs_az/', 'cs_p4_az/', 'cs/', 'cs_p4/']
@@ -86,8 +92,10 @@ def write_summaries(wd):
     """Write information about contact sites and synapses, axoness and
     connectivity.
 
-    :param wd: Path to working directory of SyConn
-    :type wd: str
+    Parameters
+    ----------
+    wd : str
+        Path to working directory of SyConn
     """
     cs_dir = wd + '/contactsites/'
     cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_az=True)
@@ -112,20 +120,25 @@ def write_summaries(wd):
 
 
 def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
-    """Writs contact site summary of all contact sites without sampling.
+    """Writes contact site summary of all contact sites without sampling
 
-    :param cs_nodes: Contact site nodes
-    :param cs_feats: synapse features of contact sites
-    :param cs_dir: path to contact site directory
-    :param supp: supplement
-    :param syn_only: if only synapses are to be saved.
-    :type cs_dir: str
-    :type cs_nodes: list, numpy.array of SkeletonNode.__class__
+    Parameters
+    ----------
+    cs_nodes: lsit of SkeletonNodes
+        contact site nodes
+    cs_feats: np.array
+        synapse features of contact sites
+    cs_dir: str
+        path to contact site directory
+    supp : str
+        supplement for resulting file
+    syn_only: bool
+        if only synapses are to be saved.
     """
     clf_path = cs_dir + '/../models/rf_synapses/rf_syn.pkl'
     print "\nUsing %s for synapse prediction." % clf_path
     rfc_syn = joblib.load(clf_path)
-    dummy_skel = NewSkeleton()
+    dummy_skel = Skeleton()
     dummy_anno = SkeletonAnnotation()
     dummy_anno.setComment('CS Summary')
     probas = rfc_syn.predict_proba(cs_feats)
@@ -145,7 +158,6 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
                 for dummy_node in syn_nodes:
                     dummy_anno.addNode(dummy_node)
                 cnt += 1
-                # add to cs_dict
                 if syn_only and 'az' not in node.getComment():
                     continue
                 overlap_vx = np.load(cs_dir+'/overlap_vx/'+cs_name+'ol_vx.npy')
@@ -171,20 +183,27 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
 
 
 def calc_cs_node(args):
-    """
-    Helper function. Calculates three nodes for given contantct site annotation
+    """Helper function. Calculates three nodes for given contantct site annotation
     containing center of cs and the nearest skeleton nodes.
     The skeleton nodes containg the property axoness, radius and skel_ID.
     The center contains all above information.
-    :param args: Filepath to AnnotationObject containing one CS
-                 list to store number of processed cs and queue
-    :type args: (str, queue)
-    :returns: Three nodes: nodes of adjacent skeletons and center node of CS
+
+    Parameters
+    ----------
+    args: list
+        Filepath to AnnotationObject containing one CS list to store number
+        of processed cs and queue
+
+    Returns
+    -------
+    list of SkeletonNodes
+    Three nodes: nodes of adjacent skeletons and center node of CS
     """
     cs_path, q = args
-    anno = au.loadj0126NML(cs_path)[0]
+    anno = su.loadj0126NML(cs_path)[0]
     ids, axoness = predict_axoness_from_nodes(anno)
     syn_nodes = []
+    center_node = None
     for node in anno.getNodes():
         n_comment = node.getComment()
         if 'center' in n_comment:
@@ -234,7 +253,10 @@ def get_spine_summary(syn_nodes, cs_dir):
     and spine number as key. The spine dictionary contains three values
     'head_diameter', 'branch_dist' and head_proba
 
-    :param cs_dir: path to contact site data
+    Parameters
+    ----------
+    cs_dir: str
+        path to contact site data
     """
     spine_summary = {}
     for nodes in syn_nodes:
@@ -256,9 +278,17 @@ def get_spine_summary(syn_nodes, cs_dir):
 def get_spine_dict(spine_node, max_dist=100):
     """Gather spine information from spine endnote
 
-    :param spine_node: SkeletonNode containing spine information
-    :param max_dist: float Maximum distance from spine head to endpoint in nm
-    :return: dict with values 'head_diameter' and 'branch_dist' and 'head_proba'
+    Parameters
+    ----------
+    spine_node: SkeletonNode
+        Node containing spine information
+    max_dist : float
+        Maximum distance from spine head to endpoint in nm
+
+    Returns
+    -------
+    dict
+        Spine properties 'head_diameter' and 'branch_dist' and 'head_proba'
     """
     spine = {}
     endpoint_dist = float(spine_node.data['end_dist'])
@@ -271,11 +301,20 @@ def get_spine_dict(spine_node, max_dist=100):
 
 
 def update_axoness_dict(cs_dir, syn_only=True):
-    """
+    """Update axoness dictionary with current data pulled from 'neurons/'
+    folder
 
-    :param cs_dir:
-    :param syn_only:
-    :return:
+    Parameters
+    ----------
+    cs_dir: str
+        path to contact site data
+    syn_only : bool
+        if only synapses are to be saved.
+
+    Returns
+    -------
+    dict
+        updated axoness dictionary
     """
     print "Writing axoness dictionary with syn_only=%s." % (str(syn_only))
     if syn_only:
@@ -317,10 +356,15 @@ def update_single_cs_axoness(params):
     Find nearest tracing node to representative coordinate of contact site of
     touching tracings.
 
-    :param params: Representative coordinate and contact site key
-    :type params: tuple (numpy.array, str)
-    :return: contact site key, dictionary of skeleton axoness
-    :rtype: str, dict
+    Parameters
+    ----------
+    params : tuple (numpy.array, str)
+        Representative coordinate and contact site key
+
+    Returns
+    -------
+    str, dict
+        contact site key, dictionary of skeleton axoness
     """
     center_coord = params[0]
     key = params[1]
@@ -347,10 +391,16 @@ def update_single_cs_axoness(params):
 
 def convert_to_standard_cs_name(name):
     """Convert to all possible contact site key combinations
-    :param name: Contact site key
-    :type name: str
-    :return: list of possible key variations
-    :rtype: list of str
+
+    Parameters
+    ----------
+    name : str
+        Contact site key
+
+    Returns
+    -------
+    list of str
+        possible key variations
     """
     cs_nb, skel1, skel2 = re.findall('(\d+)_(\d+)_(\d+)', name)[0]
     new_name1 = 'skel_%s_%s_cs%s_az' % (skel1, skel2, cs_nb)
@@ -363,10 +413,16 @@ def convert_to_standard_cs_name(name):
 
 
 def update_property_dict(cs_dir):
-    """
+    """Update property dictionary
 
-    :param cs_dir:
-    :return:
+    Parameters
+    ----------
+    cs_dir : str
+
+    Returns
+    -------
+    dict
+        update property dictionary
     """
     ax_dict = load_pkl2obj(cs_dir + 'axoness_dict.pkl')
     cs_dict = load_pkl2obj(cs_dir + 'cs_dict.pkl')
@@ -396,9 +452,6 @@ def update_property_dict(cs_dir):
 
 def update_single_cs_properties(params):
     """Helper function of update_property_dict
-
-    :param params: center coord and dictionary key (cs/synapse) of axoness dict
-    :return: property dict entry with spiness and axoness of CS/synapse
     """
     center_coord = params[0]
     key = params[1]
@@ -426,32 +479,35 @@ def update_single_cs_properties(params):
 
 
 def write_property_dict(cs_dir):
-    """
+    """Write property dictionary to working directory
 
-    :param cs_dir:
-    :return:
+    Parameters
+    ----------
+    cs_dir : str
     """
     new_property_dict = update_property_dict(cs_dir)
     write_obj2pkl(new_property_dict, cs_dir + 'property_dict.pkl')
 
 
 def write_axoness_dicts(cs_dir):
-    """
+    """Write axoness dictionaries to working directory
 
-    :param cs_dir:
-    :return:
+    Parameters
+    ----------
+    cs_dir : str
     """
     new_ax_all = update_axoness_dict(cs_dir, syn_only=False)
     write_obj2pkl(new_ax_all, cs_dir + '/axoness_dict_all.pkl')
-    # new_ax = update_axoness_dict(cs_dir, syn_only=True)
-    # write_obj2pkl(new_ax_all, cs_dir + '/axoness_dict.pkl')
+    new_ax = update_axoness_dict(cs_dir, syn_only=True)
+    write_obj2pkl(new_ax_all, cs_dir + '/axoness_dict.pkl')
 
 
 def get_number_cs_details(cs_path):
-    """
+    """Prints number of synapse candidates and number of contact sites
 
-    :param cs_path:
-    :return:
+    Parameters
+    ----------
+    cs_path : str
     """
     az_samples = [path for path in
                        get_filepaths_from_dir(cs_path+'cs_az/', ending='nml')]

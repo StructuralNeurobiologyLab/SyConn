@@ -5,12 +5,11 @@ import tempfile
 import zipfile
 from multiprocessing import cpu_count
 
-from syconn.new_skeleton.newskeleton import SkeletonAnnotation
-
 from basics import *
 from datasets import load_dataset
-from syconn.new_skeleton import annotationUtils as au
+from syconn.utils import skeleton_utils as su
 from syconn.utils.datasets import segmentationDataset
+from syconn.utils.skeleton import SkeletonAnnotation
 
 __author__ = 'pschuber'
 
@@ -63,7 +62,7 @@ def load_ordered_mapped_skeleton(path):
     :return: List of trees with order [skeleton, mitos, p4, az, soma]
     """
     anno_dict = {"skeleton": 0, "mitos": 1, "p4": 2, "az": 3, "soma": 4}
-    annotation = au.loadj0126NML(path)
+    annotation = su.loadj0126NML(path)
     ordered_annotation = list([[], [], [], [], []])
     for name in anno_dict.keys():
         init_anno = SkeletonAnnotation()

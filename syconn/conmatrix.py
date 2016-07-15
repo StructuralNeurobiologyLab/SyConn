@@ -3,22 +3,16 @@ import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
-import os
 import re
 from matplotlib import gridspec
 from matplotlib import pyplot as pp
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from numpy import array as arr
 
-import seaborn.apionly as sns
-
-from syconn.new_skeleton import annotationUtils as au
 from syconn.processing.cell_types import load_celltype_feats,\
     load_celltype_probas, get_id_dict_from_skel_ids, load_celltype_gt
 from syconn.processing.learning_rfc import cell_classification
-from new_skeleton.newskeleton import NewSkeleton
-from syconn.utils.datahandler import get_filepaths_from_dir, write_obj2pkl,\
-    load_pkl2obj
+from syconn.utils.datahandler import  write_obj2pkl, load_pkl2obj
 
 __author__ = 'pschuber'
 
@@ -41,9 +35,7 @@ def make_colormap(seq):
 
 
 def diverge_map(low=(239/255., 65/255., 50/255.), high=(39/255., 184/255., 148/255.)):
-    """
-   http://stackoverflow.com/questions/16834861/create-own-colormap-using-matplotlib-and-plot-color-scale
-    low and high are colors that will be used for the two
+    """Low and high are colors that will be used for the two
     ends of the spectrum. they can be either color strings
     or rgb color tuples
     """
@@ -55,20 +47,32 @@ def diverge_map(low=(239/255., 65/255., 50/255.), high=(39/255., 184/255., 148/2
 
 def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
                        syn_only=True, big_entries=True):
-    """
-    http://stackoverflow.com/questions/16834861/create-own-colormap-using-matplotlib-and-plot-color-scale
-    Calculate wiring of consensus skeletons sorted by type classification
-    :return:
+    """Calculate wiring of consensus skeletons sorted by predicted
+    cell type classification and axoness prediction
+
+    Parameters
+    ----------
+    wd : str
+    confidence_lvl : float
+        minimum probability of cell type prediction to keep cell
+    binary : bool
+        if True existence of synapse is weighted by 1, else 0
+    max_syn_size : float
+        maximum cumulated synapse size shown in plot
+    syn_only : bool
+        take only contact sites with synapse classification result of 1 into
+        account
+    big_entries : bool
+        artificially increase pixel size from 1 to 3 for better visualization
     """
     supp = ""
-    skeleton_ids, skeleton_feats = load_celltype_feats(wd + '/celltypes/')
-    skeleton_ids2, skel_type_probas = load_celltype_probas(wd + '/celltypes/')
-    assert np.all(np.equal(skeleton_ids, skeleton_ids2)), "Skeleton ordering wrong for"\
-                                                  "probabilities and features."
+    skeleton_ids, skeleton_feats = load_celltype_feats(wd)
+    skeleton_ids2, skel_type_probas = load_celltype_probas(wd)
+    assert np.all(np.equal(skeleton_ids, skeleton_ids2)),\
+        "Skeleton ordering wrong for probabilities and features."
     bool_arr = np.zeros(len(skeleton_ids))
     # load loo results of evaluation
-    cell_type_pred_dict = load_pkl2obj(wd + '/celltypes/'
-                                            'loo_cell_pred_dict_novel.pkl')
+    cell_type_pred_dict = load_pkl2obj(wd + '/neurons/cell_pred_dict_novel.pkl')
     # remove all skeletons under confidence level
     for k, probas in enumerate(skel_type_probas):
         if np.max(probas) > confidence_lvl:
@@ -90,14 +94,12 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
 
     # create matrix
     if syn_only:
-        syn_props = load_pkl2obj('/lustre/sdorkenw/synapse_matrices/'
-                                 'phil_dict.pkl')
+        syn_props = load_pkl2obj(wd + '/contactsites/enriched_cs_dict.pkl')
         area_key = 'sizes_area'
         total_area_key = 'total_size_area'
         syn_pred_key = 'syn_types_pred_maj'
     else:
-        syn_props = load_pkl2obj('/lustre/sdorkenw/synapse_matrices/'
-                                 'phil_dict_all.pkl')
+        syn_props = load_pkl2obj(wd + '/contactsites/enriched_cs_all.pkl')
         area_key = 'cs_area'
         total_area_key = 'total_cs_area'
         syn_pred_key = 'syn_types_pred'
@@ -180,7 +182,6 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
                            axon_axon_ids])
     type_sorted_ixs = np.argsort(ax_ax_pred, kind='mergesort')
     ax_ax_pred = ax_ax_pred[type_sorted_ixs]
-    axon_axon_ids = axon_axon_ids[type_sorted_ixs]
     print "Ranges for axons (ax-ax)[%d]: %s" % (len(ax_ax_pred),
                                                 class_ranges(ax_ax_pred))
 
@@ -188,7 +189,6 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
                            mult_syn_skel_id in axon_multiple_syns_ids])
     type_sorted_ixs = np.argsort(ax_multi_syn_pred, kind='mergesort')
     ax_multi_syn_pred = ax_multi_syn_pred[type_sorted_ixs]
-    axon_multiple_syns_ids = axon_multiple_syns_ids[type_sorted_ixs]
     print "Ranges for axons (multi-syn)[%d]: %s" % (len(ax_multi_syn_pred),
                                                 class_ranges(ax_multi_syn_pred))
 
@@ -196,7 +196,6 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
                            mult_syn_skel_id in dendrite_multiple_syns_ids])
     type_sorted_ixs = np.argsort(den_multi_syn_pred, kind='mergesort')
     den_multi_syn_pred = den_multi_syn_pred[type_sorted_ixs]
-    dendrite_multiple_syns_ids = dendrite_multiple_syns_ids[type_sorted_ixs]
     print "Ranges for dendrites (multi-syn)[%d]: %s" % (len(den_multi_syn_pred),
                                                 class_ranges(den_multi_syn_pred))
 
@@ -285,41 +284,7 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
         wiring_axoness[:, :, 2] /= max_val_axon_axon[1]
         wiring_multiple_syns[:, :, 1] /= max_val[0]
         wiring_multiple_syns[:, :, 2] /= max_val[1]
-    max_val_sym = 0.2
-    # # get max MSN-> MSN:
-    print "MSN->MSN"
-    entry_1 = ax_id_dict[382] # ax_borders[0] + 75 #(ax_borders[0]+max_entry[0])[0]
-    entry_2 = ax_id_dict[164] #ax_borders[2] + 6 #(ax_borders[2]+max_entry[1])[0]
-    print rev_ax_id_dict[entry_2], cell_type_pred_dict[rev_ax_id_dict[entry_2]]
-    print rev_ax_id_dict[entry_1], cell_type_pred_dict[rev_ax_id_dict[entry_1]]
-    print "Synapse size:", wiring[entry_1, entry_2]
-    msn_msn_row = entry_2
-    msn_msn_col = entry_1
-    # # get max int-> MSN:
-    print "Int->MSN"
-    entry_1 = ax_id_dict[371]
-    entry_2 = ax_id_dict[472]
-    print rev_ax_id_dict[entry_2], cell_type_pred_dict[rev_ax_id_dict[entry_2]]
-    print rev_ax_id_dict[entry_1], cell_type_pred_dict[rev_ax_id_dict[entry_1]]
-    print "Synapse size:", wiring[entry_1, entry_2]
-    int_row = entry_2
-    int_col = entry_1
-    # # get max MSN->gp:
-    print "MSN->GP"
-    entry_1 = ax_id_dict[578]
-    entry_2 = ax_id_dict[1]
-    print rev_ax_id_dict[entry_2], cell_type_pred_dict[rev_ax_id_dict[entry_2]]
-    print rev_ax_id_dict[entry_1], cell_type_pred_dict[rev_ax_id_dict[entry_1]]
-    print "Synapse size:", wiring[entry_1, entry_2]
-    msn_gp_row = entry_2
-    msn_gp_col = entry_1
-    # # Get rows of GP and MSN cell, close up:
-    gp_row = ax_id_dict[241]
-    msn_row = ax_id_dict[31]
-    gp_col = ax_id_dict[190]
-    msn_col = ax_id_dict[496]
-    get_close_up(wiring[:, (msn_row, gp_row, int_row, msn_gp_row, msn_msn_row)],
-                 den_borders, [gp_col, msn_col, int_col, msn_gp_col, msn_msn_col])
+
     print "Found %d synapses." % np.sum(wiring != 0)
     if not syn_only:
         supp += '_CS'
@@ -329,119 +294,60 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
                     confidence_lvl, binary, add_fname=supp+'_axon_axon')
 
         plot_wiring_cum_cs(cum_wiring, class_ranges(pure_dendrite_pred),
-                        class_ranges(pure_axon_pred), confidence_lvl, binary,
-                        add_fname=supp)
+                           class_ranges(pure_axon_pred), confidence_lvl, binary,
+                           wd, add_fname=supp)
 
         plot_wiring_cum_cs(cum_wiring_axon, class_ranges(ax_ax_pred),
-                        class_ranges(ax_ax_pred), confidence_lvl, binary,
+                        class_ranges(ax_ax_pred), confidence_lvl, binary, wd,
                         add_fname=supp+'_axon_axon')
 
         plot_wiring_cs(wiring_multiple_syns, den_borders, ax_borders,
-                       confidence_lvl, binary, add_fname=supp+'_multiple_syns')
+                       confidence_lvl, binary, wd,
+                       add_fname=supp+'_multiple_syns')
     else:
         supp += ''
         plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
-                    binary, add_fname=supp, big_entries=big_entries,
+                    binary, wd, add_fname=supp, big_entries=big_entries,
                     maj_vote=maj_vote)
 
         plot_wiring(wiring_axoness, den_borders, ax_borders, max_val_axon_axon,
-                    confidence_lvl, binary, add_fname=supp+'_axon_axon',
+                    confidence_lvl, binary, wd, add_fname=supp+'_axon_axon',
                     big_entries=big_entries, maj_vote=maj_vote_axoness)
 
         plot_wiring_cum(cum_wiring, class_ranges(dendrite_pred),
-                        class_ranges(axon_pred), confidence_lvl, binary,
+                        class_ranges(axon_pred), confidence_lvl, binary, wd,
                         add_fname=supp, maj_vote=maj_vote)
 
         plot_wiring(wiring_multiple_syns, den_borders, ax_borders, max_val,
-                    confidence_lvl, binary, add_fname=supp+'_multiple_syns',
+                    confidence_lvl, binary, wd, add_fname=supp+'_multiple_syns',
                     big_entries=big_entries, maj_vote=maj_vote)
 
-        wiring[:, (msn_row, gp_row, int_row, msn_gp_row, msn_msn_row)] = 100
-        plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
-                    binary, add_fname='MARKER', big_entries=True,
-                    maj_vote=maj_vote)
         return cum_wiring
 
 
-def get_cell_majority_synsign(cum_wiring):
-    cum_rows = np.sum(cum_wiring, axis=0)
+def get_cell_majority_synsign(avg_wiring):
+    """Calculates majority synaptic sign of rows in average wiring
+
+    Parameters
+    ----------
+    avg_wiring : np.array
+        averaged wiring
+
+    Returns
+    -------
+    np.array of int
+        majority vote of synapse sign (row wise)
+    """
+    cum_rows = np.sum(avg_wiring, axis=0)
     maj_vote = np.zeros((4))
     for i in range(4):
         maj_vote[i] = cum_rows[i, 2] > cum_rows[i, 1]
     return maj_vote
 
 
-def get_close_up(wiring, den_borders, col_entries):
-    for k, b in enumerate(den_borders):
-        b += k * 1
-        wiring = np.concatenate((wiring[:b, :], np.zeros((1, wiring.shape[1], 3)),
-                                 wiring[b:, :]), axis=0)
-    closeup = np.zeros((wiring.shape[0], len(col_entries)))
-    for i in range(wiring.shape[0]):
-        for j in range(wiring.shape[1]):
-            if wiring[i, j, 1] != 0:
-                closeup[i, j] = -wiring[i, j, 1]
-            elif wiring[i, j, 2] != 0:
-                closeup[i, j] = wiring[i, j, 2]
-    matplotlib.rcParams.update({'font.size': 14})
-    fig = pp.figure()
-    # Create scatter plot
-    gs = gridspec.GridSpec(1, 2, width_ratios=[20, 1])
-    gs.update(wspace=0.05, hspace=0.08)
-    ax = pp.subplot(gs[0, 0], frameon=False)
-    #dark_blue = sns.diverging_palette(133, 255, center="light", as_cmap=True)
-    dark_blue = sns.diverging_palette(282., 120, s=99., l=50.,
-                                      center="light", as_cmap=True)
-    cax = ax.matshow(closeup.transpose(1, 0), cmap=diverge_map(),
-                     extent=[0, wiring.shape[0], wiring.shape[1], 0],
-                     interpolation="none")
-    ax.set_xlim(0, wiring.shape[0])
-    ax.set_ylim(0, wiring.shape[1])
-    plt.grid(False)
-    plt.axis('off')
-    for k, b in enumerate(den_borders):
-        b += k * 1
-        plt.axvline(b+0.5, color='k', lw=0.5, snap=True, antialiased=True)
-    cbar_ax = pp.subplot(gs[0, 1])
-    cbar_ax.yaxis.set_ticks_position('none')
-    cb = fig.colorbar(cax, cax=cbar_ax, ticks=[])
-    fig.savefig('/lustre/pschuber/figures/wiring/type_wiring_closeup.png',
-                dpi=600)
-    plt.close()
-    matplotlib.rcParams.update({'font.size': 14})
-    fig = pp.figure()
-    # Create scatter plot
-    gs = gridspec.GridSpec(1, 2, width_ratios=[20, 1])
-    gs.update(wspace=0.05, hspace=0.08)
-    ax = pp.subplot(gs[0, 0], frameon=False)
-    #dark_blue = sns.diverging_palette(133, 255, center="light", as_cmap=True)
-    dark_blue = sns.diverging_palette(282., 120, s=99., l=50.,
-                                      center="light", as_cmap=True)
-    cax = ax.matshow(closeup.transpose(1, 0), cmap=diverge_map(),
-                     extent=[0, wiring.shape[0], wiring.shape[1], 0],
-                     interpolation="none")
-    ax.set_xlim(0, wiring.shape[0])
-    ax.set_ylim(0, wiring.shape[1])
-    plt.grid(False)
-    plt.axis('off')
-    for k, b in enumerate(den_borders):
-        b += k * 1
-        plt.axvline(b+0.5, color='k', lw=0.5, snap=True, antialiased=True)
-    for col_entry in col_entries:
-        additional_cols = np.sum(col_entry > den_borders)
-        plt.axvline(col_entry+0.5+additional_cols, color="0.4", lw=0.5,
-                    snap=True, antialiased=True)
-    cbar_ax = pp.subplot(gs[0, 1])
-    cbar_ax.yaxis.set_ticks_position('none')
-    cb = fig.colorbar(cax, cax=cbar_ax, ticks=[])
-    fig.savefig('/lustre/pschuber/figures/wiring/type_wiring_closeup_marker.png',
-                dpi=600)
-    plt.close()
-
-
 def get_cum_pos(den_ranges, ax_ranges, den_pos, ax_pos):
-    """
-    Calculates the position of synapse in cumulated matrix
+    """Calculates the position of synapse in average matrix, i.e. which sector
+    it belongs to.
     """
     den_cum_pos = 0
     ax_cum_pos = 0
@@ -455,18 +361,30 @@ def get_cum_pos(den_ranges, ax_ranges, den_pos, ax_pos):
 
 
 def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
-                binary, big_entries=False, add_fname='', maj_vote=()):
-    """
-    :param wiring:
-    :param den_borders:
-    :param ax_borders:
-    :param max_val:
-    :param confidence_lvl:
-    :param binary:
-    :param add_fname:
-    :param maj_vote:
-    :param big_entries: changes entries to 3x3 squares
-    :return:
+                binary, wd, big_entries=False, add_fname='', maj_vote=()):
+    """Plot type sorted connectivity matrix and save to figures folder in
+    working directory
+
+    Parameters
+    ----------
+    wiring : np.array
+        symmetric 2D array of size #cells x #cells
+    den_borders:
+    cell type boarders on post synaptic site
+    ax_borders:
+        cell type boarders on pre synaptic site
+    max_val : float
+        maximum cumulated contact area shown in plot
+    confidence_lvl : float
+        minimum probability of cell type prediction to keep cell
+    binary : bool
+        if True existence of synapse is weighted by 1, else 0
+    add_fname : str
+        supplement of image file
+    maj_vote : tuple
+
+    big_entries : bool
+        artificially increase pixel size from 1 to 3 for better visualization
     """
     for k, b in enumerate(den_borders):
         b += k * 1
@@ -503,7 +421,7 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
                         elif wiring[i, j, 2] != 0:
                             intensity_plot[i+add_i, j+add_j] = (-1)**(syn_sign+1) * wiring[i, j, 2]
     if not big_entries:
-        np.save('/lustre/pschuber/figures/wiring/connectivity_matrix.npy',
+        np.save(wd + '/figures/wiring/connectivity_matrix.npy',
                 intensity_plot)
     print "Plotting wiring diagram with maxval", max_val, "and supplement", add_fname
     print "Max/Min in plot:", np.min(intensity_plot), np.max(intensity_plot)
@@ -539,17 +457,20 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
     plt.close()
 
     if not binary:
-        fig.savefig('/lustre/pschuber/figures/wiring/type_wiring%s_conf'
+        fig.savefig(wd + '/figures/wiring/type_wiring%s_conf'
                     'lvl%d_be%s.png' % (add_fname, int(confidence_lvl*10),
                                    str(big_entries)), dpi=600)
     else:
-        fig.savefig('/lustre/pschuber/figures/wiring/type_wiring%s_conf'
+        fig.savefig(wd + '/figures/wiring/type_wiring%s_conf'
             'lvl%d_be%s_binary.png' % (add_fname, int(confidence_lvl*10),
                                        str(big_entries)), dpi=600)
 
 
 def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
-                    binary, add_fname='', maj_vote=()):
+                    binary, wd, add_fname='', maj_vote=()):
+    """Same as plot_wiring but for all contact sites (synapse classification 0
+    and 1)
+    """
     # plot intensities, averaged per sector
     nb_cells_per_sector = np.zeros((4, 4))
     intensity_plot = np.zeros((4, 4))
@@ -567,7 +488,7 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
                 intensity_plot[i, j] = (-1)**(syn_sign+1) * sector_intensity
             else:
                 intensity_plot[i, j] = (-1)**(syn_sign+1) * np.min((sector_intensity, 0.1))
-    np.save('/lustre/pschuber/figures/wiring/cumulated_connectivity_matrix.npy',
+    np.save(wd + '/figures/wiring/cumulated_connectivity_matrix.npy',
             intensity_plot)
     print intensity_plot
     ind = np.arange(4)
@@ -623,18 +544,16 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
     axt.bar(ind, col_sum, 1, color='0.6', linewidth=0)
     plt.close()
     if not binary:
-        fig.savefig('/lustre/pschuber/figures/wiring/type_wiring_cum%s_conf'
+        fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
                     'lvl%d.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
     else:
-        fig.savefig('/lustre/pschuber/figures/wiring/type_wiring_cum%s_conf'
+        fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
             'lvl%d_binary.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
 
 
 def type_sorted_wiring_cs(wd, confidence_lvl=0.8, binary=False,
                           max_syn_size=0.2):
-    """
-    Calculate wiring of consensus skeletons sorted by type classification
-    :return:
+    """Same as type_sorted_wiring but with all contact sites
     """
     skel_ids, skeleton_feats = load_celltype_feats(wd + '/celltypes/')
     skel_ids2, skel_type_probas = load_celltype_probas(wd + '/celltypes/')
@@ -668,12 +587,10 @@ def type_sorted_wiring_cs(wd, confidence_lvl=0.8, binary=False,
     # create matrix
     syn_props = load_pkl2obj(wd + '/synapse_matrices/phil_dict_no_'
                                   'exclusion_all.pkl')
-    area_key = 'cs_area'
     total_area_key = 'total_cs_area'
     dendrite_ids = set()
     axon_ids = set()
     for pair_name, pair in syn_props.iteritems():
-        # if pair[total_area_key] != 0:
         skel_id1, skel_id2 = re.findall('(\d+)_(\d+)', pair_name)[0]
         skel_id1 = int(skel_id1)
         skel_id2 = int(skel_id2)
@@ -742,7 +659,7 @@ def type_sorted_wiring_cs(wd, confidence_lvl=0.8, binary=False,
 
 
 def plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl,
-                binary, add_fname='_CS'):
+                binary, wd, add_fname='_CS'):
     fig = plt.figure()
     ax = plt.gca()
     max_val = np.max(wiring)
@@ -777,17 +694,16 @@ def plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl,
         cb.set_label(u'Synaptic Junction')
     plt.close()
     if not binary:
-        fig.savefig('/lustre/pschuber/figures/wiring/type_wiring%s_conf'
+        fig.savefig(wd + '/figures/wiring/type_wiring%s_conf'
                     'lvl%d.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
     else:
-        fig.savefig('/lustre/pschuber/figures/wiring/type_wiring%s_conf'
+        fig.savefig(wd + '/figures/wiring/type_wiring%s_conf'
             'lvl%d_binary.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
 
 
 def plot_wiring_cum_cs(wiring, den_borders, ax_borders, confidence_lvl,
-                       binary, add_fname=''):
+                       binary, wd, add_fname=''):
     # plot cumulated wiring
-
     # plot intensities, averaged per sector
     nb_cells_per_sector = np.zeros((4, 4))
     intensity_plot = np.zeros((4, 4))
@@ -855,10 +771,10 @@ def plot_wiring_cum_cs(wiring, den_borders, ax_borders, confidence_lvl,
     axt.bar(ind, col_sum, 1, color='0.6', linewidth=0)
     plt.show(block=False)
     if not binary:
-        fig.savefig('/lustre/pschuber/figures/wiring/type_wiring_cum%s_conf'
+        fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
                     'lvl%d.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
     else:
-        fig.savefig('/lustre/pschuber/figures/wiring/type_wiring_cum%s_conf'
+        fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
             'lvl%d_binary.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
 
 
@@ -869,23 +785,3 @@ def class_ranges(pred_arr):
     class2 = np.max((class1, np.argmax(pred_arr == 2)))
     class3 = np.max((class2, np.argmax(pred_arr == 3)))
     return np.array([0, class1, class2, class3, len(pred_arr)])
-
-
-def get_cs_of_mapped_skel(skel_path):
-    """
-    Gather all contact site of mapped skeleton at skel_path and writes .nml to
-    */nml_obj/cs_of_skel*.nml
-    :param skel_path: str Path to k.zip
-    """
-    dir, filename = os.path.split(skel_path)
-    skel_id = re.findall('iter_\d+_(\d+)-', filename)[0]
-    contact_sites_of_skel = NewSkeleton()
-    contact_sites_of_skel.scaling = [9, 9, 20]
-    paths = get_filepaths_from_dir(dir+'/contact_sites/', ending='skel_'+skel_id)
-    paths += get_filepaths_from_dir(dir+'/contact_sites/', ending=skel_id+'.nml')
-    for path in paths:
-        anno = au.loadj0126NML(path)[0]
-        contact_sites_of_skel.add_annotation(anno)
-    print "Writing file" + dir + '/cs_of_skel%s.nml' % skel_id
-    contact_sites_of_skel.toNml(dir+'/cs_of_skel%s.nml' % skel_id)
-    return

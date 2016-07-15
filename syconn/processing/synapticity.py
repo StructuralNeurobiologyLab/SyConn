@@ -8,7 +8,7 @@ from sys import stdout
 
 from knossos_utils.knossosdataset import KnossosDataset as kd
 
-import syconn.new_skeleton.annotationUtils as au
+import syconn.utils.skeleton_utils as su
 from learning_rfc import save_train_clf
 from syconn.utils.datahandler import get_filepaths_from_dir
 
@@ -37,8 +37,9 @@ def helper_load_az_feat(args):
     :param args:
     :return:
     """
+    center_coords = None
     path, cs_path, q = args
-    anno = au.loadj0126NML(path)[0]
+    anno = su.loadj0126NML(path)[0]
     anno_nodes = list(anno.getNodes())
     for node in anno_nodes:
         if 'center' in node.getComment():
@@ -103,8 +104,9 @@ def pairwise_syn_feature_calc(args):
     """
     syn_candidate, ignore_keys, detailed_cs_dir, q,\
     new_data, test_data = args
+    node = None
     if isinstance(syn_candidate, str):
-        syn_candidate = au.loadj0126NML(syn_candidate)[0]
+        syn_candidate = su.loadj0126NML(syn_candidate)[0]
     q.put(1)
     if not test_data:
         gt_value = None

@@ -1,4 +1,3 @@
-__author__ = 'philipp'
 import numpy as np
 import os
 import re
@@ -9,28 +8,29 @@ from sys import stdout
 
 import networkx as nx
 from sklearn.externals import joblib
-from syconn.new_skeleton.newskeleton import NewSkeleton, SkeletonAnnotation
 
 from features import assign_property2node, majority_vote,\
     update_property_feat_kzip
 from learning_rfc import cell_classification, load_csv2feat
-from syconn.new_skeleton import annotationUtils as au
+from syconn.utils import skeleton_utils as su
 from syconn.utils.datahandler import get_filepaths_from_dir, \
     load_ordered_mapped_skeleton, get_skelID_from_path
+from syconn.utils.skeleton import Skeleton, SkeletonAnnotation
+__author__ = 'philipp'
 
 
-def predict_axoness_mappedskel(fname_skel, recompute_feat=False):
+def predict_axoness_mappedskel(skel_fpaths, recompute_feat=False):
     """
-
-    :param fname_skel:
-    :param recompute_feat:
+    Predict axoness of each node on list of mapped skeletons.
+    skel_fpaths : list of str
+    recompute_feat : bool
     :return:
     """
     nb_cpus = cpu_count()
     pool = Pool(processes=nb_cpus)
     m = Manager()
     q = m.Queue()
-    params = [(path, q, recompute_feat) for path in fname_skel]
+    params = [(path, q, recompute_feat) for path in skel_fpaths]
     result = map(predict_axoness_of_single_mappedskel, params)
     # monitor loop
     while True:
@@ -47,10 +47,9 @@ def predict_axoness_mappedskel(fname_skel, recompute_feat=False):
 
 
 def predict_axoness_of_single_mappedskel(args):
-    """
-
-    :param args:
-    :return:
+    """Predict  axoness of mapped skeleton. Helper function of
+    ``predict_axoness_mappedskel``. Saves mapped skeleton with predicted
+    axoness at origin.
     """
     path, q, recompute_feat = args
     anno, mitos, p4, az = load_ordered_mapped_skeleton(path)
@@ -84,7 +83,7 @@ def predict_axoness_of_single_mappedskel(args):
     majority_vote(anno, 'axoness', 6000)
     grow_out_soma(anno)
     majority_processes(anno)
-    dummy_skel = NewSkeleton()
+    dummy_skel = Skeleton()
     dummy_skel.add_annotation(anno)
     dummy_skel.add_annotation(mitos)
     dummy_skel.add_annotation(p4)
@@ -95,10 +94,18 @@ def predict_axoness_of_single_mappedskel(args):
 
 
 def predict_axoness_from_node_comments(anno):
-    """
-    Exctracts axoness prediction from nodes for given contact site annotation.
-    :param anno: AnnotationObject containing one contact site.
-    :return: arr Skeleton IDS, arr Skeleton axoness
+    """Exctracts axoness prediction from node comment for given contact site
+    annotation.
+
+    Parameters
+    ----------
+    anno : SkeletonAnnotation
+        Contact site
+
+    Returns
+    -------
+    numpy.array, numpy.array
+        skeleton IDS, skeleton axoness
     """
     axoness = [[], []]
     cs_comment = anno.getComment()
@@ -124,10 +131,17 @@ def predict_axoness_from_node_comments(anno):
 
 
 def predict_axoness_from_nodes(anno):
-    """
-    Exctracts axoness prediction from nodes for given contact site annotation.
-    :param anno: AnnotationObject containing one contact site.
-    :return: arr Skeleton IDS, arr Skeleton axoness
+    """Exctracts axoness prediction from nodes for given contact site annotation
+
+    Parameters
+    ----------
+    anno : SkeletonAnnotation
+        contact site.
+
+    Returns
+    -------
+    numpy.array, numpy.array
+        skeleton IDS, skeleton axoness
     """
     axoness = [[], []]
     ids = []
@@ -155,13 +169,15 @@ def predict_axoness_from_nodes(anno):
 
 
 def majority_processes(anno):
-    """
-    Label processes of cell in anno according to majority of axonoess in
+    """Label processes of cell in anno according to majority of axonoess in
     its nodes. If anno contains soma nodes, a slight smoothing is applied
     and afterwards the soma is grown out, in order to avoid branch points
     near the soma which are false positive axons/dendrite nodes.
     Inplace operation.
-    :param anno: AnnotationObject
+
+    Parameters
+    ----------
+    anno : SkeletonAnnotation
     """
     hns = []
     soma_node_nb = 0
@@ -176,7 +192,7 @@ def majority_processes(anno):
         grow_out_soma(anno)
         majority_vote(anno, 'axoness', 3000)
         used_hn_ids = []
-        graph = au.annotation_to_nx_graph(anno)
+        graph = su.annotation_to_nx_graph(anno)
         calc_distance2soma(graph, hns)
         # reorder head nodes with descending distance to soma
         distances = [node.data['dist2soma'] for node in hns]
@@ -216,10 +232,14 @@ def majority_processes(anno):
 
 
 def calc_distance2soma(graph, nodes):
-    """ Calculates the distance to a soma node for each node and sotres it
-    in node.data['dist2soma']
-    :param graph: graph of AnnotationObject
-    :param nodes: Source nodes
+    """ Calculates the distance to a soma node for each node and stores it
+    inplace in node.data['dist2soma']. Building depth first search graph at
+    each node for sorted node ordering.
+
+    Parameters
+    ----------
+    graph : graph of SKeletonAnnotation
+    nodes : SkeletonNodes
     """
     for source in nodes:
         distance = 0
@@ -236,13 +256,15 @@ def calc_distance2soma(graph, nodes):
 def grow_out_soma(anno, max_dist=700):
     """
     Grows out soma nodes, in order to overcome false negative soma nodes which
-    should have separated axon and dendritic processes
-    :param anno:
-    :param max_dist:
-    :return:
+    should have separated axon and dendritic processes.
+    Parameters
+    ----------
+    anno : SkeletonAnnotation
+    max_dist : int
+
     """
     soma_nodes = []
-    graph = au.annotation_to_nx_graph(anno)
+    graph = su.annotation_to_nx_graph(anno)
     for node in anno.getNodes():
         if int(node.data["axoness_pred"]) == 2:
             soma_nodes.append(node)
@@ -258,26 +280,3 @@ def grow_out_soma(anno, max_dist=700):
                 assign_property2node(node, 2, 'axoness')
             current_coords = new_coords
 
-
-def get_soma_tracing_task_skels():
-    """
-
-    :return:
-    """
-    paths = get_filepaths_from_dir('/lustre/pschuber/st250_pt3_minvotes18/'
-                                   'nml_obj/')
-    dest_path = '/lustre/pschuber/soma_tracing_skels/'
-    if not os.path.isdir(dest_path):
-        os.makedirs(dest_path)
-    for ii, fpath in enumerate(paths):
-        skel = load_ordered_mapped_skeleton(fpath)[0]
-        dummy_skel = NewSkeleton()
-        skel_id = get_skelID_from_path(fpath)
-        skel.setComment(str(skel_id))
-        dummy_skel.add_annotation(skel)
-        dummy_anno = SkeletonAnnotation()
-        dummy_anno.setComment('soma_' + str(skel_id))
-        dummy_skel.add_annotation(dummy_anno)
-        file_name = dest_path + 'task%i.k.zip' % ii
-        dummy_skel.to_kzip(file_name)
-        print "Wrote file %s" % (file_name)
