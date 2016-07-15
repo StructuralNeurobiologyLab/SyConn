@@ -1,5 +1,5 @@
 import sys
-from syconn.processing.mapper import  prepare_syns_btw_annos
+from syconn.processing.mapper import prepare_syns_btw_annos
 import cPickle as pickle
 __author__ = 'pschuber'
 

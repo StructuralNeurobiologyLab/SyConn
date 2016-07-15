@@ -1,8 +1,7 @@
 import os
 from multiprocessing import cpu_count
-
+from syconn.utils.datasets import segmentationDataset
 from syconn.utils import annotationUtils as au
-
 from datasets import load_dataset
 from basics import *
 import zipfile
@@ -17,7 +16,8 @@ __author__ = 'pschuber'
 
 
 class DataHandler(object):
-    """Initialized with paths or cell components (SegmentationObjects), path to
+    """
+    Initialized with paths or cell components (SegmentationObjects), path to
     membrane prediction and source path of traced skeletons (to be computed).
     DataHandler is needed for further processing.
     :param datapath: Used as output path for all computations
@@ -144,12 +144,16 @@ def load_objpkl_from_kzip(path):
     """
     zf = zipfile.ZipFile(path, 'r')
     object_datasets = []
-    for filename in ['mitos.pkl', 'p4.pkl', 'az.pkl']:
-        temp = tempfile.TemporaryFile()
-        temp.write(zf.read(filename))
-        temp.seek(0)
-        obj_ds = pickle.load(temp)
-        object_datasets.append(obj_ds)
+    for ix, filename in enumerate(['mitos.pkl', 'p4.pkl', 'az.pkl']):
+        object_datasets.append(segmentationDataset('', '', ''))
+        try:
+            temp = tempfile.TemporaryFile()
+            temp.write(zf.read(filename))
+            temp.seek(0)
+            obj_ds = pickle.load(temp)
+            object_datasets[ix] = obj_ds
+        except (IOError, ImportError):
+            pass
     return object_datasets
 
 
@@ -179,14 +183,13 @@ def load_mapped_skeleton(path, append_obj, load_mitos):
     :param load_mitos:
     :return:
     """
-    try:
-        mapped_skel = load_ordered_mapped_skeleton(path)
-    except IOError as e:
-        print "Skipped", path
-        print e
-        return
+    mapped_skel = load_ordered_mapped_skeleton(path)
     if append_obj:
         skel = mapped_skel[0]
+        obj_dicts = load_objpkl_from_kzip(path)
+        skel.mitos = obj_dicts[0]
+        skel.p4 = obj_dicts[1]
+        skel.az = obj_dicts[2]
         if 'k.zip' in os.path.basename(path):
             path = path[:-5]
         if 'nml' in os.path.basename(path):

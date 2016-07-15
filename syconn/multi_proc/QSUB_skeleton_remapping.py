@@ -1,6 +1,6 @@
 import sys
 from syconn.brainqueries import remap_tracings
-from syconn.processing.learning_rfc import start_multiprocess
+from syconn.multi_proc.multi_proc_main import start_multiprocess
 import cPickle as pickle
 __author__ = 'pschuber'
 

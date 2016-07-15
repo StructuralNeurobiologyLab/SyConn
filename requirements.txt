@@ -1,6 +1,5 @@
 Cython
 numpy
-mayavi
 matplotlib
 sklearn
 scipy

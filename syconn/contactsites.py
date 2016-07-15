@@ -12,7 +12,7 @@ from scipy import spatial
 from sklearn.externals import joblib
 
 from syconn.processing.axoness import predict_axoness_from_nodes
-from syconn.processing.learning_rfc import start_multiprocess
+from syconn.multi_proc.multi_proc_main import start_multiprocess
 from syconn.processing.mapper import feature_valid_syns, calc_syn_dict
 from syconn.processing.synapticity import parse_synfeature_from_node
 from syconn.utils import annotationUtils as au

@@ -192,11 +192,11 @@ def enrich_tracings(wd, anno_list, map_objects=True, method='hull', radius=1200,
 
 def remap_tracings_all(anno_list, dest_dir=None, recalc_prop_only=False,
                        method='hull', context_range=6000):
-    """Remapping cell objects of all tracings
+    """Runs remap_tracings on available cluster nodes defined by
+    somaqnodes or using single node multiprocessing.
 
-    Run :func: 'remap_tracings' on available cluster nodes defined by
-    somaqnodes or using multiprocessing.
-
+    Parameters
+    ----------
     anno_list : list of str
         Paths to skeleton nml / kzip files
     dest_dir : str
@@ -207,7 +207,7 @@ def remap_tracings_all(anno_list, dest_dir=None, recalc_prop_only=False,
     method : str
         Method for object mapping procedure
     context_range : int
-        Context range for property feature.
+        Context range for property features
     """
     np.random.shuffle(anno_list)
     if dest_dir is not None and not os.path.isdir(dest_dir):
@@ -236,62 +236,70 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
                    mito_min_votes=235, p4_min_votes=191, az_min_votes=346,
                    recalc_prop_only=True, context_range=6000):
     """ Remap objects in tracings with pre-calculated cell hull
-     Remaps objects to skeleton without recalculating the hull.
-     :param wd: Path to working directory
-     :param mapped_skel_paths: Paths to tracings
-     :param dh: DataHandler Object
-     :param output_dir: str path to output dir. If none, use given path
-     :param write_obj_voxel: bool write object voxel to k.zip
-     :param az_min_votes: Best F2 score found by eval
-     :param mito_min_votes: Best F1 score found by eval
-     :param p4_min_votes: Best F2 score found by eval
-     :param method: Either 'kd' for fix radius or 'hull'/'supervoxel' if
-     membrane is available.
-     :param radius: Radius in nm. Single integer if integer radius is for all
-     objects the same. If list of three integer stick to ordering
-     [mitos, p4, az].
-     :param thresh: Denotes the factor which is multiplied with the maximum
-     membrane probability. The resulting value is used as threshold after
-     which the membrane is assumed to be existant.
-     :param nb_rays: Integer, Number of rays send at each skeleton node
-     (multiplied by a factor of 5). Defines the angle between two rays
-     (=360 / nb_rays) in the orthogonal plane.
-     :param neighbor_radius: Radius of ball in which to look for supporting
-     hull voxels. Used during outlier detection.
-     :param nb_neighbors: Integer, minimum number of neighbors needed during
-     outlier detection for a single hull point to survive.
-     :param filter_size: List of integer for each object [mitos, p4, az]
-     :param nb_hull_vox: Number of object hull voxels which are used to
-     estimate spatial proximity to skeleton.
-     :param context_range: Range of property features
-     :param nb_voting_neighbors: Number votes of skeleton hull voxels (membrane
-     representation) for object-mapping.
-     :param dh: DataHandler object containing SegmentationDataObjects
-     mitos, p4, az
-     :param max_dist_mult: float Multiplier for radius to generate maximal
-     distance of hull points to source node.
-     :param output_dir: Path to output directory, if None dh._data_path
-     will be used.
-     :param recalc_prop_only: Recalculate only features and prediction of
-     properties (axoness, spiness)
-     :param write_obj_voxel: write object voxel coordinates to kzip
-     :type output_dir: str
-     :type method: str
-     :type radius: int
-     :type thresh: float
-     :type nb_rays: int
-     :type neighbor_radius: int
-     :type filter_size: list, tuple, ...
-     :type nb_hull_vox: int
-     :type nb_voting_neighbors: int
-     :type dh: DataHandler.__class__
-     :type max_dist_mult: float
-     :type context_range: int
-     :type recalc_prop_only: bool
-     :type write_obj_voxel: bool
 
-     :returns:
+    Remaps objects to skeleton without recalculating the hull.
+
+    Parameters
+    ----------
+    wd : str
+        Path to working directory
+    mapped_skel_paths : list of str
+        Paths to tracings
+    dh: DataHandler.__class_
+    output_dir : str
+        path to output dir. If none, use given path
+    write_obj_voxel : bool
+        write object voxel to k.zip
+    az_min_votes : int
+        Best F2 score found by eval
+    mito_min_votes : int
+        Best F1 score found by eval
+    p4_min_votes : int
+        Best F2 score found by eval
+    method : str
+        Either 'kd' for fix radius or 'hull'/'supervoxel' if
+        membrane is available.
+    radius : int
+        Radius in nm. Single integer if integer radius is for all
+        objects the same. If list of three integer stick to ordering
+        [mitos, p4, az].
+    thresh : float
+        Denotes the factor which is multiplied with the maximum
+        membrane probability. The resulting value is used as threshold after
+        which the membrane is assumed to be existant.
+    nb_rays : int
+        Number of rays send at each skeleton node
+        (multiplied by a factor of 5). Defines the angle between two rays
+        (=360 / nb_rays) in the orthogonal plane.
+    neighbor_radius : int
+        Radius of ball in which to look for supporting
+        hull voxels. Used during outlier detection.
+    nb_neighbors : int
+        minimum number of neighbors needed during
+        outlier detection for a single hull point to survive.
+    filter_size : List of integer
+        for each object [mitos, p4, az]
+    nb_hull_vox : int
+        Number of object hull voxels which are used to
+        estimate spatial proximity to skeleton.
+    context_range : int
+        Range of property features
+    nb_voting_neighbors : int
+        Number votes of skeleton hull voxels (membrane
+        representation) for object-mapping.
+    max_dist_mult : float
+        Multiplier for radius to generate maximal
+        distance of hull points to source node.
+    output_dir : str
+        Path to output directory, if None dh._data_path
+        will be used.
+    recalc_prop_only : bool
+        Recalculate only features and prediction of
+        properties (axoness, spiness)
+    write_obj_voxel : bool
+        write object voxel coordinates to kzip
     """
+
     rf_axoness_p = wd + '/models/rf_axoness/rf.pkl'
     rf_spiness_p = wd + '/models/rf_spiness/rf.pkl'
     rfc_axoness, rfc_spiness = load_rfcs(rf_axoness_p, rf_spiness_p)
@@ -366,6 +374,7 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
 
 def detect_synapses(wd):
     """Detect synapses between tracings
+
      Detects contact sites between enriched tracings and writes contact site
      summary and synapse summary to working directory.
 

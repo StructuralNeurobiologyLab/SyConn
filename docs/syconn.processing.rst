@@ -28,14 +28,6 @@ syconn.processing.features module
     :undoc-members:
     :show-inheritance:
 
-syconn.processing.hull_extraction module
-----------------------------------------
-
-.. automodule:: syconn.processing.hull_extraction
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 syconn.processing.learning_rfc module
 -------------------------------------
 

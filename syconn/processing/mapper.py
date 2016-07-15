@@ -18,7 +18,7 @@ import syconn.utils.NewSkeletonUtils as nsu
 from axoness import majority_vote
 from axoness import predict_axoness_from_nodes
 from features import calc_prop_feat_dict
-from learning_rfc import start_multiprocess
+from ..multi_proc.multi_proc_main import start_multiprocess
 from learning_rfc import write_feat2csv
 from spiness import assign_neck
 from syconn.utils.datahandler import *
@@ -33,27 +33,34 @@ class SkeletonMapper(object):
     """Class to handle mapping of individual skeleton/annotation."""
     def __init__(self, source, scaling, ix=None, soma=None, mem_path=None,
                  context_range=6000):
+
         self.type = 'mapped_skeleton'
         init_anno = SkeletonAnnotation()
         init_anno.scaling = [9, 9, 20]
         init_anno.appendComment('soma')
         self.soma = init_anno
+        self.mitos = None
+        self.p4 = None
+        self.az = None
         if type(source) is str:
             self.ix = re.findall('[^/]+$', source)[0][:-4]
             self._path = source
             self.old_anno = load_ordered_mapped_skeleton(source)[0]
-            anno, self.soma = load_ordered_mapped_skeleton(source)[0, 4]
-        else:
+            self.anno, self.soma = load_ordered_mapped_skeleton(source)[0, 4]
+            obj_dicts = load_objpkl_from_kzip(source)
+            self.mitos = obj_dicts[0]
+            self.p4 = obj_dicts[1]
+            self.az = obj_dicts[2]
+        elif source.__class__ == SkeletonAnnotation.__class__:
             self._path = None
             self.ix = ix
             self.old_anno = source
             self.anno = copy.deepcopy(source)
             if soma is not None:
                 self.soma = soma
-        # init objects
-        self.mitos = None
-        self.p4 = None
-        self.az = None
+        else:
+            raise RuntimeError('Datatype not understood during __init__'
+                               'of SkeletonMapper.')
         # init annotation-paramaters
         self.detect_outlier = None
         self.neighbor_radius = None
@@ -72,13 +79,10 @@ class SkeletonMapper(object):
         self._cset_path = '/lustre/sdorkenw/j0126_watershed_map/'
         self._cset = None
         self._mem_path = mem_path
-        self.mapping_info = {}
-        self.mapping_info['az'] = {}
-        self.mapping_info['mitos'] = {}
-        self.mapping_info['p4'] = {}
+        self.mapping_info = {'az': {}, 'mitos': {}, 'p4': {}}
         self._myelin_ds_path = "/lustre/sdorkenw/j0126_myelin_in/"
-        self.az_min_votes = 235
-        self.obj_min_votes = {'mitos': 68, 'p4': 111, 'az': self.az_min_votes}
+        self.az_min_votes = 346
+        self.obj_min_votes = {'mitos': 235, 'p4': 191, 'az': self.az_min_votes}
         # stores hull and radius estimation of each ray and node
         self._hull_coords = None
         self._hull_normals = None
