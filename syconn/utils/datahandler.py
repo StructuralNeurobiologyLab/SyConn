@@ -15,19 +15,27 @@ __author__ = 'pschuber'
 
 
 class DataHandler(object):
-    """
-    Initialized with paths or cell components (SegmentationObjects), path to
+    """Initialized with paths or cell components (SegmentationObjects), path to
     membrane prediction and source path of traced skeletons (to be computed).
     DataHandler is needed for further processing.
-    :param datapath: Used as output path for all computations
+
+    Attributes
+    ----------
     """
     def __init__(self, wd, scaling=(9., 9., 20.)):
-
-        p4_source = wd + '/obj_p4/'
-        az_source = wd + '/obj_az/'
-        mito_source = wd + '/obj_mito/',
+        """
+        Parameters
+        ----------
+        wd : str
+            path to working directory
+        scaling : tuple of ints
+            scaling of data set, s.t. data is isotropic
+        """
+        p4_source = wd + '/chunkdataset/obj_p4/'
+        az_source = wd + '/chunkdataset/obj_az/'
+        mito_source = wd + '/chunkdataset/obj_mito/',
         skeleton_source = wd + '/tracings/',
-        mempath = "/lustre/sdorkenw/j0126_3d_rrbarrier/"  # TODO
+        mempath = wd + '/knossosdataset/rrbarrier/'
         datapath = wd + '/neurons/'
         self.nb_cpus = cpu_count()
         self.data_path = datapath
@@ -55,11 +63,17 @@ class DataHandler(object):
 
 
 def load_ordered_mapped_skeleton(path):
-    """
-    Load nml of mapped skeleton and order trees.
-    :param path: Path to nml
-    :type path: list
-    :return: List of trees with order [skeleton, mitos, p4, az, soma]
+    """Load nml of mapped skeleton and order trees
+
+    Parameters
+    ----------
+    path : str
+        Path to nml
+
+    Returns
+    -------
+    list
+        List of trees with order [skeleton, mitos, p4, az, soma]
     """
     anno_dict = {"skeleton": 0, "mitos": 1, "p4": 2, "az": 3, "soma": 4}
     annotation = su.loadj0126NML(path)
@@ -98,22 +112,30 @@ def load_ordered_mapped_skeleton(path):
 
 
 def load_files_from_kzip(path, load_mitos):
-    """
-    Load all available files from annotation kzip.
-    :param path: string path to kzip
-    :param load_mitos: bool Load mito hull points and ids
-    :return: list of coordinates [hull, mitos, p4, az],
+    """Load all available files from annotation kzip
+
+    Parameters
+    ----------
+    path : str
+        path to kzip
+    load_mitos : bool
+        load mito hull points and ids
+
+    Returns
+    -------
+    list of np.array
+        coordinates [hull, mitos, p4, az], id lists, normals
     """
     coord_list = [np.zeros((0, 3)), np.zeros((0, 3)),
                   np.zeros((0, 3)), np.zeros((0, 3))]
     hull_normals = [np.zeros((0, 3)), np.zeros((0, 3)),
-                  np.zeros((0, 3)), np.zeros((0, 3))]
+                    np.zeros((0, 3)), np.zeros((0, 3))]
     # id_list of cell objects
     id_list = [np.zeros((0, )), np.zeros((0, )), np.zeros((0, ))]
     zf = zipfile.ZipFile(path, 'r')
     for i, filename in enumerate(['hull_points.xyz', 'mitos.txt', 'p4.txt',
                                   'az.txt']):
-        if i == 1 and load_mitos != True:
+        if i == 1 and load_mitos is not True:
             continue
         data = np.fromstring(zf.read(filename), sep=' ')
         if np.isscalar(data[0]) and data[0] == -1:
@@ -136,10 +158,16 @@ def load_files_from_kzip(path, load_mitos):
 
 
 def load_objpkl_from_kzip(path):
-    """
-    Loads object pickle file from mapped skeleton kzip.
-    :param path: str Path to kzip
-    :return: list of SegmentationObjectDataset
+    """Loads object pickle file from mapped skeleton kzip
+
+    Parameters
+    ----------
+    path : str
+        Path to kzip
+
+    Returns
+    -------
+    list of SegmentationObjectDataset
     """
     zf = zipfile.ZipFile(path, 'r')
     object_datasets = []
@@ -156,16 +184,27 @@ def load_objpkl_from_kzip(path):
     return object_datasets
 
 
-def load_anno_list(nml_list, load_mitos=True, append_obj=True):
-    """
-    Load nml's given in nml_list and append according hull information from
+def load_anno_list(fpaths, load_mitos=True, append_obj=True):
+    """Load nml's given in nml_list and append according hull information from
     xyz-file, as well as object coordinates from txt files in kzip (if given).
-    :param load_mitos: bool Load mito hull points and ids
-    :return: List of tree lists.
+
+    Parameters
+    ----------
+    fpaths : list of str
+        paths to tracings
+    load_mitos: bool
+        load mito hull points and ids
+    append_obj : bool
+        load mapped cell objects
+
+    Returns
+    -------
+    list of list of SkeletonAnnotations
+        list of mapped cell tracings
     """
     anno_list = []
     cnt = 0
-    for path in nml_list:
+    for path in fpaths:
         cnt += 1
         mapped_skel = load_mapped_skeleton(path, append_obj, load_mitos)
         if mapped_skel is None:
@@ -175,12 +214,21 @@ def load_anno_list(nml_list, load_mitos=True, append_obj=True):
 
 
 def load_mapped_skeleton(path, append_obj, load_mitos):
-    """
+    """Load mapped cell tracing and append mapped cell objects
 
-    :param path:
-    :param append_obj:
-    :param load_mitos:
-    :return:
+    Parameters
+    ----------
+    path : str
+        path to tracing kzip
+    append_obj : bool
+        append cell objects
+    load_mitos : bool
+        load mitochondria objects
+
+    Returns
+    -------
+    list of SkeletonAnnotations
+        mapped cell tracings (skel, mito, p4, az, soma)
     """
     mapped_skel = load_ordered_mapped_skeleton(path)
     if append_obj:
@@ -208,23 +256,40 @@ def load_mapped_skeleton(path, append_obj, load_mitos):
     return mapped_skel
 
 
-def get_filepaths_from_dir(dir, ending='k.zip'):
+def get_filepaths_from_dir(directory, ending='k.zip'):
+    """Collect all files with certain ending from directory
+
+    Parameters
+    ----------
+    directory: str
+        path to lookup directory
+    ending: str
+        ending of files
+
+    Returns
+    -------
+    list of str
+        paths to files
     """
-    Collect all files with certain ending from directory.
-    :param dir: str Path to lookup directory
-    :param ending: str Ending of files
-    :return: list of paths to files
-    """
-    files = [os.path.join(dir, f) for f in next(os.walk(dir))[2] if ending in f]
+    files = [os.path.join(directory, f) for f in next(os.walk(directory))[2]
+             if ending in f]
     return files
 
 
 def get_paths_of_skelID(id_list, traced_skel_dir):
-    """
-    Gather paths to kzip of skeletons with ID in id_list
-    :param id_list: list of str of skeleton ID's
-    :param traced_skel_dir: dir of mapped skeletons
-    :return: list of paths of skeletons in id_list
+    """Gather paths to kzip of skeletons with ID in id_list
+
+    Parameters
+    ----------
+    id_list: list of str
+        skeleton ID's
+    traced_skel_dir: str
+        directory of mapped skeletons
+
+    Returns
+    -------
+    list of str
+        paths of skeletons in id_list
     """
     mapped_skel_paths = get_filepaths_from_dir(traced_skel_dir)
     mapped_skel_ids = re.findall('iter_\d+_(\d+)', ''.join(mapped_skel_paths))
@@ -240,11 +305,18 @@ def get_paths_of_skelID(id_list, traced_skel_dir):
 
 
 def supp_fname_from_fpath(fpath):
-    """
-    Returns supported filename from path to written file to write it to
-    kzip.
-    :param fpath: path to file
-    :return: filename if supported, else ValueError
+    """Returns supported filename from path to written file to write it to
+    kzip
+
+    Parameters
+    ----------
+    fpath : str
+        path to file
+
+    Returns
+    -------
+    str
+        filename if supported, else ValueError
     """
     file_name = os.path.basename(fpath)
     if '.nml' in file_name or '.xml' in file_name:
@@ -274,17 +346,18 @@ def supp_fname_from_fpath(fpath):
     elif 'spiness_feat.csv' in file_name:
         file_name = 'spiness_feat.csv'
     else:
-        raise(ValueError)
+        raise ValueError
     return file_name
 
 
 def write_data2kzip(kzip_path, fpath, force_overwrite=False):
-    """
-    Write supported files to kzip of mapped annotation
-    :param kzip_path:
-    :param fpath:
-    :param force_overwrite:
-    :return:
+    """Write supported files to kzip of mapped annotation
+
+    Parameters
+    ----------
+    kzip_path : str
+    fpath : str
+    force_overwrite : bool
     """
     file_name = supp_fname_from_fpath(fpath)
     if os.path.isfile(kzip_path):
@@ -309,10 +382,14 @@ def write_data2kzip(kzip_path, fpath, force_overwrite=False):
 
 
 def remove_from_zip(zipfname, *filenames):
-    """
-    Removes filenames from zipfile.
-    :param zipfname: str Path to zipfile
-    :param filenames: list of str Files to delete
+    """Removes filenames from zipfile
+
+    Parameters
+    ----------
+    zipfname : str
+        Path to zipfile
+    filenames : list of str
+        files to delete
     """
     tempdir = tempfile.mkdtemp()
     try:
@@ -329,19 +406,34 @@ def remove_from_zip(zipfname, *filenames):
 
 
 def get_skelID_from_path(skel_path):
-    """
-    :param skel_path: path to skeleton
-    :return: int skeleton ID
+    """Parse skeleton id from filename
+
+    Parameters
+    ----------
+    skel_path : str
+        path to skeleton
+
+    Returns
+    -------
+    int
+        skeleton ID
     """
     return int(re.findall('iter_0_(\d+)', skel_path)[0])
 
 
 def connect_soma_tracing(soma):
-    """
-    :param soma: Soma tracing
-    :type soma: AnnotationObject
-    :return: Sparsely connected soma tracing
-    Connect nearby (kd-tree) nodes of soma tracings with edges
+    """Connect tracings of soma, s.t. a lot of rays are emitted. Connects nearby
+     (kd-tree) nodes of soma tracings with edges
+
+    Parameters
+    ----------
+    soma: SkeletonAnnotation
+        Soma tracing
+
+    Returns
+    -------
+    SkeletonAnnotation
+        Sparsely connected soma tracing
     """
     node_list = np.array([node for node in soma.getNodes()])
     coords = np.array([node.getCoordinate_scaled() for node in node_list])
@@ -359,12 +451,17 @@ def connect_soma_tracing(soma):
 
 
 def cell_object_id_parser(obj_trees):
-    """
-    Extracts unique object ids from object tree list for cell objects
-    'mitos', 'p4' and 'az'.
-    :param obj_trees: list of annotation objects ['mitos', 'p4', 'az']
-    :return: dictionary with keys 'mitos', 'p4' and 'az' containing unique ID's
-    as values
+    """Extracts unique object ids from object tree list for cell objects
+    'mitos', 'p4' and 'az'
+
+    Parameters
+    ----------
+    obj_trees : list of annotation objects ['mitos', 'p4', 'az']
+
+    Returns
+    -------
+    dict
+        keys 'mitos', 'p4' and 'az' containing unique object ID's as values
     """
     mito_ids = []
     p4_ids = []
@@ -391,31 +488,46 @@ def cell_object_id_parser(obj_trees):
 
 
 def write_obj2pkl(objects, path):
-    """
-    Writes SegmentationObjectDataset to pickle file.
-    :param objects: SOD
-    :param path: str to destianation
+    """Writes object to pickle file
+
+    Parameters
+    ----------
+    objects : SegmentationDatasetObject
+    path : str
+        destianation
     """
     with open(path, 'wb') as output:
-       pickle.dump(objects, output, -1)
+        pickle.dump(objects, output, -1)
 
 
 def load_pkl2obj(path):
+    """Loads pickle file of object
+
+    Parameters
+    ----------
+    path: str
+        path of source file
+
+    Returns
+    -------
+    SegmentationDatasetObject
     """
-    Loads pickle file of SegmentationObjectDataset
-    :param path: str to source file.
-    :return: SegmentatioObjectDataset
-    """
-    with open(path, 'rb') as input:
-        objects = pickle.load(input)
+    with open(path, 'rb') as inp:
+        objects = pickle.load(inp)
     return objects
 
 
 def helper_get_voxels(obj):
-    """
-    Helper function to receive object voxels.
-    :param obj: SegmentationObject
-    :return: array voxels
+    """Helper function to receive object voxel
+
+    Parameters
+    ----------
+    obj : SegmentationObject
+
+    Returns
+    -------
+    np.array
+        object voxels
     """
     try:
         voxels = obj.voxels
@@ -425,55 +537,63 @@ def helper_get_voxels(obj):
 
 
 def helper_get_hull_voxels(obj):
-    """
-    Helper function to receive object hull voxels.
-    :param obj: SegmentationObject
-    :return: array hull voxels
+    """Helper function to receive object hull voxels.
+    Parameters
+    ----------
+    obj : SegmentationObject
+
+    Returns
+    -------
+    np.array
+        object hull voxels
     """
 
     return obj.hull_voxels
 
 
 def hull2text(hull_coords, normals, path):
-    """
-    Writes hull coordinates and normals to xyz file. Each line corresponds to
+    """Writes hull coordinates and normals to xyz file. Each line corresponds to
     coordinates and normal vector of one point x y z n_x n_y n_z.
-    :param hull_coords: array
-    :param normals: array
-    :param path: str
+
+    Parameters
+    ----------
+    hull_coords : np.array
+    normals : np.array
+    path : str
     """
     print "Writing hull to .xyz file.", path
     # add ray-end-points to nml and to txt file (incl. normals)
-    file = open(path, 'wb')
+    f = open(path, 'wb')
     for i in range(hull_coords.shape[0]):
         end_point = hull_coords[i]
         normal = normals[i]
-        file.write("%d %d %d %0.4f %0.4f %0.4f\n" %
-                   (end_point[0], end_point[1], end_point[2], normal[0],
-                    normal[1], normal[2]))
-    file.close()
+        f.write("%d %d %d %0.4f %0.4f %0.4f\n" % (end_point[0], end_point[1],
+                                                  end_point[2], normal[0],
+                                                  normal[1], normal[2]))
+    f.close()
 
 
 def obj_hull2text(id_list, hull_coords_list, path):
-    """
-    Writes object hull coordinates and corresponding object ids to txt file.
-    Each line corresponds to id and coordinate vector of one object:
-     id x y z
-    :param id_list: array
-    :param hull_coords_list: array
-    :param path: str
+    """Writes object hull coordinates and corresponding object ids to txt file.
+    Each line corresponds to id and coordinate vector of one object: id x y z
+
+    Parameters
+    ----------
+    id_list : np.array
+    hull_coords_list : np.array
+    path : str
     """
     print "Writing object hull to .txt file.", path
     # add ray-end-points to nml and to txt file (incl. normals)
-    file = open(path, 'wb')
+    f = open(path, 'wb')
     for i in range(len(hull_coords_list)):
         coord = hull_coords_list[i]
-        file.write("%d %d %d\n" % (coord[0], coord[1], coord[2]))
-    file.close()
-    if id_list == []:
+        f.write("%d %d %d\n" % (coord[0], coord[1], coord[2]))
+    f.close()
+    if id_list is []:
         return
-    file = open(path[:-4]+'_id.txt', 'wb')
+    f = open(path[:-4]+'_id.txt', 'wb')
     for i in range(len(hull_coords_list)):
-        id = id_list[i]
-        file.write("%d\n" % id)
-    file.close()
+        ix = id_list[i]
+        f.write("%d\n" % ix)
+    f.close()

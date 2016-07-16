@@ -15,214 +15,6 @@ import zipfile
 from multiprocessing import Pool
 
 
-def id_lookup_in_one_chunk_thread(args):
-    chunk = args[0]
-    coordinates = np.array(args[1]) - chunk.coordinates
-    name = args[2]
-    hdf5_name = args[3]
-    if len(args) > 4:
-        obj_coords = np.array(args[4]) - chunk.coordinates
-        obj_ids = args[5]
-
-        x_obj = []
-        y_obj = []
-        z_obj = []
-        for obj_coord in obj_coords:
-            x_obj.append(obj_coord[0])
-            y_obj.append(obj_coord[1])
-            z_obj.append(obj_coord[2])
-
-    f = h5py.File(chunk.folder + name + ".h5", "r")
-    data = f[hdf5_name].value
-    f.close()
-
-    x = []
-    y = []
-    z = []
-    for coordinate in coordinates:
-        x.append(coordinate[0])
-        y.append(coordinate[1])
-        z.append(coordinate[2])
-
-    if len(args) > 4:
-        return [data[tuple([x, y, z])], data[tuple([x_obj, y_obj, z_obj])], obj_ids]
-    else:
-        return data[tuple([x, y, z])]
-
-
-def from_id_lists_to_mergelist(id_lists, coordinates, path, immutable=1):
-    if os.path.exists(path):
-        shutil.rmtree(path)
-    os.makedirs(path)
-
-    f = open(path + "/mergelist.txt", "w")
-    for ii, id_list in enumerate(id_lists):
-        f.write("%d " % id_list[0])
-        f.write("%d 0 " % immutable)
-        for id in id_list:
-            f.write("%d " % id)
-        f.write("\n%d %d %d\n" % (coordinates[ii][0], coordinates[ii][1],
-                                   coordinates[ii][2]))
-        f.write("skeleton\n \n")
-    f.close()
-
-    with zipfile.ZipFile(path + ".k.zip", "w",
-                         zipfile.ZIP_DEFLATED) as zf:
-        for root, dirs, files in os.walk(path):
-            for file in files:
-                zf.write(os.path.join(root, file), file)
-    shutil.rmtree(path)
-
-
-def from_skeleton_to_mergelist(cset, skeleton_path, name, hdf5_name,
-                               obj_coordinates=None, objs=None,
-                               mergelist_path=None, nb_processes=1):
-    if obj_coordinates is None and objs is None:
-        obj_activated = False
-    else:
-        obj_activated = True
-    if type(skeleton_path ) == str:
-        skeleton = Skeleton().fromNml(skeleton_path)
-    else:
-        skeleton = skeleton_path
-    #annos = skeleton.getAnnotations()
-    #if len(annos) != 1:
-    #    print "WARNING: Found more than one annotation!"
-    #annos[0].interpolate_nodes()
-    nodes = skeleton.getNodes()
-    coordinates = []
-    for node in nodes:
-        coordinates.append(np.array(node.getCoordinate())-np.ones(3))
-
-    chunk_rep = cset.map_coordinates_on_chunks(coordinates)
-    if obj_activated:
-        chunk_obj_rep = cset.map_coordinates_on_chunks(obj_coordinates)
-        chunk_list = np.unique(chunk_rep + chunk_obj_rep)
-    else:
-        chunk_list = np.unique(chunk_rep)
-
-    chunk_list = chunk_list[chunk_list >= 0]
-
-    coordinates = np.array(coordinates)
-    if obj_activated:
-        obj_coordinates = np.array(obj_coordinates)
-        objs = np.array(objs)
-    multi_params = []
-    for nb_chunk in chunk_list:
-        this_coordinates = coordinates[chunk_rep == nb_chunk]
-        if not obj_activated:
-            multi_params.append([cset.chunk_dict[nb_chunk], this_coordinates, name, hdf5_name])
-        else:
-            this_obj_coordinates = obj_coordinates[chunk_obj_rep == nb_chunk]
-            this_objs = objs[chunk_obj_rep == nb_chunk]
-            multi_params.append([cset.chunk_dict[nb_chunk], this_coordinates,
-                                 name, hdf5_name, this_obj_coordinates, this_objs])
-
-    if nb_processes > 1:
-        pool = Pool(nb_processes)
-        results = pool.map(id_lookup_in_one_chunk_thread, multi_params)
-        pool.close()
-        pool.join()
-    else:
-        results = map(id_lookup_in_one_chunk_thread, multi_params)
-
-    id_list = []
-    svx_list = []
-    obj_id_list = []
-    for result in results:
-        if obj_activated:
-            id_list += result[0].tolist()
-            svx_list += result[1].tolist()
-            obj_id_list += result[2].tolist()
-        else:
-            id_list += result.tolist()
-
-    id_list = np.unique(id_list)
-
-    if mergelist_path is None:
-        if obj_activated:
-            return [(obj_id_list[i], True) if svx_list[i] in id_list else (obj_id_list[i], False)
-                    for i in range(len(svx_list))]
-        else:
-            return id_list
-    else:
-        from_id_lists_to_mergelist([id_list], [coordinates[0]], mergelist_path)
-        if obj_activated:
-            return [(obj_id_list[i], True) if svx_list[i] in id_list else (obj_id_list[i], False)
-                    for i in range(len(svx_list))]
-
-
-
-def remove_from_zip(zipfname, *filenames):
-    """
-    Removes filenames from zipfile.
-    :param zipfname: str Path to zipfile
-    :param filenames: list of str Files to delete
-    """
-    tempdir = tempfile.mkdtemp()
-    try:
-        tempname = os.path.join(tempdir, 'new.zip')
-        with zipfile.ZipFile(zipfname, 'r') as zipread:
-            with zipfile.ZipFile(tempname, 'w') as zipwrite:
-                for item in zipread.infolist():
-                    if item.filename not in filenames:
-                        data = zipread.read(item.filename)
-                        zipwrite.writestr(item, data)
-        shutil.move(tempname, zipfname)
-    finally:
-        shutil.rmtree(tempdir)
-
-def parse_attributes(xml_elem, parse_input):
-    # elem - an XML parsing element containing an "attributes" member
-    # parse_input - [["attribute_name", python_type_name], ["52", int], ["1.234", float], ["neurite", str], ...]
-    # returns the list of python-typed values - [52, 1.234, "neurite", ...]
-    parse_output = []
-    attributes = xml_elem.attributes
-    for x in parse_input:
-        try:
-            parse_output.append(x[1](attributes[x[0]].value))
-        except KeyError:
-            parse_output.append(None)
-    return parse_output
-
-def parse_cET(xml_elem, parse_input, ret_all_attr=False):
-    """
-    Implementation of cElementTree Parser
-
-    Keyword arguments:
-    xml_elem -- XML Element
-    parse_input -- what the parser should look for ["whatyouarelookingfor", type]
-
-    returns a list of python-typed values
-    """
-    parse_output = []
-    already_parsed_input_keys = {}
-    additional_attr = {}
-    attributes = xml_elem.attrib
-    for x in parse_input:
-        already_parsed_input_keys[x[0]] = True
-        try:
-            parse_output.append(x[1](attributes[x[0]]))
-        except KeyError:
-                parse_output.append(None)
-    if ret_all_attr:
-        for key in attributes.keys():
-            try:
-                _ = already_parsed_input_keys[key]
-            except KeyError:
-                additional_attr[key] = attributes[key]
-        return parse_output, additional_attr
-    else:
-        return parse_output
-
-def build_attributes(xml_elem, attributes):
-    for attr in attributes:
-        try:
-            xml_elem.setAttribute(attr[0], str(attr[1]))
-        except UnicodeEncodeError:
-            xml_elem.setAttribute(attr[0], str(attr[1].encode('ascii', 'replace')))
-    return
-
 class Skeleton:
     def __init__(self):
         # Uninitialized Mandatory
@@ -236,15 +28,12 @@ class Skeleton:
         self.active_node = None
         self.edit_position = None
         self.experiment_name = None
-
-
-        # Currently hard-coded only
         self.version = '4.1.2'
         return
 
     def set_edit_position(self, edit_position):
         self.edit_position = edit_position
-    #
+
     def reset_all_ids(self):
         """
         Rebases all node IDs, starting at 1 again.
@@ -253,8 +42,6 @@ class Skeleton:
         knossos-compatible when writing to nmls.
         annotation.high_id : highest node id in this annotation
         annotation.nodeBaseID : lowest node id in this annotation
-
-
         """
         cnt_a = 1
         cnt_all_nodes = 1
@@ -269,40 +56,35 @@ class Skeleton:
                 cnt_all_nodes += 1
             a.high_id = cnt_n
 
-
     def reset_all_times(self):
         for cur_n in self.getNodes():
             cur_n.setDataElem('time', 0)
         self.skeleton_time = 0
         self.skeleton_idletime = 0
-    #
+
     def getAnnotations(self):
         return self.annotations
-    #
+
     def getNodes(self):
-        #all_nodes = set()
         all_nodes_lst = []
         for cur_annotation in self.getAnnotations():
             all_nodes_lst.extend(list(cur_annotation.getNodes()))
         all_nodes = set(all_nodes_lst)
-        # very bad line below, adding O(n^2)
-        #all_nodes = all_nodes.union(cur_annotation.getNodes())
-
         return all_nodes
-    #
+
     def getVolumes(self):
         all_volumes = set()
         for cur_annotation in self.getAnnotations():
             all_volumes = all_volumes.union(cur_annotation.getVolumes())
 
         return all_volumes
-    #
+
     def has_node(self, node):
         for cur_anno in self.getAnnotations():
             if cur_anno.has_node(node):
                 return True
         return False
-    #
+
     def add_annotation(self, annotation):
         """
         Add SkeletonAnnotation annotation to the skeleton. Node IDs in
@@ -323,8 +105,6 @@ class Skeleton:
         :param path: str
         :return:
         """
-        #self.reset_all_ids()
-
         with open(path, 'w') as trg_file:
             edges = []
             rev_edges = []
@@ -335,8 +115,6 @@ class Skeleton:
                 rev_edges.append(a.getReverseEdges())
 
             # find a root
-            #for e_dict in rev_edges:
-
             for anno_index, e_dict in enumerate(edges):
                 root_set = False
                 for src_n in e_dict.keys():
@@ -353,11 +131,9 @@ class Skeleton:
                                     '5:d}'.format(
                                 trg_id, trg_x, trg_y, trg_z, trg_r, src_id)
 
-                #2 0 16.022520 33.760513 7.047000 0.463378 1
                             trg_file.write(n_str + '\n')
                     if (len(rev_edges[anno_index][src_n]) == 0) and not \
                             root_set:
-                        #print('n id: ' + str(src_n.getUniqueID()))
                         # set the root
                         root_set = True
                         trg_x = src_n.getCoordinate()[0]
@@ -381,8 +157,6 @@ class Skeleton:
         :return:
         """
 
-
-
     def fromNml(self, filename, use_file_scaling=False, scaling='dataset', comment=None, meta_info_only=False):
         if filename.endswith('k.zip'):
             zipper = zipfile.ZipFile(filename)
@@ -398,13 +172,13 @@ class Skeleton:
         self.fromDom(doc, use_file_scaling, scaling, comment, meta_info_only=meta_info_only)
 
         return self
-    #
+
     def fromNmlString(self, nmlString, use_file_scaling=False, scaling='dataset', comment=None, meta_info_only=False):
         doc = minidom.parseString(nmlString)
         self.fromDom(doc, use_file_scaling, scaling, comment, meta_info_only=False)
 
         return self
-    #
+
     def fromDom(self, doc, use_file_scaling=False,  scaling='dataset', comment=None, meta_info_only=False):
         try:
             [self.experiment_name] = parse_attributes(
@@ -506,17 +280,14 @@ class Skeleton:
         for branch_elem in branch_elems:
             [nodeID] = parse_attributes(branch_elem, [["id", int]])
             self.branchNodes.append(nodeID)
-            #node_ID_to_node[nodeID + base_id].setComment(comment)
-
         return self
-    #
-    def fromNmlcTree(self, filename, use_file_scaling=False, scaling='dataset', comment=None):
-        """ Reads nml file with cElementTree Parser
 
+    def fromNmlcTree(self, filename, use_file_scaling=False, scaling='dataset',
+                     comment=None):
+        """Reads nml file with cElementTree Parser
         filename -- path to nml-file
         filename -- path to k.zip-file -> this might cause trouble with other
                     functions since self.filename = *.k.zip
-
         is capable of parsing patches
         """
         if filename:
@@ -541,8 +312,6 @@ class Skeleton:
             with open(filename) as fh:
                 xml_string = fh.read()
             root = cElementTree.fromstring(xml_string)
-            #tree = cElementTree.parse(filename)
-            #root = tree.getroot()
         try:
             [self.experiment_name] = parse_cET(
                 root.find("parameters").find("experiment"),
@@ -631,14 +400,13 @@ class Skeleton:
         for branch_elem in branch_elems:
             [nodeID] = parse_cET(branch_elem, [["id", int]])
             self.branchNodes.append(nodeID)
-            #node_ID_to_node[nodeID + base_id].setComment(comment)
 
         # pre init scaled coordinates for later usage
         for node in self.getNodes():
            node.getCoordinate_scaled()
 
         return self
-    #
+
     def get_high_node_id(self):
         """
         Return highest node ID in any annotation in the skeleton.
@@ -650,7 +418,7 @@ class Skeleton:
             # added to the high_id; jk 20.01.15 - not changing it to not
             # break stuff
         return max(high_ids)
-    #
+
     def toNml(self, filename, save_empty=True):
 
         try:
@@ -718,10 +486,6 @@ class Skeleton:
                  ["z", self.edit_position[2]], ])
             parameters.appendChild(edit_position)
 
-        # offset = doc.createElement("offset")
-        # build_attributes(offset, [["x", 0], ["y", 0], ["z", 0]])
-        # parameters.appendChild(offset)
-
         time = doc.createElement("time")
         build_attributes(time, [["ms", 0], ["checksum", integer_checksum(0)]])
         parameters.appendChild(time)
@@ -762,7 +526,6 @@ class Skeleton:
 
         return doc.toprettyxml()
 
-    #
     def getSkeletonTime(self):
         if self.skeleton_time == None:
             return None
@@ -770,7 +533,7 @@ class Skeleton:
             return self.skeleton_time ^ 1347211871
         else:
             return self.skeleton_time
-    #
+
     def getIdleTime(self):
         if self.skeleton_idletime == None:
             return None
@@ -778,7 +541,7 @@ class Skeleton:
             return self.skeleton_idletime ^ 1347211871
         else:
             return self.skeleton_idletime
-    #
+
     def get_version(self):
         # Check whether the version strings are in the format
         # x.y.z
@@ -797,7 +560,7 @@ class Skeleton:
             last_saved_version = [int(x) for x in self.last_saved_version.split('.')]
 
         if self.created_version == '4.0 Beta 2':
-	        created_version = [3, 99, 2]
+            created_version = [3, 99, 2]
         if self.created_version == '4.1 Alpha':
             created_version = [4, 0, 99, 2]
         if self.created_version == '4.1 Pre Alpha':
@@ -816,6 +579,7 @@ class Skeleton:
         self.scaling = scaling
     #
     pass
+
 
 class SkeletonAnnotation:
     def interpolate_nodes(self, max_node_dist_scaled=50):
@@ -869,14 +633,14 @@ class SkeletonAnnotation:
         self.high_id = 0
         self.volumes = set()
         return
-    #
+
     def __init__(self):
         self.resetObject()
         return
-    #
+
     def __len__(self):
         return len(self.nodes)
-    #
+
     def __copy__(self):
         """
         Make a complete copy of the object along with its associated nodes.
@@ -906,14 +670,14 @@ class SkeletonAnnotation:
         new.old_to_new_nodes = old_to_new_nodes
 
         return new
-    #
+
     def clear_nodes(self):
         self.nodes = set()
         self.node_ID_to_node = {}
         self.root = None
         self.nodeBaseID = 0
         self.high_id = 0
-    #
+
     def fromNml(self, annotation_elem, skeleton, base_id=0):
         self.resetObject()
 
@@ -928,7 +692,6 @@ class SkeletonAnnotation:
         for node_elem in node_elems:
             node = SkeletonNode().fromNml(self, node_elem)
             self.addNode(node)
-            #print node.getID()
         #
         # Read edges
         edge_elems = annotation_elem.getElementsByTagName("edge")
@@ -944,7 +707,7 @@ class SkeletonAnnotation:
         self.scaling = skeleton.scaling
 
         return self
-    #
+
     def fromNmlcTree(self, annotation_elem, skeleton, base_id=0):
         """ Subfunction of fromNmlcTree from NewSkeleton
 
@@ -1000,7 +763,7 @@ class SkeletonAnnotation:
             self.volumes.add(volume)
 
         return self
-    #
+
     def toNml(self, doc, annotations_elem, comments_elem, annotation_ID):
         annotation_elem = doc.createElement("thing")
         build_attributes(annotation_elem, [["id", annotation_ID]])
@@ -1017,26 +780,26 @@ class SkeletonAnnotation:
         annotation_elem.appendChild(edges_elem)
         annotations_elem.appendChild(annotation_elem)
         return
-    #
+
     def has_node(self, node):
         for cur_node in self.getNodes():
             if node == cur_node.getCoordinate():
                 return True
         return False
-    #
+
     def clearNodeEdges(self, node):
         self.edges[node] = set()
         self.reverse_edges[node] = set()
         return
-    #
+
     def getNodes(self):
         return self.nodes
-    #
+
     def iter_edges(self):
         for cur_from_node, to_nodes in self.getEdges().iteritems():
             for cur_to_node in to_nodes:
                 yield (cur_from_node, cur_to_node)
-    #
+
     def physical_length(self):
         """
         Return the physical length along all edges in the annotation.
@@ -1050,7 +813,7 @@ class SkeletonAnnotation:
                 to_node.getCoordinate_scaled())
 
         return total_length
-    #
+
     def avg_inter_node_distance(self, outlier_distance = 2000.):
         """
         Calculates the average inter node distance for an annotation. Candidate
@@ -1078,7 +841,6 @@ class SkeletonAnnotation:
                   'distance.')
             return
 
-
     def addNode(self, node):
         this_id = node.getID()
         if this_id == None or self.node_ID_to_node.has_key(this_id):
@@ -1086,15 +848,12 @@ class SkeletonAnnotation:
             node.setID(this_id)
         if this_id > self.high_id:
             self.high_id = this_id
-
         self.nodes.add(node)
         node.annotation = self
-
         self.node_ID_to_node[this_id] = node
         self.clearNodeEdges(node)
-
         return id
-    #
+
     def removeNode(self, node):
         if not node.annotation:
             raise Exception('this should not exist')
@@ -1121,111 +880,97 @@ class SkeletonAnnotation:
         del self.reverse_edges[node]
 
         return
-    #
+
     def addEdge(self, node, target_node):
         self.edges[node].add(target_node)
         self.reverse_edges[target_node].add(node)
         return
-    #
+
     def removeEdge(self, node, target_node):
-        #try:
         self.edges[node].remove(target_node)
-        #except KeyError:
-        #    pass
-        # try:
-        #     self.edges[target_node].remove(node)
-        # except KeyError:
-        #     pass
-        #try:
         self.reverse_edges[target_node].remove(node)
-        #except KeyError:
-        #    pass
-        # try:
-        #     self.reverse_edges[node].remove(target_node)
-        # except KeyError:
-        #     pass
         return
-    #
+
     def getNodeEdges(self, node):
         return self.edges[node]
-    #
+
     def getNodeReverseEdges(self, node):
         return self.reverse_edges[node]
-    #
+
     def getEdges(self):
         return self.edges
-    #
+
     def getReverseEdges(self):
         return self.reverse_edges
-    #
+
     def clearEdges(self):
         self.edges = {}
         self.reverse_edges = {}
-    #
+
     def getVolumes(self):
         return self.volumes
-    #
+
     def getRoot(self):
         return self.root
-    #
+
     def setRootInternal(self, root):
         self.root = root
         return
-    #
+
     def setRoot(self, root):
         if self.getRoot() <> None:
-            raise "Root already exists!"
+            raise RuntimeError("Root already exists!")
         root.setRoot()
         return
-    #
+
     def unRootInternal(self):
         self.root = None
         return
-    #
+
     def unRoot(self):
         if self.root == None:
-            raise "No Root!"
+            raise RuntimeError("No Root!")
         self.root.unRoot()
         return
-    #
+
     def resetRoot(self, new_root):
         if self.getRoot() <> None:
             self.unRoot()
         self.setRoot(new_root)
         return
-    #
+
     def getNodeBaseID(self):
         return self.nodeBaseID
-    #
+
     def setNodeBaseID(self, nodeBaseID):
         self.nodeBaseID = nodeBaseID
         return
-    #
+
     def getNodeByID(self, nodeID):
         return self.node_ID_to_node[nodeID]
-    #
+
     def getNodeByUniqueID(self, uniqueNodeID):
         return self.getNodeByID(uniqueNodeID - self.getNodeBaseID())
-    #
+
     def getComment(self):
         return self.comment
-    #
+
     def setComment(self, comment):
         self.comment = comment
-    #
+
     def appendComment(self, comment):
         cur_comment = self.getComment()
         if cur_comment:
             self.setComment('%s; %s' %  (cur_comment, comment))
         else:
             self.setComment(comment)
-    #
+
     def isEmpty(self):
         if len(self.nodes) == 0:
             return True
         else:
             return False
-    #
+
     def add_path(self, path):
         """
         Add all nodes in path to the annotation, connecting them linearly.
@@ -1250,12 +995,11 @@ node_metadata_elem_delim_token = "__NODE_MD_D__"
 node_metadata_elem_keyvalue_token = "__NODE_MD_K__"
 node_metadata_key_root = "__NODE_ROOT__"
 
+
 class SkeletonNode:
     def resetObject(self):
         # Using extra data dictionaries is a bad idea and somewhat redundant,
         # see definition of __copy__ below.
-        #
-
         # Uninitialize mandatory
         self.data = {}
         self.ID = None
@@ -1264,7 +1008,7 @@ class SkeletonNode:
         self.metadata = {}
         self.annotation = None
         return
-    #
+
     def __init__(self):
         self.resetObject()
         return
@@ -1289,21 +1033,21 @@ class SkeletonNode:
         new.metadata.update(self.metadata)
 
         return new
-    #
+
     def setRoot(self):
         self.addMetaDataElem((node_metadata_key_root, ""))
         return
-    #
+
     def unRoot(self):
         self.removeMetaDataKey(node_metadata_key_root)
         return
-    #
+
     def from_coordinate(coordinate):
         new = SkeletonNode()
         new.setCoordinate(coordinate)
 
         return new
-    #
+
     def from_scratch(self, annotation, x, y, z, inVp=1, inMag=1, time=0, ID=None, radius=1.0):
         self.resetObject()
         self.annotation = annotation
@@ -1318,16 +1062,13 @@ class SkeletonNode:
         self.y_scaled = self.y * self.annotation.scaling[1]
         self.z_scaled = self.z * self.annotation.scaling[2]
 
-        #self.setDataElem("x", x)
-        #self.setDataElem("y", y)
-        #self.setDataElem("z", z)
         self.setDataElem("inVp", inVp)
         self.setDataElem("radius", radius)
         self.setDataElem("inMag", inMag)
         self.setDataElem("time", time)
 
         return self
-    #
+
     def fromNml(self, annotation, node_elem):
         self.resetObject()
         self.annotation = annotation
@@ -1347,15 +1088,12 @@ class SkeletonNode:
             self.y_scaled = self.y
             self.z_scaled = self.z
 
-        #self.setDataElem("x", x)
-        #self.setDataElem("y", y)
-        #self.setDataElem("z", z)
         self.setDataElem("inVp", inVp)
         self.setDataElem("radius", radius)
         self.setDataElem("inMag", inMag)
         self.setDataElem("time", time)
         return self
-    #
+
     def fromNmlcTree(self, annotation, node_elem):
         self.resetObject()
         self.annotation = annotation
@@ -1372,10 +1110,6 @@ class SkeletonNode:
         self.y_scaled = self.y * self.annotation.scaling[1]
         self.z_scaled = self.z * self.annotation.scaling[2]
 
-
-        #self.setDataElem("x", x)
-        #self.setDataElem("y", y)
-        #self.setDataElem("z", z)
         self.setDataElem("inVp", inVp)
         self.setDataElem("radius", radius)
         self.setDataElem("inMag", inMag)
@@ -1384,7 +1118,7 @@ class SkeletonNode:
         for key, val in additional_attr.iteritems():
             self.setDataElem(key, val)
         return self
-    #
+
     def toNml(self, doc, nodes_elem, edges_elem, comments_elem):
         node_elem = doc.createElement("node")
         build_attributes(node_elem, [("id", self.getUniqueID())])
@@ -1408,26 +1142,24 @@ class SkeletonNode:
             build_attributes(comment_elem, [["node", self.getUniqueID()], ["content", comment]])
             comments_elem.appendChild(comment_elem)
         return
-    #
+
     def getData(self):
         return self.data
-    #
+
     def setData(self, data):
         self.data = data
         return
-    #
+
     def getDataElem(self, elem_name):
         return self.data[elem_name]
-    #
+
     def setDataElem(self, elem_name, elem_value):
         self.data[elem_name] = elem_value
         return
-    #
+
     def getCoordinate(self):
         return [self.x, self.y, self.z]
-        #return [self.getDataElem("x"), self.getDataElem("y"),
-        # self.getDataElem("z")]
-    #
+
     def setCoordinate(self, coord):
         if len(coord) is not 3:
             raise Exception('Coordinate dimensionality must be 3.')
@@ -1445,16 +1177,9 @@ class SkeletonNode:
         self.y_scaled = self.y * self.annotation.scaling[1]
         self.z_scaled = self.z * self.annotation.scaling[2]
 
-        #self.setDataElem("x", coord[0])
-        #self.setDataElem("y", coord[1])
-        #self.setDataElem("z", coord[2])
-    #
     def getCoordinate_scaled(self):
         return [self.x_scaled, self.y_scaled, self.z_scaled]
-        #return [self.getDataElem("x") * self.annotation.scaling[0], \
-        #        self.getDataElem("y") * self.annotation.scaling[1], \
-        #        self.getDataElem("z") * self.annotation.scaling[2]]
-    #
+
     def getID(self):
         # If no corresponding annotation and no ID is set in this
         # instances attributes, then the ID is not defined.
@@ -1464,55 +1189,55 @@ class SkeletonNode:
             self.annotation.high_id += 1
 
         return self.ID
-    #
+
     def setID(self, id):
         self.ID = id
-    #
+
     def getUniqueID(self):
         return self.getID() + self.annotation.getNodeBaseID()
-    #
+
     def getPureComment(self):
         return self.pure_comment
-    #
+
     def setPureComment(self, comment):
         self.pure_comment = comment
         return
-    #
+
     def getMetaData(self):
         return self.metadata
-    #
+
     def setMetaData(self, md):
         for md_elem in md.items():
             self.addMetaDataElem(md_elem)
         return
-    #
+
     def removeMetaData(self):
         keys = self.metadata.keys()
         for k in keys:
             self.removeMetaDataKey(k)
         return
-    #
+
     def implyMetadataAddRoot(self):
         self.annotation.setRootInternal(self)
         return
-    #
+
     def addMetaDataElem(self, md_elem):
         add_implications = {node_metadata_key_root:self.implyMetadataAddRoot}
         (k, v) = md_elem
         self.metadata[k] = v
         add_implications[k]()
         return
-    #
+
     def implyMetadataRemoveRoot(self):
         self.annotation.unRootInternal()
         return
-    #
+
     def removeMetaDataKey(self, md_key):
         remove_implications = {node_metadata_key_root:self.implyMetadataRemoveRoot}
         del self.metadata[md_key]
         remove_implications[md_key]()
         return
-    #
+
     def getComment(self):
         def getMetaDataComment(metadata):
             if len(metadata) == 0:
@@ -1521,7 +1246,7 @@ class SkeletonNode:
             return ("%s%s%s" % (node_metadata_begin_token, elems_str, node_metadata_end_token))
         comment = getMetaDataComment(self.metadata) + self.getPureComment()
         return comment
-    #
+
     def delCommentPart(self, comment):
         comment = self.getComment()
 
@@ -1531,14 +1256,14 @@ class SkeletonNode:
             comment = comment.replace('%s' % (comment, ), '')
 
             self.setComment(comment)
-    #
+
     def appendComment(self, comment):
         cur_comment = self.getComment()
         if cur_comment:
             self.setComment('%s; %s' %  (cur_comment, comment))
         else:
             self.setComment(comment)
-    #
+
     def setComment(self, comment):
         def parseComment(s):
             pure_comment = ""
@@ -1555,13 +1280,13 @@ class SkeletonNode:
                 chunks_elems += x.split(node_metadata_elem_delim_token)
             chunks_keyvalues = [x.split(node_metadata_elem_keyvalue_token) for x in chunks_elems]
             return (dict(chunks_keyvalues), pure_comment)
-        #
+
         (metadata, pure_comment) = parseComment(comment)
         self.setPureComment(pure_comment)
         self.removeMetaData()
         self.setMetaData(metadata)
         return
-    #
+
     def has_comment_token(self, token):
         comment = self.getComment()
         if comment:
@@ -1573,49 +1298,49 @@ class SkeletonNode:
 
     def getChildren(self):
         return self.annotation.getNodeEdges(self)
-    #
+
     def addChild(self, child):
         self.annotation.addEdge(self, child)
         return
-    #
+
     def removeChild(self, child):
         self.annotation.removeEdge(self, child)
         return
-    #
+
     def getParents(self):
         return self.annotation.getNodeReverseEdges(self)
-    #
+
     def addParent(self, parent):
         parent.addChild(self)
-    #
+
     def removeParent(self, parent):
         parent.removeChild(self)
         return
-    #
+
     def getSingleParent(self):
         parents = self.getParents()
         if len(parents) <> 1:
-            raise "Not a Single Parent!"
+            raise RuntimeError("Not a Single Parent!")
         return list(parents)[0]
-    #
+
     def setSingleParent(self, parent):
-        if getSingleParent() <> None:
-            raise "Parent Already Set!"
+        if self.getSingleParent() <> None:
+            raise RuntimeError("Parent Already Set!")
         self.addParent(parent)
         return
-    #
+
     def removeSingleParent(self):
         parent = self.getSingleParent()
         self.removeParent(parent)
         return
-    #
+
     def getNeighbors(self):
         return set().union(self.getParents(), self.getChildren())
-    #
+
     def detachAnnotation(self):
         self.annotation = None
         return
-    #
+
     def distance_scaled(self, to_node):
         c_1 = self.getCoordinate_scaled()
         c_2 = to_node.getCoordinate_scaled()
@@ -1625,10 +1350,11 @@ class SkeletonNode:
                 pow(c_1[2] - c_2[2], 2))
 
         return dst
-    #
+
     def degree(self):
         return len(self.getNeighbors())
     pass
+
 
 class SkeletonVolume:
     """ Class for handling patches (=volumes)  """
@@ -1640,14 +1366,14 @@ class SkeletonVolume:
         self.comment = ''
         self.vp = 0
         return
-    #
+
     def __init__(self):
         self.resetObject()
         return
-    #
+
     def __len__(self):
         return len(self.loops)
-    #
+
     def fromNmlcTree(self, patch_elem):
         """ Subfunction of fromNmlcTree from SkeletonAnnotation
 
@@ -1665,7 +1391,7 @@ class SkeletonVolume:
             self.setVP(loop.getVP())
         self.setLimits()
         return self
-    #
+
     def setLimits(self):
         """ Calculates the two outer points (3D) of the box exactly around the volume """
         for loop in self.getLoops():
@@ -1675,25 +1401,26 @@ class SkeletonVolume:
                     self.bias[dim] = bias[dim]
                 if far[dim] > self.far[dim]:
                     self.far[dim] = far[dim]
-    #
+
     def getLimits(self):
         return self.bias, self.far
-    #
+
     def getLoops(self):
         return self.loops
-    #
+
     def getComment(self):
         return self.comment
-    #
+
     def setComment(self, comment):
         self.comment = comment
-    #
+
     def getVP(self):
         return self.vp
-    #
+
     def setVP(self, vp):
         self.vp = vp
     pass
+
 
 class SkeletonLoop:
     """ Class for handling loops of patches """
@@ -1706,19 +1433,19 @@ class SkeletonLoop:
         self.last = None
 
         return
-    #
+
     def __init__(self):
         self.resetObject()
         return
-    #
+
     def __len__(self):
         return len(self.points)
-    #
+
     def add(self, point):
         self.points.add(point)
         self.last = point
         self.setLimits(point)
-    #
+
     def fillHole(self, curr, prior):
         """ Adds a point to a hole detected by fromNmlcTree()
 
@@ -1746,7 +1473,7 @@ class SkeletonLoop:
                 point.z = prior[2]-1
 
         self.add(point)
-    #
+
     def fromNmlcTree(self, loop_elem):
         """ Subfunction of fromNmlcTree from SkeletonVolume
 
@@ -1771,7 +1498,7 @@ class SkeletonLoop:
                 self.add(point)
 
         return self
-    #
+
     def setLimits(self, point):
         """ Calculates the two outer points (3D) of the box exactly around the loop """
         [x, y, z] = point.getCoordinates()
@@ -1788,13 +1515,13 @@ class SkeletonLoop:
             self.far[1] = y
         if self.far[2] < z:
             self.far[2] = z
-    #
+
     def getLimits(self):
         return self.bias, self.far
-    #
+
     def getPoints(self):
         return self.points
-    #
+
     def calculateReducedPoints(self):
         """ Creates new pointset without double appearing points """
         points = self.getPoints()
@@ -1805,16 +1532,17 @@ class SkeletonLoop:
                     check = 0
             if check == 1:
                 self.points_reduced.add(point)
-    #
+
     def getReducedPoints(self):
         return self.points_reduced
-    #
+
     def getVP(self):
         return self.vp
-    #
+
     def setVP(self, vp):
         self.vp = int(vp)
     pass
+
 
 class SkeletonLoopPoint:
     """ Class for handling points of loops """
@@ -1822,14 +1550,14 @@ class SkeletonLoopPoint:
         self.x = None
         self.y = None
         self.z = None
-    #
+
     def __init__(self):
         self.resetObject()
         return
-    #
+
     def __repr__(self):
         return "Looppoint at %s" % (self.getCoordinates(),)
-    #
+
     def fromNmlcTree(self, point_elem):
         """ Subfunction of fromNmlcTree from SkeletonLoop
 
@@ -1838,17 +1566,224 @@ class SkeletonLoopPoint:
         self.resetObject()
         self.setCoordinates(point_elem)
         return self
-    #
+
     def setCoordinates(self, point_elem):
         """ Sets the coordinates for a point and convert them to int """
         [x, y, z] = parse_cET(point_elem, [["x", float], ["y", float], ["z", float]])
         if x > -1:
             [x, y, z] = [int(x), int(y), int(z)]
         [self.x, self.y, self.z] = [x, y, z]
-    #
+
     def getCoordinates(self):
         return [self.x, self.y, self.z]
     pass
+
+
+def id_lookup_in_one_chunk_thread(args):
+    chunk = args[0]
+    coordinates = np.array(args[1]) - chunk.coordinates
+    name = args[2]
+    hdf5_name = args[3]
+    if len(args) > 4:
+        obj_coords = np.array(args[4]) - chunk.coordinates
+        obj_ids = args[5]
+
+        x_obj = []
+        y_obj = []
+        z_obj = []
+        for obj_coord in obj_coords:
+            x_obj.append(obj_coord[0])
+            y_obj.append(obj_coord[1])
+            z_obj.append(obj_coord[2])
+
+    f = h5py.File(chunk.folder + name + ".h5", "r")
+    data = f[hdf5_name].value
+    f.close()
+
+    x = []
+    y = []
+    z = []
+    for coordinate in coordinates:
+        x.append(coordinate[0])
+        y.append(coordinate[1])
+        z.append(coordinate[2])
+
+    if len(args) > 4:
+        return [data[tuple([x, y, z])], data[tuple([x_obj, y_obj, z_obj])], obj_ids]
+    else:
+        return data[tuple([x, y, z])]
+
+
+def from_id_lists_to_mergelist(id_lists, coordinates, path, immutable=1):
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    os.makedirs(path)
+
+    f = open(path + "/mergelist.txt", "w")
+    for ii, id_list in enumerate(id_lists):
+        f.write("%d " % id_list[0])
+        f.write("%d 0 " % immutable)
+        for id in id_list:
+            f.write("%d " % id)
+        f.write("\n%d %d %d\n" % (coordinates[ii][0], coordinates[ii][1],
+                                   coordinates[ii][2]))
+        f.write("skeleton\n \n")
+    f.close()
+
+    with zipfile.ZipFile(path + ".k.zip", "w",
+                         zipfile.ZIP_DEFLATED) as zf:
+        for root, dirs, files in os.walk(path):
+            for file in files:
+                zf.write(os.path.join(root, file), file)
+    shutil.rmtree(path)
+
+
+def from_skeleton_to_mergelist(cset, skeleton_path, name, hdf5_name,
+                               obj_coordinates=None, objs=None,
+                               mergelist_path=None, nb_processes=1):
+    if obj_coordinates is None and objs is None:
+        obj_activated = False
+    else:
+        obj_activated = True
+    if type(skeleton_path ) == str:
+        skeleton = Skeleton().fromNml(skeleton_path)
+    else:
+        skeleton = skeleton_path
+    nodes = skeleton.getNodes()
+    coordinates = []
+    for node in nodes:
+        coordinates.append(np.array(node.getCoordinate())-np.ones(3))
+
+    chunk_rep = cset.map_coordinates_on_chunks(coordinates)
+    if obj_activated:
+        chunk_obj_rep = cset.map_coordinates_on_chunks(obj_coordinates)
+        chunk_list = np.unique(chunk_rep + chunk_obj_rep)
+    else:
+        chunk_list = np.unique(chunk_rep)
+
+    chunk_list = chunk_list[chunk_list >= 0]
+
+    coordinates = np.array(coordinates)
+    if obj_activated:
+        obj_coordinates = np.array(obj_coordinates)
+        objs = np.array(objs)
+    multi_params = []
+    for nb_chunk in chunk_list:
+        this_coordinates = coordinates[chunk_rep == nb_chunk]
+        if not obj_activated:
+            multi_params.append([cset.chunk_dict[nb_chunk], this_coordinates, name, hdf5_name])
+        else:
+            this_obj_coordinates = obj_coordinates[chunk_obj_rep == nb_chunk]
+            this_objs = objs[chunk_obj_rep == nb_chunk]
+            multi_params.append([cset.chunk_dict[nb_chunk], this_coordinates,
+                                 name, hdf5_name, this_obj_coordinates, this_objs])
+
+    if nb_processes > 1:
+        pool = Pool(nb_processes)
+        results = pool.map(id_lookup_in_one_chunk_thread, multi_params)
+        pool.close()
+        pool.join()
+    else:
+        results = map(id_lookup_in_one_chunk_thread, multi_params)
+
+    id_list = []
+    svx_list = []
+    obj_id_list = []
+    for result in results:
+        if obj_activated:
+            id_list += result[0].tolist()
+            svx_list += result[1].tolist()
+            obj_id_list += result[2].tolist()
+        else:
+            id_list += result.tolist()
+
+    id_list = np.unique(id_list)
+
+    if mergelist_path is None:
+        if obj_activated:
+            return [(obj_id_list[i], True) if svx_list[i] in id_list else (obj_id_list[i], False)
+                    for i in range(len(svx_list))]
+        else:
+            return id_list
+    else:
+        from_id_lists_to_mergelist([id_list], [coordinates[0]], mergelist_path)
+        if obj_activated:
+            return [(obj_id_list[i], True) if svx_list[i] in id_list else (obj_id_list[i], False)
+                    for i in range(len(svx_list))]
+
+
+def remove_from_zip(zipfname, *filenames):
+    """
+    Removes filenames from zipfile.
+    :param zipfname: str Path to zipfile
+    :param filenames: list of str Files to delete
+    """
+    tempdir = tempfile.mkdtemp()
+    try:
+        tempname = os.path.join(tempdir, 'new.zip')
+        with zipfile.ZipFile(zipfname, 'r') as zipread:
+            with zipfile.ZipFile(tempname, 'w') as zipwrite:
+                for item in zipread.infolist():
+                    if item.filename not in filenames:
+                        data = zipread.read(item.filename)
+                        zipwrite.writestr(item, data)
+        shutil.move(tempname, zipfname)
+    finally:
+        shutil.rmtree(tempdir)
+
+
+def parse_attributes(xml_elem, parse_input):
+    # elem - an XML parsing element containing an "attributes" member
+    # parse_input - [["attribute_name", python_type_name], ["52", int], ["1.234", float], ["neurite", str], ...]
+    # returns the list of python-typed values - [52, 1.234, "neurite", ...]
+    parse_output = []
+    attributes = xml_elem.attributes
+    for x in parse_input:
+        try:
+            parse_output.append(x[1](attributes[x[0]].value))
+        except KeyError:
+            parse_output.append(None)
+    return parse_output
+
+
+def parse_cET(xml_elem, parse_input, ret_all_attr=False):
+    """
+    Implementation of cElementTree Parser
+
+    Keyword arguments:
+    xml_elem -- XML Element
+    parse_input -- what the parser should look for ["whatyouarelookingfor", type]
+
+    returns a list of python-typed values
+    """
+    parse_output = []
+    already_parsed_input_keys = {}
+    additional_attr = {}
+    attributes = xml_elem.attrib
+    for x in parse_input:
+        already_parsed_input_keys[x[0]] = True
+        try:
+            parse_output.append(x[1](attributes[x[0]]))
+        except KeyError:
+                parse_output.append(None)
+    if ret_all_attr:
+        for key in attributes.keys():
+            try:
+                _ = already_parsed_input_keys[key]
+            except KeyError:
+                additional_attr[key] = attributes[key]
+        return parse_output, additional_attr
+    else:
+        return parse_output
+
+
+def build_attributes(xml_elem, attributes):
+    for attr in attributes:
+        try:
+            xml_elem.setAttribute(attr[0], str(attr[1]))
+        except UnicodeEncodeError:
+            xml_elem.setAttribute(attr[0], str(attr[1].encode('ascii', 'replace')))
+    return
 
 
 def compare_version(v1, v2):

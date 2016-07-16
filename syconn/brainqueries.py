@@ -18,6 +18,11 @@ kwargs = {'work_folder': "/home/pschuber/QSUB/", 'username': "pschuber",
           'path_to_scripts': "/home/pschuber/skeleton-analysis/Philipp/QSUB"}
 
 
+def analyze_dataset(wd):
+    enrich_tracings_all(wd)
+    detect_synapses(wd)
+
+
 def enrich_tracings_all(wd):
     """Run :func: 'enrich_tracings' on available cluster nodes defined by
     somaqnodes or using multiprocessing.
@@ -40,7 +45,7 @@ def enrich_tracings_all(wd):
         start_multiprocess(enrich_tracings, list_of_lists, nb_cpus=nb_cpus)
 
 
-def enrich_tracings(wd, anno_list, map_objects=True, method='hull', radius=1200,
+def enrich_tracings(wd, anno_list, map_objects=False, method='hull', radius=1200,
                     thresh=2.2, filter_size=(2786, 1594, 250),
                     create_hull=True, max_dist_mult=1.4, detect_outlier=True,
                     dh=None, overwrite=False, nb_neighbors=20,
@@ -160,8 +165,7 @@ def enrich_tracings(wd, anno_list, map_objects=True, method='hull', radius=1200,
             ix = cnt
         path = dh.data_path + 'nml_obj/' + re.findall('[^/]+$', filepath)[0]
         skel = SkeletonMapper(annotation, dh.scaling, ix=ix, soma=soma,
-                              context_range=context_range,
-                              mem_path=dh.mem_path)
+                              context_range=context_range)
         skel.write_obj_voxel = write_obj_voxel
         if create_hull:
             skel.hull_sampling(detect_outlier=detect_outlier, thresh=thresh,

@@ -62,11 +62,20 @@ def get_orth_plane(node_com):
 
 
 def rotation_matrix(axis, theta):
-    """
-    :param axis: array Rotation-axis
-    :param theta: float Angle to rotate
-    :return: rotation matrix associated with counterclockwise rotation about
-    the given axis by theta radians.
+    """Get rotation matrix along axis and angle
+
+    Parameters
+    ----------
+    axis: np.array
+        rotation-axis
+    theta: float
+        angle to rotate
+
+    Returns
+    -------
+    np.array
+        rotation matrix associated with counterclockwise rotation about
+        the given axis by theta radians.
     """
     axis = np.asarray(axis)
     theta = np.asarray(theta)
