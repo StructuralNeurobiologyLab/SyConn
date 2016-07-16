@@ -6,3 +6,4 @@ scipy
 networkx
 git+https://github.com/knossos-project/knossos_python_tools.git
 -e .
+--global-option="build_ext"
