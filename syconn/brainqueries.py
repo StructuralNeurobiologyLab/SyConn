@@ -7,15 +7,22 @@ from processing.learning_rfc import write_feat2csv, load_rfcs
 from processing.mapper import SkeletonMapper, prepare_syns_btw_annos
 from syconn.utils.skeleton import Skeleton
 from utils.datahandler import *
-
+import os
+import multi_proc
+import sys
+import getpass
 __author__ = 'pschuber'
 
 # Multiprocessing parameter
 nb_cpus = cpu_count()
 # QSUB keyword arguments
-kwargs = {'work_folder': "/home/pschuber/QSUB/", 'username': "pschuber",
-          'python_path': "/home/pschuber/anaconda/bin/python",
-          'path_to_scripts': "/home/pschuber/skeleton-analysis/Philipp/QSUB"}
+script_path = os.path.dirname(multi_proc.multi_proc_main.__file__)
+kwargs = {'work_folder': "/home/%s/QSUB/" % getpass.getuser(),
+          'username': getpass.getuser(),
+          'python_path': sys.executable,
+          'path_to_scripts': script_path}
+
+__QSUB__ = False
 
 
 def analyze_dataset(wd):
