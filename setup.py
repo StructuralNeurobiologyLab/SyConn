@@ -24,8 +24,7 @@ config = {
     'version': '0.1',
     'install_requires': ['cython', 'knossos_python_tools', 'nose',
                          'matplotlib', 'sklearn', 'networkx', 'numpy',
-                         'scipy', 'seaborn',
-                         'elektronn'],
+                         'scipy', 'seaborn'],
     'scripts': [],  'cmdclass': cmdclass, 'ext_modules': ext_modules,
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_python_'
