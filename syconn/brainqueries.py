@@ -52,16 +52,16 @@ def enrich_tracings_all(wd):
         start_multiprocess(enrich_tracings, list_of_lists, nb_cpus=nb_cpus)
 
 
-def enrich_tracings(wd, anno_list, map_objects=False, method='hull', radius=1200,
+def enrich_tracings(anno_list, wd, map_objects=False, method='hull', radius=1200,
                     thresh=2.2, filter_size=(2786, 1594, 250),
                     create_hull=True, max_dist_mult=1.4, detect_outlier=True,
                     dh=None, overwrite=False, nb_neighbors=20,
                     nb_hull_vox=500, context_range=6000,
                     neighbor_radius=220, nb_rays=20, nb_voting_neighbors=100,
-                    write_obj_voxel=True, output_dir=None):
+                    write_obj_voxel=True):
     """Enriches a list of paths (to tracings) using dataset in working
-    directory. Writes enriched tracings to 'neuron' folder, or to
-    ouput directory if specified.
+    directory. Writes enriched tracings to 'neuron' folder in working directory,
+     DataHandler().data_path if specified as keyword argument.
 
     Parameters
     ----------
@@ -114,18 +114,14 @@ def enrich_tracings(wd, anno_list, map_objects=False, method='hull', radius=1200
         Use outlier-detection if True
     overwrite : bool
         Overwrite existing .k.zip's of mapped skeletons
-    output_dir : str
-        Path to output directory, if None dh._data_path will be used.
     write_obj_voxel : bool
         write object voxel coordinates to .k.zip
     """
     rf_axoness_p = wd + '/models/rf_axoness/rf.pkl'
     rf_spiness_p = wd + '/models/rf_spiness/rf.pkl'
-    if output_dir is None:
-        if dh is None:
-            raise RuntimeError("No output directory could be found.")
-        else:
-            output_dir = dh.data_path
+    output_dir = wd + '/neurons/'
+    if dh is not None:
+        output_dir = dh.data_path
     if not overwrite:
         existing_skel = [re.findall('[^/]+$', os.path.join(dp, f))[0] for
                          dp, dn, filenames in os.walk(output_dir)
@@ -152,7 +148,6 @@ def enrich_tracings(wd, anno_list, map_objects=False, method='hull', radius=1200
         return
     if dh is None:
         dh = DataHandler(wd)
-        dh.data_path = output_dir
     print "Found %d processed Skeletons. %d left. Writing result to %s. " \
           "Using %s barrier." % (len(existing_skel), len(todo_skel),
                                  dh.data_path, dh.mem_path)
@@ -170,7 +165,7 @@ def enrich_tracings(wd, anno_list, map_objects=False, method='hull', radius=1200
             ix = int(re.findall('.*?([\d]+)', filepath)[-3])
         except IndexError:
             ix = cnt
-        path = dh.data_path + 'nml_obj/' + re.findall('[^/]+$', filepath)[0]
+        path = dh.data_path + re.findall('[^/]+$', filepath)[0]
         skel = SkeletonMapper(annotation, dh.scaling, ix=ix, soma=soma,
                               context_range=context_range)
         skel.write_obj_voxel = write_obj_voxel
