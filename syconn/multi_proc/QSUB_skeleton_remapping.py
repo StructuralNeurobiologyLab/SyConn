@@ -1,3 +1,8 @@
+"""Executable file for QSUB job to recalculate cell hull and remap cell objects
+ to tracings
+
+QSUB wrapper for cell object mapping using remap_tracings from brainqueries.
+"""
 import sys
 from syconn.brainqueries import remap_tracings
 from syconn.multi_proc.multi_proc_main import start_multiprocess

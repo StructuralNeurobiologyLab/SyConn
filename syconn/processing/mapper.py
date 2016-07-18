@@ -48,7 +48,7 @@ class SkeletonMapper(object):
         write object voxel to kzip as binary file
     """
 
-    def __init__(self, source, scaling, ix=None, soma=None, context_range=6000):
+    def __init__(self, source, dh, ix=None, soma=None, context_range=6000):
         """
 
         Parameters
@@ -60,11 +60,11 @@ class SkeletonMapper(object):
         context_range : int
         """
         self.context_range = context_range
-        self.scaling = arr(scaling, dtype=np.int)
-        self._mem_path = '../knossosdatasets/barrier/'
+        self.scaling = arr(dh.scaling, dtype=np.int)
+        self._mem_path = dh.mem_path
         self._nb_cpus = max(int(cpu_count()-1), 1)
-        self._cset_path = '../chunkdatasets/j0126_watershed_map/'
-        self._myelin_ds_path = "../knossosdatasets/myelin/"
+        self._cset_path = dh.cs_path
+        self._myelin_ds_path = dh.myelin_ds_path
         init_anno = SkeletonAnnotation()
         init_anno.scaling = [9, 9, 20]
         init_anno.appendComment('soma')
@@ -81,7 +81,7 @@ class SkeletonMapper(object):
             self.mitos = obj_dicts[0]
             self.p4 = obj_dicts[1]
             self.az = obj_dicts[2]
-        elif source.__class__ == SkeletonAnnotation.__class__:
+        elif isinstance(source, SkeletonAnnotation):
             self._path = None
             self.ix = ix
             self.old_anno = source
@@ -871,12 +871,12 @@ class SkeletonMapper(object):
         re_process_skels = []
         # store path to written files for kzip compression
         files = []
+        print 'Writing kzip to %s. Writing object voxels=%s' \
+              % (path, str(self.write_obj_voxel))
         if '.k.zip' in path:
             path = path[:-5] + 'nml'
         elif '.zip' in path:
             path = path[:-3] + 'nml'
-        print 'Writing .k.zip to %s. Writing object voxels=%s' \
-              % (path, str(self.write_obj_voxel))
         for k, objects in enumerate([self.mitos, self.p4, self.az]):
             object_annotation = SkeletonAnnotation()
             object_annotation.scaling = self.scaling
@@ -933,13 +933,15 @@ class SkeletonMapper(object):
             hull2text(self.hull_coords, self.hull_normals, hull_path)
             files.append(hull_path)
         kzip_path = path[:-3] + "k.zip"
-        for prop, prop_feat in self.property_features.iteritems():
-            feat_path = path[:-4] + '_%s_feat.csv' % prop
-            write_feat2csv(feat_path, prop_feat, self.property_feat_names[prop])
-            files.append(feat_path)
+        try:
+            for prop, prop_feat in self.property_features.iteritems():
+                feat_path = path[:-4] + '_%s_feat.csv' % prop
+                write_feat2csv(feat_path, prop_feat, self.property_feat_names[prop])
+                files.append(feat_path)
+        except IOError:
+            pass
         for path_to_file in files:
             write_data2kzip(kzip_path, path_to_file)
-
         print "Mapped skeleton %s saved successfully at %s." % (self.ix,
                                                                 kzip_path)
 
@@ -1133,7 +1135,7 @@ def prepare_syns_btw_annos(pairwise_paths, dest_path, max_hull_dist=60,
     if sname[:6] in ['soma01', 'soma02', 'soma03', 'soma04', 'soma05']:
         nb_cpus = np.min((2, cpu_count()-1))
     else:
-        nb_cpus = np.max(np.min((16, cpu_count()-1)), 1)
+        nb_cpus = np.max([np.min((16, cpu_count()-1)), 1])
     params = [(a, b, max_hull_dist, concom_dist, dest_path) for a, b
               in pairwise_paths]
     _ = start_multiprocess(syn_btw_anno_pair, params, nb_cpus=nb_cpus)
@@ -1761,3 +1763,14 @@ def cs_btw_annos(anno_a, anno_b, max_hull_dist, concom_dist):
     return cs_list, contact_site_coord_ids
 
 
+def translate_dense_tracings():
+    fpaths = get_filepaths_from_dir('/lustre/pschuber/dense_vol_tracings/source/')
+    for p in fpaths:
+        s = load_ordered_mapped_skeleton(p)[0]
+        for n in s.getNodes():
+            n.setCoordinate(n.getCoordinate()-np.array([3540, 4843, 2418]))
+        file_name = os.path.basename(p)
+        dummy_skel = Skeleton()
+        dummy_skel.add_annotation(s)
+        dummy_skel.to_kzip("/lustre/pschuber/SyConnDenseCube/tracings/" +
+                           file_name)

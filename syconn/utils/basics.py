@@ -28,7 +28,9 @@ def get_orth_plane(node_com):
     at each node
     """
     lin_interp = np.zeros((len(node_com), 3), dtype=np.float)
-    lin_interp[1:-1] = node_com[2:]-node_com[:-2]
+    if len(node_com) < 2:
+        return np.zeros((len(node_com), 3), dtype=np.float), lin_interp
+    lin_interp[1:-1] = node_com[2:] - node_com[:-2]
     lin_interp[0] = node_com[1] - node_com[0]
     lin_interp[-1] = node_com[-1] - node_com[-2]
     n = np.linalg.norm(lin_interp, axis=1)

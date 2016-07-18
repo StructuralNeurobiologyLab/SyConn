@@ -1,3 +1,10 @@
+"""Executable file for QSUB job to find contact sites between touching
+enriched tracings.
+
+QSUB wrapper for contact site detection using prepare_syns_btw_annos from
+processing.mapper module. Feature extraction for synapse prediction is performed
+as well.
+"""
 import sys
 from syconn.processing.mapper import prepare_syns_btw_annos
 import cPickle as pickle

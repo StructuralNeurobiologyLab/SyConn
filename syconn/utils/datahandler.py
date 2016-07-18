@@ -31,18 +31,19 @@ class DataHandler(object):
         scaling : tuple of ints
             scaling of data set, s.t. data is isotropic
         """
-        p4_source = wd + '/chunkdataset/obj_p4/'
-        az_source = wd + '/chunkdataset/obj_az/'
-        mito_source = wd + '/chunkdataset/obj_mito/',
+        p4_source = wd + '/chunkdatasets/obj_p4/'
+        az_source = wd + '/chunkdatasets/obj_az/'
+        mito_source = wd + '/chunkdatasets/obj_mito/',
         skeleton_source = wd + '/tracings/',
-        mempath = wd + '/knossosdataset/rrbarrier/'
+        self.mem_path = wd + '/knossosdatasets/rrbarrier/'
+        self.cs_path = wd + '/chunkdatasets/j0126_watershed_map/'
+        self.myelin_ds_path = wd + "/knossosdatasets/myelin/"
         datapath = wd + '/neurons/'
         self.nb_cpus = cpu_count()
         self.data_path = datapath
         self.skeleton_path = skeleton_source
         if not os.path.exists(datapath):
             os.makedirs(datapath)
-        self.mem_path = mempath
         self.scaling = arr(scaling)
         self.skeletons = {}
         self.mem = None
@@ -51,9 +52,12 @@ class DataHandler(object):
         objects = [None, None, None]
         for i, source in enumerate([mito_source, p4_source, az_source]):
             if type(source) is str:
-                obj = load_dataset(source)
-                obj.init_properties()
-                print "Initialized %s objects." % object_dict[i]
+                try:
+                    obj = load_dataset(source)
+                    obj.init_properties()
+                    print "Initialized %s objects." % object_dict[i]
+                except IOError:
+                    obj = None
             else:
                 obj = source
             objects[i] = obj
