@@ -19,6 +19,13 @@ rf_params_nodewise = {'n_estimators': 2000, 'oob_score': True, 'n_jobs': -1,
 
 
 def get_cell_type_labels():
+    """Cell type labels for HVC(0), LMAN(0), STN(0), MSN(1), GP(2), FS(3)
+
+    Returns
+    -------
+    dict
+        convetion dictionary for cell type labels (str), returns integer
+    """
     labels = {}
     labels["HVC"] = 0
     labels["LMAN"] = 0
@@ -30,6 +37,12 @@ def get_cell_type_labels():
 
 
 def get_cell_type_classes_dict():
+    """
+    Returns
+    -------
+    dict
+        dictionary from integer label to full cell name as string
+    """
     label_strings_dict = {}
     label_strings_dict[0] = "Excitatory Axons"
     label_strings_dict[1] = "Medium spiny Neurons"

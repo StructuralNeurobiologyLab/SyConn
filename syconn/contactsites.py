@@ -25,28 +25,28 @@ from syconn.utils.skeleton import Skeleton, SkeletonAnnotation
 __author__ = 'pschuber'
 
 
-def collect_contact_sites(cs_dir, only_az=False):
+def collect_contact_sites(cs_dir, only_sj=False):
     """Collect contact site nodes and corresponding features of all contact sites.
 
     Parameters
     ----------
     cs_dir : str
         Path to contact site directory
-    only_az : bool
+    only_sj : bool
         If only synapse candidates are to be saved
     cs_dir : str
         path to contact site directory
-    only_az : bool
+    only_sj : bool
 
     Returns
     -------
     list of SkeletonNodes, np.array
         CS nodes (n x 3), synapse feature (n x #feat)
     """
-    if not only_az:
-        search_folder = ['cs_az/', 'cs_p4_az/', 'cs/', 'cs_p4/']
+    if not only_sj:
+        search_folder = ['cs_sj/', 'cs_vc_sj/', 'cs/', 'cs_vc/']
     else:
-        search_folder = ['cs_az/', 'cs_p4_az/']
+        search_folder = ['cs_sj/', 'cs_vc_sj/']
     sample_list_len = []
     cs_fpaths = []
     for k, ending in enumerate(search_folder):
@@ -54,8 +54,8 @@ def collect_contact_sites(cs_dir, only_az=False):
         curr_fpaths = get_filepaths_from_dir(curr_dir, ending='nml')
         cs_fpaths += curr_fpaths
         sample_list_len.append(len(curr_fpaths))
-    print "Collecting contact sites (%d CS). Only az is %s." % (len(cs_fpaths),
-                                                                str(only_az))
+    print "Collecting contact sites (%d CS). Only sj is %s." % (len(cs_fpaths),
+                                                                str(only_sj))
     if len(cs_fpaths) == 0:
         print "No data available. Returning."
         return [], np.zeros((0, ))
@@ -98,17 +98,17 @@ def write_summaries(wd):
         Path to working directory of SyConn
     """
     cs_dir = wd + '/contactsites/'
-    cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_az=True)
+    cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_sj=True)
     write_cs_summary(cs_nodes, cs_feats, cs_dir)
-    cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_az=False)
-    features, axoness_info, syn_pred = feature_valid_syns(cs_dir, only_az=True,
+    cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_sj=False)
+    features, axoness_info, syn_pred = feature_valid_syns(cs_dir, only_sj=True,
                                                           only_syn=False)
     features, axoness_info, pre_dict, all_post_ids, valid_syn_array, ax_dict =\
         calc_syn_dict(features[syn_pred], axoness_info[syn_pred], get_all=True)
     write_obj2pkl(pre_dict, cs_dir + 'pre_dict.pkl')
     write_obj2pkl(ax_dict, cs_dir + 'axoness_dict.pkl')
     write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='_all', syn_only=False)
-    features, axoness_info, syn_pred = feature_valid_syns(cs_dir, only_az=False,
+    features, axoness_info, syn_pred = feature_valid_syns(cs_dir, only_sj=False,
                                                           only_syn=False,
                                                           all_contacts=True)
     features, axoness_info, pre_dict, all_post_ids, valid_syn_array, ax_dict =\
@@ -164,9 +164,9 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
                 for dummy_node in syn_nodes:
                     dummy_anno.addNode(dummy_node)
                 cnt += 1
-                if syn_only and 'az' not in node.getComment():
+                if syn_only and 'sj' not in node.getComment():
                     continue
-                if 'az' in node.getComment():
+                if 'sj' in node.getComment():
                     overlap_vx = np.load(cs_dir + '/overlap_vx/' +
                                          cs_name + 'ol_vx.npy')
                 else:
@@ -226,15 +226,15 @@ def calc_cs_node(args):
             center_node.data['syn_feat'] = feat
             cs_ix = re.findall('cs(\d+)', anno.getComment())[0]
             add_comment = ''
-            if 'p4' in anno.getComment():
-                add_comment += '_p4'
-            if 'az' in anno.getComment():
-                add_comment += '_az'
+            if 'vc' in anno.getComment():
+                add_comment += '_vc'
+            if 'sj' in anno.getComment():
+                add_comment += '_sj'
             center_node.setComment('cs%s%s_skel_%s_%s' % (cs_ix, add_comment,
                                    str(ids[0]), str(ids[1])))
     center_node_comment = center_node.getComment()
-    center_node.data['p4_size'] = None
-    center_node.data['az_size'] = None
+    center_node.data['vc_size'] = None
+    center_node.data['sj_size'] = None
     for node in anno.getNodes():
         n_comment = node.getComment()
         if 'skelnode_area' in n_comment:
@@ -248,10 +248,10 @@ def calc_cs_node(args):
             skel_node.data['skelID'] = skel_id
             skel_node.setComment(center_node_comment+'_skelnode'+str(skel_id))
             syn_nodes.append(skel_node)
-        if '_p4-' in n_comment:
-            center_node.data['p4_size'] = node.data['radius']
-        # if '_az-' in n_comment:
-        #     center_node.data['az_size'] = node.data['radius']
+        if '_vc-' in n_comment:
+            center_node.data['vc_size'] = node.data['radius']
+        # if '_sj-' in n_comment:
+        #     center_node.data['sj_size'] = node.data['radius']
     center_node.setComment(center_node_comment+'_center')
     syn_nodes.append(center_node)
     assert len(syn_nodes) == 3, 'Number of synapse nodes different than three'
@@ -415,10 +415,10 @@ def convert_to_standard_cs_name(name):
         possible key variations
     """
     cs_nb, skel1, skel2 = re.findall('(\d+)_(\d+)_(\d+)', name)[0]
-    new_name1 = 'skel_%s_%s_cs%s_az' % (skel1, skel2, cs_nb)
-    new_name2 = 'skel_%s_%s_cs%s_p4_az' % (skel1, skel2, cs_nb)
-    new_name3 = 'skel_%s_%s_cs%s_az' % (skel2, skel1, cs_nb)
-    new_name4 = 'skel_%s_%s_cs%s_p4_az' % (skel2, skel1, cs_nb)
+    new_name1 = 'skel_%s_%s_cs%s_sj' % (skel1, skel2, cs_nb)
+    new_name2 = 'skel_%s_%s_cs%s_vc_sj' % (skel1, skel2, cs_nb)
+    new_name3 = 'skel_%s_%s_cs%s_sj' % (skel2, skel1, cs_nb)
+    new_name4 = 'skel_%s_%s_cs%s_vc_sj' % (skel2, skel1, cs_nb)
     new_name5 = 'skel_%s_%s_cs%s' % (skel2, skel1, cs_nb)
     new_name6 = 'skel_%s_%s_cs%s' % (skel1, skel2, cs_nb)
     return [new_name1, new_name2, new_name3, new_name4, new_name5, new_name6]
@@ -521,15 +521,15 @@ def get_number_cs_details(cs_path):
     ----------
     cs_path : str
     """
-    az_samples = [path for path in
-                       get_filepaths_from_dir(cs_path+'cs_az/', ending='nml')]
-    az_p4_samples = [path for path in
-                        get_filepaths_from_dir(cs_path+'cs_p4_az/', ending='nml')]
-    p4_samples = [path for path in
-                       get_filepaths_from_dir(cs_path+'cs_p4/', ending='nml')]
+    sj_samples = [path for path in
+                       get_filepaths_from_dir(cs_path+'cs_sj/', ending='nml')]
+    sj_vc_samples = [path for path in
+                        get_filepaths_from_dir(cs_path+'cs_vc_sj/', ending='nml')]
+    vc_samples = [path for path in
+                       get_filepaths_from_dir(cs_path+'cs_vc/', ending='nml')]
     cs_samples = [path for path in
                        get_filepaths_from_dir(cs_path+'cs/', ending='nml')]
-    cs_only = len(p4_samples) + len(cs_samples)
-    syn_only= len(az_samples)+len(az_p4_samples)
+    cs_only = len(vc_samples) + len(cs_samples)
+    syn_only= len(sj_samples)+len(sj_vc_samples)
     print "Found %d syn-candidates and %d contact sites." % (syn_only,
                                                              cs_only+syn_only)

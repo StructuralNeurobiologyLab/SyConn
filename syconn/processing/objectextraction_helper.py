@@ -58,7 +58,7 @@ def gauss_threshold_connected_components_thread(args):
             tmp_data = \
                 ndimage.gaussian_filter(tmp_data, sigmas[nb_hdf5_name])
 
-        if hdf5_name in ["p4", "vc"] and membrane_filename is not None and \
+        if hdf5_name in ["vc", "vc"] and membrane_filename is not None and \
                         hdf5_name_membrane is not None:
             membrane_data = datahandler.load_from_h5py(chunk.folder+membrane_filename+".h5",
                                                        hdf5_name_membrane)[0]
@@ -68,7 +68,7 @@ def gauss_threshold_connected_components_thread(args):
                                           offset[1]: membrane_data_shape[1]-offset[1],
                                           offset[2]: membrane_data_shape[2]-offset[2]]
             tmp_data[membrane_data > 255*.4] = 0
-        elif hdf5_name == ["p4", "vc"] and membrane_kd_path is not None:
+        elif hdf5_name == ["vc", "vc"] and membrane_kd_path is not None:
             kd_bar = knossosdataset.KnossosDataset()
             kd_bar.initialize_from_knossos_path(membrane_kd_path)
             membrane_data = kd_bar.from_raw_cubes_to_matrix(size, box_offset)

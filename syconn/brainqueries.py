@@ -1,5 +1,7 @@
 from itertools import combinations
-
+import multi_proc
+import sys
+import getpass
 from contactsites import write_summaries
 from multi_proc.multi_proc_main import __QSUB__, start_multiprocess, QSUB_script
 from processing.features import calc_prop_feat_dict
@@ -7,10 +9,6 @@ from processing.learning_rfc import write_feat2csv, load_rfcs
 from processing.mapper import SkeletonMapper, prepare_syns_btw_annos
 from syconn.utils.skeleton import Skeleton
 from utils.datahandler import *
-import os
-import multi_proc
-import sys
-import getpass
 __author__ = 'pschuber'
 
 # Multiprocessing parameter
@@ -87,7 +85,7 @@ def enrich_tracings(anno_list, wd, map_objects=False, method='hull', radius=1200
     radius : int
         Radius in nm. Single integer if integer radius is for
         all objects the same. If list of three integer stick to ordering
-        [mitos, p4, az].
+        [mitos, vc, sj].
     thresh : int
         Denotes the factor which is multiplied with the maximum
         membrane probability. The resulting value is used as threshold after
@@ -114,7 +112,7 @@ def enrich_tracings(anno_list, wd, map_objects=False, method='hull', radius=1200
         Number votes of skeleton hull voxels
         (membrane representation) for object-mapping.
     dh: DataHandler
-        object containing SegmentationDataObjects mitos, p4, az
+        object containing SegmentationDataObjects mitos, vc, sj
     create_hull : bool
         create skeleton membrane estimation
     max_dist_mult : float
@@ -256,7 +254,7 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
                    nb_neighbors=20, nb_hull_vox=500,
                    neighbor_radius=220, nb_rays=20, nb_voting_neighbors=100,
                    output_dir=None, write_obj_voxel=True,
-                   mito_min_votes=235, p4_min_votes=191, az_min_votes=346,
+                   mito_min_votes=235, vc_min_votes=191, sj_min_votes=346,
                    recalc_prop_only=True, context_range=6000):
     """ Remap objects in tracings with pre-calculated cell hull
 
@@ -269,16 +267,16 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
     mapped_skel_paths : list of str
         Paths to tracings
     dh: DataHandler
-        object containing SegmentationDataObjects mitos, p4, az
+        object containing SegmentationDataObjects mitos, vc, sj
     output_dir : str
         path to output dir. If none, use given path
     write_obj_voxel : bool
         write object voxel to k.zip
-    az_min_votes : int
+    sj_min_votes : int
         Best F2 score found by eval
     mito_min_votes : int
         Best F1 score found by eval
-    p4_min_votes : int
+    vc_min_votes : int
         Best F2 score found by eval
     method : str
         Either 'kd' for fix radius or 'hull'/'supervoxel' if
@@ -286,7 +284,7 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
     radius : int
         Radius in nm. Single integer if integer radius is for all
         objects the same. If list of three integer stick to ordering
-        [mitos, p4, az].
+        [mitos, vc, sj].
     thresh : float
         Denotes the factor which is multiplied with the maximum
         membrane probability. The resulting value is used as threshold after
@@ -302,7 +300,7 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
         minimum number of neighbors needed during
         outlier detection for a single hull point to survive.
     filter_size : List of integer
-        for each object [mitos, p4, az]
+        for each object [mitos, vc, sj]
     nb_hull_vox : int
         Number of object hull voxels which are used to
         estimate spatial proximity to skeleton.
@@ -331,7 +329,7 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
     for skel_path in mapped_skel_paths:
         cnt += 1
         # get first element in list and only skeletonAnnotation
-        mapped_skel_old, mito, p4, az, soma = \
+        mapped_skel_old, mito, vc, sj, soma = \
             load_anno_list([skel_path], load_mitos=False)[0]
         if output_dir is not None:
             if not os.path.exists(output_dir):
@@ -359,8 +357,8 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
             if dh is None:
                 dh = DataHandler(wd)
             new_skel.obj_min_votes['mitos'] = mito_min_votes
-            new_skel.obj_min_votes['p4'] = p4_min_votes
-            new_skel.obj_min_votes['az'] = az_min_votes
+            new_skel.obj_min_votes['vc'] = vc_min_votes
+            new_skel.obj_min_votes['sj'] = sj_min_votes
             new_skel.write_obj_voxel = write_obj_voxel
             new_skel.annotate_objects(
                 dh, radius, method, thresh, filter_size,
@@ -381,8 +379,8 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
             dummy_skel = Skeleton()
             dummy_skel.add_annotation(new_skel.old_anno)
             dummy_skel.add_annotation(mito)
-            dummy_skel.add_annotation(p4)
-            dummy_skel.add_annotation(az)
+            dummy_skel.add_annotation(vc)
+            dummy_skel.add_annotation(sj)
             if soma is not None:
                 dummy_skel.add_annotation(soma)
             dummy_skel.toNml(path[:-5] + 'nml')
@@ -406,7 +404,7 @@ def detect_synapses(wd):
     """
     nml_list = get_filepaths_from_dir(wd + '/neurons/')
     cs_path = wd + '/contactsites/'
-    for ending in ['', 'cs', 'cs_p4', 'cs_az', 'cs_p4_az', 'pairwise',
+    for ending in ['', 'cs', 'cs_vc', 'cs_sj', 'cs_vc_sj', 'pairwise',
                    'overlap_vx']:
         if not os.path.exists(cs_path+ending):
             os.makedirs(cs_path+ending)

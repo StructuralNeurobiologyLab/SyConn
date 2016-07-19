@@ -1,98 +1,12 @@
-import numpy as np
-import os
-import re
-import time
-from multiprocessing import Pool, Manager, cpu_count
-from numpy import array as arr
-from sys import stdout
-
 import networkx as nx
-from sklearn.externals import joblib
-
-from features import assign_property2node, majority_vote,\
-    update_property_feat_kzip
-from learning_rfc import cell_classification, load_csv2feat
+import numpy as np
+from numpy import array as arr
+import re
+from features import assign_property2node, majority_vote
+from learning_rfc import cell_classification
 from syconn.utils import skeleton_utils as su
-from syconn.utils.datahandler import load_ordered_mapped_skeleton
-from syconn.utils.skeleton import Skeleton, SkeletonAnnotation
+from syconn.utils.skeleton import SkeletonAnnotation
 __author__ = 'philipp'
-
-
-def predict_axoness_mappedskel(skel_fpaths, recompute_feat=False):
-    """Predict axoness of each node on list of mapped skeletons multiprocessed
-
-    Parameters
-    ----------
-    skel_fpaths : list of str
-        paths to tracings
-    recompute_feat : bool
-        recompute axoness features
-    """
-    nb_cpus = cpu_count()
-    pool = Pool(processes=nb_cpus)
-    m = Manager()
-    q = m.Queue()
-    params = [(path, q, recompute_feat) for path in skel_fpaths]
-    result = map(predict_axoness_of_single_mappedskel, params)
-    # monitor loop
-    while True:
-        if result.ready():
-            break
-        else:
-            size = float(q.qsize())
-            stdout.write("\r%0.2f" % (size / len(params)))
-            stdout.flush()
-            time.sleep(4)
-    _ = result.get()
-    pool.close()
-    pool.join()
-
-
-def predict_axoness_of_single_mappedskel(args):
-    """Predict  axoness of mapped skeleton. Helper function of
-    ``predict_axoness_mappedskel``. Saves mapped skeleton with predicted
-    axoness at origin.
-    """
-    path, q, recompute_feat = args
-    anno, mitos, p4, az = load_ordered_mapped_skeleton(path)
-    rfc_axoness = joblib.load('/lustre/pschuber/gt_axoness/rfc/rfc_axoness.pkl')
-    if recompute_feat:
-        update_property_feat_kzip(path)
-    print "Load feature from file."
-    input, header = load_csv2feat(path)
-    axoness_feat = input[:, 1:]
-    node_ids = input[:, 0].astype(np.int64)
-    proba = rfc_axoness.predict_proba(axoness_feat)
-    # TODO bug in newskeleton! correct to fix it like that?
-    anno_node_ids = [node.getID() for node in anno.getNodes()]
-    assert len(node_ids) == len(anno_node_ids), 'Length of stored features and'\
-                                                'anno nodes differ!'
-    diff = np.abs(np.min(node_ids) - np.min(anno_node_ids))
-    print "Difference between node ids and saved node IDS:", diff
-    for k, node_id in enumerate(node_ids):
-        node = anno.getNodeByID(node_id + diff)
-        node_comment = node.getComment()
-        ax_ix = node_comment.find('axoness')
-        pred = np.argmax(proba[k])
-        if ax_ix == -1:
-            node.appendComment('axoness%d' % pred)
-        else:
-            help_list = list(node_comment)
-            help_list[ax_ix+7] = str(pred)
-            node.setComment("".join(help_list))
-        for ii in range(len(proba[k])):
-            node.setDataElem('axoness_proba%d' % ii, proba[k, ii])
-    majority_vote(anno, 'axoness', 6000)
-    grow_out_soma(anno)
-    majority_processes(anno)
-    dummy_skel = Skeleton()
-    dummy_skel.add_annotation(anno)
-    dummy_skel.add_annotation(mitos)
-    dummy_skel.add_annotation(p4)
-    dummy_skel.add_annotation(az)
-    dummy_skel.to_kzip(path[:-6] + '_smoothed_process_majority.k.zip')
-    if q is not None:
-        q.put(1)
 
 
 def predict_axoness_from_node_comments(anno):
@@ -242,7 +156,7 @@ def majority_processes(anno):
 
 
 def calc_distance2soma(graph, nodes):
-    """ Calculates the distance to a soma node for each node and stores it
+    """Calculates the distance to a soma node for each node and stores it
     inplace in node.data['dist2soma']. Building depth first search graph at
     each node for sorted node ordering.
 
@@ -264,9 +178,9 @@ def calc_distance2soma(graph, nodes):
 
 
 def grow_out_soma(anno, max_dist=700):
-    """
-    Grows out soma nodes, in order to overcome false negative soma nodes which
+    """Grows out soma nodes, in order to overcome false negative soma nodes which
     should have separated axon and dendritic processes.
+
     Parameters
     ----------
     anno : SkeletonAnnotation
