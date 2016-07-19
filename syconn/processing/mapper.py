@@ -7,16 +7,7 @@ from multiprocessing import Pool, Manager
 from scipy import sparse
 from shutil import copyfile
 from sys import stdout
-
 import networkx as nx
-from knossos_utils import chunky
-from knossos_utils.knossosdataset import KnossosDataset
-from sklearn.externals import joblib
-from syconn.utils.skeleton import Skeleton
-from syconn.utils.skeleton import SkeletonNode
-from syconn.utils.skeleton import from_skeleton_to_mergelist
-from syconn.ray_casting.ray_casting_radius import ray_casting_radius
-
 from axoness import majority_vote
 from axoness import predict_axoness_from_nodes
 from features import calc_prop_feat_dict
@@ -26,6 +17,13 @@ from syconn.utils.datahandler import *
 from syconn.utils.datasets import segmentationDataset
 from synapticity import parse_synfeature_from_node
 from ..multi_proc.multi_proc_main import start_multiprocess
+from knossos_utils import chunky
+from knossos_utils.knossosdataset import KnossosDataset
+from sklearn.externals import joblib
+from syconn.utils.skeleton import Skeleton
+from syconn.utils.skeleton import SkeletonNode
+from syconn.utils.skeleton import from_skeleton_to_mergelist
+from syconn.ray_casting.ray_casting_radius import ray_casting_radius
 
 
 class SkeletonMapper(object):
@@ -50,7 +48,6 @@ class SkeletonMapper(object):
 
     def __init__(self, source, dh, ix=None, soma=None, context_range=6000):
         """
-
         Parameters
         ----------
         source: SkeletonAnnotation/str

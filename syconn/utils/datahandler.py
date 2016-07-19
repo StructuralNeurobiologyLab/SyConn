@@ -1,16 +1,14 @@
-import cPickle as pickle
 import os
 import shutil
 import tempfile
 import zipfile
 from multiprocessing import cpu_count
-
 from basics import *
 from datasets import load_dataset
 from syconn.utils import skeleton_utils as su
 from syconn.utils.datasets import segmentationDataset
 from syconn.utils.skeleton import SkeletonAnnotation
-
+import cPickle as pickle
 __author__ = 'pschuber'
 
 

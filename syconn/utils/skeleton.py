@@ -16,6 +16,16 @@ from multiprocessing import Pool
 
 
 class Skeleton:
+    """
+    Basic class for cell tracings used in Knossos
+
+    Attributes
+    ----------
+    annotations : set of SkeletonAnnotations
+        several tracings of one cell
+    scaling : tuple
+        scaling of dataset
+    """
     def __init__(self):
         # Uninitialized Mandatory
         self.annotations = set()

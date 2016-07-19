@@ -5,9 +5,7 @@ import zipfile
 from collections import Counter
 from numpy import array as arr
 from scipy import spatial
-
 import networkx as nx
-
 from learning_rfc import write_feat2csv, cell_classification
 from syconn.utils import skeleton_utils as su
 from syconn.utils.basics import euclidian_distance

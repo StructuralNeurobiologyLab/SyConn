@@ -1,5 +1,8 @@
 from itertools import combinations
-
+import os
+import multi_proc
+import sys
+import getpass
 from contactsites import write_summaries
 from multi_proc.multi_proc_main import __QSUB__, start_multiprocess, QSUB_script
 from processing.features import calc_prop_feat_dict
@@ -7,10 +10,6 @@ from processing.learning_rfc import write_feat2csv, load_rfcs
 from processing.mapper import SkeletonMapper, prepare_syns_btw_annos
 from syconn.utils.skeleton import Skeleton
 from utils.datahandler import *
-import os
-import multi_proc
-import sys
-import getpass
 __author__ = 'pschuber'
 
 # Multiprocessing parameter
