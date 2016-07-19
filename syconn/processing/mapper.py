@@ -1544,7 +1544,7 @@ def feature_valid_syns(cs_dir, only_az=True, only_syn=True, all_contacts=False):
     np.array (n x f), np.array (n x 1), np.array (n x 1)
         features, array of contact site IDS, boolean array of synapse prediction
     """
-    clf_path = cs_dir + '/../models/rf_synapses/rf_syn.pkl'
+    clf_path = cs_dir + '/../models/rf_synapses/rfc_syn.pkl'
     cs_fpaths = []
     if only_az:
         search_folder = ['cs_az/', 'cs_p4_az/']
