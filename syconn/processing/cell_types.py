@@ -46,12 +46,14 @@ def get_cell_type_classes_dict():
 
 
 def save_cell_type_clf(gt_path, clf_used='rf', load_data=True):
-    """
-    Save axoness clf specified by clf_used to gt_directory.
+    """Save axoness clf specified by clf_used to gt_directory.
+
     Parameters
     ----------
     gt_path : str
         path to cell type gt
+    celf_used : str
+    load_data : bool
     """
     X_cells_types, Y_cells_types = load_celltype_gt(load_data=load_data)
     save_train_clf(X_cells_types, Y_cells_types, clf_used, gt_path, params=rf_params)
@@ -93,7 +95,8 @@ def find_cell_types_from_dict(wd, cell_type):
     ----------
     wd : str
         Path to working directory
-
+    cell_type : int
+        label (0 = EA, 1 = MSN, 2 = GP, 3 = INT)
     Returns
     -------
     list of str

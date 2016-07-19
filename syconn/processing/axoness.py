@@ -13,18 +13,20 @@ from features import assign_property2node, majority_vote,\
     update_property_feat_kzip
 from learning_rfc import cell_classification, load_csv2feat
 from syconn.utils import skeleton_utils as su
-from syconn.utils.datahandler import get_filepaths_from_dir, \
-    load_ordered_mapped_skeleton, get_skelID_from_path
+from syconn.utils.datahandler import load_ordered_mapped_skeleton
 from syconn.utils.skeleton import Skeleton, SkeletonAnnotation
 __author__ = 'philipp'
 
 
 def predict_axoness_mappedskel(skel_fpaths, recompute_feat=False):
-    """
-    Predict axoness of each node on list of mapped skeletons.
+    """Predict axoness of each node on list of mapped skeletons multiprocessed
+
+    Parameters
+    ----------
     skel_fpaths : list of str
+        paths to tracings
     recompute_feat : bool
-    :return:
+        recompute axoness features
     """
     nb_cpus = cpu_count()
     pool = Pool(processes=nb_cpus)

@@ -21,6 +21,29 @@ class DataHandler(object):
 
     Attributes
     ----------
+    wd : str
+        path to working directory, by default all other paths will lead to
+        subfolders of this directory
+    mem_path : str
+        path to barrier prediction
+    cs_path : str
+        path to supervoxel data
+    myelin_ds_path : str
+        path to myelin prediction
+    skeleton_path : str
+        path to cell tracings
+    data_path : str
+        output directory for mapped cell tracings
+    scaling : np.array
+        scaling of dataset, s.t. after applying coordinates are isotropic and
+        in nm
+    mem : KnossosDataset
+        will be assigned automatically
+    mem_offset :
+        optional offeset of dataset
+    mitos/p4/az : SegmentationDataset
+        Dataset which contains cell objects of mitochondria, vesicle clouds and
+        synaptic junctions respectively
     """
     def __init__(self, wd, scaling=(9., 9., 20.)):
         """
@@ -31,21 +54,19 @@ class DataHandler(object):
         scaling : tuple of ints
             scaling of data set, s.t. data is isotropic
         """
+        self.wd = wd
         p4_source = wd + '/chunkdatasets/obj_p4/'
         az_source = wd + '/chunkdatasets/obj_az/'
-        mito_source = wd + '/chunkdatasets/obj_mito/',
-        skeleton_source = wd + '/tracings/',
+        mito_source = wd + '/chunkdatasets/obj_mito/'
         self.mem_path = wd + '/knossosdatasets/rrbarrier/'
         self.cs_path = wd + '/chunkdatasets/j0126_watershed_map/'
         self.myelin_ds_path = wd + "/knossosdatasets/myelin/"
-        datapath = wd + '/neurons/'
+        self.data_path = wd + '/neurons/'
+        self.skeleton_path = wd + '/tracings/'
         self.nb_cpus = cpu_count()
-        self.data_path = datapath
-        self.skeleton_path = skeleton_source
-        if not os.path.exists(datapath):
-            os.makedirs(datapath)
+        if not os.path.exists(self.data_path):
+            os.makedirs(self.data_path)
         self.scaling = arr(scaling)
-        self.skeletons = {}
         self.mem = None
         self.mem_offset = arr([0, 0, 0])
         object_dict = {0: "mitos", 1: "p4", 2: "az"}

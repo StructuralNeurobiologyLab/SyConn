@@ -54,10 +54,15 @@ class SkeletonMapper(object):
         Parameters
         ----------
         source: SkeletonAnnotation/str
-        scaling: tuple of int
+            initial tracing object or path to .k.zip file
+        dh: DataHandler
+            DataHandler object
         ix : int
+            index of tracings
         soma : SkeletonAnnotation
+            if additional soma tracing is available
         context_range : int
+            range for feature extraction of spiness and axoness
         """
         self.context_range = context_range
         self.scaling = arr(dh.scaling, dtype=np.int)

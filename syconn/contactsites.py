@@ -135,7 +135,7 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
     syn_only: bool
         if only synapses are to be saved.
     """
-    clf_path = cs_dir + '/../models/rf_synapses/rf_syn.pkl'
+    clf_path = cs_dir + '/../models/rf_synapses/rfc_syn.pkl'
     print "\nUsing %s for synapse prediction." % clf_path
     rfc_syn = joblib.load(clf_path)
     dummy_skel = Skeleton()
