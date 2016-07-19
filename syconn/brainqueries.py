@@ -50,7 +50,7 @@ def enrich_tracings_all(wd, overwrite=False):
         list_of_lists = [[anno_list[i::60], wd, overwrite] for i in xrange(60)]
         QSUB_script(list_of_lists, 'skeleton_mapping', **kwargs)
     else:
-        enrich_tracings(anno_list, wd, overwrite=overwrite)
+        enrich_tracings(anno_list, wd, overwrite=True)
 
 
 def enrich_tracings_star(params):

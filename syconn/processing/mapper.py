@@ -1204,296 +1204,298 @@ def syn_btw_anno_pair(params):
     max_p4_dist = 80
     max_az_dist = 40
     min_cs_area = 0.05 * 1e6
-    try:
-        a = load_anno_list([path_a], load_mitos=False)[0]
-        az_dict = load_objpkl_from_kzip(path_a)[2].object_dict
-        b = load_anno_list([path_b], load_mitos=False)[0]
-        id2skel = lambda x: str(a[0].filename) if np.int(x) == 0 else\
-            str(b[0].filename)
-        az_dict.update(load_objpkl_from_kzip(path_b)[2].object_dict)
-        scaling = a[0].scaling
-        match = re.search(r'iter_0_(\d+)', a[0].filename)
-        if match:
-            a[0].filename = match.group(1)
-        match = re.search(r'iter_0_(\d+)', b[0].filename)
-        if match:
-            b[0].filename = match.group(1)
-        annotation_name = 'skel_' + a[0].filename + '_' + b[0].filename
-        # DO similarity check and skip combination if true
-        if a[0].filename == b[0].filename:
-            print "\n Skipping nearly identical skeletons: %s and %s, " \
-                  "because of identical ID.\n " % (a[0].filename, b[0].filename)
-            return None
-        if similarity_check(a[0], b[0]):
-            print "\n Skipping nearly identical skeletons: %s and %s, " \
-                  "because of similarity check.\n" % (a[0].filename, b[0].filename)
-            return None
-        csites, csite_ids = cs_btw_annos(a[0], b[0], max_hull_dist, concom_dist)
-        if len(csites) == 0:
-            return None
+    # try:
+    a = load_anno_list([path_a], load_mitos=False)[0]
+    az_dict = load_objpkl_from_kzip(path_a)[2].object_dict
+    b = load_anno_list([path_b], load_mitos=False)[0]
+    id2skel = lambda x: str(a[0].filename) if np.int(x) == 0 else\
+        str(b[0].filename)
+    az_dict.update(load_objpkl_from_kzip(path_b)[2].object_dict)
+    scaling = a[0].scaling
+    match = re.search(r'iter_0_(\d+)', a[0].filename)
+    if match:
+        a[0].filename = match.group(1)
+    match = re.search(r'iter_0_(\d+)', b[0].filename)
+    if match:
+        b[0].filename = match.group(1)
+    annotation_name = 'skel_' + a[0].filename + '_' + b[0].filename
+    # DO similarity check and skip combination if true
+    if a[0].filename == b[0].filename:
+        print "\n Skipping nearly identical skeletons: %s and %s, " \
+              "because of identical ID.\n " % (a[0].filename, b[0].filename)
+        return None
+    if similarity_check(a[0], b[0]):
+        print "\n Skipping nearly identical skeletons: %s and %s, " \
+              "because of similarity check.\n" % (a[0].filename, b[0].filename)
+        return None
+    csites, csite_ids = cs_btw_annos(a[0], b[0], max_hull_dist, concom_dist)
+    if len(csites) == 0:
+        return None
 
-        # save information about pairwise csites in one nml
-        pairwise_anno = SkeletonAnnotation()
-        pairwise_anno.appendComment(annotation_name)
-        pairwise_anno.scaling = scaling
+    # save information about pairwise csites in one nml
+    pairwise_anno = SkeletonAnnotation()
+    pairwise_anno.appendComment(annotation_name)
+    pairwise_anno.scaling = scaling
 
-        # get az_objects with hull voxels if available
-        az_nodes = list(a[3].getNodes()) + list(b[3].getNodes())
-        az_ids = []
-        for node in az_nodes:
-            global_az_id = np.int(re.findall('az-(\d+)', node.getComment())[0])
-            az_ids.append(global_az_id)
-        az_id_to_ix = {}
-        for i, entry in enumerate(az_ids):
-            az_id_to_ix[entry] = i
-        if len(a[0].az_hull_coords) != 0 or len(b[0].az_hull_coords) != 0:
-            az_hull_voxel = np.concatenate((a[0].az_hull_coords,
-                                            b[0].az_hull_coords), axis=0)
-            az_ids = np.concatenate((a[0].az_hull_ids,
-                                            b[0].az_hull_ids), axis=0)
-            az_tree = spatial.cKDTree(az_hull_voxel)
+    # get az_objects with hull voxels if available
+    az_nodes = list(a[3].getNodes()) + list(b[3].getNodes())
+    az_ids = []
+    for node in az_nodes:
+        global_az_id = np.int(re.findall('az-(\d+)', node.getComment())[0])
+        az_ids.append(global_az_id)
+    az_id_to_ix = {}
+    for i, entry in enumerate(az_ids):
+        az_id_to_ix[entry] = i
+    if len(a[0].az_hull_coords) != 0 or len(b[0].az_hull_coords) != 0:
+        az_hull_voxel = np.concatenate((a[0].az_hull_coords,
+                                        b[0].az_hull_coords), axis=0)
+        az_ids = np.concatenate((a[0].az_hull_ids,
+                                        b[0].az_hull_ids), axis=0)
+        az_tree = spatial.cKDTree(az_hull_voxel)
+    else:
+        az_tree = None
+    # get p4_objects with hull voxels if available
+    p4_nodes = list(a[2].getNodes()) + list(b[2].getNodes())
+    p4_ids = []
+    for node in p4_nodes:
+        global_p4_id = np.int(re.findall('p4-(\d+)', node.getComment())[0])
+        p4_ids.append(global_p4_id)
+    p4_id_to_ix = {}
+    for i, entry in enumerate(p4_ids):
+        p4_id_to_ix[entry] = i
+    if len(a[0].p4_hull_coords) != 0 or len(b[0].p4_hull_coords) != 0:
+        p4_hull_voxel = np.concatenate((a[0].p4_hull_coords,
+                                        b[0].p4_hull_coords), axis=0)
+        p4_ids = np.concatenate((a[0].p4_hull_ids,
+                                        b[0].p4_hull_ids), axis=0)
+        p4_tree = spatial.cKDTree(p4_hull_voxel)
+    else:
+        p4_tree = None
+
+    # iterate over all contact sites between skeletons, calc skeleton
+    # kd-tree in advance
+    a_skel_node_list = [node for node in a[0].getNodes()]
+    a_skel_node_coords = arr([node.getCoordinate() for node in
+                           a_skel_node_list]) * arr(scaling)
+    a_skel_node_tree = spatial.cKDTree(a_skel_node_coords)
+    b_skel_node_list = [node for node in b[0].getNodes()]
+    b_skel_node_coords = arr([node.getCoordinate() for node in
+                           b_skel_node_list]) * arr(scaling)
+    b_skel_node_tree = spatial.cKDTree(b_skel_node_coords)
+    for i, csite in enumerate(csites):
+        p4_bool = False
+        az_bool = False
+        # save information about one contact site in extra nml dependent on
+        # occuring p4 and az (four different categories)
+        contact_site_name = annotation_name+'_cs%d' % (i+1)
+        contact_site_anno = SkeletonAnnotation()
+        contact_site_anno.scaling = scaling
+        curr_csite_ids = arr(csite_ids[i])
+        csite_name = 'cs'+str(i+1)+'_'
+        csite_tree = spatial.cKDTree(csite)
+
+        # get hull area
+        csb_area = 0
+        csa_area = 0
+        csb_points = arr(csite)[curr_csite_ids]
+        csa_points = arr(csite)[~curr_csite_ids]
+        try:
+            if np.sum(curr_csite_ids) > 3:
+                csb_area = convex_hull_area(csb_points)
+        except Exception, e:
+            print e
+            print "Could not calculate a_area!!!!"
+        try:
+            if np.sum(~curr_csite_ids) > 3:
+                csa_area = convex_hull_area(csa_points)
+        except Exception, e:
+            print e
+            print "Could not calculate b_area!!!!"
+        for j, coord in enumerate(csite):
+            coord_id = curr_csite_ids[j]
+            node = SkeletonNode().from_scratch(
+                contact_site_anno, coord[0]/scaling[0], coord[1]/scaling[1],
+                coord[2]/scaling[2])
+            node.setPureComment(csite_name + id2skel(coord_id) + '_hull')
+            pairwise_anno.addNode(node)
+        mean_cs_area = np.mean((csb_area, csa_area))
+        if mean_cs_area < min_cs_area:
+            print "Skipping cs because of area:", mean_cs_area
+            continue
+
+        # get hull distance
+        csa_tree = spatial.cKDTree(csa_points)
+        dist, ixs = csa_tree.query(csb_points, 1)
+        cs_dist = np.min(dist)
+        # check p4 and az
+        if az_tree is not None:
+            near_az_ixs = az_tree.query_ball_point(csite, max_az_dist)
+            near_az_ids = list(set([az_ids[id] for sublist in near_az_ixs.tolist()
+                                    for id in sublist]))
         else:
-            az_tree = None
-        # get p4_objects with hull voxels if available
-        p4_nodes = list(a[2].getNodes()) + list(b[2].getNodes())
-        p4_ids = []
-        for node in p4_nodes:
-            global_p4_id = np.int(re.findall('p4-(\d+)', node.getComment())[0])
-            p4_ids.append(global_p4_id)
-        p4_id_to_ix = {}
-        for i, entry in enumerate(p4_ids):
-            p4_id_to_ix[entry] = i
-        if len(a[0].p4_hull_coords) != 0 or len(b[0].p4_hull_coords) != 0:
-            p4_hull_voxel = np.concatenate((a[0].p4_hull_coords,
-                                            b[0].p4_hull_coords), axis=0)
-            p4_ids = np.concatenate((a[0].p4_hull_ids,
-                                            b[0].p4_hull_ids), axis=0)
-            p4_tree = spatial.cKDTree(p4_hull_voxel)
+            near_az_ids = []
+        overlap = 0
+        abs_ol = 0
+        overlap_cs = 0
+        overlap_area = 0
+        overlap_coords = np.array([])
+        for az_id in near_az_ids:
+            az_ix = az_id_to_ix[az_id]
+            node = copy.copy(az_nodes[az_ix])
+            curr_az_voxel = np.array(az_dict[az_id].voxels) * scaling
+            overlap_new, overlap_cs_new, overlap_area_new,\
+                center_coord_new, overlap_coords_new = calc_overlap(
+                    csite, curr_az_voxel, vx_overlap_dist)
+            abs_ol_new = overlap_new*len(curr_az_voxel)
+            old_comment = node.getComment()
+            node.setPureComment(csite_name + 'relol%0.3f_absol%d' %
+                                (overlap_new, abs_ol_new) + old_comment)
+            contact_site_anno.addNode(node)
+            pairwise_anno.addNode(node)
+            if overlap_new > overlap:
+                overlap = overlap_new
+                abs_ol = abs_ol_new
+                overlap_cs = overlap_cs_new
+                overlap_area = overlap_area_new
+                overlap_coords = overlap_coords_new
+        if p4_tree is not None:
+            near_p4_ixs = p4_tree.query_ball_point(csite, max_p4_dist)
+            near_p4_ids = list(set([p4_ids[ix] for sublist in
+                               near_p4_ixs.tolist() for ix in sublist]))
         else:
-            p4_tree = None
-
-        # iterate over all contact sites between skeletons, calc skeleton
-        # kd-tree in advance
-        a_skel_node_list = [node for node in a[0].getNodes()]
-        a_skel_node_coords = arr([node.getCoordinate() for node in
-                               a_skel_node_list]) * arr(scaling)
-        a_skel_node_tree = spatial.cKDTree(a_skel_node_coords)
-        b_skel_node_list = [node for node in b[0].getNodes()]
-        b_skel_node_coords = arr([node.getCoordinate() for node in
-                               b_skel_node_list]) * arr(scaling)
-        b_skel_node_tree = spatial.cKDTree(b_skel_node_coords)
-        for i, csite in enumerate(csites):
-            p4_bool = False
-            az_bool = False
-            # save information about one contact site in extra nml dependent on
-            # occuring p4 and az (four different categories)
-            contact_site_name = annotation_name+'_cs%d' % (i+1)
-            contact_site_anno = SkeletonAnnotation()
-            contact_site_anno.scaling = scaling
-            curr_csite_ids = arr(csite_ids[i])
-            csite_name = 'cs'+str(i+1)+'_'
-            csite_tree = spatial.cKDTree(csite)
-
-            # get hull area
-            csb_area = 0
-            csa_area = 0
-            csb_points = arr(csite)[curr_csite_ids]
-            csa_points = arr(csite)[~curr_csite_ids]
-            try:
-                if np.sum(curr_csite_ids) > 3:
-                    csb_area = convex_hull_area(csb_points)
-            except Exception, e:
-                print e
-                print "Could not calculate a_area!!!!"
-            try:
-                if np.sum(~curr_csite_ids) > 3:
-                    csa_area = convex_hull_area(csa_points)
-            except Exception, e:
-                print e
-                print "Could not calculate b_area!!!!"
-            for j, coord in enumerate(csite):
-                coord_id = curr_csite_ids[j]
-                node = SkeletonNode().from_scratch(
-                    contact_site_anno, coord[0]/scaling[0], coord[1]/scaling[1],
-                    coord[2]/scaling[2])
-                node.setPureComment(csite_name + id2skel(coord_id) + '_hull')
-                pairwise_anno.addNode(node)
-            mean_cs_area = np.mean((csb_area, csa_area))
-            if mean_cs_area < min_cs_area:
-                print "Skipping cs because of area:", mean_cs_area
-                continue
-
-            # get hull distance
-            csa_tree = spatial.cKDTree(csa_points)
-            dist, ixs = csa_tree.query(csb_points, 1)
-            cs_dist = np.min(dist)
-            # check p4 and az
-            if az_tree is not None:
-                near_az_ixs = az_tree.query_ball_point(csite, max_az_dist)
-                near_az_ids = list(set([az_ids[id] for sublist in near_az_ixs.tolist()
-                                        for id in sublist]))
-            else:
-                near_az_ids = []
-            overlap = 0
-            abs_ol = 0
-            overlap_cs = 0
-            overlap_area = 0
-            overlap_coords = np.array([])
-            for az_id in near_az_ids:
-                az_ix = az_id_to_ix[az_id]
-                node = copy.copy(az_nodes[az_ix])
-                curr_az_voxel = np.array(az_dict[az_id].voxels) * scaling
-                overlap_new, overlap_cs_new, overlap_area_new,\
-                    center_coord_new, overlap_coords_new = calc_overlap(
-                        csite, curr_az_voxel, vx_overlap_dist)
-                abs_ol_new = overlap_new*len(curr_az_voxel)
-                old_comment = node.getComment()
-                node.setPureComment(csite_name + 'relol%0.3f_absol%d' %
-                                    (overlap_new, abs_ol_new) + old_comment)
-                contact_site_anno.addNode(node)
-                pairwise_anno.addNode(node)
-                if overlap_new > overlap:
-                    overlap = overlap_new
-                    abs_ol = abs_ol_new
-                    overlap_cs = overlap_cs_new
-                    overlap_area = overlap_area_new
-                    overlap_coords = overlap_coords_new
-            if p4_tree is not None:
-                near_p4_ixs = p4_tree.query_ball_point(csite, max_p4_dist)
-                near_p4_ids = list(set([p4_ids[ix] for sublist in
-                                   near_p4_ixs.tolist() for ix in sublist]))
-            else:
-                near_p4_ids = []
-            for p4_id in near_p4_ids:
-                p4_ix = p4_id_to_ix[p4_id]
-                node = copy.copy(p4_nodes[p4_ix])
-                dist, nearest_ix = csite_tree.query(node.getCoordinate(), 1)
-                nearest_id = curr_csite_ids[nearest_ix]
-                old_comment = node.getComment()
-                node.setPureComment(csite_name + id2skel(nearest_id) +
-                                    '_' + old_comment)
-                contact_site_anno.addNode(node)
-                pairwise_anno.addNode(node)
-
-            # get center node (representative cs coordinate)
-            cs_center = np.sum(csite, axis=0) / float(len(csite))
-            cs_center_ix = csite_tree.query(cs_center)[1]
-            cs_center = csite[cs_center_ix]
-            node = SkeletonNode().from_scratch(contact_site_anno,
-                                               cs_center[0]/scaling[0],
-                                               cs_center[1]/scaling[1],
-                                               cs_center[2]/scaling[2])
-            comment = csite_name+'area%0.2f_dist%0.4f_center' % (mean_cs_area,
-                                                                 cs_dist)
-            node.data['adj_skel1'] = a[0].filename
-            node.data['adj_skel2'] = b[0].filename
-            if len(near_p4_ids) > 0:
-                p4_bool = True
-                comment += '_p4'
-                pairwise_anno.setComment(annotation_name+'_syn_candidate')
-                contact_site_name += '_p4'
-            if len(near_az_ids) > 0:
-                az_bool = True
-                comment += '_az_relol%0.3f_absol%d_csrelol%0.3f_areaol%0.3f' % \
-                           (overlap, abs_ol, overlap_cs, overlap_area)
-                contact_site_name += '_az'
-                np.save(dest_path + '/overlap_vx/' + contact_site_name +
-                        'ol_vx.npy', overlap_coords)
-            node.data['syn_feat'] = np.array([cs_dist, mean_cs_area, overlap_area,
-                                             overlap, abs_ol, overlap_cs])
-            node.data['cs_dist'] = cs_dist
-            node.data['mean_cs_area'] = mean_cs_area
-            node.data['overlap_area'] = overlap_area
-            node.data['overlap'] = overlap
-            node.data['abs_ol'] = abs_ol
-            node.data['overlap_cs'] = overlap_cs
-            node.data['cs_name'] = contact_site_name
-            node.setPureComment(comment)
+            near_p4_ids = []
+        for p4_id in near_p4_ids:
+            p4_ix = p4_id_to_ix[p4_id]
+            node = copy.copy(p4_nodes[p4_ix])
+            dist, nearest_ix = csite_tree.query(node.getCoordinate(), 1)
+            nearest_id = curr_csite_ids[nearest_ix]
+            old_comment = node.getComment()
+            node.setPureComment(csite_name + id2skel(nearest_id) +
+                                '_' + old_comment)
             contact_site_anno.addNode(node)
             pairwise_anno.addNode(node)
 
-            # get closest skeleton nodes
-            dist, a_nearest_sn_ixs = a_skel_node_tree.query(cs_center, 2)
-            a_source_node = a_skel_node_list[a_nearest_sn_ixs[0]]
-            a_nn = max_nodes_in_path(a[0], a_source_node, 100)
-            # get nearest node to source node of skeleton b and average radius
-            a_source_node_nn = a_skel_node_list[a_nearest_sn_ixs[1]]
-            mean_radius = np.mean([a_source_node.data['radius'],
-                                   a_source_node_nn.data['radius']])
-            for j, node in enumerate(a_nn):
-                if j == 0:
-                    comment = csite_name+a[0].filename+'_skelnode'+\
-                              '_area %0.2f' % (csa_area)
-                    node.data['head_diameter'] = mean_radius * 2
-                    node.data['skel_id'] = int(a[0].filename)
-                else:
-                    comment = csite_name+a[0].filename+'_skelnode%d' % j
-                curr_node = copy.copy(node)
-                curr_node.appendComment(comment)
-                contact_site_anno.addNode(curr_node)
-                pairwise_anno.addNode(curr_node)
-            for j, node in enumerate(a_nn):
-                try:
-                    target_node = list(a[0].getNodeEdges(node))[0]
-                    contact_site_anno.addEdge(node, target_node)
-                    pairwise_anno.addEdge(node, target_node)
-                except (KeyError, IndexError):
-                    pass
+        # get center node (representative cs coordinate)
+        cs_center = np.sum(csite, axis=0) / float(len(csite))
+        cs_center_ix = csite_tree.query(cs_center)[1]
+        cs_center = csite[cs_center_ix]
+        node = SkeletonNode().from_scratch(contact_site_anno,
+                                           cs_center[0]/scaling[0],
+                                           cs_center[1]/scaling[1],
+                                           cs_center[2]/scaling[2])
+        comment = csite_name+'area%0.2f_dist%0.4f_center' % (mean_cs_area,
+                                                             cs_dist)
+        node.data['adj_skel1'] = a[0].filename
+        node.data['adj_skel2'] = b[0].filename
+        if len(near_p4_ids) > 0:
+            p4_bool = True
+            comment += '_p4'
+            pairwise_anno.setComment(annotation_name+'_syn_candidate')
+            contact_site_name += '_p4'
+        if len(near_az_ids) > 0:
+            az_bool = True
+            comment += '_az_relol%0.3f_absol%d_csrelol%0.3f_areaol%0.3f' % \
+                       (overlap, abs_ol, overlap_cs, overlap_area)
+            contact_site_name += '_az'
+            np.save(dest_path + '/overlap_vx/' + contact_site_name +
+                    'ol_vx.npy', overlap_coords)
+        node.data['syn_feat'] = np.array([cs_dist, mean_cs_area, overlap_area,
+                                         overlap, abs_ol, overlap_cs])
+        node.data['cs_dist'] = cs_dist
+        node.data['mean_cs_area'] = mean_cs_area
+        node.data['overlap_area'] = overlap_area
+        node.data['overlap'] = overlap
+        node.data['abs_ol'] = abs_ol
+        node.data['overlap_cs'] = overlap_cs
+        node.data['cs_name'] = contact_site_name
+        node.setPureComment(comment)
+        contact_site_anno.addNode(node)
+        pairwise_anno.addNode(node)
 
-            dist, b_nearest_sn_ixs = b_skel_node_tree.query(cs_center, 2)
-            b_source_node = b_skel_node_list[b_nearest_sn_ixs[0]]
-            b_nn = max_nodes_in_path(b[0], b_source_node, 100)
-            # get nearest node to source node of skeleton b and average radius
-            b_source_node_nn = b_skel_node_list[b_nearest_sn_ixs[1]]
-            mean_radius = np.mean([b_source_node.data['radius'],
-                                   b_source_node_nn.data['radius']])
-            for j, node in enumerate(b_nn):
-                if j == 0:
-                    comment = csite_name+b[0].filename+'_skelnode'+'_area %0.2f'\
-                                    % (csb_area)
-                    node.data['head_diameter'] = mean_radius * 2
-                    node.data['skel_id'] = int(b[0].filename)
-                else:
-                    comment = csite_name+b[0].filename+'_skelnode%d' % j
-                curr_node = copy.copy(node)
-                curr_node.appendComment(comment)
-                contact_site_anno.addNode(curr_node)
-                pairwise_anno.addNode(curr_node)
-            for j, node in enumerate(b_nn):
-                try:
-                    target_node = list(b[0].getNodeEdges(node))[0]
-                    contact_site_anno.addEdge(node, target_node)
-                    pairwise_anno.addEdge(node, target_node)
-                except (KeyError, IndexError):
-                    pass
-            contact_site_anno.setComment(contact_site_name)
-            dummy_skel = Skeleton()
-            dummy_skel.add_annotation(contact_site_anno)
-            cs_destpath = dest_path
-            if p4_bool and az_bool:
-                cs_destpath += 'cs_p4_az/'
-            elif p4_bool and not az_bool:
-                cs_destpath += 'cs_p4/'
-            elif not p4_bool and az_bool:
-                cs_destpath += 'cs_az/'
-            elif not p4_bool and not az_bool:
-                cs_destpath += 'cs/'
-            dummy_skel.toNml(cs_destpath+contact_site_name+'.nml')
-        if len(pairwise_anno.getNodes()) == 0:
-            print "Did not found any node in annotation object."
-            return None
-        pairwise_anno.appendComment('%dcs' % (i+1))
+        # get closest skeleton nodes
+        dist, a_nearest_sn_ixs = a_skel_node_tree.query(cs_center, 2)
+        a_source_node = a_skel_node_list[a_nearest_sn_ixs[0]]
+        a_nn = max_nodes_in_path(a[0], a_source_node, 100)
+        # get nearest node to source node of skeleton b and average radius
+        a_source_node_nn = a_skel_node_list[a_nearest_sn_ixs[1]]
+        mean_radius = np.mean([a_source_node.data['radius'],
+                               a_source_node_nn.data['radius']])
+        for j, node in enumerate(a_nn):
+            if j == 0:
+                comment = csite_name+a[0].filename+'_skelnode'+\
+                          '_area %0.2f' % (csa_area)
+                node.data['head_diameter'] = mean_radius * 2
+                node.data['skel_id'] = int(a[0].filename)
+            else:
+                comment = csite_name+a[0].filename+'_skelnode%d' % j
+            curr_node = copy.copy(node)
+            curr_node.appendComment(comment)
+            contact_site_anno.addNode(curr_node)
+            pairwise_anno.addNode(curr_node)
+        for j, node in enumerate(a_nn):
+            try:
+                target_node = list(a[0].getNodeEdges(node))[0]
+                contact_site_anno.addEdge(node, target_node)
+                pairwise_anno.addEdge(node, target_node)
+            except (KeyError, IndexError):
+                pass
+
+        dist, b_nearest_sn_ixs = b_skel_node_tree.query(cs_center, 2)
+        b_source_node = b_skel_node_list[b_nearest_sn_ixs[0]]
+        b_nn = max_nodes_in_path(b[0], b_source_node, 100)
+        # get nearest node to source node of skeleton b and average radius
+        b_source_node_nn = b_skel_node_list[b_nearest_sn_ixs[1]]
+        mean_radius = np.mean([b_source_node.data['radius'],
+                               b_source_node_nn.data['radius']])
+        for j, node in enumerate(b_nn):
+            if j == 0:
+                comment = csite_name+b[0].filename+'_skelnode'+'_area %0.2f'\
+                                % (csb_area)
+                node.data['head_diameter'] = mean_radius * 2
+                node.data['skel_id'] = int(b[0].filename)
+            else:
+                comment = csite_name+b[0].filename+'_skelnode%d' % j
+            curr_node = copy.copy(node)
+            curr_node.appendComment(comment)
+            contact_site_anno.addNode(curr_node)
+            pairwise_anno.addNode(curr_node)
+        for j, node in enumerate(b_nn):
+            try:
+                target_node = list(b[0].getNodeEdges(node))[0]
+                contact_site_anno.addEdge(node, target_node)
+                pairwise_anno.addEdge(node, target_node)
+            except (KeyError, IndexError):
+                pass
+        contact_site_anno.setComment(contact_site_name)
         dummy_skel = Skeleton()
-        dummy_skel.add_annotation(pairwise_anno)
-        dummy_skel.toNml(dest_path+'pairwise/'+annotation_name+'.nml')
-        del dummy_skel
-        gc.collect()
-        return 0
-    except Exception, e:
-        print "----------------------------\n" \
-              "WARNING!! \n" \
-              "Could not compute %s and %s. \n%s\n" % (path_a, path_b, e)
-        return 0
+        dummy_skel.add_annotation(contact_site_anno)
+        cs_destpath = dest_path
+        if p4_bool and az_bool:
+            cs_destpath += 'cs_p4_az/'
+        elif p4_bool and not az_bool:
+            cs_destpath += 'cs_p4/'
+        elif not p4_bool and az_bool:
+            cs_destpath += 'cs_az/'
+        elif not p4_bool and not az_bool:
+            cs_destpath += 'cs/'
+        dummy_skel.toNml(cs_destpath+contact_site_name+'.nml')
+    if len(pairwise_anno.getNodes()) == 0:
+        print "Did not found any node in annotation object."
+        return None
+    pairwise_anno.appendComment('%dcs' % (i+1))
+    dummy_skel = Skeleton()
+    dummy_skel.add_annotation(pairwise_anno)
+    dummy_skel.toNml(dest_path+'pairwise/'+annotation_name+'.nml')
+    del dummy_skel
+    gc.collect()
+    return 0
+    # except Exception, e:
+    #     print e
+    #     raise()
+    #     print "----------------------------\n" \
+    #           "WARNING!! \n" \
+    #           "Could not compute %s and %s. \n%s\n" % (path_a, path_b, e)
+    #     return 0
 
 
 def max_nodes_in_path(anno, source_node, max_number):
@@ -1720,11 +1722,11 @@ def cs_btw_annos(anno_a, anno_b, max_hull_dist, concom_dist):
     """
     hull_a = anno_a._hull_coords
     hull_b = anno_b._hull_coords
-    tree_a = spatial.cKDTree(hull_a)
-    tree_b = spatial.cKDTree(hull_b)
     if len(hull_a) == 0 or len(hull_b) == 0:
         print "One skeleton hull is empty!! Skipping pair."
         return [], []
+    tree_a = spatial.cKDTree(hull_a)
+    tree_b = spatial.cKDTree(hull_b)
     contact_ids = tree_a.query_ball_tree(tree_b, max_hull_dist)
     num_neighbours = arr([len(sublist) for sublist in contact_ids])
     contact_coords_a = hull_a[num_neighbours>0]

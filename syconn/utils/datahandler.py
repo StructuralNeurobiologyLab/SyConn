@@ -139,24 +139,30 @@ def load_files_from_kzip(path, load_mitos):
     zf = zipfile.ZipFile(path, 'r')
     for i, filename in enumerate(['hull_points.xyz', 'mitos.txt', 'p4.txt',
                                   'az.txt']):
-        if i == 1 and load_mitos is not True:
-            continue
-        data = np.fromstring(zf.read(filename), sep=' ')
-        if np.isscalar(data[0]) and data[0] == -1:
-            continue
-        if i == 0:
-            hull_normals = data.reshape(data.shape[0]/6, 6)[:, 3:]
-            data = data.reshape(data.shape[0]/6, 6)[:, :3]
-        else:
-            data = data.reshape(data.shape[0]/3, 3)
-        coord_list[i] = data.astype(np.uint32)
+        try:
+            if i == 1 and load_mitos is not True:
+                continue
+            data = np.fromstring(zf.read(filename), sep=' ')
+            if np.isscalar(data[0]) and data[0] == -1:
+                continue
+            if i == 0:
+                hull_normals = data.reshape(data.shape[0]/6, 6)[:, 3:]
+                data = data.reshape(data.shape[0]/6, 6)[:, :3]
+            else:
+                data = data.reshape(data.shape[0]/3, 3)
+            coord_list[i] = data.astype(np.uint32)
+        except (IOError, ImportError, KeyError):
+            pass
     for i, filename in enumerate(['mitos_id.txt', 'p4_id.txt', 'az_id.txt']):
-        if i == 0 and load_mitos is not True:
-            continue
-        data = np.fromstring(zf.read(filename), sep=' ')
-        if data[0] == -1:
-            continue
-        id_list[i] = data.astype(np.uint32)
+        try:
+            if i == 0 and load_mitos is not True:
+                continue
+            data = np.fromstring(zf.read(filename), sep=' ')
+            if data[0] == -1:
+                continue
+            id_list[i] = data.astype(np.uint32)
+        except (IOError, ImportError, KeyError):
+            pass
     zf.close()
     return coord_list, id_list, hull_normals
 
@@ -183,7 +189,7 @@ def load_objpkl_from_kzip(path):
             temp.seek(0)
             obj_ds = pickle.load(temp)
             object_datasets[ix] = obj_ds
-        except (IOError, ImportError):
+        except (IOError, ImportError, KeyError):
             pass
     return object_datasets
 

@@ -150,6 +150,8 @@ def convex_hull_area(pts):
     :param pts: np.array of coordinates in nm (scaled)
     :return: Area of the point cloud (nm^2)
     """
+    if len(pts) < 3:
+        return 0
     area = 0
     ch = ConvexHull(pts)
     triangles = ch.points[ch.simplices]
