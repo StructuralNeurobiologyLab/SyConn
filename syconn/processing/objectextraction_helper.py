@@ -421,7 +421,6 @@ def create_datasets_from_objects_thread(args):
 
     for obj_dict_path in glob.glob(path_head_folder + rel_path +
                                            "/object_dicts/*"):
-        print obj_dict_path
         f = open(obj_dict_path, "r")
         this_obj_dict = pkl.load(f)
         f.close()
