@@ -471,7 +471,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                    chunk_list=chunk_list, suffix=suffix, use_qsub=use_qsub)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
-    print "\nTime needed for creating objects: %.3fs" % all_times[-1]
+    print "\nTime needed for extracting voxels: %.3fs" % all_times[-1]
 
     # --------------------------------------------------------------------------
 
@@ -481,7 +481,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                          use_qsub=use_qsub)
     all_times.append(time.time() - time_start)
     step_names.append("concatenate mappings")
-    print "\nTime needed for creating objects: %.3fs" % all_times[-1]
+    print "\nTime needed for concatenating mappings: %.3fs" % all_times[-1]
 
     # --------------------------------------------------------------------------
 
@@ -496,10 +496,10 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
 
     time_start = time.time()
     create_datasets_from_objects(cset, filename, hdf5names,
-                                 debug=False, suffix="", use_qsub=False)
+                                 debug=debug, suffix=suffix, use_qsub=use_qsub)
     all_times.append(time.time() - time_start)
     step_names.append("create datasets from objects")
-    print "\nTime needed for creating objects: %.3fs" % all_times[-1]
+    print "\nTime needed for creating datasets: %.3fs" % all_times[-1]
 
     # --------------------------------------------------------------------------
 
