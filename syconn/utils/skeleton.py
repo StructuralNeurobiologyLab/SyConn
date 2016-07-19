@@ -285,10 +285,16 @@ class Skeleton:
     def fromNmlcTree(self, filename, use_file_scaling=False, scaling='dataset',
                      comment=None):
         """Reads nml file with cElementTree Parser
-        filename -- path to nml-file
-        filename -- path to k.zip-file -> this might cause trouble with other
-                    functions since self.filename = *.k.zip
         is capable of parsing patches
+
+        Parameters
+        ----------
+        filename : str
+            path to nml-file or path to k.zip-file (but this might cause
+            trouble with other functions since self.filename = *.k.zip)
+        use_file_scaling : bool
+        scaling : str
+        comment : str
         """
         if filename:
             self.filename = filename
@@ -711,8 +717,11 @@ class SkeletonAnnotation:
     def fromNmlcTree(self, annotation_elem, skeleton, base_id=0):
         """ Subfunction of fromNmlcTree from NewSkeleton
 
-        annotation_elem -- XML Element
-        skeleton -- type NewSkeleton()
+        Parameters
+        ----------
+        annotation_elem : XML Element
+        skeleton : Skeleton
+        base_id : int
         """
         self.resetObject()
 
@@ -1377,7 +1386,9 @@ class SkeletonVolume:
     def fromNmlcTree(self, patch_elem):
         """ Subfunction of fromNmlcTree from SkeletonAnnotation
 
-        patch_elem -- XML Element
+        Parameters
+        ----------
+        patch_elem : XML Element
         """
         self.resetObject()
 
@@ -1475,9 +1486,11 @@ class SkeletonLoop:
         self.add(point)
 
     def fromNmlcTree(self, loop_elem):
-        """ Subfunction of fromNmlcTree from SkeletonVolume
+        """Subfunction of fromNmlcTree from SkeletonVolume
 
-        loop_elem -- XML Element
+        Parameters
+        ----------
+        loop_elem : XML Element
         """
         self.resetObject()
 
@@ -1559,9 +1572,11 @@ class SkeletonLoopPoint:
         return "Looppoint at %s" % (self.getCoordinates(),)
 
     def fromNmlcTree(self, point_elem):
-        """ Subfunction of fromNmlcTree from SkeletonLoop
+        """Subfunction of fromNmlcTree from SkeletonLoop
 
-        point_elem -- XML Element
+        Parameters
+        ----------
+        point_elem : XML Element
         """
         self.resetObject()
         self.setCoordinates(point_elem)

@@ -17,34 +17,6 @@ from syconn.utils.datahandler import  write_obj2pkl, load_pkl2obj
 __author__ = 'pschuber'
 
 
-def make_colormap(seq):
-    """Return a LinearSegmentedColormap
-    seq: a sequence of floats and RGB-tuples. The floats should be increasing
-    and in the interval (0,1).
-    """
-    seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
-    cdict = {'red': [], 'green': [], 'blue': []}
-    for i, item in enumerate(seq):
-        if isinstance(item, float):
-            r1, g1, b1 = seq[i - 1]
-            r2, g2, b2 = seq[i + 1]
-            cdict['red'].append([item, r1, r2])
-            cdict['green'].append([item, g1, g2])
-            cdict['blue'].append([item, b1, b2])
-    return mcolors.LinearSegmentedColormap('CustomMap', cdict)
-
-
-def diverge_map(low=(239/255., 65/255., 50/255.), high=(39/255., 184/255., 148/255.)):
-    """Low and high are colors that will be used for the two
-    ends of the spectrum. they can be either color strings
-    or rgb color tuples
-    """
-    c = mcolors.ColorConverter().to_rgb
-    if isinstance(low, basestring): low = c(low)
-    if isinstance(high, basestring): high = c(high)
-    return make_colormap([low, c('white'), 0.5, c('white'), high])
-
-
 def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
                        syn_only=True, big_entries=True):
     """Calculate wiring of consensus skeletons sorted by predicted
@@ -468,8 +440,8 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
 
 def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
                     binary, wd, add_fname='', maj_vote=()):
-    """Same as plot_wiring but for all contact sites (synapse classification 0
-    and 1)
+    """Plot wiring diagram on celltype-to-celltype level, e.g. connectivity
+    between EA and MSN
     """
     # plot intensities, averaged per sector
     nb_cells_per_sector = np.zeros((4, 4))
@@ -553,7 +525,8 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
 
 def type_sorted_wiring_cs(wd, confidence_lvl=0.8, binary=False,
                           max_syn_size=0.2):
-    """Same as type_sorted_wiring but with all contact sites
+    """Same as type_sorted_wiring but for all contact sites
+    (synapse classification 0 and 1)
     """
     skel_ids, skeleton_feats = load_celltype_feats(wd + '/celltypes/')
     skel_ids2, skel_type_probas = load_celltype_probas(wd + '/celltypes/')
@@ -660,6 +633,8 @@ def type_sorted_wiring_cs(wd, confidence_lvl=0.8, binary=False,
 
 def plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl,
                 binary, wd, add_fname='_CS'):
+    """Same as plot_wiring, but using all contact sites
+    """
     fig = plt.figure()
     ax = plt.gca()
     max_val = np.max(wiring)
@@ -703,7 +678,7 @@ def plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl,
 
 def plot_wiring_cum_cs(wiring, den_borders, ax_borders, confidence_lvl,
                        binary, wd, add_fname=''):
-    # plot cumulated wiring
+    """Same as plot wiring, but using all contact sites"""
     # plot intensities, averaged per sector
     nb_cells_per_sector = np.zeros((4, 4))
     intensity_plot = np.zeros((4, 4))
@@ -776,6 +751,35 @@ def plot_wiring_cum_cs(wiring, den_borders, ax_borders, confidence_lvl,
     else:
         fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
             'lvl%d_binary.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
+
+
+def make_colormap(seq):
+    """Return a LinearSegmentedColormap
+    seq: a sequence of floats and RGB-tuples. The floats should be increasing
+    and in the interval (0,1).
+    """
+    seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
+    cdict = {'red': [], 'green': [], 'blue': []}
+    for i, item in enumerate(seq):
+        if isinstance(item, float):
+            r1, g1, b1 = seq[i - 1]
+            r2, g2, b2 = seq[i + 1]
+            cdict['red'].append([item, r1, r2])
+            cdict['green'].append([item, g1, g2])
+            cdict['blue'].append([item, b1, b2])
+    return mcolors.LinearSegmentedColormap('CustomMap', cdict)
+
+
+def diverge_map(low=(239/255., 65/255., 50/255.), high=(39/255., 184/255.,
+                                                        148/255.)):
+    """Low and high are colors that will be used for the two
+    ends of the spectrum. they can be either color strings
+    or rgb color tuples
+    """
+    c = mcolors.ColorConverter().to_rgb
+    if isinstance(low, basestring): low = c(low)
+    if isinstance(high, basestring): high = c(high)
+    return make_colormap([low, c('white'), 0.5, c('white'), high])
 
 
 def class_ranges(pred_arr):

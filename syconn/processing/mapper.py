@@ -1564,6 +1564,8 @@ def feature_valid_syns(cs_dir, only_az=True, only_syn=True, all_contacts=False):
         cs_fpaths += curr_fpaths
         sample_list_len.append(len(curr_fpaths))
     print "Collecting results of synapse mapping. (%d CS)" % len(cs_fpaths)
+    if len(cs_fpaths) == 0:
+        return np.zeros(0, ), np.zeros(0, ), np.zeros(0, ).astype(np.bool)
     nb_cpus = cpu_count()
     pool = Pool(processes=nb_cpus)
     m = Manager()
@@ -1591,14 +1593,8 @@ def feature_valid_syns(cs_dir, only_az=True, only_syn=True, all_contacts=False):
         rfc_syn = joblib.load(clf_path)
         syn_pred = rfc_syn.predict(features)
     axoness_info = cs_infos[:, 1]
-    error_cnt = np.sum(~non_instances)
     print "Found %d synapses with axoness information. Gathering all" \
           " contact sites with valid pre/pos information." % len(axoness_info)
-    false_cnt = np.sum(~syn_pred.astype(np.bool))
-    true_cnt = np.sum(syn_pred)
-    print "\nTrue synapses:", true_cnt / float(true_cnt+false_cnt)
-    print "False synapses:", false_cnt / float(true_cnt+false_cnt)
-    print "error count:", error_cnt
     return features, axoness_info, syn_pred.astype(np.bool)
 
 
@@ -1648,6 +1644,9 @@ def calc_syn_dict(features, axoness_info, get_all=False):
            post synaptic cell ids, synapse predictions, axoness
     """
     total_size = float(len(axoness_info))
+    if total_size == 0:
+        print "No synapse dict to create."
+        return np.zeros(0, ), np.zeros(0,), {}, np.zeros(0, ), np.zeros(0, ), {}
     ax_ax_cnt = 0
     den_den_cnt = 0
     all_post_ids = []
@@ -1658,7 +1657,7 @@ def calc_syn_dict(features, axoness_info, get_all=False):
     for k, ax_info in enumerate(axoness_info):
         stdout.write("\r%0.2f" % (k / total_size))
         stdout.flush()
-        cell1, cell2 = re.findall('(\d+)axoness(\d+)', ax_info)
+        cell1, cell2 = re.findall('(\d+)axoness(\-?\d+)', ax_info)
         cs_nb = re.findall('cs(\d+)', ax_info)[0]
         cell_ids = arr([cell1[0], cell2[0]], dtype=np.int)
         cell_axoness = arr([cell1[1], cell2[1]], dtype=np.int)
