@@ -9,6 +9,7 @@ from numpy import array as arr
 from scipy import spatial
 from sys import stdout
 
+from scipy.sparse.csgraph._tools import csgraph_from_dense
 from sklearn.externals import joblib
 
 from syconn.multi_proc.multi_proc_main import start_multiprocess
@@ -55,6 +56,9 @@ def collect_contact_sites(cs_dir, only_az=False):
         sample_list_len.append(len(curr_fpaths))
     print "Collecting contact sites (%d CS). Only az is %s." % (len(cs_fpaths),
                                                                 str(only_az))
+    if len(cs_fpaths) == 0:
+        print "No data available. Returning."
+        return [], np.zeros((0, ))
     nb_cpus = cpu_count() - 2
     pool = Pool(processes=nb_cpus)
     m = Manager()
@@ -73,15 +77,11 @@ def collect_contact_sites(cs_dir, only_az=False):
     pool.close()
     pool.join()
     feats = []
-    svens_res = []
-    svens_res2 = []
     for syn_nodes in res:
         for node in syn_nodes:
             if 'center' in node.getComment():
                 feat = node.data['syn_feat']
                 feats.append(feat)
-                svens_res.append(feat[2])
-                svens_res2.append(node.getCoordinate())
     res = arr(res)
     feats = arr(feats)
     assert len(res) == len(feats), 'feats and nodes have different length!'
@@ -135,12 +135,18 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
     syn_only: bool
         if only synapses are to be saved.
     """
-    clf_path = cs_dir + '/../models/rf_synapses/rfc_syn.pkl'
-    print "\nUsing %s for synapse prediction." % clf_path
-    rfc_syn = joblib.load(clf_path)
     dummy_skel = Skeleton()
     dummy_anno = SkeletonAnnotation()
     dummy_anno.setComment('CS Summary')
+    if len(cs_nodes) == 0:
+        write_obj2pkl({}, cs_dir + 'cs_dict%s.pkl' % supp)
+        dummy_skel.add_annotation(dummy_anno)
+        fname = cs_dir + 'cs_summary%s.k.zip' % supp
+        dummy_skel.to_kzip(fname)
+        return
+    clf_path = cs_dir + '/../models/rf_synapses/rfc_syn.pkl'
+    print "\nUsing %s for synapse prediction." % clf_path
+    rfc_syn = joblib.load(clf_path)
     probas = rfc_syn.predict_proba(cs_feats)
     preds = rfc_syn.predict(cs_feats)
     cnt = 0
@@ -160,7 +166,11 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
                 cnt += 1
                 if syn_only and 'az' not in node.getComment():
                     continue
-                overlap_vx = np.load(cs_dir+'/overlap_vx/'+cs_name+'ol_vx.npy')
+                if 'az' in node.getComment():
+                    overlap_vx = np.load(cs_dir + '/overlap_vx/' +
+                                         cs_name + 'ol_vx.npy')
+                else:
+                    overlap_vx = np.zeros((0, ))
                 cs = {}
                 cs['overlap_vx'] = overlap_vx
                 cs['syn_pred'] = pred
@@ -221,7 +231,7 @@ def calc_cs_node(args):
             if 'az' in anno.getComment():
                 add_comment += '_az'
             center_node.setComment('cs%s%s_skel_%s_%s' % (cs_ix, add_comment,
-                                                    str(ids[0]), str(ids[1])))
+                                   str(ids[0]), str(ids[1])))
     center_node_comment = center_node.getComment()
     center_node.data['p4_size'] = None
     center_node.data['az_size'] = None
@@ -230,7 +240,8 @@ def calc_cs_node(args):
         if 'skelnode_area' in n_comment:
             skel_node = copy.copy(node)
             try:
-                skel_id = int(re.findall('(\d+)_skelnode', skel_node.getComment())[0])
+                skel_id = int(re.findall('(\d+)_skelnode',
+                                         skel_node.getComment())[0])
             except IndexError:
                 skel_id = int(re.findall('syn(\d+)', skel_node.getComment())[0])
             assert skel_id in ids, 'Wrong skeleton ID during axoness parsing.'
@@ -255,6 +266,7 @@ def get_spine_summary(syn_nodes, cs_dir):
 
     Parameters
     ----------
+    syn_nodes : list of SkeletonNodes
     cs_dir: str
         path to contact site data
     """
@@ -499,7 +511,7 @@ def write_axoness_dicts(cs_dir):
     new_ax_all = update_axoness_dict(cs_dir, syn_only=False)
     write_obj2pkl(new_ax_all, cs_dir + '/axoness_dict_all.pkl')
     new_ax = update_axoness_dict(cs_dir, syn_only=True)
-    write_obj2pkl(new_ax_all, cs_dir + '/axoness_dict.pkl')
+    write_obj2pkl(new_ax, cs_dir + '/axoness_dict.pkl')
 
 
 def get_number_cs_details(cs_path):

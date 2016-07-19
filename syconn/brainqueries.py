@@ -50,7 +50,7 @@ def enrich_tracings_all(wd, overwrite=False):
         list_of_lists = [[anno_list[i::60], wd, overwrite] for i in xrange(60)]
         QSUB_script(list_of_lists, 'skeleton_mapping', **kwargs)
     else:
-        enrich_tracings(anno_list, wd, overwrite=True)
+        enrich_tracings(anno_list, wd, overwrite=overwrite)
 
 
 def enrich_tracings_star(params):
@@ -399,7 +399,7 @@ def detect_synapses(wd):
     wd : str Path to working directory
     """
     nml_list = get_filepaths_from_dir(wd + '/neurons/')
-    cs_path = wd + '/contact_sites/'
+    cs_path = wd + '/contactsites/'
     for ending in ['', 'cs', 'cs_p4', 'cs_az', 'cs_p4_az', 'pairwise',
                    'overlap_vx']:
         if not os.path.exists(cs_path+ending):
@@ -411,4 +411,4 @@ def detect_synapses(wd):
         QSUB_script(list_of_lists, 'synapse_mapping', **kwargs)
     else:
         prepare_syns_btw_annos(anno_permutations, cs_path)
-    write_summaries(cs_path)
+    write_summaries(wd)

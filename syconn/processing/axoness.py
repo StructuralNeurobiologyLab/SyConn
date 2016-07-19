@@ -153,19 +153,27 @@ def predict_axoness_from_nodes(anno):
             ids = [int(node.data['adj_skel1'])]
             ids.append(int(node.data['adj_skel2']))
             break
-    for node in list(anno.getNodes()):
-        n_comment = node.getComment()
-        if 'skelnode' in n_comment:
-            axoness_class = node.data['axoness_pred']
-            try:
-                skel_id = int(re.findall('(\d+)_skelnode', n_comment)[0])
-            except IndexError:
-                skel_id = int(re.findall('syn(\d+)', n_comment)[0])
-            axoness[ids.index(skel_id)] += [int(axoness_class)]
-    axoness_0 = int(np.round(np.mean(axoness[0])))
-    axoness_1 = int(np.round(np.mean(axoness[1])))
-    axoness_comment = str(ids[0]) + 'axoness' + str(axoness_0) \
-    + '_' + str(ids[1]) + 'axoness' + str(axoness_1)
+    try:
+        for node in list(anno.getNodes()):
+            n_comment = node.getComment()
+            if 'skelnode' in n_comment:
+                axoness_class = node.data['axoness_pred']
+                try:
+                    skel_id = int(re.findall('(\d+)_skelnode', n_comment)[0])
+                except IndexError:
+                    skel_id = int(re.findall('syn(\d+)', n_comment)[0])
+                axoness[ids.index(skel_id)] += [int(axoness_class)]
+        axoness_0 = int(np.round(np.mean(axoness[0])))
+        axoness_1 = int(np.round(np.mean(axoness[1])))
+    except KeyError as e:
+        if e.message != 'axoness_pred':
+            raise e
+        else:
+            print "Axoness prediction not available in cs '%s'." % anno.filename
+            axoness_0 = -1
+            axoness_1 = -1
+    axoness_comment = str(ids[0]) + 'axoness' + str(axoness_0) + '_' + \
+                      str(ids[1]) + 'axoness' + str(axoness_1)
     anno.appendComment(axoness_comment)
     return arr(ids), arr([axoness_0, axoness_1])
 
