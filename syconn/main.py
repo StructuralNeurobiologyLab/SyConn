@@ -7,7 +7,7 @@ import os
 import sys
 
 # home_path = sys.argv[1]
-home_path = "/mnt/axon/home/sdorkenw/SyConnDenseCube"
+home_path = "/lustre/sdorkenw/SyConnDenseCube"
 
 assert os.path.exists(home_path + "/models/")
 assert os.path.exists(home_path + "/knossosdatasets/raw/")
@@ -33,11 +33,35 @@ kd_bar.initialize_from_knossos_path(home_path + "/knossosdatasets/rrbarrier/")
 #                                   debug=False,
 #                                   membrane_kd_path=kd_bar.knossos_path)
 
-oe.from_probabilities_to_objects_parameter_sweeping(cset,
-                                                    "ARGUS",
-                                                    ["sj", "vc", "mi"],
-                                                    20,
-                                                    membrane_kd_path=None,
-                                                    hdf5_name_membrane=kd_bar.knossos_path,
-                                                    use_qsub=False)
+oe.from_probabilities_to_objects(cset, "ARGUS",
+                                 ["sj"],
+                                 thresholds=[int(4*255/21.)],
+                                 debug=False,
+                                 membrane_kd_path=kd_bar.knossos_path,
+                                 suffix="3")
+
+oe.from_probabilities_to_objects(cset, "ARGUS",
+                                 ["vc"],
+                                 thresholds=[int(6*255/21.)],
+                                 debug=False,
+                                 suffix="5",
+                                 membrane_kd_path=kd_bar.knossos_path)
+#
+oe.from_probabilities_to_objects(cset, "ARGUS",
+                                 ["mi"],
+                                 thresholds=[int(9*255/21.)],
+                                 debug=False,
+                                 suffix="8",
+                                 membrane_kd_path=kd_bar.knossos_path)
+#
+
+
+
+# oe.from_probabilities_to_objects_parameter_sweeping(cset,
+#                                                     "ARGUS",
+#                                                     ["sj", "vc", "mi"],
+#                                                     20,
+#                                                     membrane_kd_path=None,
+#                                                     hdf5_name_membrane=kd_bar.knossos_path,
+#                                                     use_qsub=False)
 

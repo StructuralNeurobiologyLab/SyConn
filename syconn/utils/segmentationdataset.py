@@ -10,16 +10,12 @@ import glob
 import scipy.spatial
 import scipy.ndimage
 try:
-    import HelperUtils as hu
-    hu_available = True
-except:
-    hu_available = False
-try:
     import QSUB_MAIN as qm
     qsub_available = True
 except:
     qsub_available = False
 
+from syconn.utils import basics
 
 def get_rel_path(obj_name, filename, suffix=""):
     if len(suffix) > 0 and not suffix[0] == "_":
@@ -235,13 +231,13 @@ def update_dataset(object_dataset, update_objects=False, recalculate_rep_coords=
     if recalculate_rep_coords:
         update_objects = True
 
-    up_object_dataset = segmentationDataset(object_dataset._type,
+    up_object_dataset = SegmentationDataset(object_dataset._type,
                                             object_dataset._rel_path_home,
                                             object_dataset._path_to_chunk_dataset_head)
     if update_objects:
         for key in object_dataset.object_dict.keys():
             obj = object_dataset.object_dict[key]
-            up_object_dataset.object_dict[key] = segmentationObject(key,
+            up_object_dataset.object_dict[key] = SegmentationObject(key,
                                                         obj._path_dataset,
                                                         obj._path_to_voxel)
             if recalculate_rep_coords:
@@ -624,8 +620,6 @@ class SegmentationObject(object):
             kd.from_matrix_to_cubes(this_bb[0], data=[matrix], nb_threads=1, mags=mags, overwrite=not overwrite)
 
     def create_hull_voxels(self):
-        if not hu_available:
-            raise Exception("HelperUtils not available")
         voxels = np.copy(self.voxels)
         if len(voxels.shape) > 1:
             voxels_array = np.array(voxels, dtype=np.int)
@@ -639,9 +633,9 @@ class SegmentationObject(object):
             matrix = np.zeros((x_max-x_min, y_max-y_min, z_max-z_min),
                               dtype=np.uint8)
 
-            lower_boarder = np.array([hu.negative_to_zero(x_min),
-                                      hu.negative_to_zero(y_min),
-                                      hu.negative_to_zero(z_min)],
+            lower_boarder = np.array([basics.negative_to_zero(x_min),
+                                      basics.negative_to_zero(y_min),
+                                      basics.negative_to_zero(z_min)],
                                      dtype=np.int)
 
             voxels = np.array(voxels, dtype=np.int) - lower_boarder
@@ -656,8 +650,6 @@ class SegmentationObject(object):
         return coords
 
     def create_hull_ids(self):
-        if not hu_available:
-            raise Exception("HelperUtils not available")
         voxels = np.copy(self.voxels)
         if len(voxels.shape) > 1:
             voxels_array = np.array(voxels, dtype=np.int)
@@ -672,9 +664,9 @@ class SegmentationObject(object):
             matrix = np.zeros((x_max-x_min, y_max-y_min, z_max-z_min),
                               dtype=np.uint8)
 
-            lower_boarder = np.array([hu.negative_to_zero(x_min),
-                                      hu.negative_to_zero(y_min),
-                                      hu.negative_to_zero(z_min)],
+            lower_boarder = np.array([basics.negative_to_zero(x_min),
+                                      basics.negative_to_zero(y_min),
+                                      basics.negative_to_zero(z_min)],
                                      dtype=np.int)
 
             voxels = np.array(voxels, dtype=np.int) - lower_boarder
