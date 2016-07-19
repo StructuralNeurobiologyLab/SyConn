@@ -11,7 +11,6 @@ from multiprocessing import cpu_count, Process
 import time
 import multiprocessing.pool
 
-
 __QSUB__ = True
 try:
     subprocess.check_output('qstat', shell=True)
@@ -170,7 +169,6 @@ def start_multiprocess(func, params, debug=False, nb_cpus=None):
     if debug:
         nb_cpus = 1
     print "Computing %d parameters with %d cpus." % (len(params), nb_cpus)
-    start = time.time()
     if not debug:
         pool = MyPool(nb_cpus)
         result = pool.map(func, params)
@@ -178,6 +176,4 @@ def start_multiprocess(func, params, debug=False, nb_cpus=None):
         pool.join()
     else:
         result = map(func, params)
-
-    print "\nTime to compute grid:", time.time() - start
     return result

@@ -26,6 +26,15 @@ __QSUB__ = False
 
 
 def analyze_dataset(wd):
+    """Analyze dataset, i.e. predict barrier, cell objects, calculate hull,
+    map cell objects to tracings and predict synapses together with ultrastructure
+    of cells to create connectivity matrix
+
+    Parameters
+    ----------
+    wd : str
+        path to working directory
+    """
     enrich_tracings_all(wd)
     detect_synapses(wd)
 
@@ -53,10 +62,6 @@ def enrich_tracings_all(wd, overwrite=False):
         enrich_tracings(anno_list, wd, overwrite=overwrite)
 
 
-def enrich_tracings_star(params):
-    enrich_tracings(params[0], params[1])
-
-
 def enrich_tracings(anno_list, wd, map_objects=False, method='hull', radius=1200,
                     thresh=2.2, filter_size=(2786, 1594, 250),
                     create_hull=True, max_dist_mult=1.4, detect_outlier=True,
@@ -66,7 +71,7 @@ def enrich_tracings(anno_list, wd, map_objects=False, method='hull', radius=1200
                     write_obj_voxel=True):
     """Enriches a list of paths (to tracings) using dataset in working
     directory. Writes enriched tracings to 'neuron' folder in working directory,
-     or, if specified, to DataHandler().data_path.
+    or, if specified, to DataHandler().data_path.
 
     Parameters
     ----------
@@ -240,6 +245,7 @@ def remap_tracings_all(anno_list, dest_dir=None, recalc_prop_only=False,
 
 
 def remap_tracings_star(params):
+    """Helper function for multiprocessed remap_tracings."""
     remap_tracings(params[0], params[1], recalc_prop_only=params[2],
                    method=params[3], context_range=params[4])
 

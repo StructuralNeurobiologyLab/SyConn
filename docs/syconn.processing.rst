@@ -56,3 +56,27 @@ syconn.processing.synapticity
     :members:
     :undoc-members:
     :show-inheritance:
+
+syconn.processing.initialization
+--------------------------------
+
+.. automodule:: syconn.processing.initialization
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+syconn.processing.objectextraction
+----------------------------------
+
+.. automodule:: syconn.processing.objectextraction
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+syconn.processing.watershed_segmentation
+----------------------------------------
+
+.. automodule:: syconn.processing.watershed_segmentation
+    :members:
+    :undoc-members:
+    :show-inheritance:
