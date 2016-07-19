@@ -169,28 +169,28 @@ def convex_hull_area(pts):
 
 def cell_object_coord_parser(voxel_tree):
     """Extracts unique voxel coords from object tree list for cell objects
-    'mitos', 'p4' and 'az'.
+    'mitos', 'vc' and 'sj'.
 
     :param voxel_tree: annotation object containing voxels of cell objects
-     ['mitos', 'p4', 'az']
-    :returns: coord arrays for 'mitos', 'p4' and 'az'
+     ['mitos', 'vc', 'sj']
+    :returns: coord arrays for 'mitos', 'vc' and 'sj'
     """
     mito_coords= []
-    p4_coords = []
-    az_coords = []
+    vc_coords = []
+    sj_coords = []
     for node in voxel_tree.getNodes():
         comment = node.getComment()
         if 'mitos' in comment:
             mito_coords.append(node.getCoordinate())
-        elif 'p4' in comment:
-            p4_coords.append(node.getCoordinate())
-        elif 'az' in comment:
-            az_coords.append(node.getCoordinate())
+        elif 'vc' in comment:
+            vc_coords.append(node.getCoordinate())
+        elif 'sj' in comment:
+            sj_coords.append(node.getCoordinate())
         else:
             print "Couldn't understand comment:", comment
-    print "Found %d mitos, %d az and %d p4." % (len(mito_coords), len(p4_coords),
-                                                len(az_coords))
-    return arr(mito_coords), arr(p4_coords), arr(az_coords)
+    print "Found %d mitos, %d sj and %d vc." % (len(mito_coords), len(vc_coords),
+                                                len(sj_coords))
+    return arr(mito_coords), arr(vc_coords), arr(sj_coords)
 
 
 def helper_samllest_dist(args):

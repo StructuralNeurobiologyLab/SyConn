@@ -1,4 +1,3 @@
-import cPickle as pickle
 import h5py
 import os
 import shutil
@@ -41,7 +40,7 @@ class DataHandler(object):
         will be assigned automatically
     mem_offset :
         optional offeset of dataset
-    mitos/p4/az : SegmentationDataset
+    mitos/vc/sj : SegmentationDataset
         Dataset which contains cell objects of mitochondria, vesicle clouds and
         synaptic junctions respectively
     """
@@ -55,8 +54,8 @@ class DataHandler(object):
             scaling of data set, s.t. data is isotropic
         """
         self.wd = wd
-        p4_source = wd + '/chunkdatasets/obj_p4/'
-        az_source = wd + '/chunkdatasets/obj_az/'
+        vc_source = wd + '/chunkdatasets/obj_vc/'
+        sj_source = wd + '/chunkdatasets/obj_sj/'
         mito_source = wd + '/chunkdatasets/obj_mito/'
         self.mem_path = wd + '/knossosdatasets/rrbarrier/'
         self.cs_path = wd + '/chunkdatasets/j0126_watershed_map/'
@@ -69,9 +68,9 @@ class DataHandler(object):
         self.scaling = arr(scaling)
         self.mem = None
         self.mem_offset = arr([0, 0, 0])
-        object_dict = {0: "mitos", 1: "p4", 2: "az"}
+        object_dict = {0: "mitos", 1: "vc", 2: "sj"}
         objects = [None, None, None]
-        for i, source in enumerate([mito_source, p4_source, az_source]):
+        for i, source in enumerate([mito_source, vc_source, sj_source]):
             if type(source) is str:
                 try:
                     obj = load_dataset(source)
@@ -83,8 +82,8 @@ class DataHandler(object):
                 obj = source
             objects[i] = obj
         self.mitos = objects[0]
-        self.p4 = objects[1]
-        self.az = objects[2]
+        self.vc = objects[1]
+        self.sj = objects[2]
 
 
 def load_ordered_mapped_skeleton(path):
@@ -98,9 +97,9 @@ def load_ordered_mapped_skeleton(path):
     Returns
     -------
     list
-        List of trees with order [skeleton, mitos, p4, az, soma]
+        List of trees with order [skeleton, mitos, vc, sj, soma]
     """
-    anno_dict = {"skeleton": 0, "mitos": 1, "p4": 2, "az": 3, "soma": 4}
+    anno_dict = {"skeleton": 0, "mitos": 1, "vc": 2, "sj": 3, "soma": 4}
     annotation = su.loadj0126NML(path)
     ordered_annotation = list([[], [], [], [], []])
     for name in anno_dict.keys():
@@ -116,10 +115,10 @@ def load_ordered_mapped_skeleton(path):
             c = anno.getComment()
             if c == '':
                 continue
-            if 'p4' in c:
-                c = 'p4'
-            elif 'az' in c:
-                c = 'az'
+            if 'vc' in c:
+                c = 'vc'
+            elif 'sj' in c:
+                c = 'sj'
             elif 'mitos' in c:
                 c = 'mitos'
             elif 'soma' in c:
@@ -149,7 +148,7 @@ def load_files_from_kzip(path, load_mitos):
     Returns
     -------
     list of np.array
-        coordinates [hull, mitos, p4, az], id lists, normals
+        coordinates [hull, mitos, vc, sj], id lists, normals
     """
     coord_list = [np.zeros((0, 3)), np.zeros((0, 3)),
                   np.zeros((0, 3)), np.zeros((0, 3))]
@@ -158,8 +157,8 @@ def load_files_from_kzip(path, load_mitos):
     # id_list of cell objects
     id_list = [np.zeros((0, )), np.zeros((0, )), np.zeros((0, ))]
     zf = zipfile.ZipFile(path, 'r')
-    for i, filename in enumerate(['hull_points.xyz', 'mitos.txt', 'p4.txt',
-                                  'az.txt']):
+    for i, filename in enumerate(['hull_points.xyz', 'mitos.txt', 'vc.txt',
+                                  'sj.txt']):
         try:
             if i == 1 and load_mitos is not True:
                 continue
@@ -174,7 +173,7 @@ def load_files_from_kzip(path, load_mitos):
             coord_list[i] = data.astype(np.uint32)
         except (IOError, ImportError, KeyError):
             pass
-    for i, filename in enumerate(['mitos_id.txt', 'p4_id.txt', 'az_id.txt']):
+    for i, filename in enumerate(['mitos_id.txt', 'vc_id.txt', 'sj_id.txt']):
         try:
             if i == 0 and load_mitos is not True:
                 continue
@@ -202,7 +201,7 @@ def load_objpkl_from_kzip(path):
     """
     zf = zipfile.ZipFile(path, 'r')
     object_datasets = []
-    for ix, filename in enumerate(['mitos.pkl', 'p4.pkl', 'az.pkl']):
+    for ix, filename in enumerate(['mitos.pkl', 'vc.pkl', 'sj.pkl']):
         object_datasets.append(SegmentationDataset('', '', ''))
         try:
             temp = tempfile.TemporaryFile()
@@ -259,30 +258,30 @@ def load_mapped_skeleton(path, append_obj, load_mitos):
     Returns
     -------
     list of SkeletonAnnotations
-        mapped cell tracings (skel, mito, p4, az, soma)
+        mapped cell tracings (skel, mito, vc, sj, soma)
     """
     mapped_skel = load_ordered_mapped_skeleton(path)
     if append_obj:
         skel = mapped_skel[0]
         obj_dicts = load_objpkl_from_kzip(path)
         skel.mitos = obj_dicts[0]
-        skel.p4 = obj_dicts[1]
-        skel.az = obj_dicts[2]
+        skel.vc = obj_dicts[1]
+        skel.sj = obj_dicts[2]
         if 'k.zip' in os.path.basename(path):
             path = path[:-5]
         if 'nml' in os.path.basename(path):
             path = path[:-3]
         coord_list, id_list, hull_normals = \
             load_files_from_kzip(path + 'k.zip', load_mitos)
-        mito_hull_ids, p4_hull_ids, az_hull_ids = id_list
-        hull, mitos, p4, az = coord_list
+        mito_hull_ids, vc_hull_ids, sj_hull_ids = id_list
+        hull, mitos, vc, sj = coord_list
         skel._hull_coords = hull
         skel.mito_hull_coords = mitos
         skel.mito_hull_ids = mito_hull_ids
-        skel.p4_hull_coords = p4
-        skel.p4_hull_ids = p4_hull_ids
-        skel.az_hull_coords = az
-        skel.az_hull_ids = az_hull_ids
+        skel.vc_hull_coords = vc
+        skel.vc_hull_ids = vc_hull_ids
+        skel.sj_hull_coords = sj
+        skel.sj_hull_ids = sj_hull_ids
         skel._hull_normals = hull_normals
     return mapped_skel
 
@@ -356,22 +355,22 @@ def supp_fname_from_fpath(fpath):
         file_name = 'hull_points.xyz'
     elif 'mitos.txt' in file_name:
         file_name = 'mitos.txt'
-    elif 'p4.txt' in file_name:
-        file_name = 'p4.txt'
-    elif 'az.txt' in file_name:
-        file_name = 'az.txt'
+    elif 'vc.txt' in file_name:
+        file_name = 'vc.txt'
+    elif 'sj.txt' in file_name:
+        file_name = 'sj.txt'
     elif 'mitos_id.txt' in file_name:
         file_name = 'mitos_id.txt'
-    elif 'p4_id.txt' in file_name:
-        file_name = 'p4_id.txt'
-    elif 'az_id.txt' in file_name:
-        file_name = 'az_id.txt'
+    elif 'vc_id.txt' in file_name:
+        file_name = 'vc_id.txt'
+    elif 'sj_id.txt' in file_name:
+        file_name = 'sj_id.txt'
     elif 'mitos.pkl' in file_name:
         file_name = 'mitos.pkl'
-    elif 'p4.pkl' in file_name:
-        file_name = 'p4.pkl'
-    elif 'az.pkl' in file_name:
-        file_name = 'az.pkl'
+    elif 'vc.pkl' in file_name:
+        file_name = 'vc.pkl'
+    elif 'sj.pkl' in file_name:
+        file_name = 'sj.pkl'
     elif 'axoness_feat.csv' in file_name:
         file_name = 'axoness_feat.csv'
     elif 'spiness_feat.csv' in file_name:
@@ -483,38 +482,38 @@ def connect_soma_tracing(soma):
 
 def cell_object_id_parser(obj_trees):
     """Extracts unique object ids from object tree list for cell objects
-    'mitos', 'p4' and 'az'
+    'mitos', 'vc' and 'sj'
 
     Parameters
     ----------
-    obj_trees : list of annotation objects ['mitos', 'p4', 'az']
+    obj_trees : list of annotation objects ['mitos', 'vc', 'sj']
 
     Returns
     -------
     dict
-        keys 'mitos', 'p4' and 'az' containing unique object ID's as values
+        keys 'mitos', 'vc' and 'sj' containing unique object ID's as values
     """
     mito_ids = []
-    p4_ids = []
-    az_ids = []
+    vc_ids = []
+    sj_ids = []
     for node in obj_trees[0].getNodes():
         comment = node.getComment()
         match = re.search('%s-([^,]+)' % 'mitos', comment)
         mito_ids.append(int(match.group(1)))
     for node in obj_trees[1].getNodes():
         comment = node.getComment()
-        match = re.search('%s-([^,]+)' % 'p4', comment)
-        p4_ids.append(int(match.group(1)))
+        match = re.search('%s-([^,]+)' % 'vc', comment)
+        vc_ids.append(int(match.group(1)))
     for node in obj_trees[2].getNodes():
         comment = node.getComment()
-        match = re.search('%s-([^,]+)' % 'az', comment)
-        az_ids.append(int(match.group(1)))
-    print "Found %d mitos, %d az and %d p4." % (len(mito_ids), len(p4_ids),
-                                                len(az_ids))
+        match = re.search('%s-([^,]+)' % 'sj', comment)
+        sj_ids.append(int(match.group(1)))
+    print "Found %d mitos, %d sj and %d vc." % (len(mito_ids), len(vc_ids),
+                                                len(sj_ids))
     obj_id_dict = {}
     obj_id_dict['mitos'] = mito_ids
-    obj_id_dict['p4'] = p4_ids
-    obj_id_dict['az'] = az_ids
+    obj_id_dict['vc'] = vc_ids
+    obj_id_dict['sj'] = sj_ids
     return obj_id_dict
 
 

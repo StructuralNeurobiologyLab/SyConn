@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
-__author__ = 'pschuber'
 import matplotlib.cm as cmx
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
-try:
-    from mayavi import mlab
-except (ImportError, ValueError), e:
-    print "Could not load mayavi. Please install vtk and then mayavi."
 from multiprocessing import Pool
-
 from syconn.contactsites import convert_to_standard_cs_name
 from syconn.brainqueries import enrich_tracings
 from syconn.processing.features import get_obj_density
 from syconn.processing.synapticity import syn_sign_prediction
 from syconn.utils.datahandler import *
+try:
+    from mayavi import mlab
+except (ImportError, ValueError), e:
+    print "Could not load mayavi. Please install vtk and then mayavi."
+__author__ = 'pschuber'
 
 
 def init_skel_vis(skel, min_pos, max_pos, hull_visualization=True, op=0.15,
@@ -88,7 +87,7 @@ def plot_skel(path, min_pos, max_pos, hull_visualization=False, cmap=None,
     :param path: string to .k.zip or .nml of annotation
     """
     if type(path) is str:
-        [skel, mitos, p4, az, soma] = load_anno_list([path])[0]
+        [skel, mitos, vc, sj, soma] = load_anno_list([path])[0]
     else:
         skel = path
     print "Using skeleton scaling %s divided by 10." % str(skel.scaling)
@@ -110,24 +109,24 @@ def coords_from_anno(skel):
     :return: list of array node coordinates
     """
     mito_hulls = skel.mito_hull_coords / 10
-    p4_hulls = skel.p4_hull_coords / 10
-    az_hulls = skel.az_hull_coords / 10
-    return mito_hulls, p4_hulls, az_hulls
+    vc_hulls = skel.vc_hull_coords / 10
+    sj_hulls = skel.sj_hull_coords / 10
+    return mito_hulls, vc_hulls, sj_hulls
 
 
 def plot_mapped_skel(path, min_pos, max_pos, color=(1./3, 1./3, 1./3), op=0.1,
                      only_syn=False, cs_path=None, hull_visualization=True,
                      save_vx_dir=None, plot_objects=(True, True, True),
-                     color_az=False):
+                     color_sj=False):
     """
     Plots the mapped skeleton at path using mayavi. Annotation file must
-    contain trees 'p4', 'az', 'mitos' and 'skeleton'
+    contain trees 'vc', 'sj', 'mitos' and 'skeleton'
     :param path: string to .k.zip or .nml of mapped annotation
     :param only_syn: bool Only plot synapse
     :param cs_path: str Hpath to contact site nml of these skeletons.
     :return:
     """
-    [skel, mitos, p4, az, soma] = load_anno_list([path])[0]
+    [skel, mitos, vc, sj, soma] = load_anno_list([path])[0]
     print "Loaded mapped skeleton %s from %s and write it to %s" % (
         skel.filename, path, str(save_vx_dir))
     skel.color = color
@@ -135,54 +134,54 @@ def plot_mapped_skel(path, min_pos, max_pos, color=(1./3, 1./3, 1./3), op=0.1,
         if cs_path is None:
             return
         mitos = []
-        p4_id, az_id = get_syn_from_cs_nml(cs_path)
-        if p4_id is None and az_id is None:
-            mitos, p4, az = coords_from_anno(skel)
+        vc_id, sj_id = get_syn_from_cs_nml(cs_path)
+        if vc_id is None and sj_id is None:
+            mitos, vc, sj = coords_from_anno(skel)
         else:
-            p4 = []
-            az = []
-            for id in p4_id:
-                p4 += list(skel.p4_hull_coords[skel.p4_hull_ids == id] / 10)
-            for id in az_id:
-                az += list(skel.az_hull_coords[skel.az_hull_ids == id] / 10)
-            p4 = arr(p4)
-            az = arr(az)
+            vc = []
+            sj = []
+            for id in vc_id:
+                vc += list(skel.vc_hull_coords[skel.vc_hull_ids == id] / 10)
+            for id in sj_id:
+                sj += list(skel.sj_hull_coords[skel.sj_hull_ids == id] / 10)
+            vc = arr(vc)
+            sj = arr(sj)
     else:
-        mitos, p4, az = coords_from_anno(skel)
+        mitos, vc, sj = coords_from_anno(skel)
     if not (mitos == []) and mitos.ndim == 1:
         mitos = mitos[:, None]
-    if not (p4 == []) and p4.ndim == 1:
-        p4 = p4[:, None]
-    if not (az == []) and az.ndim == 1:
-        az = az[:, None]
-    print "Found %d mitos, %d p4, %d az in %s." % (len(set(list(skel.mito_hull_ids))), len(set(list(skel.p4_hull_ids))),
-                                                   len(set(list(skel.az_hull_ids))), skel.filename)
+    if not (vc == []) and vc.ndim == 1:
+        vc = vc[:, None]
+    if not (sj == []) and sj.ndim == 1:
+        sj = sj[:, None]
+    print "Found %d mitos, %d vc, %d sj in %s." % (len(set(list(skel.mito_hull_ids))), len(set(list(skel.vc_hull_ids))),
+                                                   len(set(list(skel.sj_hull_ids))), skel.filename)
     mitos = get_box_coords(mitos, min_pos, max_pos)
-    p4 = get_box_coords(p4, min_pos, max_pos)
-    az = get_box_coords(az, min_pos, max_pos)
+    vc = get_box_coords(vc, min_pos, max_pos)
+    sj = get_box_coords(sj, min_pos, max_pos)
     if save_vx_dir is None:
-        while (len(mitos)+len(p4)+len(az) > 0.4e6):
+        while (len(mitos)+len(vc)+len(sj) > 0.4e6):
             print "Downsmapling of objects!!"
             mitos = mitos[::4]
-            p4 = p4[::2]
-            az = az[::2]
-            skel.az_hull_ids = skel.az_hull_ids[::2]
-            skel.az_hull_coords = skel.az_hull_coords[::2]
+            vc = vc[::2]
+            sj = sj[::2]
+            skel.sj_hull_ids = skel.sj_hull_ids[::2]
+            skel.sj_hull_coords = skel.sj_hull_coords[::2]
     else:
-        while (len(mitos)+len(p4)+len(az) > 5e6):
+        while (len(mitos)+len(vc)+len(sj) > 5e6):
             print "Downsmapling of objects!!"
             mitos = mitos[::4]
-            p4 = p4[::2]
-            az = az[::2]
-            skel.az_hull_ids = skel.az_hull_ids[::2]
-            skel.az_hull_coords = skel.az_hull_coords[::2]
-    print "Plotting %d object hull voxels." % (len(mitos)+len(p4)+len(az))
+            vc = vc[::2]
+            sj = sj[::2]
+            skel.sj_hull_ids = skel.sj_hull_ids[::2]
+            skel.sj_hull_coords = skel.sj_hull_coords[::2]
+    print "Plotting %d object hull voxels." % (len(mitos)+len(vc)+len(sj))
     # plot objects
-    objects = [mitos, p4, az]
+    objects = [mitos, vc, sj]
     colors = [(0./255, 153./255, 255./255), (0.175,0.585,0.301), (0.849,0.138,0.133)]
     syn_type_coloers = [(222./255, 102./255, 255./255), (102./255, 255./255, 0./255)]
     for obj, color, plot_b, type in zip(objects, colors, plot_objects,
-                                  ['mito', 'p4', 'az']):
+                                  ['mito', 'vc', 'sj']):
         if not plot_b:
             continue
         if len(obj) == 0:
@@ -193,10 +192,10 @@ def plot_mapped_skel(path, min_pos, max_pos, color=(1./3, 1./3, 1./3), op=0.1,
             % (skel.filename, str(tuple((arr(color)*255).astype(np.int))), type))
             continue
         print "Plotted %d %s voxel." % (len(obj), type)
-        if type=='az' and color_az:
-            for ix in set(skel.az_hull_ids):
-                ix_bool_arr = skel.az_hull_ids == ix
-                obj_hull = skel.az_hull_coords[ix_bool_arr]
+        if type=='sj' and color_sj:
+            for ix in set(skel.sj_hull_ids):
+                ix_bool_arr = skel.sj_hull_ids == ix
+                obj_hull = skel.sj_hull_coords[ix_bool_arr]
                 syn_type_pred = syn_sign_prediction(obj_hull/arr([9., 9., 20.]))
                 obj_hull = obj_hull / 10.
                 mlab.points3d(obj_hull[:, 0], obj_hull[:, 1], obj_hull[:, 2],
@@ -282,11 +281,11 @@ def get_box_from_cs_nml(path, offset=arr([250, 250, 250]), cs_nb=1):
     cs_str = 'cs%d' % cs_nb
     for node in cs_anno.getNodes():
         n_comment = node.getComment()
-        if 'center_p4_az' in n_comment and cs_str in n_comment:
+        if 'center_vc_sj' in n_comment and cs_str in n_comment:
             center_coord = arr(node.getCoordinate()) * arr(cs_anno.scaling)/10.
             break
     if center_coord is None:
-        print "Could not find center with p4 and az! Using contact_site."
+        print "Could not find center with vc and sj! Using contact_site."
         for node in cs_anno.getNodes():
             if 'center' in node.getComment() and 'cs1_' in node.getComment():
                 center_coord = arr(node.getCoordinate()) * arr(cs_anno.scaling)\
@@ -298,29 +297,29 @@ def get_box_from_cs_nml(path, offset=arr([250, 250, 250]), cs_nb=1):
 
 def get_syn_from_cs_nml(path):
     """
-    Parses p4 and az ids of synapse from pairwise contact site nml.
+    Parses vc and sj ids of synapse from pairwise contact site nml.
     :param path: str to contact_site.nml
-    :return: int tuple p4 and az ID
+    :return: int tuple vc and sj ID
     """
     cs_anno = au.loadj0126NML(path)[0]
     cs_nb = None
     for node in cs_anno.getNodes():
-        if 'center_p4_az' in node.getComment():
+        if 'center_vc_sj' in node.getComment():
             cs_nb = re.findall('cs(\d+)_', node.getComment())[0]
             break
     if cs_nb is None:
-        print "Did not find center_p4_az, looking for first contact site."
+        print "Did not find center_vc_sj, looking for first contact site."
         cs_nb = 'cs1_'
-    p4_id = []
-    az_id = []
+    vc_id = []
+    sj_id = []
     for node in cs_anno.getNodes():
         comment = node.getComment()
         if 'cs%s_' % cs_nb in comment:
-            if '_p4-' in comment:
-                p4_id.append(int(re.findall('_p4-(\d+)', node.getComment())[0]))
-            if '_az-' in comment:
-                az_id.append(int(re.findall('_az-(\d+)', node.getComment())[0]))
-    return p4_id, az_id
+            if '_vc-' in comment:
+                vc_id.append(int(re.findall('_vc-(\d+)', node.getComment())[0]))
+            if '_sj-' in comment:
+                sj_id.append(int(re.findall('_sj-(\d+)', node.getComment())[0]))
+    return vc_id, sj_id
 
 
 def plot_obj(dh, paths):
@@ -338,42 +337,42 @@ def plot_obj(dh, paths):
     nb_cpus = max(cpu_count()-1, 1)
 
     # get synapse objects
-    [skel, mitos, p4, az] = load_anno_list([paths[1]])[0]
-    skel1_mitos, skel1_p4, skel1_az = coords_from_anno(skel)
+    [skel, mitos, vc, sj] = load_anno_list([paths[1]])[0]
+    skel1_mitos, skel1_vc, skel1_sj = coords_from_anno(skel)
 
-    [skel, mitos, p4, az] = load_anno_list([paths[0]])[0]
-    skel2_mitos, skel2_p4, skel2_az = coords_from_anno(skel)
+    [skel, mitos, vc, sj] = load_anno_list([paths[0]])[0]
+    skel2_mitos, skel2_vc, skel2_sj = coords_from_anno(skel)
     filter_size=[4, 1594, 498]
-    coords = arr(dh.p4.rep_coords) * dh.scaling / 10.
+    coords = arr(dh.vc.rep_coords) * dh.scaling / 10.
     bool_1 = np.all(coords >= min_pos, axis=1) & \
              np.all(coords <= max_pos, axis=1)
-    ids = arr(dh.p4.ids)[bool_1][::12]
-    print "Found %d p4." %len(ids)
-    curr_objects = [dh.p4.object_dict[key] for key in ids if
-                    dh.p4.object_dict[key].size >= filter_size[1]]
+    ids = arr(dh.vc.ids)[bool_1][::12]
+    print "Found %d vc." %len(ids)
+    curr_objects = [dh.vc.object_dict[key] for key in ids if
+                    dh.vc.object_dict[key].size >= filter_size[1]]
     pool = Pool(processes=nb_cpus)
     voxel_list = pool.map(helper_get_hull_voxels, curr_objects)
     pool.close()
     pool.join()
-    p4 = arr([voxel for voxels in voxel_list for voxel in voxels])*skel.scaling
-    p4 = np.concatenate((p4, skel1_p4, skel2_p4), axis=0)
-    p4 = get_box_coords(p4, real_min_pos, real_max_pos)
-    print "Plotting %d object hull voxels." % len(p4)
-    coords = arr(dh.az.rep_coords) * dh.scaling / 10.
+    vc = arr([voxel for voxels in voxel_list for voxel in voxels])*skel.scaling
+    vc = np.concatenate((vc, skel1_vc, skel2_vc), axis=0)
+    vc = get_box_coords(vc, real_min_pos, real_max_pos)
+    print "Plotting %d object hull voxels." % len(vc)
+    coords = arr(dh.sj.rep_coords) * dh.scaling / 10.
     bool_1 = np.all(coords >= min_pos, axis=1) & \
              np.all(coords <= max_pos, axis=1)
-    ids = arr(dh.az.ids)[bool_1][::12]
-    print "Found %d az." % len(ids)
-    curr_objects = [dh.az.object_dict[key] for key in ids if
-                    dh.az.object_dict[key].size >= filter_size[2]]
+    ids = arr(dh.sj.ids)[bool_1][::12]
+    print "Found %d sj." % len(ids)
+    curr_objects = [dh.sj.object_dict[key] for key in ids if
+                    dh.sj.object_dict[key].size >= filter_size[2]]
     pool = Pool(processes=nb_cpus)
     voxel_list = pool.map(helper_get_hull_voxels, curr_objects)
     pool.close()
     pool.join()
-    az = arr([voxel for voxels in voxel_list for voxel in voxels])*skel.scaling
-    az = np.concatenate((az, skel1_az, skel2_az), axis=0)
-    az = get_box_coords(az, real_min_pos, real_max_pos)
-    print "Plotting %d object hull voxels." % len(az)
+    sj = arr([voxel for voxels in voxel_list for voxel in voxels])*skel.scaling
+    sj = np.concatenate((sj, skel1_sj, skel2_sj), axis=0)
+    sj = get_box_coords(sj, real_min_pos, real_max_pos)
+    print "Plotting %d object hull voxels." % len(sj)
     coords = arr(dh.mitos.rep_coords) * dh.scaling / 10.
     bool_1 = np.all(coords >= min_pos, axis=1) & \
              np.all(coords <= max_pos, axis=1)
@@ -393,7 +392,7 @@ def plot_obj(dh, paths):
     # plot objects
     mlab.figure(1, bgcolor=(1, 1, 1), fgcolor=(0.5, 0.5, 0.5))
     mlab.clf()
-    objects = [mitos, p4, az]
+    objects = [mitos, vc, sj]
     colors = [(68./(68+85+255.), 85./(68+85+255.), 255./(68+85+255.)),
              (129./(129.+255+29), 255./(129.+255+29), 29/(129.+255+29)),
              (255./(255+44+93), 44./(255+44+93), 93./(255+44+93))]
@@ -405,7 +404,7 @@ def plot_obj(dh, paths):
                       mode='sphere', color=color, opacity=1.0)
 
 
-def write_cs_p4_syn_skels(wd, dh=None, renew=False):
+def write_cs_vc_syn_skels(wd, dh=None, renew=False):
     """
     Plot workflow figure and save it!
     :param dest_path: str path to destination directory
@@ -438,7 +437,7 @@ def write_cs_p4_syn_skels(wd, dh=None, renew=False):
      1217.3956294932052,
      arr([ 5130.        ,  4997.59985352,  6092.        ]))
     mlab.view(*v_zoom)
-    write_img2png(dest_path, 'cs_p4_syn_plot.png', mag=2)
+    write_img2png(dest_path, 'cs_vc_syn_plot.png', mag=2)
 
 
 def write_new_syn_cs(dest_path='/lustre/pschuber/figures/shawns_figure/',
@@ -530,7 +529,7 @@ def write_axoness_cell(skel_path=None):
     hull2text(arr(dend_hull), arr(dend_hull_normals), dest + 'dend.xyz')
 
 
-def neck_head_az_size_hist(cs_dir, recompute=False):
+def neck_head_sj_size_hist(cs_dir, recompute=False):
     """
 
     :param cs_dir:
@@ -543,7 +542,7 @@ def neck_head_az_size_hist(cs_dir, recompute=False):
                               'consensi_celltype_labels_reviewed3.pkl')
     spine_types = [[], [], []]
     syn_types = [[], [], []]
-    az_sizes = [[], [], []]
+    sj_sizes = [[], [], []]
     if recompute:
         for old_key, val in prop_dict.iteritems():
             key = None
@@ -579,35 +578,35 @@ def neck_head_az_size_hist(cs_dir, recompute=False):
             spine_types[syn_spiness].append(key)
             syn_sign = syn_sign_prediction(cs_dict[var]['overlap_vx']/np.array([9., 9., 20.]))
             syn_types[syn_spiness].append(syn_sign)
-            az_sizes[syn_spiness].append(cs_dict[key]["overlap_area"])
+            sj_sizes[syn_spiness].append(cs_dict[key]["overlap_area"])
         print "Found shaft/head/neck synapses:\t%d/%d/%d" % (len(spine_types[0]),
                                                              len(spine_types[1]),
                                                              len(spine_types[2]))
         print "Mean sizes:\t\t\t%0.3f+-%0.3f, %0.3f+-%0.3f, %0.3f+-%0.3f" % \
-              (np.mean(az_sizes[0]), np.std(az_sizes[0]), np.mean(az_sizes[1]),
-               np.std(az_sizes[1]), np.mean(az_sizes[2]), np.std(az_sizes[2]))
-        az_sizes[0] = np.array(az_sizes[0])
-        az_sizes[1] = np.array(az_sizes[1])
-        az_sizes[2] = np.array(az_sizes[2])
+              (np.mean(sj_sizes[0]), np.std(sj_sizes[0]), np.mean(sj_sizes[1]),
+               np.std(sj_sizes[1]), np.mean(sj_sizes[2]), np.std(sj_sizes[2]))
+        sj_sizes[0] = np.array(sj_sizes[0])
+        sj_sizes[1] = np.array(sj_sizes[1])
+        sj_sizes[2] = np.array(sj_sizes[2])
         syn_types[0] = np.array(syn_types[0])
         syn_types[1] = np.array(syn_types[1])
         syn_types[2] = np.array(syn_types[2])
-        np.save("/lustre/pschuber/figures/syns/spines/shaft_sizes.npy", az_sizes[0])
-        np.save("/lustre/pschuber/figures/syns/spines/head_sizes.npy", az_sizes[1])
-        np.save("/lustre/pschuber/figures/syns/spines/neck_sizes.npy", az_sizes[2])
+        np.save("/lustre/pschuber/figures/syns/spines/shaft_sizes.npy", sj_sizes[0])
+        np.save("/lustre/pschuber/figures/syns/spines/head_sizes.npy", sj_sizes[1])
+        np.save("/lustre/pschuber/figures/syns/spines/neck_sizes.npy", sj_sizes[2])
         np.save("/lustre/pschuber/figures/syns/spines/shaft_synsign.npy", syn_types[0])
         np.save("/lustre/pschuber/figures/syns/spines/head_synsign.npy", syn_types[1])
         np.save("/lustre/pschuber/figures/syns/spines/neck_synsign.npy", syn_types[2])
     else:
-        az_sizes[0] = np.load("/lustre/pschuber/figures/syns/spines/shaft_sizes.npy")
-        az_sizes[1] = np.load("/lustre/pschuber/figures/syns/spines/head_sizes.npy")
-        az_sizes[2] = np.load("/lustre/pschuber/figures/syns/spines/neck_sizes.npy")
+        sj_sizes[0] = np.load("/lustre/pschuber/figures/syns/spines/shaft_sizes.npy")
+        sj_sizes[1] = np.load("/lustre/pschuber/figures/syns/spines/head_sizes.npy")
+        sj_sizes[2] = np.load("/lustre/pschuber/figures/syns/spines/neck_sizes.npy")
         syn_types[0] = np.load("/lustre/pschuber/figures/syns/spines/shaft_synsign.npy")
         syn_types[1] = np.load("/lustre/pschuber/figures/syns/spines/head_synsign.npy")
         syn_types[2] = np.load("/lustre/pschuber/figures/syns/spines/neck_synsign.npy")
-    # shaft_ratio = np.sum(az_sizes[0][syn_types[0] == 1]) / np.sum(az_sizes[0])
-    # head_ratio = np.sum(az_sizes[1][syn_types[1] == 1]) / np.sum(az_sizes[1])
-    # neck_ratio = np.sum(az_sizes[2][syn_types[2] == 1]) / np.sum(az_sizes[2])
+    # shaft_ratio = np.sum(sj_sizes[0][syn_types[0] == 1]) / np.sum(sj_sizes[0])
+    # head_ratio = np.sum(sj_sizes[1][syn_types[1] == 1]) / np.sum(sj_sizes[1])
+    # neck_ratio = np.sum(sj_sizes[2][syn_types[2] == 1]) / np.sum(sj_sizes[2])
     shaft_ratio = np.sum(syn_types[0] == 1) / float(len(syn_types[0]))
     head_ratio = np.sum(syn_types[1] == 1) / float(len(syn_types[1]))
     neck_ratio = np.sum(syn_types[2] == 1) / float(len(syn_types[2]))

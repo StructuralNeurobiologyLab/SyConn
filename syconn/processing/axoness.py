@@ -1,6 +1,6 @@
 import networkx as nx
 import numpy as np
-import numpy.array as arr
+from numpy import array as arr
 import re
 from features import assign_property2node, majority_vote
 from learning_rfc import cell_classification

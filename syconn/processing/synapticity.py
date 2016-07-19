@@ -22,16 +22,16 @@ def save_synapse_clf(gt_path, clf_used='rf'):
     :param clf_used: 'rf' or 'svm'
     """
     all_gt_samples = [path for path in get_filepaths_from_dir(gt_path, ending='nml')]
-    gt_az_samples = [path for path in all_gt_samples if not 'p4_az.nml' in path]
-    gt_az_p4_samples = [path for path in all_gt_samples if 'p4_az.nml' in path]
-    X_az, Y_az = calc_syn_feature(gt_az_samples)
-    X_p4_az, Y_p4_az = calc_syn_feature(gt_az_p4_samples)
-    X_total = np.concatenate((X_az, X_p4_az), axis=0)
-    y_total = np.concatenate((Y_az, Y_p4_az), axis=0)
+    gt_sj_samples = [path for path in all_gt_samples if not 'vc_sj.nml' in path]
+    gt_sj_vc_samples = [path for path in all_gt_samples if 'vc_sj.nml' in path]
+    X_sj, Y_sj = calc_syn_feature(gt_sj_samples)
+    X_vc_sj, Y_vc_sj = calc_syn_feature(gt_sj_vc_samples)
+    X_total = np.concatenate((X_sj, X_vc_sj), axis=0)
+    y_total = np.concatenate((Y_sj, Y_vc_sj), axis=0)
     save_train_clf(X_total, y_total, clf_used, gt_path)
 
 
-def helper_load_az_feat(args):
+def helper_load_sj_feat(args):
     """
 
     :param args:
@@ -62,7 +62,7 @@ def calc_syn_feature(gt_samples, ignore_keys=['Barrier', 'Skel'],
     :param detailed_cs_dir: path to folder containing the contact sites
     :return:
     """
-    for ending in ['', 'cs', 'cs_p4', 'cs_az', 'cs_p4_az', 'pairwise',
+    for ending in ['', 'cs', 'cs_vc', 'cs_sj', 'cs_vc_sj', 'pairwise',
                    'feature']:
         if not os.path.exists(detailed_cs_dir+ending):
             os.makedirs(detailed_cs_dir+ending)

@@ -12,7 +12,7 @@ from numpy import array as arr
 from syconn.processing.cell_types import load_celltype_feats,\
     load_celltype_probas, get_id_dict_from_skel_ids, load_celltype_gt
 from syconn.processing.learning_rfc import cell_classification
-from syconn.utils.datahandler import  write_obj2pkl, load_pkl2obj
+from syconn.utils.datahandler import write_obj2pkl, load_pkl2obj
 
 __author__ = 'pschuber'
 

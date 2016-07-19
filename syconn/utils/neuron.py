@@ -9,7 +9,7 @@ import networkx as nx
 import syconn.utils.skeleton_utils as su
 from syconn.utils.skeleton import Skeleton
 from syconn.processing.features import celltype_axoness_feature,\
-    spiness_feats_from_nodes,  radius_feats_from_nodes, az_per_spinehead,\
+    spiness_feats_from_nodes,  radius_feats_from_nodes, sj_per_spinehead,\
     pathlength_of_property
 from syconn.processing.learning_rfc import cell_classification
 from syconn.processing.synapticity import syn_sign_prediction
@@ -122,8 +122,8 @@ class Neuron(object):
         return len(self.synapses)
 
     @property
-    def avg_syn_az_len(self):
-        return np.mean(np.array([s.az_len for s in self.synapses]))
+    def avg_syn_sj_len(self):
+        return np.mean(np.array([s.sj_len for s in self.synapses]))
 
     @property
     def syn_h_s_ratio(self):
@@ -286,7 +286,7 @@ class Neuron(object):
                           'std of radius (axon)',
                           'mean of sh probability (axon)',
                           'mean neck length (axon)', 'std neck length (axon)',
-                          'number az per sh'])[None, :]
+                          'number sj per sh'])[None, :]
             self._feature_name_dict['synapse_type'] = np.array(
                 ['outgoing syn. type', 'proportion of inc. syn. type',
                  'median of outgoing syn. size', 'std of outgoing syn. size',
@@ -344,7 +344,7 @@ def cell_morph_properties(mapped_annotation):
         if i != 2:
             spiness_feats[0, ix_begin:ix_end] = spiness_feats_from_nodes(
                 ax_nodes)
-    spiness_feats[0, 12] = az_per_spinehead(mapped_annotation)
+    spiness_feats[0, 12] = sj_per_spinehead(mapped_annotation)
     dend_length = pathlength_of_property(mapped_annotation, 'axoness_pred', 0)
     if dend_length != 0:
         spiness_feats[0, 0] /= dend_length
@@ -403,21 +403,21 @@ def calc_syn_type_feats(anno_to_use):
     node_list = np.array([n for n in anno_to_use.getNodes()])
     coord_list = [n.getCoordinate_scaled() for n in node_list]
     skel_tree = spatial.cKDTree(coord_list)
-    for ix in set(anno_to_use.az_hull_ids):
-        ix_bool_arr = anno_to_use.az_hull_ids == ix
-        obj_hull = anno_to_use.az_hull_coords[ix_bool_arr]
+    for ix in set(anno_to_use.sj_hull_ids):
+        ix_bool_arr = anno_to_use.sj_hull_ids == ix
+        obj_hull = anno_to_use.sj_hull_coords[ix_bool_arr]
         hull_com = np.mean(obj_hull, axis=0)
         dists, close_ixs = skel_tree.query([hull_com], k=3)
         near_nodes = node_list[close_ixs]
         axoness = cell_classification([int(n.data["axoness_pred"]) for n in
                                        near_nodes[0]])
         syn_type_pred = syn_sign_prediction(obj_hull / np.array([9., 9., 20.]))
-        az_area = convex_hull_area(obj_hull) / 2.e6
+        sj_area = convex_hull_area(obj_hull) / 2.e6
         if axoness == 1:
-            outgoing_syn_size.append(az_area)
+            outgoing_syn_size.append(sj_area)
             syn_types_out.append(syn_type_pred)
         else:
-            incoming_syn_size.append(az_area)
+            incoming_syn_size.append(sj_area)
             syn_types_in.append(syn_type_pred)
     if len(syn_types_out) != 0:
         syn_type_feats[0, 0] = cell_classification(syn_types_out)
