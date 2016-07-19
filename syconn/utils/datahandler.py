@@ -54,9 +54,9 @@ class DataHandler(object):
             scaling of data set, s.t. data is isotropic
         """
         self.wd = wd
-        vc_source = wd + '/chunkdatasets/obj_vc/'
-        sj_source = wd + '/chunkdatasets/obj_sj/'
-        mito_source = wd + '/chunkdatasets/obj_mito/'
+        vc_source = wd + '/chunkdatasets/obj_vc_5/'
+        sj_source = wd + '/chunkdatasets/obj_sj_ARGUS_3/'
+        mito_source = wd + '/chunkdatasets/obj_mito_8/'
         self.mem_path = wd + '/knossosdatasets/rrbarrier/'
         self.cs_path = wd + '/chunkdatasets/j0126_watershed_map/'
         self.myelin_ds_path = wd + "/knossosdatasets/myelin/"
