@@ -13,7 +13,7 @@ def initialize_cset(kd, home_path, chunksize):
     cset = chunky.ChunkDataset()
     cset.initialize(kd, kd.boundary, chunksize, home_path + "/chunkdataset/",
                     box_coords=[0, 0, 0], fit_box_size=True)
-    # chunky.save_dataset(cset)
+    chunky.save_dataset(cset)
 
     return cset
 

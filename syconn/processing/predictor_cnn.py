@@ -138,12 +138,12 @@ def join_chunky_inference(cset, config_path, param_path, names,
     nb_chunks = len(cset.chunk_dict)
     print "Number of chunks:", nb_chunks
 
-    # if gpu is None:
-    #     theano.sandbox.cuda.use("gpu" + str(gpu))
-    # else:
-    #     theano.sandbox.cuda.use("cpu")
+    if len(names) > 1:
+        n_ch = len(labels)
+    else:
+        n_ch = 1
 
-    cnn = predictor.create_predncnn(config_path, 1, len(labels),
+    cnn = predictor.create_predncnn(config_path, n_ch, len(labels),
                                     imposed_input_size=desired_input,
                                     override_MFP_to_active=MFP,
                                     param_file=param_path)
@@ -180,8 +180,7 @@ def join_chunky_inference(cset, config_path, param_path, names,
                     (chunk.coordinates - offset) / mag,
                     mag=mag,
                     invert_data=invert_data)
-                raw_data = raw_data.reshape(1, raw_data.shape[0], raw_data.shape[1],
-                                            raw_data.shape[2])
+                raw_data = raw_data[None, :, :, :]
             else:
                 raw_data = kd.from_raw_cubes_to_matrix(
                     (np.array(chunk.size) + 2 * offset) / mag,
@@ -200,6 +199,7 @@ def join_chunky_inference(cset, config_path, param_path, names,
                 print "Time for creating recursive data: %.3f" % (
                 time.time() - time_rec)
 
+            print raw_data.shape
             inference_data = cnn.predictDense(raw_data, as_uint8=True)
 
             if mag > 1:
@@ -228,4 +228,4 @@ if __name__ == "__main__":
     cset = initialization.initialize_cset(kd, "/mnt/axon/home/sdorkenw/SyConnDenseCube/", [500, 500, 250])
     join_chunky_inference(cset, "/mnt/axon/home/sdorkenw/SyConnDenseCube/models/BIRD_MIGA_config.py",
                           "/mnt/axon/home/sdorkenw/SyConnDenseCube/models/BIRD_MIGA.param",
-                          ["MIGA"], ["sj", "vc", "mi"], [200, 200, 100], [270, 270, 50], kd=kd)
+                          ["MIGA"], ["sj", "vc", "mi"], [200, 200, 100], [50, 270, 270], kd=kd)

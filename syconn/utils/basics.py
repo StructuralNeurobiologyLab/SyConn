@@ -8,6 +8,13 @@ import re
 __author__ = 'pschuber'
 
 
+def switch_array_entries(this_array, entries):
+    entry_0 = this_array[entries[0]]
+    this_array[entries[0]] = this_array[entries[1]]
+    this_array[entries[1]] = entry_0
+    return this_array
+
+
 def negative_to_zero(a):
     """
     Sets negative values of array a to zero.

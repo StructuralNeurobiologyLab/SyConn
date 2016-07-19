@@ -14,7 +14,7 @@ from features import calc_prop_feat_dict
 from learning_rfc import write_feat2csv
 from spiness import assign_neck
 from syconn.utils.datahandler import *
-from syconn.utils.datasets import segmentationDataset
+from syconn.utils.segmentationdataset import SegmentationDataset
 from synapticity import parse_synfeature_from_node
 from ..multi_proc.multi_proc_main import start_multiprocess
 from knossos_utils import chunky
@@ -290,7 +290,7 @@ class SkeletonMapper(object):
 
         if dh.mitos is not None:
             # initialize segmentationDatasets for mapped objects
-            self.mitos = segmentationDataset(dh.mitos.type, dh.mitos._rel_path_home,
+            self.mitos = SegmentationDataset(dh.mitos.type, dh.mitos._rel_path_home,
                                              dh.mitos._path_to_chunk_dataset_head)
             # do the mapping
             node_ids = self.annotate_object(dh.mitos, radius[0], method, "mitos")
@@ -310,7 +310,7 @@ class SkeletonMapper(object):
             print "Skipped mito-mapping."
         # same for p4
         if dh.p4 is not None:
-            self.p4 = segmentationDataset(dh.p4.type, dh.p4._rel_path_home,
+            self.p4 = SegmentationDataset(dh.p4.type, dh.p4._rel_path_home,
                                           dh.p4._path_to_chunk_dataset_head)
             self.p4._node_ids = node_id2key(dh.p4, self.annotate_object(
                 dh.p4, radius[1], method, "p4"), filter_size[1])

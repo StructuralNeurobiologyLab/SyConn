@@ -21,13 +21,11 @@ except:
     qsub_available = False
 
 
-def get_rel_path(obj_name, filename, postfix=""):
-    if len(re.findall("[\d]+", filename)) > 0:
-        nb = str(re.findall("[\d]+", filename)[-1])
-    else:
-        nb = ""
+def get_rel_path(obj_name, filename, suffix=""):
+    if len(suffix) > 0 and not suffix[0] == "_":
+        suffix = "_" + suffix
     return "/obj_" + obj_name + "_" + \
-           nb + postfix +"/"
+           filename + suffix + "/"
 
 
 def path_in_voxel_folder(obj_id, chunk_nb):
@@ -293,7 +291,7 @@ def update_multiple_datasets(paths, update_objects=False, recalculate_rep_coords
             map(updating_segmentationDatasets_thread, multi_params)
 
 
-class segmentationDataset(object):
+class SegmentationDataset(object):
     def __init__(self, obj_type, rel_path_home, path_to_chunk_dataset_head):
         self._type = obj_type
         self._rel_path_home = rel_path_home
@@ -352,7 +350,7 @@ class segmentationDataset(object):
         self._node_ids = None
 
         for ii in range(len(paths_to_hull_voxel)):
-            obj = segmentationObject(obj_ids[ii], self._path_to_chunk_dataset_head+self._rel_path_home,
+            obj = SegmentationObject(obj_ids[ii], self._path_to_chunk_dataset_head+self._rel_path_home,
                                      paths_to_voxel[ii])
             obj._path_to_hull_voxel = paths_to_hull_voxel[ii]
             obj._size = sizes[ii]
@@ -471,7 +469,8 @@ class segmentationDataset(object):
         else:
             return None
 
-class segmentationObject(object):
+
+class SegmentationObject(object):
     def __init__(self, obj_id, path_dataset, path_to_voxels):
         self._path_to_voxel = path_to_voxels
         self._path_to_hull_voxel = None
@@ -545,7 +544,7 @@ class segmentationObject(object):
 
     @property
     def scaling(self):
-        return self._scaling
+        raise NotImplementedError()
 
     @property
     def most_distant_voxel(self):
@@ -582,7 +581,6 @@ class segmentationObject(object):
 
     def write_to_overlaycube(self, kd, mags=None, size_filter=0, entry=None):
         self.write_to_cube(kd, mags, size_filter, entry)
-
 
     def write_to_cube(self, kd, mags=None, size_filter=0, entry=None,
                       as_raw=False, overwrite=True):
@@ -711,7 +709,7 @@ class segmentationObject(object):
         #     os.remove(path)
 
     def calculate_rep_coord(self, calculate_size=False, voxels=None, sample_size=200):
-        if voxels == None:
+        if voxels is None:
             voxels = self.voxels
 
         if len(voxels) > 1:
@@ -743,7 +741,7 @@ class segmentationObject(object):
             self.calculate_size(voxels=voxels)
 
     def calculate_size(self, voxels=None):
-        if voxels == None:
+        if voxels is None:
             voxels = self.voxels
 
         if len(voxels.shape) > 1:
