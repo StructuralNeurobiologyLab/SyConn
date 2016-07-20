@@ -7,7 +7,9 @@ from contactsites import write_summaries
 from multi_proc.multi_proc_main import __QSUB__, start_multiprocess, QSUB_script
 from processing.features import calc_prop_feat_dict
 from processing.learning_rfc import write_feat2csv, load_rfcs
-from processing.mapper import SkeletonMapper, prepare_syns_btw_annos
+from processing.mapper import SkeletonMapper, prepare_syns_btw_annos, \
+    similarity_check_star
+from syconn.processing.cell_types import predict_celltype_label
 from syconn.utils.skeleton import Skeleton
 from utils.datahandler import *
 __author__ = 'pschuber'
@@ -28,6 +30,8 @@ def analyze_dataset(wd):
     enrich_tracings_all(wd, overwrite=False)
     # remap_tracings_all(wd)
     detect_synapses(wd)
+    predict_celltype_label(wd)
+
 
 
 def enrich_tracings_all(wd, overwrite=False):
@@ -407,3 +411,12 @@ def detect_synapses(wd):
     else:
         prepare_syns_btw_annos(anno_permutations, cs_path)
     write_summaries(wd)
+
+
+def detect_similar_tracings(wd):
+    """Print similar skeleton filepaths
+    :param skel_dir: Path to folder containing skeleton files ending with k.zip
+    :return: list of skeleton paths which are unique
+    """
+    skel_paths = get_filepaths_from_dir(wd + '/tracings/')
+    start_multiprocess(similarity_check_star, list(combinations(skel_paths, 2)))

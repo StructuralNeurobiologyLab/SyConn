@@ -189,14 +189,19 @@ def load_celltype_feats(wd):
     np.array
         cell type features
     """
-    feat_dict = load_pkl2obj(wd + '/neurons/skel_feat_dict.pkl')
-    skeleton_feats = []
+    if not os.path.isfile(wd + '/neurons/celltype_feat_dict.pkl'):
+        save_cell_type_feats(wd)
+    feat_dict = load_pkl2obj(wd + '/neurons/celltype_feat_dict.pkl')
+    skeleton_feats = np.zeros((len(feat_dict.keys()),
+                               len(feat_dict.values()[0])))
     skeleton_ids = []
+    ii = 0
     for key, val in feat_dict.iteritems():
-        skeleton_feats.append(val)
+        skeleton_feats[ii] = arr(val)
         skeleton_ids.append(key)
+        ii += 1
     ixs = np.argsort(skeleton_ids)
-    return arr(skeleton_ids)[ixs], arr(skeleton_feats)[ixs]
+    return arr(skeleton_ids)[ixs], skeleton_feats[ixs]
 
 
 def load_celltype_probas(wd):
@@ -212,6 +217,8 @@ def load_celltype_probas(wd):
     np.array, np.array
         cell ids, cell label probabilities
     """
+    if not os.path.isfile(wd + '/neurons/celltype_proba_dict.pkl'):
+        predict_celltype_label(wd)
     proba_dict = load_pkl2obj(wd + '/neurons/celltype_proba_dict.pkl')
     skel_probas = []
     skeleton_ids = []
@@ -220,6 +227,53 @@ def load_celltype_probas(wd):
         skeleton_ids.append(key)
     ixs = np.argsort(skeleton_ids)
     return arr(skeleton_ids)[ixs], arr(skel_probas)[ixs]
+
+
+def load_celltype_preds(wd):
+    """Loads cell type predictions and corresponding ids from dictionaries
+
+    Parameters
+    ----------
+    wd : str
+        Path to working directory
+
+    Returns
+    -------
+    np.array, np.array
+        cell ids, cell labels
+    """
+    if not os.path.isfile(wd + '/neurons/celltype_pred_dict.pkl'):
+        predict_celltype_label(wd)
+    pred_dict = load_pkl2obj(wd + '/neurons/celltype_pred_dict.pkl')
+    skel_probas = []
+    skeleton_ids = []
+    for key, val in pred_dict.iteritems():
+        skel_probas.append(val)
+        skeleton_ids.append(key)
+    ixs = np.argsort(skeleton_ids)
+    return arr(skeleton_ids)[ixs], arr(skel_probas)[ixs]
+
+
+def predict_celltype_label(wd):
+    """Predict celltyoe labels in working directory with pretrained classifier
+    in subfolder models/rf_celltypes/rf.pkl
+
+    Parameters
+    ----------
+    wd : str
+        path to working directory
+    """
+    rf = joblib.load(wd + '/models/rf_celltypes/rf.pkl')
+    skeleton_ids, skeleton_feats = load_celltype_feats(wd)
+    skel_type_probas = rf.predict_proba(skeleton_feats)
+    proba_dict = {}
+    cell_type_pred_dict = {}
+    for ii, proba in enumerate(skel_type_probas):
+        proba_dict[skeleton_ids[ii]] = proba
+        cell_type_pred_dict[skeleton_ids[ii]] = np.argmax(proba)
+    write_obj2pkl(cell_type_pred_dict, wd + '/neurons/'
+                                            'celltype_pred_dict.pkl')
+    write_obj2pkl(proba_dict, wd + '/neurons/celltype_proba_dict.pkl')
 
 
 def save_cell_type_feats(wd):
@@ -232,22 +286,22 @@ def save_cell_type_feats(wd):
     """
     skel_dir = wd + '/neurons/'
     skel_paths = get_filepaths_from_dir(skel_dir)
+    print "Calculating cell type feats of %d tracings." % len(skel_paths)
     # predict skeleton cell type probability
     skel_ids = []
     feat_dict = {}
-    result_tuple = start_multiprocess(calc_neuron_feat, skel_paths, debug=False,
-                                      nb_cpus=16)
+    result_tuple = start_multiprocess(calc_neuron_feat, skel_paths, debug=True)
     for feat, skel_id in result_tuple:
         skel_ids.append(skel_id)
         feat_dict[skel_id] = feat[0]
-    write_obj2pkl(feat_dict, wd + '/neurons/skel_feat_dict.pkl')
+    write_obj2pkl(feat_dict, wd + '/neurons/celltype_feat_dict.pkl')
     # get example neuron and write neuron feature names
     cell = load_mapped_skeleton(skel_paths[0], True, True)[0]
     cell.filename = skel_paths[0]
     neuron = Neuron(cell)
     _ = neuron.neuron_features
     feat_names = neuron.neuron_feature_names
-    np.save(wd + '/neurons/feat_names.npy', feat_names)
+    np.save(wd + '/neurons/celltype_feat_names.npy', feat_names)
 
 
 def calc_neuron_feat(path):
@@ -272,6 +326,7 @@ def calc_neuron_feat(path):
         print "Found nans in feautres of skel %s" % path, \
             neuron.neuron_feature_names[np.isnan(neuron.neuron_features[0])]
         print neuron.neuron_features[0][np.isnan(neuron.neuron_features[0])]
+    print "Finished feature extraction of %s" % path
     return feats, orig_skel_id
 
 
@@ -288,13 +343,6 @@ def write_feats_importance(wd, load_data=True, clf_used='rf'):
     feat_names = np.load(wd + '/neurons/feat_names.npy')
 
     rf = joblib.load(wd + '/models/celltypes/%s.pkl' % (clf_used))
-    skeleton_ids, skeleton_feats = load_celltype_feats(wd)
-    skel_type_probas = rf.predict_proba(skeleton_feats)
-    proba_dict = {}
-    print "# of feats and feat-names:", skeleton_feats.shape[1], len(feat_names)
-    for ii, proba in enumerate(skel_type_probas):
-        proba_dict[skeleton_ids[ii]] = proba
-
     importances = rf.feature_importances_
     feature_importance(rf, save_path='/home/pschuber/figures/cell_types/'
                                      'rf_feat_importance.png')

@@ -1186,7 +1186,7 @@ def similarity_check_star(params):
     skel1 = load_ordered_mapped_skeleton(params[0])[0]
     skel2 = load_ordered_mapped_skeleton(params[1])[0]
     similar = similarity_check(skel1, skel2)
-    return similar
+    return similar, params
 
 
 def syn_btw_anno_pair(params):

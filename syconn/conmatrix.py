@@ -2,15 +2,20 @@
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
+from matplotlib import pyplot as pp
+from matplotlib import gridspec
 import numpy as np
 import re
+import os
 from matplotlib import gridspec
 from matplotlib import pyplot as pp
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from numpy import array as arr
 
+from syconn.contactsites import conn_dict_wrapper
 from syconn.processing.cell_types import load_celltype_feats,\
-    load_celltype_probas, get_id_dict_from_skel_ids, load_celltype_gt
+    load_celltype_probas, get_id_dict_from_skel_ids, load_celltype_gt,\
+    load_celltype_preds
 from syconn.processing.learning_rfc import cell_classification
 from syconn.utils.datahandler import write_obj2pkl, load_pkl2obj
 
@@ -38,40 +43,28 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
         artificially increase pixel size from 1 to 3 for better visualization
     """
     supp = ""
-    skeleton_ids, skeleton_feats = load_celltype_feats(wd)
-    skeleton_ids2, skel_type_probas = load_celltype_probas(wd)
-    assert np.all(np.equal(skeleton_ids, skeleton_ids2)),\
-        "Skeleton ordering wrong for probabilities and features."
+    skeleton_ids, cell_type_probas = load_celltype_probas(wd)
+    cell_type_pred_dict = load_pkl2obj(wd + '/neurons/celltype_pred_dict.pkl')
     bool_arr = np.zeros(len(skeleton_ids))
-    # load loo results of evaluation
-    cell_type_pred_dict = load_pkl2obj(wd + '/neurons/cell_pred_dict_novel.pkl')
     # remove all skeletons under confidence level
-    for k, probas in enumerate(skel_type_probas):
+    for k, probas in enumerate(cell_type_probas):
         if np.max(probas) > confidence_lvl:
             bool_arr[k] = 1
     bool_arr = bool_arr.astype(np.bool)
-    skeleton_ids = skeleton_ids[bool_arr]
+    skeleton_ids = skeleton_ids[bool_arr].tolist()
     print "%d/%d are under confidence level %0.2f and being removed." % \
-          (np.sum(~bool_arr), len(skeleton_ids2), confidence_lvl)
-    # remove identical skeletons
-    ident_cnt = 0
-    skeleton_ids = skeleton_ids.tolist()
-    for skel_id in skeleton_ids:
-        if skel_id in [497, 474, 307, 366, 71, 385, 434, 503, 521, 285, 546,
-                       158, 604]:
-            skeleton_ids.remove(skel_id)
-            ident_cnt += 1
-    skeleton_ids = arr(skeleton_ids)
-    print "Removed %d skeletons because of similarity." % ident_cnt
-
+          (np.sum(~bool_arr), len(skeleton_ids), confidence_lvl)
+    if not os.path.isfile(wd + '/contactsites/connectivity_dict.pkl'):
+        conn_dict_wrapper(wd, all=False)
+        conn_dict_wrapper(wd, all=True)
     # create matrix
     if syn_only:
-        syn_props = load_pkl2obj(wd + '/contactsites/enriched_cs_dict.pkl')
+        syn_props = load_pkl2obj(wd + '/contactsites/connectivity_dict.pkl')
         area_key = 'sizes_area'
         total_area_key = 'total_size_area'
         syn_pred_key = 'syn_types_pred_maj'
     else:
-        syn_props = load_pkl2obj(wd + '/contactsites/enriched_cs_all.pkl')
+        syn_props = load_pkl2obj(wd + '/contactsites/connectivity_dict_all.pkl')
         area_key = 'cs_area'
         total_area_key = 'total_cs_area'
         syn_pred_key = 'syn_types_pred'
@@ -143,7 +136,7 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
     print "Ranges for axons[%d]: %s" % (len(axon_pred), class_ranges(axon_pred))
 
     pure_axon_pred = np.array([cell_type_pred_dict[den_id] for den_id in
-                          pure_axon_ids])
+                              pure_axon_ids])
     type_sorted_ixs = np.argsort(pure_axon_pred, kind='mergesort')
     pure_axon_pred = pure_axon_pred[type_sorted_ixs]
     pure_axon_ids = pure_axon_ids[type_sorted_ixs]
@@ -287,8 +280,8 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
                     big_entries=big_entries, maj_vote=maj_vote_axoness)
 
         plot_wiring_cum(cum_wiring, class_ranges(dendrite_pred),
-                        class_ranges(axon_pred), confidence_lvl, binary, wd,
-                        add_fname=supp, maj_vote=maj_vote)
+                        class_ranges(axon_pred), confidence_lvl, max_val,
+                        binary, wd, add_fname=supp, maj_vote=maj_vote)
 
         plot_wiring(wiring_multiple_syns, den_borders, ax_borders, max_val,
                     confidence_lvl, binary, wd, add_fname=supp+'_multiple_syns',
@@ -528,34 +521,17 @@ def type_sorted_wiring_cs(wd, confidence_lvl=0.8, binary=False,
     """Same as type_sorted_wiring but for all contact sites
     (synapse classification 0 and 1)
     """
-    skel_ids, skeleton_feats = load_celltype_feats(wd + '/celltypes/')
-    skel_ids2, skel_type_probas = load_celltype_probas(wd + '/celltypes/')
-    assert np.all(np.equal(skel_ids, skel_ids2)), "Skeleton ordering wrong for"\
-                                                  "probabilities and features."
-    bool_arr = np.zeros(len(skel_ids))
-    cell_type_pred_dict = {}
-    for k, skel_id in enumerate(skel_ids):
-        cell_type_pred_dict[skel_id] = np.argmax(skel_type_probas[k])
-    # load loo results of evaluation
-    proba_fname = wd+'/res/loo_proba_rf_2labels_False_pca' \
-                     '_False_evenlabels_False.npy'
-    probas = np.load(proba_fname)
-    # get corresponding skeleton ids
-    _, _, help_skel_ids = load_celltype_gt()
-    # rewrite "prediction" of samples which are in trainings set with loo-proba
-    for k, skel_id in enumerate(help_skel_ids):
-        cell_type_pred_dict[skel_id] = np.argmax(probas[k])
-    write_obj2pkl(cell_type_pred_dict, wd + '/synapse_matrices/'
-                                            'cell_pred_dict.pkl')
-
+    skeleton_ids, cell_type_probas = load_celltype_probas(wd)
+    cell_type_pred_dict = load_pkl2obj(wd + '/neurons/celltype_pred_dict.pkl')
+    bool_arr = np.zeros(len(skeleton_ids))
     # remove all skeletons under confidence level
-    for k, probas in enumerate(skel_type_probas):
+    for k, probas in enumerate(cell_type_probas):
         if np.max(probas) > confidence_lvl:
             bool_arr[k] = 1
     bool_arr = bool_arr.astype(np.bool)
-    skeleton_ids = skel_ids[bool_arr]
+    skeleton_ids = skeleton_ids[bool_arr]
     print "%d/%d are under confidence level %0.2f and being removed." % \
-          (np.sum(~bool_arr), len(skel_ids), confidence_lvl)
+          (np.sum(~bool_arr), len(skeleton_ids2), confidence_lvl)
 
     # create matrix
     syn_props = load_pkl2obj(wd + '/synapse_matrices/phil_dict_no_'
@@ -701,11 +677,6 @@ def plot_wiring_cum_cs(wiring, den_borders, ax_borders, confidence_lvl,
     col_sum = np.sum(wiring, axis=0)
     intensity_plot = (intensity_plot - intensity_plot.min())/\
                      np.max((intensity_plot.max() - intensity_plot.min()))
-
-    print row_sum
-    print col_sum
-    from matplotlib import pyplot as pp
-    from matplotlib import gridspec
     matplotlib.rcParams.update({'font.size': 14})
     fig = pp.figure()
     # Create scatter plot

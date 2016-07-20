@@ -229,7 +229,6 @@ class Neuron(object):
             self.nx_g)
         self.features['all_branch_density'] = 0.
         self.features['num_all_end_p'] = num_end_points_of_nx_graph(self.nx_g)
-        self.features['all_branch_density'] = 0.
         self.features['tortuosity'] = calc_arc_choord(anno_to_use, self.nx_g)
 
         if os.path.isfile(self._mapped_skel_dir + anno_to_use.filename) or \
@@ -304,7 +303,12 @@ class Neuron(object):
 
 
 def num_end_points_of_nx_graph(nx_graph):
-    return len(list({k for k, v in nx_graph.degree().iteritems() if v == 1}))
+    try:
+        num = len(list({k for k, v in nx_graph.degree().iteritems() if v == 1}))
+    except Exception, e:
+        print e
+        print "Got exception during number end point calculation. Setting to 0."
+    return num
 
 
 def cell_morph_properties(mapped_annotation):
@@ -407,7 +411,8 @@ def calc_syn_type_feats(anno_to_use):
         ix_bool_arr = anno_to_use.sj_hull_ids == ix
         obj_hull = anno_to_use.sj_hull_coords[ix_bool_arr]
         hull_com = np.mean(obj_hull, axis=0)
-        dists, close_ixs = skel_tree.query([hull_com], k=3)
+        dists, close_ixs = skel_tree.query([hull_com],
+                                           k=np.min((3, len(node_list))))
         near_nodes = node_list[close_ixs]
         axoness = cell_classification([int(n.data["axoness_pred"]) for n in
                                        near_nodes[0]])
@@ -441,7 +446,13 @@ def calc_syn_type_feats(anno_to_use):
 
 
 def num_branch_points_of_nx_graph(nx_graph):
-    return len(list({k for k, v in nx_graph.degree().iteritems() if v > 2}))
+    try:
+        num = len(list({k for k, v in nx_graph.degree().iteritems() if v > 2}))
+    except Exception, e:
+        print e
+        print "Got exception during number branch point calc. Setting to 0."
+        num = 0
+    return num
 
 
 def get_annotation_branch_lengths(annotation):
@@ -503,5 +514,4 @@ def calc_arc_choord(anno, nxg=None):
         print('No path between nodes for tortuosity calculation for neuron %s' %
               anno.filename)
         return 0
-
     return dists[-1][1] / path_len

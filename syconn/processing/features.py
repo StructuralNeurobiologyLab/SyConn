@@ -318,9 +318,10 @@ def celltype_axoness_feature(anno):
     """
     type_feats = np.zeros((1, 4))
     all_path_length = anno.physical_length() / 1000.
-    for i in range(3):
-        type_feats[0, i] = pathlength_of_property(anno, 'axoness_pred', i) / \
-                        all_path_length
+    if all_path_length != 0:
+        for i in range(3):
+            type_feats[0, i] = pathlength_of_property(anno, 'axoness_pred', i) / \
+                            all_path_length
     for n in anno.getNodes():
         if int(n.data["axoness_pred"]) == 2:
             type_feats[0, 3] = np.max((n.degree(), type_feats[0, 3]))
