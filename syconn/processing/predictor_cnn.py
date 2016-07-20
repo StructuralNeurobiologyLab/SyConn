@@ -144,6 +144,7 @@ def join_chunky_inference(cset, config_path, param_path, names,
         n_ch = 1
 
     cnn = predictor.create_predncnn(config_path, n_ch, len(labels),
+                                    gpu=gpu,
                                     imposed_input_size=desired_input,
                                     override_MFP_to_active=MFP,
                                     param_file=param_path)

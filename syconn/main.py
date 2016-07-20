@@ -1,43 +1,163 @@
-from processing import initialization, objectextraction as oe
+from processing import initialization, objectextraction as oe, \
+    predictor_cnn as pc
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
+import syconn
 
+import glob
 import numpy as np
 import os
+import shutil
 import sys
 
-# home_path = sys.argv[1]
-home_path = "/lustre/sdorkenw/SyConnDenseCube"
+home_dir = os.environ['HOME'] + "/"
+syconn_dir = syconn.__path__[0] + "/"
 
-assert os.path.exists(home_path + "/models/")
-assert os.path.exists(home_path + "/knossosdatasets/raw/")
+# main_path = sys.argv[1]
+# cnn_device = sys.argv[2]
+cnn_device = "gpu0"
+main_path = "/lustre/sdorkenw/SyConnDenseCubeTestCenter/"
+if not "/" == main_path[-1]:
+    main_path += "/"
+
+# ------------------------------------------------------------------------ Setup
+
+assert os.path.exists(main_path + "/models/BIRD_MIGA_config.py")
+assert os.path.exists(main_path + "/models/BIRD_MIGA.param")
+assert os.path.exists(main_path + "/models/BIRD_ARGUS_config.py")
+assert os.path.exists(main_path + "/models/BIRD_ARGUS.param")
+assert os.path.exists(main_path + "/models/BIRD_barrier_config.py")
+assert os.path.exists(main_path + "/models/BIRD_barrier.param")
+assert os.path.exists(main_path + "/models/BIRD_rbarrier_config.py")
+assert os.path.exists(main_path + "/models/BIRD_rbarrier.param")
+assert os.path.exists(main_path + "/models/BIRD_TYPE_config.py")
+assert os.path.exists(main_path + "/models/BIRD_TYPE.param")
+
+assert os.path.exists(main_path + "/knossosdatasets/raw/")
+
 
 # define paths, create folders, initialize datasets
 kd_raw = knossosdataset.KnossosDataset()
-kd_raw.initialize_from_knossos_path(home_path + "/knossosdatasets/raw/")
-cset = initialization.initialize_cset(kd_raw, home_path, [500, 500, 250])
+kd_raw.initialize_from_knossos_path(main_path + "/knossosdatasets/raw/")
 
-# CNN - Synapses
+if os.path.exists(main_path + "chunkdataset.chunk_dataset.pkl"):
+    cset = chunky.load_dataset(main_path + "chunkdataset.chunk_dataset.pkl")
+else:
+    cset = initialization.initialize_cset(kd_raw, main_path, [500, 500, 250])
 
-# CNN - Barrier
+if not os.path.exists(home_dir + ".theanorc"):
+    print "Creating .theanorc in your home"
+    shutil.copy(syconn_dir + "/utils/default_thenaorc",
+                home_dir + "/.theanorc")
+else:
+    print ".theanorc detected"
 
+# -------------------------------------------------------------- CNN Predictions
+
+mutex_paths = glob.glob(cset.path_head_folder + "chunky_*/mutex_*")
+for path in mutex_paths:
+    os.removedirs(path)
+
+# Synaptic junctions, vesicle clouds, mitochondria - stage 1
+pc.join_chunky_inference(cset,
+                         main_path + "/models/BIRD_MIGA_config.py",
+                         main_path + "/models/BIRD_MIGA.param",
+                         ["MIGA"], ["none", "mi", "vc", "sj"], [200, 200, 100],
+                         [32, 290, 290], kd=kd_raw)
+
+# Synaptic junctions, vesicle clouds, mitochondria - stage 2
+pc.join_chunky_inference(cset,
+                         main_path + "/models/BIRD_ARGUS_config.py",
+                         main_path + "/models/BIRD_ARGUS.param",
+                         ["ARGUS", "MIGA"], ["none", "mi", "vc", "sj"], [100, 100, 50],
+                         [32, 290, 290], kd=kd_raw)
+
+# Type of synaptic junctions
+pc.join_chunky_inference(cset,
+                         main_path + "/models/BIRD_TYPE_config.py",
+                         main_path + "/models/BIRD_TYPE.param",
+                         ["TYPE"], ["none", "asym", "sym"], [100, 100, 50],
+                         [32, 290, 290], kd=kd_raw)
+
+# Barrier - stage 1
+pc.join_chunky_inference(cset,
+                         main_path + "/models/BIRD_barrier_config.py",
+                         main_path + "/models/BIRD_barrier.param",
+                         ["BARRIER"], ["none", "bar"], [200, 200, 100],
+                         [32, 290, 290], kd=kd_raw)
+
+# Barrier - stage 2
+pc.join_chunky_inference(cset,
+                         main_path + "/models/BIRD_rbarrier_config.py",
+                         main_path + "/models/BIRD_rbarrier.param",
+                         ["RBARRIER", "BARRIER"], ["none", "bar"], [100, 100, 50],
+                         [32, 290, 290], kd=kd_raw)
+
+# ------------------------------------------------ Conversion to knossosdatasets
 
 kd_bar = knossosdataset.KnossosDataset()
-kd_bar.initialize_from_knossos_path(home_path + "/knossosdatasets/rrbarrier/")
+if os.path.exists(main_path + "knossosdatasets/rrbarrier/"):
+    kd_bar.initialize_from_knossos_path(main_path + "/knossosdatasets/rrbarrier/")
+else:
+    bar = cset.from_chunky_to_matrix(kd_raw.boundary, [0, 0, 0], "RBARRIER",
+                                     ["bar"], dtype=np.uint8,
+                                     show_progress=True)
+    kd_bar.initialize_from_matrix(main_path + "knossosdatasets/rrbarrier/",
+                                  scale=[9, 9, 20],
+                                  experiment_name="j0126_dense",
+                                  data=bar,
+                                  mags=[1, 2, 4, 8])
+    bar = None
 
-# Object Extraction
-# TODO: use specific thresholds only for example run
-# oe.from_probabilities_to_objects(cset, "ARGUS",
-#                                   ["sj", "vc", "mi"],
-#                                   thresholds=[100, 100, 100],
-#                                   debug=False,
-#                                   membrane_kd_path=kd_bar.knossos_path)
+kd_asym = knossosdataset.KnossosDataset()
+if os.path.exists(main_path + "knossosdatasets/asymmetric/"):
+    kd_asym.initialize_from_knossos_path(main_path + "/knossosdatasets/asymmetric/")
+kd_sym = knossosdataset.KnossosDataset()
+if os.path.exists(main_path + "knossosdatasets/symmetric/"):
+    kd_sym.initialize_from_knossos_path(main_path + "/knossosdatasets/symmetric/")
+
+if not kd_asym.initialized or not kd_sym.initialized:
+    types = cset.from_chunky_to_matrix(kd_raw.boundary, [0, 0, 0], "TYPE",
+                                       ["asym", "sym"], dtype=np.uint8,
+                                       show_progress=True)
+
+    if not kd_asym.initialized:
+        kd_asym.initialize_from_matrix(main_path + "knossosdatasets/asymmetric/",
+                                       scale=[9, 9, 20],
+                                       experiment_name="j0126_dense",
+                                       data=types["asym"],
+                                       mags=[1, 2, 4, 8])
+
+    if not kd_sym.initialized:
+        kd_sym.initialize_from_matrix(main_path + "knossosdatasets/symmetric/",
+                                      scale=[9, 9, 20],
+                                      experiment_name="j0126_dense",
+                                      data=types["sym"],
+                                      mags=[1, 2, 4, 8])
+
+        types = None
+
+
+if os.path.exists(main_path + "knossosdatasets/rrbarrier/"):
+    kd_bar.initialize_from_knossos_path(main_path + "/knossosdatasets/rrbarrier/")
+else:
+    bar = cset.from_chunky_to_matrix(kd_raw.boundary, [0, 0, 0], "RBARRIER",
+                                     ["bar"], dtype=np.uint8,
+                                     show_progress=True)
+    kd_bar.initialize_from_matrix(main_path + "knossosdatasets/rrbarrier/",
+                                  scale=[9, 9, 20],
+                                  experiment_name="j0126_dense",
+                                  data=bar,
+                                  mags=[1, 2, 4, 8])
+    bar = None
+
+
+# ------------------------------------------------------------ Object Extraction
 
 oe.from_probabilities_to_objects(cset, "ARGUS",
                                  ["sj"],
                                  thresholds=[int(4*255/21.)],
                                  debug=False,
-                                 membrane_kd_path=kd_bar.knossos_path,
                                  suffix="3")
 
 oe.from_probabilities_to_objects(cset, "ARGUS",
@@ -46,22 +166,10 @@ oe.from_probabilities_to_objects(cset, "ARGUS",
                                  debug=False,
                                  suffix="5",
                                  membrane_kd_path=kd_bar.knossos_path)
-#
+
 oe.from_probabilities_to_objects(cset, "ARGUS",
                                  ["mi"],
                                  thresholds=[int(9*255/21.)],
                                  debug=False,
-                                 suffix="8",
-                                 membrane_kd_path=kd_bar.knossos_path)
-#
-
-
-
-# oe.from_probabilities_to_objects_parameter_sweeping(cset,
-#                                                     "ARGUS",
-#                                                     ["sj", "vc", "mi"],
-#                                                     20,
-#                                                     membrane_kd_path=None,
-#                                                     hdf5_name_membrane=kd_bar.knossos_path,
-#                                                     use_qsub=False)
+                                 suffix="8")
 
