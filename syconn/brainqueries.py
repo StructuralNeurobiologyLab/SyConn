@@ -12,6 +12,7 @@ from processing.mapper import SkeletonMapper, prepare_syns_btw_annos, \
 from syconn.processing.cell_types import predict_celltype_label
 from syconn.utils.skeleton import Skeleton
 from utils.datahandler import *
+from syconn.conmatrix import type_sorted_wiring
 __author__ = 'pschuber'
 
 __QSUB__ = False
@@ -31,6 +32,8 @@ def analyze_dataset(wd):
     # remap_tracings_all(wd)
     detect_synapses(wd)
     predict_celltype_label(wd)
+    type_sorted_wiring(wd)
+
 
 
 
