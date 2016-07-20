@@ -541,6 +541,8 @@ def get_number_cs_details(cs_path):
 
 
 def conn_dict_wrapper(wd, all=False):
+    """Wrapper function to write connectivity dictionary to working directory
+    """
     if all:
         suffix = "_all"
     else:
@@ -551,6 +553,15 @@ def conn_dict_wrapper(wd, all=False):
 
 def synapse_matrix(wd, type_threshold=0.225, suffix="",
                    exclude_dendrodendro=True):
+    """
+
+    Parameters
+    ----------
+    wd : str
+    type_threshold : float
+    suffix : str
+    exclude_dendrodendro : bool
+    """
     save_folder = wd + '/contactsites/'
     if not os.path.exists(save_folder):
         os.makedirs(save_folder)
@@ -677,6 +688,15 @@ def synapse_matrix(wd, type_threshold=0.225, suffix="",
 
 
 def syn_type_majority_vote(wd, suffix=""):
+    """Majority vote of synapse type
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    int, int
+    """
     save_folder = wd + '/contactsites/'
     with open(save_folder + "/connectivity_dict%s.pkl" % suffix, "r") as f:
         phil_dict = pickle.load(f)

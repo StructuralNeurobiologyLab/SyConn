@@ -382,14 +382,17 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
                             (den_pos_i != den_pos) or (ax_pos_j != ax_pos):
                             continue
                         if wiring[i, j, 1] != 0:
-                            intensity_plot[i+add_i, j+add_j] = (-1)**(syn_sign+1) * wiring[i, j, 1]
+                                intensity_plot[i+add_i, j+add_j] = \
+                                    (-1)**(syn_sign+1) * wiring[i, j, 1]
                         elif wiring[i, j, 2] != 0:
-                            intensity_plot[i+add_i, j+add_j] = (-1)**(syn_sign+1) * wiring[i, j, 2]
+                                intensity_plot[i+add_i, j+add_j] = \
+                                    (-1)**(syn_sign+1) * wiring[i, j, 2]
     if not big_entries:
-        np.save(wd + '/figures/wiring/connectivity_matrix.npy',
+        np.save('/lustre/pschuber/figures/wiring/connectivity_matrix.npy',
                 intensity_plot)
     print "Plotting wiring diagram with maxval", max_val, "and supplement", add_fname
     print "Max/Min in plot:", np.min(intensity_plot), np.max(intensity_plot)
+    print "Max/Min in plot (original):", max_val
     tmp_max_val = np.zeros((2))
     tmp_max_val[1] = np.min(intensity_plot)
     tmp_max_val[0] = np.max(intensity_plot)
@@ -419,6 +422,7 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
 
     cbar_ax = pp.subplot(gs[0, 1])
     cbar_ax.yaxis.set_ticks_position('none')
+    cb = fig.colorbar(cax, cax=cbar_ax, ticks=[])
     plt.close()
 
     if not binary:
@@ -453,7 +457,7 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
                 intensity_plot[i, j] = (-1)**(syn_sign+1) * sector_intensity
             else:
                 intensity_plot[i, j] = (-1)**(syn_sign+1) * np.min((sector_intensity, 0.1))
-    np.save(wd + '/figures/wiring/cumulated_connectivity_matrix.npy',
+    np.save('/lustre/pschuber/figures/wiring/cumulated_connectivity_matrix.npy',
             intensity_plot)
     print intensity_plot
     ind = np.arange(4)
@@ -479,6 +483,7 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
     ax.grid(color='k', linestyle='-')
     cbar_ax = pp.subplot(gs[1, 2])
     cbar_ax.yaxis.set_ticks_position('none')
+    cb = fig.colorbar(cax, cax=cbar_ax, ticks=[])
     axr = pp.subplot(gs[1, 1], sharey=ax, yticks=[],
                      xticks=[],
                      frameon=False,
@@ -513,7 +518,8 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
                     'lvl%d.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
     else:
         fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
-            'lvl%d_binary.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
+                    'lvl%d_binary.png' % (add_fname, int(confidence_lvl*10)),
+                    dpi=600)
 
 
 def type_sorted_wiring_cs(wd, confidence_lvl=0.8, binary=False,

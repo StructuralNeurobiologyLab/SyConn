@@ -35,8 +35,6 @@ def analyze_dataset(wd):
     type_sorted_wiring(wd)
 
 
-
-
 def enrich_tracings_all(wd, overwrite=False):
     """Run :func: 'enrich_tracings' on available cluster nodes defined by
     somaqnodes or using multiprocessing.
