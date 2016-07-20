@@ -2,6 +2,7 @@ from itertools import combinations
 import multi_proc
 import sys
 import getpass
+import warnings
 from contactsites import write_summaries
 from multi_proc.multi_proc_main import __QSUB__, start_multiprocess, QSUB_script
 from processing.features import calc_prop_feat_dict
@@ -10,15 +11,6 @@ from processing.mapper import SkeletonMapper, prepare_syns_btw_annos
 from syconn.utils.skeleton import Skeleton
 from utils.datahandler import *
 __author__ = 'pschuber'
-
-# Multiprocessing parameter
-nb_cpus = cpu_count()
-# QSUB keyword arguments
-script_path = os.path.dirname(multi_proc.multi_proc_main.__file__)
-kwargs = {'work_folder': "/home/%s/QSUB/" % getpass.getuser(),
-          'username': getpass.getuser(),
-          'python_path': sys.executable,
-          'path_to_scripts': script_path}
 
 __QSUB__ = False
 
@@ -33,7 +25,8 @@ def analyze_dataset(wd):
     wd : str
         path to working directory
     """
-    enrich_tracings_all(wd)
+    enrich_tracings_all(wd, overwrite=False)
+    # remap_tracings_all(wd)
     detect_synapses(wd)
 
 
@@ -55,12 +48,12 @@ def enrich_tracings_all(wd, overwrite=False):
     print "Found %d cell tracings." % len(anno_list)
     if __QSUB__:
         list_of_lists = [[anno_list[i::60], wd, overwrite] for i in xrange(60)]
-        QSUB_script(list_of_lists, 'skeleton_mapping', **kwargs)
+        QSUB_script(list_of_lists, 'skeleton_mapping')
     else:
         enrich_tracings(anno_list, wd, overwrite=overwrite)
 
 
-def enrich_tracings(anno_list, wd, map_objects=False, method='hull', radius=1200,
+def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
                     thresh=2.2, filter_size=(2786, 1594, 250),
                     create_hull=True, max_dist_mult=1.4, detect_outlier=True,
                     dh=None, overwrite=False, nb_neighbors=20,
@@ -182,18 +175,19 @@ def enrich_tracings(anno_list, wd, map_objects=False, method='hull', radius=1200
                                    nb_neighbors=nb_neighbors,
                                    neighbor_radius=neighbor_radius,
                                    max_dist_mult=max_dist_mult)
+                if map_objects:
+                    skel.annotate_objects(dh, radius, method, thresh,
+                                          filter_size, nb_hull_vox=nb_hull_vox,
+                                          nb_voting_neighbors=nb_voting_neighbors,
+                                          nb_rays=nb_rays,
+                                          nb_neighbors=nb_neighbors,
+                                          neighbor_radius=neighbor_radius,
+                                          max_dist_mult=max_dist_mult)
             except Exception, e:
-                print e
-                print "Problem with tracing %s. Skipping it." % filepath
-                return
+                warnings.warn(
+                    "%s. Problem with tracing %s. Skipping it." %
+                    (e, filepath), RuntimeWarning)
         if map_objects:
-            skel.annotate_objects(dh, radius, method, thresh,
-                                  filter_size, nb_hull_vox=nb_hull_vox,
-                                  nb_voting_neighbors=nb_voting_neighbors,
-                                  nb_rays=nb_rays,
-                                  nb_neighbors=nb_neighbors,
-                                  neighbor_radius=neighbor_radius,
-                                  max_dist_mult=max_dist_mult)
             print "Starting cell compartment prediction."
             if rfc_spiness is not None:
                 skel.predict_property(rfc_spiness, 'spiness')
@@ -205,15 +199,16 @@ def enrich_tracings(anno_list, wd, map_objects=False, method='hull', radius=1200
         skel.write2kzip(path)
 
 
-def remap_tracings_all(anno_list, dest_dir=None, recalc_prop_only=False,
+def remap_tracings_all(wd, dest_dir=None, recalc_prop_only=False,
                        method='hull', context_range=6000):
     """Run remap_tracings on available cluster nodes defined by
     somaqnodes or using single node multiprocessing.
 
     Parameters
     ----------
-    anno_list : list of str
-        Paths to skeleton nml / kzip files
+    wd : str
+        Path to working directory, which contains skeleton nml / kzip files in
+
     dest_dir : str
         Directory path to store mapped skeletons
     recalc_prop_only : bool
@@ -224,41 +219,37 @@ def remap_tracings_all(anno_list, dest_dir=None, recalc_prop_only=False,
     context_range : int
         Context range for property features
     """
+    anno_list = get_filepaths_from_dir(wd + '/neurons/')
     np.random.shuffle(anno_list)
     if dest_dir is not None and not os.path.isdir(dest_dir):
         os.makedirs(dest_dir)
-    print "Found %d mapped Skeletons. Remapping with context range of %d" % \
+    print "Found %d mapped Skeletons. Remapping with context range of %d nm." %\
           (len(anno_list), context_range)
-
+    nb_processes = np.max((len(anno_list) / 3, 3))
+    list_of_lists = [[wd, anno_list[i::nb_processes], dest_dir,
+                      recalc_prop_only, method, context_range]
+                     for i in xrange(nb_processes)]
     if __QSUB__:
-        nb_processes = np.max((len(anno_list) / 3, 3))
-        list_of_lists = [[anno_list[i::nb_processes], dest_dir,
-                          recalc_prop_only, method, context_range]
-                         for i in xrange(nb_processes)]
-        QSUB_script(list_of_lists, 'skeleton_remapping', **kwargs)
+        QSUB_script(list_of_lists, 'skeleton_remapping')
     else:
-        start_multiprocess(remap_tracings_star, [anno_list, dest_dir,
-                           recalc_prop_only, method, context_range],
-                           nb_cpus=nb_cpus)
+        start_multiprocess(remap_tracings_star, list_of_lists, debug=True)
 
 
 def remap_tracings_star(params):
     """Helper function for multiprocessed remap_tracings."""
-    remap_tracings(params[0], params[1], recalc_prop_only=params[2],
-                   method=params[3], context_range=params[4])
+    remap_tracings(params[0], params[1], output_dir=params[2],
+                   recalc_prop_only=params[3], method=params[4],
+                   context_range=params[5])
 
 
 def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
                    thresh=2.2, filter_size=(2786, 1594, 250),
-                   max_dist_mult=1.4,
-                   nb_neighbors=20, nb_hull_vox=500,
+                   max_dist_mult=1.4, nb_neighbors=20, nb_hull_vox=500,
                    neighbor_radius=220, nb_rays=20, nb_voting_neighbors=100,
                    output_dir=None, write_obj_voxel=True,
                    mito_min_votes=235, vc_min_votes=191, sj_min_votes=346,
                    recalc_prop_only=True, context_range=6000):
-    """ Remap objects in tracings with pre-calculated cell hull
-
-    Remaps objects to skeleton without recalculating the hull.
+    """Remaps objects to skeleton without recalculating the hull.
 
     Parameters
     ----------
@@ -326,6 +317,8 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
     rf_spiness_p = wd + '/models/rf_spiness/rf.pkl'
     rfc_axoness, rfc_spiness = load_rfcs(rf_axoness_p, rf_spiness_p)
     cnt = 0
+    if dh is None:
+        dh = DataHandler(wd)
     for skel_path in mapped_skel_paths:
         cnt += 1
         # get first element in list and only skeletonAnnotation
@@ -348,14 +341,12 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
               "Using context range of %d and method '%s'" % (skel_path, path,
                                                              context_range,
                                                              method)
-        new_skel = SkeletonMapper(mapped_skel_old, mapped_skel_old.scaling,
+        new_skel = SkeletonMapper(mapped_skel_old, dh,
                                   ix=ix, soma=soma)
         if recalc_prop_only:
             print "--- Recalculating properties only ---"
             new_skel.old_anno.filename = skel_path
         else:
-            if dh is None:
-                dh = DataHandler(wd)
             new_skel.obj_min_votes['mitos'] = mito_min_votes
             new_skel.obj_min_votes['vc'] = vc_min_votes
             new_skel.obj_min_votes['sj'] = sj_min_votes
@@ -412,7 +403,7 @@ def detect_synapses(wd):
     if __QSUB__:
         list_of_lists = [[list(anno_permutations[i::300]), cs_path]
                          for i in xrange(300)]
-        QSUB_script(list_of_lists, 'synapse_mapping', **kwargs)
+        QSUB_script(list_of_lists, 'synapse_mapping', queue='somaqnodes')
     else:
         prepare_syns_btw_annos(anno_permutations, cs_path)
     write_summaries(wd)

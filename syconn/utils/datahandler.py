@@ -54,11 +54,11 @@ class DataHandler(object):
             scaling of data set, s.t. data is isotropic
         """
         self.wd = wd
-        vc_source = wd + '/chunkdatasets/obj_vc_5/'
-        sj_source = wd + '/chunkdatasets/obj_sj_ARGUS_3/'
-        mito_source = wd + '/chunkdatasets/obj_mito_8/'
+        vc_source = wd + '/chunkdataset/obj_vc_ARGUS_5/'
+        sj_source = wd + '/chunkdataset/obj_sj_ARGUS_3/'
+        mito_source = wd + '/chunkdataset/obj_mi_ARGUS_8/'
         self.mem_path = wd + '/knossosdatasets/rrbarrier/'
-        self.cs_path = wd + '/chunkdatasets/j0126_watershed_map/'
+        self.cs_path = wd + '/chunkdataset/j0126_watershed_map/'
         self.myelin_ds_path = wd + "/knossosdatasets/myelin/"
         self.data_path = wd + '/neurons/'
         self.skeleton_path = wd + '/tracings/'
@@ -77,6 +77,7 @@ class DataHandler(object):
                     obj.init_properties()
                     print "Initialized %s objects." % object_dict[i]
                 except IOError:
+                    print
                     obj = None
             else:
                 obj = source
@@ -163,6 +164,8 @@ def load_files_from_kzip(path, load_mitos):
             if i == 1 and load_mitos is not True:
                 continue
             data = np.fromstring(zf.read(filename), sep=' ')
+            if len(data) == 0:
+                continue
             if np.isscalar(data[0]) and data[0] == -1:
                 continue
             if i == 0:
@@ -178,6 +181,8 @@ def load_files_from_kzip(path, load_mitos):
             if i == 0 and load_mitos is not True:
                 continue
             data = np.fromstring(zf.read(filename), sep=' ')
+            if len(data) == 0:
+                continue
             if data[0] == -1:
                 continue
             id_list[i] = data.astype(np.uint32)
@@ -275,14 +280,14 @@ def load_mapped_skeleton(path, append_obj, load_mitos):
             load_files_from_kzip(path + 'k.zip', load_mitos)
         mito_hull_ids, vc_hull_ids, sj_hull_ids = id_list
         hull, mitos, vc, sj = coord_list
-        skel._hull_coords = hull
+        skel.hull_coords = hull
         skel.mito_hull_coords = mitos
         skel.mito_hull_ids = mito_hull_ids
         skel.vc_hull_coords = vc
         skel.vc_hull_ids = vc_hull_ids
         skel.sj_hull_coords = sj
         skel.sj_hull_ids = sj_hull_ids
-        skel._hull_normals = hull_normals
+        skel.hull_normals = hull_normals
     return mapped_skel
 
 

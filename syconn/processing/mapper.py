@@ -112,10 +112,10 @@ class SkeletonMapper(object):
         self._hull_coords = None
         self._hull_normals = None
         self._skel_radius = None
-        if hasattr(self.old_anno, '_hull_coords'):
+        if hasattr(self.old_anno, 'hull_coords'):
             print "Found membrane hull. Re-using it."
-            self._hull_coords = self.old_anno._hull_coords
-            self._hull_normals = self.old_anno._hull_normals
+            self._hull_coords = self.old_anno.hull_coords
+            self._hull_normals = self.old_anno.hull_normals
         # init skeleton nodes
         self._property_features = None
         self.property_feat_names = None
@@ -328,7 +328,7 @@ class SkeletonMapper(object):
             print "Skipped vc-mapping."
         # and sj
         if dh.sj is not None:
-            self.sj = segmentationDataset(dh.sj.type, dh.sj._rel_path_home,
+            self.sj = SegmentationDataset(dh.sj.type, dh.sj._rel_path_home,
                                           dh.sj._path_to_chunk_dataset_head)
             self.sj._node_ids = node_id2key(dh.sj, self.annotate_object(
                 dh.sj, radius[2], method, "sj"), filter_size[2])
@@ -570,6 +570,8 @@ class SkeletonMapper(object):
         red_ids = self._annotate_with_kdtree(data, radius=radius)
         red_ids = list(set([id for sublist in red_ids for id in sublist]))
         points = self.hull_coords
+        if len(points) == 0:
+            return [[]] * len(self.nodes)
         tree = spatial.cKDTree(points)
         def check_hull_normals(obj_coord, hull_coords, dir_vecs):
             if not sjtrue:
@@ -753,7 +755,10 @@ class SkeletonMapper(object):
             ix_node = big_skel_tree.query(node.getCoordinate(), 1)[1]
             node.setDataElem("radius", np.max((radii_sorted[ix_node], 1.)))
         self.anno.nodes = set(self.nodes)
-        hull_coords = arr([pt for sub in hull_list for pt in sub])*self.scaling
+        try:
+            hull_coords = arr([pt for sub in hull_list for pt in sub])*self.scaling
+        except ValueError:
+            hull_coords = np.zeros((0, 3))
         hull_coords = np.nan_to_num(hull_coords).astype(np.float32)
         if detect_outlier:
             hull_coords_ix = outlier_detection(hull_coords, nb_neighbors,
@@ -1021,6 +1026,8 @@ def outlier_detection(point_list, min_num_neigh, radius):
     numpy.array
         Cleaned point cloud
     """
+    if len(point_list) == 0:
+        return np.ones((len(point_list), )).astype(np.bool)
     print "Starting outlier detection."
     if np.array(point_list).ndim != 2:
         points = np.array([point for sublist in point_list for point in sublist])
@@ -1163,14 +1170,14 @@ def similarity_check(skel_a, skel_b):
                skel_a.scaling
     a_coords_sample = a_coords[np.random.randint(0, len(a_coords), 100)]
     b_coords = arr([node.getCoordinate() for node in skel_b.getNodes()]) * \
-               skel_b.scaling
+                skel_b.scaling
     b_tree = spatial.cKDTree(b_coords)
     a_near = b_tree.query_ball_point(a_coords_sample, 1)
     nb_equal = len([id for sublist in a_near for id in sublist])
     similar = nb_equal > 10
     if similar:
-        print "Skeletons %s and %s are similar, choosing first one " \
-              % (skel_a.filename, skel_b.filename)
+        print "Skeletons %s and %s are similar." % (skel_a.filename,
+                                                    skel_b.filename)
     return similar
 
 
@@ -1322,7 +1329,7 @@ def syn_btw_anno_pair(params):
             pairwise_anno.addNode(node)
         mean_cs_area = np.mean((csb_area, csa_area))
         if mean_cs_area < min_cs_area:
-            print "Skipping cs because of area:", mean_cs_area
+            # print "Skipping cs because of area:", mean_cs_area
             continue
 
         # get hull distance
@@ -1484,20 +1491,13 @@ def syn_btw_anno_pair(params):
     if len(pairwise_anno.getNodes()) == 0:
         print "Did not found any node in annotation object."
         return None
-    pairwise_anno.appendComment('%dcs' % (i+1))
+    pairwise_anno.appendComment('%dcs' % len(csites))
     dummy_skel = Skeleton()
     dummy_skel.add_annotation(pairwise_anno)
     dummy_skel.toNml(dest_path+'pairwise/'+annotation_name+'.nml')
     del dummy_skel
     gc.collect()
     return 0
-    # except Exception, e:
-    #     print e
-    #     raise()
-    #     print "----------------------------\n" \
-    #           "WARNING!! \n" \
-    #           "Could not compute %s and %s. \n%s\n" % (path_a, path_b, e)
-    #     return 0
 
 
 def max_nodes_in_path(anno, source_node, max_number):
@@ -1721,10 +1721,10 @@ def cs_btw_annos(anno_a, anno_b, max_hull_dist, concom_dist):
     list
         List of hull coordinates for each contact site
     """
-    hull_a = anno_a._hull_coords
-    hull_b = anno_b._hull_coords
+    hull_a = anno_a.hull_coords
+    hull_b = anno_b.hull_coords
     if len(hull_a) == 0 or len(hull_b) == 0:
-        print "One skeleton hull is empty!! Skipping pair."
+        # print "One skeleton hull is empty!! Skipping pair."
         return [], []
     tree_a = spatial.cKDTree(hull_a)
     tree_b = spatial.cKDTree(hull_b)
@@ -1738,9 +1738,12 @@ def cs_btw_annos(anno_a, anno_b, max_hull_dist, concom_dist):
     if contact_coords_b.ndim == 1:
         contact_coords_b = contact_coords_a[None, :]
     contact_coords = np.concatenate((contact_coords_a, contact_coords_b), axis=0)
-    if contact_coords.shape[0] >= 0.3*(len(hull_a)+len(hull_b)):
-        print "Found too many contact_coords, " \
-              "assuming similar skeleton comparison."
+    if contact_coords.shape[0] >= 0.95*(len(hull_a)+len(hull_b)):
+        print "Found too many contact_coords (proportion of total hull voxel:" \
+              "%0.3f) assuming similar skeleton comparison between skeleton" \
+              "%s and %s. " \
+              % (contact_coords.shape[0] / float(len(hull_a)+len(hull_b)),
+                 anno_a.filename, anno_b.filename)
         return [], []
     if contact_coords.shape[0] == 0:
         return [], []
@@ -1752,8 +1755,6 @@ def cs_btw_annos(anno_a, anno_b, max_hull_dist, concom_dist):
     for label in set(labels):
         curr_label_ixs = labels == label
         cs_list.append(contact_coords[curr_label_ixs])
-    print "Found %d contact sites for anno %s and %s." % \
-         (nb_cc, anno_a.filename, anno_b.filename)
     # extract annotation ids
     tree_a_b = spatial.cKDTree(np.concatenate((hull_a, hull_b), axis=0))
     contact_site_coord_ids = []

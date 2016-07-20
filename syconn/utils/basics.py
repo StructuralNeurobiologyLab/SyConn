@@ -4,6 +4,8 @@ from numpy import array as arr
 from math import pow, sqrt, ceil
 from scipy import ndimage
 from scipy.spatial import ConvexHull
+from scipy.spatial.qhull import QhullError
+import warnings
 import re
 __author__ = 'pschuber'
 
@@ -157,13 +159,19 @@ def convex_hull_area(pts):
     :param pts: np.array of coordinates in nm (scaled)
     :return: Area of the point cloud (nm^2)
     """
-    if len(pts) < 3:
+    if len(pts) < 4:
         return 0
     area = 0
-    ch = ConvexHull(pts)
-    triangles = ch.points[ch.simplices]
-    for triangle in triangles:
-        area += poly_area(triangle)
+    try:
+        ch = ConvexHull(pts)
+        triangles = ch.points[ch.simplices]
+        for triangle in triangles:
+            area += poly_area(triangle)
+    except QhullError as e:
+        warnings.warn("%s encountered during calculation of convex hull "
+                      "area with %d points. Returning 0 nm^2." %
+                      (e, len(pts)), RuntimeWarning)
+        pass
     return area
 
 

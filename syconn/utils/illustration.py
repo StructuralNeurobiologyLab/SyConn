@@ -22,10 +22,10 @@ def init_skel_vis(skel, min_pos, max_pos, hull_visualization=True, op=0.15,
         if np.any(node_coord < min_pos) or np.any(node_coord > max_pos):
             skel.removeNode(node)
     if hull_visualization is True:
-        bools = get_box_coords(skel._hull_coords / 10., min_pos, max_pos,
+        bools = get_box_coords(skel.hull_coords / 10., min_pos, max_pos,
                                ret_bool_array=True)
-        hull_points = skel._hull_coords[bools] / 10.
-        hull_normals = skel._hull_normals[bools]
+        hull_points = skel.hull_coords[bools] / 10.
+        hull_normals = skel.hull_normals[bools]
         if save_vx_dir is not None:
             hull2text(hull_points, hull_normals, save_vx_dir +
                       skel.filename + 'hull.xyz')
@@ -58,7 +58,7 @@ def init_skel_vis_with_properties(skel, min_pos, max_pos, property='spiness_pred
         if np.any(node_coord < min_pos) or np.any(node_coord > max_pos):
             skel.removeNode(node)
         node_axoness[int(node.data[property])] += [i]
-    hull_points = get_box_coords(skel._hull_coords / 10., min_pos, max_pos)
+    hull_points = get_box_coords(skel.hull_coords / 10., min_pos, max_pos)
     while len(hull_points) > 0.3e6:
         hull_points = hull_points[::2]
         print "Subsampling"
@@ -486,8 +486,8 @@ def write_axoness_cell(skel_path=None):
     if skel_path is None:
         skel_path = get_paths_of_skelID(['182'], '/lustre/pschuber/mapped_soma_tracings/nml_obj/')[0]
     skel, _, _, _, _ = load_mapped_skeleton(skel_path, True, False)
-    hull = skel._hull_coords
-    normals = skel._hull_normals
+    hull = skel.hull_coords
+    normals = skel.hull_normals
     node_coords = []
     node_ids = []
     axon_ids = []

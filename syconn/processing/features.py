@@ -436,7 +436,7 @@ def assign_property2node(node, pred, property):
         node.setComment("".join(help_list))
 
 
-def majority_vote(anno, property='axoness', max_dist=5000):
+def majority_vote(anno, property='axoness', max_dist=6000):
     """
     Smoothes property prediction of annotation using running average with path
     length 2 * max_length (nm).
@@ -472,8 +472,9 @@ def majority_vote(anno, property='axoness', max_dist=5000):
 
 def get_obj_density(source, property='axoness_pred', value=1, obj='mito',
                     return_abs_density=True):
-    """
-    Calculate pathlength of nodes using edges.
+    """Calculate pathlength of nodes using edges
+    Parameters
+    ----------
     :param anno: list of SkeletonAnnotation
     :return: length in um
     """
