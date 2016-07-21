@@ -444,7 +444,7 @@ def get_connectivity_list(wd):
     assert os.path.exists(conn_dict_path)
     conn_dict = load_pkl2obj(conn_dict_path)
     synapse_touches = -1 * np.ones((len(conn_dict.keys()), 1))
-    cell_ids = -1 * np.ones((len(conn_dict.keys()), 1))
+    cell_ids = -1 * np.ones((len(conn_dict.keys()), 2))
     cnt = 0
     for pair_name, pair in conn_dict.iteritems():
         if pair['total_size_area'] == 0:
