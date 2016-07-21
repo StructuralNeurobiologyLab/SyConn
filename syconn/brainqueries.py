@@ -443,16 +443,21 @@ def get_connectivity_list(wd):
     conn_dict_path = wd + '/contactsites/connectivity_dict.pkl'
     assert os.path.exists(conn_dict_path)
     conn_dict = load_pkl2obj(conn_dict_path)
-    synapse_touches = np.zeros((len(conn_dict.keys()), 1))
+    synapse_touches = -1 * np.ones((len(conn_dict.keys()), 1))
     cell_ids = -1 * np.ones((len(conn_dict.keys()), 1))
     cnt = 0
     for pair_name, pair in conn_dict.iteritems():
+        if pair['total_size_area'] == 0:
+            continue
         skel_id1, skel_id2 = re.findall('(\d+)_(\d+)', pair_name)[0]
         cell_ids[cnt] = np.array([int(skel_id1), int(skel_id1)])
         indiv_syn_sizes = np.array(pair['sizes_area'])
         indiv_syn_axoness = np.array(pair['partner_axoness']) == 1
         pair['sizes_area'] = indiv_syn_sizes[~indiv_syn_axoness]
         synapse_touches[cnt] = len(v['sizes_area'])
+    existent_entries = synapse_touches != -1
+    synapse_touches = synapse_touches[existent_entries]
+    cell_ids = cell_ids[existent_entries]
     sorted_ixs = np.argsort(synapse_touches)
     synapse_touches = synapse_touches[sorted_ixs]
     cell_ids = cell_ids[sorted_ixs]

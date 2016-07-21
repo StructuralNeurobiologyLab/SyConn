@@ -411,7 +411,7 @@ def write_cs_vc_syn_skels(wd, dh=None, renew=False):
     :param dh: DataHandler
     :param renew: Mapped skeletons
     """
-    dest_path = wd + '/figures/',
+    dest_path = wd + '/figures/'
     source = get_paths_of_skelID(['227', '83', '216'])
     paths = get_paths_of_skelID(['227', '83', '216'],
                                 traced_skel_dir=wd + '/neurons/')
