@@ -129,8 +129,11 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
 
     Returns
     -------
+    results_as_list: list
         list containing information about the number of connected components
-        in each chunk, overlap and stitch overlap
+        in each chunk
+    overlap: np.array
+    stitch overlap: np.array
     """
 
     label_density = np.array(label_density)
@@ -250,6 +253,39 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                      overlap, debug, suffix="", use_qsub=False):
+    """
+    Creates a stitch list for the overlap region between chunks
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    filename : str
+        Filename of the prediction in the chunkdataset
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    chunk_list: list of int
+        Selective list of chunks for which this function should work on. If None
+        all chunks are used.
+    overlap: np.array
+        Defines the overlap with neighbouring chunks that is left for later
+        processing steps
+    stitch_overlap: np.array
+        Defines the overlap with neighbouring chunks that is left for stitching
+    debug: boolean
+        If true multiprocessed steps only operate on one core using 'map' which
+        allows for better error messages
+    suffix: str
+        Suffix for the intermediate results
+    use_qsub: boolean
+        Whether or not to use qsub
+
+    Returns:
+    --------
+    stitch_list: list
+        list of overlapping component ids
+    """
+
     multi_params = []
     for nb_chunk in chunk_list:
         multi_params.append([cset, nb_chunk, filename, hdf5names,
@@ -295,6 +331,28 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
 
 
 def make_merge_list(hdf5names, stitch_list, max_labels):
+    """
+    Creates a merge list from a stitch list by mapping all connected ids to
+    one id
+
+    Parameters
+    ----------
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    stitch_list: dictionary
+        Contains pairs of overlapping component ids for each hdf5name
+    max_labels dictionary
+        Contains the number of different component ids for each hdf5name
+
+    Returns
+    -------
+    merge_dict: dictionary
+        mergelist for each hdf5name
+    merge_list_dict: dictionary
+        mergedict for each hdf5name
+    """
+
     merge_dict = {}
     merge_list_dict = {}
     for hdf5_name in hdf5names:
@@ -315,6 +373,31 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
 
 def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                      debug, suffix="", use_qsub=False):
+    """
+    Applies merge list to all chunks
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    chunk_list: list of int
+        Selective list of chunks for which this function should work on. If None
+        all chunks are used.
+    filename : str
+        Filename of the prediction in the chunkdataset
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    merge_list_dict: dictionary
+        mergedict for each hdf5name
+    debug: boolean
+        If true multiprocessed steps only operate on one core using 'map' which
+        allows for better error messages
+    suffix: str
+        Suffix for the intermediate results
+    use_qsub: boolean
+        Whether or not to use qsub
+    """
+
     multi_params = []
     merge_list_dict_path = cset.path_head_folder + "merge_list_dict.pkl"
 
@@ -342,6 +425,29 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
 
 def extract_voxels(cset, filename, hdf5names, debug=False, chunk_list=None,
                    suffix="", use_qsub=False):
+    """
+    Extracts voxels for each component id
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    filename : str
+        Filename of the prediction in the chunkdataset
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    chunk_list: list of int
+        Selective list of chunks for which this function should work on. If None
+        all chunks are used.
+    debug: boolean
+        If true multiprocessed steps only operate on one core using 'map' which
+        allows for better error messages
+    suffix: str
+        Suffix for the intermediate results
+    use_qsub: boolean
+        Whether or not to use qsub
+
+    """
 
     if chunk_list is None:
         chunk_list = [ii for ii in range(len(cset.chunk_dict))]
@@ -365,8 +471,26 @@ def extract_voxels(cset, filename, hdf5names, debug=False, chunk_list=None,
         raise Exception("QSUB not available")
 
 
-def concatenate_mappings(cset, filename, hdf5names, debug=False, chunk_list=None,
-                         suffix="", use_qsub=False):
+def concatenate_mappings(cset, filename, hdf5names, debug=False, suffix=""):
+    """
+    Combines all map dicts
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    filename : str
+        Filename of the prediction in the chunkdataset
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    debug: boolean
+        If true multiprocessed steps only operate on one core using 'map' which
+        allows for better error messages
+    suffix: str
+        Suffix for the intermediate results
+
+    """
+
     multi_params = []
     for hdf5_name in hdf5names:
         rel_path = segmentationdataset.get_rel_path(hdf5_name, filename, suffix)
@@ -380,6 +504,29 @@ def concatenate_mappings(cset, filename, hdf5names, debug=False, chunk_list=None
 
 def create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
                                debug=False, suffix="", use_qsub=False):
+    """
+    Creates object instances from extracted voxels
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    filename : str
+        Filename of the prediction in the chunkdataset
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    granularity: int
+        Defines granularity for partitioning data for multiprocessing
+    debug: boolean
+        If true multiprocessed steps only operate on one core using 'map' which
+        allows for better error messages
+    suffix: str
+        Suffix for the intermediate results
+    use_qsub: boolean
+        Whether or not to use qsub
+
+    """
+
     multi_params = []
     for nb_hdf5_name in range(len(hdf5names)):
         counter = 0
@@ -394,7 +541,7 @@ def create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
         for step in range(
                 int(np.ceil(len(map_dict_paths) / float(granularity)))):
             this_map_dict_paths = map_dict_paths[step * granularity:
-            (step + 1) * granularity]
+                                                    (step + 1) * granularity]
             save_path = path_dataset + "/object_dicts/dict_%d.pkl" % counter
             multi_params.append([cset.path_head_folder, this_map_dict_paths,
                                  filename, hdf5_name, save_path, suffix,
@@ -417,6 +564,26 @@ def create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
 
 def create_datasets_from_objects(cset, filename, hdf5names,
                                  debug=False, suffix="", use_qsub=False):
+    """
+    Create dataset instance from objects
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    filename : str
+        Filename of the prediction in the chunkdataset
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    debug: boolean
+        If true multiprocessed steps only operate on one core using 'map' which
+        allows for better error messages
+    suffix: str
+        Suffix for the intermediate results
+    use_qsub: boolean
+        Whether or not to use qsub
+
+    """
     multi_params = []
     for hdf5_name in hdf5names:
         multi_params.append(
@@ -450,6 +617,62 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                                   hdf5_name_membrane=None,
                                   suffix="",
                                   use_qsub=False):
+    """
+    Main function for the object extraction step; combines all needed steps
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    filename : str
+        Filename of the prediction in the chunkdataset
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    overlap: str or np.array
+        Defines the overlap with neighbouring chunks that is left for later
+        processing steps; if 'auto' the overlap is calculated from the sigma and
+        the stitch_overlap (here: [1., 1., 1.])
+    sigmas: list of lists or None
+        Defines the sigmas of the gaussian filters applied to the probability
+        maps. Has to be the same length as hdf5names. If None no gaussian filter
+        is applied
+    thresholds: list of float
+        Threshold for cutting the probability map. Has to be the same length as
+        hdf5names. If None zeros are used instead (not recommended!)
+    chunk_list: list of int
+        Selective list of chunks for which this function should work on. If None
+        all chunks are used.
+    debug: boolean
+        If true multiprocessed steps only operate on one core using 'map' which
+        allows for better error messages
+    swapdata: boolean
+        If true an x-z swap is applied to the data prior to processing
+    label_density: np.array
+        Defines the density of the data. If the data was downsampled prior to
+        saving; it has to be interpolated first before processing due to
+        alignment issues with the coordinate system. Two-times downsampled
+        data would have a label_density of [2, 2, 2]
+    offset : np.array
+        offset of the volume to the origin
+    size: np.array
+        size of the volume
+    membrane_filename: str
+        One way to allow access to a membrane segmentation when processing
+        vesicle clouds. Filename of the prediction in the chunkdataset. The
+        threshold is currently set at 0.4.
+    membrane_kd_path: str
+        One way to allow access to a membrane segmentation when processing
+        vesicle clouds. Path to the knossosdataset containing a membrane
+        segmentation. The threshold is currently set at 0.4.
+    hdf5_name_membrane: str
+        When using the membrane_filename this key has to be given to access the
+        data in the saved chunk
+    suffix: str
+        Suffix for the intermediate results
+    use_qsub: boolean
+        Whether or not to use qsub
+
+    """
     all_times = []
     step_names = []
     if size is not None and offset is not None:
@@ -581,9 +804,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     # --------------------------------------------------------------------------
 
     time_start = time.time()
-    concatenate_mappings(cset, filename, hdf5names, debug=debug,
-                         chunk_list=chunk_list, suffix=suffix,
-                         use_qsub=use_qsub)
+    concatenate_mappings(cset, filename, hdf5names, debug=debug, suffix=suffix)
     all_times.append(time.time() - time_start)
     step_names.append("concatenate mappings")
     print "\nTime needed for concatenating mappings: %.3fs" % all_times[-1]
@@ -630,6 +851,61 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
                                                      membrane_kd_path=None,
                                                      hdf5_name_membrane=None,
                                                      use_qsub=False):
+    """
+    Sweeps over different thresholds. Each objectextraction resutls are saved in
+    a seperate folder, all intermediate steps are saved with a different suffix
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    filename : str
+        Filename of the prediction in the chunkdataset
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    nb_thresholds: integer
+        number of thresholds and therefore runs of objectextractions to do;
+        the actual thresholds are equally spaced
+    overlap: str or np.array
+        Defines the overlap with neighbouring chunks that is left for later
+        processing steps; if 'auto' the overlap is calculated from the sigma and
+        the stitch_overlap (here: [1., 1., 1.])
+    sigmas: list of lists or None
+        Defines the sigmas of the gaussian filters applied to the probability
+        maps. Has to be the same length as hdf5names. If None no gaussian filter
+        is applied
+    chunk_list: list of int
+        Selective list of chunks for which this function should work on. If None
+        all chunks are used.
+    swapdata: boolean
+        If true an x-z swap is applied to the data prior to processing
+    label_density: np.array
+        Defines the density of the data. If the data was downsampled prior to
+        saving; it has to be interpolated first before processing due to
+        alignment issues with the coordinate system. Two-times downsampled
+        data would have a label_density of [2, 2, 2]
+    offset : np.array
+        offset of the volume to the origin
+    size: np.array
+        size of the volume
+    membrane_filename: str
+        One way to allow access to a membrane segmentation when processing
+        vesicle clouds. Filename of the prediction in the chunkdataset. The
+        threshold is currently set at 0.4.
+    membrane_kd_path: str
+        One way to allow access to a membrane segmentation when processing
+        vesicle clouds. Path to the knossosdataset containing a membrane
+        segmentation. The threshold is currently set at 0.4.
+    hdf5_name_membrane: str
+        When using the membrane_filename this key has to be given to access the
+        data in the saved chunk
+    suffix: str
+        Suffix for the intermediate results
+    use_qsub: boolean
+        Whether or not to use qsub
+
+    """
+
     thresholds = np.array(
         255. / (nb_thresholds + 1) * np.array(range(1, nb_thresholds + 1)),
         dtype=np.uint8)
