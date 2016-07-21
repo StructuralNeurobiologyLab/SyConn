@@ -33,7 +33,7 @@ def gauss_threshold_connected_components_thread(args):
     box_offset = np.array(chunk.coordinates) - np.array(overlap)
     size = np.array(chunk.size) + 2*np.array(overlap)
 
-    if swapdata == 1:
+    if swapdata:
         size = basics.switch_array_entries(size, [0, 2])
 
     if not fast_load:

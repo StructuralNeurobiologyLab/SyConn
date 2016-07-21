@@ -6,33 +6,34 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import numpy as np
-from multiprocessing.pool import ThreadPool
-from multiprocessing import Pool
 import os
 import time
 import cPickle as pickle
 import networkx as nx
-from scipy import ndimage
-import sklearn.metrics
-import subprocess
-import sys
 import glob
-import shutil
-
-try:
-    import fadvise
-
-    fadvise_available = True
-except:
-    fadvise_available = False
 
 from syconn.processing import objectextraction_helper as oeh
 from syconn.multi_proc import multi_proc_main as mpm
-from syconn.utils import datahandler, basics, segmentationdataset
-from knossos_utils import chunky
+from syconn.utils import datahandler, segmentationdataset
 
 
 def calculate_chunk_numbers_for_box(cset, offset, size):
+    """
+    Calculates the chunk ids that are (partly) contained it the defined volume
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    offset : np.array
+        offset of the volume to the origin
+    size: np.array
+        size of the volume
+
+    Returns
+    -------
+        list of chunk ids, dictionary with reverse mapping
+    """
+
     for dim in range(3):
         offset_overlap = offset[dim] % cset.chunk_size[dim]
         offset[dim] -= offset_overlap
@@ -55,7 +56,7 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
                                          thresholds=None,
                                          chunk_list=None,
                                          debug=False,
-                                         swapdata=0,
+                                         swapdata=False,
                                          label_density=np.ones(3),
                                          membrane_filename=None,
                                          membrane_kd_path=None,
@@ -63,6 +64,75 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
                                          fast_load=False,
                                          suffix="",
                                          use_qsub=False):
+    """
+    Extracts connected component from probability maps
+    1. Gaussian filter (defined by sigma)
+    2. Thresholding (defined by threshold)
+    3. Connected components analysis
+
+    In case of vesicle clouds (hdf5_name in ["p4", "vc"]) the membrane
+    segmentation is used to cut connected vesicle clouds across cells
+    apart (only if membrane segmentation is provided).
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    filename : str
+        Filename of the prediction in the chunkdataset
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    overlap: str or np.array
+        Defines the overlap with neighbouring chunks that is left for later
+        processing steps; if 'auto' the overlap is calculated from the sigma and
+        the stitch_overlap (here: [1., 1., 1.])
+    sigmas: list of lists or None
+        Defines the sigmas of the gaussian filters applied to the probability
+        maps. Has to be the same length as hdf5names. If None no gaussian filter
+        is applied
+    thresholds: list of float
+        Threshold for cutting the probability map. Has to be the same length as
+        hdf5names. If None zeros are used instead (not recommended!)
+    chunk_list: list of int
+        Selective list of chunks for which this function should work on. If None
+        all chunks are used.
+    debug: boolean
+        If true multiprocessed steps only operate on one core using 'map' which
+        allows for better error messages
+    swapdata: boolean
+        If true an x-z swap is applied to the data prior to processing
+    label_density: np.array
+        Defines the density of the data. If the data was downsampled prior to
+        saving; it has to be interpolated first before processing due to
+        alignment issues with the coordinate system. Two-times downsampled
+        data would have a label_density of [2, 2, 2]
+    membrane_filename: str
+        One way to allow access to a membrane segmentation when processing
+        vesicle clouds. Filename of the prediction in the chunkdataset. The
+        threshold is currently set at 0.4.
+    membrane_kd_path: str
+        One way to allow access to a membrane segmentation when processing
+        vesicle clouds. Path to the knossosdataset containing a membrane
+        segmentation. The threshold is currently set at 0.4.
+    hdf5_name_membrane: str
+        When using the membrane_filename this key has to be given to access the
+        data in the saved chunk
+    fast_load: boolean
+        If true the data of chunk is blindly loaded without checking for enough
+        offset to compute the overlap area. Faster, because no neighbouring
+        chunk has to be accessed since the default case loads th overlap area
+        from them.
+    suffix: str
+        Suffix for the intermediate results
+    use_qsub: boolean
+        Whether or not to use qsub
+
+    Returns
+    -------
+        list containing information about the number of connected components
+        in each chunk, overlap and stitch overlap
+    """
+
     label_density = np.array(label_density)
     if thresholds is None:
         thresholds = np.zeros(len(hdf5names))
@@ -126,6 +196,35 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
 def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                        chunk_translator, debug, suffix="",
                        use_qsub=False):
+    """
+    Makes labels unique across chunks
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    filename : str
+        Filename of the prediction in the chunkdataset
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    chunk_list: list of int
+        Selective list of chunks for which this function should work on. If None
+        all chunks are used.
+    max_nb_dict: dictionary
+        Maps each chunk id to a integer describing which needs to be added to
+        all its entries
+    chunk_translator: boolean
+        Remapping from chunk ids to position in chunk_list
+    debug: boolean
+        If true multiprocessed steps only operate on one core using 'map' which
+        allows for better error messages
+    suffix: str
+        Suffix for the intermediate results
+    use_qsub: boolean
+        Whether or not to use qsub
+
+    """
+
     multi_params = []
     for nb_chunk in chunk_list:
         this_max_nb_dict = {}

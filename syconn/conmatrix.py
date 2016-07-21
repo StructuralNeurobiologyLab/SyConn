@@ -751,8 +751,8 @@ def make_colormap(seq):
     return mcolors.LinearSegmentedColormap('CustomMap', cdict)
 
 
-def diverge_map(low=(239/255., 65/255., 50/255.), high=(39/255., 184/255.,
-                                                        148/255.)):
+def diverge_map(low=(239/255., 65/255., 50/255.),
+                high=(39/255., 184/255., 148/255.)):
     """Low and high are colors that will be used for the two
     ends of the spectrum. they can be either color strings
     or rgb color tuples

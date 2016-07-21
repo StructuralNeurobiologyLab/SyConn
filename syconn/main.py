@@ -5,8 +5,8 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-from processing import initialization, objectextraction as oe, \
-    predictor_cnn as pc
+from processing import initialization, objectextraction as oe
+    # predictor_cnn as pc
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 import syconn
@@ -68,40 +68,40 @@ mutex_paths = glob.glob(cset.path_head_folder + "chunky_*/mutex_*")
 for path in mutex_paths:
     os.removedirs(path)
 
-# Synaptic junctions, vesicle clouds, mitochondria - stage 1
-pc.join_chunky_inference(cset,
-                         main_path + "/models/BIRD_MIGA_config.py",
-                         main_path + "/models/BIRD_MIGA.param",
-                         ["MIGA"], ["none", "mi", "vc", "sj"], [200, 200, 100],
-                         [32, 290, 290], kd=kd_raw)
-
-# Synaptic junctions, vesicle clouds, mitochondria - stage 2
-pc.join_chunky_inference(cset,
-                         main_path + "/models/BIRD_ARGUS_config.py",
-                         main_path + "/models/BIRD_ARGUS.param",
-                         ["ARGUS", "MIGA"], ["none", "mi", "vc", "sj"],
-                         [200, 200, 100], [32, 290, 290], kd=kd_raw)
-
-# Type of synaptic junctions
-pc.join_chunky_inference(cset,
-                         main_path + "/models/BIRD_TYPE_config.py",
-                         main_path + "/models/BIRD_TYPE.param",
-                         ["TYPE"], ["none", "asym", "sym"], [100, 100, 50],
-                         [32, 290, 290], kd=kd_raw)
-
-# Barrier - stage 1
-pc.join_chunky_inference(cset,
-                         main_path + "/models/BIRD_barrier_config.py",
-                         main_path + "/models/BIRD_barrier.param",
-                         ["BARRIER"], ["none", "bar"], [200, 200, 100],
-                         [32, 290, 290], kd=kd_raw)
-
-# Barrier - stage 2
-pc.join_chunky_inference(cset,
-                         main_path + "/models/BIRD_rbarrier_config.py",
-                         main_path + "/models/BIRD_rbarrier.param",
-                         ["RBARRIER", "BARRIER"], ["none", "bar"],
-                         [200, 200, 100], [18, 240, 240], kd=kd_raw)
+# # Synaptic junctions, vesicle clouds, mitochondria - stage 1
+# pc.join_chunky_inference(cset,
+#                          main_path + "/models/BIRD_MIGA_config.py",
+#                          main_path + "/models/BIRD_MIGA.param",
+#                          ["MIGA"], ["none", "mi", "vc", "sj"], [200, 200, 100],
+#                          [32, 290, 290], kd=kd_raw)
+#
+# # Synaptic junctions, vesicle clouds, mitochondria - stage 2
+# pc.join_chunky_inference(cset,
+#                          main_path + "/models/BIRD_ARGUS_config.py",
+#                          main_path + "/models/BIRD_ARGUS.param",
+#                          ["ARGUS", "MIGA"], ["none", "mi", "vc", "sj"],
+#                          [200, 200, 100], [32, 290, 290], kd=kd_raw)
+#
+# # Type of synaptic junctions
+# pc.join_chunky_inference(cset,
+#                          main_path + "/models/BIRD_TYPE_config.py",
+#                          main_path + "/models/BIRD_TYPE.param",
+#                          ["TYPE"], ["none", "asym", "sym"], [100, 100, 50],
+#                          [32, 290, 290], kd=kd_raw)
+#
+# # Barrier - stage 1
+# pc.join_chunky_inference(cset,
+#                          main_path + "/models/BIRD_barrier_config.py",
+#                          main_path + "/models/BIRD_barrier.param",
+#                          ["BARRIER"], ["none", "bar"], [200, 200, 100],
+#                          [32, 290, 290], kd=kd_raw)
+#
+# # Barrier - stage 2
+# pc.join_chunky_inference(cset,
+#                          main_path + "/models/BIRD_rbarrier_config.py",
+#                          main_path + "/models/BIRD_rbarrier.param",
+#                          ["RBARRIER", "BARRIER"], ["none", "bar"],
+#                          [200, 200, 100], [18, 240, 240], kd=kd_raw)
 
 # ------------------------------------------------ Conversion to knossosdatasets
 
