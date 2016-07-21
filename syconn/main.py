@@ -32,7 +32,12 @@ assert os.path.exists(main_path + "/models/BIRD_rbarrier_config.py")
 assert os.path.exists(main_path + "/models/BIRD_rbarrier.param")
 assert os.path.exists(main_path + "/models/BIRD_TYPE_config.py")
 assert os.path.exists(main_path + "/models/BIRD_TYPE.param")
-
+assert os.path.exists(main_path + "/models/rf_synapses/rf_syn.pkl")
+assert os.path.exists(main_path + "/models/rf_axoness/rf.pkl")
+assert os.path.exists(main_path + "/models/rf_spiness/rf.pkl")
+assert os.path.exists(main_path + "/models/rf_celltypes/rf.pkl")
+tracing_paths = syconn.get_filepaths_from_dir(main_path + "/tracings/")
+assert len(tracing_paths) > 1
 assert os.path.exists(main_path + "/knossosdatasets/raw/")
 
 
@@ -173,3 +178,7 @@ oe.from_probabilities_to_objects(cset, "ARGUS",
                                  debug=False,
                                  suffix="8")
 
+syconn.enrich_tracings_all(main_path)
+syconn.detect_synapses(main_path)
+syconn.predict_celltype_label(main_path)
+syconn.type_sorted_wiring(main_path)
