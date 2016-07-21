@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import numpy as np
 from scipy import spatial
 from numpy import array as arr
@@ -7,7 +14,6 @@ from scipy.spatial import ConvexHull
 from scipy.spatial.qhull import QhullError
 import warnings
 import re
-__author__ = 'pschuber'
 
 
 def switch_array_entries(this_array, entries):

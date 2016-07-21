@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import copy
 import numpy as np
 import os
@@ -14,7 +21,6 @@ import networkx as nx
 from syconn.utils.basics import euclidian_distance, FloatCoordinate
 from syconn.utils.skeleton import SkeletonAnnotation, Skeleton, SkeletonNode
 from syconn.utils.skeleton import integer_checksum
-
 
 
 class InvalidFileFormatException(Exception):

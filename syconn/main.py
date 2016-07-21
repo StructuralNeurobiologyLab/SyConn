@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 from processing import initialization, objectextraction as oe, \
     predictor_cnn as pc
 from knossos_utils import knossosdataset
@@ -32,7 +39,7 @@ assert os.path.exists(main_path + "/models/BIRD_rbarrier_config.py")
 assert os.path.exists(main_path + "/models/BIRD_rbarrier.param")
 assert os.path.exists(main_path + "/models/BIRD_TYPE_config.py")
 assert os.path.exists(main_path + "/models/BIRD_TYPE.param")
-assert os.path.exists(main_path + "/models/rf_synapses/rf_syn.pkl")
+assert os.path.exists(main_path + "/models/rf_synapses/rfc_syn.pkl")
 assert os.path.exists(main_path + "/models/rf_axoness/rf.pkl")
 assert os.path.exists(main_path + "/models/rf_spiness/rf.pkl")
 assert os.path.exists(main_path + "/models/rf_celltypes/rf.pkl")
@@ -40,8 +47,6 @@ tracing_paths = syconn.get_filepaths_from_dir(main_path + "/tracings/")
 assert len(tracing_paths) > 1
 assert os.path.exists(main_path + "/knossosdatasets/raw/")
 
-
-# define paths, create folders, initialize datasets
 kd_raw = knossosdataset.KnossosDataset()
 kd_raw.initialize_from_knossos_path(main_path + "/knossosdatasets/raw/")
 
@@ -74,8 +79,8 @@ pc.join_chunky_inference(cset,
 pc.join_chunky_inference(cset,
                          main_path + "/models/BIRD_ARGUS_config.py",
                          main_path + "/models/BIRD_ARGUS.param",
-                         ["ARGUS", "MIGA"], ["none", "mi", "vc", "sj"], [100, 100, 50],
-                         [32, 290, 290], kd=kd_raw)
+                         ["ARGUS", "MIGA"], ["none", "mi", "vc", "sj"],
+                         [200, 200, 100], [32, 290, 290], kd=kd_raw)
 
 # Type of synaptic junctions
 pc.join_chunky_inference(cset,
@@ -95,8 +100,8 @@ pc.join_chunky_inference(cset,
 pc.join_chunky_inference(cset,
                          main_path + "/models/BIRD_rbarrier_config.py",
                          main_path + "/models/BIRD_rbarrier.param",
-                         ["RBARRIER", "BARRIER"], ["none", "bar"], [100, 100, 50],
-                         [32, 290, 290], kd=kd_raw)
+                         ["RBARRIER", "BARRIER"], ["none", "bar"],
+                         [200, 200, 100], [18, 240, 240], kd=kd_raw)
 
 # ------------------------------------------------ Conversion to knossosdatasets
 
@@ -106,7 +111,7 @@ if os.path.exists(main_path + "knossosdatasets/rrbarrier/"):
 else:
     bar = cset.from_chunky_to_matrix(kd_raw.boundary, [0, 0, 0], "RBARRIER",
                                      ["bar"], dtype=np.uint8,
-                                     show_progress=True)
+                                     show_progress=True)["bar"]
     kd_bar.initialize_from_matrix(main_path + "knossosdatasets/rrbarrier/",
                                   scale=[9, 9, 20],
                                   experiment_name="j0126_dense",
@@ -142,21 +147,6 @@ if not kd_asym.initialized or not kd_sym.initialized:
 
         types = None
 
-
-if os.path.exists(main_path + "knossosdatasets/rrbarrier/"):
-    kd_bar.initialize_from_knossos_path(main_path + "/knossosdatasets/rrbarrier/")
-else:
-    bar = cset.from_chunky_to_matrix(kd_raw.boundary, [0, 0, 0], "RBARRIER",
-                                     ["bar"], dtype=np.uint8,
-                                     show_progress=True)
-    kd_bar.initialize_from_matrix(main_path + "knossosdatasets/rrbarrier/",
-                                  scale=[9, 9, 20],
-                                  experiment_name="j0126_dense",
-                                  data=bar,
-                                  mags=[1, 2, 4, 8])
-    bar = None
-
-
 # ------------------------------------------------------------ Object Extraction
 
 oe.from_probabilities_to_objects(cset, "ARGUS",
@@ -178,7 +168,19 @@ oe.from_probabilities_to_objects(cset, "ARGUS",
                                  debug=False,
                                  suffix="8")
 
+# ------------ Create hull and map objects to tracings and classify compartments
+
 syconn.enrich_tracings_all(main_path)
+
+# ---------------------------------- Classify contact sites as synaptic or touch
+
 syconn.detect_synapses(main_path)
+
+# ----------------------------------------------------------- Classify cell type
+
 syconn.predict_celltype_label(main_path)
+
+# --------------------------------------------------- Create connectivity matrix
+
 syconn.type_sorted_wiring(main_path)
+

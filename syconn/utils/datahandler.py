@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import h5py
 import os
 import shutil
@@ -10,8 +17,6 @@ from syconn.utils import skeleton_utils as su
 from syconn.utils.segmentationdataset import SegmentationDataset
 from syconn.utils.skeleton import SkeletonAnnotation
 import cPickle as pickle
-__author__ = 'pschuber'
-
 
 class DataHandler(object):
     """Initialized with paths or cell components (SegmentationObjects), path to

@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+
+# -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
 
 from learning_rfc import *
@@ -8,8 +15,6 @@ from syconn.utils.datahandler import get_filepaths_from_dir,\
     load_ordered_mapped_skeleton, load_mapped_skeleton, get_paths_of_skelID,\
     write_obj2pkl, load_pkl2obj, get_skelID_from_path
 from syconn.utils.neuron import Neuron
-
-__author__ = 'pschuber'
 
 rf_params = {'n_estimators': 4000, 'oob_score': True, 'n_jobs': -1,
              'class_weight': 'balanced', 'max_features': 0.66}

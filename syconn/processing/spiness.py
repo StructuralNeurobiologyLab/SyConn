@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+
 import numpy as np
 import networkx as nx
 import syconn.utils.skeleton_utils as su
@@ -6,7 +13,6 @@ from features import morphology_feature, assign_property2node, \
 from learning_rfc import save_train_clf
 from syconn.utils.datahandler import get_filepaths_from_dir
 from syconn.utils.datahandler import load_ordered_mapped_skeleton
-__author__ = 'philipp'
 
 
 def load_node_gt(path_to_file):

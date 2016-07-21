@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -18,8 +24,6 @@ from syconn.processing.cell_types import load_celltype_feats,\
     load_celltype_preds
 from syconn.processing.learning_rfc import cell_classification
 from syconn.utils.datahandler import write_obj2pkl, load_pkl2obj
-
-__author__ = 'pschuber'
 
 
 def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,

@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
+
 import copy
 import gc
 import numpy as np
@@ -24,8 +31,6 @@ from syconn.utils.datahandler import get_filepaths_from_dir, \
     load_ordered_mapped_skeleton, get_paths_of_skelID
 from syconn.utils.datahandler import write_obj2pkl, load_pkl2obj
 from syconn.utils.skeleton import Skeleton, SkeletonAnnotation
-
-__author__ = 'pschuber'
 
 
 def collect_contact_sites(cs_dir, only_sj=False):

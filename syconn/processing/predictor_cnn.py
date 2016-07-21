@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+
 from elektronn.training import predictor
 from syconn.processing import initialization
 from knossos_utils import knossosdataset
@@ -143,12 +150,7 @@ def join_chunky_inference(cset, config_path, param_path, names,
     else:
         n_ch = 1
 
-    cnn = predictor.create_predncnn(config_path, n_ch, len(labels),
-                                    gpu=gpu,
-                                    imposed_input_size=desired_input,
-                                    override_MFP_to_active=MFP,
-                                    param_file=param_path)
-
+    cnn = None
     name = names[0]
 
     while True:
@@ -172,6 +174,13 @@ def join_chunky_inference(cset, config_path, param_path, names,
         if nb_chunk != -1:
             if not os.path.exists(chunk.folder):
                 os.makedirs(chunk.folder)
+
+            if cnn is None:
+                cnn = predictor.create_predncnn(config_path, n_ch, len(labels),
+                                                gpu=gpu,
+                                                imposed_input_size=desired_input,
+                                                override_MFP_to_active=MFP,
+                                                param_file=param_path)
 
             out_path = chunk.folder + name + ".h5"
             print "Processing Chunk: %d" % nb_chunk
@@ -200,7 +209,6 @@ def join_chunky_inference(cset, config_path, param_path, names,
                 print "Time for creating recursive data: %.3f" % (
                 time.time() - time_rec)
 
-            print raw_data.shape
             inference_data = cnn.predictDense(raw_data, as_uint8=True)
 
             if mag > 1:

@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+
 import numpy as np
 from sklearn.externals import joblib
 from sklearn import cross_validation
@@ -13,7 +20,6 @@ import shutil
 import os
 import matplotlib.patches as patches
 from sklearn.decomposition import PCA
-__author__ = 'pschuber'
 
 rf_params = {'n_estimators': 2000, 'oob_score': True, 'n_jobs': -1,
              'class_weight': 'balanced', 'max_features': 'auto'}

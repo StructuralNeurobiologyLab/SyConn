@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 from itertools import combinations
 import multi_proc
 import sys
@@ -13,8 +20,6 @@ from syconn.processing.cell_types import predict_celltype_label
 from syconn.utils.skeleton import Skeleton
 from utils.datahandler import *
 from syconn.conmatrix import type_sorted_wiring
-__author__ = 'pschuber'
-
 __QSUB__ = False
 
 
