@@ -416,8 +416,44 @@ def detect_synapses(wd):
 
 def detect_similar_tracings(wd):
     """Print similar skeleton filepaths
-    :param skel_dir: Path to folder containing skeleton files ending with k.zip
-    :return: list of skeleton paths which are unique
+
+    Parameters
+    ----------
+    wd : str
+        path to working directory
     """
     skel_paths = get_filepaths_from_dir(wd + '/tracings/')
     start_multiprocess(similarity_check_star, list(combinations(skel_paths, 2)))
+
+
+def get_connectivity_list(wd):
+    """Find synapses between tracing pairs
+
+    Parameters
+    ----------
+    wd : str
+        path to working directory
+
+    Returns
+    -------
+    np.array (n, 1), np.array (n x 2)
+        descending array of synapse number between corresponding tracing pairs
+        (tuple of ids)
+    """
+    conn_dict_path = wd + '/contactsites/connectivity_dict.pkl'
+    assert os.path.exists(conn_dict_path)
+    conn_dict = load_pkl2obj(conn_dict_path)
+    synapse_touches = np.zeros((len(conn_dict.keys()), 1))
+    cell_ids = -1 * np.ones((len(conn_dict.keys()), 1))
+    cnt = 0
+    for pair_name, pair in conn_dict.iteritems():
+        skel_id1, skel_id2 = re.findall('(\d+)_(\d+)', pair_name)[0]
+        cell_ids[cnt] = np.array([int(skel_id1), int(skel_id1)])
+        indiv_syn_sizes = np.array(pair['sizes_area'])
+        indiv_syn_axoness = np.array(pair['partner_axoness']) == 1
+        pair['sizes_area'] = indiv_syn_sizes[~indiv_syn_axoness]
+        synapse_touches[cnt] = len(v['sizes_area'])
+    sorted_ixs = np.argsort(synapse_touches)
+    synapse_touches = synapse_touches[sorted_ixs]
+    cell_ids = cell_ids[sorted_ixs]
+    return synapse_touches, cell_ids
