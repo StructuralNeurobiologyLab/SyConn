@@ -43,29 +43,28 @@ def interpolate(data, mag=2):
     return new_data
 
 
-def create_chunk_checklist(head_path, nb_chunks, names, subfolder=0):
+def create_chunk_checklist(head_path, names):
     """
+    Checks which chunks have already been already processed
 
     Parameters
     ----------
-    head_path
-    nb_chunks
-    names
-    subfolder
+    head_path: str
+        path to chunkdataset folder
+    names: list
+        list of hdf5names
 
     Returns
     -------
+    checklist: np.array
 
     """
-    checklist = np.zeros((nb_chunks, len(names)), dtype=np.uint8)
-    folders_in_path = glob.glob(head_path+"/chunky*")
+    folders_in_path = glob.glob(head_path+"/chunky_*")
+    checklist = np.zeros((len(folders_in_path), len(names)), dtype=np.uint8)
     for folder in folders_in_path:
         if len(re.findall('[\d]+', folder)) > 0:
             chunk_nb = int(re.findall('[\d]+', folder)[-1])
-            if subfolder == 0:
-                existing_files = glob.glob(folder+"/*.h5")
-            else:
-                existing_files = glob.glob(folder+"/*")
+            existing_files = glob.glob(folder+"/*.h5")
             for file in existing_files:
                 for name_nb in range(len(names)):
                     if names[name_nb] in file:
@@ -74,11 +73,29 @@ def create_chunk_checklist(head_path, nb_chunks, names, subfolder=0):
     return checklist
 
 
-def search_for_chunk(head_path, nb_chunks, name, subfolder=1, max_age_min=100):
-    checklist = create_chunk_checklist(head_path, nb_chunks,
-                                       [name], subfolder=subfolder)
+def search_for_chunk(head_path, name, max_age_min=100):
+    """
+    Finds a chunk that has to be processed
+
+    Parameters
+    ----------
+    head_path: str
+        path to chunkdataset folder
+    name: str
+        hdf5name
+    max_age_min: int
+        maximum allowed age of a mutex in minutes
+
+    Returns
+    -------
+    left_chunk: int
+        chunk id of chunk that should be processed. Returns -1 if no chunk is
+        left
+    """
+    folders_in_path = glob.glob(head_path + "/chunky_*")
+    checklist = create_chunk_checklist(head_path, [name])
     left_chunks = []
-    for chunk_nb in range(nb_chunks):
+    for chunk_nb in range(len(folders_in_path)):
         if checklist[chunk_nb] == 0:
             left_chunks.append(chunk_nb)
     if len(left_chunks) > 0:
@@ -99,8 +116,24 @@ def search_for_chunk(head_path, nb_chunks, name, subfolder=1, max_age_min=100):
 
 
 def create_recursive_data(labels, labels_data=None, labels_path="",
-                          raw_path="", raw_data=None, use_labels=[],
-                          data_shape=None):
+                          raw_path="", raw_data=None, use_labels=[]):
+    """
+    Creates input data for the recursive CNN
+
+    Parameters
+    ----------
+    labels: list
+        hdf5names
+    labels_data:
+    labels_path
+    raw_path
+    raw_data
+    use_labels
+
+    Returns
+    -------
+
+    """
     try:
         len(labels)
     except:
@@ -169,8 +202,7 @@ def join_chunky_inference(cset, config_path, param_path, names,
     if kd is None:
         kd = cset.dataset
 
-    nb_chunks = len(cset.chunk_dict)
-    print "Number of chunks:", nb_chunks
+    print "Number of chunks:", len(cset.chunk_dict)
 
     if len(names) > 1:
         n_ch = len(labels)
@@ -188,7 +220,7 @@ def join_chunky_inference(cset, config_path, param_path, names,
         time_start = time.time()
 
         while True:
-            nb_chunk = search_for_chunk(cset.path_head_folder, nb_chunks, name)
+            nb_chunk = search_for_chunk(cset.path_head_folder, name)
             if nb_chunk == -1:
                 break
             chunk = cset.chunk_dict[nb_chunk]
