@@ -46,6 +46,10 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
     big_entries : bool
         artificially increase pixel size from 1 to 3 for better visualization
     """
+
+    if not os.path.exists(wd + "/figures/"):
+        os.makedirs(wd + "/figures/")
+
     supp = ""
     skeleton_ids, cell_type_probas = load_celltype_probas(wd)
     cell_type_pred_dict = load_pkl2obj(wd + '/neurons/celltype_pred_dict.pkl')
@@ -392,7 +396,7 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
                                 intensity_plot[i+add_i, j+add_j] = \
                                     (-1)**(syn_sign+1) * wiring[i, j, 2]
     if not big_entries:
-        np.save('/lustre/pschuber/figures/wiring/connectivity_matrix.npy',
+        np.save(wd + '/figures/connectivity_matrix.npy',
                 intensity_plot)
     print "Plotting wiring diagram with maxval", max_val, "and supplement", add_fname
     print "Max/Min in plot:", np.min(intensity_plot), np.max(intensity_plot)
@@ -430,11 +434,11 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
     plt.close()
 
     if not binary:
-        fig.savefig(wd + '/figures/wiring/type_wiring%s_conf'
+        fig.savefig(wd + '/figures/type_wiring%s_conf'
                     'lvl%d_be%s.png' % (add_fname, int(confidence_lvl*10),
                                    str(big_entries)), dpi=600)
     else:
-        fig.savefig(wd + '/figures/wiring/type_wiring%s_conf'
+        fig.savefig(wd + '/figures/type_wiring%s_conf'
             'lvl%d_be%s_binary.png' % (add_fname, int(confidence_lvl*10),
                                        str(big_entries)), dpi=600)
 
@@ -461,7 +465,7 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
                 intensity_plot[i, j] = (-1)**(syn_sign+1) * sector_intensity
             else:
                 intensity_plot[i, j] = (-1)**(syn_sign+1) * np.min((sector_intensity, 0.1))
-    np.save('/lustre/pschuber/figures/wiring/cumulated_connectivity_matrix.npy',
+    np.save('/lustre/pschuber/figures/cumulated_connectivity_matrix.npy',
             intensity_plot)
     print intensity_plot
     ind = np.arange(4)
@@ -518,10 +522,10 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
     axt.bar(ind, col_sum, 1, color='0.6', linewidth=0)
     plt.close()
     if not binary:
-        fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
+        fig.savefig(wd + '/figures/type_wiring_cum%s_conf'
                     'lvl%d.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
     else:
-        fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
+        fig.savefig(wd + '/figures/type_wiring_cum%s_conf'
                     'lvl%d_binary.png' % (add_fname, int(confidence_lvl*10)),
                     dpi=600)
 
@@ -655,10 +659,10 @@ def plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl,
         cb.set_label(u'Synaptic Junction')
     plt.close()
     if not binary:
-        fig.savefig(wd + '/figures/wiring/type_wiring%s_conf'
+        fig.savefig(wd + '/figures/type_wiring%s_conf'
                     'lvl%d.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
     else:
-        fig.savefig(wd + '/figures/wiring/type_wiring%s_conf'
+        fig.savefig(wd + '/figures/type_wiring%s_conf'
             'lvl%d_binary.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
 
 
@@ -727,10 +731,10 @@ def plot_wiring_cum_cs(wiring, den_borders, ax_borders, confidence_lvl,
     axt.bar(ind, col_sum, 1, color='0.6', linewidth=0)
     plt.show(block=False)
     if not binary:
-        fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
+        fig.savefig(wd + '/figures/type_wiring_cum%s_conf'
                     'lvl%d.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
     else:
-        fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
+        fig.savefig(wd + '/figures/type_wiring_cum%s_conf'
             'lvl%d_binary.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
 
 
