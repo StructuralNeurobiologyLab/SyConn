@@ -20,6 +20,20 @@ import theano
 
 
 def interpolate(data, mag=2):
+    """
+    Applies a naive interpolation to the data by replicating entries
+
+    Parameters
+    ----------
+    data: np.array
+    mag: int
+        defines downsampling rate
+
+    Returns
+    -------
+    new_data: np.array
+        interpolated data
+    """
     ds = data.shape
     new_data = np.zeros([ds[0], ds[1]*mag, ds[2]*mag, ds[3]*mag])
     for x in range(0, mag):
@@ -30,6 +44,19 @@ def interpolate(data, mag=2):
 
 
 def create_chunk_checklist(head_path, nb_chunks, names, subfolder=0):
+    """
+
+    Parameters
+    ----------
+    head_path
+    nb_chunks
+    names
+    subfolder
+
+    Returns
+    -------
+
+    """
     checklist = np.zeros((nb_chunks, len(names)), dtype=np.uint8)
     folders_in_path = glob.glob(head_path+"/chunky*")
     for folder in folders_in_path:
