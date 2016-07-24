@@ -26,7 +26,6 @@ if len(sys.argv) > 2:
 else:
     gpu = None
 
-# main_path = "/lustre/sdorkenw/SyConnDenseCubeTestCenter/"
 if not "/" == main_path[-1]:
     main_path += "/"
 
@@ -72,7 +71,7 @@ else:
 if gpu is None:
     batch_size = [40, 500, 500]
 else:
-    batch_size = [20, 270, 270]
+    batch_size = [22, 270, 270]
 
 mutex_paths = glob.glob(cset.path_head_folder + "chunky_*/mutex_*")
 for path in mutex_paths:
