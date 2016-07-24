@@ -21,7 +21,7 @@ home_dir = os.environ['HOME'] + "/"
 syconn_dir = syconn.__path__[0] + "/"
 
 main_path = sys.argv[1]
-if len(sys.argv[2]) > 1:
+if len(sys.argv) > 1:
     gpu = int(sys.argv[2])
 else:
     gpu = None
