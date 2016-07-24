@@ -20,10 +20,13 @@ import sys
 home_dir = os.environ['HOME'] + "/"
 syconn_dir = syconn.__path__[0] + "/"
 
-# main_path = sys.argv[1]
-# cnn_device = sys.argv[2]
-cnn_device = "gpu0"
-main_path = "/lustre/sdorkenw/SyConnDenseCubeTestCenter/"
+main_path = sys.argv[1]
+if len(sys.argv[2]) > 1:
+    gpu = int(sys.argv[2])
+else:
+    gpu = None
+
+# main_path = "/lustre/sdorkenw/SyConnDenseCubeTestCenter/"
 if not "/" == main_path[-1]:
     main_path += "/"
 
@@ -75,35 +78,35 @@ pc.join_chunky_inference(cset,
                          main_path + "/models/BIRD_MIGA_config.py",
                          main_path + "/models/BIRD_MIGA.param",
                          ["MIGA"], ["none", "mi", "vc", "sj"], [200, 200, 100],
-                         [32, 290, 290], kd=kd_raw)
+                         [32, 290, 290], kd=kd_raw, gpu=gpu)
 
 # Synaptic junctions, vesicle clouds, mitochondria - stage 2
 pc.join_chunky_inference(cset,
                          main_path + "/models/BIRD_ARGUS_config.py",
                          main_path + "/models/BIRD_ARGUS.param",
                          ["ARGUS", "MIGA"], ["none", "mi", "vc", "sj"],
-                         [200, 200, 100], [32, 290, 290], kd=kd_raw)
+                         [200, 200, 100], [32, 290, 290], kd=kd_raw, gpu=gpu)
 
 # Type of synaptic junctions
 pc.join_chunky_inference(cset,
                          main_path + "/models/BIRD_TYPE_config.py",
                          main_path + "/models/BIRD_TYPE.param",
                          ["TYPE"], ["none", "asym", "sym"], [100, 100, 50],
-                         [32, 290, 290], kd=kd_raw)
+                         [32, 290, 290], kd=kd_raw, gpu=gpu)
 
 # Barrier - stage 1
 pc.join_chunky_inference(cset,
                          main_path + "/models/BIRD_barrier_config.py",
                          main_path + "/models/BIRD_barrier.param",
                          ["BARRIER"], ["none", "bar"], [200, 200, 100],
-                         [32, 290, 290], kd=kd_raw)
+                         [32, 290, 290], kd=kd_raw, gpu=gpu)
 
 # Barrier - stage 2
 pc.join_chunky_inference(cset,
                          main_path + "/models/BIRD_rbarrier_config.py",
                          main_path + "/models/BIRD_rbarrier.param",
                          ["RBARRIER", "BARRIER"], ["none", "bar"],
-                         [200, 200, 100], [18, 240, 240], kd=kd_raw)
+                         [200, 200, 100], [18, 240, 240], kd=kd_raw, gpu=gpu)
 
 # ------------------------------------------------ Conversion to knossosdatasets
 
