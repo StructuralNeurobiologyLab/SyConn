@@ -464,7 +464,7 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
                 intensity_plot[i, j] = (-1)**(syn_sign+1) * sector_intensity
             else:
                 intensity_plot[i, j] = (-1)**(syn_sign+1) * np.min((sector_intensity, 0.1))
-    np.save('/lustre/pschuber/figures/cumulated_connectivity_matrix.npy',
+    np.save(wd + '/figures/cumulated_connectivity_matrix.npy',
             intensity_plot)
     print intensity_plot
     ind = np.arange(4)
@@ -474,7 +474,7 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
     row_sum = np.sum(np.sum(wiring.transpose(1, 0, 2)[::-1], axis=2), axis=1)
     col_sum = np.sum(np.sum(wiring.transpose(1, 0, 2)[::-1], axis=2), axis=0)
     max_val_tmp = np.array([np.max(intensity_plot),
-                        np.abs(np.min(intensity_plot))])
+                            np.abs(np.min(intensity_plot))])
     intensity_plot[intensity_plot < 0] /= max_val_tmp[1]
     intensity_plot[intensity_plot > 0] /= max_val_tmp[0]
     print "Plotting cumulative matrix with supplement", add_fname
