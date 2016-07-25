@@ -5,6 +5,8 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
+import numpy as np
+import re
 import h5py
 import os
 import shutil
@@ -640,6 +642,22 @@ def obj_hull2text(id_list, hull_coords_list, path):
 
 
 def load_from_h5py(path, hdf5_names=None, as_dict=False):
+    """
+    Loads data from a h5py File
+
+    Parameters
+    ----------
+    path: str
+    hdf5_names: list of str
+        if None, all keys will be loaded
+    as_dict: boolean
+        if False a list is returned
+
+    Returns
+    -------
+    data: dict or np.array
+
+    """
     if as_dict:
         data = {}
     else:
@@ -660,6 +678,21 @@ def load_from_h5py(path, hdf5_names=None, as_dict=False):
 
 
 def save_to_h5py(data, path, hdf5_names=None):
+    """
+    Saves data to h5py File
+
+    Parameters
+    ----------
+    data: list of np.arrays
+    path: str
+    hdf5_names: list of str
+        has to be the same length as data
+
+    Returns
+    -------
+    nothing
+
+    """
     if (not type(data) is dict) and hdf5_names is None:
         raise Exception("hdf5names has to be set, when data is a list")
     if os.path.isfile(path):
@@ -680,6 +713,18 @@ def save_to_h5py(data, path, hdf5_names=None):
 
 
 def switch_array_entries(this_array, entries):
+    """
+    Switches to array entries
+
+    Parameters
+    ----------
+    this_array: np.array
+    entries: list of int
+
+    Returns
+    -------
+    this_array: np.array
+    """
     entry_0 = this_array[entries[0]]
     this_array[entries[0]] = this_array[entries[1]]
     this_array[entries[1]] = entry_0
@@ -687,6 +732,21 @@ def switch_array_entries(this_array, entries):
 
 
 def cut_array_in_one_dim(array, start, end, dim):
+    """
+    Cuts an array along a dimension
+
+    Parameters
+    ----------
+    array: np.array
+    start: int
+    end: int
+    dim: int
+
+    Returns
+    -------
+    array: np.array
+
+    """
     start = int(start)
     end = int(end)
     if dim == 0:
