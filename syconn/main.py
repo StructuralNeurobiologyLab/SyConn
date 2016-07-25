@@ -69,9 +69,11 @@ else:
 # -------------------------------------------------------------- CNN Predictions
 
 if gpu is None:
-    batch_size = [40, 500, 500]
+    batch_size1 = [40, 500, 500]
+    batch_size2 = [40, 500, 500]
 else:
-    batch_size = [22, 270, 270]
+    batch_size1 = [22, 270, 270]
+    batch_size2 = [18, 220, 220]
 
 mutex_paths = glob.glob(cset.path_head_folder + "chunky_*/mutex_*")
 for path in mutex_paths:
@@ -84,35 +86,35 @@ pc.join_chunky_inference(cset,
                          main_path + "/models/BIRD_MIGA_config.py",
                          main_path + "/models/BIRD_MIGA.param",
                          ["MIGA"], ["none", "mi", "vc", "sj"], offset,
-                         batch_size, kd=kd_raw, gpu=gpu)
+                         batch_size1, kd=kd_raw, gpu=gpu)
 
 # Synaptic junctions, vesicle clouds, mitochondria - stage 2
 pc.join_chunky_inference(cset,
                          main_path + "/models/BIRD_ARGUS_config.py",
                          main_path + "/models/BIRD_ARGUS.param",
                          ["ARGUS", "MIGA"], ["none", "mi", "vc", "sj"],
-                         offset, batch_size, kd=kd_raw, gpu=gpu)
+                         offset, batch_size1, kd=kd_raw, gpu=gpu)
 
 # Type of synaptic junctions
 pc.join_chunky_inference(cset,
                          main_path + "/models/BIRD_TYPE_config.py",
                          main_path + "/models/BIRD_TYPE.param",
                          ["TYPE"], ["none", "asym", "sym"], offset,
-                         batch_size, kd=kd_raw, gpu=gpu)
+                         batch_size1, kd=kd_raw, gpu=gpu)
 
 # Barrier - stage 1
 pc.join_chunky_inference(cset,
                          main_path + "/models/BIRD_barrier_config.py",
                          main_path + "/models/BIRD_barrier.param",
                          ["BARRIER"], ["none", "bar"], offset,
-                         batch_size, kd=kd_raw, gpu=gpu)
+                         batch_size1, kd=kd_raw, gpu=gpu)
 
 # Barrier - stage 2
 pc.join_chunky_inference(cset,
                          main_path + "/models/BIRD_rbarrier_config.py",
                          main_path + "/models/BIRD_rbarrier.param",
                          ["RBARRIER", "BARRIER"], ["none", "bar"],
-                         offset, batch_size, kd=kd_raw, gpu=gpu)
+                         offset, batch_size2, kd=kd_raw, gpu=gpu)
 
 # ------------------------------------------------ Conversion to knossosdatasets
 

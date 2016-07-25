@@ -5,6 +5,8 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
+import numpy as np
+import re
 import h5py
 import os
 import shutil
