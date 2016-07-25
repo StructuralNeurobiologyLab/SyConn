@@ -1,8 +1,4 @@
 from itertools import combinations
-import multi_proc
-import sys
-import getpass
-import warnings
 from contactsites import write_summaries
 from multi_proc.multi_proc_main import __QSUB__, start_multiprocess, QSUB_script
 from processing.features import calc_prop_feat_dict
@@ -437,28 +433,27 @@ def get_connectivity_list(wd):
     Returns
     -------
     np.array (n, 1), np.array (n x 2)
-        descending array of synapse number between corresponding tracing pairs
+        descending array of synapse (axo-dendritic, if count is zero, axo-axonic
+        touches arepresent) number between corresponding tracing pairs
         (tuple of ids)
     """
     conn_dict_path = wd + '/contactsites/connectivity_dict.pkl'
     assert os.path.exists(conn_dict_path)
     conn_dict = load_pkl2obj(conn_dict_path)
-    synapse_touches = -1 * np.ones((len(conn_dict.keys()), 1))
-    cell_ids = -1 * np.ones((len(conn_dict.keys()), 2))
-    cnt = 0
+    cell_ids = []
+    synapse_touches = []
     for pair_name, pair in conn_dict.iteritems():
         if pair['total_size_area'] == 0:
             continue
         skel_id1, skel_id2 = re.findall('(\d+)_(\d+)', pair_name)[0]
-        cell_ids[cnt] = np.array([int(skel_id1), int(skel_id1)])
+        cell_ids.append(np.array([int(skel_id1), int(skel_id2)]))
         indiv_syn_sizes = np.array(pair['sizes_area'])
         indiv_syn_axoness = np.array(pair['partner_axoness']) == 1
         pair['sizes_area'] = indiv_syn_sizes[~indiv_syn_axoness]
-        synapse_touches[cnt] = len(v['sizes_area'])
-    existent_entries = synapse_touches != -1
-    synapse_touches = synapse_touches[existent_entries]
-    cell_ids = cell_ids[existent_entries]
-    sorted_ixs = np.argsort(synapse_touches)
+        synapse_touches.append(len(pair['sizes_area']))
+    synapse_touches = np.array(synapse_touches)
+    cell_ids = np.array(cell_ids)
+    sorted_ixs = np.argsort(synapse_touches)[::-1]
     synapse_touches = synapse_touches[sorted_ixs]
     cell_ids = cell_ids[sorted_ixs]
-    return synapse_touches, cell_ids
+    return np.array(synapse_touches), np.array(cell_ids)

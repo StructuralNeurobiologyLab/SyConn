@@ -255,7 +255,7 @@ def load_celltype_preds(wd):
 
 
 def predict_celltype_label(wd):
-    """Predict celltyoe labels in working directory with pretrained classifier
+    """Predict celltyoe labels in working directory with pre-trained classifier
     in subfolder models/rf_celltypes/rf.pkl
 
     Parameters
