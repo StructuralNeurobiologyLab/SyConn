@@ -16,7 +16,6 @@ import os
 import re
 import sys
 import time
-import theano
 
 
 def interpolate(data, mag=2):
@@ -124,15 +123,16 @@ def create_recursive_data(labels, labels_data=None, labels_path="",
     ----------
     labels: list
         hdf5names
-    labels_data:
-    labels_path
-    raw_path
-    raw_data
-    use_labels
+    labels_data: np.array
+    labels_path: str
+    raw_path: str
+    raw_data: np.array
+    use_labels: list
+        determines which labels are used
 
     Returns
     -------
-
+    recursive_data: np.array
     """
     try:
         len(labels)
@@ -194,6 +194,45 @@ def create_recursive_data(labels, labels_data=None, labels_path="",
 def join_chunky_inference(cset, config_path, param_path, names,
                           labels, offset, desired_input, gpu=None, MFP=True,
                           invert_data=False, kd=None, mag=1):
+    """
+    Main predictor function. Handles parallel inference with mutexes; can
+    be called multiple times from different independent processes
+
+
+    Parameters
+    ----------
+    cset: ChunkDataset
+    config_path: str
+        path to CNN config file
+    param_path: str
+        path to param file from CNN training
+    names: list of str
+        if len == 1 this is just the savename; if len==2 the first name is
+        used for creating the recursive data; the second entry is the the
+        savename
+    labels: list of str
+        hdf5names
+    offset: np.array
+        Defines the extra space around the chunk which should be used to make
+        up for the CNN offset
+    desired_input: np.array
+        desired batch_size
+    gpu: int
+        gpu number
+    MFP: boolean
+        whether or not to use max fragment pooling (recommended)
+    invert_data: boolean
+        if True, data gets inverted before inference
+    kd: KnossosDataset
+        if None, the linked KnossosDataset from cset will be used
+    mag: int
+        on which magnite the inference should be carried out
+
+    Returns
+    -------
+    nothing
+
+    """
 
     sys.setrecursionlimit(10000)
 
