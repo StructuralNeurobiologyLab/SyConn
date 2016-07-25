@@ -334,7 +334,7 @@ def get_cum_pos(den_ranges, ax_ranges, den_pos, ax_pos):
 
 
 def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
-                binary, wd, big_entries=False, add_fname='', maj_vote=()):
+                binary, wd, big_entries=True, add_fname='', maj_vote=()):
     """Plot type sorted connectivity matrix and save to figures folder in
     working directory
 
@@ -546,7 +546,7 @@ def type_sorted_wiring_cs(wd, confidence_lvl=0.8, binary=False,
     bool_arr = bool_arr.astype(np.bool)
     skeleton_ids = skeleton_ids[bool_arr]
     print "%d/%d are under confidence level %0.2f and being removed." % \
-          (np.sum(~bool_arr), len(skeleton_ids2), confidence_lvl)
+          (np.sum(~bool_arr), len(skeleton_ids), confidence_lvl)
 
     # create matrix
     syn_props = load_pkl2obj(wd + '/synapse_matrices/phil_dict_no_'
