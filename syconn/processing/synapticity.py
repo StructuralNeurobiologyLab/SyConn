@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+
 import numpy as np
 import os
 import re
@@ -11,8 +18,6 @@ from knossos_utils.knossosdataset import KnossosDataset as kd
 import syconn.utils.skeleton_utils as su
 from learning_rfc import save_train_clf
 from syconn.utils.datahandler import get_filepaths_from_dir
-
-__author__ = 'philipp'
 
 
 def save_synapse_clf(gt_path, clf_used='rf'):
@@ -157,9 +162,7 @@ def parse_synfeature_from_node(node):
     return feat_arr
 
 
-def syn_sign_prediction(voxels, threshold=.25,
-                        kd_path_sym='/lustre/sdorkenw/j0126_3d_symmetric/',
-                        kd_path_asym='/lustre/sdorkenw/j0126_3d_asymmetric/'):
+def syn_sign_prediction(voxels, kd_path_sym, kd_path_asym, threshold=.25):
 
     kd_asym = kd()
     kd_asym.initialize_from_knossos_path(kd_path_asym)

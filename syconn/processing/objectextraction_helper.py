@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+
 from syconn.utils import datahandler, basics, segmentationdataset
 from knossos_utils import chunky, knossosdataset
 
@@ -26,7 +33,7 @@ def gauss_threshold_connected_components_thread(args):
     box_offset = np.array(chunk.coordinates) - np.array(overlap)
     size = np.array(chunk.size) + 2*np.array(overlap)
 
-    if swapdata == 1:
+    if swapdata:
         size = basics.switch_array_entries(size, [0, 2])
 
     if not fast_load:

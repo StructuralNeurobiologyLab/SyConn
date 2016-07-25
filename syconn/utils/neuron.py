@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import copy
 import itertools
 import numpy as np
@@ -28,12 +35,13 @@ class Neuron(object):
     features : dict of np.array
         cell type features stored with their feature names
     """
-    def __init__(self, annotations, unique_ID=None):
+    def __init__(self, annotations, wd, unique_ID=None):
 
         # This identifier is always unique. If another neuron object is
         # discovered to be the same biological unit, both need to be merged
         # immediately.
         self._ID = unique_ID
+        self.wd = wd
 
         self.annotations = annotations
         # scan for consensus annotations
@@ -240,7 +248,7 @@ class Neuron(object):
             self.features['type_morphology'] = type_feats  # 4
             self.features['spine_morphology'] = spine_feats  # 13
             self.features['synapse_type'] = calc_syn_type_feats(
-                anno_to_use)  # 8
+                anno_to_use, self.wd)  # 8
             self.features['mito density'] = 0.
             self.features['vc density'] = 0.
             self.features['sj density'] = 0.
@@ -384,7 +392,7 @@ def calc_obj_feat(mapped_annotation):
     return object_feats
 
 
-def calc_syn_type_feats(anno_to_use):
+def calc_syn_type_feats(anno_to_use, wd):
     """Calculate cell feature based on mapped synapses
 
     Parameters
@@ -416,7 +424,9 @@ def calc_syn_type_feats(anno_to_use):
         near_nodes = node_list[close_ixs]
         axoness = cell_classification([int(n.data["axoness_pred"]) for n in
                                        near_nodes[0]])
-        syn_type_pred = syn_sign_prediction(obj_hull / np.array([9., 9., 20.]))
+        syn_type_pred = syn_sign_prediction(obj_hull / np.array([9., 9., 20.]),
+                                            wd+"/knossosdatasets/symmetric/",
+                                            wd+"/knossosdatasets/asymmetric/")
         sj_area = convex_hull_area(obj_hull) / 2.e6
         if axoness == 1:
             outgoing_syn_size.append(sj_area)

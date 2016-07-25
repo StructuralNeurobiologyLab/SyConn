@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import numpy as np
 from scipy import spatial
 from numpy import array as arr
@@ -7,7 +14,6 @@ from scipy.spatial import ConvexHull
 from scipy.spatial.qhull import QhullError
 import warnings
 import re
-__author__ = 'pschuber'
 
 
 def switch_array_entries(this_array, entries):
@@ -294,6 +300,7 @@ def calc_overlap(point_list_a, point_list_b, max_dist):
 
 ###################### TODO
 
+
 def tuple_to_string(coordinate, sep=', ', dl='(', dr=')'):
     return dl + sep.join([str(x) for x in coordinate]) + dr
 
@@ -309,6 +316,7 @@ def coordinate_from_string(coord_string):
 
     return (x, y, z)
 
+
 def coordinate_to_ewkt(coordinate, scale='dataset'):
     if isinstance(scale, str):
         scale = (1.0, 1.0, 1.0)
@@ -318,6 +326,7 @@ def coordinate_to_ewkt(coordinate, scale='dataset'):
                   coordinate[2] * scale[2])
 
     return "POINT(%s)" % (" ".join([str(x) for x in coordinate]),)
+
 
 def has_equal_dimensions(c):
     """
@@ -445,3 +454,5 @@ class FloatCoordinate(Coordinate):
     def __init__(self, c):
         c = [float(x) for x in c]
         super(FloatCoordinate, self).__init__(c)
+
+

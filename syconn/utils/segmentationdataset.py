@@ -8,6 +8,13 @@ import shutil
 from multiprocessing import Pool
 import glob
 import scipy.spatial
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import scipy.ndimage
 try:
     import QSUB_MAIN as qm
@@ -16,6 +23,7 @@ except:
     qsub_available = False
 
 from syconn.utils import basics
+
 
 def get_rel_path(obj_name, filename, suffix=""):
     if len(suffix) > 0 and not suffix[0] == "_":

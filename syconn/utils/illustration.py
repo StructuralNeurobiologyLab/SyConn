@@ -1,4 +1,11 @@
 # -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
+
 import matplotlib.cm as cmx
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
@@ -12,7 +19,6 @@ try:
 except (ImportError, ValueError), e:
     print e
     print "Could not load mayavi. Please install vtk and then mayavi."
-__author__ = 'pschuber'
 
 
 def init_skel_vis(skel, min_pos, max_pos, hull_visualization=True, op=0.15,

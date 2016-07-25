@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import matplotlib
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
@@ -18,8 +24,6 @@ from syconn.processing.cell_types import load_celltype_feats,\
     load_celltype_preds
 from syconn.processing.learning_rfc import cell_classification
 from syconn.utils.datahandler import write_obj2pkl, load_pkl2obj
-
-__author__ = 'pschuber'
 
 
 def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
@@ -42,6 +46,10 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
     big_entries : bool
         artificially increase pixel size from 1 to 3 for better visualization
     """
+
+    if not os.path.exists(wd + "/figures/"):
+        os.makedirs(wd + "/figures/")
+
     supp = ""
     skeleton_ids, cell_type_probas = load_celltype_probas(wd)
     cell_type_pred_dict = load_pkl2obj(wd + '/neurons/celltype_pred_dict.pkl')
@@ -326,7 +334,7 @@ def get_cum_pos(den_ranges, ax_ranges, den_pos, ax_pos):
 
 
 def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
-                binary, wd, big_entries=False, add_fname='', maj_vote=()):
+                binary, wd, big_entries=True, add_fname='', maj_vote=()):
     """Plot type sorted connectivity matrix and save to figures folder in
     working directory
 
@@ -388,14 +396,12 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
                                 intensity_plot[i+add_i, j+add_j] = \
                                     (-1)**(syn_sign+1) * wiring[i, j, 2]
     if not big_entries:
-        np.save('/lustre/pschuber/figures/wiring/connectivity_matrix.npy',
+        np.save(wd + '/figures/connectivity_matrix.npy',
                 intensity_plot)
     print "Plotting wiring diagram with maxval", max_val, "and supplement", add_fname
     print "Max/Min in plot:", np.min(intensity_plot), np.max(intensity_plot)
     print "Max/Min in plot (original):", max_val
-    tmp_max_val = np.zeros((2))
-    tmp_max_val[1] = np.min(intensity_plot)
-    tmp_max_val[0] = np.max(intensity_plot)
+    tmp_max_val = np.max(np.abs(intensity_plot))
     matplotlib.rcParams.update({'font.size': 14})
     fig = pp.figure()
     # Create scatter plot
@@ -405,7 +411,8 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
 
     cax = ax.matshow(-intensity_plot.transpose(1, 0), cmap=diverge_map(),
                      extent=[0, wiring.shape[0], wiring.shape[1], 0],
-                     interpolation="none")
+                     interpolation="none", vmin=-tmp_max_val,
+                     vmax=tmp_max_val)
     ax.set_xlabel('Post', fontsize=18)
     ax.set_ylabel('Pre', fontsize=18)
     ax.set_xlim(0, wiring.shape[0])
@@ -426,11 +433,11 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
     plt.close()
 
     if not binary:
-        fig.savefig(wd + '/figures/wiring/type_wiring%s_conf'
+        fig.savefig(wd + '/figures/type_wiring%s_conf'
                     'lvl%d_be%s.png' % (add_fname, int(confidence_lvl*10),
                                    str(big_entries)), dpi=600)
     else:
-        fig.savefig(wd + '/figures/wiring/type_wiring%s_conf'
+        fig.savefig(wd + '/figures/type_wiring%s_conf'
             'lvl%d_be%s_binary.png' % (add_fname, int(confidence_lvl*10),
                                        str(big_entries)), dpi=600)
 
@@ -457,7 +464,7 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
                 intensity_plot[i, j] = (-1)**(syn_sign+1) * sector_intensity
             else:
                 intensity_plot[i, j] = (-1)**(syn_sign+1) * np.min((sector_intensity, 0.1))
-    np.save('/lustre/pschuber/figures/wiring/cumulated_connectivity_matrix.npy',
+    np.save(wd + '/figures/cumulated_connectivity_matrix.npy',
             intensity_plot)
     print intensity_plot
     ind = np.arange(4)
@@ -467,7 +474,7 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
     row_sum = np.sum(np.sum(wiring.transpose(1, 0, 2)[::-1], axis=2), axis=1)
     col_sum = np.sum(np.sum(wiring.transpose(1, 0, 2)[::-1], axis=2), axis=0)
     max_val_tmp = np.array([np.max(intensity_plot),
-                        np.abs(np.min(intensity_plot))])
+                            np.abs(np.min(intensity_plot))])
     intensity_plot[intensity_plot < 0] /= max_val_tmp[1]
     intensity_plot[intensity_plot > 0] /= max_val_tmp[0]
     print "Plotting cumulative matrix with supplement", add_fname
@@ -479,7 +486,9 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
     gs = gridspec.GridSpec(2, 3, width_ratios=[10, 1, 0.5], height_ratios=[1, 10])
     gs.update(wspace=0.05, hspace=0.08)
     ax = pp.subplot(gs[1, 0], frameon=False)
-    cax = ax.matshow(intensity_plot, cmap=diverge_map(), extent=[0, 4, 0, 4])
+    tmp_max_val = np.max(np.abs(intensity_plot))
+    cax = ax.matshow(intensity_plot, cmap=diverge_map(), extent=[0, 4, 0, 4],
+                     vmin=-tmp_max_val, vmax=tmp_max_val)
     ax.grid(color='k', linestyle='-')
     cbar_ax = pp.subplot(gs[1, 2])
     cbar_ax.yaxis.set_ticks_position('none')
@@ -514,10 +523,10 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
     axt.bar(ind, col_sum, 1, color='0.6', linewidth=0)
     plt.close()
     if not binary:
-        fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
+        fig.savefig(wd + '/figures/type_wiring_cum%s_conf'
                     'lvl%d.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
     else:
-        fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
+        fig.savefig(wd + '/figures/type_wiring_cum%s_conf'
                     'lvl%d_binary.png' % (add_fname, int(confidence_lvl*10)),
                     dpi=600)
 
@@ -537,7 +546,7 @@ def type_sorted_wiring_cs(wd, confidence_lvl=0.8, binary=False,
     bool_arr = bool_arr.astype(np.bool)
     skeleton_ids = skeleton_ids[bool_arr]
     print "%d/%d are under confidence level %0.2f and being removed." % \
-          (np.sum(~bool_arr), len(skeleton_ids2), confidence_lvl)
+          (np.sum(~bool_arr), len(skeleton_ids), confidence_lvl)
 
     # create matrix
     syn_props = load_pkl2obj(wd + '/synapse_matrices/phil_dict_no_'
@@ -651,10 +660,10 @@ def plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl,
         cb.set_label(u'Synaptic Junction')
     plt.close()
     if not binary:
-        fig.savefig(wd + '/figures/wiring/type_wiring%s_conf'
+        fig.savefig(wd + '/figures/type_wiring%s_conf'
                     'lvl%d.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
     else:
-        fig.savefig(wd + '/figures/wiring/type_wiring%s_conf'
+        fig.savefig(wd + '/figures/type_wiring%s_conf'
             'lvl%d_binary.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
 
 
@@ -723,10 +732,10 @@ def plot_wiring_cum_cs(wiring, den_borders, ax_borders, confidence_lvl,
     axt.bar(ind, col_sum, 1, color='0.6', linewidth=0)
     plt.show(block=False)
     if not binary:
-        fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
+        fig.savefig(wd + '/figures/type_wiring_cum%s_conf'
                     'lvl%d.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
     else:
-        fig.savefig(wd + '/figures/wiring/type_wiring_cum%s_conf'
+        fig.savefig(wd + '/figures/type_wiring_cum%s_conf'
             'lvl%d_binary.png' % (add_fname, int(confidence_lvl*10)), dpi=600)
 
 
@@ -747,8 +756,8 @@ def make_colormap(seq):
     return mcolors.LinearSegmentedColormap('CustomMap', cdict)
 
 
-def diverge_map(low=(239/255., 65/255., 50/255.), high=(39/255., 184/255.,
-                                                        148/255.)):
+def diverge_map(low=(239/255., 65/255., 50/255.),
+                high=(39/255., 184/255., 148/255.)):
     """Low and high are colors that will be used for the two
     ends of the spectrum. they can be either color strings
     or rgb color tuples
