@@ -401,9 +401,7 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
     print "Plotting wiring diagram with maxval", max_val, "and supplement", add_fname
     print "Max/Min in plot:", np.min(intensity_plot), np.max(intensity_plot)
     print "Max/Min in plot (original):", max_val
-    tmp_max_val = np.zeros((2))
-    tmp_max_val[1] = np.min(intensity_plot)
-    tmp_max_val[0] = np.max(intensity_plot)
+    tmp_max_val = np.max(np.abs(intensity_plot))
     matplotlib.rcParams.update({'font.size': 14})
     fig = pp.figure()
     # Create scatter plot
@@ -413,7 +411,8 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
 
     cax = ax.matshow(-intensity_plot.transpose(1, 0), cmap=diverge_map(),
                      extent=[0, wiring.shape[0], wiring.shape[1], 0],
-                     interpolation="none")
+                     interpolation="none", vmin=-tmp_max_val,
+                     vmax=tmp_max_val)
     ax.set_xlabel('Post', fontsize=18)
     ax.set_ylabel('Pre', fontsize=18)
     ax.set_xlim(0, wiring.shape[0])
@@ -487,7 +486,9 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
     gs = gridspec.GridSpec(2, 3, width_ratios=[10, 1, 0.5], height_ratios=[1, 10])
     gs.update(wspace=0.05, hspace=0.08)
     ax = pp.subplot(gs[1, 0], frameon=False)
-    cax = ax.matshow(intensity_plot, cmap=diverge_map(), extent=[0, 4, 0, 4])
+    tmp_max_val = np.max(np.abs(intensity_plot))
+    cax = ax.matshow(intensity_plot, cmap=diverge_map(), extent=[0, 4, 0, 4],
+                     vmin=-tmp_max_val, vmax=tmp_max_val)
     ax.grid(color='k', linestyle='-')
     cbar_ax = pp.subplot(gs[1, 2])
     cbar_ax.yaxis.set_ticks_position('none')

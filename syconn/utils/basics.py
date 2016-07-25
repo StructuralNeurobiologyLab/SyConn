@@ -300,6 +300,7 @@ def calc_overlap(point_list_a, point_list_b, max_dist):
 
 ###################### TODO
 
+
 def tuple_to_string(coordinate, sep=', ', dl='(', dr=')'):
     return dl + sep.join([str(x) for x in coordinate]) + dr
 
@@ -315,6 +316,7 @@ def coordinate_from_string(coord_string):
 
     return (x, y, z)
 
+
 def coordinate_to_ewkt(coordinate, scale='dataset'):
     if isinstance(scale, str):
         scale = (1.0, 1.0, 1.0)
@@ -324,6 +326,7 @@ def coordinate_to_ewkt(coordinate, scale='dataset'):
                   coordinate[2] * scale[2])
 
     return "POINT(%s)" % (" ".join([str(x) for x in coordinate]),)
+
 
 def has_equal_dimensions(c):
     """
@@ -451,3 +454,5 @@ class FloatCoordinate(Coordinate):
     def __init__(self, c):
         c = [float(x) for x in c]
         super(FloatCoordinate, self).__init__(c)
+
+

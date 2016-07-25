@@ -5,8 +5,8 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-from processing import initialization, objectextraction as oe
-    # predictor_cnn as pc
+from processing import initialization, objectextraction as oe, \
+    predictor_cnn as pc
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 import syconn
@@ -20,10 +20,12 @@ import sys
 home_dir = os.environ['HOME'] + "/"
 syconn_dir = syconn.__path__[0] + "/"
 
-# main_path = sys.argv[1]
-# cnn_device = sys.argv[2]
-cnn_device = "gpu0"
-main_path = "/lustre/sdorkenw/SyConnDenseCubeTestCenter/"
+main_path = sys.argv[1]
+if len(sys.argv) > 2:
+    gpu = int(sys.argv[2])
+else:
+    gpu = None
+
 if not "/" == main_path[-1]:
     main_path += "/"
 
@@ -55,53 +57,62 @@ if os.path.exists(main_path + "chunkdataset.chunk_dataset.pkl"):
 else:
     cset = initialization.initialize_cset(kd_raw, main_path, [500, 500, 250])
 
+
 if not os.path.exists(home_dir + ".theanorc"):
     print "Creating .theanorc in your home"
-    shutil.copy(syconn_dir + "/utils/default_thenaorc",
+    shutil.copy(syconn_dir + "/utils/default_theanorc",
                 home_dir + "/.theanorc")
 else:
     print ".theanorc detected"
 
+
 # -------------------------------------------------------------- CNN Predictions
+
+if gpu is None:
+    batch_size = [40, 500, 500]
+else:
+    batch_size = [22, 270, 270]
 
 mutex_paths = glob.glob(cset.path_head_folder + "chunky_*/mutex_*")
 for path in mutex_paths:
     os.removedirs(path)
 
-# # Synaptic junctions, vesicle clouds, mitochondria - stage 1
-# pc.join_chunky_inference(cset,
-#                          main_path + "/models/BIRD_MIGA_config.py",
-#                          main_path + "/models/BIRD_MIGA.param",
-#                          ["MIGA"], ["none", "mi", "vc", "sj"], [200, 200, 100],
-#                          [32, 290, 290], kd=kd_raw)
-#
-# # Synaptic junctions, vesicle clouds, mitochondria - stage 2
-# pc.join_chunky_inference(cset,
-#                          main_path + "/models/BIRD_ARGUS_config.py",
-#                          main_path + "/models/BIRD_ARGUS.param",
-#                          ["ARGUS", "MIGA"], ["none", "mi", "vc", "sj"],
-#                          [200, 200, 100], [32, 290, 290], kd=kd_raw)
-#
-# # Type of synaptic junctions
-# pc.join_chunky_inference(cset,
-#                          main_path + "/models/BIRD_TYPE_config.py",
-#                          main_path + "/models/BIRD_TYPE.param",
-#                          ["TYPE"], ["none", "asym", "sym"], [100, 100, 50],
-#                          [32, 290, 290], kd=kd_raw)
-#
-# # Barrier - stage 1
-# pc.join_chunky_inference(cset,
-#                          main_path + "/models/BIRD_barrier_config.py",
-#                          main_path + "/models/BIRD_barrier.param",
-#                          ["BARRIER"], ["none", "bar"], [200, 200, 100],
-#                          [32, 290, 290], kd=kd_raw)
-#
-# # Barrier - stage 2
-# pc.join_chunky_inference(cset,
-#                          main_path + "/models/BIRD_rbarrier_config.py",
-#                          main_path + "/models/BIRD_rbarrier.param",
-#                          ["RBARRIER", "BARRIER"], ["none", "bar"],
-#                          [200, 200, 100], [18, 240, 240], kd=kd_raw)
+offset = [120, 120, 30]
+
+# Synaptic junctions, vesicle clouds, mitochondria - stage 1
+pc.join_chunky_inference(cset,
+                         main_path + "/models/BIRD_MIGA_config.py",
+                         main_path + "/models/BIRD_MIGA.param",
+                         ["MIGA"], ["none", "mi", "vc", "sj"], offset,
+                         batch_size, kd=kd_raw, gpu=gpu)
+
+# Synaptic junctions, vesicle clouds, mitochondria - stage 2
+pc.join_chunky_inference(cset,
+                         main_path + "/models/BIRD_ARGUS_config.py",
+                         main_path + "/models/BIRD_ARGUS.param",
+                         ["ARGUS", "MIGA"], ["none", "mi", "vc", "sj"],
+                         offset, batch_size, kd=kd_raw, gpu=gpu)
+
+# Type of synaptic junctions
+pc.join_chunky_inference(cset,
+                         main_path + "/models/BIRD_TYPE_config.py",
+                         main_path + "/models/BIRD_TYPE.param",
+                         ["TYPE"], ["none", "asym", "sym"], offset,
+                         batch_size, kd=kd_raw, gpu=gpu)
+
+# Barrier - stage 1
+pc.join_chunky_inference(cset,
+                         main_path + "/models/BIRD_barrier_config.py",
+                         main_path + "/models/BIRD_barrier.param",
+                         ["BARRIER"], ["none", "bar"], offset,
+                         batch_size, kd=kd_raw, gpu=gpu)
+
+# Barrier - stage 2
+pc.join_chunky_inference(cset,
+                         main_path + "/models/BIRD_rbarrier_config.py",
+                         main_path + "/models/BIRD_rbarrier.param",
+                         ["RBARRIER", "BARRIER"], ["none", "bar"],
+                         offset, batch_size, kd=kd_raw, gpu=gpu)
 
 # ------------------------------------------------ Conversion to knossosdatasets
 
@@ -172,13 +183,13 @@ oe.from_probabilities_to_objects(cset, "ARGUS",
 
 syconn.enrich_tracings_all(main_path)
 
-# ---------------------------------- Classify contact sites as synaptic or touch
-
-syconn.detect_synapses(main_path)
-
 # ----------------------------------------------------------- Classify cell type
 
 syconn.predict_celltype_label(main_path)
+
+# ---------------------------------- Classify contact sites as synaptic or touch
+
+syconn.detect_synapses(main_path)
 
 # --------------------------------------------------- Create connectivity matrix
 
