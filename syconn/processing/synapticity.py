@@ -162,9 +162,7 @@ def parse_synfeature_from_node(node):
     return feat_arr
 
 
-def syn_sign_prediction(voxels, threshold=.25,
-                        kd_path_sym='/lustre/sdorkenw/j0126_3d_symmetric/',
-                        kd_path_asym='/lustre/sdorkenw/j0126_3d_asymmetric/'):
+def syn_sign_prediction(voxels, kd_path_sym, kd_path_asym, threshold=.25):
 
     kd_asym = kd()
     kd_asym.initialize_from_knossos_path(kd_path_asym)
