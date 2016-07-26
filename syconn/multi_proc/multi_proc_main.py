@@ -151,7 +151,8 @@ def SUBP_script(params, name, suffix=""):
                 pkl.dump(param, f)
 
         p = subprocess.Popen("%s %s %s %s" % (python_path, path_to_script,
-                                              this_storage_path, this_out_path))
+                                              this_storage_path, this_out_path),
+                             shell=True)
         processes.append(p)
 
     for p in processes:

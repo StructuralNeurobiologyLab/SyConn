@@ -98,7 +98,7 @@ for gpu in gpus:
                    main_path + "/models/BIRD_MIGA_config.py",
                    main_path + "/models/BIRD_MIGA.param",
                    ["MIGA"], ["none", "mi", "vc", "sj"], offset,
-                   batch_size1, kd_raw, gpu])
+                   batch_size1, kd_raw.knossos_path, gpu])
 
 mpm.SUBP_script(params, "join_chunky_inference")
 
@@ -111,7 +111,7 @@ for gpu in gpus:
                    main_path + "/models/BIRD_ARGUS_config.py",
                    main_path + "/models/BIRD_ARGUS.param",
                    ["ARGUS", "MIGA"], ["none", "mi", "vc", "sj"],
-                   offset, batch_size1, kd_raw, gpu])
+                   offset, batch_size1, kd_raw.knossos_path, gpu])
 
 mpm.SUBP_script(params, "join_chunky_inference")
 
@@ -122,7 +122,7 @@ for gpu in gpus:
                    main_path + "/models/BIRD_TYPE_config.py",
                    main_path + "/models/BIRD_TYPE.param",
                    ["TYPE"], ["none", "asym", "sym"], offset,
-                   batch_size1, kd_raw, gpu])
+                   batch_size1, kd_raw.knossos_path, gpu])
 
 mpm.SUBP_script(params, "join_chunky_inference")
 
@@ -133,7 +133,7 @@ for gpu in gpus:
                    main_path + "/models/BIRD_barrier_config.py",
                    main_path + "/models/BIRD_barrier.param",
                    ["BARRIER"], ["none", "bar"], offset,
-                   batch_size1, kd_raw, gpu])
+                   batch_size1, kd_raw.knossos_path, gpu])
 
 mpm.SUBP_script(params, "join_chunky_inference")
 
@@ -144,7 +144,7 @@ for gpu in gpus:
                    main_path + "/models/BIRD_rbarrier_config.py",
                    main_path + "/models/BIRD_rbarrier.param",
                    ["RBARRIER", "BARRIER"], ["none", "bar"],
-                   offset, batch_size2, kd_raw, gpu])
+                   offset, batch_size2, kd_raw.knossos_path, gpu])
 
 mpm.SUBP_script(params, "join_chunky_inference")
 

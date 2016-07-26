@@ -8,6 +8,7 @@
 import sys
 
 import cPickle as pkl
+from knossos_utils import knossosdataset
 from syconn.processing import predictor_cnn as pc
 
 path_storage_file = sys.argv[1]
@@ -21,6 +22,8 @@ with open(path_storage_file) as f:
         except:
             break
 
+kd_raw = knossosdataset.KnossosDataset()
+
 cset = args[0]
 config_path = args[1]
 param_path = args[2]
@@ -28,7 +31,7 @@ names = args[3]
 labels = args[4]
 offset = args[5]
 batch_size = args[6]
-kd_raw = args[7]
+kd_raw.initialize_from_knossos_path(args[7])
 gpu = args[8]
 
 pc.join_chunky_inference(cset, config_path, param_path, names, labels, offset,
