@@ -23,7 +23,7 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
 
     Parameters
     ----------
-    cset : chunkdataset instance
+    cset : ChunkDataset
     offset : np.array
         offset of the volume to the origin
     size: np.array
@@ -31,7 +31,11 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
 
     Returns
     -------
-        list of chunk ids, dictionary with reverse mapping
+    chunk_list: list
+        chunk ids
+    dictionary: dict
+        with reverse mapping
+
     """
 
     for dim in range(3):

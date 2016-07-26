@@ -12,12 +12,12 @@ import matplotlib.pyplot as plt
 from multiprocessing import Pool
 from syconn.contactsites import convert_to_standard_cs_name
 from syconn.brainqueries import enrich_tracings
-from syconn.processing.features import get_obj_density
 from syconn.processing.synapticity import syn_sign_prediction
 from syconn.utils.datahandler import *
 try:
     from mayavi import mlab
 except (ImportError, ValueError), e:
+    print e
     print "Could not load mayavi. Please install vtk and then mayavi."
 
 
@@ -282,7 +282,7 @@ def get_box_from_cs_nml(path, offset=arr([250, 250, 250]), cs_nb=1):
     :param offset: array defining bounding box
     :return:
     """
-    cs_anno = au.loadj0126NML(path)[0]
+    cs_anno = su.loadj0126NML(path)[0]
     center_coord = None
     cs_str = 'cs%d' % cs_nb
     for node in cs_anno.getNodes():
@@ -307,7 +307,7 @@ def get_syn_from_cs_nml(path):
     :param path: str to contact_site.nml
     :return: int tuple vc and sj ID
     """
-    cs_anno = au.loadj0126NML(path)[0]
+    cs_anno = su.loadj0126NML(path)[0]
     cs_nb = None
     for node in cs_anno.getNodes():
         if 'center_vc_sj' in node.getComment():
@@ -738,39 +738,6 @@ def plot_csarea_nbsyns(pre=0, post=1):
     np.save('/lustre/pschuber/figures/synapse_cum/%d_%d.npy' % (pre, post), save)
     np.save('/lustre/pschuber/figures/synapse_cum/nb_syns_%d_%d.npy' % (pre, post), save_nb_syns)
     np.save('/lustre/pschuber/figures/synapse_cum/cum_%d_%d.npy' % (pre, post), save_cum)
-
-
-def get_obj_density(recompute=False, obj='mito', property='axoness_pred', value=1,
-                     return_abs_density=True):
-    """
-    Plots two keys of phildict as scatter plot.
-    :return:
-    """
-    consensi_celltype_label = load_pkl2obj('/lustre/pschuber/gt_cell_types/'
-                                        'consensi_celltype_labels_reviewed3.pkl')
-    cell_type_pred_dict = load_pkl2obj('/lustre/pschuber/gt_cell_types/'
-                                       'loo_cell_pred_dict_novel.pkl')
-    if return_abs_density:
-        dest_path = "/lustre/pschuber/figures/%s_densities_axoness%d.npy" %\
-                        (obj, value)
-    else:
-        dest_path = "/lustre/pschuber/figures/%s_densities_axoness%d_vol.npy" %\
-                        (obj, value)
-    if not os.path.isfile(dest_path) or recompute:
-        obj_densities = [[], [], [], []]
-        for k, v in cell_type_pred_dict.iteritems():
-            cell_path = get_paths_of_skelID([k], '/lustre/pschuber/'
-                        'mapped_soma_tracings/nml_obj/')[0]
-            obj_density = get_obj_density(cell_path, property=property,
-                                           value=value, obj=obj,
-                                          return_abs_density=return_abs_density)
-            obj_densities[int(v)].append(obj_density)
-
-            np.save(dest_path, obj_densities)
-    else:
-        obj_densities = np.load(dest_path)
-    return obj_densities
-
 
 def plot_meansyn_celltypes(pre=0, post=1):
     """
