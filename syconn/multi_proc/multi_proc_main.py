@@ -28,9 +28,10 @@ except subprocess.CalledProcessError:
 
 qsub_queue_dict = {"single": "", "half": "", "full": ""}
 
+home_dir = os.environ['HOME'] + "/"
 path_to_scripts = os.path.dirname(__file__)
-qsub_work_folder = "/home/%s/QSUB/" % getpass.getuser()
-subp_work_folder = "/home/%s/SUBP/" % getpass.getuser()
+qsub_work_folder = "%s/QSUB/" % home_dir
+subp_work_folder = "%s/SUBP/" % home_dir
 username = getpass.getuser()
 python_path = sys.executable
 
