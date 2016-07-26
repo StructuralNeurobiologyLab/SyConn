@@ -129,7 +129,7 @@ def QSUB_script(params, name, queue="single", sge_additional_flags='',
     return path_to_out
 
 
-def SUBP_script(params, name, suffix=""):
+def SUBP_script(params, name, suffix="", delay=0):
     if os.path.exists(subp_work_folder + "/%s_folder%s/" % (name, suffix)):
         shutil.rmtree(subp_work_folder + "/%s_folder%s/" % (name, suffix))
 
@@ -155,6 +155,7 @@ def SUBP_script(params, name, suffix=""):
                                               this_storage_path, this_out_path),
                              shell=True)
         processes.append(p)
+        time.sleep(delay)
 
     for p in processes:
         p.wait()
