@@ -5,7 +5,6 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
-# -*- coding: utf-8 -*-
 import matplotlib.pyplot as plt
 
 from learning_rfc import *

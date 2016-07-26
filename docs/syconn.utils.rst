@@ -17,10 +17,10 @@ syconn.utils.datahandler
     :undoc-members:
     :show-inheritance:
 
-syconn.utils.datasets
+syconn.utils.segmentationdataset
 ---------------------
 
-.. automodule:: syconn.utils.datasets
+.. automodule:: syconn.utils.segmentationdataset
     :members:
     :undoc-members:
     :show-inheritance:

@@ -29,7 +29,8 @@ except subprocess.CalledProcessError:
 qsub_queue_dict = {"single": "", "half": "", "full": ""}
 
 path_to_scripts = os.path.dirname(__file__)
-work_folder = "/home/%s/QSUB/" % getpass.getuser()
+qsub_work_folder = "/home/%s/QSUB/" % getpass.getuser()
+subp_work_folder = "/home/%s/SUBP/" % getpass.getuser()
 username = getpass.getuser()
 python_path = sys.executable
 
@@ -48,15 +49,15 @@ def QSUB_script(params, name, queue="single", sge_additional_flags='',
         print "WARNING: Your job_name is longer than 10. job_names have to be distinguishable " \
               "with only using their first 10 characters."
 
-    if os.path.exists(work_folder+"/%s_folder%s/" % (name, suffix)):
-        shutil.rmtree(work_folder+"/%s_folder%s/" % (name, suffix))
+    if os.path.exists(qsub_work_folder+"/%s_folder%s/" % (name, suffix)):
+        shutil.rmtree(qsub_work_folder+"/%s_folder%s/" % (name, suffix))
 
     path_to_script = path_to_scripts + "/QSUB_%s.py" % (name)
-    path_to_storage = work_folder+"/%s_folder%s/storage/" % (name, suffix)
-    path_to_sh = work_folder+"/%s_folder%s/sh/" % (name, suffix)
-    path_to_log = work_folder+"/%s_folder%s/log/" % (name, suffix)
-    path_to_err = work_folder+"/%s_folder%s/err/" % (name, suffix)
-    path_to_out = work_folder+"/%s_folder%s/out/" % (name, suffix)
+    path_to_storage = qsub_work_folder+"/%s_folder%s/storage/" % (name, suffix)
+    path_to_sh = qsub_work_folder+"/%s_folder%s/sh/" % (name, suffix)
+    path_to_log = qsub_work_folder+"/%s_folder%s/log/" % (name, suffix)
+    path_to_err = qsub_work_folder+"/%s_folder%s/err/" % (name, suffix)
+    path_to_out = qsub_work_folder+"/%s_folder%s/out/" % (name, suffix)
 
     if queue in qsub_queue_dict:
         sge_queue = qsub_queue_dict[queue]
@@ -123,6 +124,38 @@ def QSUB_script(params, name, queue="single", sge_additional_flags='',
             sys.stdout.write('\rProgress: %.2f%% in %.2fs' % (progress, time.time()-time_start))
             sys.stdout.flush()
         time.sleep(1.)
+
+    return path_to_out
+
+
+def SUBP_script(params, name, suffix=""):
+    if os.path.exists(subp_work_folder + "/%s_folder%s/" % (name, suffix)):
+        shutil.rmtree(subp_work_folder + "/%s_folder%s/" % (name, suffix))
+
+    path_to_script = path_to_scripts + "/QSUB_%s.py" % (name)
+    path_to_storage = subp_work_folder + "/%s_folder%s/storage/" % (name, suffix)
+    path_to_out = subp_work_folder + "/%s_folder%s/out/" % (name, suffix)
+
+    if not os.path.exists(path_to_storage):
+        os.makedirs(path_to_storage)
+    if not os.path.exists(path_to_out):
+        os.makedirs(path_to_out)
+
+    processes = []
+    for ii in range(len(params)):
+        this_storage_path = path_to_storage + "job_%d.pkl" % ii
+        this_out_path = path_to_out + "job_%d.pkl" % ii
+
+        with open(this_storage_path, "wb") as f:
+            for param in params[ii]:
+                pkl.dump(param, f)
+
+        p = subprocess.Popen("%s %s %s %s" % (python_path, path_to_script,
+                                              this_storage_path, this_out_path))
+        processes.append(p)
+
+    for p in processes:
+        p.wait()
 
     return path_to_out
 

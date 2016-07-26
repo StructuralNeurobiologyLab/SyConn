@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+
 """Executable file for QSUB job to recalculate cell hull and remap cell objects
  to tracings
 
@@ -7,7 +14,6 @@ import sys
 from syconn.brainqueries import remap_tracings
 from syconn.multi_proc.multi_proc_main import start_multiprocess
 import cPickle as pickle
-__author__ = 'pschuber'
 
 
 def multi_helper_remap(para):
