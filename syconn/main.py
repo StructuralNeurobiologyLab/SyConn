@@ -102,8 +102,6 @@ for gpu in gpus:
 
 mpm.SUBP_script(params, "join_chunky_inference")
 
-raise()
-
 # Synaptic junctions, vesicle clouds, mitochondria - stage 2
 params = []
 for gpu in gpus:
