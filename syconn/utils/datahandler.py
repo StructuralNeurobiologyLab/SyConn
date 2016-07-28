@@ -82,9 +82,8 @@ class DataHandler(object):
                 try:
                     obj = load_dataset(source)
                     obj.init_properties()
-                    print "Initialized %s objects." % object_dict[i]
+                    # print "Initialized %s objects." % object_dict[i]
                 except IOError:
-                    print
                     obj = None
             else:
                 obj = source
@@ -123,9 +122,9 @@ def load_ordered_mapped_skeleton(path):
             c = anno.getComment()
             if c == '':
                 continue
-            if 'vc' in c:
+            if ('vc' in c) or ('p4' in c):
                 c = 'vc'
-            elif 'sj' in c:
+            elif ('sj' in c) or ('az' in c):
                 c = 'sj'
             elif 'mitos' in c:
                 c = 'mitos'
@@ -481,7 +480,6 @@ def connect_soma_tracing(soma):
     coords = np.array([node.getCoordinate_scaled() for node in node_list])
     if len(coords) == 0:
         return soma
-    print "Connecting nearby soma nodes with kd-tree (radius=4000)."
     tree = spatial.cKDTree(coords)
     near_nodes_list = tree.query_ball_point(coords, 4000)
     for ii, node in enumerate(node_list):
@@ -520,8 +518,6 @@ def cell_object_id_parser(obj_trees):
         comment = node.getComment()
         match = re.search('%s-([^,]+)' % 'sj', comment)
         sj_ids.append(int(match.group(1)))
-    print "Found %d mitos, %d sj and %d vc." % (len(mito_ids), len(vc_ids),
-                                                len(sj_ids))
     obj_id_dict = {}
     obj_id_dict['mitos'] = mito_ids
     obj_id_dict['vc'] = vc_ids
@@ -603,7 +599,6 @@ def hull2text(hull_coords, normals, path):
     normals : np.array
     path : str
     """
-    print "Writing hull to .xyz file.", path
     # add ray-end-points to nml and to txt file (incl. normals)
     f = open(path, 'wb')
     for i in range(hull_coords.shape[0]):
@@ -625,7 +620,6 @@ def obj_hull2text(id_list, hull_coords_list, path):
     hull_coords_list : np.array
     path : str
     """
-    print "Writing object hull to .txt file.", path
     # add ray-end-points to nml and to txt file (incl. normals)
     f = open(path, 'wb')
     for i in range(len(hull_coords_list)):

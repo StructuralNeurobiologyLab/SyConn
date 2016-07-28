@@ -521,7 +521,7 @@ def calc_arc_choord(anno, nxg=None):
                                            target=dists[-1][0][1],
                                            weight='weight')
     except:
-        print('No path between nodes for tortuosity calculation for neuron %s' %
-              anno.filename)
+        # print('No path between nodes for tortuosity calculation for neuron %s' %
+        #       anno.filename)
         return 0
     return dists[-1][1] / path_len
