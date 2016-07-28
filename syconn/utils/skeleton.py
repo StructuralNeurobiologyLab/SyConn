@@ -488,6 +488,7 @@ class Skeleton:
 
         # Add dummy header
         parameters = doc.createElement("parameters")
+        props = doc.createElement("properties")
         annotations_elem.appendChild(parameters)
         expname = doc.createElement("experiment")
 
@@ -508,6 +509,21 @@ class Skeleton:
                  ["y", self.edit_position[1]],
                  ["z", self.edit_position[2]], ])
             parameters.appendChild(edit_position)
+
+        # find property keys
+        orig_keys = ["inVp", "node", "id", "inMag", "radius", "time",
+                     "x", "y", "z", "edge", "comment", "content", "target"]
+        #  assume properties are set in every node -> only look at a single
+        #  node is sufficient
+        for n in self.getNodes():
+            property_names = []
+            for key, val in n.data.iteritems():
+                if key not in property_names+orig_keys:
+                    property_names.append(key)
+                    prop_entry = doc.createElement("property_name")
+                    build_attributes(prop_entry,
+                                     [["ms", 0], ["checksum", integer_checksum(0)]])
+            break
 
         time = doc.createElement("time")
         build_attributes(time, [["ms", 0], ["checksum", integer_checksum(0)]])
