@@ -29,7 +29,7 @@ The following section is a walk-through of all major steps.
 
 Applying SyConn -- step by step
 -------------------------------
-At first, membrane and intracellular space is predicted as barrier (white) and cell
+At first, membrane and intracellular space is predicted as barrier (black) and cell
 components, such as mitochondria (blue), vesicle clouds (green) and synaptic junctions (red)
 are detected as objects using a CNN with a 3D perceptive field of view and an
 object extraction afterwards, see figure below.
@@ -57,6 +57,6 @@ to further assign types (EA, MSN, GP, INT) to every cell and create a wiring
 diagram combining knowledge about pre and post synapses (sub-cellular compartments),
 area of synaptic junctions and cell functions.
 
-.. figure::  images/wiring_diagram.png
+.. figure::  images/connectivity_labeled.png
    :scale:   60 %
    :align:   center
