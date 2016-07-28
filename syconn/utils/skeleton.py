@@ -481,7 +481,8 @@ class Skeleton:
         return
 
     def to_xml_string(self, save_empty=True):
-        # This is currently only a slight cosmetic duplication of the old Skeleton, therefore far from complete
+        # This is currently only a slight cosmetic duplication of the old
+        # Skeleton, therefore far from complete
         doc = minidom.Document()
         annotations_elem = doc.createElement("things")
         doc.appendChild(annotations_elem)
@@ -489,6 +490,7 @@ class Skeleton:
         # Add dummy header
         parameters = doc.createElement("parameters")
         props = doc.createElement("properties")
+        annotations_elem.appendChild(props)
         annotations_elem.appendChild(parameters)
         expname = doc.createElement("experiment")
 
@@ -515,15 +517,15 @@ class Skeleton:
                      "x", "y", "z", "edge", "comment", "content", "target"]
         #  assume properties are set in every node -> only look at a single
         #  node is sufficient
+        property_names = []
         for n in self.getNodes():
-            property_names = []
             for key, val in n.data.iteritems():
                 if key not in property_names+orig_keys:
                     property_names.append(key)
-                    prop_entry = doc.createElement("property_name")
-                    build_attributes(prop_entry,
-                                     [["ms", 0], ["checksum", integer_checksum(0)]])
-            break
+                    prop_entry = doc.createElement("property")
+                    build_attributes(prop_entry, [["name", key],
+                                                  ["type", "number"]])
+                    props.appendChild(prop_entry)
 
         time = doc.createElement("time")
         build_attributes(time, [["ms", 0], ["checksum", integer_checksum(0)]])
