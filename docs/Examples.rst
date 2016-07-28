@@ -44,7 +44,7 @@ object extraction afterwards, see figure below.
 
 .. figure::  images/mapped_hull_synapse_new.png
    :scale:   40 %
-   :align:   right
+   :align:   center
 
 Based on the cell tracings and the barrier prediction a cell hull sampling
 is performed which enables mapping components to individual cells (embedding
@@ -58,5 +58,5 @@ diagram combining knowledge about pre and post synapses (sub-cellular compartmen
 area of synaptic junctions and cell functions.
 
 .. figure::  images/connectivity_labeled.png
-   :scale:   60 %
+   :scale:   10 %
    :align:   center
