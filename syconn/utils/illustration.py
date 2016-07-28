@@ -48,7 +48,6 @@ def init_skel_vis(skel, min_pos, max_pos, hull_visualization=True, op=0.15,
             # print "Subsampling"
         if cmap is not None:
             skel.color = None
-        print "Plotting %d hull voxels." % len(hull_points)
         mlab.points3d(hull_points[:, 0], hull_points[:, 1], hull_points[:, 2],
                       scale_factor=1.5, mode='sphere', color=skel.color,
                       opacity=op, colormap=cmap)
@@ -205,7 +204,6 @@ def plot_mapped_skel(path, min_pos, max_pos, color=(1./3, 1./3, 1./3), op=0.1,
             hull2text(obj, get_normals(obj), save_vx_dir + '%s%s_%s.xyz'
             % (skel.filename, str(tuple((arr(color)*255).astype(np.int))), type))
             continue
-        print "Plotted %d %s voxel." % (len(obj), type)
         if type=='sj' and color_sj:
             for ix in set(skel.sj_hull_ids):
                 ix_bool_arr = skel.sj_hull_ids == ix
@@ -215,8 +213,6 @@ def plot_mapped_skel(path, min_pos, max_pos, color=(1./3, 1./3, 1./3), op=0.1,
                 mlab.points3d(obj_hull[:, 0], obj_hull[:, 1], obj_hull[:, 2],
                               scale_factor=4.5, mode='sphere', opacity=0.7,
                               color=syn_type_coloers[syn_type_pred])
-                print "Plotted synapse of type", syn_type_pred,\
-                    "with %d vx" % len(obj_hull)
         else:
             mlab.points3d(obj[:, 0], obj[:, 1], obj[:, 2], scale_factor=4.5,
                           mode='sphere', color=color, opacity=0.7)
