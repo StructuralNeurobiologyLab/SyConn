@@ -486,7 +486,8 @@ def assign_property2node(node, pred, property):
 def majority_vote(anno, property='axoness', max_dist=6000):
     """
     Smoothes (average using sliding window of 2 times max_dist and majority
-    vote) property prediction in annotation
+    vote) property prediction in annotation, whereas for axoness somata are
+    untouched.
 
     Parameters
     ----------
@@ -604,8 +605,8 @@ def get_obj_density(source, property='axoness_pred', value=1, obj='mito',
 
 
 def node_branch_end_distance(nml, dist):
-    """Set distances to next branch resp. end point for each node (maximum
-    distance is capped by given parameter dist) in .data dictionary of each node
+    """Set distances to next branch resp. end point for each node (distance is
+    capped by given parameter dist) in .data dictionary of each node
     and returns values with node ids
 
     Parameters

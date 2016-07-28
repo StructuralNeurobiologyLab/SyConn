@@ -815,6 +815,14 @@ class SkeletonMapper(object):
 
     def predict_property(self, rf, prop, max_neck2endpoint_dist=3000,
                          max_head2endpoint_dist=600):
+        """
+
+        :param rf:
+        :param prop:
+        :param max_neck2endpoint_dist:
+        :param max_head2endpoint_dist:
+        :return:
+        """
         property_feature = self.property_features[prop][:, 1:]
         # print "Predicting %s using %d features." % \
         #       (prop, property_feature.shape[1])
@@ -823,7 +831,7 @@ class SkeletonMapper(object):
         node_ids = self.property_features[prop][:, 0]
         for k, node_id in enumerate(node_ids):
             node = self.old_anno.getNodeByID(node_id)
-            if prop == 'spiness' and 'axoness' in node.data.keys():
+            if prop == 'spiness' and 'axoness_pred' in node.data.keys():
                 if int(node.data['axoness_pred']) != 0:
                     continue
             node_comment = node.getComment()

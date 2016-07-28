@@ -122,9 +122,9 @@ def load_ordered_mapped_skeleton(path):
             c = anno.getComment()
             if c == '':
                 continue
-            if 'vc' in c:
+            if ('vc' in c) or ('p4' in c):
                 c = 'vc'
-            elif 'sj' in c:
+            elif ('sj' in c) or ('az' in c):
                 c = 'sj'
             elif 'mitos' in c:
                 c = 'mitos'
