@@ -69,7 +69,7 @@ def save_cell_type_clf(gt_path, clf_used='rf', load_data=True):
     ----------
     gt_path : str
         path to cell type gt
-    celf_used : str
+    clf_used : str
     load_data : bool
     """
     X_cells_types, Y_cells_types = load_celltype_gt(load_data=load_data)
@@ -175,8 +175,8 @@ def load_cell_gt(skel_ids, wd):
             skel_labels[i] = class_nb
         except KeyError:
             pass
-    print "Using %d/%d labeled skeletons as GT for cell type RFC training." % \
-          (len(skel_labels[skel_labels != -1]), len(skel_labels))
+    # print "Using %d/%d labeled skeletons as GT for cell type RFC training." % \
+    #       (len(skel_labels[skel_labels != -1]), len(skel_labels))
     return skel_labels
 
 
@@ -290,7 +290,7 @@ def save_cell_type_feats(wd):
     """
     skel_dir = wd + '/neurons/'
     skel_paths = get_filepaths_from_dir(skel_dir)
-    print "Calculating cell type feats of %d tracings." % len(skel_paths)
+    # print "Calculating cell type feats of %d tracings." % len(skel_paths)
     # predict skeleton cell type probability
     skel_ids = []
     feat_dict = {}
@@ -331,11 +331,11 @@ def calc_neuron_feat(path, wd):
     cell.filename = path
     neuron = Neuron(cell, wd=wd)
     feats = neuron.neuron_features
-    if np.any(np.isnan(feats)):
-        print "Found nans in feautres of skel %s" % path, \
-            neuron.neuron_feature_names[np.isnan(neuron.neuron_features[0])]
-        print neuron.neuron_features[0][np.isnan(neuron.neuron_features[0])]
-    print "Finished feature extraction of %s" % path
+    # if np.any(np.isnan(feats)):
+    #     print "Found nans in feautres of skel %s" % path, \
+    #         neuron.neuron_feature_names[np.isnan(neuron.neuron_features[0])]
+    #     print neuron.neuron_features[0][np.isnan(neuron.neuron_features[0])]
+    # print "Finished feature extraction of %s" % path
     return feats, orig_skel_id
 
 
@@ -356,7 +356,6 @@ def write_feats_importance(wd, load_data=True, clf_used='rf'):
     feature_importance(rf, save_path='/home/pschuber/figures/cell_types/'
                                      'rf_feat_importance.png')
     tree_imp = [tree.feature_importances_ for tree in rf.estimators_]
-    print "Print feature importance of rf with %d trees." % len(tree_imp)
     std = np.std(tree_imp, axis=0) / np.sqrt(len(tree_imp))
     assert len(importances) == len(feat_names), "Number of names and features" \
                                                 "differs."
@@ -391,7 +390,6 @@ def draw_feat_hist(wd, k=15, classes=(0, 1, 2, 3), nb_bars=20):
                                                   "probabilities and features."
     skel_preds = np.argmax(skel_type_probas, axis=1)
     indices = np.argsort(importances)[::-1]
-    print feat_names[indices]
     for n in range(k):
         ix = indices[n]
         fig, ax = plt.subplots()
@@ -420,17 +418,14 @@ def draw_feat_hist(wd, k=15, classes=(0, 1, 2, 3), nb_bars=20):
         plt.gcf().subplots_adjust(bottom=0.15)
         colors = ['r', 'b', arr([135, 206, 250])/255.,
                   arr([255, 255, 224])/255.]
-        print "Plotting %d. feature %s" % (n, curr_feat_name)
         mask_arr = np.zeros(len(feats), dtype=np.bool)
         for c in classes:
             mask_arr += skel_preds == c
         x_max = np.max(feats[mask_arr, ix])
         x_min = np.min(feats[mask_arr, ix])
         ranges = (x_min, x_max)
-        print "Using range", ranges
         for ii, c in enumerate(classes):
             mask_arr = skel_preds == c
-            print "Found %d cells of class %d" % (np.sum(mask_arr), c)
             ax.hist(feats[mask_arr][:, ix], normed=True, range=ranges, alpha=0.8,
                     bins=nb_bars, label=label_strings_dict[c], color=colors[ii])
         ymin, ymax = ax.get_ylim()

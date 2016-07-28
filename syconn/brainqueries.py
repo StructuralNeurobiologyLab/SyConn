@@ -16,7 +16,8 @@ from syconn.processing.cell_types import predict_celltype_label
 from syconn.utils.skeleton import Skeleton
 from utils.datahandler import *
 from syconn.conmatrix import type_sorted_wiring
-__QSUB__ = False
+import time
+import datetime
 
 
 def analyze_dataset(wd):
@@ -47,6 +48,9 @@ def enrich_tracings_all(wd, overwrite=False):
     overwrite : bool
         enforce overwriting of existing files
     """
+    print "------------------------------\n" \
+          "Starting tracing enrichment."
+    start = time.time()
     skel_dir = wd + '/tracings/'
     anno_list = [os.path.join(skel_dir, f) for f in
                  next(os.walk(skel_dir))[2] if 'k.zip' in f]
@@ -57,6 +61,11 @@ def enrich_tracings_all(wd, overwrite=False):
         QSUB_script(list_of_lists, 'skeleton_mapping')
     else:
         enrich_tracings(anno_list, wd, overwrite=overwrite)
+    predict_celltype_label(wd)
+    diff = time.time() - start
+    print "Finished tracing enrichment (cell object mapping, prediction of" \
+          "sub-cellular compartments and cell types) after %s." % \
+          str(datetime.timedelta(seconds=diff))
 
 
 def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
@@ -126,6 +135,7 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
     """
     rf_axoness_p = wd + '/models/rf_axoness/rf.pkl'
     rf_spiness_p = wd + '/models/rf_spiness/rf.pkl'
+    rfc_axoness, rfc_spiness = None, None
     if dh is None:
         dh = DataHandler(wd)
     output_dir = dh.data_path
@@ -153,9 +163,9 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
     if len(todo_skel) == 0:
         print "Nothing to do. Aborting."
         return
-    print "Found %d processed Skeletons. %d left. Writing result to %s. " \
-          "Using %s barrier." % (len(existing_skel), len(todo_skel),
-                                 dh.data_path, dh.mem_path)
+    # print "Found %d processed Skeletons. %d left. Writing result to %s. " \
+    #       "Using %s barrier." % (len(existing_skel), len(todo_skel),
+    #                              dh.data_path, dh.mem_path)
     cnt = 0
     if map_objects:
         rfc_axoness, rfc_spiness = load_rfcs(rf_axoness_p, rf_spiness_p)
@@ -165,8 +175,6 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
         _list = load_ordered_mapped_skeleton(filepath)
         annotation = _list[0]
         soma = connect_soma_tracing(_list[4])
-        if len(_list[4].getNodes()) != 0:
-            print "Loaded soma of skeleton."
         try:
             ix = int(re.findall('.*?([\d]+)', filepath)[-3])
         except IndexError:
@@ -194,7 +202,6 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
                     "%s. Problem with tracing %s. Skipping it." %
                     (e, filepath), RuntimeWarning)
         if map_objects:
-            print "Starting cell compartment prediction."
             if rfc_spiness is not None:
                 skel.predict_property(rfc_spiness, 'spiness')
             skel._property_features = None
@@ -229,8 +236,6 @@ def remap_tracings_all(wd, dest_dir=None, recalc_prop_only=False,
     np.random.shuffle(anno_list)
     if dest_dir is not None and not os.path.isdir(dest_dir):
         os.makedirs(dest_dir)
-    print "Found %d mapped Skeletons. Remapping with context range of %d nm." %\
-          (len(anno_list), context_range)
     nb_processes = np.max((len(anno_list) / 3, 3))
     list_of_lists = [[wd, anno_list[i::nb_processes], dest_dir,
                       recalc_prop_only, method, context_range]
@@ -331,9 +336,6 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
         mapped_skel_old, mito, vc, sj, soma = \
             load_anno_list([skel_path], load_mitos=False)[0]
         if output_dir is not None:
-            if not os.path.exists(output_dir):
-                print "Couldn't find output directory. Creating", output_dir
-                os.makedirs(output_dir)
             for fpath in mapped_skel_paths:
                 shutil.copyfile(fpath, output_dir + os.path.split(fpath)[1])
             path = output_dir + re.findall('[^/]+$', skel_path)[0]
@@ -343,14 +345,9 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
             ix = int(re.findall('.*?([\d]+)', skel_path)[-3])
         except IndexError:
             ix = cnt
-        print "Remapping skeleton at %s and writing result to %s.\n" \
-              "Using context range of %d and method '%s'" % (skel_path, path,
-                                                             context_range,
-                                                             method)
         new_skel = SkeletonMapper(mapped_skel_old, dh,
                                   ix=ix, soma=soma)
         if recalc_prop_only:
-            print "--- Recalculating properties only ---"
             new_skel.old_anno.filename = skel_path
         else:
             new_skel.obj_min_votes['mitos'] = mito_min_votes
@@ -388,7 +385,6 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
                            new_skel.property_features['spiness'])
             write_data2kzip(path, path + 'axoness_feat.csv')
             write_data2kzip(path, path + 'spiness_feat.csv')
-        print "Remapped skeleton %s successfully." % path
 
 
 def detect_synapses(wd):
@@ -399,6 +395,9 @@ def detect_synapses(wd):
     ----------
     wd : str Path to working directory
     """
+    print "------------------------------\n" \
+          "Starting contact site detection with synapse classification."
+    start = time.time()
     nml_list = get_filepaths_from_dir(wd + '/neurons/')
     cs_path = wd + '/contactsites/'
     for ending in ['', 'cs', 'cs_vc', 'cs_sj', 'cs_vc_sj', 'pairwise',
@@ -413,10 +412,13 @@ def detect_synapses(wd):
     else:
         prepare_syns_btw_annos(anno_permutations, cs_path)
     write_summaries(wd)
+    diff = time.time() - start
+    print "Finished connectivity analysis after %s." %\
+          str(datetime.timedelta(seconds=diff))
 
 
 def detect_similar_tracings(wd):
-    """Print similar skeleton filepaths
+    """Print similar skeleton file paths
 
     Parameters
     ----------

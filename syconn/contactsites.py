@@ -62,8 +62,8 @@ def collect_contact_sites(cs_dir, only_sj=False):
         curr_fpaths = get_filepaths_from_dir(curr_dir, ending='nml')
         cs_fpaths += curr_fpaths
         sample_list_len.append(len(curr_fpaths))
-    print "Collecting contact sites (%d CS). Only sj is %s." % (len(cs_fpaths),
-                                                                str(only_sj))
+    # print "Collecting contact sites (%d CS). Only sj is %s." % (len(cs_fpaths),
+    #                                                            str(only_sj))
     if len(cs_fpaths) == 0:
         print "No data available. Returning."
         return [], np.zeros((0, ))
@@ -155,7 +155,7 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
         dummy_skel.to_kzip(fname)
         return
     clf_path = cs_dir + '/../models/rf_synapses/rfc_syn.pkl'
-    print "\nUsing %s for synapse prediction." % clf_path
+    # print "\nUsing %s for synapse prediction." % clf_path
     rfc_syn = joblib.load(clf_path)
     probas = rfc_syn.predict_proba(cs_feats)
     preds = rfc_syn.predict(cs_feats)
@@ -199,7 +199,9 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
     fname = cs_dir + 'cs_summary%s.k.zip' % supp
     dummy_skel.to_kzip(fname)
     write_obj2pkl(cs_dict, cs_dir + 'cs_dict%s.pkl' % supp)
-    print "Saved CS summary at %s." % fname
+    # print "Saved CS summary at %s." % fname
+    print "---------------------------\nFound %d contact sites containing %d" \
+          " synapses." % (len(cs_feats), np.sum(pred))
 
 
 def calc_cs_node(args):
@@ -338,7 +340,6 @@ def update_axoness_dict(cs_dir, syn_only=True):
     dict
         updated axoness dictionary
     """
-    print "Writing axoness dictionary with syn_only=%s." % (str(syn_only))
     if syn_only:
         dict_path = cs_dir + 'cs_dict.pkl'
     else:
@@ -540,7 +541,7 @@ def get_number_cs_details(cs_path):
     cs_samples = [path for path in
                        get_filepaths_from_dir(cs_path+'cs/', ending='nml')]
     cs_only = len(vc_samples) + len(cs_samples)
-    syn_only= len(sj_samples)+len(sj_vc_samples)
+    syn_only = len(sj_samples)+len(sj_vc_samples)
     print "Found %d syn-candidates and %d contact sites." % (syn_only,
                                                              cs_only+syn_only)
 
@@ -625,7 +626,6 @@ def synapse_matrix(wd, type_threshold=0.225, suffix="",
     fails = []
     syn_matrix = np.zeros([len(ids), len(ids)], dtype=np.int)
     for ii, cs_key in enumerate(cs_keys):
-        print "%d of %d" % (ii+1, len(cs_keys))
         skels = re.findall('[\d]+', cs_key)
         # if cs_dict[cs_key]['syn_pred']:
         ax_key = skels[2] + '_' + skels[0] + '_' + skels[1]
@@ -640,7 +640,6 @@ def synapse_matrix(wd, type_threshold=0.225, suffix="",
         else:
             this_type = 0
             overlap = 0
-        # print ax[this_keys[0]], ax[this_keys[1]]
         for ii in range(2):
             if int(ax[this_keys[ii]]) == 1 or not exclude_dendrodendro:
                 if int(ax[this_keys[(ii+1)%2]]) == 1:
@@ -744,7 +743,6 @@ def syn_type_majority_vote(wd, suffix=""):
             # maj_types.append(np.argmax(np.bincount(this_types)))
             sum0 = np.sum(np.array(this_sizes)[np.array(this_types)==0])
             sum1 = np.sum(np.array(this_sizes)[np.array(this_types)==1])
-            print sum0, sum1
             maj_types.append(int(sum0 < sum1))
         else:
             maj_types.append(-1)
@@ -765,4 +763,3 @@ def syn_type_majority_vote(wd, suffix=""):
     with open(save_folder + "/connectivity_dict%s.pkl" % suffix, "w") as f:
         pickle.dump(phil_dict, f)
 
-    print change_count, syn_count

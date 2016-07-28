@@ -46,7 +46,7 @@ def update_property_feat_kzip(path2kzip, dist=6000):
             remove_from_zip(path2kzip, file_name)
             with zipfile.ZipFile(path2kzip, "a", zipfile.ZIP_DEFLATED) as zf:
                 zf.write(path2csv, file_name)
-            print "Wrote new %s feature to %s." % (prop, path2kzip)
+            # print "Wrote new %s feature to %s." % (prop, path2kzip)
         except Exception, e:
             print 'Could not write %s to zip file.' % file_name
             print e
@@ -66,7 +66,6 @@ def calc_prop_feat_dict(source, dist=6000):
     dict, list of str
     Dictionary of property features, list of feature names
     """
-    print "Calculating morphological features with context range %d." % dist
     property_features = {}
     property_feat_names = {}
     morph_feat, spinehead_feats, node_ids = morphology_feature(source, dist)
@@ -148,13 +147,13 @@ def morphology_feature(source, max_nn_dist=6000):
     assert np.all(node_ids == ids), 'Node IDs are different.'
     morph_feat = np.concatenate((morph_feat, dist_feature), axis=1)
     if np.any(np.isnan(morph_feat)):
-        print "Found nans in morphological features of %s: %s" % \
-              (source, np.where(np.isnan(morph_feat)))
+        # print "Found nans in morphological features of %s: %s" % \
+        #       (source, np.where(np.isnan(morph_feat)))
         morph_feat = np.nan_to_num(morph_feat.astype(np.float32))
     spinehead_feat = spinehead_feat[sort_ix2]
     if np.any(np.isnan(spinehead_feat)):
-        print "Found nans in spinhead features of %s: %s" % \
-              (source, np.where(np.isnan(spinehead_feat)))
+        # print "Found nans in spinhead features of %s: %s" % \
+        #       (source, np.where(np.isnan(spinehead_feat)))
         spinehead_feat = np.nan_to_num(spinehead_feat.astype(np.float32))
     return morph_feat, spinehead_feat, ids
 
@@ -497,8 +496,8 @@ def majority_vote(anno, property='axoness', max_dist=6000):
     max_dist : int
         maximum distance (in nm) for sliding window used in majority voting
     """
-    print "Performing smoothing of %s using sliding window average of max " \
-          "dist %d nm." % (property, max_dist)
+    # print "Performing smoothing of %s using sliding window average of max " \
+    #       "dist %d nm." % (property, max_dist)
     old_anno = copy.deepcopy(anno)
     nearest_nodes_list = nodes_in_pathlength(old_anno, max_dist)
     for nodes in nearest_nodes_list:
@@ -657,6 +656,5 @@ def node_branch_end_distance(nml, dist):
         features.append(single_node_feature)
         node.data["branchpointdistance"] = distance2branchpoint
     X = np.array(features)
-    print "Max occuring distance:", np.max(features)
     Y = np.array(Y)
     return X, Y

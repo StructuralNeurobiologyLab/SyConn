@@ -215,10 +215,6 @@ oe.from_probabilities_to_objects(cset, "ARGUS",
 
 syconn.enrich_tracings_all(main_path)
 
-# ----------------------------------------------------------- Classify cell type
-
-syconn.predict_celltype_label(main_path)
-
 # ---------------------------------- Classify contact sites as synaptic or touch
 
 syconn.detect_synapses(main_path)

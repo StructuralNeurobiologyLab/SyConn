@@ -202,8 +202,6 @@ def cell_object_coord_parser(voxel_tree):
             sj_coords.append(node.getCoordinate())
         else:
             print "Couldn't understand comment:", comment
-    print "Found %d mitos, %d sj and %d vc." % (len(mito_coords), len(vc_coords),
-                                                len(sj_coords))
     return arr(mito_coords), arr(vc_coords), arr(sj_coords)
 
 

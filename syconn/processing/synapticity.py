@@ -90,10 +90,10 @@ def calc_syn_feature(gt_samples, ignore_keys=['Barrier', 'Skel'],
     res = result.get()
     pool.close()
     pool.join()
-    print "\n", len(res), len(filter(None, res))
+    # print "\n", len(res), len(filter(None, res))
     res = np.array(filter(None, res))
     non_instances = arr([isinstance(el, np.ndarray) for el in res[:,0]])
-    print len(res[non_instances])
+    # print len(res[non_instances])
     X = np.array(res[:, 0][non_instances].tolist(), dtype=np.float)
     Y = np.array(res[:, 1][non_instances], dtype=np.int)
     return X, Y

@@ -18,17 +18,9 @@ syconn.utils.datahandler
     :show-inheritance:
 
 syconn.utils.segmentationdataset
----------------------
+--------------------------------
 
 .. automodule:: syconn.utils.segmentationdataset
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-syconn.utils.illustration
--------------------------
-
-.. automodule:: syconn.utils.illustration
     :members:
     :undoc-members:
     :show-inheritance:
