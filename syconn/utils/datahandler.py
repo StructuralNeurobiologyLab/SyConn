@@ -1,18 +1,24 @@
-import cPickle as pickle
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
+import numpy as np
+import re
+import h5py
 import os
 import shutil
 import tempfile
 import zipfile
 from multiprocessing import cpu_count
-
 from basics import *
-from datasets import load_dataset
+from segmentationdataset import load_dataset
 from syconn.utils import skeleton_utils as su
-from syconn.utils.datasets import segmentationDataset
+from syconn.utils.segmentationdataset import SegmentationDataset
 from syconn.utils.skeleton import SkeletonAnnotation
-
-__author__ = 'pschuber'
-
+import cPickle as pickle
 
 class DataHandler(object):
     """Initialized with paths or cell components (SegmentationObjects), path to
@@ -21,6 +27,29 @@ class DataHandler(object):
 
     Attributes
     ----------
+    wd : str
+        path to working directory, by default all other paths will lead to
+        subfolders of this directory
+    mem_path : str
+        path to barrier prediction
+    cs_path : str
+        path to supervoxel data
+    myelin_ds_path : str
+        path to myelin prediction
+    skeleton_path : str
+        path to cell tracings
+    data_path : str
+        output directory for mapped cell tracings
+    scaling : np.array
+        scaling of dataset, s.t. after applying coordinates are isotropic and
+        in nm
+    mem : KnossosDataset
+        will be assigned automatically
+    mem_offset :
+        optional offeset of dataset
+    mitos/vc/sj : SegmentationDataset
+        Dataset which contains cell objects of mitochondria, vesicle clouds and
+        synaptic junctions respectively
     """
     def __init__(self, wd, scaling=(9., 9., 20.)):
         """
@@ -31,35 +60,37 @@ class DataHandler(object):
         scaling : tuple of ints
             scaling of data set, s.t. data is isotropic
         """
-        p4_source = wd + '/chunkdataset/obj_p4/'
-        az_source = wd + '/chunkdataset/obj_az/'
-        mito_source = wd + '/chunkdataset/obj_mito/',
-        skeleton_source = wd + '/tracings/',
-        mempath = wd + '/knossosdataset/rrbarrier/'
-        datapath = wd + '/neurons/'
+        self.wd = wd
+        vc_source = wd + '/chunkdataset/obj_vc_ARGUS_5/'
+        sj_source = wd + '/chunkdataset/obj_sj_ARGUS_3/'
+        mito_source = wd + '/chunkdataset/obj_mi_ARGUS_8/'
+        self.mem_path = wd + '/knossosdatasets/rrbarrier/'
+        self.cs_path = wd + '/chunkdataset/j0126_watershed_map/'
+        self.myelin_ds_path = wd + "/knossosdatasets/myelin/"
+        self.data_path = wd + '/neurons/'
+        self.skeleton_path = wd + '/tracings/'
         self.nb_cpus = cpu_count()
-        self.data_path = datapath
-        self.skeleton_path = skeleton_source
-        if not os.path.exists(datapath):
-            os.makedirs(datapath)
-        self.mem_path = mempath
+        if not os.path.exists(self.data_path):
+            os.makedirs(self.data_path)
         self.scaling = arr(scaling)
-        self.skeletons = {}
         self.mem = None
         self.mem_offset = arr([0, 0, 0])
-        object_dict = {0: "mitos", 1: "p4", 2: "az"}
+        object_dict = {0: "mitos", 1: "vc", 2: "sj"}
         objects = [None, None, None]
-        for i, source in enumerate([mito_source, p4_source, az_source]):
+        for i, source in enumerate([mito_source, vc_source, sj_source]):
             if type(source) is str:
-                obj = load_dataset(source)
-                obj.init_properties()
-                print "Initialized %s objects." % object_dict[i]
+                try:
+                    obj = load_dataset(source)
+                    obj.init_properties()
+                    # print "Initialized %s objects." % object_dict[i]
+                except IOError:
+                    obj = None
             else:
                 obj = source
             objects[i] = obj
         self.mitos = objects[0]
-        self.p4 = objects[1]
-        self.az = objects[2]
+        self.vc = objects[1]
+        self.sj = objects[2]
 
 
 def load_ordered_mapped_skeleton(path):
@@ -73,9 +104,9 @@ def load_ordered_mapped_skeleton(path):
     Returns
     -------
     list
-        List of trees with order [skeleton, mitos, p4, az, soma]
+        List of trees with order [skeleton, mitos, vc, sj, soma]
     """
-    anno_dict = {"skeleton": 0, "mitos": 1, "p4": 2, "az": 3, "soma": 4}
+    anno_dict = {"skeleton": 0, "mitos": 1, "vc": 2, "sj": 3, "soma": 4}
     annotation = su.loadj0126NML(path)
     ordered_annotation = list([[], [], [], [], []])
     for name in anno_dict.keys():
@@ -91,10 +122,10 @@ def load_ordered_mapped_skeleton(path):
             c = anno.getComment()
             if c == '':
                 continue
-            if 'p4' in c:
-                c = 'p4'
-            elif 'az' in c:
-                c = 'az'
+            if ('vc' in c) or ('p4' in c):
+                c = 'vc'
+            elif ('sj' in c) or ('az' in c):
+                c = 'sj'
             elif 'mitos' in c:
                 c = 'mitos'
             elif 'soma' in c:
@@ -124,7 +155,7 @@ def load_files_from_kzip(path, load_mitos):
     Returns
     -------
     list of np.array
-        coordinates [hull, mitos, p4, az], id lists, normals
+        coordinates [hull, mitos, vc, sj], id lists, normals
     """
     coord_list = [np.zeros((0, 3)), np.zeros((0, 3)),
                   np.zeros((0, 3)), np.zeros((0, 3))]
@@ -133,26 +164,36 @@ def load_files_from_kzip(path, load_mitos):
     # id_list of cell objects
     id_list = [np.zeros((0, )), np.zeros((0, )), np.zeros((0, ))]
     zf = zipfile.ZipFile(path, 'r')
-    for i, filename in enumerate(['hull_points.xyz', 'mitos.txt', 'p4.txt',
-                                  'az.txt']):
-        if i == 1 and load_mitos is not True:
-            continue
-        data = np.fromstring(zf.read(filename), sep=' ')
-        if np.isscalar(data[0]) and data[0] == -1:
-            continue
-        if i == 0:
-            hull_normals = data.reshape(data.shape[0]/6, 6)[:, 3:]
-            data = data.reshape(data.shape[0]/6, 6)[:, :3]
-        else:
-            data = data.reshape(data.shape[0]/3, 3)
-        coord_list[i] = data.astype(np.uint32)
-    for i, filename in enumerate(['mitos_id.txt', 'p4_id.txt', 'az_id.txt']):
-        if i == 0 and load_mitos is not True:
-            continue
-        data = np.fromstring(zf.read(filename), sep=' ')
-        if data[0] == -1:
-            continue
-        id_list[i] = data.astype(np.uint32)
+    for i, filename in enumerate(['hull_points.xyz', 'mitos.txt', 'vc.txt',
+                                  'sj.txt']):
+        try:
+            if i == 1 and load_mitos is not True:
+                continue
+            data = np.fromstring(zf.read(filename), sep=' ')
+            if len(data) == 0:
+                continue
+            if np.isscalar(data[0]) and data[0] == -1:
+                continue
+            if i == 0:
+                hull_normals = data.reshape(data.shape[0]/6, 6)[:, 3:]
+                data = data.reshape(data.shape[0]/6, 6)[:, :3]
+            else:
+                data = data.reshape(data.shape[0]/3, 3)
+            coord_list[i] = data.astype(np.uint32)
+        except (IOError, ImportError, KeyError):
+            pass
+    for i, filename in enumerate(['mitos_id.txt', 'vc_id.txt', 'sj_id.txt']):
+        try:
+            if i == 0 and load_mitos is not True:
+                continue
+            data = np.fromstring(zf.read(filename), sep=' ')
+            if len(data) == 0:
+                continue
+            if data[0] == -1:
+                continue
+            id_list[i] = data.astype(np.uint32)
+        except (IOError, ImportError, KeyError):
+            pass
     zf.close()
     return coord_list, id_list, hull_normals
 
@@ -171,15 +212,15 @@ def load_objpkl_from_kzip(path):
     """
     zf = zipfile.ZipFile(path, 'r')
     object_datasets = []
-    for ix, filename in enumerate(['mitos.pkl', 'p4.pkl', 'az.pkl']):
-        object_datasets.append(segmentationDataset('', '', ''))
+    for ix, filename in enumerate(['mitos.pkl', 'vc.pkl', 'sj.pkl']):
+        object_datasets.append(SegmentationDataset('', '', ''))
         try:
             temp = tempfile.TemporaryFile()
             temp.write(zf.read(filename))
             temp.seek(0)
             obj_ds = pickle.load(temp)
             object_datasets[ix] = obj_ds
-        except (IOError, ImportError):
+        except (IOError, ImportError, KeyError):
             pass
     return object_datasets
 
@@ -228,31 +269,31 @@ def load_mapped_skeleton(path, append_obj, load_mitos):
     Returns
     -------
     list of SkeletonAnnotations
-        mapped cell tracings (skel, mito, p4, az, soma)
+        mapped cell tracings (skel, mito, vc, sj, soma)
     """
     mapped_skel = load_ordered_mapped_skeleton(path)
     if append_obj:
         skel = mapped_skel[0]
         obj_dicts = load_objpkl_from_kzip(path)
         skel.mitos = obj_dicts[0]
-        skel.p4 = obj_dicts[1]
-        skel.az = obj_dicts[2]
+        skel.vc = obj_dicts[1]
+        skel.sj = obj_dicts[2]
         if 'k.zip' in os.path.basename(path):
             path = path[:-5]
         if 'nml' in os.path.basename(path):
             path = path[:-3]
         coord_list, id_list, hull_normals = \
             load_files_from_kzip(path + 'k.zip', load_mitos)
-        mito_hull_ids, p4_hull_ids, az_hull_ids = id_list
-        hull, mitos, p4, az = coord_list
-        skel._hull_coords = hull
+        mito_hull_ids, vc_hull_ids, sj_hull_ids = id_list
+        hull, mitos, vc, sj = coord_list
+        skel.hull_coords = hull
         skel.mito_hull_coords = mitos
         skel.mito_hull_ids = mito_hull_ids
-        skel.p4_hull_coords = p4
-        skel.p4_hull_ids = p4_hull_ids
-        skel.az_hull_coords = az
-        skel.az_hull_ids = az_hull_ids
-        skel._hull_normals = hull_normals
+        skel.vc_hull_coords = vc
+        skel.vc_hull_ids = vc_hull_ids
+        skel.sj_hull_coords = sj
+        skel.sj_hull_ids = sj_hull_ids
+        skel.hull_normals = hull_normals
     return mapped_skel
 
 
@@ -325,22 +366,22 @@ def supp_fname_from_fpath(fpath):
         file_name = 'hull_points.xyz'
     elif 'mitos.txt' in file_name:
         file_name = 'mitos.txt'
-    elif 'p4.txt' in file_name:
-        file_name = 'p4.txt'
-    elif 'az.txt' in file_name:
-        file_name = 'az.txt'
+    elif 'vc.txt' in file_name:
+        file_name = 'vc.txt'
+    elif 'sj.txt' in file_name:
+        file_name = 'sj.txt'
     elif 'mitos_id.txt' in file_name:
         file_name = 'mitos_id.txt'
-    elif 'p4_id.txt' in file_name:
-        file_name = 'p4_id.txt'
-    elif 'az_id.txt' in file_name:
-        file_name = 'az_id.txt'
+    elif 'vc_id.txt' in file_name:
+        file_name = 'vc_id.txt'
+    elif 'sj_id.txt' in file_name:
+        file_name = 'sj_id.txt'
     elif 'mitos.pkl' in file_name:
         file_name = 'mitos.pkl'
-    elif 'p4.pkl' in file_name:
-        file_name = 'p4.pkl'
-    elif 'az.pkl' in file_name:
-        file_name = 'az.pkl'
+    elif 'vc.pkl' in file_name:
+        file_name = 'vc.pkl'
+    elif 'sj.pkl' in file_name:
+        file_name = 'sj.pkl'
     elif 'axoness_feat.csv' in file_name:
         file_name = 'axoness_feat.csv'
     elif 'spiness_feat.csv' in file_name:
@@ -439,7 +480,6 @@ def connect_soma_tracing(soma):
     coords = np.array([node.getCoordinate_scaled() for node in node_list])
     if len(coords) == 0:
         return soma
-    print "Connecting nearby soma nodes with kd-tree (radius=4000)."
     tree = spatial.cKDTree(coords)
     near_nodes_list = tree.query_ball_point(coords, 4000)
     for ii, node in enumerate(node_list):
@@ -452,38 +492,36 @@ def connect_soma_tracing(soma):
 
 def cell_object_id_parser(obj_trees):
     """Extracts unique object ids from object tree list for cell objects
-    'mitos', 'p4' and 'az'
+    'mitos', 'vc' and 'sj'
 
     Parameters
     ----------
-    obj_trees : list of annotation objects ['mitos', 'p4', 'az']
+    obj_trees : list of annotation objects ['mitos', 'vc', 'sj']
 
     Returns
     -------
     dict
-        keys 'mitos', 'p4' and 'az' containing unique object ID's as values
+        keys 'mitos', 'vc' and 'sj' containing unique object ID's as values
     """
     mito_ids = []
-    p4_ids = []
-    az_ids = []
+    vc_ids = []
+    sj_ids = []
     for node in obj_trees[0].getNodes():
         comment = node.getComment()
         match = re.search('%s-([^,]+)' % 'mitos', comment)
         mito_ids.append(int(match.group(1)))
     for node in obj_trees[1].getNodes():
         comment = node.getComment()
-        match = re.search('%s-([^,]+)' % 'p4', comment)
-        p4_ids.append(int(match.group(1)))
+        match = re.search('%s-([^,]+)' % 'vc', comment)
+        vc_ids.append(int(match.group(1)))
     for node in obj_trees[2].getNodes():
         comment = node.getComment()
-        match = re.search('%s-([^,]+)' % 'az', comment)
-        az_ids.append(int(match.group(1)))
-    print "Found %d mitos, %d az and %d p4." % (len(mito_ids), len(p4_ids),
-                                                len(az_ids))
+        match = re.search('%s-([^,]+)' % 'sj', comment)
+        sj_ids.append(int(match.group(1)))
     obj_id_dict = {}
     obj_id_dict['mitos'] = mito_ids
-    obj_id_dict['p4'] = p4_ids
-    obj_id_dict['az'] = az_ids
+    obj_id_dict['vc'] = vc_ids
+    obj_id_dict['sj'] = sj_ids
     return obj_id_dict
 
 
@@ -561,7 +599,6 @@ def hull2text(hull_coords, normals, path):
     normals : np.array
     path : str
     """
-    print "Writing hull to .xyz file.", path
     # add ray-end-points to nml and to txt file (incl. normals)
     f = open(path, 'wb')
     for i in range(hull_coords.shape[0]):
@@ -583,7 +620,6 @@ def obj_hull2text(id_list, hull_coords_list, path):
     hull_coords_list : np.array
     path : str
     """
-    print "Writing object hull to .txt file.", path
     # add ray-end-points to nml and to txt file (incl. normals)
     f = open(path, 'wb')
     for i in range(len(hull_coords_list)):
@@ -597,3 +633,123 @@ def obj_hull2text(id_list, hull_coords_list, path):
         ix = id_list[i]
         f.write("%d\n" % ix)
     f.close()
+
+
+def load_from_h5py(path, hdf5_names=None, as_dict=False):
+    """
+    Loads data from a h5py File
+
+    Parameters
+    ----------
+    path: str
+    hdf5_names: list of str
+        if None, all keys will be loaded
+    as_dict: boolean
+        if False a list is returned
+
+    Returns
+    -------
+    data: dict or np.array
+
+    """
+    if as_dict:
+        data = {}
+    else:
+        data = []
+    try:
+        f = h5py.File(path, 'r')
+        if hdf5_names is None:
+            hdf5_names = f.keys()
+        for hdf5_name in hdf5_names:
+            if as_dict:
+                data[hdf5_name] = f[hdf5_name].value
+            else:
+                data.append(f[hdf5_name].value)
+    except:
+        raise Exception("Error at Path: %s, with labels:" % path, hdf5_names)
+    f.close()
+    return data
+
+
+def save_to_h5py(data, path, hdf5_names=None):
+    """
+    Saves data to h5py File
+
+    Parameters
+    ----------
+    data: list of np.arrays
+    path: str
+    hdf5_names: list of str
+        has to be the same length as data
+
+    Returns
+    -------
+    nothing
+
+    """
+    if (not type(data) is dict) and hdf5_names is None:
+        raise Exception("hdf5names has to be set, when data is a list")
+    if os.path.isfile(path):
+        os.remove(path)
+    f = h5py.File(path, "w")
+    if type(data) is dict:
+        for key in data.keys():
+            f.create_dataset(key, data=data[key],
+                             compression="gzip")
+    else:
+        if len(hdf5_names) != len(data):
+            f.close()
+            raise Exception("Not enough or to much hdf5-names given!")
+        for nb_data in range(len(data)):
+            f.create_dataset(hdf5_names[nb_data], data=data[nb_data],
+                             compression="gzip")
+    f.close()
+
+
+def switch_array_entries(this_array, entries):
+    """
+    Switches to array entries
+
+    Parameters
+    ----------
+    this_array: np.array
+    entries: list of int
+
+    Returns
+    -------
+    this_array: np.array
+    """
+    entry_0 = this_array[entries[0]]
+    this_array[entries[0]] = this_array[entries[1]]
+    this_array[entries[1]] = entry_0
+    return this_array
+
+
+def cut_array_in_one_dim(array, start, end, dim):
+    """
+    Cuts an array along a dimension
+
+    Parameters
+    ----------
+    array: np.array
+    start: int
+    end: int
+    dim: int
+
+    Returns
+    -------
+    array: np.array
+
+    """
+    start = int(start)
+    end = int(end)
+    if dim == 0:
+        array = array[start: end, :, :]
+    elif dim == 1:
+        array = array[:, start: end, :]
+    elif dim == 2:
+        array = array[:, :, start:end]
+    else:
+        raise NotImplementedError()
+
+    return array

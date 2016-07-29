@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+
 from elektronn.training import predictor
 from syconn.processing import initialization
 from knossos_utils import knossosdataset
@@ -9,10 +16,23 @@ import os
 import re
 import sys
 import time
-import theano
 
 
 def interpolate(data, mag=2):
+    """
+    Applies a naive interpolation to the data by replicating entries
+
+    Parameters
+    ----------
+    data: np.array
+    mag: int
+        defines downsampling rate
+
+    Returns
+    -------
+    new_data: np.array
+        interpolated data
+    """
     ds = data.shape
     new_data = np.zeros([ds[0], ds[1]*mag, ds[2]*mag, ds[3]*mag])
     for x in range(0, mag):
@@ -22,16 +42,28 @@ def interpolate(data, mag=2):
     return new_data
 
 
-def create_chunk_checklist(head_path, nb_chunks, names, subfolder=0):
-    checklist = np.zeros((nb_chunks, len(names)), dtype=np.uint8)
-    folders_in_path = glob.glob(head_path+"/chunky*")
+def create_chunk_checklist(head_path, names):
+    """
+    Checks which chunks have already been already processed
+
+    Parameters
+    ----------
+    head_path: str
+        path to chunkdataset folder
+    names: list
+        list of hdf5names
+
+    Returns
+    -------
+    checklist: np.array
+
+    """
+    folders_in_path = glob.glob(head_path+"/chunky_*")
+    checklist = np.zeros((len(folders_in_path), len(names)), dtype=np.uint8)
     for folder in folders_in_path:
         if len(re.findall('[\d]+', folder)) > 0:
             chunk_nb = int(re.findall('[\d]+', folder)[-1])
-            if subfolder == 0:
-                existing_files = glob.glob(folder+"/*.h5")
-            else:
-                existing_files = glob.glob(folder+"/*")
+            existing_files = glob.glob(folder+"/*.h5")
             for file in existing_files:
                 for name_nb in range(len(names)):
                     if names[name_nb] in file:
@@ -40,11 +72,29 @@ def create_chunk_checklist(head_path, nb_chunks, names, subfolder=0):
     return checklist
 
 
-def search_for_chunk(head_path, nb_chunks, name, subfolder=1, max_age_min=100):
-    checklist = create_chunk_checklist(head_path, nb_chunks,
-                                       [name], subfolder=subfolder)
+def search_for_chunk(head_path, name, max_age_min=100):
+    """
+    Finds a chunk that has to be processed
+
+    Parameters
+    ----------
+    head_path: str
+        path to chunkdataset folder
+    name: str
+        hdf5name
+    max_age_min: int
+        maximum allowed age of a mutex in minutes
+
+    Returns
+    -------
+    left_chunk: int
+        chunk id of chunk that should be processed. Returns -1 if no chunk is
+        left
+    """
+    folders_in_path = glob.glob(head_path + "/chunky_*")
+    checklist = create_chunk_checklist(head_path, [name])
     left_chunks = []
-    for chunk_nb in range(nb_chunks):
+    for chunk_nb in range(len(folders_in_path)):
         if checklist[chunk_nb] == 0:
             left_chunks.append(chunk_nb)
     if len(left_chunks) > 0:
@@ -65,8 +115,25 @@ def search_for_chunk(head_path, nb_chunks, name, subfolder=1, max_age_min=100):
 
 
 def create_recursive_data(labels, labels_data=None, labels_path="",
-                          raw_path="", raw_data=None, use_labels=[],
-                          data_shape=None):
+                          raw_path="", raw_data=None, use_labels=[]):
+    """
+    Creates input data for the recursive CNN
+
+    Parameters
+    ----------
+    labels: list
+        hdf5names
+    labels_data: np.array
+    labels_path: str
+    raw_path: str
+    raw_data: np.array
+    use_labels: list
+        determines which labels are used
+
+    Returns
+    -------
+    recursive_data: np.array
+    """
     try:
         len(labels)
     except:
@@ -127,6 +194,45 @@ def create_recursive_data(labels, labels_data=None, labels_path="",
 def join_chunky_inference(cset, config_path, param_path, names,
                           labels, offset, desired_input, gpu=None, MFP=True,
                           invert_data=False, kd=None, mag=1):
+    """
+    Main predictor function. Handles parallel inference with mutexes; can
+    be called multiple times from different independent processes
+
+
+    Parameters
+    ----------
+    cset: ChunkDataset
+    config_path: str
+        path to CNN config file
+    param_path: str
+        path to param file from CNN training
+    names: list of str
+        if len == 1 this is just the savename; if len==2 the first name is
+        used for creating the recursive data; the second entry is the the
+        savename
+    labels: list of str
+        hdf5names
+    offset: np.array
+        Defines the extra space around the chunk which should be used to make
+        up for the CNN offset
+    desired_input: np.array
+        desired batch_size
+    gpu: int
+        gpu number
+    MFP: boolean
+        whether or not to use max fragment pooling (recommended)
+    invert_data: boolean
+        if True, data gets inverted before inference
+    kd: KnossosDataset
+        if None, the linked KnossosDataset from cset will be used
+    mag: int
+        on which magnite the inference should be carried out
+
+    Returns
+    -------
+    nothing
+
+    """
 
     sys.setrecursionlimit(10000)
 
@@ -135,19 +241,14 @@ def join_chunky_inference(cset, config_path, param_path, names,
     if kd is None:
         kd = cset.dataset
 
-    nb_chunks = len(cset.chunk_dict)
-    print "Number of chunks:", nb_chunks
+    print "Number of chunks:", len(cset.chunk_dict)
 
-    # if gpu is None:
-    #     theano.sandbox.cuda.use("gpu" + str(gpu))
-    # else:
-    #     theano.sandbox.cuda.use("cpu")
+    if len(names) > 1:
+        n_ch = len(labels)
+    else:
+        n_ch = 1
 
-    cnn = predictor.create_predncnn(config_path, 1, len(labels),
-                                    imposed_input_size=desired_input,
-                                    override_MFP_to_active=MFP,
-                                    param_file=param_path)
-
+    cnn = None
     name = names[0]
 
     while True:
@@ -158,7 +259,7 @@ def join_chunky_inference(cset, config_path, param_path, names,
         time_start = time.time()
 
         while True:
-            nb_chunk = search_for_chunk(cset.path_head_folder, nb_chunks, name)
+            nb_chunk = search_for_chunk(cset.path_head_folder, name)
             if nb_chunk == -1:
                 break
             chunk = cset.chunk_dict[nb_chunk]
@@ -172,6 +273,13 @@ def join_chunky_inference(cset, config_path, param_path, names,
             if not os.path.exists(chunk.folder):
                 os.makedirs(chunk.folder)
 
+            if cnn is None:
+                cnn = predictor.create_predncnn(config_path, n_ch, len(labels),
+                                                gpu=gpu,
+                                                imposed_input_size=desired_input,
+                                                override_MFP_to_active=MFP,
+                                                param_file=param_path)
+
             out_path = chunk.folder + name + ".h5"
             print "Processing Chunk: %d" % nb_chunk
             if len(names) == 1:
@@ -180,8 +288,7 @@ def join_chunky_inference(cset, config_path, param_path, names,
                     (chunk.coordinates - offset) / mag,
                     mag=mag,
                     invert_data=invert_data)
-                raw_data = raw_data.reshape(1, raw_data.shape[0], raw_data.shape[1],
-                                            raw_data.shape[2])
+                raw_data = raw_data[None, :, :, :]
             else:
                 raw_data = kd.from_raw_cubes_to_matrix(
                     (np.array(chunk.size) + 2 * offset) / mag,
@@ -228,4 +335,4 @@ if __name__ == "__main__":
     cset = initialization.initialize_cset(kd, "/mnt/axon/home/sdorkenw/SyConnDenseCube/", [500, 500, 250])
     join_chunky_inference(cset, "/mnt/axon/home/sdorkenw/SyConnDenseCube/models/BIRD_MIGA_config.py",
                           "/mnt/axon/home/sdorkenw/SyConnDenseCube/models/BIRD_MIGA.param",
-                          ["MIGA"], ["sj", "vc", "mi"], [200, 200, 100], [270, 270, 50], kd=kd)
+                          ["MIGA"], ["sj", "vc", "mi"], [200, 200, 100], [50, 270, 270], kd=kd)

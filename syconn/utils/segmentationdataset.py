@@ -3,31 +3,52 @@ import os
 import cPickle as pickle
 from knossos_utils import chunky
 import re
+from  scipy import ndimage
 from scipy import spatial
 import shutil
 from multiprocessing import Pool
 import glob
-import scipy.spatial
-import scipy.ndimage
-try:
-    import HelperUtils as hu
-    hu_available = True
-except:
-    hu_available = False
+
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
+
 try:
     import QSUB_MAIN as qm
     qsub_available = True
 except:
     qsub_available = False
 
+from syconn.utils import basics
 
-def get_rel_path(obj_name, filename, postfix=""):
-    if len(re.findall("[\d]+", filename)) > 0:
-        nb = str(re.findall("[\d]+", filename)[-1])
-    else:
-        nb = ""
+
+def get_rel_path(obj_name, filename, suffix=""):
+    """
+    Returns path from ChunkDataset foler to SegmentationDataset folder
+
+    Parameters
+    ----------
+    obj_name: str
+        ie. hdf5name
+    filename: str
+        Filename of the prediction in the chunkdataset
+    suffix: str
+        suffix of name
+
+    Returns
+    -------
+    rel_path: str
+        relative path from ChunkDataset folder to SegmentationDataset folder
+
+    """
+    if len(suffix) > 0 and not suffix[0] == "_":
+        suffix = "_" + suffix
     return "/obj_" + obj_name + "_" + \
-           nb + postfix +"/"
+           filename + suffix + "/"
 
 
 def path_in_voxel_folder(obj_id, chunk_nb):
@@ -53,8 +74,10 @@ def extract_and_save_all_hull_voxels_thread(args):
     np.savez_compressed(path + "/%d" % set_cnt, **set_dict)
 
 
+#TODO: change queue! 
 def extract_and_save_all_hull_voxels(object_dataset_path, overwrite=False,
-                                     nb_processes=1, use_qsub=False, queue="red3somaq"):
+                                     nb_processes=1, use_qsub=False,
+                                     queue="red3somaq"):
     object_dataset = load_dataset(object_dataset_path)
     path = object_dataset.path + "/hull_voxels/"
 
@@ -237,13 +260,13 @@ def update_dataset(object_dataset, update_objects=False, recalculate_rep_coords=
     if recalculate_rep_coords:
         update_objects = True
 
-    up_object_dataset = segmentationDataset(object_dataset._type,
+    up_object_dataset = SegmentationDataset(object_dataset._type,
                                             object_dataset._rel_path_home,
                                             object_dataset._path_to_chunk_dataset_head)
     if update_objects:
         for key in object_dataset.object_dict.keys():
             obj = object_dataset.object_dict[key]
-            up_object_dataset.object_dict[key] = segmentationObject(key,
+            up_object_dataset.object_dict[key] = SegmentationObject(key,
                                                         obj._path_dataset,
                                                         obj._path_to_voxel)
             if recalculate_rep_coords:
@@ -293,7 +316,7 @@ def update_multiple_datasets(paths, update_objects=False, recalculate_rep_coords
             map(updating_segmentationDatasets_thread, multi_params)
 
 
-class segmentationDataset(object):
+class SegmentationDataset(object):
     def __init__(self, obj_type, rel_path_home, path_to_chunk_dataset_head):
         self._type = obj_type
         self._rel_path_home = rel_path_home
@@ -352,7 +375,7 @@ class segmentationDataset(object):
         self._node_ids = None
 
         for ii in range(len(paths_to_hull_voxel)):
-            obj = segmentationObject(obj_ids[ii], self._path_to_chunk_dataset_head+self._rel_path_home,
+            obj = SegmentationObject(obj_ids[ii], self._path_to_chunk_dataset_head+self._rel_path_home,
                                      paths_to_voxel[ii])
             obj._path_to_hull_voxel = paths_to_hull_voxel[ii]
             obj._size = sizes[ii]
@@ -471,7 +494,8 @@ class segmentationDataset(object):
         else:
             return None
 
-class segmentationObject(object):
+
+class SegmentationObject(object):
     def __init__(self, obj_id, path_dataset, path_to_voxels):
         self._path_to_voxel = path_to_voxels
         self._path_to_hull_voxel = None
@@ -545,7 +569,7 @@ class segmentationObject(object):
 
     @property
     def scaling(self):
-        return self._scaling
+        raise NotImplementedError()
 
     @property
     def most_distant_voxel(self):
@@ -582,7 +606,6 @@ class segmentationObject(object):
 
     def write_to_overlaycube(self, kd, mags=None, size_filter=0, entry=None):
         self.write_to_cube(kd, mags, size_filter, entry)
-
 
     def write_to_cube(self, kd, mags=None, size_filter=0, entry=None,
                       as_raw=False, overwrite=True):
@@ -626,8 +649,6 @@ class segmentationObject(object):
             kd.from_matrix_to_cubes(this_bb[0], data=[matrix], nb_threads=1, mags=mags, overwrite=not overwrite)
 
     def create_hull_voxels(self):
-        if not hu_available:
-            raise Exception("HelperUtils not available")
         voxels = np.copy(self.voxels)
         if len(voxels.shape) > 1:
             voxels_array = np.array(voxels, dtype=np.int)
@@ -641,9 +662,9 @@ class segmentationObject(object):
             matrix = np.zeros((x_max-x_min, y_max-y_min, z_max-z_min),
                               dtype=np.uint8)
 
-            lower_boarder = np.array([hu.negative_to_zero(x_min),
-                                      hu.negative_to_zero(y_min),
-                                      hu.negative_to_zero(z_min)],
+            lower_boarder = np.array([basics.negative_to_zero(x_min),
+                                      basics.negative_to_zero(y_min),
+                                      basics.negative_to_zero(z_min)],
                                      dtype=np.int)
 
             voxels = np.array(voxels, dtype=np.int) - lower_boarder
@@ -652,14 +673,12 @@ class segmentationObject(object):
             k = np.array([[[0, 0, 0], [0, 1, 0], [0, 0, 0]],
                           [[0, 1, 0], [1, 1, 1], [0, 1, 0]],
                           [[0, 0, 0], [0, 1, 0], [0, 0, 0]]])
-            coords = np.argwhere((scipy.ndimage.convolve(matrix, k, mode="constant", cval=0.) < 7)*matrix == 1) + lower_boarder
+            coords = np.argwhere((ndimage.convolve(matrix, k, mode="constant", cval=0.) < 7)*matrix == 1) + lower_boarder
         else:
             coords = voxels
         return coords
 
     def create_hull_ids(self):
-        if not hu_available:
-            raise Exception("HelperUtils not available")
         voxels = np.copy(self.voxels)
         if len(voxels.shape) > 1:
             voxels_array = np.array(voxels, dtype=np.int)
@@ -674,9 +693,9 @@ class segmentationObject(object):
             matrix = np.zeros((x_max-x_min, y_max-y_min, z_max-z_min),
                               dtype=np.uint8)
 
-            lower_boarder = np.array([hu.negative_to_zero(x_min),
-                                      hu.negative_to_zero(y_min),
-                                      hu.negative_to_zero(z_min)],
+            lower_boarder = np.array([basics.negative_to_zero(x_min),
+                                      basics.negative_to_zero(y_min),
+                                      basics.negative_to_zero(z_min)],
                                      dtype=np.int)
 
             voxels = np.array(voxels, dtype=np.int) - lower_boarder
@@ -711,7 +730,7 @@ class segmentationObject(object):
         #     os.remove(path)
 
     def calculate_rep_coord(self, calculate_size=False, voxels=None, sample_size=200):
-        if voxels == None:
+        if voxels is None:
             voxels = self.voxels
 
         if len(voxels) > 1:
@@ -720,7 +739,7 @@ class segmentationObject(object):
             #                             np.mean(voxels[:, 2])],
             #                            dtype=np.int)
             np.random.shuffle(voxels)
-            dist = scipy.spatial.distance.cdist(voxels[:sample_size], voxels[:sample_size])
+            dist = spatial.distance.cdist(voxels[:sample_size], voxels[:sample_size])
             sum = np.sum(dist, 1)
             pos = np.where(sum == np.min(sum))[0][0]
             self._rep_coord = np.array(voxels[:sample_size][pos])
@@ -732,7 +751,7 @@ class segmentationObject(object):
             #         step = len(voxels)/300
             #         if step == 0:
             #             step = 1
-            #         dist = scipy.spatial.distance.cdist(voxels[::step], voxels[::step])
+            #         dist = spatial.distance.cdist(voxels[::step], voxels[::step])
             #         sum = np.sum(dist, 1)
             #         pos = np.where(sum == np.min(sum))[0]
             #         self._rep_coord = np.array(voxels[::step][pos])
@@ -743,7 +762,7 @@ class segmentationObject(object):
             self.calculate_size(voxels=voxels)
 
     def calculate_size(self, voxels=None):
-        if voxels == None:
+        if voxels is None:
             voxels = self.voxels
 
         if len(voxels.shape) > 1:

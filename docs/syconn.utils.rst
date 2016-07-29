@@ -17,22 +17,21 @@ syconn.utils.datahandler
     :undoc-members:
     :show-inheritance:
 
-syconn.utils.datasets
+syconn.utils.segmentationdataset
+--------------------------------
+
+.. automodule:: syconn.utils.segmentationdataset
+    :members:
+    :undoc-members:
+    :show-inheritance:
+
+syconn.utils.skeleton
 ---------------------
 
-.. automodule:: syconn.utils.datasets
+.. automodule:: syconn.utils.skeleton
     :members:
     :undoc-members:
     :show-inheritance:
-
-syconn.utils.illustration
--------------------------
-
-.. automodule:: syconn.utils.illustration
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 
 syconn.utils.skeleton_utils
 ---------------------------
@@ -42,11 +41,3 @@ syconn.utils.skeleton_utils
     :undoc-members:
     :show-inheritance:
 
-
-syconn.utils.skeleton
----------------------
-
-.. automodule:: syconn.utils.skeleton
-    :members:
-    :undoc-members:
-    :show-inheritance:

@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+
 import copy
 import numpy as np
 import os
@@ -5,9 +12,7 @@ import zipfile
 from collections import Counter
 from numpy import array as arr
 from scipy import spatial
-
 import networkx as nx
-
 from learning_rfc import write_feat2csv, cell_classification
 from syconn.utils import skeleton_utils as su
 from syconn.utils.basics import euclidian_distance
@@ -41,7 +46,7 @@ def update_property_feat_kzip(path2kzip, dist=6000):
             remove_from_zip(path2kzip, file_name)
             with zipfile.ZipFile(path2kzip, "a", zipfile.ZIP_DEFLATED) as zf:
                 zf.write(path2csv, file_name)
-            print "Wrote new %s feature to %s." % (prop, path2kzip)
+            # print "Wrote new %s feature to %s." % (prop, path2kzip)
         except Exception, e:
             print 'Could not write %s to zip file.' % file_name
             print e
@@ -61,7 +66,6 @@ def calc_prop_feat_dict(source, dist=6000):
     dict, list of str
     Dictionary of property features, list of feature names
     """
-    print "Calculating morphological features with context range %d." % dist
     property_features = {}
     property_feat_names = {}
     morph_feat, spinehead_feats, node_ids = morphology_feature(source, dist)
@@ -71,8 +75,8 @@ def calc_prop_feat_dict(source, dist=6000):
                                                   spinehead_feats), axis=1)
     morph_feat_names = ['nodeID', 'rad_mean', 'rad_std'] + \
                        ['rad_hist'+str(i) for i in range(10)] +\
-                       ['mito_nb', 'mito_size_mean', 'p4_nb', 'p4_size_mean',
-                        'az_nb', 'az_size_mean', 'branch_dist', 'endpoint_dist']
+                       ['mito_nb', 'mito_size_mean', 'vc_nb', 'vc_size_mean',
+                        'sj_nb', 'sj_size_mean', 'branch_dist', 'endpoint_dist']
     property_features["spiness"] = morph_info
     property_feat_names["axoness"] = morph_feat_names +\
                                     ['nb_spinehead', 'sh_rad_mean',
@@ -104,17 +108,17 @@ def morphology_feature(source, max_nn_dist=6000):
     if isinstance(source, basestring):
         anno = load_ordered_mapped_skeleton(source)[0]
         # build mito sample tree
-        mitos, p4, az = load_objpkl_from_kzip(source)
+        mitos, vc, sj = load_objpkl_from_kzip(source)
     else:
         anno = source.old_anno
         if source.mitos is None:
-            mitos, p4, az = load_objpkl_from_kzip(anno.filename)
+            mitos, vc, sj = load_objpkl_from_kzip(anno.filename)
         else:
             mitos = source.mitos
-            p4 = source.p4
-            az = source.az
-    m_dict, p4_dict, az_dict = (mitos.object_dict, p4.object_dict,
-                                az.object_dict)
+            vc = source.vc
+            sj = source.sj
+    m_dict, vc_dict, sj_dict = (mitos.object_dict, vc.object_dict,
+                                sj.object_dict)
     nearby_node_list = nodes_in_pathlength(anno, max_nn_dist)
     node_coords = []
     node_radii = []
@@ -125,12 +129,12 @@ def morphology_feature(source, max_nn_dist=6000):
         node_ids.append(nodes[0].getID())
     m_feat = objfeat2skelnode(node_coords, node_radii, node_ids,
                               nearby_node_list, m_dict, anno.scaling)
-    p4_feat = objfeat2skelnode(node_coords, node_radii, node_ids,
-                               nearby_node_list, p4_dict, anno.scaling)
-    az_feat = objfeat2skelnode(node_coords, node_radii, node_ids,
-                               nearby_node_list, az_dict, anno.scaling)
+    vc_feat = objfeat2skelnode(node_coords, node_radii, node_ids,
+                               nearby_node_list, vc_dict, anno.scaling)
+    sj_feat = objfeat2skelnode(node_coords, node_radii, node_ids,
+                               nearby_node_list, sj_dict, anno.scaling)
     rad_feat, spinehead_feat = radfeat2skelnode(nearby_node_list)
-    morph_feat = np.concatenate((rad_feat, m_feat, p4_feat, az_feat),
+    morph_feat = np.concatenate((rad_feat, m_feat, vc_feat, sj_feat),
                                 axis=1)
     dist_feature, ids = node_branch_end_distance(anno, max_nn_dist)
     sort_ix = np.argsort(ids)
@@ -143,13 +147,13 @@ def morphology_feature(source, max_nn_dist=6000):
     assert np.all(node_ids == ids), 'Node IDs are different.'
     morph_feat = np.concatenate((morph_feat, dist_feature), axis=1)
     if np.any(np.isnan(morph_feat)):
-        print "Found nans in morphological features of %s: %s" % \
-              (source, np.where(np.isnan(morph_feat)))
+        # print "Found nans in morphological features of %s: %s" % \
+        #       (source, np.where(np.isnan(morph_feat)))
         morph_feat = np.nan_to_num(morph_feat.astype(np.float32))
     spinehead_feat = spinehead_feat[sort_ix2]
     if np.any(np.isnan(spinehead_feat)):
-        print "Found nans in spinhead features of %s: %s" % \
-              (source, np.where(np.isnan(spinehead_feat)))
+        # print "Found nans in spinhead features of %s: %s" % \
+        #       (source, np.where(np.isnan(spinehead_feat)))
         spinehead_feat = np.nan_to_num(spinehead_feat.astype(np.float32))
     return morph_feat, spinehead_feat, ids
 
@@ -214,8 +218,15 @@ def spiness_feats_from_nodes(nodes):
     Calculates spiness feats including abs. number of spineheads, mean and
     standard deviation (std) of spinehead size, mean spinehead probability and
     mean and std of spineneck lengths.
-    :param nodes: list of SkeletonNodes
-    :return: np.array of spiness features, dim. of 6
+
+    Parameters
+    ----------
+    nodes : list of SkeletonNodes
+
+    Returns
+    -------
+    np.array
+        spiness features, dim. of 6
     """
     spinehead_feats = np.zeros((6))
     spinehead_radius = []
@@ -245,45 +256,58 @@ def spiness_feats_from_nodes(nodes):
     return spinehead_feats
 
 
-def az_per_spinehead(anno):
-    """
-    Calculate number of az per spinehead. Iterate over all mapped az objects and
+def sj_per_spinehead(anno):
+    """Calculate number of sj per spinehead. Iterate over all mapped sj objects and
     find nearest skeleton node. If skeleton node has spiness prediction == 1
     (spinehead) then increment counter of this node by one.
     After the loop sum over all counter and divide by the number of nodes which
-    have at least one az assigned.
+    have at least one sj assigned.
+
+    Parameters
+    ----------
     :param anno: SkeletonAnnotation
-    :return: Average number of az per spinehead (assumes there is no spinehead
-    without az)
+
+    Returns
+    -------
+    float
+        Average number of sj per spinehead (assumes there is no spinehead
+        without sj)
     """
-    _, _, az = load_objpkl_from_kzip(anno.filename)
-    az_dict = az.object_dict
-    nb_az = len(az_dict.keys())
-    hull_samples = np.zeros((nb_az, 100, 3))
+    _, _, sj = load_objpkl_from_kzip(anno.filename)
+    sj_dict = sj.object_dict
+    nb_sj = len(sj_dict.keys())
+    hull_samples = np.zeros((nb_sj, 100, 3))
     skel_nodes = [n for n in anno.getNodes()]
     node_coords = arr([n.getCoordinate_scaled() for n in skel_nodes])
-    node_az_counter = np.zeros((len(skel_nodes), ))
+    node_sj_counter = np.zeros((len(skel_nodes), ))
     skeleton_tree = spatial.cKDTree(node_coords)
-    for i, az_key in enumerate(az_dict.keys()):
-        az = az_dict[az_key]
-        m_hull = az.hull_voxels * arr(anno.scaling)
+    for i, sj_key in enumerate(sj_dict.keys()):
+        sj = sj_dict[sj_key]
+        m_hull = sj.hull_voxels * arr(anno.scaling)
         random_ixs = np.random.choice(np.arange(len(m_hull)), size=100)
         hull_samples[i] = m_hull[random_ixs]
-    for i in range(nb_az):
+    for i in range(nb_sj):
         dists, nearest_skel_ixs = skeleton_tree.query(hull_samples[i], 1)
         majority_ix = cell_classification(nearest_skel_ixs)
         if int(skel_nodes[majority_ix].data["spiness_pred"]) == 1:
-            node_az_counter[majority_ix] += 1
-    az_per_sh = np.sum(node_az_counter) / float(np.sum(node_az_counter != 0))
-    return np.nan_to_num(az_per_sh)
+            node_sj_counter[majority_ix] += 1
+    sj_per_sh = np.sum(node_sj_counter) / float(np.sum(node_sj_counter != 0))
+    return np.nan_to_num(sj_per_sh)
 
 
 def propertyfeat2skelnode(node_list):
-    """
-    Calculate nodewise radius feature.
-    :param node_list: list of grouped nodes
-    :return: array of number of nodes times 22 features, containing mean radius,
-    sigma of radii, 20 hist features
+    """Calculate nodewise radius feature
+
+    Parameters
+    ----------
+    node_list : list
+        grouped nodes
+
+    Returns
+    -------
+    np.array
+        number of nodes times 22 features, containing mean radius,
+        sigma of radii, 20 hist features
     """
     radius_feat = np.zeros((1, 12))
     n_radius = []
@@ -320,9 +344,10 @@ def celltype_axoness_feature(anno):
     """
     type_feats = np.zeros((1, 4))
     all_path_length = anno.physical_length() / 1000.
-    for i in range(3):
-        type_feats[0, i] = pathlength_of_property(anno, 'axoness_pred', i) / \
-                        all_path_length
+    if all_path_length != 0:
+        for i in range(3):
+            type_feats[0, i] = pathlength_of_property(anno, 'axoness_pred', i) / \
+                            all_path_length
     for n in anno.getNodes():
         if int(n.data["axoness_pred"]) == 2:
             type_feats[0, 3] = np.max((n.degree(), type_feats[0, 3]))
@@ -357,10 +382,22 @@ def pathlength_of_property(anno, property, value):
 
 def objfeat2skelnode(node_coords, node_radii, node_ids, nearby_node_list,
                      obj_dict, scaling):
-    """
-    Calculate features of SegmentationDatasetObjects along Skeleton.
-    :return: array of dimension nb_skelnodes x 2. The two features are:
-    absolute number of assigned objects and mean voxel size of the objects
+    """Calculate features of SegmentationDatasetObjects along Skeleton
+
+    Parameters
+    ----------
+    node_coords : np.array
+    node_radii : np.array
+    node_ids : np.array
+    nearby_node_list : list of list of SkeletonNodes
+    obj_dict : SegmentationDataset
+    scaling : tuple
+
+    Returns
+    -------
+    np.array (dimension nb_skelnodes x 2)
+        The two features are absolute number of assigned objects and
+        mean voxel size of the objects
     """
     skeleton_tree = spatial.cKDTree(node_coords)
     nb_skelnodes = len(node_coords)
@@ -396,12 +433,18 @@ def objfeat2skelnode(node_coords, node_radii, node_ids, nearby_node_list,
 
 
 def nodes_in_pathlength(anno, max_path_len):
-    """
-    Find nodes reachable in max_path_len from source node, calculated for
+    """Find nodes reachable in max_path_len from source node, calculated for
     every node in anno.
-    :param anno: AnnotationObject
-    :param max_path_len: float Maximum distance from source node
-    :return: list of lists containing reachable nodes in max_path_len where
+
+    Parameters
+    ----------
+    anno : AnnotationObject
+    max_path_len : float
+        Maximum distance from source node
+
+    Returns
+    -------
+    list of lists containing reachable nodes in max_path_len where
     outer list has length len(anno.getNodes())
     """
     skel_graph = su.annotation_to_nx_graph(anno)
@@ -420,12 +463,14 @@ def nodes_in_pathlength(anno, max_path_len):
 
 
 def assign_property2node(node, pred, property):
-    """
-    Assign prediction of property to node
-    :param node: NewSkeletonNode
-    :param pred: prediction appropriate to property
-    :param property: property to change
-    :return:
+    """Assign prediction of property to node
+
+    Parameters
+    ----------
+    node : NewSkeletonNode
+    pred : prediction appropriate to property
+    property : property to change
+
     """
     node.data["%s_pred" % property] = str(pred)
     node_comment = node.getComment()
@@ -438,17 +483,22 @@ def assign_property2node(node, pred, property):
         node.setComment("".join(help_list))
 
 
-def majority_vote(anno, property='axoness', max_dist=5000):
+def majority_vote(anno, property='axoness', max_dist=6000):
     """
-    Smoothes property prediction of annotation using running average with path
-    length 2 * max_length (nm).
-    :param anno:
-    :param property:
-    :param max_dist:
-    :return:
+    Smoothes (average using sliding window of 2 times max_dist and majority
+    vote) property prediction in annotation, whereas for axoness somata are
+    untouched.
+
+    Parameters
+    ----------
+    anno : SkeletonAnnotation
+    property : str
+        which property to average
+    max_dist : int
+        maximum distance (in nm) for sliding window used in majority voting
     """
-    print "Performing smoothing of %s using sliding window average of max " \
-          "dist %d nm." % (property, max_dist)
+    # print "Performing smoothing of %s using sliding window average of max " \
+    #       "dist %d nm." % (property, max_dist)
     old_anno = copy.deepcopy(anno)
     nearest_nodes_list = nodes_in_pathlength(old_anno, max_dist)
     for nodes in nearest_nodes_list:
@@ -457,11 +507,7 @@ def majority_vote(anno, property='axoness', max_dist=5000):
         if int(new_node.data["axoness_pred"]) == 2:
             new_node.data["axoness_pred"] = 2
             continue
-        # property_val = [int(re.findall(property+'(\d+)', n.getComment())[0])
-        #            for n in nodes]
         property_val = [int(n.data[property+'_pred']) for n in nodes]
-        # print "Using %d nodes for %s majority voting" % (len(property_val),
-        #                                                  property)
         counter = Counter(property_val)
         new_ax = counter.most_common()[0][0]
         node_comment = new_node.getComment()
@@ -474,27 +520,39 @@ def majority_vote(anno, property='axoness', max_dist=5000):
 
 def get_obj_density(source, property='axoness_pred', value=1, obj='mito',
                     return_abs_density=True):
-    """
-    Calculate pathlength of nodes using edges.
-    :param anno: list of SkeletonAnnotation
+    """Calculate pathlength of nodes using edges
+
+    Parameters
+    ----------
+    anno: list of SkeletonAnnotation
+    property : str
+        e.g. 'axoness_pred'
+    value : int
+        value of property to check
+    obj : str
+        mito/vc/sj
+    return_abs_density : bool
+
+    Returns
+    -------
     :return: length in um
     """
-    obj_dict = {'mito': 0, 'p4': 1, 'az':2}
+    obj_dict = {'mito': 0, 'vc': 1, 'sj':2}
     if isinstance(source, basestring):
         anno = load_ordered_mapped_skeleton(source)[0]
         # build mito sample tree
-        mitos, p4, az = load_objpkl_from_kzip(source)
+        mitos, vc, sj = load_objpkl_from_kzip(source)
     else:
         anno = source.old_anno
         if source.mitos is None:
-            mitos, p4, az = load_objpkl_from_kzip(anno.filename)
+            mitos, vc, sj = load_objpkl_from_kzip(anno.filename)
         else:
             mitos = source.mitos
-            p4 = source.p4
-            az = source.az
-    m_dict, p4_dict, az_dict = (mitos.object_dict, p4.object_dict,
-                                az.object_dict)
-    obj_dict = [m_dict, p4_dict, az_dict][obj_dict[obj]]
+            vc = source.vc
+            sj = source.sj
+    m_dict, vc_dict, sj_dict = (mitos.object_dict, vc.object_dict,
+                                sj.object_dict)
+    obj_dict = [m_dict, vc_dict, sj_dict][obj_dict[obj]]
     node_coords = []
     node_radii = []
     node_ids = []
@@ -547,19 +605,31 @@ def get_obj_density(source, property='axoness_pred', value=1, obj='mito',
 
 
 def node_branch_end_distance(nml, dist):
+    """Set distances to next branch resp. end point for each node (distance is
+    capped by given parameter dist) in .data dictionary of each node
+    and returns values with node ids
+
+    Parameters
+    ----------
+    nml : SkeletonAnnotation
+    dist : int
+        maximum distance value to occur
+
+    Returns
+    -------
+    np.array, np.array
+        distances to nearest end/branch point, node ids
+    """
     graph = su.annotation_to_nx_graph(nml)
     dic = su.nx.degree(graph)
-
     end = []
     for key, value in dic.items():
         if value == 1:
             end.append(key)
-
     bran = []
     for key, value in dic.items():
         if value >= 3:
             bran.append(key)
-
     features = []
     Y = []
     for node in graph.nodes():
@@ -574,8 +644,6 @@ def node_branch_end_distance(nml, dist):
             distance2endpoint = min(node_to_all_endnode)
         else:
             distance2endpoint = np.float32(99999999)
-
-        # distance2endpoint = min(node_to_all_endnode)
         node.data["endpointdistance"] = distance2endpoint
         single_node_feature.append(distance2endpoint)
 
@@ -589,6 +657,5 @@ def node_branch_end_distance(nml, dist):
         features.append(single_node_feature)
         node.data["branchpointdistance"] = distance2branchpoint
     X = np.array(features)
-    print "Max occuring distance:", np.max(features)
     Y = np.array(Y)
     return X, Y

@@ -1,11 +1,26 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import numpy as np
 from scipy import spatial
 from numpy import array as arr
 from math import pow, sqrt, ceil
 from scipy import ndimage
 from scipy.spatial import ConvexHull
+from scipy.spatial.qhull import QhullError
+import warnings
 import re
-__author__ = 'pschuber'
+
+
+def switch_array_entries(this_array, entries):
+    entry_0 = this_array[entries[0]]
+    this_array[entries[0]] = this_array[entries[1]]
+    this_array[entries[1]] = entry_0
+    return this_array
 
 
 def negative_to_zero(a):
@@ -28,7 +43,9 @@ def get_orth_plane(node_com):
     at each node
     """
     lin_interp = np.zeros((len(node_com), 3), dtype=np.float)
-    lin_interp[1:-1] = node_com[2:]-node_com[:-2]
+    if len(node_com) < 2:
+        return np.zeros((len(node_com), 3), dtype=np.float), lin_interp
+    lin_interp[1:-1] = node_com[2:] - node_com[:-2]
     lin_interp[0] = node_com[1] - node_com[0]
     lin_interp[-1] = node_com[-1] - node_com[-2]
     n = np.linalg.norm(lin_interp, axis=1)
@@ -148,38 +165,44 @@ def convex_hull_area(pts):
     :param pts: np.array of coordinates in nm (scaled)
     :return: Area of the point cloud (nm^2)
     """
+    if len(pts) < 4:
+        return 0
     area = 0
-    ch = ConvexHull(pts)
-    triangles = ch.points[ch.simplices]
-    for triangle in triangles:
-        area += poly_area(triangle)
+    try:
+        ch = ConvexHull(pts)
+        triangles = ch.points[ch.simplices]
+        for triangle in triangles:
+            area += poly_area(triangle)
+    except QhullError as e:
+        warnings.warn("%s encountered during calculation of convex hull "
+                      "area with %d points. Returning 0 nm^2." %
+                      (e, len(pts)), RuntimeWarning)
+        pass
     return area
 
 
 def cell_object_coord_parser(voxel_tree):
     """Extracts unique voxel coords from object tree list for cell objects
-    'mitos', 'p4' and 'az'.
+    'mitos', 'vc' and 'sj'.
 
     :param voxel_tree: annotation object containing voxels of cell objects
-     ['mitos', 'p4', 'az']
-    :returns: coord arrays for 'mitos', 'p4' and 'az'
+     ['mitos', 'vc', 'sj']
+    :returns: coord arrays for 'mitos', 'vc' and 'sj'
     """
     mito_coords= []
-    p4_coords = []
-    az_coords = []
+    vc_coords = []
+    sj_coords = []
     for node in voxel_tree.getNodes():
         comment = node.getComment()
         if 'mitos' in comment:
             mito_coords.append(node.getCoordinate())
-        elif 'p4' in comment:
-            p4_coords.append(node.getCoordinate())
-        elif 'az' in comment:
-            az_coords.append(node.getCoordinate())
+        elif 'vc' in comment:
+            vc_coords.append(node.getCoordinate())
+        elif 'sj' in comment:
+            sj_coords.append(node.getCoordinate())
         else:
             print "Couldn't understand comment:", comment
-    print "Found %d mitos, %d az and %d p4." % (len(mito_coords), len(p4_coords),
-                                                len(az_coords))
-    return arr(mito_coords), arr(p4_coords), arr(az_coords)
+    return arr(mito_coords), arr(vc_coords), arr(sj_coords)
 
 
 def helper_samllest_dist(args):
@@ -275,6 +298,7 @@ def calc_overlap(point_list_a, point_list_b, max_dist):
 
 ###################### TODO
 
+
 def tuple_to_string(coordinate, sep=', ', dl='(', dr=')'):
     return dl + sep.join([str(x) for x in coordinate]) + dr
 
@@ -290,6 +314,7 @@ def coordinate_from_string(coord_string):
 
     return (x, y, z)
 
+
 def coordinate_to_ewkt(coordinate, scale='dataset'):
     if isinstance(scale, str):
         scale = (1.0, 1.0, 1.0)
@@ -299,6 +324,7 @@ def coordinate_to_ewkt(coordinate, scale='dataset'):
                   coordinate[2] * scale[2])
 
     return "POINT(%s)" % (" ".join([str(x) for x in coordinate]),)
+
 
 def has_equal_dimensions(c):
     """
@@ -426,3 +452,5 @@ class FloatCoordinate(Coordinate):
     def __init__(self, c):
         c = [float(x) for x in c]
         super(FloatCoordinate, self).__init__(c)
+
+

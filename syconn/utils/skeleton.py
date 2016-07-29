@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 from xml.dom import minidom
 import xml.etree.cElementTree as cElementTree
 from math import pow, sqrt
@@ -16,6 +23,16 @@ from multiprocessing import Pool
 
 
 class Skeleton:
+    """
+    Basic class for cell tracings used in Knossos
+
+    Attributes
+    ----------
+    annotations : set of SkeletonAnnotations
+        several tracings of one cell
+    scaling : tuple
+        scaling of dataset
+    """
     def __init__(self):
         # Uninitialized Mandatory
         self.annotations = set()
@@ -285,10 +302,16 @@ class Skeleton:
     def fromNmlcTree(self, filename, use_file_scaling=False, scaling='dataset',
                      comment=None):
         """Reads nml file with cElementTree Parser
-        filename -- path to nml-file
-        filename -- path to k.zip-file -> this might cause trouble with other
-                    functions since self.filename = *.k.zip
         is capable of parsing patches
+
+        Parameters
+        ----------
+        filename : str
+            path to nml-file or path to k.zip-file (but this might cause
+            trouble with other functions since self.filename = *.k.zip)
+        use_file_scaling : bool
+        scaling : str
+        comment : str
         """
         if filename:
             self.filename = filename
@@ -458,13 +481,16 @@ class Skeleton:
         return
 
     def to_xml_string(self, save_empty=True):
-        # This is currently only a slight cosmetic duplication of the old Skeleton, therefore far from complete
+        # This is currently only a slight cosmetic duplication of the old
+        # Skeleton, therefore far from complete
         doc = minidom.Document()
         annotations_elem = doc.createElement("things")
         doc.appendChild(annotations_elem)
 
         # Add dummy header
         parameters = doc.createElement("parameters")
+        props = doc.createElement("properties")
+        annotations_elem.appendChild(props)
         annotations_elem.appendChild(parameters)
         expname = doc.createElement("experiment")
 
@@ -485,6 +511,21 @@ class Skeleton:
                  ["y", self.edit_position[1]],
                  ["z", self.edit_position[2]], ])
             parameters.appendChild(edit_position)
+
+        # find property keys
+        orig_keys = ["inVp", "node", "id", "inMag", "radius", "time",
+                     "x", "y", "z", "edge", "comment", "content", "target"]
+        #  assume properties are set in every node -> only look at a single
+        #  node is sufficient
+        property_names = []
+        for n in self.getNodes():
+            for key, val in n.data.iteritems():
+                if key not in property_names+orig_keys:
+                    property_names.append(key)
+                    prop_entry = doc.createElement("property")
+                    build_attributes(prop_entry, [["name", key],
+                                                  ["type", "number"]])
+                    props.appendChild(prop_entry)
 
         time = doc.createElement("time")
         build_attributes(time, [["ms", 0], ["checksum", integer_checksum(0)]])
@@ -711,8 +752,11 @@ class SkeletonAnnotation:
     def fromNmlcTree(self, annotation_elem, skeleton, base_id=0):
         """ Subfunction of fromNmlcTree from NewSkeleton
 
-        annotation_elem -- XML Element
-        skeleton -- type NewSkeleton()
+        Parameters
+        ----------
+        annotation_elem : XML Element
+        skeleton : Skeleton
+        base_id : int
         """
         self.resetObject()
 
@@ -1377,7 +1421,9 @@ class SkeletonVolume:
     def fromNmlcTree(self, patch_elem):
         """ Subfunction of fromNmlcTree from SkeletonAnnotation
 
-        patch_elem -- XML Element
+        Parameters
+        ----------
+        patch_elem : XML Element
         """
         self.resetObject()
 
@@ -1475,9 +1521,11 @@ class SkeletonLoop:
         self.add(point)
 
     def fromNmlcTree(self, loop_elem):
-        """ Subfunction of fromNmlcTree from SkeletonVolume
+        """Subfunction of fromNmlcTree from SkeletonVolume
 
-        loop_elem -- XML Element
+        Parameters
+        ----------
+        loop_elem : XML Element
         """
         self.resetObject()
 
@@ -1559,9 +1607,11 @@ class SkeletonLoopPoint:
         return "Looppoint at %s" % (self.getCoordinates(),)
 
     def fromNmlcTree(self, point_elem):
-        """ Subfunction of fromNmlcTree from SkeletonLoop
+        """Subfunction of fromNmlcTree from SkeletonLoop
 
-        point_elem -- XML Element
+        Parameters
+        ----------
+        point_elem : XML Element
         """
         self.resetObject()
         self.setCoordinates(point_elem)

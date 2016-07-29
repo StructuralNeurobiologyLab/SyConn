@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+
 import numpy as np
 import os
 import re
@@ -12,8 +19,6 @@ import syconn.utils.skeleton_utils as su
 from learning_rfc import save_train_clf
 from syconn.utils.datahandler import get_filepaths_from_dir
 
-__author__ = 'philipp'
-
 
 def save_synapse_clf(gt_path, clf_used='rf'):
     """
@@ -22,16 +27,16 @@ def save_synapse_clf(gt_path, clf_used='rf'):
     :param clf_used: 'rf' or 'svm'
     """
     all_gt_samples = [path for path in get_filepaths_from_dir(gt_path, ending='nml')]
-    gt_az_samples = [path for path in all_gt_samples if not 'p4_az.nml' in path]
-    gt_az_p4_samples = [path for path in all_gt_samples if 'p4_az.nml' in path]
-    X_az, Y_az = calc_syn_feature(gt_az_samples)
-    X_p4_az, Y_p4_az = calc_syn_feature(gt_az_p4_samples)
-    X_total = np.concatenate((X_az, X_p4_az), axis=0)
-    y_total = np.concatenate((Y_az, Y_p4_az), axis=0)
+    gt_sj_samples = [path for path in all_gt_samples if not 'vc_sj.nml' in path]
+    gt_sj_vc_samples = [path for path in all_gt_samples if 'vc_sj.nml' in path]
+    X_sj, Y_sj = calc_syn_feature(gt_sj_samples)
+    X_vc_sj, Y_vc_sj = calc_syn_feature(gt_sj_vc_samples)
+    X_total = np.concatenate((X_sj, X_vc_sj), axis=0)
+    y_total = np.concatenate((Y_sj, Y_vc_sj), axis=0)
     save_train_clf(X_total, y_total, clf_used, gt_path)
 
 
-def helper_load_az_feat(args):
+def helper_load_sj_feat(args):
     """
 
     :param args:
@@ -62,7 +67,7 @@ def calc_syn_feature(gt_samples, ignore_keys=['Barrier', 'Skel'],
     :param detailed_cs_dir: path to folder containing the contact sites
     :return:
     """
-    for ending in ['', 'cs', 'cs_p4', 'cs_az', 'cs_p4_az', 'pairwise',
+    for ending in ['', 'cs', 'cs_vc', 'cs_sj', 'cs_vc_sj', 'pairwise',
                    'feature']:
         if not os.path.exists(detailed_cs_dir+ending):
             os.makedirs(detailed_cs_dir+ending)
@@ -85,10 +90,10 @@ def calc_syn_feature(gt_samples, ignore_keys=['Barrier', 'Skel'],
     res = result.get()
     pool.close()
     pool.join()
-    print "\n", len(res), len(filter(None, res))
+    # print "\n", len(res), len(filter(None, res))
     res = np.array(filter(None, res))
     non_instances = arr([isinstance(el, np.ndarray) for el in res[:,0]])
-    print len(res[non_instances])
+    # print len(res[non_instances])
     X = np.array(res[:, 0][non_instances].tolist(), dtype=np.float)
     Y = np.array(res[:, 1][non_instances], dtype=np.int)
     return X, Y
@@ -157,9 +162,7 @@ def parse_synfeature_from_node(node):
     return feat_arr
 
 
-def syn_sign_prediction(voxels, threshold=.25,
-                        kd_path_sym='/lustre/sdorkenw/j0126_3d_symmetric/',
-                        kd_path_asym='/lustre/sdorkenw/j0126_3d_asymmetric/'):
+def syn_sign_prediction(voxels, kd_path_sym, kd_path_asym, threshold=.25):
 
     kd_asym = kd()
     kd_asym.initialize_from_knossos_path(kd_path_asym)

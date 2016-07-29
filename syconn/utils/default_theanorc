@@ -1,0 +1,9 @@
+[global]16
+floatX = float32
+device = cpu
+openmp = True
+OMP_NUM_THREADS = 30
+# linker = cvm_nogc
+
+[nvcc]
+fastmath = True

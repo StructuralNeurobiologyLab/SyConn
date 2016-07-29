@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import copy
 import itertools
 import numpy as np
@@ -9,7 +16,7 @@ import networkx as nx
 import syconn.utils.skeleton_utils as su
 from syconn.utils.skeleton import Skeleton
 from syconn.processing.features import celltype_axoness_feature,\
-    spiness_feats_from_nodes,  radius_feats_from_nodes, az_per_spinehead,\
+    spiness_feats_from_nodes,  radius_feats_from_nodes, sj_per_spinehead,\
     pathlength_of_property
 from syconn.processing.learning_rfc import cell_classification
 from syconn.processing.synapticity import syn_sign_prediction
@@ -28,12 +35,13 @@ class Neuron(object):
     features : dict of np.array
         cell type features stored with their feature names
     """
-    def __init__(self, annotations, unique_ID=None):
+    def __init__(self, annotations, wd, unique_ID=None):
 
         # This identifier is always unique. If another neuron object is
         # discovered to be the same biological unit, both need to be merged
         # immediately.
         self._ID = unique_ID
+        self.wd = wd
 
         self.annotations = annotations
         # scan for consensus annotations
@@ -122,8 +130,8 @@ class Neuron(object):
         return len(self.synapses)
 
     @property
-    def avg_syn_az_len(self):
-        return np.mean(np.array([s.az_len for s in self.synapses]))
+    def avg_syn_sj_len(self):
+        return np.mean(np.array([s.sj_len for s in self.synapses]))
 
     @property
     def syn_h_s_ratio(self):
@@ -229,7 +237,6 @@ class Neuron(object):
             self.nx_g)
         self.features['all_branch_density'] = 0.
         self.features['num_all_end_p'] = num_end_points_of_nx_graph(self.nx_g)
-        self.features['all_branch_density'] = 0.
         self.features['tortuosity'] = calc_arc_choord(anno_to_use, self.nx_g)
 
         if os.path.isfile(self._mapped_skel_dir + anno_to_use.filename) or \
@@ -241,7 +248,7 @@ class Neuron(object):
             self.features['type_morphology'] = type_feats  # 4
             self.features['spine_morphology'] = spine_feats  # 13
             self.features['synapse_type'] = calc_syn_type_feats(
-                anno_to_use)  # 8
+                anno_to_use, self.wd)  # 8
             self.features['mito density'] = 0.
             self.features['vc density'] = 0.
             self.features['sj density'] = 0.
@@ -286,7 +293,7 @@ class Neuron(object):
                           'std of radius (axon)',
                           'mean of sh probability (axon)',
                           'mean neck length (axon)', 'std neck length (axon)',
-                          'number az per sh'])[None, :]
+                          'number sj per sh'])[None, :]
             self._feature_name_dict['synapse_type'] = np.array(
                 ['outgoing syn. type', 'proportion of inc. syn. type',
                  'median of outgoing syn. size', 'std of outgoing syn. size',
@@ -304,7 +311,12 @@ class Neuron(object):
 
 
 def num_end_points_of_nx_graph(nx_graph):
-    return len(list({k for k, v in nx_graph.degree().iteritems() if v == 1}))
+    try:
+        num = len(list({k for k, v in nx_graph.degree().iteritems() if v == 1}))
+    except Exception, e:
+        print e
+        print "Got exception during number end point calculation. Setting to 0."
+    return num
 
 
 def cell_morph_properties(mapped_annotation):
@@ -344,7 +356,7 @@ def cell_morph_properties(mapped_annotation):
         if i != 2:
             spiness_feats[0, ix_begin:ix_end] = spiness_feats_from_nodes(
                 ax_nodes)
-    spiness_feats[0, 12] = az_per_spinehead(mapped_annotation)
+    spiness_feats[0, 12] = sj_per_spinehead(mapped_annotation)
     dend_length = pathlength_of_property(mapped_annotation, 'axoness_pred', 0)
     if dend_length != 0:
         spiness_feats[0, 0] /= dend_length
@@ -380,7 +392,7 @@ def calc_obj_feat(mapped_annotation):
     return object_feats
 
 
-def calc_syn_type_feats(anno_to_use):
+def calc_syn_type_feats(anno_to_use, wd):
     """Calculate cell feature based on mapped synapses
 
     Parameters
@@ -403,21 +415,24 @@ def calc_syn_type_feats(anno_to_use):
     node_list = np.array([n for n in anno_to_use.getNodes()])
     coord_list = [n.getCoordinate_scaled() for n in node_list]
     skel_tree = spatial.cKDTree(coord_list)
-    for ix in set(anno_to_use.az_hull_ids):
-        ix_bool_arr = anno_to_use.az_hull_ids == ix
-        obj_hull = anno_to_use.az_hull_coords[ix_bool_arr]
+    for ix in set(anno_to_use.sj_hull_ids):
+        ix_bool_arr = anno_to_use.sj_hull_ids == ix
+        obj_hull = anno_to_use.sj_hull_coords[ix_bool_arr]
         hull_com = np.mean(obj_hull, axis=0)
-        dists, close_ixs = skel_tree.query([hull_com], k=3)
+        dists, close_ixs = skel_tree.query([hull_com],
+                                           k=np.min((3, len(node_list))))
         near_nodes = node_list[close_ixs]
         axoness = cell_classification([int(n.data["axoness_pred"]) for n in
                                        near_nodes[0]])
-        syn_type_pred = syn_sign_prediction(obj_hull / np.array([9., 9., 20.]))
-        az_area = convex_hull_area(obj_hull) / 2.e6
+        syn_type_pred = syn_sign_prediction(obj_hull / np.array([9., 9., 20.]),
+                                            wd+"/knossosdatasets/symmetric/",
+                                            wd+"/knossosdatasets/asymmetric/")
+        sj_area = convex_hull_area(obj_hull) / 2.e6
         if axoness == 1:
-            outgoing_syn_size.append(az_area)
+            outgoing_syn_size.append(sj_area)
             syn_types_out.append(syn_type_pred)
         else:
-            incoming_syn_size.append(az_area)
+            incoming_syn_size.append(sj_area)
             syn_types_in.append(syn_type_pred)
     if len(syn_types_out) != 0:
         syn_type_feats[0, 0] = cell_classification(syn_types_out)
@@ -441,7 +456,13 @@ def calc_syn_type_feats(anno_to_use):
 
 
 def num_branch_points_of_nx_graph(nx_graph):
-    return len(list({k for k, v in nx_graph.degree().iteritems() if v > 2}))
+    try:
+        num = len(list({k for k, v in nx_graph.degree().iteritems() if v > 2}))
+    except Exception, e:
+        print e
+        print "Got exception during number branch point calc. Setting to 0."
+        num = 0
+    return num
 
 
 def get_annotation_branch_lengths(annotation):
@@ -500,8 +521,7 @@ def calc_arc_choord(anno, nxg=None):
                                            target=dists[-1][0][1],
                                            weight='weight')
     except:
-        print('No path between nodes for tortuosity calculation for neuron %s' %
-              anno.filename)
+        # print('No path between nodes for tortuosity calculation for neuron %s' %
+        #       anno.filename)
         return 0
-
     return dists[-1][1] / path_len

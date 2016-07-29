@@ -1,4 +1,10 @@
 # -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+
 import matplotlib.pyplot as plt
 
 from learning_rfc import *
@@ -9,8 +15,6 @@ from syconn.utils.datahandler import get_filepaths_from_dir,\
     write_obj2pkl, load_pkl2obj, get_skelID_from_path
 from syconn.utils.neuron import Neuron
 
-__author__ = 'pschuber'
-
 rf_params = {'n_estimators': 4000, 'oob_score': True, 'n_jobs': -1,
              'class_weight': 'balanced', 'max_features': 0.66}
 
@@ -19,6 +23,13 @@ rf_params_nodewise = {'n_estimators': 2000, 'oob_score': True, 'n_jobs': -1,
 
 
 def get_cell_type_labels():
+    """Cell type labels for HVC(0), LMAN(0), STN(0), MSN(1), GP(2), FS(3)
+
+    Returns
+    -------
+    dict
+        convetion dictionary for cell type labels (str), returns integer
+    """
     labels = {}
     labels["HVC"] = 0
     labels["LMAN"] = 0
@@ -30,6 +41,12 @@ def get_cell_type_labels():
 
 
 def get_cell_type_classes_dict():
+    """
+    Returns
+    -------
+    dict
+        dictionary from integer label to full cell name as string
+    """
     label_strings_dict = {}
     label_strings_dict[0] = "Excitatory Axons"
     label_strings_dict[1] = "Medium spiny Neurons"
@@ -46,12 +63,14 @@ def get_cell_type_classes_dict():
 
 
 def save_cell_type_clf(gt_path, clf_used='rf', load_data=True):
-    """
-    Save axoness clf specified by clf_used to gt_directory.
+    """Save axoness clf specified by clf_used to gt_directory.
+
     Parameters
     ----------
     gt_path : str
         path to cell type gt
+    clf_used : str
+    load_data : bool
     """
     X_cells_types, Y_cells_types = load_celltype_gt(load_data=load_data)
     save_train_clf(X_cells_types, Y_cells_types, clf_used, gt_path, params=rf_params)
@@ -93,7 +112,8 @@ def find_cell_types_from_dict(wd, cell_type):
     ----------
     wd : str
         Path to working directory
-
+    cell_type : int
+        label (0 = EA, 1 = MSN, 2 = GP, 3 = INT)
     Returns
     -------
     list of str
@@ -155,8 +175,8 @@ def load_cell_gt(skel_ids, wd):
             skel_labels[i] = class_nb
         except KeyError:
             pass
-    print "Using %d/%d labeled skeletons as GT for cell type RFC training." % \
-          (len(skel_labels[skel_labels != -1]), len(skel_labels))
+    # print "Using %d/%d labeled skeletons as GT for cell type RFC training." % \
+    #       (len(skel_labels[skel_labels != -1]), len(skel_labels))
     return skel_labels
 
 
@@ -173,14 +193,19 @@ def load_celltype_feats(wd):
     np.array
         cell type features
     """
-    feat_dict = load_pkl2obj(wd + '/neurons/skel_feat_dict.pkl')
-    skeleton_feats = []
+    if not os.path.isfile(wd + '/neurons/celltype_feat_dict.pkl'):
+        save_cell_type_feats(wd)
+    feat_dict = load_pkl2obj(wd + '/neurons/celltype_feat_dict.pkl')
+    skeleton_feats = np.zeros((len(feat_dict.keys()),
+                               len(feat_dict.values()[0])))
     skeleton_ids = []
+    ii = 0
     for key, val in feat_dict.iteritems():
-        skeleton_feats.append(val)
+        skeleton_feats[ii] = arr(val)
         skeleton_ids.append(key)
+        ii += 1
     ixs = np.argsort(skeleton_ids)
-    return arr(skeleton_ids)[ixs], arr(skeleton_feats)[ixs]
+    return arr(skeleton_ids)[ixs], skeleton_feats[ixs]
 
 
 def load_celltype_probas(wd):
@@ -196,6 +221,8 @@ def load_celltype_probas(wd):
     np.array, np.array
         cell ids, cell label probabilities
     """
+    if not os.path.isfile(wd + '/neurons/celltype_proba_dict.pkl'):
+        predict_celltype_label(wd)
     proba_dict = load_pkl2obj(wd + '/neurons/celltype_proba_dict.pkl')
     skel_probas = []
     skeleton_ids = []
@@ -204,6 +231,53 @@ def load_celltype_probas(wd):
         skeleton_ids.append(key)
     ixs = np.argsort(skeleton_ids)
     return arr(skeleton_ids)[ixs], arr(skel_probas)[ixs]
+
+
+def load_celltype_preds(wd):
+    """Loads cell type predictions and corresponding ids from dictionaries
+
+    Parameters
+    ----------
+    wd : str
+        Path to working directory
+
+    Returns
+    -------
+    np.array, np.array
+        cell ids, cell labels
+    """
+    if not os.path.isfile(wd + '/neurons/celltype_pred_dict.pkl'):
+        predict_celltype_label(wd)
+    pred_dict = load_pkl2obj(wd + '/neurons/celltype_pred_dict.pkl')
+    skel_probas = []
+    skeleton_ids = []
+    for key, val in pred_dict.iteritems():
+        skel_probas.append(val)
+        skeleton_ids.append(key)
+    ixs = np.argsort(skeleton_ids)
+    return arr(skeleton_ids)[ixs], arr(skel_probas)[ixs]
+
+
+def predict_celltype_label(wd):
+    """Predict celltyoe labels in working directory with pre-trained classifier
+    in subfolder models/rf_celltypes/rf.pkl
+
+    Parameters
+    ----------
+    wd : str
+        path to working directory
+    """
+    rf = joblib.load(wd + '/models/rf_celltypes/rf.pkl')
+    skeleton_ids, skeleton_feats = load_celltype_feats(wd)
+    skel_type_probas = rf.predict_proba(skeleton_feats)
+    proba_dict = {}
+    cell_type_pred_dict = {}
+    for ii, proba in enumerate(skel_type_probas):
+        proba_dict[skeleton_ids[ii]] = proba
+        cell_type_pred_dict[skeleton_ids[ii]] = np.argmax(proba)
+    write_obj2pkl(cell_type_pred_dict, wd + '/neurons/'
+                                            'celltype_pred_dict.pkl')
+    write_obj2pkl(proba_dict, wd + '/neurons/celltype_proba_dict.pkl')
 
 
 def save_cell_type_feats(wd):
@@ -216,25 +290,30 @@ def save_cell_type_feats(wd):
     """
     skel_dir = wd + '/neurons/'
     skel_paths = get_filepaths_from_dir(skel_dir)
+    # print "Calculating cell type feats of %d tracings." % len(skel_paths)
     # predict skeleton cell type probability
     skel_ids = []
     feat_dict = {}
-    result_tuple = start_multiprocess(calc_neuron_feat, skel_paths, debug=False,
-                                      nb_cpus=16)
+    params = [(p, wd) for p in skel_paths]
+    result_tuple = start_multiprocess(calc_neuron_feat_star, params, debug=True)
     for feat, skel_id in result_tuple:
         skel_ids.append(skel_id)
         feat_dict[skel_id] = feat[0]
-    write_obj2pkl(feat_dict, wd + '/neurons/skel_feat_dict.pkl')
+    write_obj2pkl(feat_dict, wd + '/neurons/celltype_feat_dict.pkl')
     # get example neuron and write neuron feature names
     cell = load_mapped_skeleton(skel_paths[0], True, True)[0]
     cell.filename = skel_paths[0]
-    neuron = Neuron(cell)
+    neuron = Neuron(cell, wd=wd)
     _ = neuron.neuron_features
     feat_names = neuron.neuron_feature_names
-    np.save(wd + '/neurons/feat_names.npy', feat_names)
+    np.save(wd + '/neurons/celltype_feat_names.npy', feat_names)
 
 
-def calc_neuron_feat(path):
+def calc_neuron_feat_star(params):
+    return calc_neuron_feat(params[0], params[1])
+
+
+def calc_neuron_feat(path, wd):
     """Calculate neuron features using neuron class
 
     Parameters
@@ -250,12 +329,13 @@ def calc_neuron_feat(path):
     orig_skel_id = get_skelID_from_path(path)
     cell = load_mapped_skeleton(path, True, True)[0]
     cell.filename = path
-    neuron = Neuron(cell)
+    neuron = Neuron(cell, wd=wd)
     feats = neuron.neuron_features
-    if np.any(np.isnan(feats)):
-        print "Found nans in feautres of skel %s" % path, \
-            neuron.neuron_feature_names[np.isnan(neuron.neuron_features[0])]
-        print neuron.neuron_features[0][np.isnan(neuron.neuron_features[0])]
+    # if np.any(np.isnan(feats)):
+    #     print "Found nans in feautres of skel %s" % path, \
+    #         neuron.neuron_feature_names[np.isnan(neuron.neuron_features[0])]
+    #     print neuron.neuron_features[0][np.isnan(neuron.neuron_features[0])]
+    # print "Finished feature extraction of %s" % path
     return feats, orig_skel_id
 
 
@@ -272,18 +352,10 @@ def write_feats_importance(wd, load_data=True, clf_used='rf'):
     feat_names = np.load(wd + '/neurons/feat_names.npy')
 
     rf = joblib.load(wd + '/models/celltypes/%s.pkl' % (clf_used))
-    skeleton_ids, skeleton_feats = load_celltype_feats(wd)
-    skel_type_probas = rf.predict_proba(skeleton_feats)
-    proba_dict = {}
-    print "# of feats and feat-names:", skeleton_feats.shape[1], len(feat_names)
-    for ii, proba in enumerate(skel_type_probas):
-        proba_dict[skeleton_ids[ii]] = proba
-
     importances = rf.feature_importances_
     feature_importance(rf, save_path='/home/pschuber/figures/cell_types/'
                                      'rf_feat_importance.png')
     tree_imp = [tree.feature_importances_ for tree in rf.estimators_]
-    print "Print feature importance of rf with %d trees." % len(tree_imp)
     std = np.std(tree_imp, axis=0) / np.sqrt(len(tree_imp))
     assert len(importances) == len(feat_names), "Number of names and features" \
                                                 "differs."
@@ -318,7 +390,6 @@ def draw_feat_hist(wd, k=15, classes=(0, 1, 2, 3), nb_bars=20):
                                                   "probabilities and features."
     skel_preds = np.argmax(skel_type_probas, axis=1)
     indices = np.argsort(importances)[::-1]
-    print feat_names[indices]
     for n in range(k):
         ix = indices[n]
         fig, ax = plt.subplots()
@@ -347,17 +418,14 @@ def draw_feat_hist(wd, k=15, classes=(0, 1, 2, 3), nb_bars=20):
         plt.gcf().subplots_adjust(bottom=0.15)
         colors = ['r', 'b', arr([135, 206, 250])/255.,
                   arr([255, 255, 224])/255.]
-        print "Plotting %d. feature %s" % (n, curr_feat_name)
         mask_arr = np.zeros(len(feats), dtype=np.bool)
         for c in classes:
             mask_arr += skel_preds == c
         x_max = np.max(feats[mask_arr, ix])
         x_min = np.min(feats[mask_arr, ix])
         ranges = (x_min, x_max)
-        print "Using range", ranges
         for ii, c in enumerate(classes):
             mask_arr = skel_preds == c
-            print "Found %d cells of class %d" % (np.sum(mask_arr), c)
             ax.hist(feats[mask_arr][:, ix], normed=True, range=ranges, alpha=0.8,
                     bins=nb_bars, label=label_strings_dict[c], color=colors[ii])
         ymin, ymax = ax.get_ylim()

@@ -1,16 +1,27 @@
 # -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
+
 import copy
 import gc
 import numpy as np
 import re
 import time
+import os
 from multiprocessing import Pool, Manager, cpu_count
 from numpy import array as arr
 from scipy import spatial
 from sys import stdout
+import cPickle as pickle
 
+from scipy.sparse.csgraph._tools import csgraph_from_dense
 from sklearn.externals import joblib
 
+from knossos_utils.knossosdataset import KnossosDataset
 from syconn.multi_proc.multi_proc_main import start_multiprocess
 from syconn.utils import skeleton_utils as su
 from syconn.processing.axoness import predict_axoness_from_nodes
@@ -21,31 +32,29 @@ from syconn.utils.datahandler import get_filepaths_from_dir, \
 from syconn.utils.datahandler import write_obj2pkl, load_pkl2obj
 from syconn.utils.skeleton import Skeleton, SkeletonAnnotation
 
-__author__ = 'pschuber'
 
-
-def collect_contact_sites(cs_dir, only_az=False):
+def collect_contact_sites(cs_dir, only_sj=False):
     """Collect contact site nodes and corresponding features of all contact sites.
 
     Parameters
     ----------
     cs_dir : str
         Path to contact site directory
-    only_az : bool
+    only_sj : bool
         If only synapse candidates are to be saved
     cs_dir : str
         path to contact site directory
-    only_az : bool
+    only_sj : bool
 
     Returns
     -------
     list of SkeletonNodes, np.array
         CS nodes (n x 3), synapse feature (n x #feat)
     """
-    if not only_az:
-        search_folder = ['cs_az/', 'cs_p4_az/', 'cs/', 'cs_p4/']
+    if not only_sj:
+        search_folder = ['cs_sj/', 'cs_vc_sj/', 'cs/', 'cs_vc/']
     else:
-        search_folder = ['cs_az/', 'cs_p4_az/']
+        search_folder = ['cs_sj/', 'cs_vc_sj/']
     sample_list_len = []
     cs_fpaths = []
     for k, ending in enumerate(search_folder):
@@ -53,8 +62,11 @@ def collect_contact_sites(cs_dir, only_az=False):
         curr_fpaths = get_filepaths_from_dir(curr_dir, ending='nml')
         cs_fpaths += curr_fpaths
         sample_list_len.append(len(curr_fpaths))
-    print "Collecting contact sites (%d CS). Only az is %s." % (len(cs_fpaths),
-                                                                str(only_az))
+    # print "Collecting contact sites (%d CS). Only sj is %s." % (len(cs_fpaths),
+    #                                                            str(only_sj))
+    if len(cs_fpaths) == 0:
+        print "No data available. Returning."
+        return [], np.zeros((0, ))
     nb_cpus = cpu_count() - 2
     pool = Pool(processes=nb_cpus)
     m = Manager()
@@ -73,15 +85,11 @@ def collect_contact_sites(cs_dir, only_az=False):
     pool.close()
     pool.join()
     feats = []
-    svens_res = []
-    svens_res2 = []
     for syn_nodes in res:
         for node in syn_nodes:
             if 'center' in node.getComment():
                 feat = node.data['syn_feat']
                 feats.append(feat)
-                svens_res.append(feat[2])
-                svens_res2.append(node.getCoordinate())
     res = arr(res)
     feats = arr(feats)
     assert len(res) == len(feats), 'feats and nodes have different length!'
@@ -98,17 +106,17 @@ def write_summaries(wd):
         Path to working directory of SyConn
     """
     cs_dir = wd + '/contactsites/'
-    cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_az=True)
+    cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_sj=True)
     write_cs_summary(cs_nodes, cs_feats, cs_dir)
-    cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_az=False)
-    features, axoness_info, syn_pred = feature_valid_syns(cs_dir, only_az=True,
+    cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_sj=False)
+    features, axoness_info, syn_pred = feature_valid_syns(cs_dir, only_sj=True,
                                                           only_syn=False)
     features, axoness_info, pre_dict, all_post_ids, valid_syn_array, ax_dict =\
         calc_syn_dict(features[syn_pred], axoness_info[syn_pred], get_all=True)
     write_obj2pkl(pre_dict, cs_dir + 'pre_dict.pkl')
     write_obj2pkl(ax_dict, cs_dir + 'axoness_dict.pkl')
     write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='_all', syn_only=False)
-    features, axoness_info, syn_pred = feature_valid_syns(cs_dir, only_az=False,
+    features, axoness_info, syn_pred = feature_valid_syns(cs_dir, only_sj=False,
                                                           only_syn=False,
                                                           all_contacts=True)
     features, axoness_info, pre_dict, all_post_ids, valid_syn_array, ax_dict =\
@@ -117,6 +125,8 @@ def write_summaries(wd):
     write_obj2pkl(ax_dict, cs_dir + 'axoness_dict_all.pkl')
     gc.collect()
     write_property_dict(cs_dir)
+    conn_dict_wrapper(wd, all=False)
+    conn_dict_wrapper(wd, all=True)
 
 
 def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
@@ -135,12 +145,18 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
     syn_only: bool
         if only synapses are to be saved.
     """
-    clf_path = cs_dir + '/../models/rf_synapses/rf_syn.pkl'
-    print "\nUsing %s for synapse prediction." % clf_path
-    rfc_syn = joblib.load(clf_path)
     dummy_skel = Skeleton()
     dummy_anno = SkeletonAnnotation()
     dummy_anno.setComment('CS Summary')
+    if len(cs_nodes) == 0:
+        write_obj2pkl({}, cs_dir + 'cs_dict%s.pkl' % supp)
+        dummy_skel.add_annotation(dummy_anno)
+        fname = cs_dir + 'cs_summary%s.k.zip' % supp
+        dummy_skel.to_kzip(fname)
+        return
+    clf_path = cs_dir + '/../models/rf_synapses/rfc_syn.pkl'
+    # print "\nUsing %s for synapse prediction." % clf_path
+    rfc_syn = joblib.load(clf_path)
     probas = rfc_syn.predict_proba(cs_feats)
     preds = rfc_syn.predict(cs_feats)
     cnt = 0
@@ -158,9 +174,13 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
                 for dummy_node in syn_nodes:
                     dummy_anno.addNode(dummy_node)
                 cnt += 1
-                if syn_only and 'az' not in node.getComment():
+                if syn_only and 'sj' not in node.getComment():
                     continue
-                overlap_vx = np.load(cs_dir+'/overlap_vx/'+cs_name+'ol_vx.npy')
+                if 'sj' in node.getComment():
+                    overlap_vx = np.load(cs_dir + '/overlap_vx/' +
+                                         cs_name + 'ol_vx.npy')
+                else:
+                    overlap_vx = np.zeros((0, ))
                 cs = {}
                 cs['overlap_vx'] = overlap_vx
                 cs['syn_pred'] = pred
@@ -179,7 +199,9 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
     fname = cs_dir + 'cs_summary%s.k.zip' % supp
     dummy_skel.to_kzip(fname)
     write_obj2pkl(cs_dict, cs_dir + 'cs_dict%s.pkl' % supp)
-    print "Saved CS summary at %s." % fname
+    # print "Saved CS summary at %s." % fname
+    print "---------------------------\nFound %d contact sites containing %d" \
+          " synapses." % (len(cs_feats), np.sum(pred))
 
 
 def calc_cs_node(args):
@@ -216,31 +238,32 @@ def calc_cs_node(args):
             center_node.data['syn_feat'] = feat
             cs_ix = re.findall('cs(\d+)', anno.getComment())[0]
             add_comment = ''
-            if 'p4' in anno.getComment():
-                add_comment += '_p4'
-            if 'az' in anno.getComment():
-                add_comment += '_az'
+            if 'vc' in anno.getComment():
+                add_comment += '_vc'
+            if 'sj' in anno.getComment():
+                add_comment += '_sj'
             center_node.setComment('cs%s%s_skel_%s_%s' % (cs_ix, add_comment,
-                                                    str(ids[0]), str(ids[1])))
+                                   str(ids[0]), str(ids[1])))
     center_node_comment = center_node.getComment()
-    center_node.data['p4_size'] = None
-    center_node.data['az_size'] = None
+    center_node.data['vc_size'] = None
+    center_node.data['sj_size'] = None
     for node in anno.getNodes():
         n_comment = node.getComment()
         if 'skelnode_area' in n_comment:
             skel_node = copy.copy(node)
             try:
-                skel_id = int(re.findall('(\d+)_skelnode', skel_node.getComment())[0])
+                skel_id = int(re.findall('(\d+)_skelnode',
+                                         skel_node.getComment())[0])
             except IndexError:
                 skel_id = int(re.findall('syn(\d+)', skel_node.getComment())[0])
             assert skel_id in ids, 'Wrong skeleton ID during axoness parsing.'
             skel_node.data['skelID'] = skel_id
             skel_node.setComment(center_node_comment+'_skelnode'+str(skel_id))
             syn_nodes.append(skel_node)
-        if '_p4-' in n_comment:
-            center_node.data['p4_size'] = node.data['radius']
-        # if '_az-' in n_comment:
-        #     center_node.data['az_size'] = node.data['radius']
+        if '_vc-' in n_comment:
+            center_node.data['vc_size'] = node.data['radius']
+        # if '_sj-' in n_comment:
+        #     center_node.data['sj_size'] = node.data['radius']
     center_node.setComment(center_node_comment+'_center')
     syn_nodes.append(center_node)
     assert len(syn_nodes) == 3, 'Number of synapse nodes different than three'
@@ -255,6 +278,7 @@ def get_spine_summary(syn_nodes, cs_dir):
 
     Parameters
     ----------
+    syn_nodes : list of SkeletonNodes
     cs_dir: str
         path to contact site data
     """
@@ -316,7 +340,6 @@ def update_axoness_dict(cs_dir, syn_only=True):
     dict
         updated axoness dictionary
     """
-    print "Writing axoness dictionary with syn_only=%s." % (str(syn_only))
     if syn_only:
         dict_path = cs_dir + 'cs_dict.pkl'
     else:
@@ -403,10 +426,10 @@ def convert_to_standard_cs_name(name):
         possible key variations
     """
     cs_nb, skel1, skel2 = re.findall('(\d+)_(\d+)_(\d+)', name)[0]
-    new_name1 = 'skel_%s_%s_cs%s_az' % (skel1, skel2, cs_nb)
-    new_name2 = 'skel_%s_%s_cs%s_p4_az' % (skel1, skel2, cs_nb)
-    new_name3 = 'skel_%s_%s_cs%s_az' % (skel2, skel1, cs_nb)
-    new_name4 = 'skel_%s_%s_cs%s_p4_az' % (skel2, skel1, cs_nb)
+    new_name1 = 'skel_%s_%s_cs%s_sj' % (skel1, skel2, cs_nb)
+    new_name2 = 'skel_%s_%s_cs%s_vc_sj' % (skel1, skel2, cs_nb)
+    new_name3 = 'skel_%s_%s_cs%s_sj' % (skel2, skel1, cs_nb)
+    new_name4 = 'skel_%s_%s_cs%s_vc_sj' % (skel2, skel1, cs_nb)
     new_name5 = 'skel_%s_%s_cs%s' % (skel2, skel1, cs_nb)
     new_name6 = 'skel_%s_%s_cs%s' % (skel1, skel2, cs_nb)
     return [new_name1, new_name2, new_name3, new_name4, new_name5, new_name6]
@@ -499,7 +522,7 @@ def write_axoness_dicts(cs_dir):
     new_ax_all = update_axoness_dict(cs_dir, syn_only=False)
     write_obj2pkl(new_ax_all, cs_dir + '/axoness_dict_all.pkl')
     new_ax = update_axoness_dict(cs_dir, syn_only=True)
-    write_obj2pkl(new_ax_all, cs_dir + '/axoness_dict.pkl')
+    write_obj2pkl(new_ax, cs_dir + '/axoness_dict.pkl')
 
 
 def get_number_cs_details(cs_path):
@@ -509,15 +532,234 @@ def get_number_cs_details(cs_path):
     ----------
     cs_path : str
     """
-    az_samples = [path for path in
-                       get_filepaths_from_dir(cs_path+'cs_az/', ending='nml')]
-    az_p4_samples = [path for path in
-                        get_filepaths_from_dir(cs_path+'cs_p4_az/', ending='nml')]
-    p4_samples = [path for path in
-                       get_filepaths_from_dir(cs_path+'cs_p4/', ending='nml')]
+    sj_samples = [path for path in
+                       get_filepaths_from_dir(cs_path+'cs_sj/', ending='nml')]
+    sj_vc_samples = [path for path in
+                        get_filepaths_from_dir(cs_path+'cs_vc_sj/', ending='nml')]
+    vc_samples = [path for path in
+                       get_filepaths_from_dir(cs_path+'cs_vc/', ending='nml')]
     cs_samples = [path for path in
                        get_filepaths_from_dir(cs_path+'cs/', ending='nml')]
-    cs_only = len(p4_samples) + len(cs_samples)
-    syn_only= len(az_samples)+len(az_p4_samples)
+    cs_only = len(vc_samples) + len(cs_samples)
+    syn_only = len(sj_samples)+len(sj_vc_samples)
     print "Found %d syn-candidates and %d contact sites." % (syn_only,
                                                              cs_only+syn_only)
+
+
+def conn_dict_wrapper(wd, all=False):
+    """Wrapper function to write connectivity dictionary to working directory
+    """
+    if all:
+        suffix = "_all"
+    else:
+        suffix = ""
+    synapse_matrix(wd, suffix=suffix)
+    syn_type_majority_vote(wd, suffix=suffix)
+
+
+def synapse_matrix(wd, type_threshold=0.225, suffix="",
+                   exclude_dendrodendro=True):
+    """
+
+    Parameters
+    ----------
+    wd : str
+    type_threshold : float
+    suffix : str
+    exclude_dendrodendro : bool
+    """
+    save_folder = wd + '/contactsites/'
+    if not os.path.exists(save_folder):
+        os.makedirs(save_folder)
+    with open(save_folder + "/cs_dict%s.pkl" % suffix, "r") as f:
+        cs_dict = pickle.load(f)
+    with open(save_folder + "/axoness_dict%s.pkl" % suffix, "r") as f:
+        ax_dict = pickle.load(f)
+    with open(wd + '/neurons/celltype_pred_dict.pkl', "r") as f:
+        cell_type_dict = pickle.load(f)
+
+    kd_asym = KnossosDataset()
+    kd_asym.initialize_from_knossos_path(wd + '/knossosdatasets/asymmetric/')
+    kd_sym = KnossosDataset()
+    kd_sym.initialize_from_knossos_path(wd + '/knossosdatasets/symmetric/')
+
+    ids = []
+    cs_keys = cs_dict.keys()
+    for cs_key in cs_keys:
+        skels = np.array(re.findall('[\d]+', cs_key)[:2], dtype=np.int)
+        ids.append(skels)
+
+    ids = np.unique(ids)
+    id_mapper = {}
+    for ii in range(len(ids)):
+        id_mapper[ids[ii]] = ii
+
+    axo_axo_dict = {}
+
+    size_dict = {}
+    coord_dict = {}
+    syn_type_dict = {}
+    partner_cell_type_dict = {}
+    partner_ax_dict = {}
+    cs_key_dict = {}
+    phil_dict = {}
+    for first_key in ids:
+        for second_key in ids:
+            size_dict[str(first_key) + "_" + str(second_key)] = []
+            coord_dict[str(first_key) + "_" + str(second_key)] = []
+            syn_type_dict[str(first_key) + "_" + str(second_key)] = []
+            partner_cell_type_dict[str(first_key) + "_" + str(second_key)] = []
+            partner_ax_dict[str(first_key) + "_" + str(second_key)] = []
+            cs_key_dict[str(first_key) + "_" + str(second_key)] = []
+            phil_dict[str(first_key) + "_" + str(second_key)] = {}
+            phil_dict[str(first_key) + "_" + str(second_key)]["total_size_area"] = 0
+            phil_dict[str(first_key) + "_" + str(second_key)]["sizes_area"] = []
+            phil_dict[str(first_key) + "_" + str(second_key)]["syn_types_prob"] = []
+            phil_dict[str(first_key) + "_" + str(second_key)]["syn_types_pred"] = []
+            phil_dict[str(first_key) + "_" + str(second_key)]["coords"] = []
+            phil_dict[str(first_key) + "_" + str(second_key)]['partner_axoness'] = []
+            phil_dict[str(first_key) + "_" + str(second_key)]['partner_cell_type'] = []
+            phil_dict[str(first_key) + "_" + str(second_key)]['cs_area'] = []
+            phil_dict[str(first_key) + "_" + str(second_key)]['total_cs_area'] = 0
+            phil_dict[str(first_key) + "_" + str(second_key)]['syn_pred'] = []
+
+    fails = []
+    syn_matrix = np.zeros([len(ids), len(ids)], dtype=np.int)
+    for ii, cs_key in enumerate(cs_keys):
+        skels = re.findall('[\d]+', cs_key)
+        # if cs_dict[cs_key]['syn_pred']:
+        ax_key = skels[2] + '_' + skels[0] + '_' + skels[1]
+        ax = ax_dict[ax_key]
+        this_keys = ax.keys()
+        if cs_dict[cs_key]['syn_pred']:
+            overlap_vx = cs_dict[cs_key]['overlap_vx'] / np.array([9,9,20])
+            sym_values = kd_sym.from_raw_cubes_to_list(overlap_vx)
+            asym_values = kd_asym.from_raw_cubes_to_list(overlap_vx)
+            this_type = float(np.sum(sym_values))/(np.sum(sym_values)+np.sum(asym_values))
+            overlap = cs_dict[cs_key]['overlap_area']/2
+        else:
+            this_type = 0
+            overlap = 0
+        for ii in range(2):
+            if int(ax[this_keys[ii]]) == 1 or not exclude_dendrodendro:
+                if int(ax[this_keys[(ii+1)%2]]) == 1:
+                    if this_keys[ii] in axo_axo_dict:
+                        axo_axo_dict[this_keys[ii]].append(this_keys[(ii+1)%2])
+                    else:
+                        axo_axo_dict[this_keys[ii]] = [this_keys[(ii+1)%2]]
+
+                syn_matrix[id_mapper[int(this_keys[ii])], id_mapper[int(this_keys[(ii+1)%2])]] += 1
+
+                dict_key = this_keys[ii] + "_" + this_keys[(ii+1)%2]
+                cs_key_dict[dict_key].append(cs_key)
+                coord_dict[dict_key].append(cs_dict[cs_key]['center_coord'])
+                syn_type_dict[dict_key].append(this_type)
+                size_dict[dict_key].append(overlap)
+                partner_ax_dict[dict_key].append(int(ax[this_keys[(ii+1)%2]]))
+                partner_cell_type_dict[dict_key].append(cell_type_dict[int(this_keys[(ii+1)%2])])
+
+                phil_dict[dict_key]["total_size_area"] += overlap
+                phil_dict[dict_key]["sizes_area"].append(overlap)
+                phil_dict[dict_key]["cs_area"].append(cs_dict[cs_key]['mean_cs_area']/2.e6)
+                phil_dict[dict_key]["total_cs_area"] += cs_dict[cs_key]['mean_cs_area']/2.e6
+                phil_dict[dict_key]["syn_types_prob"].append(this_type)
+                phil_dict[dict_key]["syn_types_pred"].append(int(this_type > type_threshold))
+                phil_dict[dict_key]["coords"].append(cs_dict[cs_key]['center_coord'])
+                phil_dict[dict_key]['partner_axoness'].append(int(ax[this_keys[(ii+1)%2]]))
+                phil_dict[dict_key]['partner_cell_type'].append(cell_type_dict[int(this_keys[(ii+1)%2])])
+                phil_dict[dict_key]['syn_pred'].append(cs_dict[cs_key]['syn_pred'])
+
+    if not exclude_dendrodendro:
+        suffix = "_no_exclusion" + suffix
+
+    np.save(save_folder+"/syn_matrix%s.npy" % suffix, syn_matrix)
+    with open(save_folder + "/id_mapper%s.pkl" % suffix, "w") as f:
+        pickle.dump(id_mapper, f)
+    with open(save_folder + "/size_dict%s.pkl" % suffix, "w") as f:
+        pickle.dump(size_dict, f)
+    with open(save_folder + "/syn_type_dict%s.pkl" % suffix, "w") as f:
+        pickle.dump(syn_type_dict, f)
+    with open(save_folder + "/coord_dict%s.pkl" % suffix, "w") as f:
+        pickle.dump(coord_dict, f)
+    with open(save_folder + "/cs_key_dict%s.pkl" % suffix, "w") as f:
+        pickle.dump(cs_key_dict, f)
+    with open(save_folder + "/partner_ax_dict%s.pkl" % suffix, "w") as f:
+        pickle.dump(partner_ax_dict, f)
+    with open(save_folder + "/partner_cell_type_dict%s.pkl" % suffix, "w") as f:
+        pickle.dump(partner_cell_type_dict, f)
+    with open(save_folder + "/connectivity_dict%s.pkl" % suffix, "w") as f:
+        pickle.dump(phil_dict, f)
+
+
+def syn_type_majority_vote(wd, suffix=""):
+    """Majority vote of synapse type
+
+    Parameters
+    ----------
+
+    Returns
+    -------
+    int, int
+    """
+    save_folder = wd + '/contactsites/'
+    with open(save_folder + "/connectivity_dict%s.pkl" % suffix, "r") as f:
+        phil_dict = pickle.load(f)
+    with open(save_folder + "/cs_dict%s.pkl" % suffix, "r") as f:
+        cs_dict = pickle.load(f)
+
+    maj_type_dict = {}
+
+    ids = []
+    cs_keys = cs_dict.keys()
+    for cs_key in cs_keys:
+        skels = np.array(re.findall('[\d]+', cs_key)[:2], dtype=np.int)
+        ids.append(skels)
+
+    ids = np.unique(ids)
+    id_mapper = {}
+    for ii in range(len(ids)):
+        id_mapper[ids[ii]] = ii
+
+    types = []
+    sizes = []
+    for first_key in ids:
+        types.append([])
+        sizes.append([])
+        for second_key in ids:
+            key = str(first_key) + "_" + str(second_key)
+            types[-1].append(phil_dict[key]["syn_types_pred"])
+            sizes[-1].append(phil_dict[key]["sizes_area"])
+            phil_dict[key]["syn_types_pred_maj"] = None
+            maj_type_dict[key] = []
+
+    maj_types = []
+    for ii in range(len(ids)):
+        this_types = []
+        this_sizes = []
+        for jj in range(len(ids)):
+            this_types += types[ii][jj]
+            this_sizes += sizes[ii][jj]
+        if len(this_types) > 0:
+            # maj_types.append(np.argmax(np.bincount(this_types)))
+            sum0 = np.sum(np.array(this_sizes)[np.array(this_types)==0])
+            sum1 = np.sum(np.array(this_sizes)[np.array(this_types)==1])
+            maj_types.append(int(sum0 < sum1))
+        else:
+            maj_types.append(-1)
+
+    change_count = 0
+    syn_count = 0
+    for ii, first_key in enumerate(ids):
+        for second_key in ids:
+            key = str(first_key) + "_" + str(second_key)
+            if maj_types[ii] != -1:
+                phil_dict[key]["syn_types_pred_maj"] = [maj_types[ii]]*len(phil_dict[key]["syn_types_pred"])
+                maj_type_dict[key] = [maj_types[ii]]*len(phil_dict[key]["syn_types_pred"])
+                change_count += np.abs(np.sum(phil_dict[key]["syn_types_pred"])-np.sum(maj_type_dict[key]))
+                syn_count += len(maj_type_dict[key])
+
+    with open(save_folder + "/maj_syn_types%s.pkl" % suffix, "w") as f:
+        pickle.dump(maj_type_dict, f)
+    with open(save_folder + "/connectivity_dict%s.pkl" % suffix, "w") as f:
+        pickle.dump(phil_dict, f)
+

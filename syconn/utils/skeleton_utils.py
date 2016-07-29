@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import copy
 import numpy as np
 import os
@@ -7,12 +14,11 @@ import zipfile
 from collections import Counter
 from glob import glob
 from scipy import spatial
-from scipy.cluster import hierarchy
 from scipy.spatial import ConvexHull
 
 import networkx as nx
 
-from syconn.utils.basics import euclidian_distance
+from syconn.utils.basics import euclidian_distance, FloatCoordinate
 from syconn.utils.skeleton import SkeletonAnnotation, Skeleton, SkeletonNode
 from syconn.utils.skeleton import integer_checksum
 
@@ -20,8 +26,10 @@ from syconn.utils.skeleton import integer_checksum
 class InvalidFileFormatException(Exception):
     pass
 
+
 class NonSimpleNML(Exception):
     pass
+
 
 def neighbour_next(node):
     return node.getNeighbors()
@@ -128,95 +136,6 @@ class AnnotationSearch(object):
 
     #
     pass
-
-#
-def debugBFSFunc(node, origin_node, level, count, context):
-    if origin_node == None:
-        origin_str = "None"
-    else:
-        origin_str = origin_node.getID()
-    print "%d\t%s\t%d\t%d" % (node.getID(), origin_str, level, count)
-    return
-
-#
-class AnnotationCanonizer:
-    def __init__(self, annotation):
-        self.annotation = annotation
-        return
-
-    #
-    def validateRoot(self, new_root):
-        root = self.annotation.getRoot()
-        if new_root == None:
-            if root <> None:
-                return
-        elif root == new_root:
-            return
-        raise "Root failed!"
-
-    #
-    def validateRootNoParent(self):
-        if len(self.annotation.getRoot().getParents()) > 0:
-            raise "Root Parent failed!"
-        return
-
-    #
-    def validateSingleParent(self):
-        nodes = self.annotation.getNodes().copy()
-        nodes.remove(self.annotation.getRoot())
-        tmp = [node.getSingleParent() for node in nodes]
-        return
-
-    #
-    def canonize(self, new_root):
-        def canonizeBFSFunc(node, origin_node, level, count, node_children):
-            if origin_node <> None:
-                node_children.setdefault(origin_node, []).append(node)
-            return
-
-        #
-        def validateNoneParentBFS(parent_to_child, root):
-            none_children = parent_to_child[None]
-            if len(children) == 1:
-                if children[0] == root:
-                    return
-            raise "None Parent For Non-Root!"
-
-        #
-        if new_root <> None:
-            self.annotation.resetRoot(new_root)
-        self.validateRoot(new_root)
-        root = self.annotation.getRoot()
-        parent_to_child = {}
-        orphans = AnnotationBFS(self.annotation, root, canonizeBFSFunc,
-            parent_to_child).annnotationNeighborsBFS()
-        # Clear edges (before removing orphans, to avoid wasting time remove each orphan's edges)
-        self.annotation.clearEdges()
-        # Remove orphans
-        for node in orphans:
-            self.annotation.removeNode(node)
-        print "Deleted %d Orphans" % len(orphans)
-        # Re-edge, descending from root
-        for (parent, children) in parent_to_child.items():
-            for child in children:
-                parent.addChild(child)
-        self.validateRootNoParent()
-        self.validateSingleParent()
-        return
-
-    #
-    pass
-
-
-def skeletonCanonize(skeleton, root_f):
-    def noneFunc(annotation):
-        return None
-
-    if root_f is None:
-        root_f = noneFunc
-    for annotation in skeleton.getAnnotations():
-        AnnotationCanonizer(annotation).canonize(root_f(annotation))
-    return
 
 
 def filter_nodes(s, criterion):
@@ -1224,17 +1143,12 @@ def getAnnoWithMostNodes(skeleton):
     there are trees with more than 1 node in each."""
     annos = skeleton.getAnnotations()
     # most probable anno is the annotation with the most nodes of all
-    annosSortedByNodeNums = zip([len(anno.getNodes()) for anno in annos], list(annos))
+    annosSortedByNodeNums = zip([len(anno.getNodes()) for anno in annos],
+                                list(annos))
     annosSortedByNodeNums.sort()
     mostProbableAnno = list(annosSortedByNodeNums.pop(-1))[1]
     if len(mostProbableAnno.getNodes()) == 0:
         mostProbableAnno = None
-    #if annosSortedByNodeNums:
-    #    for numNodes, anno in annosSortedByNodeNums:
-    #        if numNodes > 1:
-    #            mostProbableAnno = None
-    #            break
-
     return mostProbableAnno
 
 
@@ -1285,264 +1199,13 @@ def loadj0126ConsensusNMLsInDir(directory):
             for nodesInC in nx.connected_components(currNxg):
                 print 'This connected component contains ' +\
                       str(len(nodesInC)) + '  nodes.'
-                #for node in nodesInC:
-                #    print str(node.getID())
 
             raise Exception('File ' + nmlfile +
                             ' contains more than one connected component.')
 
         annotations.append(anno)
         annodict[anno.seedID] = anno
-
-    return (annotations, annodict)
-
-
-def find_and_validate_contacts(dir_1, dir_2, scaling=(9.0, 9.0, 21.0)):
-    files = dict()
-    files['dir_1'] = glob.glob(dir_1 + '/*.nml') + glob.glob(dir_1 + '/*.k.zip')
-    files['dir_2'] = glob.glob(dir_2 + '/*.nml') + glob.glob(dir_2 + '/*.k.zip')
-
-    annotations = dict()
-
-    print('Loading files.')
-    for cur_dir, cur_files in files.iteritems():
-        for cur_f in cur_files:
-            print cur_f
-            s = Skeleton()
-            s = s.fromNml(cur_f, scaling=scaling)
-            for cur_a in s.getAnnotations():
-                # Not exactly correct but does the job of removing file name
-                # extension in the usual case
-
-                if not cur_a.getNodes():
-                    continue
-
-                cur_a.tag = os.path.basename(cur_f.replace('.k.zip', '').replace(
-                    '.nml', ''))
-                annotations.setdefault(cur_dir, []).append(cur_a)
-
-    print('Analyzing contacts.')
-    contacts = find_contacts_between(
-        annotations['dir_1'],
-        annotations['dir_2'],
-        lumping=lambda x: x.tag,
-        cluster_filter=True)
-
-
-    # print('Writing validation output.')
-    # s_out = NewSkeleton()
-    # for pair_l, partners in contacts.iteritems():
-    #     for pair_r in partners:
-    #         pair_annotation = SkeletonAnnotation()
-    #         pair_annotation.comment = '%s -> %s' % (
-    #             pair_l.annotation.tag,
-    #             pair_r.annotation.tag, )
-    #         pair_l_coord = pair_l.getCoordinate()
-    #         pair_r_coord = pair_r.getCoordinate()
-    #         node_l = SkeletonNode().from_scratch(
-    #             pair_annotation,
-    #             pair_l_coord[0],
-    #             pair_l_coord[1],
-    #             pair_l_coord[2],)
-    #         node_l.setComment('TODO')
-    #         pair_annotation.addNode(node_l)
-    #         node_r = SkeletonNode().from_scratch(
-    #             pair_annotation,
-    #             pair_r_coord[0],
-    #             pair_r_coord[1],
-    #             pair_r_coord[2],)
-    #         pair_annotation.addNode(node_r)
-    #         pair_annotation.addEdge(node_l, node_r)
-    #         s_out.add_annotation(pair_annotation)
-    #
-    # s_out.toNml('validate_contacts.nml')
-
-
-def find_contacts_between(from_annotations, to_annotations,
-                          spotlight_radius=1000,
-                          lumping=None, cluster_filter=True):
-    """
-    Extension of findContactSites below. This one only finds contacts
-    between from_annotations and to_annotations.
-
-    Parameters
-    ----------
-
-    one_to_one : boolean
-        If true, only return one match per node / other annotation pair.
-
-    exclusion : function
-        If one_to_one is true, then this function is applied to all
-        SkeletonNode object matched from a given coordinate and for every
-        unique result of exclusion, only one of the nodes is retained.
-        E.g., the default lambda x: x.annotation, which is used when
-        exclusion is None, will cause only one node per matching annotation
-        to be retained per coordinate.
-
-    cluster_filter:
-        Cluster matches based on their centroids. The result depends strongly
-        on the threshold parameter to fclusterdata. Only the shortest-distance
-        match will be returned for every cluster.
-
-    Returns
-    -------
-        contact_sites : dict of list
-            node in from_annotations -> list of nodes in to_annotations
-
-
-    """
-
-    from_lumped = dict()
-    to_lumped = dict()
-
-    for cur_from in from_annotations:
-        cur_key = lumping(cur_from)
-        from_lumped.setdefault(cur_key, []).append(cur_from)
-    for cur_to in to_annotations:
-        cur_key = lumping(cur_to)
-        to_lumped.setdefault(cur_key, []).append(cur_to)
-
-    cluster_filtered_contact_per_pair = dict()
-    for cur_from_tag, cur_from in from_lumped.iteritems():
-        cur_from_kd = annosToKDtree(cur_from)
-
-        for cur_to_tag, cur_to in to_lumped.iteritems():
-            cluster_filtered_contact = dict()
-            print('%s -> %s' % (cur_from_tag, cur_to_tag))
-
-            cur_to_kd = annosToKDtree(cur_to)
-
-            contact_sites = cur_from_kd.query_ball_tree(cur_to_kd,
-                                                        spotlight_radius)
-
-            if not contact_sites:
-                continue
-
-            if cluster_filter:
-                flat_contacts = []
-                for cur_left, cur_rights in contact_sites.iteritems():
-                    for cur_right in cur_rights:
-                        flat_contacts.append([cur_left, cur_right])
-
-                flat_centroids = []
-                for i, cur_contact in enumerate(flat_contacts):
-                    cur_centroid = cur_contact[0].getCoordinate_scaled()
-                    #cur_centroid = [x + y for x, y in zip(
-                    #    cur_contact[0].getCoordinate_scaled(),
-                    #    cur_contact[1].getCoordinate_scaled())]
-                    flat_centroids.append(cur_centroid)
-
-                if len(flat_centroids) == 1:
-                    # Do not cluster, wouldn't work.
-                    cluster_filtered_contact.setdefault(
-                        flat_contacts[0][0], []).append(flat_contacts[0][1])
-                    continue
-
-                centroids_np = np.array(flat_centroids)
-                #import ipdb
-                #ipdb.set_trace()
-                print centroids_np.shape
-                clusters = hierarchy.fclusterdata(centroids_np, 300,
-                                                  criterion='distance')
-                #print len(set(clusters))
-
-                cluster_id_to_shortest = dict()
-                cluster_id_to_length = dict()
-                for i, cur_cluster in enumerate(clusters):
-                    cur_dst = euclidian_distance(
-                        flat_contacts[i][0].getCoordinate_scaled(),
-                        flat_contacts[i][1].getCoordinate_scaled())
-
-                    if not cur_cluster in cluster_id_to_length:
-                        cluster_id_to_length[cur_cluster] = 1000000000
-                        cluster_id_to_shortest[cur_cluster] = None
-
-                    if cur_dst < cluster_id_to_length[cur_cluster]:
-                        cluster_id_to_length[cur_cluster] = cur_dst
-                        cluster_id_to_shortest[cur_cluster] = [
-                            flat_contacts[i][0],
-                            flat_contacts[i][1]]
-
-                for cur_pair in cluster_id_to_shortest.itervalues():
-                    cluster_filtered_contact.setdefault(cur_pair[0], []).append(
-                        cur_pair[1]
-                    )
-
-                cluster_filtered_contact_per_pair[
-                    '%s-%s' % (cur_from_tag, cur_to_tag, )] =  \
-                    cluster_filtered_contact
-
-                print('Writing validation output.')
-                s_out = Skeleton()
-                pair_annotation = SkeletonAnnotation()
-                pair_annotation.comment = '%s -> %s' % (
-                    cur_from_tag,
-                    cur_to_tag, )
-                pair_annotation.color = (0.0, 0.0, 1.0, 1.0)
-                s_out.add_annotation(pair_annotation)
-                for cur_to_anno in cur_to:
-                    cur_to_anno.setComment(cur_to_tag)
-                    cur_to_anno.color = (1.0, 0.0, 0.0, 1.0)
-                    s_out.add_annotation(cur_to_anno)
-                for cur_from_anno in cur_from:
-                    cur_from_anno.setComment(cur_from_tag)
-                    cur_from_anno.color = (0.0, 1.0, 0.0, 1.0)
-                    s_out.add_annotation(cur_from_anno)
-                for pair_l, partners in cluster_filtered_contact.iteritems():
-                    for pair_r in partners:
-                        pair_l_coord = pair_l.getCoordinate()
-                        pair_r_coord = pair_r.getCoordinate()
-                        # The randint here is a horrible workaround around
-                        # the sorry state of NewSkeleton
-                        node_l = SkeletonNode().from_scratch(
-                            pair_annotation,
-                            pair_l_coord[0],
-                            pair_l_coord[1],
-                            pair_l_coord[2],
-                            ID=random.randint(5000000, 6000000))
-                        node_l.setComment('TODO')
-                        pair_annotation.addNode(node_l)
-                        node_r = SkeletonNode().from_scratch(
-                            pair_annotation,
-                            pair_r_coord[0],
-                            pair_r_coord[1],
-                            pair_r_coord[2],
-                            ID=random.randint(5000000, 6000000))
-                        pair_annotation.addNode(node_r)
-                        pair_annotation.addEdge(node_l, node_r)
-
-                s_out.toNml('%s-%s.nml' % (cur_from_tag, cur_to_tag, ))
-
-    return cluster_filtered_contact_per_pair
-
-
-def findContactSites(annotations, spotlightRadius=1000):
-    """
-    Finds node-pairs between different annotations with maximum distance
-    spotlightRadius.
-    :annotations: List of annotations
-    :spotlightRadius: search radius for kd-tree in nm
-    :return: Dictionary containing contact-node-pairs for each annotation. Key is indice of annotation in list "annotations".
-    """
-    # Insert all annotations into a single kd-tree for fast spatial lookups
-    kdtree = annosToKDtree(annotations)
-
-    contactSites = dict()
-    for j, anno in enumerate(annotations):
-        annoNodes = list(anno.getNodes())
-        coords = [node.getCoordinate_scaled() for node in annoNodes]
-        # foundNodes is a list of node lists, each node lists corresponds to
-        # a single query from an element in coords
-        foundNodes = kdtree.query_ball_point(coords, spotlightRadius)
-
-        # contact sites contains contact-node-pairs for each annotation
-        anno_ContactSites = []
-        for i, nodes in enumerate(foundNodes):
-            # add anno node as first node in list and nearby nodes of other annos
-            new_nodes = [node for node in nodes if node.annotation != anno]
-            anno_ContactSites.append([annoNodes[i]] + new_nodes)
-        contactSites[j] = anno_ContactSites
-    return contactSites
+    return annotations, annodict
 
 
 def loadj0126NMLbyRegex(regex):
@@ -1591,7 +1254,6 @@ def load_j0256_nml(path_to_file, merge_all_annos=False):
 
 
 def loadj0126NML(path_to_file, merge_all_annos=False):
-    #print('Loading: ' + os.path.basename(path_to_file))
     annos = load_jk_NML(pathToFile=path_to_file,
                         ds_id = 'j0126',
                         merge_all_annos=merge_all_annos,
@@ -1640,7 +1302,7 @@ def load_jk_NML(pathToFile,
     if merge_all_annos and len(skeletonObj.annotations) > 1:
         for anno_to_merge in skeletonObj.annotations[1:]:
             skeletonObj.annotations[0] =\
-                nsu.merge_annotations(skeletonObj.annotations[0], anno_to_merge)
+                merge_annotations(skeletonObj.annotations[0], anno_to_merge)
     num_nodes_total = len(skeletonObj.getNodes())
     for anno in skeletonObj.annotations:
         if remove_empty_annotations:
@@ -1659,7 +1321,6 @@ def load_jk_NML(pathToFile,
         else:
             anno.avg_node_time = 0.
 
-
         anno.scaling = scaling
         anno.filename = filename
         anno.seedID = seed
@@ -1674,7 +1335,7 @@ def load_jk_NML(pathToFile,
 
 
 def getNMLannos(filename):
-    skel = ns.NewSkeleton()
+    skel = Skeleton()
     skel.fromNml(filename)
     annos = skel.getAnnotations()
     annotations = []
@@ -1795,12 +1456,6 @@ def annotation_matcher(annotations,
             coords = [node.getCoordinate_scaled()
                       for node in
                       random.sample(anno.getNodes(),len(anno.getNodes()))]
-            #print 'Anno ' + anno.filename +\
-            #      ' contained less nodes than sample size, using only ' +\
-            #      str(len(anno.getNodes())) + ' nodes.'
-        #raise()
-        # foundNodes is a list of node lists, each node lists corresponds to
-        # a single query from an element in coords
         foundNodes = kdtree.query_ball_point(coords, spotlightRadius)
 
         # ignore identical annotations
@@ -1912,43 +1567,16 @@ def annotation_matcher(annotations,
         plt.xlabel('match quality (fraction of nodes with match)')
         plt.title('Match quality histogram')
 
-        # # visualize weak matches directly, one by one
-        # for src_anno, match_anno in weak_matches_not_included:
-        #     print('Now we will show weak matches that were not accepted as'
-        #           ' matches. Only different skeletons should show up.')
-        #     src_anno.color = (1.0, 0.0, 0.0)
-        #     match_anno.color = (0.0, 0.0, 1.0)
-        #     skelplot.visualize_annotation(src_anno)
-        #     skelplot.add_anno_to_mayavi_window(match_anno)
-        #     print('currently shown weak match: ' +\
-        #           str(annoMatchGroup[src_anno][match_anno]) + ' ' +\
-        #           src_anno.seedID + ' ,red -> ' + match_anno.seedID + ' ,blue')
-        #     raw_input('Enter for next weak match (put mayavi win on top)')
-        #
-        # for src_anno, match_anno in weak_matches_possibly_included:
-        #     print('Now we show weak matches that were possibly (reciprocity'
-        #           ' test can still exclude them) accepted as'
-        #           ' matches. Only equal skeletons should show up.')
-        #     src_anno.color = (1.0, 0.0, 0.0)
-        #     match_anno.color = (0.0, 0.0, 1.0)
-        #     skelplot.visualize_annotation(src_anno)
-        #     skelplot.add_anno_to_mayavi_window(match_anno)
-        #     print('currently shown weak match: ' +\
-        #           str(annoMatchGroup[src_anno][match_anno]) + ' ' +\
-        #           src_anno.seedID + ' ,red -> ' + match_anno.seedID + ' ,blue')
-        #     raw_input('Enter for next weak match (put mayavi win on top)')
-
-
     if write_match_group_nmls:
         print('Done with grouping, starting to write out match group nmls')
         for cnt, group in enumerate(groups):
             skel_obj = Skeleton()
 
-            colors=skelplot.get_different_rgba_colors(len(group),rgb_only=True)
+            # colors = skelplot.get_different_rgba_colors(len(group),rgb_only=True)
 
             for cnt2, anno in enumerate(group):
                 anno.setComment(anno.username + ' ' + anno.seedID)
-                anno.color = colors[cnt2]
+                # anno.color = colors[cnt2]
                 skel_obj.add_annotation(anno)
 
             skel_obj.toNml(write_match_group_nmls+'group_' + str(cnt) + '.nml')
@@ -2092,9 +1720,6 @@ def genSeedNodes(annotations, reqRedundancy, spotlightRadius):
                 if anno.lonelyENodes[eNode] > reqRedundancy:
                     del(anno.lonelyENodes[eNode])
                     break
-        #seedNodes.append(anno.lonelyENodes)
-    #return seedNodes
-        # generate new seed nodes to test the validity (by tracing then) of the lonely end nodes of the current anno
         for leNode in anno.lonelyENodes.keys():
             stopSearch = 0
             # find first branch node
@@ -2113,22 +1738,6 @@ def genSeedNodes(annotations, reqRedundancy, spotlightRadius):
                         seedNodes.append(foundNodesAllOthers[0])
                         stopSearch = 1
                         break
-
-                        # tdItem: remove lonely end nodes that are covered
-                        # by the same seed point ( remove branch node from
-                        #graph, DFS, find all end nodes in DFS, remove those
-                        #from initial lonely end node list for this anno)
-
-# round 1: find all lonely stop nodes in all available annotations;
-# -> DFS from lonely stop nodes to first encountered branch node in proximity to one OTHER annotation; remove all lonely stop nodes before the branch node (remove found branch node and do another DFS from the stop node, remove all other encountered stop nodes)
-# -> create a seed node at the position of the OTHER annotation node close to the branch node and distribute; limit the radius for tracing to max(shortest path length seed node to all stop nodes in not found branch)
-
-# redundancy can be set by defining a lonelyness criterion for stop nodes (i.e. <2 in proximity means lonely)
-
-# disadvantages: possible that wrong seed points are picked?
-
-# round 2: if the missed branch was correct, the lonely stop node will be gone now. otherwise: more rounds? accept lonely stop node as consequence of false branching after x rounds.
-
     return seedNodes
 
 
@@ -2412,23 +2021,8 @@ def genj0126SkelObj():
     return skel
 
 
-def annotationCanonizer(annos):
-    """Returns the anno with the most nodes for annos
-    that were identified to be the same and all other
-    unique annotations."""
-    canonized = []
-    grouped = annotationMatcher(annos, 5000, samplesize=50, thres=0.5)
-    for group in grouped:
-        if type(group) == list:
-            group.sort(key=lambda x: x.pathLen, reverse=True)
-            canonized.append(group[0]) # use the largest anno for now
-        else:
-            canonized.append(group)
-    return canonized
-
-
 def annosToNMLFile(annos, filename):
-    skel = ns.NewSkeleton()
+    skel = Skeleton()
     skel.scaling = (9,9,20)
     skel.experimentName = 'j0126'
 
