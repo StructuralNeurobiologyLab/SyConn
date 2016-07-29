@@ -290,7 +290,7 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
     start = time.time()
     if not debug:
         pool = MyPool(nb_cpus)
-        result = pool.map(func, params)
+        result = pool.map(func, *params)
         pool.close()
         pool.join()
     else:
