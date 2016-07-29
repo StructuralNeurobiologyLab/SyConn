@@ -183,17 +183,16 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
                 results_as_list.append(entry)
 
     elif mpm.__QSUB__:
-        raise NotImplementedError()
-        # path_to_out = mpm.QSUB_script(multi_params,
-        #                               "gauss_threshold_connected_components",
-        #                               cset, chunk_list, queue="red3somaq")
+        path_to_out = mpm.QSUB_script(multi_params,
+                                      "gauss_threshold_connected_components",
+                                      queue="full")
 
-        # out_files = glob.glob(path_to_out + "/*")
-        # results_as_list = []
-        # for out_file in out_files:
-        #     with open(out_file) as f:
-        #         for entry in pickle.load(f):
-        #             results_as_list.append(entry)
+        out_files = glob.glob(path_to_out + "/*")
+        results_as_list = []
+        for out_file in out_files:
+            with open(out_file) as f:
+                for entry in pickle.load(f):
+                    results_as_list.append(entry)
     else:
         raise Exception("QSUB not available")
 
@@ -247,10 +246,9 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                                          multi_params, debug=debug)
 
     elif mpm.__QSUB__:
-        raise NotImplementedError()
-        # path_to_out = mpm.QSUB_script(multi_params,
-        #                               "make_unqiue_labels",
-        #                               cset, chunk_list, queue="red3somaq")
+        path_to_out = mpm.QSUB_script(multi_params,
+                                      "make_unqiue_labels",
+                                      queue="full")
     else:
         raise Exception("QSUB not available")
 
@@ -310,24 +308,23 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                     stitch_list[hdf5_name].append(elem)
 
     elif mpm.__QSUB__:
-        raise NotImplementedError()
-        # path_to_out = mpm.QSUB_script(multi_params,
-        #                               "make_stitch_list_thread",
-        #                               cset, chunk_list, queue="red3somaq")
+        path_to_out = mpm.QSUB_script(multi_params,
+                                      "make_stitch_list_thread",
+                                      queue="full")
 
-        # out_files = glob.glob(path_to_out + "/*")
-        #
-        # stitch_list = {}
-        # for hdf5_name in hdf5names:
-        #     stitch_list[hdf5_name] = []
-        #
-        # for out_file in out_files:
-        #     with open(out_file) as f:
-        #         result = pickle.load(f)
-        #         for hdf5_name in hdf5names:
-        #             elems = result[hdf5_name]
-        #             for elem in elems:
-        #                 stitch_list[hdf5_name].append(elem)
+        out_files = glob.glob(path_to_out + "/*")
+
+        stitch_list = {}
+        for hdf5_name in hdf5names:
+            stitch_list[hdf5_name] = []
+
+        for out_file in out_files:
+            with open(out_file) as f:
+                result = pickle.load(f)
+                for hdf5_name in hdf5names:
+                    elems = result[hdf5_name]
+                    for elem in elems:
+                        stitch_list[hdf5_name].append(elem)
     else:
         raise Exception("QSUB not available")
 
@@ -466,10 +463,9 @@ def extract_voxels(cset, filename, hdf5names, debug=False, chunk_list=None,
                                          multi_params, debug=debug)
 
     elif mpm.__QSUB__:
-        raise NotImplementedError()
-        # path_to_out = mpm.QSUB_script(multi_params,
-        #                               "extract_voxels",
-        #                               cset, chunk_list, queue="red3somaq")
+        path_to_out = mpm.QSUB_script(multi_params,
+                                      "extract_voxels",
+                                      queue="full")
 
     else:
         raise Exception("QSUB not available")
@@ -557,10 +553,9 @@ def create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
                                multi_params, debug=debug)
 
     elif mpm.__QSUB__:
-        raise NotImplementedError()
-        # path_to_out = mpm.QSUB_script(multi_params,
-        #                               "create_objects_from_voxels",
-        #                               cset, chunk_list, queue="red2somaq")
+        path_to_out = mpm.QSUB_script(multi_params,
+                                      "create_objects_from_voxels",
+                                      queue="full")
 
     else:
         raise Exception("QSUB not available")
@@ -598,10 +593,9 @@ def create_datasets_from_objects(cset, filename, hdf5names,
                                multi_params, debug=debug)
 
     elif mpm.__QSUB__:
-        raise NotImplementedError()
-        # path_to_out = mpm.QSUB_script(multi_params,
-        #                               "create_datasets_from_objects",
-        #                               cset, chunk_list, queue="red2somaq")
+        path_to_out = mpm.QSUB_script(multi_params,
+                                      "create_datasets_from_objects",
+                                      queue="full")
 
     else:
         raise Exception("QSUB not available")

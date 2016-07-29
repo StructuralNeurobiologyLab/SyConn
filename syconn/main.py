@@ -5,26 +5,36 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
+import argparse
+def parseargs():
+    parser = argparse.ArgumentParser(
+    usage="Evaluate </path/to_work_dir> [--gpus <int>, <int>]]")
+    parser.add_argument("main_path", type=str)
+    parser.add_argument("--gpus", nargs='+', type=int)
+    return parser.parse_args()
+
+commandline_args = parseargs()
+
 from processing import initialization, objectextraction as oe, \
     predictor_cnn as pc
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
+from multi_proc import multi_proc_main as mpm
 import syconn
 
 import glob
 import numpy as np
 import os
 import shutil
-import sys
 
 home_dir = os.environ['HOME'] + "/"
 syconn_dir = syconn.__path__[0] + "/"
 
-main_path = sys.argv[1]
-if len(sys.argv) > 2:
-    gpu = int(sys.argv[2])
-else:
-    gpu = None
+main_path = commandline_args.main_path
+gpus = commandline_args.gpus
+
+if gpus is None:
+    gpus = [None]
 
 if not "/" == main_path[-1]:
     main_path += "/"
@@ -68,7 +78,7 @@ else:
 
 # -------------------------------------------------------------- CNN Predictions
 
-if gpu is None:
+if gpus[0] is None:
     batch_size1 = [40, 500, 500]
     batch_size2 = [40, 500, 500]
 else:
@@ -82,39 +92,59 @@ for path in mutex_paths:
 offset = [120, 120, 30]
 
 # Synaptic junctions, vesicle clouds, mitochondria - stage 1
-pc.join_chunky_inference(cset,
-                         main_path + "/models/BIRD_MIGA_config.py",
-                         main_path + "/models/BIRD_MIGA.param",
-                         ["MIGA"], ["none", "mi", "vc", "sj"], offset,
-                         batch_size1, kd=kd_raw, gpu=gpu)
+params = []
+for gpu in gpus:
+    params.append([cset,
+                   main_path + "/models/BIRD_MIGA_config.py",
+                   main_path + "/models/BIRD_MIGA.param",
+                   ["MIGA"], ["none", "mi", "vc", "sj"], offset,
+                   batch_size1, kd_raw.knossos_path, gpu])
+
+mpm.SUBP_script(params, "join_chunky_inference")
 
 # Synaptic junctions, vesicle clouds, mitochondria - stage 2
-pc.join_chunky_inference(cset,
-                         main_path + "/models/BIRD_ARGUS_config.py",
-                         main_path + "/models/BIRD_ARGUS.param",
-                         ["ARGUS", "MIGA"], ["none", "mi", "vc", "sj"],
-                         offset, batch_size1, kd=kd_raw, gpu=gpu)
+params = []
+for gpu in gpus:
+    params.append([cset,
+                   main_path + "/models/BIRD_ARGUS_config.py",
+                   main_path + "/models/BIRD_ARGUS.param",
+                   ["ARGUS", "MIGA"], ["none", "mi", "vc", "sj"],
+                   offset, batch_size1, kd_raw.knossos_path, gpu])
+
+mpm.SUBP_script(params, "join_chunky_inference")
 
 # Type of synaptic junctions
-pc.join_chunky_inference(cset,
-                         main_path + "/models/BIRD_TYPE_config.py",
-                         main_path + "/models/BIRD_TYPE.param",
-                         ["TYPE"], ["none", "asym", "sym"], offset,
-                         batch_size1, kd=kd_raw, gpu=gpu)
+params = []
+for gpu in gpus:
+    params.append([cset,
+                   main_path + "/models/BIRD_TYPE_config.py",
+                   main_path + "/models/BIRD_TYPE.param",
+                   ["TYPE"], ["none", "asym", "sym"], offset,
+                   batch_size1, kd_raw.knossos_path, gpu])
+
+mpm.SUBP_script(params, "join_chunky_inference")
 
 # Barrier - stage 1
-pc.join_chunky_inference(cset,
-                         main_path + "/models/BIRD_barrier_config.py",
-                         main_path + "/models/BIRD_barrier.param",
-                         ["BARRIER"], ["none", "bar"], offset,
-                         batch_size1, kd=kd_raw, gpu=gpu)
+params = []
+for gpu in gpus:
+    params.append([cset,
+                   main_path + "/models/BIRD_barrier_config.py",
+                   main_path + "/models/BIRD_barrier.param",
+                   ["BARRIER"], ["none", "bar"], offset,
+                   batch_size1, kd_raw.knossos_path, gpu])
+
+mpm.SUBP_script(params, "join_chunky_inference")
 
 # Barrier - stage 2
-pc.join_chunky_inference(cset,
-                         main_path + "/models/BIRD_rbarrier_config.py",
-                         main_path + "/models/BIRD_rbarrier.param",
-                         ["RBARRIER", "BARRIER"], ["none", "bar"],
-                         offset, batch_size2, kd=kd_raw, gpu=gpu)
+params = []
+for gpu in gpus:
+    params.append([cset,
+                   main_path + "/models/BIRD_rbarrier_config.py",
+                   main_path + "/models/BIRD_rbarrier.param",
+                   ["RBARRIER", "BARRIER"], ["none", "bar"],
+                   offset, batch_size2, kd_raw.knossos_path, gpu])
+
+mpm.SUBP_script(params, "join_chunky_inference")
 
 # ------------------------------------------------ Conversion to knossosdatasets
 
@@ -184,10 +214,6 @@ oe.from_probabilities_to_objects(cset, "ARGUS",
 # ------------ Create hull and map objects to tracings and classify compartments
 
 syconn.enrich_tracings_all(main_path)
-
-# ----------------------------------------------------------- Classify cell type
-
-syconn.predict_celltype_label(main_path)
 
 # ---------------------------------- Classify contact sites as synaptic or touch
 

@@ -73,16 +73,16 @@ def load_rfcs(rf_axoness_p, rf_spiness_p):
     """
     if os.path.isfile(rf_axoness_p):
         rfc_axoness = joblib.load(rf_axoness_p)
-        print "Found RFC for axoness. SkeletonNodes will contain axoness " \
-              "probability."
+        # print "Found RFC for axoness. SkeletonNodes will contain axoness " \
+        #       "probability."
     else:
         rfc_axoness = None
         print "WARNING: Could not predict axoness of SkeletonNodes. " \
               "Pretrained RFC file not found."
     if os.path.isfile(rf_spiness_p):
         rfc_spiness = joblib.load(rf_spiness_p)
-        print "Found RFC for spiness. SkeletonNodes will contain spiness " \
-              "probability."
+        # print "Found RFC for spiness. SkeletonNodes will contain spiness " \
+        #       "probability."
     else:
         rfc_spiness = None
         print "WARNING: Could not predict spiness of SkeletonNodes. " \
@@ -110,30 +110,24 @@ def save_train_clf(X, y, clf_used, dir_path, use_pca=False, params=None):
         parameters for classifier
 
     """
-    print "Start saving procedure for clf %s with features of shape %s." %\
-          (clf_used, X.shape)
     if use_pca:
         old_dim = X.shape[1]
         pca = PCA(n_components=0.99)
         X = pca.fit_transform(X)
-        print pca.explained_variance_ratio_
-        print "Reduced feature space dimension %d, instead of %d" % (X.shape[1],
-                                                                     old_dim)
     clf = init_clf(clf_used, params=params)
     try:
         clf.fit(X, y)
     except ValueError:
-        print "Found nans in features, converting to number."
         X = np.nan_to_num(X)
         clf.fit(X, y)
     clf_dir = dir_path + '%s/' % clf_used
     if os.path.exists(clf_dir):
         shutil.rmtree(clf_dir)
-    if clf_used == 'rf':
-        print "Random Forest oob score:", clf.oob_score_
+    # if clf_used == 'rf':
+        # print "Random Forest oob score:", clf.oob_score_
     os.makedirs(clf_dir)
     joblib.dump(clf, clf_dir + '/%s.pkl' % clf_used)
-    print "%s-Classifier written to %s" % (clf_used, clf_dir)
+    # print "%s-Classifier written to %s" % (clf_used, clf_dir)
 
 
 def novel_multiclass_prediction(f_scores, thresholds, probs):
@@ -275,14 +269,14 @@ def feature_importance(rf, save_path=None):
     importances = rf.feature_importances_
     nb = len(importances)
     tree_imp = [tree.feature_importances_ for tree in rf.estimators_]
-    print "Print feature importance of rf with %d trees." % len(tree_imp)
+    # print "Print feature importance of rf with %d trees." % len(tree_imp)
     std = np.std(tree_imp, axis=0) / np.sqrt(len(tree_imp))
     indices = np.argsort(importances)[::-1]
     # Print the feature ranking
-    print("Feature ranking:")
-    for f in range(nb):
-        print("%d. feature %d (%f)" %
-              (f + 1, indices[f], importances[indices[f]]))
+    # print("Feature ranking:")
+    # for f in range(nb):
+    #     print("%d. feature %d (%f)" %
+    #           (f + 1, indices[f], importances[indices[f]]))
 
     # Plot the feature importances of the forest
     pl.figure()
@@ -310,7 +304,7 @@ def write_feat2csv(fpath, feat_arr, feat_names=None):
     """
     if feat_names is None or (len(feat_names) != feat_arr.shape[1]):
         df = pd.DataFrame(feat_arr)
-        print feat_arr.shape, len(feat_names)
+        # print feat_arr.shape, len(feat_names)
     else:
         df = pd.DataFrame(feat_arr, columns=feat_names)
     df.to_csv(fpath)
@@ -363,26 +357,26 @@ def loo_proba(x, y, clf_used='rf', use_pca=False, params=None):
     np.array, np.array
         class probability, hard classification
     """
-    print "Performing LOO with %s and %d features. Using PCA: %s" % \
-          (clf_used, x.shape[1], str(use_pca))
+    # print "Performing LOO with %s and %d features. Using PCA: %s" % \
+    #       (clf_used, x.shape[1], str(use_pca))
     if use_pca:
         old_dim = x.shape[1]
         pca = PCA(n_components=0.999)
         x = pca.fit_transform(x)
-        print pca.explained_variance_ratio_
-        print "Reduced feature space dimension %d, instead of %d" % (x.shape[1],
-                                                                     old_dim)
+        # print pca.explained_variance_ratio_
+        # print "Reduced feature space dimension %d, instead of %d" % (x.shape[1],
+        #                                                              old_dim)
     nans_in_X = np.sum(np.isnan(x))
     if nans_in_X > 0:
-        print np.where(np.isnan(x))
-        print "Found %d nans in features, converting to number." % nans_in_X
+        # print np.where(np.isnan(x))
+        # print "Found %d nans in features, converting to number." % nans_in_X
         x = np.nan_to_num(x)
     loo = cross_validation.LeaveOneOut(len(x))
     shape = (len(x), len(list(set(y))))
     prob = np.zeros(shape, dtype=np.float)
     pred = np.zeros((len(x), 1), dtype=np.int)
     cnt = 0
-    print "rf params:", rf_params
+    # print "rf params:", rf_params
     for train_ixs, test_ixs in loo:
         x_train = x[train_ixs]
         x_test = x[test_ixs]
@@ -392,10 +386,10 @@ def loo_proba(x, y, clf_used='rf', use_pca=False, params=None):
         prob[cnt] = clf.predict_proba(x_test)
         pred[cnt] = clf.predict(x_test)
         np.set_printoptions(formatter={'float': '{: 0.3f}'.format})
-        if pred[cnt] == y[test_ixs]:
-            print test_ixs, "\t", prob[cnt], pred[cnt], y[test_ixs]
-        else:
-            print test_ixs, "\t", prob[cnt], pred[cnt], y[test_ixs], "\t WRONG"
+        # if pred[cnt] == y[test_ixs]:
+        #     print test_ixs, "\t", prob[cnt], pred[cnt], y[test_ixs]
+        # else:
+        #     print test_ixs, "\t", prob[cnt], pred[cnt], y[test_ixs], "\t WRONG"
         cnt += 1
     return prob, pred
 

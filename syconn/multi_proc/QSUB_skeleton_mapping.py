@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+
 """Executable file for QSUB job to calculate cell hull and map cell objects to
  tracings
 
@@ -6,7 +13,6 @@ QSUB wrapper for cell object mapping using enrich_tracings from brainqueries.
 import sys
 from syconn.brainqueries import enrich_tracings
 import cPickle as pickle
-__author__ = 'pschuber'
 
 if __name__ == '__main__':
 

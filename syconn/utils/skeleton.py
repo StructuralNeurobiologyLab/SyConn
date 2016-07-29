@@ -481,13 +481,16 @@ class Skeleton:
         return
 
     def to_xml_string(self, save_empty=True):
-        # This is currently only a slight cosmetic duplication of the old Skeleton, therefore far from complete
+        # This is currently only a slight cosmetic duplication of the old
+        # Skeleton, therefore far from complete
         doc = minidom.Document()
         annotations_elem = doc.createElement("things")
         doc.appendChild(annotations_elem)
 
         # Add dummy header
         parameters = doc.createElement("parameters")
+        props = doc.createElement("properties")
+        annotations_elem.appendChild(props)
         annotations_elem.appendChild(parameters)
         expname = doc.createElement("experiment")
 
@@ -508,6 +511,21 @@ class Skeleton:
                  ["y", self.edit_position[1]],
                  ["z", self.edit_position[2]], ])
             parameters.appendChild(edit_position)
+
+        # find property keys
+        orig_keys = ["inVp", "node", "id", "inMag", "radius", "time",
+                     "x", "y", "z", "edge", "comment", "content", "target"]
+        #  assume properties are set in every node -> only look at a single
+        #  node is sufficient
+        property_names = []
+        for n in self.getNodes():
+            for key, val in n.data.iteritems():
+                if key not in property_names+orig_keys:
+                    property_names.append(key)
+                    prop_entry = doc.createElement("property")
+                    build_attributes(prop_entry, [["name", key],
+                                                  ["type", "number"]])
+                    props.appendChild(prop_entry)
 
         time = doc.createElement("time")
         build_attributes(time, [["ms", 0], ["checksum", integer_checksum(0)]])
@@ -655,6 +673,7 @@ class SkeletonAnnotation:
         # node ID in the annotation.
         self.high_id = 0
         self.volumes = set()
+        self.data = {}
         return
 
     def __init__(self):
@@ -793,7 +812,8 @@ class SkeletonAnnotation:
     def toNml(self, doc, annotations_elem, comments_elem, annotation_ID):
         annotation_elem = doc.createElement("thing")
         build_attributes(annotation_elem, [["id", annotation_ID]])
-
+        for k, v in self.data.iteritems():
+            build_attributes(annotation_elem, [[k, v]])
         if self.getComment():
             annotation_elem.setAttribute("comment", self.getComment())
 

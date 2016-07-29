@@ -28,35 +28,66 @@ except subprocess.CalledProcessError:
 
 qsub_queue_dict = {"single": "", "half": "", "full": ""}
 
+home_dir = os.environ['HOME'] + "/"
 path_to_scripts = os.path.dirname(__file__)
-work_folder = "/home/%s/QSUB/" % getpass.getuser()
+qsub_work_folder = "%s/QSUB/" % home_dir
+subp_work_folder = "%s/SUBP/" % home_dir
 username = getpass.getuser()
 python_path = sys.executable
 
 
 def QSUB_script(params, name, queue="single", sge_additional_flags='',
-                suffix="", job_name="default", create_random_job_name=True):
+                suffix="", job_name="default"):
+    """
+    QSUB handler - takes parameter list like normal multiprocessing job and
+    runs them on the specified cluster
+
+    IMPORTANT NOTE: the user has to make sure that queues exist and work; we
+    suggest to generate multiple queues handling different workloads
+
+    Parameters
+    ----------
+    params: list
+        list of all paramter sets to be processed
+    name: str
+        name of job - specifies script with QSUB_%s % name
+    queue: str
+        queue name or queue dict key name (latter has higher priority)
+    sge_additional_flags: str
+        additional command line flags to be passed to qsub
+    suffix: str
+        suffix for folder names - enables the execution of multiple qsub jobs
+        for the same function
+    job_name: str
+        unique name for job - or just 'default' which gets changed into a
+        random name automatically
+
+    Returns
+    -------
+    path_to_out: str
+        path to the output directory
+
+    """
     if job_name == "default":
-        if create_random_job_name:
-            letters = string.ascii_lowercase
-            job_name = "".join([letters[l] for l in np.random.randint(0, len(letters), 10)])
-            print "Random job_name created: %s" % job_name
-        else:
-            print "WARNING: running multiple jobs via qsub is only supported with non-default job_names"
+        letters = string.ascii_lowercase
+        job_name = "".join([letters[l] for l in np.random.randint(0, len(letters), 10)])
+        print "Random job_name created: %s" % job_name
+    else:
+        print "WARNING: running multiple jobs via qsub is only supported with non-default job_names"
 
     if len(job_name) > 10:
         print "WARNING: Your job_name is longer than 10. job_names have to be distinguishable " \
               "with only using their first 10 characters."
 
-    if os.path.exists(work_folder+"/%s_folder%s/" % (name, suffix)):
-        shutil.rmtree(work_folder+"/%s_folder%s/" % (name, suffix))
+    if os.path.exists(qsub_work_folder+"/%s_folder%s/" % (name, suffix)):
+        shutil.rmtree(qsub_work_folder+"/%s_folder%s/" % (name, suffix))
 
     path_to_script = path_to_scripts + "/QSUB_%s.py" % (name)
-    path_to_storage = work_folder+"/%s_folder%s/storage/" % (name, suffix)
-    path_to_sh = work_folder+"/%s_folder%s/sh/" % (name, suffix)
-    path_to_log = work_folder+"/%s_folder%s/log/" % (name, suffix)
-    path_to_err = work_folder+"/%s_folder%s/err/" % (name, suffix)
-    path_to_out = work_folder+"/%s_folder%s/out/" % (name, suffix)
+    path_to_storage = qsub_work_folder+"/%s_folder%s/storage/" % (name, suffix)
+    path_to_sh = qsub_work_folder+"/%s_folder%s/sh/" % (name, suffix)
+    path_to_log = qsub_work_folder+"/%s_folder%s/log/" % (name, suffix)
+    path_to_err = qsub_work_folder+"/%s_folder%s/err/" % (name, suffix)
+    path_to_out = qsub_work_folder+"/%s_folder%s/out/" % (name, suffix)
 
     if queue in qsub_queue_dict:
         sge_queue = qsub_queue_dict[queue]
@@ -127,7 +158,77 @@ def QSUB_script(params, name, queue="single", sge_additional_flags='',
     return path_to_out
 
 
-def delete_jobs_by_name(job_name, username="sdorkenw"):
+def SUBP_script(params, name, suffix="", delay=0):
+    """
+    Runs multiple subprocesses on one node at the same time - no load
+    balancing, all jobs get executed right away (or with a specified delay)
+
+    Parameters
+    ----------
+    params: list
+        list of all paramter sets to be processed
+    name: str
+        name of job - specifies script with QSUB_%s % name
+    suffix: str
+        suffix for folder names - enables the execution of multiple subp jobs
+        for the same function
+    delay: int
+        delay between executions in seconds
+
+    Returns
+    -------
+    path_to_out: str
+        path to the output directory
+
+    """
+    if os.path.exists(subp_work_folder + "/%s_folder%s/" % (name, suffix)):
+        shutil.rmtree(subp_work_folder + "/%s_folder%s/" % (name, suffix))
+
+    path_to_script = path_to_scripts + "/QSUB_%s.py" % (name)
+    path_to_storage = subp_work_folder + "/%s_folder%s/storage/" % (name, suffix)
+    path_to_out = subp_work_folder + "/%s_folder%s/out/" % (name, suffix)
+
+    if not os.path.exists(path_to_storage):
+        os.makedirs(path_to_storage)
+    if not os.path.exists(path_to_out):
+        os.makedirs(path_to_out)
+
+    processes = []
+    for ii in range(len(params)):
+        this_storage_path = path_to_storage + "job_%d.pkl" % ii
+        this_out_path = path_to_out + "job_%d.pkl" % ii
+
+        with open(this_storage_path, "wb") as f:
+            for param in params[ii]:
+                pkl.dump(param, f)
+
+        p = subprocess.Popen("%s %s %s %s" % (python_path, path_to_script,
+                                              this_storage_path, this_out_path),
+                             shell=True)
+        processes.append(p)
+        time.sleep(delay)
+
+    for p in processes:
+        p.wait()
+
+    return path_to_out
+
+
+def delete_jobs_by_name(job_name, username):
+    """
+    Deletes a group of jobs that have the same name
+
+    Parameters
+    ----------
+    job_name: str
+        job_name as shown in qstats
+    username: str
+        username as shown in qstats
+
+    Returns
+    -------
+
+    """
     process = subprocess.Popen("qstat -u %s" % username,
                 shell=True,
                 stdout=subprocess.PIPE)
@@ -153,12 +254,13 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
     ----------
     func : function
     params : function parameters
-    debug : bool
+    debug : boolean
     nb_cpus : int
 
     Returns
     -------
-    list of function returns
+    result: list
+        list of function returns
     """
     # found NoDaemonProcess on stackexchange by Chris Arndt - enables
     # multprocessed grid search with gpu's
@@ -188,7 +290,7 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
     start = time.time()
     if not debug:
         pool = MyPool(nb_cpus)
-        result = pool.map(func, params)
+        result = pool.map(func, *params)
         pool.close()
         pool.join()
     else:

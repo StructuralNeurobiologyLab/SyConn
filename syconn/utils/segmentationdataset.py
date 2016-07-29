@@ -3,11 +3,12 @@ import os
 import cPickle as pickle
 from knossos_utils import chunky
 import re
+from  scipy import ndimage
 from scipy import spatial
 import shutil
 from multiprocessing import Pool
 import glob
-import scipy.spatial
+
 # -*- coding: utf-8 -*-
 # SyConn - Synaptic connectivity inference toolkit
 #
@@ -15,7 +16,7 @@ import scipy.spatial
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-import scipy.ndimage
+
 try:
     import QSUB_MAIN as qm
     qsub_available = True
@@ -26,6 +27,24 @@ from syconn.utils import basics
 
 
 def get_rel_path(obj_name, filename, suffix=""):
+    """
+    Returns path from ChunkDataset foler to SegmentationDataset folder
+
+    Parameters
+    ----------
+    obj_name: str
+        ie. hdf5name
+    filename: str
+        Filename of the prediction in the chunkdataset
+    suffix: str
+        suffix of name
+
+    Returns
+    -------
+    rel_path: str
+        relative path from ChunkDataset folder to SegmentationDataset folder
+
+    """
     if len(suffix) > 0 and not suffix[0] == "_":
         suffix = "_" + suffix
     return "/obj_" + obj_name + "_" + \
@@ -55,8 +74,10 @@ def extract_and_save_all_hull_voxels_thread(args):
     np.savez_compressed(path + "/%d" % set_cnt, **set_dict)
 
 
+#TODO: change queue! 
 def extract_and_save_all_hull_voxels(object_dataset_path, overwrite=False,
-                                     nb_processes=1, use_qsub=False, queue="red3somaq"):
+                                     nb_processes=1, use_qsub=False,
+                                     queue="red3somaq"):
     object_dataset = load_dataset(object_dataset_path)
     path = object_dataset.path + "/hull_voxels/"
 
@@ -652,7 +673,7 @@ class SegmentationObject(object):
             k = np.array([[[0, 0, 0], [0, 1, 0], [0, 0, 0]],
                           [[0, 1, 0], [1, 1, 1], [0, 1, 0]],
                           [[0, 0, 0], [0, 1, 0], [0, 0, 0]]])
-            coords = np.argwhere((scipy.ndimage.convolve(matrix, k, mode="constant", cval=0.) < 7)*matrix == 1) + lower_boarder
+            coords = np.argwhere((ndimage.convolve(matrix, k, mode="constant", cval=0.) < 7)*matrix == 1) + lower_boarder
         else:
             coords = voxels
         return coords
@@ -718,7 +739,7 @@ class SegmentationObject(object):
             #                             np.mean(voxels[:, 2])],
             #                            dtype=np.int)
             np.random.shuffle(voxels)
-            dist = scipy.spatial.distance.cdist(voxels[:sample_size], voxels[:sample_size])
+            dist = spatial.distance.cdist(voxels[:sample_size], voxels[:sample_size])
             sum = np.sum(dist, 1)
             pos = np.where(sum == np.min(sum))[0][0]
             self._rep_coord = np.array(voxels[:sample_size][pos])
@@ -730,7 +751,7 @@ class SegmentationObject(object):
             #         step = len(voxels)/300
             #         if step == 0:
             #             step = 1
-            #         dist = scipy.spatial.distance.cdist(voxels[::step], voxels[::step])
+            #         dist = spatial.distance.cdist(voxels[::step], voxels[::step])
             #         sum = np.sum(dist, 1)
             #         pos = np.where(sum == np.min(sum))[0]
             #         self._rep_coord = np.array(voxels[::step][pos])
