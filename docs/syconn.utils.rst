@@ -25,14 +25,6 @@ syconn.utils.datasets
     :undoc-members:
     :show-inheritance:
 
-syconn.utils.illustration
--------------------------
-
-.. automodule:: syconn.utils.illustration
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 syconn.utils.skeleton
 ---------------------
 

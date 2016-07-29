@@ -8,7 +8,6 @@ SyConn API
     syconn.multi_proc
     syconn.utils
 
-
 syconn.brainqueries
 -------------------
 
