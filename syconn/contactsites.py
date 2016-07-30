@@ -17,7 +17,7 @@ from numpy import array as arr
 from scipy import spatial
 from sys import stdout
 import cPickle as pickle
-
+from scipy import spatial
 from scipy.sparse.csgraph._tools import csgraph_from_dense
 from sklearn.externals import joblib
 
@@ -30,7 +30,7 @@ from syconn.processing.synapticity import parse_synfeature_from_node
 from syconn.utils.datahandler import get_filepaths_from_dir, \
     load_ordered_mapped_skeleton, get_paths_of_skelID
 from syconn.utils.datahandler import write_obj2pkl, load_pkl2obj
-from syconn.utils.skeleton import Skeleton, SkeletonAnnotation
+from syconn.utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 
 
 def collect_contact_sites(cs_dir, only_sj=False):
@@ -762,4 +762,54 @@ def syn_type_majority_vote(wd, suffix=""):
         pickle.dump(maj_type_dict, f)
     with open(save_folder + "/connectivity_dict%s.pkl" % suffix, "w") as f:
         pickle.dump(phil_dict, f)
+
+
+def create_synapse_skeleton(wd):
+    cs_dir = wd + '/contactsites/'
+    cs_nodes, cs_feats = collect_contact_sites(cs_dir, only_sj=False)
+    clf_path = wd + '/models/rf_synapses/rfc_syn.pkl'
+    # print "\nUsing %s for synapse prediction." % clf_path
+    rfc_syn = joblib.load(clf_path)
+    syn_probas = rfc_syn.predict_proba(cs_feats)
+    synapse_skels = Skeleton()
+    for p in get_filepaths_from_dir(wd+'/tracings/'):
+        tracing = load_ordered_mapped_skeleton(p)[0]
+        synapse_skels.add_annotation(tracing)
+    tracing_node_tree = spatial.cKDTree([n.getCoordinate for n
+                                         in synapse_skels.getNodes()])
+    for ii, syn_nodes in enumerate(cs_nodes):
+        skel_nodes = []
+        center_node = None
+        assert len(syn_nodes) == 3, "Wrong number of synapse nodes. It is %d" \
+                                    "instead of 3." % len(syn_nodes)
+        for n in syn_nodes:
+            if 'center' in n.getComment():
+                center_node = n
+            else:
+                skel_nodes.append(n)
+        new_syn_anno = SkeletonAnnotation()
+        for k, v in center_node.data.iteritems():
+            if k in ["inVp", "node", "id", "inMag", "radius", "time", "x",
+                     "y", "z", "edge", "comment", "content", "target"]:
+                continue
+            else:
+                new_syn_anno.data[k] = v
+        syn_pred = np.argmax(syn_probas[ii])
+        new_syn_anno.data['synapticCleft'] = bool(syn_pred)
+        new_syn_anno.data['syn_proba'] = bool(syn_probas[ii][1])
+        new_syn_anno.addNode(SkeletonNode().from_scratch(new_syn_anno,
+                             center_node.getCoordinate()[0],
+                             center_node.getCoordinate()[1],
+                             center_node.getCoordinate()[2],
+                             radius=center_node.data["radius"]))
+        for n in skel_nodes:
+            n_in_anno = tracing_node_tree.query_ball_point(
+                n.getCoordinate(), r=1)[0]
+            if int(n.data['axoness_pred']):
+                new_syn_anno.data['preSynapse'] = n_in_anno.getCoordinate()
+            else:
+                new_syn_anno.data['postSynapse'] = n_in_anno.getCoordinate()
+    synapse_skels.to_kzip(wd + "/contactsites/")
+
+
 

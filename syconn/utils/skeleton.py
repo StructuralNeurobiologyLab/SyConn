@@ -673,6 +673,7 @@ class SkeletonAnnotation:
         # node ID in the annotation.
         self.high_id = 0
         self.volumes = set()
+        self.data = {}
         return
 
     def __init__(self):
@@ -811,7 +812,8 @@ class SkeletonAnnotation:
     def toNml(self, doc, annotations_elem, comments_elem, annotation_ID):
         annotation_elem = doc.createElement("thing")
         build_attributes(annotation_elem, [["id", annotation_ID]])
-
+        for k, v in self.data.iteritems():
+            build_attributes(annotation_elem, [[k, v]])
         if self.getComment():
             annotation_elem.setAttribute("comment", self.getComment())
 
