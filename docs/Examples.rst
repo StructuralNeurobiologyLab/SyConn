@@ -4,7 +4,7 @@
 Examples
 ********
 
-This page gives an example for a full run of  then main components of SyConn.
+This page gives a brief example for a full run of  then main components of SyConn.
 The corresponding code is available in :ref:`/syconn/main.py`.
 The example data set with all pre-trained models can be downloaded at
 `to be added <http://>`_.
@@ -17,7 +17,7 @@ Given that the example zipfile was extracted, running the analysis would just be
    python2 SyConn/syconn/main.py </path/to/example_folder> [--gpus {None | <int> <int> ...}]
 
 By default the CNN prediction uses only CPUs (None option; up to as many cores as specified in the ~/.theanorc).
-GPUs can be made available by adding their ids as shown in nvidia-smi.
+GPUs can be made available by adding their ids (specified in nvidia-smi).
 
 
 
