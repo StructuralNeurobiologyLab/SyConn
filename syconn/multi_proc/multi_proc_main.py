@@ -48,7 +48,7 @@ def QSUB_script(params, name, queue="single", sge_additional_flags='',
     Parameters
     ----------
     params: list
-        list of all paramter sets to be processed
+        list of all parameter sets to be processed
     name: str
         name of job - specifies script with QSUB_%s % name
     queue: str
