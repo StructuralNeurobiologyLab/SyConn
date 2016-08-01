@@ -108,7 +108,7 @@ def write_summaries(wd):
     write_obj2pkl(pre_dict, cs_dir + 'pre_dict.pkl')
     write_obj2pkl(ax_dict, cs_dir + 'axoness_dict.pkl')
     write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='_all', syn_only=False)
-    features, axoness_info, syn_pred = feature_valid_syns(cs_dir, only_sj=False,
+    features, axoness_info, _ = feature_valid_syns(cs_dir, only_sj=False,
                                                           only_syn=False,
                                                           all_contacts=True)
     features, axoness_info, pre_dict, all_post_ids, valid_syn_array, ax_dict =\
@@ -119,6 +119,8 @@ def write_summaries(wd):
     write_property_dict(cs_dir)
     conn_dict_wrapper(wd, all=False)
     conn_dict_wrapper(wd, all=True)
+    print "---------------------------\nFound %d contact sites containing %d" \
+          " synapses." % (len(cs_feats), np.sum(syn_pred))
 
 
 def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
@@ -192,8 +194,6 @@ def write_cs_summary(cs_nodes, cs_feats, cs_dir, supp='', syn_only=True):
     dummy_skel.to_kzip(fname)
     write_obj2pkl(cs_dict, cs_dir + 'cs_dict%s.pkl' % supp)
     # print "Saved CS summary at %s." % fname
-    print "---------------------------\nFound %d contact sites containing %d" \
-          " synapses." % (len(cs_feats), np.sum(pred))
 
 
 def calc_cs_node(args):
