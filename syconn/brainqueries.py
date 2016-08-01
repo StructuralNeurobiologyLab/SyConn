@@ -57,19 +57,26 @@ def enrich_tracings_all(wd, overwrite=False, use_qsub=False):
     print "------------------------------\n" \
           "Starting enrichment of %d cell tracings" % len(anno_list)
     np.random.shuffle(anno_list)
+    nb_lists = int(len(anno_list) / cpu_count() * 2)
+    list_of_lists = [[anno_list[i::nb_lists], wd, overwrite] for i
+                     in xrange(nb_lists)]
     if use_qsub and __QSUB__:
-        list_of_lists = [[anno_list[i::60], wd, overwrite] for i in xrange(60)]
         QSUB_script(list_of_lists, 'skeleton_mapping')
     elif use_qsub and not __QSUB__:
         raise RuntimeError("QSUB not available. Please make sure QSUB is"
                            "configured correctly.")
     else:
-        enrich_tracings(anno_list, wd, overwrite=overwrite)
+        start_multiprocess(enrich_tracings_star, list_of_lists,
+                           nb_cpus=int(cpu_count/2))
     predict_celltype_label(wd)
     diff = time.time() - start
     print "Finished tracing enrichment (cell object mapping, prediction of" \
           "sub-cellular compartments and cell types) after %s." % \
           str(datetime.timedelta(seconds=diff))
+
+
+def enrich_tracings_star(params):
+    enrich_tracings(params[0], params[1], overwrite=params[2])
 
 
 def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
@@ -197,18 +204,18 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
         skel.write_obj_voxel = write_obj_voxel
         if create_hull:
             # try:
-                skel.hull_sampling(detect_outlier=detect_outlier, thresh=thresh,
-                                   nb_neighbors=nb_neighbors,
-                                   neighbor_radius=neighbor_radius,
-                                   max_dist_mult=max_dist_mult)
-                if map_objects:
-                    skel.annotate_objects(dh, radius, method, thresh,
-                                          filter_size, nb_hull_vox=nb_hull_vox,
-                                          nb_voting_neighbors=nb_voting_neighbors,
-                                          nb_rays=nb_rays,
-                                          nb_neighbors=nb_neighbors,
-                                          neighbor_radius=neighbor_radius,
-                                          max_dist_mult=max_dist_mult)
+            skel.hull_sampling(detect_outlier=detect_outlier, thresh=thresh,
+                               nb_neighbors=nb_neighbors,
+                               neighbor_radius=neighbor_radius,
+                               max_dist_mult=max_dist_mult)
+            if map_objects:
+                skel.annotate_objects(dh, radius, method, thresh,
+                                      filter_size, nb_hull_vox=nb_hull_vox,
+                                      nb_voting_neighbors=nb_voting_neighbors,
+                                      nb_rays=nb_rays,
+                                      nb_neighbors=nb_neighbors,
+                                      neighbor_radius=neighbor_radius,
+                                      max_dist_mult=max_dist_mult)
             # except Exception, e:
             #     warnings.warn(
             #         "%s. Problem with tracing %s. Skipping it." %

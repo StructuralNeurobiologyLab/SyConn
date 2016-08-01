@@ -20,6 +20,7 @@ from syconn.utils.segmentationdataset import SegmentationDataset
 from syconn.utils.skeleton import SkeletonAnnotation
 import cPickle as pickle
 
+
 class DataHandler(object):
     """Initialized with paths or cell components (SegmentationObjects), path to
     membrane prediction and source path of traced skeletons (to be computed).

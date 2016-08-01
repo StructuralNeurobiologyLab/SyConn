@@ -703,16 +703,12 @@ class SkeletonMapper(object):
         boxes.append((arr(box), node_attr))
         # print "Found %d different boxes." % len(boxes)
         # print "Using %d cpus." % self._nb_cpus
-        pool = Pool(processes=self._nb_cpus)
+        pool = Pool(processes=np.min((self._nb_cpus, 2)))
         m = Manager()
         q = m.Queue()
         result = pool.map_async(get_radii_hull, [(box, q, self.scaling,
                                 mem_path, nb_rays, thresh, max_dist_mult)
                                 for box in boxes])
-        # monitor loop
-        while True:
-            if result.ready():
-                break
         outputs = result.get()
         pool.close()
         pool.join()
@@ -805,13 +801,15 @@ class SkeletonMapper(object):
 
     def predict_property(self, rf, prop, max_neck2endpoint_dist=3000,
                          max_head2endpoint_dist=600):
-        """
+        """Predict property (axoness, spiness) of tracings
 
-        :param rf:
-        :param prop:
-        :param max_neck2endpoint_dist:
-        :param max_head2endpoint_dist:
-        :return:
+        Parameters
+        ----------
+        rf: RandomForestClassifier
+        prop: str
+            property name
+        max_neck2endpoint_dist: int
+        max_head2endpoint_dist: int
         """
         property_feature = self.property_features[prop][:, 1:]
         if prop == 'axoness' and not self.spiness_given:
@@ -1565,14 +1563,6 @@ def feature_valid_syns(cs_dir, only_sj=True, only_syn=True, all_contacts=False):
     q = m.Queue()
     params = [(sample, q) for sample in cs_fpaths]
     result = pool.map_async(readout_cs_info, params)
-    while True:
-        if result.ready():
-            break
-        else:
-            size = float(q.qsize())
-            stdout.write("\r%0.2f" % (size / len(params)))
-            stdout.flush()
-            time.sleep(1)
     res = result.get()
     pool.close()
     pool.join()

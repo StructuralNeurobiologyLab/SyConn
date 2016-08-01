@@ -73,11 +73,6 @@ def collect_contact_sites(cs_dir, only_sj=False):
     q = m.Queue()
     params = [(sample, q) for sample in cs_fpaths]
     result = pool.map_async(calc_cs_node, params)
-    while True:
-        if result.ready():
-            break
-        # else:
-        #     size = float(q.qsize())
     res = result.get()
     pool.close()
     pool.join()
