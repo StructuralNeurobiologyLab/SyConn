@@ -94,7 +94,15 @@ def QSUB_script(params, name, queue="single", sge_additional_flags='',
     else:
         sge_queue = queue
 
-    #TODO: check if queue exists
+    p = subprocess.Popen("qconf -sql", shell=True, stdout=subprocess.PIPE)
+    queue_exists = False
+
+    for line in iter(p.stdout.readline, ''):
+        if queue == line.strip():
+            queue_exists = True
+
+    if not queue_exists:
+        raise Exception("Queue does not exist")
 
     if not os.path.exists(path_to_storage):
         os.makedirs(path_to_storage)
@@ -214,7 +222,7 @@ def SUBP_script(params, name, suffix="", delay=0):
     return path_to_out
 
 
-def delete_jobs_by_name(job_name, username):
+def delete_jobs_by_name(job_name):
     """
     Deletes a group of jobs that have the same name
 
@@ -222,8 +230,6 @@ def delete_jobs_by_name(job_name, username):
     ----------
     job_name: str
         job_name as shown in qstats
-    username: str
-        username as shown in qstats
 
     Returns
     -------

@@ -6,17 +6,8 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import argparse
-def parseargs():
-    parser = argparse.ArgumentParser(
-    usage="Evaluate </path/to_work_dir> [--gpus <int>, <int>]]")
-    parser.add_argument("main_path", type=str)
-    parser.add_argument("--gpus", nargs='+', type=int)
-    return parser.parse_args()
 
-commandline_args = parseargs()
-
-from processing import initialization, objectextraction as oe, \
-    predictor_cnn as pc
+from processing import initialization, objectextraction as oe
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 from multi_proc import multi_proc_main as mpm
@@ -27,11 +18,33 @@ import numpy as np
 import os
 import shutil
 
+
+def parseargs():
+    parser = argparse.ArgumentParser(
+    usage="Evaluate </path/to_work_dir> [--gpus <int>, <int>]] "
+          "[--CNNsize <int> (0-4)]")
+    parser.add_argument("main_path", type=str)
+    parser.add_argument("--gpus", nargs='+', type=int, default=None)
+    parser.add_argument("--CNNsize", type=int, default=2)
+    return parser.parse_args()
+
+commandline_args = parseargs()
+
+use_qsub = False
 home_dir = os.environ['HOME'] + "/"
 syconn_dir = syconn.__path__[0] + "/"
 
-main_path = commandline_args.main_path
+main_path = os.path.abspath(commandline_args.main_path)
 gpus = commandline_args.gpus
+CNN_size = commandline_args.CNNsize
+
+if CNN_size > 4:
+    print "CNNsize too big; set to 4"
+    CNN_size = 4
+
+if CNN_size < 0:
+    print "CNNsize too small; set to 0"
+    CNN_size = 0
 
 if gpus is None:
     gpus = [None]
@@ -82,8 +95,23 @@ if gpus[0] is None:
     batch_size1 = [40, 500, 500]
     batch_size2 = [40, 500, 500]
 else:
-    batch_size1 = [22, 270, 270]
-    batch_size2 = [18, 220, 220]
+    if CNN_size == 0:
+        batch_size1 = [18, 220, 220]
+        batch_size2 = [18, 160, 160]
+    elif CNN_size == 1:
+        batch_size1 = [22, 270, 270]
+        batch_size2 = [18, 220, 220]
+    elif CNN_size == 2:
+        batch_size1 = [30, 340, 340]
+        batch_size2 = [22, 270, 270]
+    elif CNN_size == 3:
+        batch_size1 = [36, 440, 440]
+        batch_size2 = [30, 340, 340]
+    elif CNN_size == 4:
+        batch_size1 = [40, 500, 500]
+        batch_size2 = [36, 440, 440]
+    else:
+        raise Exception("CNNsize not supported")
 
 mutex_paths = glob.glob(cset.path_head_folder + "chunky_*/mutex_*")
 for path in mutex_paths:
@@ -196,30 +224,33 @@ oe.from_probabilities_to_objects(cset, "ARGUS",
                                  ["sj"],
                                  thresholds=[int(4*255/21.)],
                                  debug=False,
-                                 suffix="3")
+                                 suffix="3",
+                                 use_qsub=use_qsub)
 
 oe.from_probabilities_to_objects(cset, "ARGUS",
                                  ["vc"],
                                  thresholds=[int(6*255/21.)],
                                  debug=False,
                                  suffix="5",
-                                 membrane_kd_path=kd_bar.knossos_path)
+                                 membrane_kd_path=kd_bar.knossos_path,
+                                 use_qsub=use_qsub)
 
 oe.from_probabilities_to_objects(cset, "ARGUS",
                                  ["mi"],
                                  thresholds=[int(9*255/21.)],
                                  debug=False,
-                                 suffix="8")
+                                 suffix="8",
+                                 use_qsub=use_qsub)
 
 # ------------ Create hull and map objects to tracings and classify compartments
 
-syconn.enrich_tracings_all(main_path)
+syconn.enrich_tracings_all(main_path, use_qsub=use_qsub)
 
 # ---------------------------------- Classify contact sites as synaptic or touch
 
-syconn.detect_synapses(main_path)
+syconn.detect_synapses(main_path, use_qsub=use_qsub)
 
 # --------------------------------------------------- Create connectivity matrix
 
-syconn.type_sorted_wiring(main_path)
+syconn.type_sorted_wiring(main_path, use_qsub=use_qsub)
 
