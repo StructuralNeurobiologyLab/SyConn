@@ -36,7 +36,14 @@ gpus = commandline_args.gpus
 CNN_size = commandline_args.CNNsize
 
 if CNN_size > 4:
+    print "CNNsize too big; set to 4"
     CNN_size = 4
+
+if CNN_size < 0:
+    print "CNNsize too small; set to 0"
+    CNN_size = 0
+
+raise()
 
 if gpus is None:
     gpus = [None]
