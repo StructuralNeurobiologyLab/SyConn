@@ -17,6 +17,7 @@ from syconn.utils.skeleton import Skeleton
 from utils.datahandler import *
 from syconn.conmatrix import type_sorted_wiring
 import time
+import sys
 import datetime
 
 
@@ -54,7 +55,7 @@ def enrich_tracings_all(wd, overwrite=False, use_qsub=False):
     anno_list = [os.path.join(skel_dir, f) for f in
                  next(os.walk(skel_dir))[2] if 'k.zip' in f]
     print "------------------------------\n" \
-          "Starting tracing enrichment of %d cell tracings." % len(anno_list)
+          "Starting enrichment of %d cell tracings" % len(anno_list)
     np.random.shuffle(anno_list)
     if use_qsub and __QSUB__:
         list_of_lists = [[anno_list[i::60], wd, overwrite] for i in xrange(60)]
@@ -141,6 +142,10 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
     rfc_axoness, rfc_spiness = None, None
     if dh is None:
         dh = DataHandler(wd)
+    if not os.path.isdir(dh.myelin_ds_path):
+        print "Could not find myelin dataset. Enriched tracings won't " \
+              "contain myelin prediction."
+        dh.myelin_ds_path = None
     output_dir = dh.data_path
     if not overwrite:
         existing_skel = [re.findall('[^/]+$', os.path.join(dp, f))[0] for
@@ -172,7 +177,11 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
     cnt = 0
     if map_objects:
         rfc_axoness, rfc_spiness = load_rfcs(rf_axoness_p, rf_spiness_p)
-    for filepath in list(todo_skel)[::-1]:
+    for ii, filepath in enumerate(list(todo_skel)[::-1]):
+        sys.stdout.write('\r')
+        # the exact output you're looking for:
+        sys.stdout.write("%d/%d" % (ii, len(list(todo_skel))))
+        sys.stdout.flush()
         dh.skeletons = {}
         cnt += 1
         _list = load_ordered_mapped_skeleton(filepath)
@@ -187,7 +196,7 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
                               context_range=context_range)
         skel.write_obj_voxel = write_obj_voxel
         if create_hull:
-            try:
+            # try:
                 skel.hull_sampling(detect_outlier=detect_outlier, thresh=thresh,
                                    nb_neighbors=nb_neighbors,
                                    neighbor_radius=neighbor_radius,
@@ -200,10 +209,10 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
                                           nb_neighbors=nb_neighbors,
                                           neighbor_radius=neighbor_radius,
                                           max_dist_mult=max_dist_mult)
-            except Exception, e:
-                warnings.warn(
-                    "%s. Problem with tracing %s. Skipping it." %
-                    (e, filepath), RuntimeWarning)
+            # except Exception, e:
+            #     warnings.warn(
+            #         "%s. Problem with tracing %s. Skipping it." %
+            #         (e, filepath), RuntimeWarning)
         if map_objects:
             if rfc_spiness is not None:
                 skel.predict_property(rfc_spiness, 'spiness')

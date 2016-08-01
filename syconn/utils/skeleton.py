@@ -443,7 +443,6 @@ class Skeleton:
         return max(high_ids)
 
     def toNml(self, filename, save_empty=True):
-
         try:
             f = open(filename, "w")
             f.write(self.to_xml_string(save_empty))

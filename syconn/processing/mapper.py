@@ -713,11 +713,6 @@ class SkeletonMapper(object):
         while True:
             if result.ready():
                 break
-            else:
-                size = float(q.qsize())
-                stdout.write("\r%0.2f" % (size / len(boxes)))
-                stdout.flush()
-                time.sleep(2)
         outputs = result.get()
         pool.close()
         pool.join()
@@ -800,12 +795,12 @@ class SkeletonMapper(object):
 
         Returns
         -------
-        np.array
-            property features
+        np.array, bool
+            property features, if spiness feature are given
         """
         if self._property_features is None:
-            self._property_features, self.property_feat_names = \
-                calc_prop_feat_dict(self, self.context_range)
+            self._property_features, self.property_feat_names, \
+            self.spiness_given = calc_prop_feat_dict(self, self.context_range)
         return self._property_features
 
     def predict_property(self, rf, prop, max_neck2endpoint_dist=3000,
@@ -819,6 +814,9 @@ class SkeletonMapper(object):
         :return:
         """
         property_feature = self.property_features[prop][:, 1:]
+        if prop == 'axoness' and not self.spiness_given:
+            raise RuntimeError("Spiness feature were not given "
+                               "during axoness prediction!")
         # print "Predicting %s using %d features." % \
         #       (prop, property_feature.shape[1])
         proba = rf.predict_proba(property_feature)

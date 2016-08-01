@@ -76,11 +76,8 @@ def collect_contact_sites(cs_dir, only_sj=False):
     while True:
         if result.ready():
             break
-        else:
-            size = float(q.qsize())
-            stdout.write("\r%0.2f" % (size / len(params)))
-            stdout.flush()
-            time.sleep(1)
+        # else:
+        #     size = float(q.qsize())
     res = result.get()
     pool.close()
     pool.join()
@@ -775,8 +772,10 @@ def create_synapse_skeleton(wd):
     for p in get_filepaths_from_dir(wd+'/tracings/'):
         tracing = load_ordered_mapped_skeleton(p)[0]
         synapse_skels.add_annotation(tracing)
-    tracing_node_tree = spatial.cKDTree([n.getCoordinate for n
-                                         in synapse_skels.getNodes()])
+    synapse_skels.scaling = tracing.scaling
+    new_node_lst = [n for n in synapse_skels.getNodes()]
+    tracing_node_tree = spatial.cKDTree(np.array([n.getCoordinate() for n
+                                        in new_node_lst]))
     for ii, syn_nodes in enumerate(cs_nodes):
         skel_nodes = []
         center_node = None
@@ -788,6 +787,7 @@ def create_synapse_skeleton(wd):
             else:
                 skel_nodes.append(n)
         new_syn_anno = SkeletonAnnotation()
+        new_syn_anno.scaling = synapse_skels.scaling
         for k, v in center_node.data.iteritems():
             if k in ["inVp", "node", "id", "inMag", "radius", "time", "x",
                      "y", "z", "edge", "comment", "content", "target"]:
@@ -802,14 +802,21 @@ def create_synapse_skeleton(wd):
                              center_node.getCoordinate()[1],
                              center_node.getCoordinate()[2],
                              radius=center_node.data["radius"]))
+        new_syn_anno.data["axo-axonic"] = False
         for n in skel_nodes:
-            n_in_anno = tracing_node_tree.query_ball_point(
-                n.getCoordinate(), r=1)[0]
+            n_in_anno = new_node_lst[tracing_node_tree.query_ball_point(
+                n.getCoordinate(), r=1)[0]]
             if int(n.data['axoness_pred']):
-                new_syn_anno.data['preSynapse'] = n_in_anno.getCoordinate()
+                #
+                if 'preSynapse' in new_syn_anno.data.keys():
+                    new_syn_anno.data['postSynapse'] = n_in_anno.getID()
+                else:
+                    new_syn_anno.data['preSynapse'] = n_in_anno.getID()
+                    new_syn_anno.data["axo-axonic"] = True
             else:
-                new_syn_anno.data['postSynapse'] = n_in_anno.getCoordinate()
-    synapse_skels.to_kzip(wd + "/contactsites/")
+                new_syn_anno.data['postSynapse'] = n_in_anno.getID()
+        synapse_skels.add_annotation(new_syn_anno)
+    synapse_skels.to_kzip(wd + "/contactsites/synapses_skel.k.zip")
 
 
 

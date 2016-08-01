@@ -63,12 +63,14 @@ def calc_prop_feat_dict(source, dist=6000):
 
     Returns
     -------
-    dict, list of str
-    Dictionary of property features, list of feature names
+    dict, list of str, bool
+    Dictionary of property features, list of feature names, bool if spiness
+    feature are given
     """
     property_features = {}
     property_feat_names = {}
-    morph_feat, spinehead_feats, node_ids = morphology_feature(source, dist)
+    morph_feat, spinehead_feats, node_ids, spiness_given\
+        = morphology_feature(source, dist)
     morph_info = np.concatenate((node_ids[:, None],
                                  morph_feat.astype(np.float32)), axis=1)
     property_features["axoness"] = np.concatenate((morph_info,
@@ -82,7 +84,7 @@ def calc_prop_feat_dict(source, dist=6000):
                                     ['nb_spinehead', 'sh_rad_mean',
                                     'sh_rad_std', 'sh_proba_mean']
     property_feat_names["spiness"] = morph_feat_names
-    return property_features, property_feat_names
+    return property_features, property_feat_names, spiness_given
 
 
 def morphology_feature(source, max_nn_dist=6000):
@@ -101,9 +103,9 @@ def morphology_feature(source, max_nn_dist=6000):
 
     Returns
     -------
-    numpy.array, numpary.array, list of int
+    numpy.array, numpary.array, list of int, bool
         two arrays of features for each node. number of nodes x 28 (22 radius
-        feature and 6 object features)
+        feature and 6 object features), bool if spiness feature are given
     """
     if isinstance(source, basestring):
         anno = load_ordered_mapped_skeleton(source)[0]
@@ -133,7 +135,7 @@ def morphology_feature(source, max_nn_dist=6000):
                                nearby_node_list, vc_dict, anno.scaling)
     sj_feat = objfeat2skelnode(node_coords, node_radii, node_ids,
                                nearby_node_list, sj_dict, anno.scaling)
-    rad_feat, spinehead_feat = radfeat2skelnode(nearby_node_list)
+    rad_feat, spinehead_feat, spiness_given = radfeat2skelnode(nearby_node_list)
     morph_feat = np.concatenate((rad_feat, m_feat, vc_feat, sj_feat),
                                 axis=1)
     dist_feature, ids = node_branch_end_distance(anno, max_nn_dist)
@@ -155,7 +157,7 @@ def morphology_feature(source, max_nn_dist=6000):
         # print "Found nans in spinhead features of %s: %s" % \
         #       (source, np.where(np.isnan(spinehead_feat)))
         spinehead_feat = np.nan_to_num(spinehead_feat.astype(np.float32))
-    return morph_feat, spinehead_feat, ids
+    return morph_feat, spinehead_feat, ids, spiness_given
 
 
 def radfeat2skelnode(nearby_node_list):
@@ -168,23 +170,25 @@ def radfeat2skelnode(nearby_node_list):
 
     Returns
     -------
+    np.array, np.array, bool
         array of number of nodes times 22 features, containing mean radius,
-        sigma of radii, 20 hist features
+        sigma of radii, 20 hist features, spinehead features and whether
+        spiness features are returned
     """
     radius_feat = np.zeros((len(nearby_node_list), 12))
     spiness_given = True
     try:
         _ = nearby_node_list[0][0].data["spiness_pred"]
     except KeyError:
-        print "Spiness prediction not found in Annotation Object. Axoness" \
-              "feature reduced to morphological features."
+        # print "Spiness prediction not found in Annotation Object. Axoness" \
+        #       "feature reduced to morphological features."
         spiness_given = False
     spinehead_feats = np.zeros((len(nearby_node_list), 4))
     for k, neighbor_nodes in enumerate(nearby_node_list):
         radius_feat[k] = radius_feats_from_nodes(neighbor_nodes)
         if spiness_given:
             spinehead_feats[k] = spiness_feats_from_nodes(neighbor_nodes)[:4]
-    return radius_feat, spinehead_feats
+    return radius_feat, spinehead_feats, spiness_given
 
 
 def radius_feats_from_nodes(nodes, nb_bins=10, max_rad=5000):
