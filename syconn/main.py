@@ -273,5 +273,5 @@ syconn.detect_synapses(main_path, use_qsub=use_qsub)
 
 # --------------------------------------------------- Create connectivity matrix
 
-syconn.type_sorted_wiring(main_path, use_qsub=use_qsub)
+syconn.type_sorted_wiring(main_path)
 

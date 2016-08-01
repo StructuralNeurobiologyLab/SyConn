@@ -70,7 +70,7 @@ class SkeletonMapper(object):
         self.context_range = context_range
         self.scaling = arr(dh.scaling, dtype=np.int)
         self._mem_path = dh.mem_path
-        self._nb_cpus = max(int(cpu_count()-1), 1)
+        self._nb_cpus = dh.nb_cpus
         self._cset_path = dh.cs_path
         self._myelin_ds_path = dh.myelin_ds_path
         init_anno = SkeletonAnnotation()
@@ -709,10 +709,6 @@ class SkeletonMapper(object):
         result = pool.map_async(get_radii_hull, [(box, q, self.scaling,
                                 mem_path, nb_rays, thresh, max_dist_mult)
                                 for box in boxes])
-        # monitor loop
-        while True:
-            if result.ready():
-                break
         outputs = result.get()
         pool.close()
         pool.join()
@@ -805,13 +801,15 @@ class SkeletonMapper(object):
 
     def predict_property(self, rf, prop, max_neck2endpoint_dist=3000,
                          max_head2endpoint_dist=600):
-        """
+        """Predict property (axoness, spiness) of tracings
 
-        :param rf:
-        :param prop:
-        :param max_neck2endpoint_dist:
-        :param max_head2endpoint_dist:
-        :return:
+        Parameters
+        ----------
+        rf: RandomForestClassifier
+        prop: str
+            property name
+        max_neck2endpoint_dist: int
+        max_head2endpoint_dist: int
         """
         property_feature = self.property_features[prop][:, 1:]
         if prop == 'axoness' and not self.spiness_given:
@@ -1565,14 +1563,6 @@ def feature_valid_syns(cs_dir, only_sj=True, only_syn=True, all_contacts=False):
     q = m.Queue()
     params = [(sample, q) for sample in cs_fpaths]
     result = pool.map_async(readout_cs_info, params)
-    while True:
-        if result.ready():
-            break
-        else:
-            size = float(q.qsize())
-            stdout.write("\r%0.2f" % (size / len(params)))
-            stdout.flush()
-            time.sleep(1)
     res = result.get()
     pool.close()
     pool.join()

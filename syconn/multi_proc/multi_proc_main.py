@@ -261,6 +261,7 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
     func : function
     params : function parameters
     debug : boolean
+    verbose : bool
     nb_cpus : int
 
     Returns
