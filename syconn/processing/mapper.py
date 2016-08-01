@@ -70,7 +70,7 @@ class SkeletonMapper(object):
         self.context_range = context_range
         self.scaling = arr(dh.scaling, dtype=np.int)
         self._mem_path = dh.mem_path
-        self._nb_cpus = max(int(cpu_count()-1), 1)
+        self._nb_cpus = dh.nb_cpus
         self._cset_path = dh.cs_path
         self._myelin_ds_path = dh.myelin_ds_path
         init_anno = SkeletonAnnotation()
@@ -703,7 +703,7 @@ class SkeletonMapper(object):
         boxes.append((arr(box), node_attr))
         # print "Found %d different boxes." % len(boxes)
         # print "Using %d cpus." % self._nb_cpus
-        pool = Pool(processes=np.min((self._nb_cpus, 2)))
+        pool = Pool(processes=self._nb_cpus)
         m = Manager()
         q = m.Queue()
         result = pool.map_async(get_radii_hull, [(box, q, self.scaling,

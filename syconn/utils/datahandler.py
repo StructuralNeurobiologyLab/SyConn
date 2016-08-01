@@ -70,7 +70,7 @@ class DataHandler(object):
         self.myelin_ds_path = wd + "/knossosdatasets/myelin/"
         self.data_path = wd + '/neurons/'
         self.skeleton_path = wd + '/tracings/'
-        self.nb_cpus = cpu_count()
+        self.nb_cpus = np.min((cpu_count(), 2))
         if not os.path.exists(self.data_path):
             os.makedirs(self.data_path)
         self.scaling = arr(scaling)

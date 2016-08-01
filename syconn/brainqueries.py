@@ -57,7 +57,7 @@ def enrich_tracings_all(wd, overwrite=False, use_qsub=False):
     print "------------------------------\n" \
           "Starting enrichment of %d cell tracings" % len(anno_list)
     np.random.shuffle(anno_list)
-    nb_lists = int(len(anno_list) / cpu_count() * 2)
+    nb_lists = np.max((int(cpu_count() / 2), 1))
     list_of_lists = [[anno_list[i::nb_lists], wd, overwrite] for i
                      in xrange(nb_lists)]
     if use_qsub and __QSUB__:
@@ -67,7 +67,7 @@ def enrich_tracings_all(wd, overwrite=False, use_qsub=False):
                            "configured correctly.")
     else:
         start_multiprocess(enrich_tracings_star, list_of_lists,
-                           nb_cpus=int(cpu_count/2))
+                           nb_cpus=nb_lists)
     predict_celltype_label(wd)
     diff = time.time() - start
     print "Finished tracing enrichment (cell object mapping, prediction of" \
@@ -185,10 +185,6 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
     if map_objects:
         rfc_axoness, rfc_spiness = load_rfcs(rf_axoness_p, rf_spiness_p)
     for ii, filepath in enumerate(list(todo_skel)[::-1]):
-        sys.stdout.write('\r')
-        # the exact output you're looking for:
-        sys.stdout.write("%d/%d" % (ii, len(list(todo_skel))))
-        sys.stdout.flush()
         dh.skeletons = {}
         cnt += 1
         _list = load_ordered_mapped_skeleton(filepath)
@@ -229,6 +225,7 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
         if not os.path.exists(dh.data_path):
             os.makedirs(dh.data_path)
         skel.write2kzip(path)
+    print "Finished enrichment of %d cell tracings" % len(anno_list)
 
 
 def remap_tracings_all(wd, dest_dir=None, recalc_prop_only=False,
@@ -267,7 +264,7 @@ def remap_tracings_all(wd, dest_dir=None, recalc_prop_only=False,
         raise RuntimeError("QSUB not available. Please make sure QSUB is"
                            "configured correctly.")
     else:
-        start_multiprocess(remap_tracings_star, list_of_lists, debug=True)
+        start_multiprocess(remap_tracings_star, list_of_lists, debug=False)
 
 
 def remap_tracings_star(params):
