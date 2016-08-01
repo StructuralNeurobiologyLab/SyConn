@@ -86,8 +86,29 @@ if not os.path.exists(home_dir + ".theanorc"):
     shutil.copy(syconn_dir + "/utils/default_theanorc",
                 home_dir + "/.theanorc")
 else:
-    print ".theanorc detected"
+    print ".theanorc detected, checking"
+    device_error = False
+    with open(home_dir + "/.theanorc", "r") as f:
+        lines = f.readlines()
+        for line in lines:
+            if not "#" in line and "device" in line and "gpu" in line:
+                if len(gpus) > 1:
+                    device_error = True
+                elif gpus[0] is None:
+                    device_error = True
+                elif line.strip().endswith("u") and not gpus[0] == 0:
+                    device_error = True
+                elif not line.strip().endswith("u"):
+                    if not int(line.strip()[-1]) == gpus[0]:
+                        device_error = True
+            elif not "#" in line and "linker" in line and "cvm_nogc" in line:
+                print "\nYou turned garbage collection off in your ~/.theanorc"\
+                      " - try removing this if you encounter memory problems.\n"
 
+    if device_error:
+        raise Exception("Please change your device setting in ~/.theanorc"
+                        "to cpu, because current settings do not allow the "
+                        "allocation of your specified gpu(s)")
 
 # -------------------------------------------------------------- CNN Predictions
 
