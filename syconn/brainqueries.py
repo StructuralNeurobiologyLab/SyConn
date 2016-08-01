@@ -37,7 +37,7 @@ def analyze_dataset(wd):
     type_sorted_wiring(wd)
 
 
-def enrich_tracings_all(wd, overwrite=False):
+def enrich_tracings_all(wd, use_qsub=False, overwrite=False):
     """Run :func: 'enrich_tracings' on available cluster nodes defined by
     somaqnodes or using multiprocessing.
 
@@ -56,9 +56,12 @@ def enrich_tracings_all(wd, overwrite=False):
                  next(os.walk(skel_dir))[2] if 'k.zip' in f]
     np.random.shuffle(anno_list)
     print "Found %d cell tracings." % len(anno_list)
-    if __QSUB__:
+    if use_qsub and __QSUB__:
         list_of_lists = [[anno_list[i::60], wd, overwrite] for i in xrange(60)]
         QSUB_script(list_of_lists, 'skeleton_mapping')
+    elif use_qsub and not __QSUB__:
+        raise RuntimeError("QSUB not available. Please make sure QSUB is"
+                           "configured correctly.")
     else:
         enrich_tracings(anno_list, wd, overwrite=overwrite)
     predict_celltype_label(wd)
@@ -213,7 +216,8 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
 
 
 def remap_tracings_all(wd, dest_dir=None, recalc_prop_only=False,
-                       method='hull', context_range=6000):
+                       method='hull', context_range=6000,
+                       use_qsub=False):
     """Run remap_tracings on available cluster nodes defined by
     somaqnodes or using single node multiprocessing.
 
@@ -240,8 +244,11 @@ def remap_tracings_all(wd, dest_dir=None, recalc_prop_only=False,
     list_of_lists = [[wd, anno_list[i::nb_processes], dest_dir,
                       recalc_prop_only, method, context_range]
                      for i in xrange(nb_processes)]
-    if __QSUB__:
+    if use_qsub and __QSUB__:
         QSUB_script(list_of_lists, 'skeleton_remapping')
+    elif use_qsub and not __QSUB__:
+        raise RuntimeError("QSUB not available. Please make sure QSUB is"
+                           "configured correctly.")
     else:
         start_multiprocess(remap_tracings_star, list_of_lists, debug=True)
 
@@ -387,7 +394,7 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
             write_data2kzip(path, path + 'spiness_feat.csv')
 
 
-def detect_synapses(wd):
+def detect_synapses(wd, use_qsub=False):
     """Detects contact sites between enriched tracings and writes contact site
      summary and synapse summary to working directory.
 
@@ -405,10 +412,14 @@ def detect_synapses(wd):
         if not os.path.exists(cs_path+ending):
             os.makedirs(cs_path+ending)
     anno_permutations = list(combinations(nml_list, 2))
-    if __QSUB__:
+
+    if use_qsub and __QSUB__:
         list_of_lists = [[list(anno_permutations[i::300]), cs_path]
                          for i in xrange(300)]
         QSUB_script(list_of_lists, 'synapse_mapping', queue='somaqnodes')
+    elif use_qsub and not __QSUB__:
+        raise RuntimeError("QSUB not available. Please make sure QSUB is"
+                           "configured correctly.")
     else:
         prepare_syns_btw_annos(anno_permutations, cs_path)
     write_summaries(wd)

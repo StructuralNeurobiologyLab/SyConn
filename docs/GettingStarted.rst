@@ -12,6 +12,5 @@ System Requirements & Installation
 
 For installation instructions see :ref:`installation <installation>`
 
+An code example can be found in section :ref:`examples <examples>`
 
-Overview
-========
