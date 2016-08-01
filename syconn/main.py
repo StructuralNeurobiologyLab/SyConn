@@ -43,11 +43,8 @@ if CNN_size < 0:
     print "CNNsize too small; set to 0"
     CNN_size = 0
 
-raise()
-
 if gpus is None:
     gpus = [None]
-
 
 if not "/" == main_path[-1]:
     main_path += "/"
