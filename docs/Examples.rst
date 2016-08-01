@@ -14,10 +14,11 @@ Running the example
 -------------------
 Given that the example zipfile was extracted, running the analysis would just be::
 
-   python2 SyConn/syconn/main.py </path/to/example_folder> [--gpus {None | <int> <int> ...}]
+   python2 SyConn/syconn/main.py </path/to/example_folder> [--gpus {None | <int> <int> ...}, --CNNsize {1 | <int>}]
 
 By default the CNN prediction uses only CPUs (None option; up to as many cores as specified in the ~/.theanorc).
-GPUs can be made available by adding their ids (specified in nvidia-smi).
+GPUs can be made available by adding their ids (specified in nvidia-smi). The CNNsize argument allows the adjustment
+of the memory used on each GPU, where 4 is the highest possible value (more VRAM used) and 0 the smallest value.
 
 
 

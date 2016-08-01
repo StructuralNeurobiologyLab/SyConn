@@ -8,15 +8,16 @@
 import argparse
 def parseargs():
     parser = argparse.ArgumentParser(
-    usage="Evaluate </path/to_work_dir> [--gpus <int>, <int>]]")
+    usage="Evaluate </path/to_work_dir> [--gpus <int>, <int>]] "
+          "[--CNNsize <int> (0-4)]")
     parser.add_argument("main_path", type=str)
-    parser.add_argument("--gpus", nargs='+', type=int)
+    parser.add_argument("--gpus", nargs='+', type=int, default=None)
+    parser.add_argument("--CNNsize", type=int, default=2)
     return parser.parse_args()
 
 commandline_args = parseargs()
 
-from processing import initialization, objectextraction as oe, \
-    predictor_cnn as pc
+from processing import initialization, objectextraction as oe
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 from multi_proc import multi_proc_main as mpm
@@ -32,9 +33,14 @@ syconn_dir = syconn.__path__[0] + "/"
 
 main_path = commandline_args.main_path
 gpus = commandline_args.gpus
+CNN_size = commandline_args.CNNsize
+
+if CNN_size > 4:
+    CNN_size = 4
 
 if gpus is None:
     gpus = [None]
+
 
 if not "/" == main_path[-1]:
     main_path += "/"
@@ -82,8 +88,23 @@ if gpus[0] is None:
     batch_size1 = [40, 500, 500]
     batch_size2 = [40, 500, 500]
 else:
-    batch_size1 = [22, 270, 270]
-    batch_size2 = [18, 220, 220]
+    if CNN_size == 0:
+        batch_size1 = [18, 220, 220]
+        batch_size2 = [18, 160, 160]
+    elif CNN_size == 1:
+        batch_size1 = [22, 270, 270]
+        batch_size2 = [18, 220, 220]
+    elif CNN_size == 2:
+        batch_size1 = [30, 340, 340]
+        batch_size2 = [22, 270, 270]
+    elif CNN_size == 3:
+        batch_size1 = [36, 440, 440]
+        batch_size2 = [30, 340, 340]
+    elif CNN_size == 4:
+        batch_size1 = [40, 500, 500]
+        batch_size2 = [36, 440, 440]
+    else:
+        raise Exception("CNNsize not supported")
 
 mutex_paths = glob.glob(cset.path_head_folder + "chunky_*/mutex_*")
 for path in mutex_paths:
