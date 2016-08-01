@@ -832,6 +832,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
         print "%s: %.3fs" % (step_names[ii], all_times[ii])
     print "--------------------------"
     print "Total Time: %.1f min" % (np.sum(all_times) / 60)
+    print "--------------------------\n\n"
 
 
 def from_probabilities_to_objects_parameter_sweeping(cset,
@@ -933,3 +934,4 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
         print "t = %.2f: %.1f min" % (thresholds[ii], all_times[ii] / 60)
     print "--------------------------"
     print "Total Time: %.1f min" % (np.sum(all_times) / 60)
+    print "--------------------------\n"
