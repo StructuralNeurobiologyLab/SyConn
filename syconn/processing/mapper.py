@@ -352,12 +352,7 @@ class SkeletonMapper(object):
             # print "Skipped sj-mapping."
             pass
         if self._myelin_ds_path is not None:
-            try:
-                self.calc_myelinisation()
-            except Exception, e:
-                print e
-                print "Myelin prediction failed for %s." % self.old_anno.filename
-                pass
+            self.calc_myelinisation()
         # print "--- Skeleton #%s fully annotated after %0.2f seconds with" \
         #       " '%s'-criterion" % (self.ix, time.time() - start,
         #                            self.annotation_method)
