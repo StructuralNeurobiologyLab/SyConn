@@ -74,10 +74,9 @@ def extract_and_save_all_hull_voxels_thread(args):
     np.savez_compressed(path + "/%d" % set_cnt, **set_dict)
 
 
-#TODO: change queue! 
 def extract_and_save_all_hull_voxels(object_dataset_path, overwrite=False,
                                      nb_processes=1, use_qsub=False,
-                                     queue="red3somaq"):
+                                     queue="full"):
     object_dataset = load_dataset(object_dataset_path)
     path = object_dataset.path + "/hull_voxels/"
 
@@ -128,7 +127,7 @@ def extract_and_save_all_hull_voxels(object_dataset_path, overwrite=False,
 
 
 def extract_and_save_all_hull_voxels_loop(object_dataset_paths, overwrite=False,
-                                          nb_processes=1, use_qsub=False, queue="red3somaq"):
+                                          nb_processes=1, use_qsub=False, queue="full"):
     for object_dataset_path in object_dataset_paths:
         extract_and_save_all_hull_voxels(object_dataset_path, overwrite=overwrite,
                                          nb_processes=nb_processes, use_qsub=use_qsub, queue=queue)
@@ -146,7 +145,7 @@ def check_all_hulls_thread(args):
     return misses
 
 
-def check_all_hulls(object_dataset_path, nb_processes, use_qsub=False, queue="red2somaq"):
+def check_all_hulls(object_dataset_path, nb_processes, use_qsub=False, queue="full"):
     object_dataset = load_dataset(object_dataset_path)
     multi_params = []
     for step in range(int(np.ceil(len(object_dataset.object_dict)/10000))):
@@ -176,7 +175,7 @@ def check_all_hulls(object_dataset_path, nb_processes, use_qsub=False, queue="re
     return misses
 
 
-def check_all_hulls_loop(object_dataset_paths, nb_processes=1, use_qsub=False, queue="red2somaq"):
+def check_all_hulls_loop(object_dataset_paths, nb_processes=1, use_qsub=False, queue="full"):
     misses = {}
     for object_dataset_path in object_dataset_paths:
         misses[object_dataset_path] = check_all_hulls(object_dataset_path, nb_processes=nb_processes,
@@ -299,7 +298,7 @@ def updating_segmentationDatasets_thread(args):
                           recalculate_rep_coords=recalculate_rep_coords, overwrite=True)
 
 
-def update_multiple_datasets(paths, update_objects=False, recalculate_rep_coords=False, nb_processes=1, use_qsub=True, queue="red3somaq"):
+def update_multiple_datasets(paths, update_objects=False, recalculate_rep_coords=False, nb_processes=1, use_qsub=True, queue="full"):
     multi_params = []
     for path in paths:
         multi_params.append([path, update_objects, recalculate_rep_coords])
