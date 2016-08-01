@@ -37,7 +37,7 @@ def analyze_dataset(wd):
     type_sorted_wiring(wd)
 
 
-def enrich_tracings_all(wd, use_qsub=False, overwrite=False):
+def enrich_tracings_all(wd, overwrite=False, use_qsub=False):
     """Run :func: 'enrich_tracings' on available cluster nodes defined by
     somaqnodes or using multiprocessing.
 
@@ -47,15 +47,15 @@ def enrich_tracings_all(wd, use_qsub=False, overwrite=False):
         Path to working directory
     overwrite : bool
         enforce overwriting of existing files
+    use_qsub : bool
     """
-    print "------------------------------\n" \
-          "Starting tracing enrichment."
     start = time.time()
     skel_dir = wd + '/tracings/'
     anno_list = [os.path.join(skel_dir, f) for f in
                  next(os.walk(skel_dir))[2] if 'k.zip' in f]
+    print "------------------------------\n" \
+          "Starting tracing enrichment of %d cell tracings." % len(anno_list)
     np.random.shuffle(anno_list)
-    print "Found %d cell tracings." % len(anno_list)
     if use_qsub and __QSUB__:
         list_of_lists = [[anno_list[i::60], wd, overwrite] for i in xrange(60)]
         QSUB_script(list_of_lists, 'skeleton_mapping')
@@ -235,6 +235,7 @@ def remap_tracings_all(wd, dest_dir=None, recalc_prop_only=False,
         Method for object mapping procedure
     context_range : int
         Context range for property features
+    use_qsub : bool
     """
     anno_list = get_filepaths_from_dir(wd + '/neurons/')
     np.random.shuffle(anno_list)
@@ -401,6 +402,7 @@ def detect_synapses(wd, use_qsub=False):
     Parameters
     ----------
     wd : str Path to working directory
+    use_qsub : bool
     """
     print "------------------------------\n" \
           "Starting contact site detection with synapse classification."

@@ -537,10 +537,10 @@ class SegmentationObject(object):
             try:
                 return np.load(self.path_to_hull_voxels)[str(self.obj_id)]
             except:
-                print "Hull Voxels need to be calculated"
+                # print "Hull Voxels need to be calculated"
                 return self.create_hull_voxels()
         else:
-            print "Hull Voxels need to be calculated"
+            # print "Hull Voxels need to be calculated"
             return self.create_hull_voxels()
 
     @property
