@@ -52,25 +52,30 @@ def enrich_tracings_all(wd, overwrite=False, use_qsub=False):
     """
     start = time.time()
     skel_dir = wd + '/tracings/'
+    if not os.oath.isdir(wd + '/neurons/'):
+        os.makedirs(wd + '/neurons/')
     anno_list = [os.path.join(skel_dir, f) for f in
                  next(os.walk(skel_dir))[2] if 'k.zip' in f]
     print "------------------------------\n" \
           "Starting enrichment of %d cell tracings" % len(anno_list)
     np.random.shuffle(anno_list)
-    nb_lists = np.max((int(cpu_count() / 2), 1))
-    list_of_lists = [[anno_list[i::nb_lists], wd, overwrite] for i
-                     in xrange(nb_lists)]
     if use_qsub and __QSUB__:
+        nb_lists = 30
+        list_of_lists = [[anno_list[i::nb_lists], wd, overwrite] for i
+                         in xrange(nb_lists)]
         QSUB_script(list_of_lists, 'skeleton_mapping')
     elif use_qsub and not __QSUB__:
         raise RuntimeError("QSUB not available. Please make sure QSUB is"
                            "configured correctly.")
     else:
+        nb_lists = np.max((int(cpu_count() / 2), 1))
+        list_of_lists = [[anno_list[i::nb_lists], wd, overwrite] for i
+                         in xrange(nb_lists)]
         start_multiprocess(enrich_tracings_star, list_of_lists,
                            nb_cpus=nb_lists)
     predict_celltype_label(wd)
     diff = time.time() - start
-    print "Finished tracing enrichment (cell object mapping, prediction of" \
+    print "Finished tracing enrichment (cell object mapping, prediction of " \
           "sub-cellular compartments and cell types) after %s." % \
           str(datetime.timedelta(seconds=diff))
 

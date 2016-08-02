@@ -147,7 +147,7 @@ class SkeletonMapper(object):
         if self._hull_coords is None:
             self.hull_sampling(thresh=self.thresh,
                                detect_outlier=True,
-                               nb_rays=40, nb_neighbors=20, neighbor_radius=220,
+                               nb_rays=20, nb_neighbors=20, neighbor_radius=220,
                                max_dist_mult=1.4)
         return self._hull_coords
 
@@ -195,7 +195,7 @@ class SkeletonMapper(object):
         if self._skel_radius is None:
             self.hull_sampling(thresh=self.thresh,
                                detect_outlier=True,
-                               nb_rays=20, nb_neighbors=40, neighbor_radius=220,
+                               nb_rays=20, nb_neighbors=20, neighbor_radius=220,
                                max_dist_mult=1.4)
         return self._skel_radius
 
@@ -486,8 +486,7 @@ class SkeletonMapper(object):
     def _annotate_with_supervoxels(self, data, radius, objtype):
         """Annotates objects to skeleton if sufficient randomly selected
         object hull voxels are within supervoxels of this skeleton.
-        radius. For mitos and vc (self.nb_hull_vox / 2) hull voxels are used,
-        whereas for sj one object voxel inside is sufficient.
+        radius.
 
         Parameters
         ----------
@@ -612,9 +611,9 @@ class SkeletonMapper(object):
             self.mapping_info[objtype][curr_obj_id] = is_in_hull
         return [[]]*(len(self.nodes)-1)+[annotation_ids_new]
 
-    def hull_sampling(self, thresh=2.5, nb_rays=20, nb_neighbors=40,
+    def hull_sampling(self, thresh=2.2, nb_rays=20, nb_neighbors=20,
                       neighbor_radius=220, detect_outlier=True,
-                      max_dist_mult=1.5):
+                      max_dist_mult=1.4):
         """ Calculates hull of tracing
 
         Parameters

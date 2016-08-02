@@ -367,11 +367,11 @@ def plot_wiring(wiring, den_borders, ax_borders, max_val, confidence_lvl,
                             (den_pos_i != den_pos) or (ax_pos_j != ax_pos):
                             continue
                         if wiring[i, j, 1] != 0:
-                                intensity_plot[i+add_i, j+add_j] = \
-                                    (-1)**(syn_sign+1) * wiring[i, j, 1]
+                            intensity_plot[i+add_i, j+add_j] = \
+                                (-1)**(syn_sign+1) * wiring[i, j, 1]
                         elif wiring[i, j, 2] != 0:
-                                intensity_plot[i+add_i, j+add_j] = \
-                                    (-1)**(syn_sign+1) * wiring[i, j, 2]
+                            intensity_plot[i+add_i, j+add_j] = \
+                                (-1)**(syn_sign+1) * wiring[i, j, 2]
     if not big_entries:
         np.save(wd + '/figures/connectivity_matrix.npy',
                 intensity_plot)

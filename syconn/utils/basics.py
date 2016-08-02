@@ -174,9 +174,9 @@ def convex_hull_area(pts):
         for triangle in triangles:
             area += poly_area(triangle)
     except QhullError as e:
-        warnings.warn("%s encountered during calculation of convex hull "
-                      "area with %d points. Returning 0 nm^2." %
-                      (e, len(pts)), RuntimeWarning)
+        # warnings.warn("%s encountered during calculation of convex hull "
+        #               "area with %d points. Returning 0 nm^2." %
+        #               (e, len(pts)), RuntimeWarning)
         pass
     return area
 
