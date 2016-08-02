@@ -119,7 +119,7 @@ def write_summaries(wd):
     write_property_dict(cs_dir)
     conn_dict_wrapper(wd, all=False)
     conn_dict_wrapper(wd, all=True)
-    print "---------------------------\nFound %d contact sites containing %d" \
+    print "Found %d contact sites containing %d" \
           " synapses." % (len(cs_feats), np.sum(syn_pred))
 
 

@@ -6,6 +6,7 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import matplotlib
+matplotlib.use('Agg')
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np
@@ -239,9 +240,9 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
     if not syn_only:
         supp += '_CS'
         plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl,
-                    binary, add_fname=supp)
+                    binary, wd, add_fname=supp)
         plot_wiring_cs(wiring_axoness, den_borders, ax_borders,
-                    confidence_lvl, binary, add_fname=supp+'_axon_axon')
+                    confidence_lvl, binary, wd, add_fname=supp+'_axon_axon')
 
         plot_wiring_cum_cs(cum_wiring, class_ranges(pure_dendrite_pred),
                            class_ranges(pure_axon_pred), confidence_lvl, binary,
@@ -497,8 +498,8 @@ def plot_wiring_cum(wiring, den_borders, ax_borders, confidence_lvl, max_val,
                     dpi=600)
 
 
-def type_sorted_wiring_cs(wd, confidence_lvl=0.8, binary=False,
-                          max_syn_size=0.2):
+def type_sorted_wiring_cs(wd, confidence_lvl=0.3, binary=False,
+                          max_syn_size=0.4):
     """Same as type_sorted_wiring but for all contact sites
     (synapse classification 0 and 1)
     """
@@ -513,8 +514,7 @@ def type_sorted_wiring_cs(wd, confidence_lvl=0.8, binary=False,
     skeleton_ids = skeleton_ids[bool_arr]
 
     # create matrix
-    syn_props = load_pkl2obj(wd + '/synapse_matrices/phil_dict_no_'
-                                  'exclusion_all.pkl')
+    syn_props = load_pkl2obj(wd + '/contactsites/connectivity_dict_all.pkl')
     total_area_key = 'total_cs_area'
     dendrite_ids = set()
     axon_ids = set()

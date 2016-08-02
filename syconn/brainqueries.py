@@ -439,8 +439,8 @@ def detect_synapses(wd, use_qsub=False):
         prepare_syns_btw_annos(anno_permutations, cs_path)
     write_summaries(wd)
     diff = time.time() - start
-    print "Finished connectivity analysis after %s." %\
-          str(datetime.timedelta(seconds=diff))
+    print "Finished connectivity analysis after %s.\n" \
+          "---------------------------" % str(datetime.timedelta(seconds=diff))
 
 
 def detect_similar_tracings(wd):
