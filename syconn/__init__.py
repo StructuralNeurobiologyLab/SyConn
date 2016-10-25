@@ -1,6 +1,10 @@
 import sip
-sip.setapi('QString', 2)
-sip.setapi('QVariant', 2)
+try:
+    sip.setapi('QString', 2)
+    sip.setapi('QVariant', 2)
+except ValueError:
+    sip.setapi('QString', 1)
+    sip.setapi('QVariant', 1)
 import multi_proc
 import utils
 import processing

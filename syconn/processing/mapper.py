@@ -29,7 +29,13 @@ from sklearn.externals import joblib
 from syconn.utils.skeleton import Skeleton
 from syconn.utils.skeleton import SkeletonNode
 from syconn.utils.skeleton import from_skeleton_to_mergelist
-from syconn.ray_casting.ray_casting_radius import ray_casting_radius
+
+try:
+    from syconn.ray_casting.ray_casting_radius import ray_casting_radius
+    ray_cast_avail = True
+except ImportError:
+    print("ray_casting_radius-module not imported")
+    ray_cast_avail = False
 
 
 class SkeletonMapper(object):
@@ -1041,6 +1047,8 @@ def outlier_detection(point_list, min_num_neigh, radius):
 
 
 def get_radii_hull(args):
+    if not ray_cast_avail:
+        raise RuntimeError("ray_casting_radius-module needed for this")
     """Wrapper-function for point cloud extraction from membrane prediction.
     Gets a bounding box with nodes, loads the membrane prediction for these
     and then calculates the radius and hull at each skeleton node.
