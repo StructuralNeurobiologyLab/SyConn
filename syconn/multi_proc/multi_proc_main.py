@@ -21,7 +21,9 @@ import time
 
 __QSUB__ = True
 try:
-    subprocess.check_output('qstat', shell=True)
+    with open(os.devnull, 'w') as devnull:
+        subprocess.check_call('qstat', shell=True,
+                                stdout=devnull, stderr=devnull)
 except subprocess.CalledProcessError:
     print "QSUB not found, switching to single node multiprocessing."
     __QSUB__ = False
