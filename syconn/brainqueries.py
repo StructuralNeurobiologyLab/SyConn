@@ -387,8 +387,8 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
                 nb_neighbors=nb_neighbors, neighbor_radius=neighbor_radius,
                 max_dist_mult=max_dist_mult)
         if rfc_spiness is not None:
-            new_skel._property_features, new_skel.property_feat_names = \
-                calc_prop_feat_dict(new_skel, context_range)
+            new_skel._property_features, new_skel.property_feat_names, \
+            spiness_given = calc_prop_feat_dict(new_skel, context_range)
             new_skel.predict_property(rfc_spiness, 'spiness')
             new_skel._property_features = None
         if rfc_spiness is not None and rfc_axoness is not None:

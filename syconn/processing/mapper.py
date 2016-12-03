@@ -844,9 +844,9 @@ class SkeletonMapper(object):
             node.setDataElem(prop+'_pred', node_pred)
             node.setDataElem('branch_dist', property_feature[k, -1])
             node.setDataElem('end_dist', property_feature[k, -2])
-        if prop == 'axoness':
-            majority_vote(self.old_anno, 'axoness', 25000)
-            pass
+        # if prop == 'axoness':
+        #     majority_vote(self.old_anno, 'axoness', 25000)
+        #     pass
         if prop == 'spiness':
             assign_neck(self.old_anno,
                         max_head2endpoint_dist=max_head2endpoint_dist,

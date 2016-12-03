@@ -387,6 +387,8 @@ def supp_fname_from_fpath(fpath):
         file_name = 'axoness_feat.csv'
     elif 'spiness_feat.csv' in file_name:
         file_name = 'spiness_feat.csv'
+    elif 'mergelist.txt' in file_name:
+        file_name = 'mergelist.txt'
     else:
         raise ValueError
     return file_name

@@ -5,9 +5,9 @@ Examples
 ********
 
 This page gives a brief example for a full run of  then main components of SyConn.
-The corresponding code is available in :ref:`/syconn/main.py`.
-The example data set with all pre-trained models can be downloaded at
-`to be added <http://>`_.
+The corresponding code is available in :ref:`/syconn/main.py` and
+the example data with all pre-trained models can be downloaded at
+`to be added <http://>`_, which are located in the "models" folder.
 
 
 Running the example
@@ -32,7 +32,7 @@ This data set is a subset of the zebra finch area X dataset j0126 acquired by
    :scale:   60 %
    :align:   center
 
-   Left: Raw data cube Right: Human cell tracings
+   Left: Raw data cube; Right: Human cell tracings
 
 The above figure shows cell tracings in 3D EM data cube, which is the
 required data to perform automated structural analysis using SyConn.
