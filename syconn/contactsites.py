@@ -23,7 +23,7 @@ from sklearn.externals import joblib
 
 from knossos_utils.knossosdataset import KnossosDataset
 from multi_proc.multi_proc_main import start_multiprocess
-from utils import skeleton_utils as su
+from knossos_utils import skeleton_utils as su
 from processing.axoness import predict_axoness_from_nodes
 from processing.mapper import feature_valid_syns, calc_syn_dict
 from processing.synapticity import parse_synfeature_from_node
