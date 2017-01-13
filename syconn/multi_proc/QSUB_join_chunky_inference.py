@@ -9,7 +9,7 @@ import sys
 
 import cPickle as pkl
 from knossos_utils import knossosdataset
-from syconn.processing import predictor_cnn as pc
+from ..processing import predictor_cnn as pc
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]

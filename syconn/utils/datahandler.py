@@ -15,9 +15,9 @@ import zipfile
 from multiprocessing import cpu_count
 from basics import *
 from segmentationdataset import load_dataset
-from syconn.utils import skeleton_utils as su
-from syconn.utils.segmentationdataset import SegmentationDataset
-from syconn.utils.skeleton import SkeletonAnnotation
+from knossos_utils import skeleton_utils as su
+from ..utils.segmentationdataset import SegmentationDataset
+from knossos_utils.skeleton import SkeletonAnnotation
 import cPickle as pickle
 
 
@@ -298,8 +298,8 @@ def load_mapped_skeleton(path, append_obj, load_mitos):
     return mapped_skel
 
 
-def get_filepaths_from_dir(directory, ending='k.zip'):
-    """Collect all files with certain ending from directory
+def get_filepaths_from_dir(directory, ending='k.zip', recursively=False):
+    """Collect all files with certain ending from directory.
 
     Parameters
     ----------
@@ -307,14 +307,20 @@ def get_filepaths_from_dir(directory, ending='k.zip'):
         path to lookup directory
     ending: str
         ending of files
+    recursively: boolean
+        add files from subdirectories
 
     Returns
     -------
     list of str
         paths to files
     """
-    files = [os.path.join(directory, f) for f in next(os.walk(directory))[2]
-             if ending in f]
+    if recursively:
+        files = [os.path.join(r, f) for r,s ,fs in
+                 os.walk(directory) for f in fs if ending in f[-len(ending):]]
+    else:
+        files = [os.path.join(directory, f) for f in next(os.walk(directory))[2]
+                 if ending in f[-len(ending):]]
     return files
 
 

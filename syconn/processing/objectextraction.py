@@ -12,9 +12,9 @@ import cPickle as pickle
 import networkx as nx
 import glob
 
-from syconn.processing import objectextraction_helper as oeh
-from syconn.multi_proc import multi_proc_main as mpm
-from syconn.utils import datahandler, segmentationdataset
+from ..processing import objectextraction_helper as oeh
+from ..multi_proc import multi_proc_main as mpm
+from ..utils import datahandler, segmentationdataset
 
 
 def calculate_chunk_numbers_for_box(cset, offset, size):

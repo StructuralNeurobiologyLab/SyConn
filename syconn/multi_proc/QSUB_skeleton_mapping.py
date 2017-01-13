@@ -11,8 +11,8 @@
 QSUB wrapper for cell object mapping using enrich_tracings from brainqueries.
 """
 import sys
-from syconn.brainqueries import enrich_tracings
-from syconn.utils.datahandler import DataHandler
+from ..brainqueries import enrich_tracings
+from ..utils.datahandler import DataHandler
 import cPickle as pickle
 
 if __name__ == '__main__':

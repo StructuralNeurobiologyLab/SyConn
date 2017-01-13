@@ -8,7 +8,7 @@
 from xml.dom import minidom
 import xml.etree.cElementTree as cElementTree
 from math import pow, sqrt
-from syconn.utils.basics import euclidian_distance
+from ..utils.basics import euclidian_distance
 import copy
 import tempfile
 import unicodedata

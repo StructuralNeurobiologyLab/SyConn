@@ -22,15 +22,15 @@ from scipy.sparse.csgraph._tools import csgraph_from_dense
 from sklearn.externals import joblib
 
 from knossos_utils.knossosdataset import KnossosDataset
-from syconn.multi_proc.multi_proc_main import start_multiprocess
-from syconn.utils import skeleton_utils as su
-from syconn.processing.axoness import predict_axoness_from_nodes
-from syconn.processing.mapper import feature_valid_syns, calc_syn_dict
-from syconn.processing.synapticity import parse_synfeature_from_node
-from syconn.utils.datahandler import get_filepaths_from_dir, \
+from multi_proc.multi_proc_main import start_multiprocess
+from utils import skeleton_utils as su
+from processing.axoness import predict_axoness_from_nodes
+from processing.mapper import feature_valid_syns, calc_syn_dict
+from processing.synapticity import parse_synfeature_from_node
+from utils.datahandler import get_filepaths_from_dir, \
     load_ordered_mapped_skeleton, get_paths_of_skelID
-from syconn.utils.datahandler import write_obj2pkl, load_pkl2obj
-from syconn.utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
+from utils.datahandler import write_obj2pkl, load_pkl2obj
+from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 
 
 def collect_contact_sites(cs_dir, only_sj=False):

@@ -5,7 +5,7 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
-from syconn.utils import datahandler, basics, segmentationdataset
+from ..utils import datahandler, basics, segmentationdataset
 from knossos_utils import chunky, knossosdataset
 
 import cPickle as pkl

@@ -13,7 +13,7 @@ processing.mapper module. Feature extraction for synapse prediction is performed
 as well.
 """
 import sys
-from syconn.processing.mapper import prepare_syns_btw_annos
+from ..processing.mapper import prepare_syns_btw_annos
 import cPickle as pickle
 
 if __name__ == '__main__':

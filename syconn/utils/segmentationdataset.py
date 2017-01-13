@@ -3,7 +3,7 @@ import os
 import cPickle as pickle
 from knossos_utils import chunky
 import re
-from  scipy import ndimage
+from scipy import ndimage
 from scipy import spatial
 import shutil
 from multiprocessing import Pool

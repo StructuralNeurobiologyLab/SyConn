@@ -8,8 +8,8 @@
 
 import matplotlib.cm as cmx
 import matplotlib.colors as colors
-from syconn.processing.synapticity import syn_sign_prediction
-from syconn.utils.datahandler import *
+from ..processing.synapticity import syn_sign_prediction
+from ..utils.datahandler import *
 try:
     from mayavi import mlab
 except (ImportError, ValueError), e:

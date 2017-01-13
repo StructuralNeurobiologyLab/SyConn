@@ -7,7 +7,7 @@
 
 import numpy as np
 import networkx as nx
-import syconn.utils.skeleton_utils as su
+import knossos_utils.skeleton_utils as su
 from features import assign_property2node, node_branch_end_distance
 
 

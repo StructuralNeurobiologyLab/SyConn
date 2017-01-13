@@ -22,13 +22,13 @@ config = {
     'download_url': 'https://github.com/pschubert/SyConn.git',
     'author_email': '',
     'version': '0.1',
-    'install_requires': ['cython', 'knossos_python_tools', 'nose',
+    'install_requires': ['cython', 'knossos_utils', 'nose',
                          'matplotlib', 'sklearn', 'networkx', 'numpy',
                          'scipy', 'seaborn'],
     'scripts': [],  'cmdclass': cmdclass, 'ext_modules': ext_modules,
     'name': 'SyConn',
-    'dependency_links': ['https://github.com/knossos-project/knossos_python_'
-                         'tools/tarball/master#egg=knossos_python_tools'],
+    'dependency_links': ['https://github.com/knossos-project/knossos_utils'
+                         '/tarball/master#egg=knossos_utils'],
     'include_dirs': [np.get_include()],
     'package_data': {'syconn': ['ray_casting/*.so']},
     'packages': find_packages(), ' include_package_data': True,

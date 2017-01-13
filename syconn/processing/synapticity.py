@@ -15,9 +15,9 @@ from sys import stdout
 
 from knossos_utils.knossosdataset import KnossosDataset as kd
 
-import syconn.utils.skeleton_utils as su
+import knossos_utils.skeleton_utils as su
 from learning_rfc import save_train_clf
-from syconn.utils.datahandler import get_filepaths_from_dir
+from ..utils.datahandler import get_filepaths_from_dir
 
 
 def save_synapse_clf(gt_path, clf_used='rf'):

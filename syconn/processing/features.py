@@ -14,11 +14,11 @@ from numpy import array as arr
 from scipy import spatial
 import networkx as nx
 from learning_rfc import write_feat2csv, cell_classification
-from syconn.utils import skeleton_utils as su
-from syconn.utils.basics import euclidian_distance
-from syconn.utils.datahandler import load_objpkl_from_kzip, \
+from ..utils import skeleton_utils as su
+from ..utils.basics import euclidian_distance
+from ..utils.datahandler import load_objpkl_from_kzip, \
     load_ordered_mapped_skeleton
-from syconn.utils.skeleton import remove_from_zip
+from knossos_utils.skeleton import remove_from_zip
 
 
 def update_property_feat_kzip_star(args):

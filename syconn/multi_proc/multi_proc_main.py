@@ -15,7 +15,7 @@ import re
 import shutil
 import string
 import subprocess
-from syconn.utils.basics import negative_to_zero
+from ..utils.basics import negative_to_zero
 import sys
 import time
 

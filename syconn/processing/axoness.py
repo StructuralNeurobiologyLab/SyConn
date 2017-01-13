@@ -11,8 +11,8 @@ from numpy import array as arr
 import re
 from features import assign_property2node, majority_vote
 from learning_rfc import cell_classification
-from syconn.utils import skeleton_utils as su
-from syconn.utils.skeleton import SkeletonAnnotation
+from ..utils import skeleton_utils as su
+from knossos_utils.skeleton import SkeletonAnnotation
 
 
 def predict_axoness_from_node_comments(anno):

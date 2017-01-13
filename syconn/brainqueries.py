@@ -13,7 +13,7 @@ from processing.learning_rfc import write_feat2csv, load_rfcs
 from processing.mapper import SkeletonMapper, prepare_syns_btw_annos, \
     similarity_check_star
 from syconn.processing.cell_types import predict_celltype_label
-from syconn.utils.skeleton import Skeleton
+from knossos_utils.skeleton import Skeleton
 from utils.datahandler import *
 from syconn.conmatrix import type_sorted_wiring
 import time

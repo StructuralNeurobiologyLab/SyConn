@@ -19,8 +19,8 @@ from scipy.spatial import ConvexHull
 import networkx as nx
 
 from syconn.utils.basics import euclidian_distance, FloatCoordinate
-from syconn.utils.skeleton import SkeletonAnnotation, Skeleton, SkeletonNode
-from syconn.utils.skeleton import integer_checksum
+from knossos_utils.skeleton import SkeletonAnnotation, Skeleton, SkeletonNode
+from knossos_utils.skeleton import integer_checksum
 
 
 class InvalidFileFormatException(Exception):

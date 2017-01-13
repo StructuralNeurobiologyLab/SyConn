@@ -6,7 +6,7 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 from elektronn.training import predictor
-from syconn.processing import initialization
+from ..processing import initialization
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 import glob

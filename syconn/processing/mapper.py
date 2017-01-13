@@ -19,16 +19,16 @@ from axoness import predict_axoness_from_nodes
 from features import calc_prop_feat_dict
 from learning_rfc import write_feat2csv
 from spiness import assign_neck
-from syconn.utils.datahandler import *
-from syconn.utils.segmentationdataset import SegmentationDataset
+from ..utils.datahandler import *
+from ..utils.segmentationdataset import SegmentationDataset
 from synapticity import parse_synfeature_from_node
 from ..multi_proc.multi_proc_main import start_multiprocess
 from knossos_utils import chunky
 from knossos_utils.knossosdataset import KnossosDataset
 from sklearn.externals import joblib
-from syconn.utils.skeleton import Skeleton
-from syconn.utils.skeleton import SkeletonNode
-from syconn.utils.skeleton import from_skeleton_to_mergelist
+from knossos_utils.skeleton import Skeleton
+from knossos_utils.skeleton import SkeletonNode
+from knossos_utils.skeleton import from_skeleton_to_mergelist
 
 try:
     from syconn.ray_casting.ray_casting_radius import ray_casting_radius

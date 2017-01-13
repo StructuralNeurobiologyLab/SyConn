@@ -13,15 +13,15 @@ from scipy import spatial
 
 import networkx as nx
 
-import syconn.utils.skeleton_utils as su
-from syconn.utils.skeleton import Skeleton
-from syconn.processing.features import celltype_axoness_feature,\
+import knossos_utils.skeleton_utils as su
+from knossos_utils.skeleton import Skeleton
+from ..processing.features import celltype_axoness_feature,\
     spiness_feats_from_nodes,  radius_feats_from_nodes, sj_per_spinehead,\
     pathlength_of_property
-from syconn.processing.learning_rfc import cell_classification
-from syconn.processing.synapticity import syn_sign_prediction
-from syconn.utils.basics import convex_hull_area
-from syconn.utils.datahandler import load_objpkl_from_kzip
+from ..processing.learning_rfc import cell_classification
+from ..processing.synapticity import syn_sign_prediction
+from ..utils.basics import convex_hull_area
+from ..utils.datahandler import load_objpkl_from_kzip
 
 
 class Neuron(object):
