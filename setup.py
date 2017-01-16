@@ -23,7 +23,7 @@ config = {
     'author_email': '',
     'version': '0.1',
     'install_requires': ['cython', 'knossos_utils', 'nose',
-                         'matplotlib', 'sklearn', 'networkx', 'numpy',
+                         'matplotlib', 'sklearn==0.17.1', 'networkx', 'numpy',
                          'scipy', 'seaborn'],
     'scripts': [],  'cmdclass': cmdclass, 'ext_modules': ext_modules,
     'name': 'SyConn',
