@@ -1,7 +1,7 @@
 cython
 numpy
 matplotlib
-sklearn == 0.17.1
+scikit-learn == 0.17.1
 scipy
 networkx
 git+https://github.com/knossos-project/knossos_utils.git
