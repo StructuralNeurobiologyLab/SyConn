@@ -5,8 +5,8 @@ Examples
 ********
 
 This page gives a brief example for a full run of  then main components of SyConn.
-The corresponding code is available in `/examples/full_run_example.py` and
-the example data with all pre-trained models can be found in `SyConnDenseCube`.
+The corresponding code is available in ``/examples/full_run_example.py`` and
+the example data with all pre-trained models can be found in ``SyConnDenseCube(.zip)``.
 
 
 Running the example
