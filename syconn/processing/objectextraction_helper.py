@@ -39,8 +39,7 @@ def gauss_threshold_connected_components_thread(args):
     if not fast_load:
         cset = chunky.load_dataset(path_head_folder)
         bin_data_dict = cset.from_chunky_to_matrix(size, box_offset,
-                                                   filename, hdf5names,
-                                                   label_density=label_density)
+                                                   filename, hdf5names)
     else:
         bin_data_dict = datahandler.load_from_h5py(chunk.folder + filename + ".h5",
                                                    hdf5names, as_dict=True)
@@ -157,8 +156,7 @@ def get_neighbouring_chunks(cset, chunk, chunk_list=None, diagonal=False):
         try:
             this_coordinate = \
                 coordinate + \
-                datahandler.switch_array_entries(np.array([chunk.size[dim], 0, 0]),
-                                        [0, dim])
+                datahandler.switch_array_entries(np.array([chunk.size[dim], 0, 0]), [0, dim])
             neighbour = cset.coord_dict[tuple(this_coordinate)]
             if not chunk_list is None:
                 if neighbour in chunk_list:

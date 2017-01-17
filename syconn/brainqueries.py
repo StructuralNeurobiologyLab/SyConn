@@ -38,7 +38,7 @@ def analyze_dataset(wd):
     type_sorted_wiring(wd)
 
 
-def enrich_tracings_all(wd, overwrite=False, use_qsub=False):
+def enrich_tracings_all(wd, overwrite=False, qsub_pe=None, qsub_queue=None):
     """Run :func: 'enrich_tracings' on available cluster nodes defined by
     somaqnodes or using multiprocessing.
 
@@ -48,11 +48,15 @@ def enrich_tracings_all(wd, overwrite=False, use_qsub=False):
         Path to working directory
     overwrite : bool
         enforce overwriting of existing files
-    use_qsub : bool
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
     """
+    use_qsub = qsub_pe is not None or qsub_queue is not None
     start = time.time()
     skel_dir = wd + '/tracings/'
-    if not os.oath.isdir(wd + '/neurons/'):
+    if not os.path.isdir(wd + '/neurons/'):
         os.makedirs(wd + '/neurons/')
     anno_list = [os.path.join(skel_dir, f) for f in
                  next(os.walk(skel_dir))[2] if 'k.zip' in f]
@@ -63,7 +67,8 @@ def enrich_tracings_all(wd, overwrite=False, use_qsub=False):
         nb_lists = 30
         list_of_lists = [[anno_list[i::nb_lists], wd, overwrite] for i
                          in xrange(nb_lists)]
-        QSUB_script(list_of_lists, 'skeleton_mapping')
+        QSUB_script(list_of_lists, 'skeleton_mapping', queue=qsub_queue,
+                    pe=qsub_pe)
     elif use_qsub and not __QSUB__:
         raise RuntimeError("QSUB not available. Please make sure QSUB is"
                            "configured correctly.")
@@ -413,17 +418,21 @@ def remap_tracings(wd, mapped_skel_paths, dh=None, method='hull', radius=1200,
             write_data2kzip(path, path + 'spiness_feat.csv')
 
 
-def detect_synapses(wd, use_qsub=False):
+def detect_synapses(wd, qsub_pe=None, qsub_queue=None):
     """Detects contact sites between enriched tracings and writes contact site
      summary and synapse summary to working directory.
 
     Parameters
     ----------
     wd : str Path to working directory
-    use_qsub : bool
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
     """
     print "------------------------------\n" \
           "Starting contact site detection with synapse classification."
+    use_qsub = qsub_pe is not None or qsub_queue is not None
     start = time.time()
     nml_list = get_filepaths_from_dir(wd + '/neurons/')
     cs_path = wd + '/contactsites/'
@@ -436,7 +445,8 @@ def detect_synapses(wd, use_qsub=False):
     if use_qsub and __QSUB__:
         list_of_lists = [[list(anno_permutations[i::300]), cs_path]
                          for i in xrange(300)]
-        QSUB_script(list_of_lists, 'synapse_mapping', queue='somaqnodes')
+        QSUB_script(list_of_lists, 'synapse_mapping', queue=qsub_queue,
+                    pe=qsub_pe)
     elif use_qsub and not __QSUB__:
         raise RuntimeError("QSUB not available. Please make sure QSUB is"
                            "configured correctly.")

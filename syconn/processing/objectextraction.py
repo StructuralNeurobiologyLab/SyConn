@@ -67,7 +67,8 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
                                          hdf5_name_membrane=None,
                                          fast_load=False,
                                          suffix="",
-                                         use_qsub=False):
+                                         qsub_pe=None,
+                                         qsub_queue=None):
     """
     Extracts connected component from probability maps
     1. Gaussian filter (defined by sigma)
@@ -128,8 +129,10 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
         from them.
     suffix: str
         Suffix for the intermediate results
-    use_qsub: boolean
-        Whether or not to use qsub
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
 
     Returns
     -------
@@ -173,7 +176,7 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
              label_density, membrane_filename, membrane_kd_path,
              hdf5_name_membrane, fast_load, suffix])
 
-    if not use_qsub:
+    if qsub_pe is None and qsub_queue is None:
         results = mpm.start_multiprocess(oeh.gauss_threshold_connected_components_thread,
                                          multi_params, debug=debug)
 
@@ -185,7 +188,7 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
     elif mpm.__QSUB__:
         path_to_out = mpm.QSUB_script(multi_params,
                                       "gauss_threshold_connected_components",
-                                      queue="full")
+                                      pe=qsub_pe, queue=qsub_queue)
 
         out_files = glob.glob(path_to_out + "/*")
         results_as_list = []
@@ -201,7 +204,7 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
 
 def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                        chunk_translator, debug, suffix="",
-                       use_qsub=False):
+                       qsub_pe=None, qsub_queue=None):
     """
     Makes labels unique across chunks
 
@@ -226,8 +229,10 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
         allows for better error messages
     suffix: str
         Suffix for the intermediate results
-    use_qsub: boolean
-        Whether or not to use qsub
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
 
     """
 
@@ -241,20 +246,20 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
         multi_params.append([cset.chunk_dict[nb_chunk], filename, hdf5names,
                              this_max_nb_dict, suffix])
 
-    if not use_qsub:
+    if qsub_pe is None and qsub_queue is None:
         results = mpm.start_multiprocess(oeh.make_unique_labels_thread,
                                          multi_params, debug=debug)
 
     elif mpm.__QSUB__:
         path_to_out = mpm.QSUB_script(multi_params,
                                       "make_unqiue_labels",
-                                      queue="full")
+                                      pe=qsub_pe, queue=qsub_queue)
     else:
         raise Exception("QSUB not available")
 
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
-                     overlap, debug, suffix="", use_qsub=False):
+                     overlap, debug, suffix="", qsub_pe=None, qsub_queue=None):
     """
     Creates a stitch list for the overlap region between chunks
 
@@ -279,8 +284,10 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
         allows for better error messages
     suffix: str
         Suffix for the intermediate results
-    use_qsub: boolean
-        Whether or not to use qsub
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
 
     Returns:
     --------
@@ -293,7 +300,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
         multi_params.append([cset, nb_chunk, filename, hdf5names,
                              stitch_overlap, overlap, suffix, chunk_list])
 
-    if not use_qsub:
+    if qsub_pe is None and qsub_queue is None:
         results = mpm.start_multiprocess(oeh.make_stitch_list_thread,
                                          multi_params, debug=debug)
 
@@ -310,7 +317,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
     elif mpm.__QSUB__:
         path_to_out = mpm.QSUB_script(multi_params,
                                       "make_stitch_list_thread",
-                                      queue="full")
+                                      pe=qsub_pe, queue=qsub_queue)
 
         out_files = glob.glob(path_to_out + "/*")
 
@@ -373,7 +380,7 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
 
 
 def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
-                     debug, suffix="", use_qsub=False):
+                     debug, suffix="", qsub_pe=None, qsub_queue=None):
     """
     Applies merge list to all chunks
 
@@ -395,8 +402,10 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
         allows for better error messages
     suffix: str
         Suffix for the intermediate results
-    use_qsub: boolean
-        Whether or not to use qsub
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
     """
 
     multi_params = []
@@ -410,22 +419,24 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
         multi_params.append([cset.chunk_dict[nb_chunk], filename, hdf5names,
                              merge_list_dict_path, suffix])
 
-    if not use_qsub:
-        results = mpm.start_multiprocess(oeh.apply_merge_list_thread,
-                                         multi_params, debug=debug)
+    results = mpm.start_multiprocess(oeh.apply_merge_list_thread,
+                                     multi_params, debug=debug)
+    # if qsub_pe is None and qsub_queue is None:
+    #     results = mpm.start_multiprocess(oeh.apply_merge_list_thread,
+    #                                      multi_params, debug=debug)
 
-    elif mpm.__QSUB__:
-        raise NotImplementedError()
+    # elif mpm.__QSUB__:
+    #     raise NotImplementedError()
         # path_to_out = mpm.QSUB_script(multi_params,
         #                               "apply_merge_list",
         #                               cset, chunk_list, queue="red3somaq")
 
-    else:
-        raise Exception("QSUB not available")
+    # else:
+    #     raise Exception("QSUB not available")
 
 
 def extract_voxels(cset, filename, hdf5names, debug=False, chunk_list=None,
-                   suffix="", use_qsub=False):
+                   suffix="", qsub_pe=None, qsub_queue=None):
     """
     Extracts voxels for each component id
 
@@ -445,8 +456,10 @@ def extract_voxels(cset, filename, hdf5names, debug=False, chunk_list=None,
         allows for better error messages
     suffix: str
         Suffix for the intermediate results
-    use_qsub: boolean
-        Whether or not to use qsub
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
 
     """
 
@@ -458,14 +471,14 @@ def extract_voxels(cset, filename, hdf5names, debug=False, chunk_list=None,
         multi_params.append([cset.chunk_dict[nb_chunk], cset.path_head_folder,
                              filename, hdf5names, suffix])
 
-    if not use_qsub:
+    if qsub_pe is None and qsub_queue is None:
         results = mpm.start_multiprocess(oeh.extract_voxels_thread,
                                          multi_params, debug=debug)
 
     elif mpm.__QSUB__:
         path_to_out = mpm.QSUB_script(multi_params,
                                       "extract_voxels",
-                                      queue="full")
+                                      pe=qsub_pe, queue=qsub_queue)
 
     else:
         raise Exception("QSUB not available")
@@ -503,7 +516,8 @@ def concatenate_mappings(cset, filename, hdf5names, debug=False, suffix=""):
 
 
 def create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
-                               debug=False, suffix="", use_qsub=False):
+                               debug=False, suffix="", qsub_pe=None,
+                               qsub_queue=None):
     """
     Creates object instances from extracted voxels
 
@@ -522,8 +536,10 @@ def create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
         allows for better error messages
     suffix: str
         Suffix for the intermediate results
-    use_qsub: boolean
-        Whether or not to use qsub
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
 
     """
 
@@ -548,21 +564,21 @@ def create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
                                  counter])
             counter += 1
 
-    if not use_qsub:
+    if qsub_pe is None and qsub_queue is None:
         mpm.start_multiprocess(oeh.create_objects_from_voxels_thread,
                                multi_params, debug=debug)
 
     elif mpm.__QSUB__:
         path_to_out = mpm.QSUB_script(multi_params,
                                       "create_objects_from_voxels",
-                                      queue="full")
+                                      pe=qsub_pe, queue=qsub_queue)
 
     else:
         raise Exception("QSUB not available")
 
 
-def create_datasets_from_objects(cset, filename, hdf5names,
-                                 debug=False, suffix="", use_qsub=False):
+def create_datasets_from_objects(cset, filename, hdf5names, debug=False,
+                                 suffix="", qsub_pe=None, qsub_queue=None):
     """
     Create dataset instance from objects
 
@@ -579,8 +595,10 @@ def create_datasets_from_objects(cset, filename, hdf5names,
         allows for better error messages
     suffix: str
         Suffix for the intermediate results
-    use_qsub: boolean
-        Whether or not to use qsub
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
 
     """
     multi_params = []
@@ -588,14 +606,14 @@ def create_datasets_from_objects(cset, filename, hdf5names,
         multi_params.append(
             [cset.path_head_folder, hdf5_name, filename, suffix])
 
-    if not use_qsub:
+    if qsub_pe is None and qsub_queue is None:
         mpm.start_multiprocess(oeh.create_datasets_from_objects_thread,
                                multi_params, debug=debug)
 
     elif mpm.__QSUB__:
         path_to_out = mpm.QSUB_script(multi_params,
                                       "create_datasets_from_objects",
-                                      queue="full")
+                                      pe=qsub_pe, queue=qsub_queue)
 
     else:
         raise Exception("QSUB not available")
@@ -614,7 +632,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                                   membrane_kd_path=None,
                                   hdf5_name_membrane=None,
                                   suffix="",
-                                  use_qsub=False):
+                                  qsub_pe=None,
+                                  qsub_queue=None):
     """
     Main function for the object extraction step; combines all needed steps
 
@@ -667,8 +686,10 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
         data in the saved chunk
     suffix: str
         Suffix for the intermediate results
-    use_qsub: boolean
-        Whether or not to use qsub
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
 
     """
     all_times = []
@@ -706,7 +727,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
         membrane_kd_path=membrane_kd_path,
         hdf5_name_membrane=hdf5_name_membrane,
         fast_load=True, suffix=suffix,
-        use_qsub=use_qsub)
+        qsub_pe=qsub_pe,
+        qsub_queue=qsub_queue)
 
     stitch_overlap = overlap_info[1]
     overlap = overlap_info[0]
@@ -743,7 +765,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     time_start = time.time()
     make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                        chunk_translator, debug, suffix=suffix,
-                       use_qsub=use_qsub)
+                       qsub_pe=qsub_pe, qsub_queue=qsub_queue)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
     print "\nTime needed for unique labels: %.3fs" % all_times[-1]
@@ -753,7 +775,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     time_start = time.time()
     stitch_list = make_stitch_list(cset, filename, hdf5names, chunk_list,
                                    stitch_overlap, overlap, debug,
-                                   suffix=suffix, use_qsub=use_qsub)
+                                   suffix=suffix, qsub_pe=qsub_pe,
+                                   qsub_queue=qsub_queue)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
     print "\nTime needed for stitch list: %.3fs" % all_times[-1]
@@ -773,7 +796,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
 
     time_start = time.time()
     apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
-                     debug, suffix=suffix, use_qsub=use_qsub)
+                     debug, suffix=suffix, qsub_pe=qsub_pe,
+                     qsub_queue=qsub_queue)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
     print "\nTime needed for applying merge list: %.3fs" % all_times[-1]
@@ -794,7 +818,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
 
     time_start = time.time()
     extract_voxels(cset, filename, hdf5names, debug=debug,
-                   chunk_list=chunk_list, suffix=suffix, use_qsub=use_qsub)
+                   chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
+                   qsub_queue=qsub_queue)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
     print "\nTime needed for extracting voxels: %.3fs" % all_times[-1]
@@ -811,7 +836,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
 
     time_start = time.time()
     create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
-                               debug=debug, suffix=suffix, use_qsub=use_qsub)
+                               debug=debug, suffix=suffix, qsub_pe=qsub_pe,
+                               qsub_queue=qsub_queue)
     all_times.append(time.time() - time_start)
     step_names.append("create objects from voxels")
     print "\nTime needed for creating objects: %.3fs" % all_times[-1]
@@ -820,7 +846,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
 
     time_start = time.time()
     create_datasets_from_objects(cset, filename, hdf5names,
-                                 debug=debug, suffix=suffix, use_qsub=use_qsub)
+                                 debug=debug, suffix=suffix, qsub_pe=qsub_pe,
+                                 qsub_queue=qsub_queue)
     all_times.append(time.time() - time_start)
     step_names.append("create datasets from objects")
     print "\nTime needed for creating datasets: %.3fs" % all_times[-1]
@@ -849,7 +876,8 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
                                                      membrane_filename=None,
                                                      membrane_kd_path=None,
                                                      hdf5_name_membrane=None,
-                                                     use_qsub=False):
+                                                     qsub_pe=None,
+                                                     qsub_queue=None):
     """
     Sweeps over different thresholds. Each objectextraction resutls are saved in
     a seperate folder, all intermediate steps are saved with a different suffix
@@ -900,9 +928,10 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
         data in the saved chunk
     suffix: str
         Suffix for the intermediate results
-    use_qsub: boolean
-        Whether or not to use qsub
-
+    qsub_pe: str
+        qsub parallel environment name
+    qsub_queue: str or None
+        qsub queue name
     """
 
     thresholds = np.array(
@@ -925,7 +954,8 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
                                       membrane_kd_path=membrane_kd_path,
                                       hdf5_name_membrane=hdf5_name_membrane,
                                       suffix=str(nb),
-                                      use_qsub=use_qsub,
+                                      qsub_pe=qsub_pe,
+                                      qsub_queue=qsub_queue,
                                       debug=False)
         all_times.append(time.time() - time_start)
 
