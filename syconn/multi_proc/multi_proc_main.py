@@ -15,7 +15,6 @@ import re
 import shutil
 import string
 import subprocess
-from ..utils.basics import negative_to_zero
 import sys
 import time
 
@@ -28,18 +27,23 @@ except subprocess.CalledProcessError:
     print "QSUB not found, switching to single node multiprocessing."
     __QSUB__ = False
 
-qsub_queue_dict = {"single": "", "half": "", "full": ""}
-
 home_dir = os.environ['HOME'] + "/"
-path_to_scripts = os.path.dirname(__file__)
+path_to_scripts_default = os.path.dirname(__file__)
 qsub_work_folder = "%s/QSUB/" % home_dir
 subp_work_folder = "%s/SUBP/" % home_dir
 username = getpass.getuser()
 python_path = sys.executable
 
 
-def QSUB_script(params, name, queue="single", sge_additional_flags='',
-                suffix="", job_name="default"):
+def negative_to_zero(a):
+    if a > 0:
+        return a
+    else:
+        return 0
+
+
+def QSUB_script(params, name, queue=None, pe=None, n_cores=1, sge_additional_flags='',
+                suffix="", job_name="default", script_folder=None):
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
@@ -53,8 +57,10 @@ def QSUB_script(params, name, queue="single", sge_additional_flags='',
         list of all parameter sets to be processed
     name: str
         name of job - specifies script with QSUB_%s % name
-    queue: str
-        queue name or queue dict key name (latter has higher priority)
+    queue: str or None
+        queue name
+    pe: str
+        parallel environment name
     sge_additional_flags: str
         additional command line flags to be passed to qsub
     suffix: str
@@ -63,6 +69,8 @@ def QSUB_script(params, name, queue="single", sge_additional_flags='',
     job_name: str
         unique name for job - or just 'default' which gets changed into a
         random name automatically
+    script_folder: str or None
+        directory in which the QSUB_* file is located
 
     Returns
     -------
@@ -72,14 +80,21 @@ def QSUB_script(params, name, queue="single", sge_additional_flags='',
     """
     if job_name == "default":
         letters = string.ascii_lowercase
-        job_name = "".join([letters[l] for l in np.random.randint(0, len(letters), 10)])
+        job_name = "".join([letters[l] for l in
+                            np.random.randint(0, len(letters), 10)])
         print "Random job_name created: %s" % job_name
     else:
-        print "WARNING: running multiple jobs via qsub is only supported with non-default job_names"
+        print "WARNING: running multiple jobs via qsub is only supported " \
+              "with non-default job_names"
 
     if len(job_name) > 10:
-        print "WARNING: Your job_name is longer than 10. job_names have to be distinguishable " \
-              "with only using their first 10 characters."
+        print "WARNING: Your job_name is longer than 10. job_names have " \
+              "to be distinguishable with only using their first 10 characters."
+
+    if script_folder is not None:
+        path_to_scripts = script_folder
+    else:
+        path_to_scripts = path_to_scripts_default
 
     if os.path.exists(qsub_work_folder+"/%s_folder%s/" % (name, suffix)):
         shutil.rmtree(qsub_work_folder+"/%s_folder%s/" % (name, suffix))
@@ -91,20 +106,12 @@ def QSUB_script(params, name, queue="single", sge_additional_flags='',
     path_to_err = qsub_work_folder+"/%s_folder%s/err/" % (name, suffix)
     path_to_out = qsub_work_folder+"/%s_folder%s/out/" % (name, suffix)
 
-    if queue in qsub_queue_dict:
-        sge_queue = qsub_queue_dict[queue]
+    if pe is not None:
+        sge_queue_option = "-pe %s %d" % (pe, n_cores)
+    elif queue is not None:
+        sge_queue_option = "-q %s" % queue
     else:
-        sge_queue = queue
-
-    p = subprocess.Popen("qconf -sql", shell=True, stdout=subprocess.PIPE)
-    queue_exists = False
-
-    for line in iter(p.stdout.readline, ''):
-        if queue == line.strip():
-            queue_exists = True
-
-    if not queue_exists:
-        raise Exception("Queue does not exist")
+        raise Exception("No queue or parallel environment defined")
 
     if not os.path.exists(path_to_storage):
         os.makedirs(path_to_storage)
@@ -140,8 +147,8 @@ def QSUB_script(params, name, queue="single", sge_additional_flags='',
 
         os.chmod(this_sh_path, 0744)
 
-        subprocess.call("qsub -q {0} -o {1} -e {2} -N {3} {4} {5}".format(
-            sge_queue,
+        subprocess.call("qsub {0} -o {1} -e {2} -N {3} {4} {5}".format(
+            sge_queue_option,
             job_log_path,
             job_err_path,
             job_name,
@@ -157,13 +164,16 @@ def QSUB_script(params, name, queue="single", sge_additional_flags='',
             if job_name[:10] in line:
                 nb_lines += 1
         if nb_lines == 0:
-            sys.stdout.write('\rAll jobs were finished in %.2fs\n' % (time.time()-time_start))
+            sys.stdout.write('\rAll jobs were finished in %.2fs\n' %
+                             (time.time()-time_start))
             break
         else:
-            progress = 100*(len(params) - negative_to_zero(nb_lines))/float(len(params))
-            sys.stdout.write('\rProgress: %.2f%% in %.2fs' % (progress, time.time()-time_start))
+            progress = 100*(len(params) - negative_to_zero(nb_lines))/\
+                       float(len(params))
+            sys.stdout.write('\rProgress: %.2f%% in %.2fs' %
+                             (progress, time.time()-time_start))
             sys.stdout.flush()
-        time.sleep(1.)
+        time.sleep(5.)
 
     return path_to_out
 
@@ -194,8 +204,9 @@ def SUBP_script(params, name, suffix="", delay=0):
     if os.path.exists(subp_work_folder + "/%s_folder%s/" % (name, suffix)):
         shutil.rmtree(subp_work_folder + "/%s_folder%s/" % (name, suffix))
 
-    path_to_script = path_to_scripts + "/QSUB_%s.py" % (name)
-    path_to_storage = subp_work_folder + "/%s_folder%s/storage/" % (name, suffix)
+    path_to_script = path_to_scripts_default + "/QSUB_%s.py" % (name)
+    path_to_storage = subp_work_folder + "/%s_folder%s/storage/" % (name,
+                                                                    suffix)
     path_to_out = subp_work_folder + "/%s_folder%s/out/" % (name, suffix)
 
     if not os.path.exists(path_to_storage):
