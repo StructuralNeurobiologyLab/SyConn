@@ -240,7 +240,7 @@ def enrich_tracings(anno_list, wd, map_objects=True, method='hull', radius=1200,
 
 def remap_tracings_all(wd, dest_dir=None, recalc_prop_only=False,
                        method='hull', context_range=6000,
-                       use_qsub=False):
+                       qsub_pe=None, qsub_queue=None):
     """Run remap_tracings on available cluster nodes defined by
     somaqnodes or using single node multiprocessing.
 
@@ -258,8 +258,13 @@ def remap_tracings_all(wd, dest_dir=None, recalc_prop_only=False,
         Method for object mapping procedure
     context_range : int
         Context range for property features
-    use_qsub : bool
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
     """
+    use_qsub = qsub_pe is not None or qsub_queue is not None
+
     anno_list = get_filepaths_from_dir(wd + '/neurons/')
     np.random.shuffle(anno_list)
     if dest_dir is not None and not os.path.isdir(dest_dir):
@@ -269,7 +274,8 @@ def remap_tracings_all(wd, dest_dir=None, recalc_prop_only=False,
                       recalc_prop_only, method, context_range]
                      for i in xrange(nb_processes)]
     if use_qsub and __QSUB__:
-        QSUB_script(list_of_lists, 'skeleton_remapping')
+        QSUB_script(list_of_lists, 'skeleton_remapping', queue=qsub_queue,
+                    pe=qsub_pe)
     elif use_qsub and not __QSUB__:
         raise RuntimeError("QSUB not available. Please make sure QSUB is"
                            "configured correctly.")
