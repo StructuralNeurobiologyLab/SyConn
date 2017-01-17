@@ -7,7 +7,7 @@
 
 import numpy as np
 from sklearn.externals import joblib
-from sklearn.model_selection import LeaveOneOut
+from sklearn import cross_validation
 from sklearn.ensemble import RandomForestClassifier, AdaBoostClassifier
 from sklearn.linear_model import LogisticRegressionCV
 from sklearn.svm import SVC
@@ -371,13 +371,13 @@ def loo_proba(x, y, clf_used='rf', use_pca=False, params=None):
         # print np.where(np.isnan(x))
         # print "Found %d nans in features, converting to number." % nans_in_X
         x = np.nan_to_num(x)
-    loo = LeaveOneOut()
+    loo = cross_validation.LeaveOneOut(len(x))
     shape = (len(x), len(list(set(y))))
     prob = np.zeros(shape, dtype=np.float)
     pred = np.zeros((len(x), 1), dtype=np.int)
     cnt = 0
     # print "rf params:", rf_params
-    for train_ixs, test_ixs in loo.split(x):
+    for train_ixs, test_ixs in loo:
         x_train = x[train_ixs]
         x_test = x[test_ixs]
         y_train = y[train_ixs]
