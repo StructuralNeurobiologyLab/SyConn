@@ -11,6 +11,7 @@
 QSUB wrapper for cell object mapping using enrich_tracings from brainqueries.
 """
 import sys
+from multiprocessing import cpu_count
 from syconn.brainqueries import enrich_tracings
 from syconn.utils.datahandler import DataHandler
 import cPickle as pickle
@@ -24,6 +25,7 @@ if __name__ == '__main__':
         nml_list = pickle.load(f)
         wd = pickle.load(f)
         overwrite = pickle.load(f)
+
     dh = DataHandler(wd)
-    dh.nb_cpus = 16
-    enrich_tracings(nml_list, overwrite=overwrite)
+    dh.nb_cpus = int(cpu_count())
+    enrich_tracings(nml_list, wd, dh=dh, overwrite=overwrite)
