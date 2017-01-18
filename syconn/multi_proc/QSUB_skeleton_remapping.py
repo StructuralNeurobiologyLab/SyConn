@@ -11,8 +11,8 @@
 QSUB wrapper for cell object mapping using remap_tracings from brainqueries.
 """
 import sys
-from ..brainqueries import remap_tracings
-from ..multi_proc.multi_proc_main import start_multiprocess
+from syconn.brainqueries import remap_tracings
+from syconn.multi_proc.multi_proc_main import start_multiprocess
 import cPickle as pickle
 
 

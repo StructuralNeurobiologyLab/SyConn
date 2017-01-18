@@ -8,7 +8,7 @@
 import sys
 
 import cPickle as pkl
-from ..processing import objectextraction_helper as oeh
+from syconn.processing import objectextraction_helper as oeh
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
