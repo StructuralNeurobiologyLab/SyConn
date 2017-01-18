@@ -316,7 +316,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
 
     elif mpm.__QSUB__:
         path_to_out = mpm.QSUB_script(multi_params,
-                                      "make_stitch_list_thread",
+                                      "make_stitch_list",
                                       pe=qsub_pe, queue=qsub_queue)
 
         out_files = glob.glob(path_to_out + "/*")
@@ -419,20 +419,20 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
         multi_params.append([cset.chunk_dict[nb_chunk], filename, hdf5names,
                              merge_list_dict_path, suffix])
 
-    results = mpm.start_multiprocess(oeh.apply_merge_list_thread,
-                                     multi_params, debug=debug)
-    # if qsub_pe is None and qsub_queue is None:
-    #     results = mpm.start_multiprocess(oeh.apply_merge_list_thread,
-    #                                      multi_params, debug=debug)
+    # results = mpm.start_multiprocess(oeh.apply_merge_list_thread,
+    #                                  multi_params, debug=debug)
 
-    # elif mpm.__QSUB__:
-    #     raise NotImplementedError()
-        # path_to_out = mpm.QSUB_script(multi_params,
-        #                               "apply_merge_list",
-        #                               cset, chunk_list, queue="red3somaq")
+    if qsub_pe is None and qsub_queue is None:
+        results = mpm.start_multiprocess(oeh.apply_merge_list_thread,
+                                         multi_params, debug=debug)
 
-    # else:
-    #     raise Exception("QSUB not available")
+    elif mpm.__QSUB__:
+        path_to_out = mpm.QSUB_script(multi_params,
+                                      "apply_merge_list",
+                                      pe=qsub_pe, queue=qsub_queue)
+
+    else:
+        raise Exception("QSUB not available")
 
 
 def extract_voxels(cset, filename, hdf5names, debug=False, chunk_list=None,
