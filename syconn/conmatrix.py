@@ -241,6 +241,7 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
         supp += '_CS'
         plot_wiring_cs(wiring, den_borders, ax_borders, confidence_lvl,
                     binary, wd, add_fname=supp)
+
         plot_wiring_cs(wiring_axoness, den_borders, ax_borders,
                     confidence_lvl, binary, wd, add_fname=supp+'_axon_axon')
 
@@ -261,9 +262,9 @@ def type_sorted_wiring(wd, confidence_lvl=0.3, binary=False, max_syn_size=0.4,
                     binary, wd, add_fname=supp, big_entries=big_entries,
                     maj_vote=maj_vote)
 
-        plot_wiring(wiring_axoness, den_borders, ax_borders, max_val_axon_axon,
-                    confidence_lvl, binary, wd, add_fname=supp+'_axon_axon',
-                    big_entries=big_entries, maj_vote=maj_vote_axoness)
+        # plot_wiring(wiring_axoness, den_borders, ax_borders, max_val_axon_axon,
+        #             confidence_lvl, binary, wd, add_fname=supp+'_axon_axon',
+        #             big_entries=big_entries, maj_vote=maj_vote_axoness)
 
         plot_wiring_cum(cum_wiring, class_ranges(dendrite_pred),
                         class_ranges(axon_pred), confidence_lvl, max_val,
