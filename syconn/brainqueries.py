@@ -68,7 +68,7 @@ def enrich_tracings_all(wd, overwrite=False, qsub_pe=None, qsub_queue=None):
         list_of_lists = [[anno_list[i::nb_lists], wd, overwrite] for i
                          in xrange(nb_lists)]
         QSUB_script(list_of_lists, 'skeleton_mapping', queue=qsub_queue,
-                    pe=qsub_pe)
+                    pe=qsub_pe, n_cores=np.max((int(cpu_count() / 2), 1)))
     elif use_qsub and not __QSUB__:
         raise RuntimeError("QSUB not available. Please make sure QSUB is"
                            "configured correctly.")
@@ -275,7 +275,7 @@ def remap_tracings_all(wd, dest_dir=None, recalc_prop_only=False,
                      for i in xrange(nb_processes)]
     if use_qsub and __QSUB__:
         QSUB_script(list_of_lists, 'skeleton_remapping', queue=qsub_queue,
-                    pe=qsub_pe)
+                    pe=qsub_pe, n_cores=np.max((int(cpu_count()), 1)))
     elif use_qsub and not __QSUB__:
         raise RuntimeError("QSUB not available. Please make sure QSUB is"
                            "configured correctly.")
@@ -452,7 +452,7 @@ def detect_synapses(wd, qsub_pe=None, qsub_queue=None):
         list_of_lists = [[list(anno_permutations[i::300]), cs_path]
                          for i in xrange(300)]
         QSUB_script(list_of_lists, 'synapse_mapping', queue=qsub_queue,
-                    pe=qsub_pe)
+                    pe=qsub_pe, n_cores=np.max((int(cpu_count()), 1)))
     elif use_qsub and not __QSUB__:
         raise RuntimeError("QSUB not available. Please make sure QSUB is"
                            "configured correctly.")
