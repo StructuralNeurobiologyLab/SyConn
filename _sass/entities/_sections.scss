@@ -1,0 +1,154 @@
+html, body {
+	height: 100%;
+	background: #efefef;
+	background: #efefef url(../images/bg.jpg) no-repeat top center;
+	background-size: cover;
+}
+
+.page-content {
+	background: #fff;
+	margin: 2em 1em 0;
+	box-shadow: 0 4px 9px 0 rgba(23,28,33,0.3);
+	background: #fff;
+	border-radius: 5px;
+	margin-bottom: -50px;
+	position: relative;
+	z-index: 2;
+}
+
+.section {
+	article {
+		padding: 1em 2em;
+	}
+}
+
+.inbetween-article {
+	padding-left: 4em;
+	padding-right: 4em;
+	background: rgb(250, 250, 250);
+	border-top: 1px solid #eee;
+	border-bottom: 1px solid #eee;
+}
+
+@include breakpoint($on-medium) {
+	.page-separator {
+		background: #efefef url(../images/bg.jpg) no-repeat top center;
+		background-size: cover;
+		border-left: 1px solid #bbb;
+		position: fixed;
+		height: calc(100% + 150px);
+		width: calc(25% + 150px);
+		transform: rotate(-5deg);
+		z-index: 3;
+		top: -75px;
+		right: -75px;
+	}
+
+	.page-content {
+		width: 75%;
+		margin: 0;
+		border-radius: 0;
+		background: #fff;
+		position: relative;
+		z-index: 2;
+	}
+
+	.section article {
+		padding: 1em calc(150px + 2em) 1em 2em;
+	}
+
+	.inbetween-article {
+		padding: 1em calc(150px + 4em) 1em 4em !important;
+	}
+}
+
+.header {
+	padding: 4em;
+}
+
+.section:last-of-type {
+	padding-bottom: 4em;
+}
+
+.bottom-footer {
+	margin-top: 0;
+	background: #313438;
+	color: #9b9fa6;
+	font-family: "Oak Light", sans-serif;
+	font-size: 1.3rem;
+
+	a {
+		color: #9b9fa6;
+		transition: color .2s linear;
+
+		&:hover {
+			color: #fff;
+		}
+	}
+
+	> .top {
+		padding: 75px 4em 0;
+	}
+
+	> .footer {
+		margin-top: 2em;
+		padding: 1em 2em;
+		background: #292c2f;
+		color: #777b81;
+	}
+
+	@include breakpoint($on-medium) {
+		> .top {
+			padding-top: 2em;
+			padding-right: calc(30% + 2em);
+		}
+
+		> .footer {
+			padding-right: calc(30% + 2em);
+		}
+
+		.col {
+			margin-left: 1em;
+			margin-right: 1em;
+		}
+	}
+}
+
+.refer-links {
+	margin-bottom: 4em;
+	align-items: center;
+	justify-content: space-between;
+
+	> .col {
+		flex-basis: 300px;
+		flex-grow: 0;
+		padding-top: 2em;
+	}
+
+	.refer-link {
+		opacity: .5;
+		transition: opacity .2s linear;
+
+		&:hover {
+			opacity: 1;
+		}
+	}
+}
+
+figure.MPI-Logo {
+	display: table;
+	width: 100%;
+
+	> img {
+		display: table-cell;
+		width: 96px;
+		vertical-align: middle;
+	}
+
+	> span {
+		padding-left: 1em;
+		font-size: 1.4rem;
+		display: table-cell;
+		vertical-align: middle;
+	}
+}

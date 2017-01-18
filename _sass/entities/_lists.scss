@@ -1,0 +1,27 @@
+ol.footnotes {
+	list-style: none;
+	font-size: 1.3rem;
+
+	sup, sub {
+		position: absolute;
+		left: -.6em;
+	}
+
+	li {
+		margin-left: .6em;
+		position: relative;
+	}
+}
+
+ul.button-list {
+	list-style: none;
+
+	&.-horizontal {
+		li {
+			display: list-item;
+			@include breakpoint($on-medium) {
+			display: inline-block;
+			}
+		}
+	}
+}

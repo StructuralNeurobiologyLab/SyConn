@@ -1,0 +1,23 @@
+.code-block {
+	@extend .-no-rhythm;
+	background: #fff;
+	border-radius: 4px;
+	box-shadow: 0 0 0 1px #e1e4e6;
+	font-family: monospace;
+	font-size: 1.3rem;
+	line-height: 1.5;
+	padding: 0;
+	overflow-x: scroll;
+
+	> * {
+		display: table-cell;
+		padding: 12px;
+	}
+
+	> .line-numbers {
+		text-align: right;
+		border-right: 1px solid #e1e4e6;
+		color: #5dc79e;
+		border-radius: 2px 0 0 2px;
+	}
+}

@@ -1,0 +1,71 @@
+---
+layout: default
+permalink: /about/
+---
+
+
+
+<div class="main-content container -medium _center">
+	<header class="header row container -medium _center">
+		<article class="row__col">
+			<h2 class="subtitle">About</h2>
+			<p>Something</p>
+		</article>
+
+		<aside class="row__col">
+			{% include navigation.html %}
+		</aside>
+	</header>
+
+	<section class="row">
+		<div class="row__col">
+			<h2 class="subtitle" id="about-us">About us</h2>
+
+			<p><strong>SyConn</strong> is developed by … and … at Max Planck Institute for Medical Research in Heidelberg, Germany.</p>
+
+			<div class="about-user">
+				<img class="image" src="{{ "images/team/sven.jpg" | prepend: site.baseurl }}">
+
+				<div class="description">
+					<h4>Sven Dorkenwald</h4>
+					<p>Master Student of Informatics</p>
+				</div>
+			</div>
+
+			<div class="about-user">
+				<img class="image" src="{{ "images/team/philipp.jpg" | prepend: site.baseurl }}">
+				<div class="description">
+					<h4>Philipp Schubert</h4>
+					<p>Master Student of Physics</p>
+				</div>
+			</div>
+
+			<div class="about-user">
+				<img class="image" src="{{ "images/team/marius.jpg" | prepend: site.baseurl }}">
+				<div class="description">
+					<h4>Marius Killinger</h4>
+					<p>Master Student of Physics</p>
+				</div>
+			</div>
+
+			<div class="about-user">
+				<img class="image" src="{{ "images/team/joergen.png" | prepend: site.baseurl }}">
+				<div class="description">
+					<h4>Jörgen Kornfeld</h4>
+					<p>Ph.D. Student</p>
+				</div>
+			</div>
+		</div>
+
+		
+		<div class="row__col">
+			<h2 class="subtitle">References</h2>
+
+			<p>SyConn is based on <strong class="-strong-light">ELEKTRONN</strong> (<a href="http://elektronn.org">elektronn.org</a>) and the KNOSSOS Python tools.<sup>1</sup></p>
+
+			<ol class="footnotes">
+				<li><sup>1</sup>KNOSSOS is used for visualization and annotation of 3D EM data sets.</li>
+			</ol>
+		</div>
+	</section>
+</div>

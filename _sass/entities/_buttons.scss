@@ -1,0 +1,62 @@
+button,
+.button {
+	background: $accent-color;
+	border: 1px solid darken($accent-color, 5);
+	border-bottom-color: darken($accent-color, 10);
+	border-radius: 3px;
+	box-shadow: 0 1px 5px #f1f1f1;
+	color: white;
+	font-family: "Oak Light", sans-serif;
+	font-size: 1.4rem;
+	padding: .5em 1.5em;
+	pointer: cursor;
+	transition: all .2s linear;
+	bottom: 0;
+	position: relative;
+
+	&:hover {
+		bottom: 2px;
+		color: #fff;
+		background: lighten($accent-color, 5);
+		box-shadow: 0 2px 5px darken(#f1f1f1, 20);
+	}
+
+	&:active {
+		background: darken($accent-color, 5);
+	}
+
+	.icon {
+		margin-right: .5em;
+	}
+}
+
+// button,
+// .button {
+// 	background: $accent-color;
+// 	border-radius: 4px;
+// 	position: relative;
+// 	box-shadow: 0 4px 6px rgba(50,50,93,0.11),0 1px 3px rgba(0,0,0,0.08);
+// 	color: white;
+// 	font-family: "Oak Light", sans-serif;
+// 	font-size: 1.4rem;
+// 	padding: .5em 1.5em;
+// 	pointer: cursor;
+// 	transition: all .2s linear;
+// 	bottom: 0;
+
+// 	&:hover {
+// 		bottom: 2px;
+// 		color: #fff;
+// 		background: lighten($accent-color, 10);
+// 	}
+
+// 	&:active {
+// 		background: darken($accent-color, 10);
+// 	}
+
+// 	.icon {
+// 		font-size: 2.0rem;
+// 		margin-right: .25em;
+// 		vertical-align: bottom;
+// 	}
+// }

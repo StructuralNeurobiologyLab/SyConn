@@ -1,0 +1,37 @@
+.about-gallery {
+	@include breakpoint($on-medium) {
+		flex-wrap: nowrap;
+
+		.col + .col {
+			position: relative; 
+
+			&:before {
+				position: absolute;
+				height: 100%;
+				width: 1px;
+				background: #ccc;
+				content: "";
+				left: 0;
+				top: 0;
+				transform: rotate(-5deg);
+			}
+		}
+
+		.user + .user {
+			border-top: 1px solid #ccc;
+		}
+	}
+
+	.user {
+		padding: 2em 2em 1em;
+		text-align: center;
+	}
+
+	.image {
+		width: 128px;
+		min-width: 128px;
+		border-radius: 50%;
+		border: 1px solid #fff;
+		box-shadow: 0px 0px 0px 1px #ccc;
+	}
+}

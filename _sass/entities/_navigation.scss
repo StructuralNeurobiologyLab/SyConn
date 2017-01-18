@@ -1,0 +1,149 @@
+ul.sub-navigation {
+	list-style: none;
+
+	li + li {
+		border-top: 1px solid #424548;
+		padding: 1em 0 0;
+	}
+}
+
+ul.main-navigation {
+	list-style: none;
+	font-family: "Oak Light", sans-serif;
+
+	a {
+		color: inherit;
+	}
+
+	.link {
+		padding: .5em 1em;
+		transition: background .2s linear, color .2s linear;
+		border-radius: 4px;
+
+		&:hover {
+			background: #9b9fa6;
+			color: #fff;
+		}
+	}
+
+	.icon {
+		width: 24px;
+	}
+}
+
+// .sidebar {
+// 	display: none;
+
+// 	@include breakpoint($on-small) {
+// 		position: fixed;
+// 		height: 100%;
+// 		background-color: #f2f2f2;
+// 		border-right: 1px solid #eee;
+// 		box-shadow: inset -1px 0px 0px 0px #fff;
+// 		display: table-cell;
+// 		font-family: "Oak Light", sans-serif;
+// 		transition: width linear .1s;
+// 		vertical-align: top;
+// 		width: 48px;
+
+// 		&.-expand {
+// 			width: 200px;
+// 		}
+
+// 		&.-expand .link {
+// 			width: 200px;
+// 		}
+
+// 		&.-expand .nav-buttons .button {
+// 			width: calc(200px - 1em);
+// 		}
+// 	}
+// }
+
+// .nav {
+// 	> .link {
+// 		@extend .-no-rhythm;
+// 		color: black;
+// 		cursor: pointer;
+// 		display: block;
+// 		height: 48px;
+// 		line-height: 48px;
+// 		overflow: hidden;
+// 		text-decoration: none;
+// 		transition: width .1s linear, background .2s linear;
+// 		border: 0;
+// 		white-space: nowrap;
+// 		width: 48px;
+
+// 		&:hover {
+// 			background: #ccc;
+// 		}
+
+// 		.icon, .icon-label {
+// 			display: inline-block;
+// 		}
+
+// 		.icon {
+// 			text-align: center;
+// 			width: 48px;
+// 			font-size: 2.0rem;
+// 		}
+
+// 		.icon-label {
+// 			font-size: 1.6rem;
+// 			width: 100%;
+// 		}
+// 	}
+// }
+
+// .nav-buttons {
+// 	> .button {
+// 		display: block;
+// 		width: calc(48px - 1em);
+// 		white-space: nowrap;
+// 		color: white;
+// 		overflow: hidden;
+// 		cursor: pointer;
+// 		margin-left: .5em;
+// 		transition: width .1s linear;
+// 		padding-left: 0;
+// 		padding-right: 0;
+
+// 		&:hover {
+// 			color: white;
+// 		}
+
+// 		i, span {
+// 			display: inline-block;
+// 			margin-top: 0;
+// 		}
+
+// 		i {
+// 			width: calc(48px - 1em);
+// 			text-align: center;
+// 		}
+
+// 		span {
+// 			margin-left: .5em;
+// 		}
+// 	}
+// }
+
+// .sidebar-buttons {
+// 	> .button {
+// 		display: block;
+// 		margin-left: .5em;
+// 		margin-right: .5em;
+// 		overflow: hidden;
+// 		white-space: nowrap;
+// 		width: calc(48px - 1em);
+// 		padding-left: 0;
+// 		padding-right: 0;
+// 		text-align: center;
+
+// 		span {
+// 			margin-left: .5em;
+// 			display: none;
+// 		}
+// 	}
+// }

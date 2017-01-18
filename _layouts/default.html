@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html>
+
+{% include head.html %}
+
+<body class="">
+
+	<!-- {% include top-bar.html %} -->
+
+	<div class="page-separator"></div>
+	
+	<article class="page-content">
+		{{ content }}
+	</article>
+
+	{% include footer.html %}
+
+	<script src="{{ "js/jquery-3.1.1.min.js" | prepend: site.baseurl }}"></script>
+	<script src="{{ "js/jquery.mobile-events.min.js" | prepend: site.baseurl }}"></script>
+	<script src="{{ "js/cocoen.min.js" | prepend: site.baseurl }}"></script>
+	<script>
+		$(document).ready(function(){
+			$('.cocoen').cocoen();
+		});
+
+		$("nav > .toggle").on("click", function () {
+			$(".sidebar").toggleClass("-expand");
+		});
+	</script>
+</body>
+
+</html>
