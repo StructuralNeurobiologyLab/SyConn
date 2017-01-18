@@ -252,7 +252,7 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
 
     elif mpm.__QSUB__:
         path_to_out = mpm.QSUB_script(multi_params,
-                                      "make_unqiue_labels",
+                                      "make_unique_labels",
                                       pe=qsub_pe, queue=qsub_queue)
     else:
         raise Exception("QSUB not available")
