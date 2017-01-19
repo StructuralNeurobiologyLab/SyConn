@@ -2,6 +2,10 @@
 	@include breakpoint($on-medium) {
 		flex-wrap: nowrap;
 
+		.row + .row {
+			border-top: 1px solid #ccc;
+		}
+
 		.col + .col {
 			position: relative; 
 
@@ -23,8 +27,13 @@
 	}
 
 	.user {
-		padding: 2em 2em 1em;
+		padding: 2em 2em 1em 1em;
 		text-align: center;
+		
+		&.-with-picture {
+			height: 300px;
+			overflow: hidden;
+		}
 	}
 
 	.image {

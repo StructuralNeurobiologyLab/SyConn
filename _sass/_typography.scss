@@ -10,7 +10,14 @@ body {
 	font-weight: 300;
 }
 
-body * + * {
+p + p,
+h1 + *,
+h2 + *,
+h3 + *,
+h4 + *,
+h5 + *,
+h6 + *,
+li ~ li {
 	margin-top: 1em;
 }
 
@@ -29,16 +36,6 @@ p.subtitle {
 	font-style: italic;
 	color: #000;
 }
-
-// h1, h2, h3, h4, h5, h6 {
-// 	color: #000;
-// 	font-family: "Oak Bold", sans-serif;
-// 	line-height: 1.2;
-// }
-
-// h4 {
-// 	font-size: 1.6rem;
-// }
 
 p + p {
 	text-indent: 2em;
@@ -59,29 +56,6 @@ h2.subtitle {
 	}
 }
 
-// em {
-// 	display: inline-block;
-// 	background: rgba($accent-color, .3);
-// 	font-style: normal;
-// }
-
-// sup, sub {
-// 	font-size: 1.1rem;
-// }
-
 a {
 	text-decoration: none;
 }
-
-// a {
-// 	color: black;
-// 	text-decoration: none;
-// 	padding-bottom: .7rem;
-// 	border-bottom: 2px solid rgba($accent-color, .25);
-// 	transition: border-color .2s linear;
-
-// 	&:hover {
-// 		color: $accent-color;
-// 		border-bottom: 2px solid $accent-color;
-// 	}
-// }
