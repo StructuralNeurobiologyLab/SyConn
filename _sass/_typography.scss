@@ -59,3 +59,14 @@ h2.subtitle {
 a {
 	text-decoration: none;
 }
+
+p a {
+	color: $accent-color;
+	border-bottom: 2px solid rgba($accent-color, .5);
+	transition: all .2s linear;
+
+	&:hover {
+		color: darken($accent-color, 10);
+		border-bottom: 1px solid $accent-color;
+	}
+}
