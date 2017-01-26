@@ -421,7 +421,7 @@ def create_datasets_from_objects_thread(args):
     suffix = args[3]
 
     rel_path = segmentationdataset.get_rel_path(hdf5_name, filename, suffix)
-    sset = segmentationdataset.SegmentationDataset(hdf5_name, rel_path,
+    sset = segmentationdataset.UltrastructuralDataset(hdf5_name, rel_path,
                                                    path_head_folder)
 
     for obj_dict_path in glob.glob(path_head_folder + rel_path +

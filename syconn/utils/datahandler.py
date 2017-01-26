@@ -16,7 +16,7 @@ from multiprocessing import cpu_count
 from basics import *
 from segmentationdataset import load_dataset
 from knossos_utils import skeleton_utils as su
-from ..utils.segmentationdataset import SegmentationDataset
+from ..utils.segmentationdataset import UltrastructuralDataset
 from knossos_utils.skeleton import SkeletonAnnotation
 import cPickle as pickle
 
@@ -48,7 +48,7 @@ class DataHandler(object):
         will be assigned automatically
     mem_offset :
         optional offeset of dataset
-    mitos/vc/sj : SegmentationDataset
+    mitos/vc/sj : UltrastructuralDataset
         Dataset which contains cell objects of mitochondria, vesicle clouds and
         synaptic junctions respectively
     """
@@ -214,7 +214,7 @@ def load_objpkl_from_kzip(path):
     zf = zipfile.ZipFile(path, 'r')
     object_datasets = []
     for ix, filename in enumerate(['mitos.pkl', 'vc.pkl', 'sj.pkl']):
-        object_datasets.append(SegmentationDataset('', '', ''))
+        object_datasets.append(UltrastructuralDataset('', '', ''))
         try:
             temp = tempfile.TemporaryFile()
             temp.write(zf.read(filename))
@@ -539,7 +539,7 @@ def write_obj2pkl(objects, path):
 
     Parameters
     ----------
-    objects : SegmentationDatasetObject
+    objects : UltrastructuralDatasetObject
     path : str
         destianation
     """
@@ -557,7 +557,7 @@ def load_pkl2obj(path):
 
     Returns
     -------
-    SegmentationDatasetObject
+    UltrastructuralDatasetObject
     """
     with open(path, 'rb') as inp:
         objects = pickle.load(inp)

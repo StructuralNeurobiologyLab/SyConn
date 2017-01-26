@@ -386,7 +386,7 @@ def pathlength_of_property(anno, property, value):
 
 def objfeat2skelnode(node_coords, node_radii, node_ids, nearby_node_list,
                      obj_dict, scaling):
-    """Calculate features of SegmentationDatasetObjects along Skeleton
+    """Calculate features of UltrastructuralDatasetObjects along Skeleton
 
     Parameters
     ----------
@@ -394,7 +394,7 @@ def objfeat2skelnode(node_coords, node_radii, node_ids, nearby_node_list,
     node_radii : np.array
     node_ids : np.array
     nearby_node_list : list of list of SkeletonNodes
-    obj_dict : SegmentationDataset
+    obj_dict : UltrastructuralDataset
     scaling : tuple
 
     Returns

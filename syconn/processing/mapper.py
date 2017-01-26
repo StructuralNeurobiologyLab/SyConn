@@ -20,7 +20,7 @@ from features import calc_prop_feat_dict
 from learning_rfc import write_feat2csv
 from spiness import assign_neck
 from ..utils.datahandler import *
-from ..utils.segmentationdataset import SegmentationDataset
+from ..utils.segmentationdataset import UltrastructuralDataset
 from synapticity import parse_synfeature_from_node
 from ..multi_proc.multi_proc_main import start_multiprocess
 from knossos_utils import chunky
@@ -235,7 +235,7 @@ class SkeletonMapper(object):
                          nb_hull_vox=500, neighbor_radius=220,
                          detect_outlier=True, nb_rays=20,
                          nb_voting_neighbors=100, max_dist_mult=1.4):
-        """Creates self.object with annotated objects as SegmentationDataset,
+        """Creates self.object with annotated objects as UltrastructuralDataset,
         where object is in {mitos, vc, sj}
 
         Parameters
@@ -300,7 +300,7 @@ class SkeletonMapper(object):
 
         if dh.mitos is not None:
             # initialize segmentationDatasets for mapped objects
-            self.mitos = SegmentationDataset(dh.mitos.type, dh.mitos._rel_path_home,
+            self.mitos = UltrastructuralDataset(dh.mitos.type, dh.mitos._rel_path_home,
                                              dh.mitos._path_to_chunk_dataset_head)
             # do the mapping
             node_ids = self.annotate_object(dh.mitos, radius[0], method, "mitos")
@@ -321,7 +321,7 @@ class SkeletonMapper(object):
             pass
         # same for vc
         if dh.vc is not None:
-            self.vc = SegmentationDataset(dh.vc.type, dh.vc._rel_path_home,
+            self.vc = UltrastructuralDataset(dh.vc.type, dh.vc._rel_path_home,
                                           dh.vc._path_to_chunk_dataset_head)
             self.vc._node_ids = node_id2key(dh.vc, self.annotate_object(
                 dh.vc, radius[1], method, "vc"), filter_size[1])
@@ -340,7 +340,7 @@ class SkeletonMapper(object):
             pass
         # and sj
         if dh.sj is not None:
-            self.sj = SegmentationDataset(dh.sj.type, dh.sj._rel_path_home,
+            self.sj = UltrastructuralDataset(dh.sj.type, dh.sj._rel_path_home,
                                           dh.sj._path_to_chunk_dataset_head)
             self.sj._node_ids = node_id2key(dh.sj, self.annotate_object(
                 dh.sj, radius[2], method, "sj"), filter_size[2])
@@ -368,7 +368,7 @@ class SkeletonMapper(object):
 
         Parameters
         ----------
-        objects: SegmentationDataset
+        objects: UltrastructuralDataset
         radius: int
             Radius of kd-tree in units of nm.
         method: str
@@ -400,7 +400,7 @@ class SkeletonMapper(object):
 
         Parameters
         ----------
-        data : SegmentationDataset
+        data : UltrastructuralDataset
             Dictionary of cell objects
         radius : int
             Cell radius at tracing nodes (in nm)
@@ -466,14 +466,14 @@ class SkeletonMapper(object):
 
         Parameters
         ----------
-        data : SegmentationDataset
+        data : UltrastructuralDataset
             Dictioanry of cell objects
         radius: int
             radii list (in nm)
 
         Returns
         -------
-        list of list of SegmentationDatasetObjects
+        list of list of UltrastructuralDatasetObjects
             List with annotated objects per node, i.e. list of lists
         """
         # print "Applying kd-tree with radius %s to %d nodes and %d objects" % \
@@ -496,7 +496,7 @@ class SkeletonMapper(object):
 
         Parameters
         ----------
-        data : SegmentationDataset
+        data : UltrastructuralDataset
             Dictioanry of cell objects
         radius: int
             radii list (in nm)
@@ -505,7 +505,7 @@ class SkeletonMapper(object):
 
         Returns
         -------
-        list of list of SegmentationDatasetObjects
+        list of list of UltrastructuralDatasetObjects
             List with annotated objects per node, i.e. list of lists
         """
         nb_hull_vox = self.nb_hull_vox
@@ -551,7 +551,7 @@ class SkeletonMapper(object):
 
         Parameters
         ----------
-        data : SegmentationDataset
+        data : UltrastructuralDataset
             Dictioanry of cell objects
         radius: int
             radii list (in nm)
@@ -560,7 +560,7 @@ class SkeletonMapper(object):
 
         Returns
         -------
-        list of list of SegmentationDatasetObjects
+        list of list of UltrastructuralDatasetObjects
             List with annotated objects per node, i.e. list of lists
         """
         sjtrue = (objtype == 'sj')
@@ -989,7 +989,7 @@ def node_id2key(segdataobject, node_ids, filter_size):
 
     Parameters
     ----------
-    :param segdataobject: SegmentationDataset of object type currently processed
+    :param segdataobject: UltrastructuralDataset of object type currently processed
     :param node_ids: List of list containing annotated object ids for each node
     :param filter_size: int minimum number of voxels of object
 
