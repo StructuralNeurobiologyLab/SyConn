@@ -1,0 +1,1 @@
+Estimated times for the dense manual annotations of all individual steps required for acquiring a wiring matrix from EM datasets. hatched bars are skeletonization times. Volumes: j012 (songbird Area X): 0.00108 mm³; zebrafish larval brain: 0.048 mm³ 45; mouse brain, grey matter: 112 mm³.
