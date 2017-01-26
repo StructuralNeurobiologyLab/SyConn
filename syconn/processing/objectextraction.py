@@ -965,3 +965,108 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
     print "--------------------------"
     print "Total Time: %.1f min" % (np.sum(all_times) / 60)
     print "--------------------------\n"
+
+
+def from_ids_to_objects(cset, filename, hdf5names, chunk_list=None, debug=False,
+                        offset=None, size=None, suffix="", qsub_pe=None,
+                        qsub_queue=None):
+    """
+    Main function for the object extraction step; combines all needed steps
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    filename : str
+        Filename of the prediction in the chunkdataset
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    chunk_list: list of int
+        Selective list of chunks for which this function should work on. If None
+        all chunks are used.
+    debug: boolean
+        If true multiprocessed steps only operate on one core using 'map' which
+        allows for better error messages
+    offset : np.array
+        offset of the volume to the origin
+    size: np.array
+        size of the volume
+    suffix: str
+        Suffix for the intermediate results
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
+
+    """
+    all_times = []
+    step_names = []
+    if size is not None and offset is not None:
+        chunk_list, chunk_translator = \
+            calculate_chunk_numbers_for_box(cset, offset, size)
+    else:
+        chunk_translator = {}
+        if chunk_list is None:
+            chunk_list = [ii for ii in range(len(cset.chunk_dict))]
+            for ii in range(len(cset.chunk_dict)):
+                chunk_translator[ii] = ii
+        else:
+            for ii in range(len(chunk_list)):
+                chunk_translator[chunk_list[ii]] = ii
+
+    for hdf5_name in hdf5names:
+        path = cset.path_head_folder + "/" + \
+               segmentationdataset.get_rel_path(hdf5_name, filename, suffix)
+        if not os.path.exists(path + "/map_dicts/"):
+            os.makedirs(path + "/map_dicts/")
+        if not os.path.exists(path + "/voxels/"):
+            os.makedirs(path + "/voxels/")
+        if not os.path.exists(path + "/hull_voxels/"):
+            os.makedirs(path + "/hull_voxels/")
+
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    extract_voxels(cset, filename, hdf5names, debug=debug,
+                   chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
+                   qsub_queue=qsub_queue)
+    all_times.append(time.time() - time_start)
+    step_names.append("voxel extraction")
+    print "\nTime needed for extracting voxels: %.3fs" % all_times[-1]
+
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    concatenate_mappings(cset, filename, hdf5names, debug=debug, suffix=suffix)
+    all_times.append(time.time() - time_start)
+    step_names.append("concatenate mappings")
+    print "\nTime needed for concatenating mappings: %.3fs" % all_times[-1]
+
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
+                               debug=debug, suffix=suffix, qsub_pe=qsub_pe,
+                               qsub_queue=qsub_queue)
+    all_times.append(time.time() - time_start)
+    step_names.append("create objects from voxels")
+    print "\nTime needed for creating objects: %.3fs" % all_times[-1]
+
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    create_datasets_from_objects(cset, filename, hdf5names,
+                                 debug=debug, suffix=suffix, qsub_pe=qsub_pe,
+                                 qsub_queue=qsub_queue)
+    all_times.append(time.time() - time_start)
+    step_names.append("create datasets from objects")
+    print "\nTime needed for creating datasets: %.3fs" % all_times[-1]
+
+    # --------------------------------------------------------------------------
+
+    print "\nTime overview:"
+    for ii in range(len(all_times)):
+        print "%s: %.3fs" % (step_names[ii], all_times[ii])
+    print "--------------------------"
+    print "Total Time: %.1f min" % (np.sum(all_times) / 60)
+    print "--------------------------\n\n"
