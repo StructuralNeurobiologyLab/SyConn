@@ -296,11 +296,9 @@ def calc_overlap(point_list_a, point_list_b, max_dist):
            point_list_b[total_id_list]
 
 
-###################### TODO
-
-
 def tuple_to_string(coordinate, sep=', ', dl='(', dr=')'):
     return dl + sep.join([str(x) for x in coordinate]) + dr
+
 
 def coordinate_from_string(coord_string):
     coordinate_expression = '[(\[]{0,1}\s*(?P<x>-?\d+)\s*[,;]\s*(' \
@@ -349,6 +347,7 @@ def has_equal_dimensions(c):
     else:
         return True
 
+
 def average_coordinate(c):
     """
     Return the average coordinate (center of gravity) for an iterable of
@@ -383,10 +382,12 @@ def average_coordinate(c):
 
     return avg_coordinate
 
+
 def euclidian_distance(c1, c2):
     return sqrt(pow((c2[0] - c1[0]), 2) +
      pow((c2[1] - c1[1]), 2) +
      pow((c2[2] - c1[2]), 2))
+
 
 def interpolate_between(c1, c2):
     """
@@ -399,6 +400,7 @@ def interpolate_between(c1, c2):
     step = delta / dist
 
     return [list(step * cur_step + c1) for cur_step in range(0, dist + 1)]
+
 
 class Coordinate(list):
     """
@@ -435,7 +437,6 @@ class Coordinate(list):
             # scalar multiplication
             return type(self)([x * other for x in self])
 
-
     def __div__(self, other):
         try:
             # scalar multiplication
@@ -443,6 +444,7 @@ class Coordinate(list):
         except TypeError:
             # element-wise multiplication
             return type(self)([x / y for x, y in zip(self, other)])
+
 
 class FloatCoordinate(Coordinate):
     """
