@@ -28,7 +28,7 @@ from syconn.utils import basics
 
 def get_rel_path(obj_name, filename, suffix=""):
     """
-    Returns path from ChunkDataset foler to SegmentationDataset folder
+    Returns path from ChunkDataset foler to UltrastructuralDataset folder
 
     Parameters
     ----------
@@ -42,7 +42,7 @@ def get_rel_path(obj_name, filename, suffix=""):
     Returns
     -------
     rel_path: str
-        relative path from ChunkDataset folder to SegmentationDataset folder
+        relative path from ChunkDataset folder to UltrastructuralDataset folder
 
     """
     if len(suffix) > 0 and not suffix[0] == "_":
@@ -259,7 +259,7 @@ def update_dataset(object_dataset, update_objects=False, recalculate_rep_coords=
     if recalculate_rep_coords:
         update_objects = True
 
-    up_object_dataset = SegmentationDataset(object_dataset._type,
+    up_object_dataset = UltrastructuralDataset(object_dataset._type,
                                             object_dataset._rel_path_home,
                                             object_dataset._path_to_chunk_dataset_head)
     if update_objects:
@@ -315,7 +315,7 @@ def update_multiple_datasets(paths, update_objects=False, recalculate_rep_coords
             map(updating_segmentationDatasets_thread, multi_params)
 
 
-class SegmentationDataset(object):
+class UltrastructuralDataset(object):
     def __init__(self, obj_type, rel_path_home, path_to_chunk_dataset_head):
         self._type = obj_type
         self._rel_path_home = rel_path_home
@@ -383,7 +383,6 @@ class SegmentationDataset(object):
             obj._most_distant_voxel = most_distant_voxels[ii]
             obj._scaling = scaling
             self.object_dict[obj_ids[ii]] = obj
-
 
     @property
     def type(self):
@@ -511,12 +510,11 @@ class SegmentationObject(object):
 
     @property
     def bounding_box(self):
-        if 1 or self._bounding_box == None:
+        if self._bounding_box is None:
             min = np.min(self.voxels, axis=0)
             max = np.max(self.voxels, axis=0)
-            return [min, max]
-        else:
-            return self._bounding_box
+            self._bounding_box = [min, max]
+        return self._bounding_box
 
     @property
     def voxels(self):
