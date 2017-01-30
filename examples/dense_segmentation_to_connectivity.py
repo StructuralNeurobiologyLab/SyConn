@@ -41,7 +41,7 @@ main_path = os.path.abspath(commandline_args.main_path)
 qsub_pe = commandline_args.qsub_pe
 qsub_queue = commandline_args.qsub_queue
 
-knossos_raw_path = "/run/media/sdorkenw/K338/j0126_realigned_v4b_min1k_cbs_ext0/"
+knossos_raw_path = main_path + "/j0126_realigned_v4b_cbs_ext0_fix.conf"
 # knossos_raw_path = main_path + "/knossosdatasets/raw/"
 
 if not "/" == main_path[-1]:
@@ -65,33 +65,19 @@ kd_raw.initialize_from_knossos_path(knossos_raw_path)
 if os.path.exists(main_path + "chunkdataset.chunk_dataset.pkl"):
     cset = chunky.load_dataset(main_path + "chunkdataset.chunk_dataset.pkl")
 else:
-    cset = initialization.initialize_cset(kd_raw, main_path, [512, 512, 256])
-
+    cset = initialization.initialize_cset(kd_raw, main_path, [512, 512, 512])
 
 # ------------------------------------------------------------ SuperVoxel Extraction
 
 # Write segmentation to chunky first
-densedataset.export_dense_segmentation_to_cset(cset, kd_raw, nb_cpus=4)
+densedataset.export_dense_segmentation_to_cset(cset, kd_raw, datatype=np.uint16,
+                                               nb_cpus=20, pe=qsub_pe,
+                                               queue=qsub_queue)
 
-oe.from_ids_to_objects(cset, "dense_segmentation", ["sv"],
-                       debug=False, qsub_pe=qsub_pe, qsub_queue=qsub_queue)
+# Extract supervoxels as objects
+# oe.from_ids_to_objects(cset, "dense_segmentation", ["sv"],
+#                        debug=False, qsub_pe=qsub_pe, qsub_queue=qsub_queue)
 
-# oe.from_probabilities_to_objects(cset, "ARGUS",
-#                                  ["vc"],
-#                                  thresholds=[int(6*255/21.)],
-#                                  debug=False,
-#                                  suffix="5",
-#                                  membrane_kd_path=kd_bar.knossos_path,
-#                                  qsub_pe=qsub_pe,
-#                                  qsub_queue=qsub_queue)
-#
-# oe.from_probabilities_to_objects(cset, "ARGUS",
-#                                  ["mi"],
-#                                  thresholds=[int(9*255/21.)],
-#                                  debug=False,
-#                                  suffix="8",
-#                                  qsub_pe=qsub_pe,
-#                                  qsub_queue=qsub_queue)
 #
 # # ------------ Create hull and map objects to tracings and classify compartments
 #
