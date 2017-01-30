@@ -14,7 +14,8 @@ import time
 def export_dense_segmentation_to_cset_thread(args):
     chunk_keys = args[0]
     cset = chunky.load_dataset(args[1])
-    kd = knossosdataset.KnossosDataset().initialize_from_knossos_path(args[2])
+    kd = knossosdataset.KnossosDataset()
+    kd.initialize_from_knossos_path(args[2])
     datatype = args[3]
 
     for k_chunk in chunk_keys:
