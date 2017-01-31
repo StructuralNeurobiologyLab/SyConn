@@ -15,7 +15,7 @@ layout: default
 	</div>
 
 	<div class="col">
-		<!-- {% include navigation.html %} -->
+		
 	</div>
 </header>
 <!-- 
@@ -71,60 +71,80 @@ layout: default
 	</article>
 </section>
 -->
+
 <section class="section">
-<article>
-		<p><strong>SyConn</strong> was developed in Prof. Winfried Denk’s department <a href="https://www.neuro.mpg.de/denk"><em>Electrons - Photons - Neurons</em></a> at the Max Planck Institute of Neurobiolgy in Martinsried, Germany.</p>
-	</article>
-</section>
+	<article class="row -middle">
+		<div class="col">
+			<p>Teravoxel volume electron microscopy datasets from neural tissue can now be acquired in weeks, but data analysis requires years of manual labor (see also <a href="#Fig1">Fig. 1, <em>timing plot</em></a>).</p>
 
-<section class="section" id="AboutSection">
-	<article>
-		<header>
-			<h2 class="subtitle">Contributors</h2>
-		</header>
-
-		<div class="about-gallery row">
-			<div class="col">
-				<div class="user -with-picture">
-					<img class="image" src="{{ "/images/team/sven.jpg" | prepend: site.baseurl }}">
-
-					<h4>Sven Dorkenwald</h4>
-					<p>SyConn development and evaluation</p>
-				</div>
-
-				<div class="user">
-					<h4>Marius Killinger and Gregor Urban</h4>
-					<p><strong>ELEKTRONN</strong> development.</p>
-				</div>
-			</div>
-
-			<div class="col">
-				<div class="user -with-picture">
-					<img class="image" src="{{ "/images/team/philipp.jpg" | prepend: site.baseurl }}">
-					<div class="description">
-						<h4>Philipp Schubert</h4>
-						<p>SyConn development and evaluation</p>
-					</div>
-				</div>
-
-				<div class="user">
-					<h4>Fabian Svara and Shawn Mikula</h4>
-					<p>Dataset contributions</p>
-				</div>
-			</div>
-
-			<div class="col">
-				<div class="user -with-picture">
-					<img class="image" src="{{ "/images/team/joergen.png" | prepend: site.baseurl }}">
-					<div class="description">
-						<h4>Jörgen Kornfeld</h4>
-						<p>SyConn development and evaluation</p>
-					</div>
-				</div>
-
-				<div class="user">
-				</div>
-			</div>
+			<p>The SyConn framework uses deep convolutional neural networks (CNN) and random forest classifiers (RFC) to infer a richly-annotated synaptic connectivity matrix from manual neurite skeleton reconstructions by automatically identifying mitochondria, synapses and their types, axons, dendrites, spines, myelin, somata and cell types.</p>
 		</div>
-	</article>
-</section>
+
+		<div class="col">
+			<figure id="Fig1">
+				<img src="{{ "/images/timing_plot.png" | prepend: site.baseurl}}" alt="Timing plot comparison">
+				<figcaption><strong>Fig. 1:</strong> Estimated times for the dense manual annotations of all individual steps required for acquiring a wiring matrix from EM datasets. Hatched bars are skeletonization times.<br>
+
+					<strong>Volumes:</strong> j012 (songbird Area X): 0.00108 mm³; zebrafish larval brain: 0.048 mm³ 45; mouse brain, grey matter: 112 mm³.</figcaption>
+				</figure>
+			</div>
+		</article>
+	</section>
+
+	<section class="section">
+		<article>
+			<p><strong>SyConn</strong> was developed in Prof. Winfried Denk’s department <a href="https://www.neuro.mpg.de/denk"><em>Electrons - Photons - Neurons</em></a> at the Max Planck Institute of Neurobiolgy in Martinsried, Germany.</p>
+		</article>
+	</section>
+
+	<section class="section" id="AboutSection">
+		<article>
+			<header>
+				<h2 class="subtitle">Contributors</h2>
+			</header>
+
+			<div class="about-gallery row">
+				<div class="col">
+					<div class="user -with-picture">
+						<img class="image" src="{{ "/images/team/sven.jpg" | prepend: site.baseurl }}">
+
+						<h4>Sven Dorkenwald</h4>
+						<p>SyConn development and evaluation</p>
+					</div>
+
+					<div class="user">
+						<h4>Marius Killinger and Gregor Urban</h4>
+						<p><strong>ELEKTRONN</strong> development.</p>
+					</div>
+				</div>
+
+				<div class="col">
+					<div class="user -with-picture">
+						<img class="image" src="{{ "/images/team/philipp.jpg" | prepend: site.baseurl }}">
+						<div class="description">
+							<h4>Philipp Schubert</h4>
+							<p>SyConn development and evaluation</p>
+						</div>
+					</div>
+
+					<div class="user">
+						<h4>Fabian Svara and Shawn Mikula</h4>
+						<p>Dataset contributions</p>
+					</div>
+				</div>
+
+				<div class="col">
+					<div class="user -with-picture">
+						<img class="image" src="{{ "/images/team/joergen.png" | prepend: site.baseurl }}">
+						<div class="description">
+							<h4>Jörgen Kornfeld</h4>
+							<p>SyConn development and evaluation</p>
+						</div>
+					</div>
+
+					<div class="user">
+					</div>
+				</div>
+			</div>
+		</article>
+	</section>

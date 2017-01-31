@@ -1,6 +1,15 @@
 .about-gallery {
+	margin-left: -2em;
+	margin-right: -2em;
+
+	.col + .col {
+		margin-left: 0;
+	}
+
 	@include breakpoint($on-medium) {
 		flex-wrap: nowrap;
+		margin-left: 0;
+		margin-right: 0;
 
 		.row + .row {
 			border-top: 1px solid #ccc;
@@ -24,10 +33,14 @@
 		.user + .user {
 			border-top: 1px solid #ccc;
 		}
+
+		.col + .col {
+			border: 0 !important;
+		}
 	}
 
 	.user {
-		padding: 2em 2em 1em 1em;
+		padding: 2em 2em 2em 1em;
 		text-align: center;
 		
 		&.-with-picture {
@@ -35,6 +48,10 @@
 			overflow: hidden;
 		}
 	}
+
+	.user + .user, .col + .col {
+			border-top: 1px solid #ccc;
+		}
 
 	.image {
 		width: 128px;

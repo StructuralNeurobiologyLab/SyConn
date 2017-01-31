@@ -15,12 +15,13 @@ ol.footnotes {
 
 ul.button-list {
 	list-style: none;
+	display: block;
 
 	&.-horizontal {
 		li {
 			display: list-item;
 			@include breakpoint($on-medium) {
-			display: inline-block;
+				display: inline-block;
 			}
 		}
 	}

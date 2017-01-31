@@ -12,11 +12,11 @@
 		}
 
 		> .col + .col {
-			margin-top: 0;
+			margin-left: 2em;
 		}
     }
 
     .row.row--align-top { align-items: flex-start }
-	.row.row--middle { align-content: center; align-items: center }
+	.row.-middle { align-content: center; align-items: center }
 	.row.-no-wrap { flex-wrap: nowrap }
 }

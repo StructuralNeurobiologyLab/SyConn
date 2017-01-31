@@ -8,6 +8,7 @@
 	<!-- {% include top-bar.html %} -->
 
 	<div class="page-separator"></div>
+	<div class="page-overlay"></div>
 	
 	<article class="page-content">
 		{{ content }}
@@ -19,6 +20,12 @@
 	<script src="{{ "/js/jquery.mobile-events.min.js" | prepend: site.baseurl }}"></script>
 	<script src="{{ "/js/cocoen.min.js" | prepend: site.baseurl }}"></script>
 	<script>
+		var divs = $('.page-overlay');
+		$(window).scroll(function(){
+		   var percent = $(document).scrollTop() / ($(document).height() - $(window).height());
+		   divs.css('opacity', percent);
+		});
+
 		$(document).ready(function(){
 			$('.cocoen').cocoen();
 		});

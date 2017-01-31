@@ -7,7 +7,7 @@ html, body {
 
 .page-content {
 	background: #fff;
-	margin: 2em 1em 0;
+	margin: 2em .5em 0;
 	box-shadow: 0 4px 9px 0 rgba(23,28,33,0.3);
 	background: #fff;
 	border-radius: 5px;
@@ -30,9 +30,9 @@ html, body {
 	border-bottom: 1px solid #eee;
 }
 
-@include breakpoint($on-medium) {
+@include breakpoint($on-large) {
 	.page-separator {
-		background: #efefef url(../images/bg.jpg) no-repeat top center;
+		background: #efefef url(../images/bg-grey.jpg) no-repeat center center;
 		background-size: cover;
 		border-left: 1px solid #bbb;
 		position: fixed;
@@ -40,6 +40,20 @@ html, body {
 		width: calc(25% + 150px);
 		transform: rotate(-5deg);
 		z-index: 3;
+		top: -75px;
+		right: -75px;
+	}
+
+	.page-overlay {
+		background: #efefef url(../images/bg.jpg) no-repeat center center;
+		background-size: cover;
+		border-left: 1px solid #bbb;
+		position: fixed;
+		height: calc(100% + 150px);
+		width: calc(25% + 150px);
+		transform: rotate(-5deg);
+		z-index: 4;
+		opacity: 0;
 		top: -75px;
 		right: -75px;
 	}
@@ -54,18 +68,49 @@ html, body {
 	}
 
 	.section article {
-		padding: 1em calc(150px + 2em) 1em 2em;
+		padding: 1em calc(150px + 2em) 1em 4em;
 	}
 
 	.inbetween-article {
 		padding: 1em calc(150px + 4em) 1em 4em !important;
 	}
+
+	.section:last-of-type {
+		padding-bottom: 4em;
+	}
+
 }
 
 .header {
-	padding: 4em;
+	padding: 4em 2em 1em;
+
+	.button-list {
+		margin-top: 2em;
+	}
+
+	.col + .col {
+		margin-top: 2em;
+	}
+
+	@include breakpoint($on-medium) {
+		padding: 4em 6em 2em;
+	}
+
+	@include breakpoint($on-large) {
+		padding: 4em calc(150px + 4em) 2em 4em;
+
+		.col + .col {
+			margin-top: 0;
+		}
+	}
 }
 
 .section:last-of-type {
-	padding-bottom: 4em;
+	padding-bottom: 1em;
+}
+
+figure {
+	figcaption {
+		font-size: 1.4rem;
+	}
 }
