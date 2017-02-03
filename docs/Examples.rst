@@ -6,7 +6,7 @@ Examples
 
 This page gives a brief example for a full run of  then main components of SyConn.
 The corresponding code is available in ``/examples/full_run_example.py`` and
-the example data with all pre-trained models can be found in ``SyConnDenseCube(.zip)``.
+the example data with all pre-trained models can be found in ``SyConnDenseCube(.zip)`` (go to our `Website <http://structuralneurobiologylab.github.io/SyConn/>`_ for Download).
 
 
 Running the example
