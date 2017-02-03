@@ -1,0 +1,838 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>SyConn API &#8212; SyConn a documentation</title>
+    
+    <link rel="stylesheet" href="_static/sphinxdoc.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     'a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="SyConn a documentation" href="index.html" />
+    <link rel="next" title="syconn.processing" href="syconn.processing.html" />
+    <link rel="prev" title="Examples" href="Examples.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="syconn.processing.html" title="syconn.processing"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="Examples.html" title="Examples"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">SyConn a documentation</a> &#187;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">SyConn API</a><ul>
+<li><a class="reference internal" href="#module-syconn.brainqueries">syconn.brainqueries</a></li>
+<li><a class="reference internal" href="#module-syconn.conmatrix">syconn.conmatrix</a></li>
+<li><a class="reference internal" href="#module-syconn.contactsites">syconn.contactsites</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="Examples.html"
+                        title="previous chapter">Examples</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="syconn.processing.html"
+                        title="next chapter">syconn.processing</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/syconn.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="syconn-api">
+<h1>SyConn API<a class="headerlink" href="#syconn-api" title="Permalink to this headline">¶</a></h1>
+<div class="toctree-wrapper compound">
+<ul>
+<li class="toctree-l1"><a class="reference internal" href="syconn.processing.html">syconn.processing</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="syconn.processing.html#module-syconn.processing.axoness">syconn.processing.axoness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.processing.html#module-syconn.processing.cell_types">syconn.processing.cell_types</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.processing.html#module-syconn.processing.features">syconn.processing.features</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.processing.html#module-syconn.processing.learning_rfc">syconn.processing.learning_rfc</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.processing.html#module-syconn.processing.mapper">syconn.processing.mapper</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.processing.html#module-syconn.processing.spiness">syconn.processing.spiness</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.processing.html#module-syconn.processing.synapticity">syconn.processing.synapticity</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.processing.html#module-syconn.processing.initialization">syconn.processing.initialization</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.processing.html#module-syconn.processing.objectextraction">syconn.processing.objectextraction</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.processing.html#module-syconn.processing.watershed_segmentation">syconn.processing.watershed_segmentation</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="syconn.multi_proc.html">syconn.multi_proc</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="syconn.multi_proc.html#module-syconn.multi_proc.multi_proc_main">syconn.multi_proc.multi_proc_main</a></li>
+</ul>
+</li>
+<li class="toctree-l1"><a class="reference internal" href="syconn.utils.html">syconn.utils</a><ul>
+<li class="toctree-l2"><a class="reference internal" href="syconn.utils.html#module-syconn.utils.basics">syconn.utils.basics</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.utils.html#module-syconn.utils.datahandler">syconn.utils.datahandler</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.utils.html#module-syconn.utils.segmentationdataset">syconn.utils.segmentationdataset</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.utils.html#module-syconn.utils.skeleton">syconn.utils.skeleton</a></li>
+<li class="toctree-l2"><a class="reference internal" href="syconn.utils.html#module-syconn.utils.skeleton_utils">syconn.utils.skeleton_utils</a></li>
+</ul>
+</li>
+</ul>
+</div>
+<div class="section" id="module-syconn.brainqueries">
+<span id="syconn-brainqueries"></span><h2>syconn.brainqueries<a class="headerlink" href="#module-syconn.brainqueries" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="syconn.brainqueries.analyze_dataset">
+<code class="descclassname">syconn.brainqueries.</code><code class="descname">analyze_dataset</code><span class="sig-paren">(</span><em>wd</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/brainqueries.html#analyze_dataset"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.brainqueries.analyze_dataset" title="Permalink to this definition">¶</a></dt>
+<dd><p>Analyze dataset, i.e. predict barrier, cell objects, calculate hull,
+map cell objects to tracings and predict synapses together with ultrastructure
+of cells to create connectivity matrix</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>wd</strong> (<em>str</em>) &#8211; path to working directory</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.brainqueries.detect_similar_tracings">
+<code class="descclassname">syconn.brainqueries.</code><code class="descname">detect_similar_tracings</code><span class="sig-paren">(</span><em>wd</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/brainqueries.html#detect_similar_tracings"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.brainqueries.detect_similar_tracings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Print similar skeleton file paths</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>wd</strong> (<em>str</em>) &#8211; path to working directory</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.brainqueries.detect_synapses">
+<code class="descclassname">syconn.brainqueries.</code><code class="descname">detect_synapses</code><span class="sig-paren">(</span><em>wd</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/brainqueries.html#detect_synapses"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.brainqueries.detect_synapses" title="Permalink to this definition">¶</a></dt>
+<dd><dl class="docutils">
+<dt>Detects contact sites between enriched tracings and writes contact site</dt>
+<dd>summary and synapse summary to working directory.</dd>
+</dl>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>wd</strong> (<em>str Path to working directory</em>) &#8211; </li>
+<li><strong>qsub_pe</strong> (<em>str or None</em>) &#8211; qsub parallel environment</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.brainqueries.enrich_tracings">
+<code class="descclassname">syconn.brainqueries.</code><code class="descname">enrich_tracings</code><span class="sig-paren">(</span><em>anno_list</em>, <em>wd</em>, <em>map_objects=True</em>, <em>method='hull'</em>, <em>radius=1200</em>, <em>thresh=2.2</em>, <em>filter_size=(2786</em>, <em>1594</em>, <em>250)</em>, <em>create_hull=True</em>, <em>max_dist_mult=1.4</em>, <em>detect_outlier=True</em>, <em>dh=None</em>, <em>overwrite=False</em>, <em>nb_neighbors=20</em>, <em>nb_hull_vox=500</em>, <em>context_range=6000</em>, <em>neighbor_radius=220</em>, <em>nb_rays=20</em>, <em>nb_voting_neighbors=100</em>, <em>write_obj_voxel=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/brainqueries.html#enrich_tracings"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.brainqueries.enrich_tracings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Enriches a list of paths (to tracings) using dataset in working
+directory. Writes enriched tracings to &#8216;neuron&#8217; folder in working directory,
+or, if specified, to DataHandler().data_path.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>wd</strong> (<em>str</em>) &#8211; Path to working directory</li>
+<li><strong>anno_list</strong> (<em>list</em>) &#8211; paths to tracing .k.zip&#8217;s</li>
+<li><strong>map_objects</strong> (<em>bool</em>) &#8211; Map cell components to skeleton</li>
+<li><strong>method</strong> (<em>str</em>) &#8211; Either &#8216;kd&#8217; for fix radius or &#8216;hull&#8217;/&#8217;supervoxel&#8217; if
+membrane is available.</li>
+<li><strong>radius</strong> (<em>int</em>) &#8211; Radius in nm. Single integer if integer radius is for
+all objects the same. If list of three integer stick to ordering
+[mitos, vc, sj].</li>
+<li><strong>thresh</strong> (<em>int</em>) &#8211; Denotes the factor which is multiplied with the maximum
+membrane probability. The resulting value is used as threshold after
+which the membrane is assumed to be existant.</li>
+<li><strong>nb_rays</strong> (<em>int</em>) &#8211; Number of rays send at each skeleton node
+(multiplied by a factor of 5). Defines the angle between two rays
+(=360 / nb_rays) in the orthogonal plane.</li>
+<li><strong>neighbor_radius</strong> (<em>int</em>) &#8211; Radius of ball in which to look for supporting
+hull voxels. Used during outlier detection.</li>
+<li><strong>nb_neighbors</strong> (<em>int</em>) &#8211; minimum number of neighbors needed during outlier detection
+for a single hull point to survive.</li>
+<li><strong>filter_size</strong> (<em>list, tuple of int</em>) &#8211; minimum cell object sizes for each object (mitos, vesicle clouds,
+synaptic clefts)</li>
+<li><strong>nb_hull_vox</strong> (<em>int</em>) &#8211; Number of object hull voxels which are used to
+estimate spatial proximity to skeleton.</li>
+<li><strong>context_range</strong> (<em>int</em>) &#8211; Range of property features</li>
+<li><strong>nb_voting_neighbors</strong> (<em>int</em>) &#8211; Number votes of skeleton hull voxels
+(membrane representation) for object-mapping.</li>
+<li><strong>dh</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.datahandler.DataHandler" title="syconn.utils.datahandler.DataHandler"><em>DataHandler</em></a>) &#8211; object containing SegmentationDataObjects mitos, vc, sj</li>
+<li><strong>create_hull</strong> (<em>bool</em>) &#8211; create skeleton membrane estimation</li>
+<li><strong>max_dist_mult</strong> (<em>float</em>) &#8211; Multiplier for radius to generate maximal
+distance of hull points to source node.</li>
+<li><strong>detect_outlier</strong> (<em>bool</em>) &#8211; Use outlier-detection if True</li>
+<li><strong>overwrite</strong> (<em>bool</em>) &#8211; Overwrite existing .k.zip&#8217;s of mapped skeletons</li>
+<li><strong>write_obj_voxel</strong> (<em>bool</em>) &#8211; write object voxel coordinates to .k.zip</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.brainqueries.enrich_tracings_all">
+<code class="descclassname">syconn.brainqueries.</code><code class="descname">enrich_tracings_all</code><span class="sig-paren">(</span><em>wd</em>, <em>overwrite=False</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/brainqueries.html#enrich_tracings_all"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.brainqueries.enrich_tracings_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run :func: &#8216;enrich_tracings&#8217; on available cluster nodes defined by
+somaqnodes or using multiprocessing.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>wd</strong> (<em>str</em>) &#8211; Path to working directory</li>
+<li><strong>overwrite</strong> (<em>bool</em>) &#8211; enforce overwriting of existing files</li>
+<li><strong>qsub_pe</strong> (<em>str or None</em>) &#8211; qsub parallel environment</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.brainqueries.enrich_tracings_star">
+<code class="descclassname">syconn.brainqueries.</code><code class="descname">enrich_tracings_star</code><span class="sig-paren">(</span><em>params</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/brainqueries.html#enrich_tracings_star"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.brainqueries.enrich_tracings_star" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="syconn.brainqueries.get_connectivity_list">
+<code class="descclassname">syconn.brainqueries.</code><code class="descname">get_connectivity_list</code><span class="sig-paren">(</span><em>wd</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/brainqueries.html#get_connectivity_list"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.brainqueries.get_connectivity_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find synapses between tracing pairs</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>wd</strong> (<em>str</em>) &#8211; path to working directory</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">descending array of synapse (axo-dendritic, if count is zero, axo-axonic
+touches arepresent) number between corresponding tracing pairs
+(tuple of ids)</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">np.array (n, 1), np.array (n x 2)</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.brainqueries.remap_tracings">
+<code class="descclassname">syconn.brainqueries.</code><code class="descname">remap_tracings</code><span class="sig-paren">(</span><em>wd</em>, <em>mapped_skel_paths</em>, <em>dh=None</em>, <em>method='hull'</em>, <em>radius=1200</em>, <em>thresh=2.2</em>, <em>filter_size=(2786</em>, <em>1594</em>, <em>250)</em>, <em>max_dist_mult=1.4</em>, <em>nb_neighbors=20</em>, <em>nb_hull_vox=500</em>, <em>neighbor_radius=220</em>, <em>nb_rays=20</em>, <em>nb_voting_neighbors=100</em>, <em>output_dir=None</em>, <em>write_obj_voxel=True</em>, <em>mito_min_votes=235</em>, <em>vc_min_votes=191</em>, <em>sj_min_votes=346</em>, <em>recalc_prop_only=True</em>, <em>context_range=6000</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/brainqueries.html#remap_tracings"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.brainqueries.remap_tracings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Remaps objects to skeleton without recalculating the hull.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>wd</strong> (<em>str</em>) &#8211; Path to working directory</li>
+<li><strong>mapped_skel_paths</strong> (<em>list of str</em>) &#8211; Paths to tracings</li>
+<li><strong>dh</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.datahandler.DataHandler" title="syconn.utils.datahandler.DataHandler"><em>DataHandler</em></a>) &#8211; object containing SegmentationDataObjects mitos, vc, sj</li>
+<li><strong>output_dir</strong> (<em>str</em>) &#8211; path to output dir. If none, use given path</li>
+<li><strong>write_obj_voxel</strong> (<em>bool</em>) &#8211; write object voxel to k.zip</li>
+<li><strong>sj_min_votes</strong> (<em>int</em>) &#8211; Best F2 score found by eval</li>
+<li><strong>mito_min_votes</strong> (<em>int</em>) &#8211; Best F1 score found by eval</li>
+<li><strong>vc_min_votes</strong> (<em>int</em>) &#8211; Best F2 score found by eval</li>
+<li><strong>method</strong> (<em>str</em>) &#8211; Either &#8216;kd&#8217; for fix radius or &#8216;hull&#8217;/&#8217;supervoxel&#8217; if
+membrane is available.</li>
+<li><strong>radius</strong> (<em>int</em>) &#8211; Radius in nm. Single integer if integer radius is for all
+objects the same. If list of three integer stick to ordering
+[mitos, vc, sj].</li>
+<li><strong>thresh</strong> (<em>float</em>) &#8211; Denotes the factor which is multiplied with the maximum
+membrane probability. The resulting value is used as threshold after
+which the membrane is assumed to be existant.</li>
+<li><strong>nb_rays</strong> (<em>int</em>) &#8211; Number of rays send at each skeleton node
+(multiplied by a factor of 5). Defines the angle between two rays
+(=360 / nb_rays) in the orthogonal plane.</li>
+<li><strong>neighbor_radius</strong> (<em>int</em>) &#8211; Radius of ball in which to look for supporting
+hull voxels. Used during outlier detection.</li>
+<li><strong>nb_neighbors</strong> (<em>int</em>) &#8211; minimum number of neighbors needed during
+outlier detection for a single hull point to survive.</li>
+<li><strong>filter_size</strong> (<em>List of integer</em>) &#8211; for each object [mitos, vc, sj]</li>
+<li><strong>nb_hull_vox</strong> (<em>int</em>) &#8211; Number of object hull voxels which are used to
+estimate spatial proximity to skeleton.</li>
+<li><strong>context_range</strong> (<em>int</em>) &#8211; Range of property features</li>
+<li><strong>nb_voting_neighbors</strong> (<em>int</em>) &#8211; Number votes of skeleton hull voxels (membrane
+representation) for object-mapping.</li>
+<li><strong>max_dist_mult</strong> (<em>float</em>) &#8211; Multiplier for radius to generate maximal
+distance of hull points to source node.</li>
+<li><strong>output_dir</strong> &#8211; Path to output directory, if None dh._data_path
+will be used.</li>
+<li><strong>recalc_prop_only</strong> (<em>bool</em>) &#8211; Recalculate only features and prediction of
+properties (axoness, spiness)</li>
+<li><strong>write_obj_voxel</strong> &#8211; write object voxel coordinates to kzip</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.brainqueries.remap_tracings_all">
+<code class="descclassname">syconn.brainqueries.</code><code class="descname">remap_tracings_all</code><span class="sig-paren">(</span><em>wd</em>, <em>dest_dir=None</em>, <em>recalc_prop_only=False</em>, <em>method='hull'</em>, <em>context_range=6000</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/brainqueries.html#remap_tracings_all"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.brainqueries.remap_tracings_all" title="Permalink to this definition">¶</a></dt>
+<dd><p>Run remap_tracings on available cluster nodes defined by
+somaqnodes or using single node multiprocessing.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>wd</strong> (<em>str</em>) &#8211; Path to working directory, which contains skeleton nml / kzip files in</li>
+<li><strong>dest_dir</strong> (<em>str</em>) &#8211; Directory path to store mapped skeletons</li>
+<li><strong>recalc_prop_only</strong> (<em>bool</em>) &#8211; Recalculate properties (spiness, axoness) only,
+without calculating hull</li>
+<li><strong>method</strong> (<em>str</em>) &#8211; Method for object mapping procedure</li>
+<li><strong>context_range</strong> (<em>int</em>) &#8211; Context range for property features</li>
+<li><strong>qsub_pe</strong> (<em>str or None</em>) &#8211; qsub parallel environment</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.brainqueries.remap_tracings_star">
+<code class="descclassname">syconn.brainqueries.</code><code class="descname">remap_tracings_star</code><span class="sig-paren">(</span><em>params</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/brainqueries.html#remap_tracings_star"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.brainqueries.remap_tracings_star" title="Permalink to this definition">¶</a></dt>
+<dd><p>Helper function for multiprocessed remap_tracings.</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-syconn.conmatrix">
+<span id="syconn-conmatrix"></span><h2>syconn.conmatrix<a class="headerlink" href="#module-syconn.conmatrix" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="syconn.conmatrix.class_ranges">
+<code class="descclassname">syconn.conmatrix.</code><code class="descname">class_ranges</code><span class="sig-paren">(</span><em>pred_arr</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/conmatrix.html#class_ranges"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.conmatrix.class_ranges" title="Permalink to this definition">¶</a></dt>
+<dd><p>Helper function to get extent of cell types in sorted prediction</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>pred_arr</strong> (<em>np.array</em>) &#8211; sorted array of cell type predictions</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">indices of changing cell type labels in pred_arr</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">np.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.conmatrix.diverge_map">
+<code class="descclassname">syconn.conmatrix.</code><code class="descname">diverge_map</code><span class="sig-paren">(</span><em>low=(0.9372549019607843</em>, <em>0.2549019607843137</em>, <em>0.19607843137254902)</em>, <em>high=(0.15294117647058825</em>, <em>0.7215686274509804</em>, <em>0.5803921568627451)</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/conmatrix.html#diverge_map"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.conmatrix.diverge_map" title="Permalink to this definition">¶</a></dt>
+<dd><p>Low and high are colors that will be used for the two
+ends of the spectrum. they can be either color strings
+or rgb color tuples</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.conmatrix.get_cell_majority_synsign">
+<code class="descclassname">syconn.conmatrix.</code><code class="descname">get_cell_majority_synsign</code><span class="sig-paren">(</span><em>avg_wiring</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/conmatrix.html#get_cell_majority_synsign"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.conmatrix.get_cell_majority_synsign" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates majority synaptic sign of rows in average wiring</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>avg_wiring</strong> (<em>np.array</em>) &#8211; averaged wiring</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">majority vote of synapse sign (row wise)</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">np.array of int</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.conmatrix.get_cum_pos">
+<code class="descclassname">syconn.conmatrix.</code><code class="descname">get_cum_pos</code><span class="sig-paren">(</span><em>den_ranges</em>, <em>ax_ranges</em>, <em>den_pos</em>, <em>ax_pos</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/conmatrix.html#get_cum_pos"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.conmatrix.get_cum_pos" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates the position of synapse in average matrix, i.e. which sector
+it belongs to.</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.conmatrix.make_colormap">
+<code class="descclassname">syconn.conmatrix.</code><code class="descname">make_colormap</code><span class="sig-paren">(</span><em>seq</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/conmatrix.html#make_colormap"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.conmatrix.make_colormap" title="Permalink to this definition">¶</a></dt>
+<dd><p>Return a LinearSegmentedColormap
+seq: a sequence of floats and RGB-tuples. The floats should be increasing
+and in the interval (0,1).</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.conmatrix.plot_wiring">
+<code class="descclassname">syconn.conmatrix.</code><code class="descname">plot_wiring</code><span class="sig-paren">(</span><em>wiring</em>, <em>den_borders</em>, <em>ax_borders</em>, <em>max_val</em>, <em>confidence_lvl</em>, <em>binary</em>, <em>wd</em>, <em>big_entries=True</em>, <em>add_fname=''</em>, <em>maj_vote=()</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/conmatrix.html#plot_wiring"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.conmatrix.plot_wiring" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plot type sorted connectivity matrix and save to figures folder in
+working directory</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>wiring</strong> (<em>np.array</em>) &#8211; symmetric 2D array of size #cells x #cells</li>
+<li><strong>den_borders</strong> &#8211; </li>
+<li><strong>type boarders on post synaptic site</strong> (<em>cell</em>) &#8211; </li>
+<li><strong>ax_borders</strong> &#8211; cell type boarders on pre synaptic site</li>
+<li><strong>max_val</strong> (<em>float</em>) &#8211; maximum cumulated contact area shown in plot</li>
+<li><strong>confidence_lvl</strong> (<em>float</em>) &#8211; minimum probability of cell type prediction to keep cell</li>
+<li><strong>binary</strong> (<em>bool</em>) &#8211; if True existence of synapse is weighted by 1, else 0</li>
+<li><strong>add_fname</strong> (<em>str</em>) &#8211; supplement of image file</li>
+<li><strong>maj_vote</strong> (<em>tuple</em>) &#8211; </li>
+<li><strong>big_entries</strong> (<em>bool</em>) &#8211; artificially increase pixel size from 1 to 3 for better visualization</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.conmatrix.plot_wiring_cs">
+<code class="descclassname">syconn.conmatrix.</code><code class="descname">plot_wiring_cs</code><span class="sig-paren">(</span><em>wiring</em>, <em>den_borders</em>, <em>ax_borders</em>, <em>confidence_lvl</em>, <em>binary</em>, <em>wd</em>, <em>add_fname='_CS'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/conmatrix.html#plot_wiring_cs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.conmatrix.plot_wiring_cs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Same as plot_wiring, but using all contact sites</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.conmatrix.plot_wiring_cum">
+<code class="descclassname">syconn.conmatrix.</code><code class="descname">plot_wiring_cum</code><span class="sig-paren">(</span><em>wiring</em>, <em>den_borders</em>, <em>ax_borders</em>, <em>confidence_lvl</em>, <em>max_val</em>, <em>binary</em>, <em>wd</em>, <em>add_fname=''</em>, <em>maj_vote=()</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/conmatrix.html#plot_wiring_cum"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.conmatrix.plot_wiring_cum" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plot wiring diagram on celltype-to-celltype level, e.g. connectivity
+between EA and MSN</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.conmatrix.plot_wiring_cum_cs">
+<code class="descclassname">syconn.conmatrix.</code><code class="descname">plot_wiring_cum_cs</code><span class="sig-paren">(</span><em>wiring</em>, <em>den_borders</em>, <em>ax_borders</em>, <em>confidence_lvl</em>, <em>binary</em>, <em>wd</em>, <em>add_fname=''</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/conmatrix.html#plot_wiring_cum_cs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.conmatrix.plot_wiring_cum_cs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Same as plot wiring, but using all contact sites</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.conmatrix.type_sorted_wiring">
+<code class="descclassname">syconn.conmatrix.</code><code class="descname">type_sorted_wiring</code><span class="sig-paren">(</span><em>wd</em>, <em>confidence_lvl=0.3</em>, <em>binary=False</em>, <em>max_syn_size=0.4</em>, <em>syn_only=True</em>, <em>big_entries=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/conmatrix.html#type_sorted_wiring"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.conmatrix.type_sorted_wiring" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate wiring of consensus skeletons sorted by predicted
+cell type classification and axoness prediction</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>wd</strong> (<em>str</em>) &#8211; </li>
+<li><strong>confidence_lvl</strong> (<em>float</em>) &#8211; minimum probability of cell type prediction to keep cell</li>
+<li><strong>binary</strong> (<em>bool</em>) &#8211; if True existence of synapse is weighted by 1, else 0</li>
+<li><strong>max_syn_size</strong> (<em>float</em>) &#8211; maximum cumulated synapse size shown in plot</li>
+<li><strong>syn_only</strong> (<em>bool</em>) &#8211; take only contact sites with synapse classification result of 1 into
+account</li>
+<li><strong>big_entries</strong> (<em>bool</em>) &#8211; artificially increase pixel size from 1 to 3 for better visualization</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.conmatrix.type_sorted_wiring_cs">
+<code class="descclassname">syconn.conmatrix.</code><code class="descname">type_sorted_wiring_cs</code><span class="sig-paren">(</span><em>wd</em>, <em>confidence_lvl=0.3</em>, <em>binary=False</em>, <em>max_syn_size=0.4</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/conmatrix.html#type_sorted_wiring_cs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.conmatrix.type_sorted_wiring_cs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Same as type_sorted_wiring but for all contact sites
+(synapse classification 0 and 1)</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-syconn.contactsites">
+<span id="syconn-contactsites"></span><h2>syconn.contactsites<a class="headerlink" href="#module-syconn.contactsites" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="syconn.contactsites.calc_cs_node">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">calc_cs_node</code><span class="sig-paren">(</span><em>args</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#calc_cs_node"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.calc_cs_node" title="Permalink to this definition">¶</a></dt>
+<dd><p>Helper function. Calculates three nodes for given contantct site annotation
+containing center of cs and the nearest skeleton nodes.
+The skeleton nodes containg the property axoness, radius and skel_ID.
+The center contains all above information.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>args</strong> (<em>list</em>) &#8211; Filepath to AnnotationObject containing one CS list to store number
+of processed cs and queue</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><ul class="simple">
+<li><em>list of SkeletonNodes</em></li>
+<li><strong>Three nodes</strong> (<em>nodes of adjacent skeletons and center node of CS</em>)</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.collect_contact_sites">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">collect_contact_sites</code><span class="sig-paren">(</span><em>cs_dir</em>, <em>only_sj=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#collect_contact_sites"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.collect_contact_sites" title="Permalink to this definition">¶</a></dt>
+<dd><p>Collect contact site nodes and corresponding features of all contact sites.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>cs_dir</strong> (<em>str</em>) &#8211; Path to contact site directory</li>
+<li><strong>only_sj</strong> (<em>bool</em>) &#8211; If only synapse candidates are to be saved</li>
+<li><strong>cs_dir</strong> &#8211; path to contact site directory</li>
+<li><strong>only_sj</strong> &#8211; </li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">CS nodes (n x 3), synapse feature (n x #feat)</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list of SkeletonNodes, np.array</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.conn_dict_wrapper">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">conn_dict_wrapper</code><span class="sig-paren">(</span><em>wd</em>, <em>all=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#conn_dict_wrapper"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.conn_dict_wrapper" title="Permalink to this definition">¶</a></dt>
+<dd><p>Wrapper function to write connectivity dictionary to working directory</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.convert_to_standard_cs_name">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">convert_to_standard_cs_name</code><span class="sig-paren">(</span><em>name</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#convert_to_standard_cs_name"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.convert_to_standard_cs_name" title="Permalink to this definition">¶</a></dt>
+<dd><p>Convert to all possible contact site key combinations</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>name</strong> (<em>str</em>) &#8211; Contact site key</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">possible key variations</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">list of str</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.create_synapse_skeleton">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">create_synapse_skeleton</code><span class="sig-paren">(</span><em>wd</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#create_synapse_skeleton"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.create_synapse_skeleton" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.get_number_cs_details">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">get_number_cs_details</code><span class="sig-paren">(</span><em>cs_path</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#get_number_cs_details"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.get_number_cs_details" title="Permalink to this definition">¶</a></dt>
+<dd><p>Prints number of synapse candidates and number of contact sites</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cs_path</strong> (<em>str</em>) &#8211; </td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.get_spine_dict">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">get_spine_dict</code><span class="sig-paren">(</span><em>spine_node</em>, <em>max_dist=100</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#get_spine_dict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.get_spine_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Gather spine information from spine endnote</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>spine_node</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonNode" title="syconn.utils.skeleton.SkeletonNode"><em>SkeletonNode</em></a>) &#8211; Node containing spine information</li>
+<li><strong>max_dist</strong> (<em>float</em>) &#8211; Maximum distance from spine head to endpoint in nm</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">Spine properties &#8216;head_diameter&#8217; and &#8216;branch_dist&#8217; and &#8216;head_proba&#8217;</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">dict</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.get_spine_summary">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">get_spine_summary</code><span class="sig-paren">(</span><em>syn_nodes</em>, <em>cs_dir</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#get_spine_summary"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.get_spine_summary" title="Permalink to this definition">¶</a></dt>
+<dd><p>Write out dictionary containing spines (dictionaries) with contact site name
+and spine number as key. The spine dictionary contains three values
+&#8216;head_diameter&#8217;, &#8216;branch_dist&#8217; and head_proba</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>syn_nodes</strong> (<em>list of SkeletonNodes</em>) &#8211; </li>
+<li><strong>cs_dir</strong> (<em>str</em>) &#8211; path to contact site data</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.syn_type_majority_vote">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">syn_type_majority_vote</code><span class="sig-paren">(</span><em>wd</em>, <em>suffix=''</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#syn_type_majority_vote"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.syn_type_majority_vote" title="Permalink to this definition">¶</a></dt>
+<dd><p>Majority vote of synapse type</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body"></td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">int, int</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.synapse_matrix">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">synapse_matrix</code><span class="sig-paren">(</span><em>wd</em>, <em>type_threshold=0.225</em>, <em>suffix=''</em>, <em>exclude_dendrodendro=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#synapse_matrix"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.synapse_matrix" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>wd</strong> (<em>str</em>) &#8211; </li>
+<li><strong>type_threshold</strong> (<em>float</em>) &#8211; </li>
+<li><strong>suffix</strong> (<em>str</em>) &#8211; </li>
+<li><strong>exclude_dendrodendro</strong> (<em>bool</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.update_axoness_dict">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">update_axoness_dict</code><span class="sig-paren">(</span><em>cs_dir</em>, <em>syn_only=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#update_axoness_dict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.update_axoness_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update axoness dictionary with current data pulled from &#8216;neurons/&#8217;
+folder</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>cs_dir</strong> (<em>str</em>) &#8211; path to contact site data</li>
+<li><strong>syn_only</strong> (<em>bool</em>) &#8211; if only synapses are to be saved.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">updated axoness dictionary</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">dict</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.update_property_dict">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">update_property_dict</code><span class="sig-paren">(</span><em>cs_dir</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#update_property_dict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.update_property_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Update property dictionary</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cs_dir</strong> (<em>str</em>) &#8211; </td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">update property dictionary</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.update_single_cs_axoness">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">update_single_cs_axoness</code><span class="sig-paren">(</span><em>params</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#update_single_cs_axoness"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.update_single_cs_axoness" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get axoness of adjacent tracings of contact site</p>
+<p>Find nearest tracing node to representative coordinate of contact site of
+touching tracings.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>params</strong> (<em>tuple (numpy.array, str)</em>) &#8211; Representative coordinate and contact site key</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">contact site key, dictionary of skeleton axoness</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">str, dict</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.update_single_cs_properties">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">update_single_cs_properties</code><span class="sig-paren">(</span><em>params</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#update_single_cs_properties"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.update_single_cs_properties" title="Permalink to this definition">¶</a></dt>
+<dd><p>Helper function of update_property_dict</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.write_axoness_dicts">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">write_axoness_dicts</code><span class="sig-paren">(</span><em>cs_dir</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#write_axoness_dicts"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.write_axoness_dicts" title="Permalink to this definition">¶</a></dt>
+<dd><p>Write axoness dictionaries to working directory</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cs_dir</strong> (<em>str</em>) &#8211; </td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.write_cs_summary">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">write_cs_summary</code><span class="sig-paren">(</span><em>cs_nodes</em>, <em>cs_feats</em>, <em>cs_dir</em>, <em>supp=''</em>, <em>syn_only=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#write_cs_summary"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.write_cs_summary" title="Permalink to this definition">¶</a></dt>
+<dd><p>Writes contact site summary of all contact sites without sampling</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>cs_nodes</strong> (<em>lsit of SkeletonNodes</em>) &#8211; contact site nodes</li>
+<li><strong>cs_feats</strong> (<em>np.array</em>) &#8211; synapse features of contact sites</li>
+<li><strong>cs_dir</strong> (<em>str</em>) &#8211; path to contact site directory</li>
+<li><strong>supp</strong> (<em>str</em>) &#8211; supplement for resulting file</li>
+<li><strong>syn_only</strong> (<em>bool</em>) &#8211; if only synapses are to be saved.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.write_property_dict">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">write_property_dict</code><span class="sig-paren">(</span><em>cs_dir</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#write_property_dict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.write_property_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Write property dictionary to working directory</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>cs_dir</strong> (<em>str</em>) &#8211; </td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.contactsites.write_summaries">
+<code class="descclassname">syconn.contactsites.</code><code class="descname">write_summaries</code><span class="sig-paren">(</span><em>wd</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/contactsites.html#write_summaries"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.contactsites.write_summaries" title="Permalink to this definition">¶</a></dt>
+<dd><p>Write information about contact sites and synapses, axoness and
+connectivity.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>wd</strong> (<em>str</em>) &#8211; Path to working directory of SyConn</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="syconn.processing.html" title="syconn.processing"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="Examples.html" title="Examples"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">SyConn a documentation</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2016, Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.8.
+    </div>
+  </body>
+</html>

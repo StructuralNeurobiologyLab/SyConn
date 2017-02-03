@@ -1,0 +1,909 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>syconn.contactsites &#8212; SyConn a documentation</title>
+    
+    <link rel="stylesheet" href="../../_static/sphinxdoc.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     'a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="../../genindex.html" />
+    <link rel="search" title="Search" href="../../search.html" />
+    <link rel="top" title="SyConn a documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">SyConn a documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" accesskey="U">Module code</a> &#187;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for syconn.contactsites</h1><div class="highlight"><pre>
+<span></span><span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1"># SyConn - Synaptic connectivity inference toolkit</span>
+<span class="c1">#</span>
+<span class="c1"># Copyright (c) 2016 - now</span>
+<span class="c1"># Max-Planck-Institute for Medical Research, Heidelberg, Germany</span>
+<span class="c1"># Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld</span>
+
+
+<span class="kn">import</span> <span class="nn">copy</span>
+<span class="kn">import</span> <span class="nn">gc</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">time</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">multiprocessing</span> <span class="k">import</span> <span class="n">Pool</span><span class="p">,</span> <span class="n">Manager</span><span class="p">,</span> <span class="n">cpu_count</span>
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="k">import</span> <span class="n">array</span> <span class="k">as</span> <span class="n">arr</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="k">import</span> <span class="n">spatial</span>
+<span class="kn">from</span> <span class="nn">sys</span> <span class="k">import</span> <span class="n">stdout</span>
+<span class="kn">import</span> <span class="nn">cPickle</span> <span class="k">as</span> <span class="nn">pickle</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="k">import</span> <span class="n">spatial</span>
+<span class="kn">from</span> <span class="nn">scipy.sparse.csgraph._tools</span> <span class="k">import</span> <span class="n">csgraph_from_dense</span>
+<span class="kn">from</span> <span class="nn">sklearn.externals</span> <span class="k">import</span> <span class="n">joblib</span>
+
+<span class="kn">from</span> <span class="nn">knossos_utils.knossosdataset</span> <span class="k">import</span> <span class="n">KnossosDataset</span>
+<span class="kn">from</span> <span class="nn">multi_proc.multi_proc_main</span> <span class="k">import</span> <span class="n">start_multiprocess</span>
+<span class="kn">from</span> <span class="nn">knossos_utils</span> <span class="k">import</span> <span class="n">skeleton_utils</span> <span class="k">as</span> <span class="n">su</span>
+<span class="kn">from</span> <span class="nn">processing.axoness</span> <span class="k">import</span> <span class="n">predict_axoness_from_nodes</span>
+<span class="kn">from</span> <span class="nn">processing.mapper</span> <span class="k">import</span> <span class="n">feature_valid_syns</span><span class="p">,</span> <span class="n">calc_syn_dict</span>
+<span class="kn">from</span> <span class="nn">processing.synapticity</span> <span class="k">import</span> <span class="n">parse_synfeature_from_node</span>
+<span class="kn">from</span> <span class="nn">utils.datahandler</span> <span class="k">import</span> <span class="n">get_filepaths_from_dir</span><span class="p">,</span> \
+    <span class="n">load_ordered_mapped_skeleton</span><span class="p">,</span> <span class="n">get_paths_of_skelID</span>
+<span class="kn">from</span> <span class="nn">utils.datahandler</span> <span class="k">import</span> <span class="n">write_obj2pkl</span><span class="p">,</span> <span class="n">load_pkl2obj</span>
+<span class="kn">from</span> <span class="nn">knossos_utils.skeleton</span> <span class="k">import</span> <span class="n">Skeleton</span><span class="p">,</span> <span class="n">SkeletonAnnotation</span><span class="p">,</span> <span class="n">SkeletonNode</span>
+
+
+<div class="viewcode-block" id="collect_contact_sites"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.collect_contact_sites">[docs]</a><span class="k">def</span> <span class="nf">collect_contact_sites</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">,</span> <span class="n">only_sj</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Collect contact site nodes and corresponding features of all contact sites.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cs_dir : str</span>
+<span class="sd">        Path to contact site directory</span>
+<span class="sd">    only_sj : bool</span>
+<span class="sd">        If only synapse candidates are to be saved</span>
+<span class="sd">    cs_dir : str</span>
+<span class="sd">        path to contact site directory</span>
+<span class="sd">    only_sj : bool</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of SkeletonNodes, np.array</span>
+<span class="sd">        CS nodes (n x 3), synapse feature (n x #feat)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">only_sj</span><span class="p">:</span>
+        <span class="n">search_folder</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;cs_sj/&#39;</span><span class="p">,</span> <span class="s1">&#39;cs_vc_sj/&#39;</span><span class="p">,</span> <span class="s1">&#39;cs/&#39;</span><span class="p">,</span> <span class="s1">&#39;cs_vc/&#39;</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">search_folder</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;cs_sj/&#39;</span><span class="p">,</span> <span class="s1">&#39;cs_vc_sj/&#39;</span><span class="p">]</span>
+    <span class="n">sample_list_len</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">cs_fpaths</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">ending</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">search_folder</span><span class="p">):</span>
+        <span class="n">curr_dir</span> <span class="o">=</span> <span class="n">cs_dir</span><span class="o">+</span><span class="n">ending</span>
+        <span class="n">curr_fpaths</span> <span class="o">=</span> <span class="n">get_filepaths_from_dir</span><span class="p">(</span><span class="n">curr_dir</span><span class="p">,</span> <span class="n">ending</span><span class="o">=</span><span class="s1">&#39;nml&#39;</span><span class="p">)</span>
+        <span class="n">cs_fpaths</span> <span class="o">+=</span> <span class="n">curr_fpaths</span>
+        <span class="n">sample_list_len</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">curr_fpaths</span><span class="p">))</span>
+    <span class="c1"># print &quot;Collecting contact sites (%d CS). Only sj is %s.&quot; % (len(cs_fpaths),</span>
+    <span class="c1">#                                                            str(only_sj))</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cs_fpaths</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="nb">print</span> <span class="s2">&quot;No data available. Returning.&quot;</span>
+        <span class="k">return</span> <span class="p">[],</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="p">))</span>
+    <span class="n">nb_cpus</span> <span class="o">=</span> <span class="n">cpu_count</span><span class="p">()</span> <span class="o">-</span> <span class="mi">2</span>
+    <span class="n">pool</span> <span class="o">=</span> <span class="n">Pool</span><span class="p">(</span><span class="n">processes</span><span class="o">=</span><span class="n">nb_cpus</span><span class="p">)</span>
+    <span class="n">m</span> <span class="o">=</span> <span class="n">Manager</span><span class="p">()</span>
+    <span class="n">q</span> <span class="o">=</span> <span class="n">m</span><span class="o">.</span><span class="n">Queue</span><span class="p">()</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="p">[(</span><span class="n">sample</span><span class="p">,</span> <span class="n">q</span><span class="p">)</span> <span class="k">for</span> <span class="n">sample</span> <span class="ow">in</span> <span class="n">cs_fpaths</span><span class="p">]</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">pool</span><span class="o">.</span><span class="n">map_async</span><span class="p">(</span><span class="n">calc_cs_node</span><span class="p">,</span> <span class="n">params</span><span class="p">)</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">result</span><span class="o">.</span><span class="n">get</span><span class="p">()</span>
+    <span class="n">pool</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="n">pool</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+    <span class="n">feats</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">syn_nodes</span> <span class="ow">in</span> <span class="n">res</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">syn_nodes</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s1">&#39;center&#39;</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">getComment</span><span class="p">():</span>
+                <span class="n">feat</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;syn_feat&#39;</span><span class="p">]</span>
+                <span class="n">feats</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">feat</span><span class="p">)</span>
+    <span class="n">res</span> <span class="o">=</span> <span class="n">arr</span><span class="p">(</span><span class="n">res</span><span class="p">)</span>
+    <span class="n">feats</span> <span class="o">=</span> <span class="n">arr</span><span class="p">(</span><span class="n">feats</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">res</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">feats</span><span class="p">),</span> <span class="s1">&#39;feats and nodes have different length!&#39;</span>
+    <span class="k">return</span> <span class="n">res</span><span class="p">,</span> <span class="n">feats</span></div>
+
+
+<div class="viewcode-block" id="write_summaries"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.write_summaries">[docs]</a><span class="k">def</span> <span class="nf">write_summaries</span><span class="p">(</span><span class="n">wd</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Write information about contact sites and synapses, axoness and</span>
+<span class="sd">    connectivity.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    wd : str</span>
+<span class="sd">        Path to working directory of SyConn</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">cs_dir</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/contactsites/&#39;</span>
+    <span class="n">cs_nodes</span><span class="p">,</span> <span class="n">cs_feats</span> <span class="o">=</span> <span class="n">collect_contact_sites</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">,</span> <span class="n">only_sj</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">write_cs_summary</span><span class="p">(</span><span class="n">cs_nodes</span><span class="p">,</span> <span class="n">cs_feats</span><span class="p">,</span> <span class="n">cs_dir</span><span class="p">)</span>
+    <span class="n">cs_nodes</span><span class="p">,</span> <span class="n">cs_feats</span> <span class="o">=</span> <span class="n">collect_contact_sites</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">,</span> <span class="n">only_sj</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">features</span><span class="p">,</span> <span class="n">axoness_info</span><span class="p">,</span> <span class="n">syn_pred</span> <span class="o">=</span> <span class="n">feature_valid_syns</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">,</span> <span class="n">only_sj</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>
+                                                          <span class="n">only_syn</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">features</span><span class="p">,</span> <span class="n">axoness_info</span><span class="p">,</span> <span class="n">pre_dict</span><span class="p">,</span> <span class="n">all_post_ids</span><span class="p">,</span> <span class="n">valid_syn_array</span><span class="p">,</span> <span class="n">ax_dict</span> <span class="o">=</span>\
+        <span class="n">calc_syn_dict</span><span class="p">(</span><span class="n">features</span><span class="p">[</span><span class="n">syn_pred</span><span class="p">],</span> <span class="n">axoness_info</span><span class="p">[</span><span class="n">syn_pred</span><span class="p">],</span> <span class="n">get_all</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">write_obj2pkl</span><span class="p">(</span><span class="n">pre_dict</span><span class="p">,</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;pre_dict.pkl&#39;</span><span class="p">)</span>
+    <span class="n">write_obj2pkl</span><span class="p">(</span><span class="n">ax_dict</span><span class="p">,</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;axoness_dict.pkl&#39;</span><span class="p">)</span>
+    <span class="n">write_cs_summary</span><span class="p">(</span><span class="n">cs_nodes</span><span class="p">,</span> <span class="n">cs_feats</span><span class="p">,</span> <span class="n">cs_dir</span><span class="p">,</span> <span class="n">supp</span><span class="o">=</span><span class="s1">&#39;_all&#39;</span><span class="p">,</span> <span class="n">syn_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">features</span><span class="p">,</span> <span class="n">axoness_info</span><span class="p">,</span> <span class="n">_</span> <span class="o">=</span> <span class="n">feature_valid_syns</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">,</span> <span class="n">only_sj</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                                          <span class="n">only_syn</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                                          <span class="n">all_contacts</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">features</span><span class="p">,</span> <span class="n">axoness_info</span><span class="p">,</span> <span class="n">pre_dict</span><span class="p">,</span> <span class="n">all_post_ids</span><span class="p">,</span> <span class="n">valid_syn_array</span><span class="p">,</span> <span class="n">ax_dict</span> <span class="o">=</span>\
+        <span class="n">calc_syn_dict</span><span class="p">(</span><span class="n">features</span><span class="p">,</span> <span class="n">axoness_info</span><span class="p">,</span> <span class="n">get_all</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">write_obj2pkl</span><span class="p">(</span><span class="n">pre_dict</span><span class="p">,</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;pre_dict_all.pkl&#39;</span><span class="p">)</span>
+    <span class="n">write_obj2pkl</span><span class="p">(</span><span class="n">ax_dict</span><span class="p">,</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;axoness_dict_all.pkl&#39;</span><span class="p">)</span>
+    <span class="n">gc</span><span class="o">.</span><span class="n">collect</span><span class="p">()</span>
+    <span class="n">write_property_dict</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">)</span>
+    <span class="n">conn_dict_wrapper</span><span class="p">(</span><span class="n">wd</span><span class="p">,</span> <span class="nb">all</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">conn_dict_wrapper</span><span class="p">(</span><span class="n">wd</span><span class="p">,</span> <span class="nb">all</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="nb">print</span> <span class="s2">&quot;Found </span><span class="si">%d</span><span class="s2"> contact sites containing </span><span class="si">%d</span><span class="s2">&quot;</span> \
+          <span class="s2">&quot; synapses.&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">cs_feats</span><span class="p">),</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">syn_pred</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="write_cs_summary"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.write_cs_summary">[docs]</a><span class="k">def</span> <span class="nf">write_cs_summary</span><span class="p">(</span><span class="n">cs_nodes</span><span class="p">,</span> <span class="n">cs_feats</span><span class="p">,</span> <span class="n">cs_dir</span><span class="p">,</span> <span class="n">supp</span><span class="o">=</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="n">syn_only</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Writes contact site summary of all contact sites without sampling</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cs_nodes: lsit of SkeletonNodes</span>
+<span class="sd">        contact site nodes</span>
+<span class="sd">    cs_feats: np.array</span>
+<span class="sd">        synapse features of contact sites</span>
+<span class="sd">    cs_dir: str</span>
+<span class="sd">        path to contact site directory</span>
+<span class="sd">    supp : str</span>
+<span class="sd">        supplement for resulting file</span>
+<span class="sd">    syn_only: bool</span>
+<span class="sd">        if only synapses are to be saved.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">dummy_skel</span> <span class="o">=</span> <span class="n">Skeleton</span><span class="p">()</span>
+    <span class="n">dummy_anno</span> <span class="o">=</span> <span class="n">SkeletonAnnotation</span><span class="p">()</span>
+    <span class="n">dummy_anno</span><span class="o">.</span><span class="n">setComment</span><span class="p">(</span><span class="s1">&#39;CS Summary&#39;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">cs_nodes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">write_obj2pkl</span><span class="p">({},</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;cs_dict</span><span class="si">%s</span><span class="s1">.pkl&#39;</span> <span class="o">%</span> <span class="n">supp</span><span class="p">)</span>
+        <span class="n">dummy_skel</span><span class="o">.</span><span class="n">add_annotation</span><span class="p">(</span><span class="n">dummy_anno</span><span class="p">)</span>
+        <span class="n">fname</span> <span class="o">=</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;cs_summary</span><span class="si">%s</span><span class="s1">.k.zip&#39;</span> <span class="o">%</span> <span class="n">supp</span>
+        <span class="n">dummy_skel</span><span class="o">.</span><span class="n">to_kzip</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span>
+        <span class="k">return</span>
+    <span class="n">clf_path</span> <span class="o">=</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;/../models/rf_synapses/rfc_syn.pkl&#39;</span>
+    <span class="c1"># print &quot;\nUsing %s for synapse prediction.&quot; % clf_path</span>
+    <span class="n">rfc_syn</span> <span class="o">=</span> <span class="n">joblib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">clf_path</span><span class="p">)</span>
+    <span class="n">probas</span> <span class="o">=</span> <span class="n">rfc_syn</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">cs_feats</span><span class="p">)</span>
+    <span class="n">preds</span> <span class="o">=</span> <span class="n">rfc_syn</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">cs_feats</span><span class="p">)</span>
+    <span class="n">cnt</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">cs_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">syn_nodes</span> <span class="ow">in</span> <span class="n">cs_nodes</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">syn_nodes</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s1">&#39;center&#39;</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">getComment</span><span class="p">():</span>
+                <span class="n">proba</span> <span class="o">=</span> <span class="n">probas</span><span class="p">[</span><span class="n">cnt</span><span class="p">]</span>
+                <span class="n">pred</span> <span class="o">=</span> <span class="n">preds</span><span class="p">[</span><span class="n">cnt</span><span class="p">]</span>
+                <span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;syn_proba&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">proba</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;syn_pred&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pred</span>
+                <span class="n">feat</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;syn_feat&#39;</span><span class="p">]</span>
+                <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">array_equal</span><span class="p">(</span><span class="n">feat</span><span class="p">,</span> <span class="n">cs_feats</span><span class="p">[</span><span class="n">cnt</span><span class="p">]),</span> <span class="s2">&quot;Features unequal!&quot;</span>
+                <span class="n">cs_name</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;cs_name&#39;</span><span class="p">]</span>
+                <span class="k">for</span> <span class="n">dummy_node</span> <span class="ow">in</span> <span class="n">syn_nodes</span><span class="p">:</span>
+                    <span class="n">dummy_anno</span><span class="o">.</span><span class="n">addNode</span><span class="p">(</span><span class="n">dummy_node</span><span class="p">)</span>
+                <span class="n">cnt</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="k">if</span> <span class="n">syn_only</span> <span class="ow">and</span> <span class="s1">&#39;sj&#39;</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">getComment</span><span class="p">():</span>
+                    <span class="k">continue</span>
+                <span class="k">if</span> <span class="s1">&#39;sj&#39;</span> <span class="ow">in</span> <span class="n">node</span><span class="o">.</span><span class="n">getComment</span><span class="p">():</span>
+                    <span class="n">overlap_vx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;/overlap_vx/&#39;</span> <span class="o">+</span>
+                                         <span class="n">cs_name</span> <span class="o">+</span> <span class="s1">&#39;ol_vx.npy&#39;</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">overlap_vx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="p">))</span>
+                <span class="n">cs</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="n">cs</span><span class="p">[</span><span class="s1">&#39;overlap_vx&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">overlap_vx</span>
+                <span class="n">cs</span><span class="p">[</span><span class="s1">&#39;syn_pred&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">pred</span>
+                <span class="n">cs</span><span class="p">[</span><span class="s1">&#39;syn_proba&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">proba</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">cs</span><span class="p">[</span><span class="s1">&#39;center_coord&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">()</span>
+                <span class="n">cs</span><span class="p">[</span><span class="s1">&#39;syn_feats&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">feat</span>
+                <span class="n">cs</span><span class="p">[</span><span class="s1">&#39;cs_dist&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;cs_dist&#39;</span><span class="p">])</span>
+                <span class="n">cs</span><span class="p">[</span><span class="s1">&#39;mean_cs_area&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;mean_cs_area&#39;</span><span class="p">])</span>
+                <span class="n">cs</span><span class="p">[</span><span class="s1">&#39;overlap_area&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;overlap_area&#39;</span><span class="p">])</span>
+                <span class="n">cs</span><span class="p">[</span><span class="s1">&#39;overlap&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;overlap&#39;</span><span class="p">])</span>
+                <span class="n">cs</span><span class="p">[</span><span class="s1">&#39;abs_ol&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;abs_ol&#39;</span><span class="p">])</span>
+                <span class="n">cs</span><span class="p">[</span><span class="s1">&#39;overlap_cs&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;overlap_cs&#39;</span><span class="p">])</span>
+                <span class="n">cs</span><span class="p">[</span><span class="s1">&#39;cs_name&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;cs_name&#39;</span><span class="p">]</span>
+                <span class="n">cs_dict</span><span class="p">[</span><span class="n">cs_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">cs</span>
+    <span class="n">dummy_skel</span><span class="o">.</span><span class="n">add_annotation</span><span class="p">(</span><span class="n">dummy_anno</span><span class="p">)</span>
+    <span class="n">fname</span> <span class="o">=</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;cs_summary</span><span class="si">%s</span><span class="s1">.k.zip&#39;</span> <span class="o">%</span> <span class="n">supp</span>
+    <span class="n">dummy_skel</span><span class="o">.</span><span class="n">to_kzip</span><span class="p">(</span><span class="n">fname</span><span class="p">)</span>
+    <span class="n">write_obj2pkl</span><span class="p">(</span><span class="n">cs_dict</span><span class="p">,</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;cs_dict</span><span class="si">%s</span><span class="s1">.pkl&#39;</span> <span class="o">%</span> <span class="n">supp</span><span class="p">)</span></div>
+    <span class="c1"># print &quot;Saved CS summary at %s.&quot; % fname</span>
+
+
+<div class="viewcode-block" id="calc_cs_node"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.calc_cs_node">[docs]</a><span class="k">def</span> <span class="nf">calc_cs_node</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Helper function. Calculates three nodes for given contantct site annotation</span>
+<span class="sd">    containing center of cs and the nearest skeleton nodes.</span>
+<span class="sd">    The skeleton nodes containg the property axoness, radius and skel_ID.</span>
+<span class="sd">    The center contains all above information.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    args: list</span>
+<span class="sd">        Filepath to AnnotationObject containing one CS list to store number</span>
+<span class="sd">        of processed cs and queue</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of SkeletonNodes</span>
+<span class="sd">    Three nodes: nodes of adjacent skeletons and center node of CS</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">cs_path</span><span class="p">,</span> <span class="n">q</span> <span class="o">=</span> <span class="n">args</span>
+    <span class="n">anno</span> <span class="o">=</span> <span class="n">su</span><span class="o">.</span><span class="n">loadj0126NML</span><span class="p">(</span><span class="n">cs_path</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">ids</span><span class="p">,</span> <span class="n">axoness</span> <span class="o">=</span> <span class="n">predict_axoness_from_nodes</span><span class="p">(</span><span class="n">anno</span><span class="p">)</span>
+    <span class="n">syn_nodes</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">center_node</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">anno</span><span class="o">.</span><span class="n">getNodes</span><span class="p">():</span>
+        <span class="n">n_comment</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">getComment</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s1">&#39;center&#39;</span> <span class="ow">in</span> <span class="n">n_comment</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">feat</span> <span class="o">=</span> <span class="n">parse_synfeature_from_node</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="n">feat</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;[\d.e+e-]+&#39;</span><span class="p">,</span> <span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;syn_feat&#39;</span><span class="p">])</span>
+                <span class="n">feat</span> <span class="o">=</span> <span class="n">arr</span><span class="p">([</span><span class="nb">float</span><span class="p">(</span><span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">feat</span><span class="p">])</span>
+            <span class="n">center_node</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+            <span class="n">center_node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;syn_feat&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">feat</span>
+            <span class="n">cs_ix</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;cs(\d+)&#39;</span><span class="p">,</span> <span class="n">anno</span><span class="o">.</span><span class="n">getComment</span><span class="p">())[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">add_comment</span> <span class="o">=</span> <span class="s1">&#39;&#39;</span>
+            <span class="k">if</span> <span class="s1">&#39;vc&#39;</span> <span class="ow">in</span> <span class="n">anno</span><span class="o">.</span><span class="n">getComment</span><span class="p">():</span>
+                <span class="n">add_comment</span> <span class="o">+=</span> <span class="s1">&#39;_vc&#39;</span>
+            <span class="k">if</span> <span class="s1">&#39;sj&#39;</span> <span class="ow">in</span> <span class="n">anno</span><span class="o">.</span><span class="n">getComment</span><span class="p">():</span>
+                <span class="n">add_comment</span> <span class="o">+=</span> <span class="s1">&#39;_sj&#39;</span>
+            <span class="n">center_node</span><span class="o">.</span><span class="n">setComment</span><span class="p">(</span><span class="s1">&#39;cs</span><span class="si">%s%s</span><span class="s1">_skel_</span><span class="si">%s</span><span class="s1">_</span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">cs_ix</span><span class="p">,</span> <span class="n">add_comment</span><span class="p">,</span>
+                                   <span class="nb">str</span><span class="p">(</span><span class="n">ids</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="nb">str</span><span class="p">(</span><span class="n">ids</span><span class="p">[</span><span class="mi">1</span><span class="p">])))</span>
+    <span class="n">center_node_comment</span> <span class="o">=</span> <span class="n">center_node</span><span class="o">.</span><span class="n">getComment</span><span class="p">()</span>
+    <span class="n">center_node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;vc_size&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="n">center_node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;sj_size&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+    <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">anno</span><span class="o">.</span><span class="n">getNodes</span><span class="p">():</span>
+        <span class="n">n_comment</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">getComment</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s1">&#39;skelnode_area&#39;</span> <span class="ow">in</span> <span class="n">n_comment</span><span class="p">:</span>
+            <span class="n">skel_node</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">node</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">skel_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;(\d+)_skelnode&#39;</span><span class="p">,</span>
+                                         <span class="n">skel_node</span><span class="o">.</span><span class="n">getComment</span><span class="p">())[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">except</span> <span class="ne">IndexError</span><span class="p">:</span>
+                <span class="n">skel_id</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;syn(\d+)&#39;</span><span class="p">,</span> <span class="n">skel_node</span><span class="o">.</span><span class="n">getComment</span><span class="p">())[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">assert</span> <span class="n">skel_id</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">,</span> <span class="s1">&#39;Wrong skeleton ID during axoness parsing.&#39;</span>
+            <span class="n">skel_node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;skelID&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">skel_id</span>
+            <span class="n">skel_node</span><span class="o">.</span><span class="n">setComment</span><span class="p">(</span><span class="n">center_node_comment</span><span class="o">+</span><span class="s1">&#39;_skelnode&#39;</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">skel_id</span><span class="p">))</span>
+            <span class="n">syn_nodes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">skel_node</span><span class="p">)</span>
+        <span class="k">if</span> <span class="s1">&#39;_vc-&#39;</span> <span class="ow">in</span> <span class="n">n_comment</span><span class="p">:</span>
+            <span class="n">center_node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;vc_size&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;radius&#39;</span><span class="p">]</span>
+        <span class="c1"># if &#39;_sj-&#39; in n_comment:</span>
+        <span class="c1">#     center_node.data[&#39;sj_size&#39;] = node.data[&#39;radius&#39;]</span>
+    <span class="n">center_node</span><span class="o">.</span><span class="n">setComment</span><span class="p">(</span><span class="n">center_node_comment</span><span class="o">+</span><span class="s1">&#39;_center&#39;</span><span class="p">)</span>
+    <span class="n">syn_nodes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">center_node</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">syn_nodes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">,</span> <span class="s1">&#39;Number of synapse nodes different than three&#39;</span>
+    <span class="n">q</span><span class="o">.</span><span class="n">put</span><span class="p">(</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">syn_nodes</span></div>
+
+
+<div class="viewcode-block" id="get_spine_summary"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.get_spine_summary">[docs]</a><span class="k">def</span> <span class="nf">get_spine_summary</span><span class="p">(</span><span class="n">syn_nodes</span><span class="p">,</span> <span class="n">cs_dir</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Write out dictionary containing spines (dictionaries) with contact site name</span>
+<span class="sd">    and spine number as key. The spine dictionary contains three values</span>
+<span class="sd">    &#39;head_diameter&#39;, &#39;branch_dist&#39; and head_proba</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    syn_nodes : list of SkeletonNodes</span>
+<span class="sd">    cs_dir: str</span>
+<span class="sd">        path to contact site data</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">spine_summary</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">nodes</span> <span class="ow">in</span> <span class="n">syn_nodes</span><span class="p">:</span>
+        <span class="n">skel1_node</span><span class="p">,</span> <span class="n">skel2_node</span><span class="p">,</span> <span class="n">center_node</span> <span class="o">=</span> <span class="n">nodes</span>
+        <span class="n">spiness1</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">skel1_node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;spiness_pred&#39;</span><span class="p">])</span>
+        <span class="n">spiness2</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">skel2_node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;spiness_pred&#39;</span><span class="p">])</span>
+        <span class="n">cs_name</span> <span class="o">=</span> <span class="n">center_node</span><span class="o">.</span><span class="n">getComment</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">spiness1</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">spine_node</span> <span class="o">=</span> <span class="n">skel1_node</span>
+            <span class="n">spine</span> <span class="o">=</span> <span class="n">get_spine_dict</span><span class="p">(</span><span class="n">spine_node</span><span class="p">)</span>
+            <span class="n">spine_summary</span><span class="p">[</span><span class="n">cs_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">spine</span>
+        <span class="k">if</span> <span class="n">spiness2</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">spine_node</span> <span class="o">=</span> <span class="n">skel2_node</span>
+            <span class="n">spine</span> <span class="o">=</span> <span class="n">get_spine_dict</span><span class="p">(</span><span class="n">spine_node</span><span class="p">)</span>
+            <span class="n">spine_summary</span><span class="p">[</span><span class="n">cs_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">spine</span>
+    <span class="n">write_obj2pkl</span><span class="p">(</span><span class="n">spine_summary</span><span class="p">,</span> <span class="n">cs_dir</span><span class="o">+</span><span class="s1">&#39;/spine_summary.pkl&#39;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="get_spine_dict"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.get_spine_dict">[docs]</a><span class="k">def</span> <span class="nf">get_spine_dict</span><span class="p">(</span><span class="n">spine_node</span><span class="p">,</span> <span class="n">max_dist</span><span class="o">=</span><span class="mi">100</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Gather spine information from spine endnote</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    spine_node: SkeletonNode</span>
+<span class="sd">        Node containing spine information</span>
+<span class="sd">    max_dist : float</span>
+<span class="sd">        Maximum distance from spine head to endpoint in nm</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        Spine properties &#39;head_diameter&#39; and &#39;branch_dist&#39; and &#39;head_proba&#39;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">spine</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">endpoint_dist</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">spine_node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;end_dist&#39;</span><span class="p">])</span>
+    <span class="k">if</span> <span class="n">endpoint_dist</span> <span class="o">&gt;</span> <span class="n">max_dist</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">None</span>
+    <span class="n">spine</span><span class="p">[</span><span class="s1">&#39;head_diameter&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">spine_node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;head_diameter&#39;</span><span class="p">])</span>
+    <span class="n">spine</span><span class="p">[</span><span class="s1">&#39;branch_dist&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">spine_node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;branch_dist&#39;</span><span class="p">])</span>
+    <span class="n">spine</span><span class="p">[</span><span class="s1">&#39;head_proba&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">spine_node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;spiness_proba1&#39;</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">spine</span></div>
+
+
+<div class="viewcode-block" id="update_axoness_dict"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.update_axoness_dict">[docs]</a><span class="k">def</span> <span class="nf">update_axoness_dict</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">,</span> <span class="n">syn_only</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Update axoness dictionary with current data pulled from &#39;neurons/&#39;</span>
+<span class="sd">    folder</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cs_dir: str</span>
+<span class="sd">        path to contact site data</span>
+<span class="sd">    syn_only : bool</span>
+<span class="sd">        if only synapses are to be saved.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        updated axoness dictionary</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">syn_only</span><span class="p">:</span>
+        <span class="n">dict_path</span> <span class="o">=</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;cs_dict.pkl&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">dict_path</span> <span class="o">=</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;cs_dict_all.pkl&#39;</span>
+    <span class="n">cs_dict</span> <span class="o">=</span> <span class="n">load_pkl2obj</span><span class="p">(</span><span class="n">dict_path</span><span class="p">)</span>
+    <span class="n">cs_keys</span> <span class="o">=</span> <span class="n">cs_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">cs_keys</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">syn_only</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">cs_dict</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s1">&#39;syn_pred&#39;</span><span class="p">]:</span>
+            <span class="k">continue</span>
+        <span class="c1"># new_names = convert_to_standard_cs_name(k)</span>
+        <span class="n">skels</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;[\d]+&#39;</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span>
+        <span class="n">ax_key</span> <span class="o">=</span> <span class="n">skels</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span> <span class="o">+</span> <span class="n">skels</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span> <span class="o">+</span> <span class="n">skels</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">new_names</span> <span class="o">=</span> <span class="p">[</span><span class="n">k</span><span class="p">]</span>
+        <span class="n">param</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">new_names</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">center_coord</span> <span class="o">=</span> <span class="n">cs_dict</span><span class="p">[</span><span class="n">var</span><span class="p">][</span><span class="s1">&#39;center_coord&#39;</span><span class="p">]</span>
+                <span class="n">param</span> <span class="o">=</span> <span class="p">(</span><span class="n">center_coord</span><span class="p">,</span> <span class="n">ax_key</span><span class="p">)</span>
+                <span class="k">break</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">param</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Didnt find CS of key </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">k</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">params</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
+    <span class="n">new_vals</span> <span class="o">=</span> <span class="n">start_multiprocess</span><span class="p">(</span><span class="n">update_single_cs_axoness</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">new_ax_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">new_vals</span><span class="p">:</span>
+        <span class="n">new_ax_dict</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+    <span class="k">return</span> <span class="n">new_ax_dict</span></div>
+
+
+<div class="viewcode-block" id="update_single_cs_axoness"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.update_single_cs_axoness">[docs]</a><span class="k">def</span> <span class="nf">update_single_cs_axoness</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Get axoness of adjacent tracings of contact site</span>
+
+<span class="sd">    Find nearest tracing node to representative coordinate of contact site of</span>
+<span class="sd">    touching tracings.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    params : tuple (numpy.array, str)</span>
+<span class="sd">        Representative coordinate and contact site key</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str, dict</span>
+<span class="sd">        contact site key, dictionary of skeleton axoness</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">center_coord</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">cs_nb</span><span class="p">,</span> <span class="n">skel1</span><span class="p">,</span> <span class="n">skel2</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;(\d+)_(\d+)_(\d+)&#39;</span><span class="p">,</span> <span class="n">key</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">skel1_path</span><span class="p">,</span> <span class="n">skel2_path</span> <span class="o">=</span> <span class="n">get_paths_of_skelID</span><span class="p">([</span><span class="n">skel1</span><span class="p">,</span> <span class="n">skel2</span><span class="p">],</span>
+            <span class="n">traced_skel_dir</span><span class="o">=</span><span class="s1">&#39;/lustre/pschuber/mapped_soma_tracings/nml_obj/&#39;</span><span class="p">)</span>
+    <span class="n">skel1_anno</span> <span class="o">=</span> <span class="n">load_ordered_mapped_skeleton</span><span class="p">(</span><span class="n">skel1_path</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">skel2_anno</span> <span class="o">=</span> <span class="n">load_ordered_mapped_skeleton</span><span class="p">(</span><span class="n">skel2_path</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">a_nodes</span> <span class="o">=</span> <span class="p">[</span><span class="n">node</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">skel1_anno</span><span class="o">.</span><span class="n">getNodes</span><span class="p">()]</span>
+    <span class="n">b_nodes</span> <span class="o">=</span> <span class="p">[</span><span class="n">node</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">skel2_anno</span><span class="o">.</span><span class="n">getNodes</span><span class="p">()]</span>
+    <span class="n">a_coords</span> <span class="o">=</span> <span class="n">arr</span><span class="p">([</span><span class="n">node</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">()</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">a_nodes</span><span class="p">])</span>\
+               <span class="o">*</span> <span class="n">skel1_anno</span><span class="o">.</span><span class="n">scaling</span>
+    <span class="n">b_coords</span> <span class="o">=</span> <span class="n">arr</span><span class="p">([</span><span class="n">node</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">()</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">b_nodes</span><span class="p">])</span>\
+               <span class="o">*</span> <span class="n">skel2_anno</span><span class="o">.</span><span class="n">scaling</span>
+    <span class="n">a_tree</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">cKDTree</span><span class="p">(</span><span class="n">a_coords</span><span class="p">)</span>
+    <span class="n">b_tree</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">cKDTree</span><span class="p">(</span><span class="n">b_coords</span><span class="p">)</span>
+    <span class="n">center_coord</span> <span class="o">*=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">skel1_anno</span><span class="o">.</span><span class="n">scaling</span><span class="p">)</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">a_near</span> <span class="o">=</span> <span class="n">a_tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">center_coord</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">b_near</span> <span class="o">=</span> <span class="n">b_tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">center_coord</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">axoness_entry</span> <span class="o">=</span> <span class="p">{</span><span class="n">skel1</span><span class="p">:</span> <span class="n">a_nodes</span><span class="p">[</span><span class="n">a_near</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;axoness_pred&quot;</span><span class="p">],</span>
+                     <span class="n">skel2</span><span class="p">:</span> <span class="n">b_nodes</span><span class="p">[</span><span class="n">b_near</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;axoness_pred&quot;</span><span class="p">]}</span>
+    <span class="k">return</span> <span class="n">key</span><span class="p">,</span> <span class="n">axoness_entry</span></div>
+
+
+<div class="viewcode-block" id="convert_to_standard_cs_name"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.convert_to_standard_cs_name">[docs]</a><span class="k">def</span> <span class="nf">convert_to_standard_cs_name</span><span class="p">(</span><span class="n">name</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Convert to all possible contact site key combinations</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    name : str</span>
+<span class="sd">        Contact site key</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of str</span>
+<span class="sd">        possible key variations</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">cs_nb</span><span class="p">,</span> <span class="n">skel1</span><span class="p">,</span> <span class="n">skel2</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;(\d+)_(\d+)_(\d+)&#39;</span><span class="p">,</span> <span class="n">name</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">new_name1</span> <span class="o">=</span> <span class="s1">&#39;skel_</span><span class="si">%s</span><span class="s1">_</span><span class="si">%s</span><span class="s1">_cs</span><span class="si">%s</span><span class="s1">_sj&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">skel1</span><span class="p">,</span> <span class="n">skel2</span><span class="p">,</span> <span class="n">cs_nb</span><span class="p">)</span>
+    <span class="n">new_name2</span> <span class="o">=</span> <span class="s1">&#39;skel_</span><span class="si">%s</span><span class="s1">_</span><span class="si">%s</span><span class="s1">_cs</span><span class="si">%s</span><span class="s1">_vc_sj&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">skel1</span><span class="p">,</span> <span class="n">skel2</span><span class="p">,</span> <span class="n">cs_nb</span><span class="p">)</span>
+    <span class="n">new_name3</span> <span class="o">=</span> <span class="s1">&#39;skel_</span><span class="si">%s</span><span class="s1">_</span><span class="si">%s</span><span class="s1">_cs</span><span class="si">%s</span><span class="s1">_sj&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">skel2</span><span class="p">,</span> <span class="n">skel1</span><span class="p">,</span> <span class="n">cs_nb</span><span class="p">)</span>
+    <span class="n">new_name4</span> <span class="o">=</span> <span class="s1">&#39;skel_</span><span class="si">%s</span><span class="s1">_</span><span class="si">%s</span><span class="s1">_cs</span><span class="si">%s</span><span class="s1">_vc_sj&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">skel2</span><span class="p">,</span> <span class="n">skel1</span><span class="p">,</span> <span class="n">cs_nb</span><span class="p">)</span>
+    <span class="n">new_name5</span> <span class="o">=</span> <span class="s1">&#39;skel_</span><span class="si">%s</span><span class="s1">_</span><span class="si">%s</span><span class="s1">_cs</span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">skel2</span><span class="p">,</span> <span class="n">skel1</span><span class="p">,</span> <span class="n">cs_nb</span><span class="p">)</span>
+    <span class="n">new_name6</span> <span class="o">=</span> <span class="s1">&#39;skel_</span><span class="si">%s</span><span class="s1">_</span><span class="si">%s</span><span class="s1">_cs</span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">skel1</span><span class="p">,</span> <span class="n">skel2</span><span class="p">,</span> <span class="n">cs_nb</span><span class="p">)</span>
+    <span class="k">return</span> <span class="p">[</span><span class="n">new_name1</span><span class="p">,</span> <span class="n">new_name2</span><span class="p">,</span> <span class="n">new_name3</span><span class="p">,</span> <span class="n">new_name4</span><span class="p">,</span> <span class="n">new_name5</span><span class="p">,</span> <span class="n">new_name6</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="update_property_dict"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.update_property_dict">[docs]</a><span class="k">def</span> <span class="nf">update_property_dict</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Update property dictionary</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cs_dir : str</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        update property dictionary</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ax_dict</span> <span class="o">=</span> <span class="n">load_pkl2obj</span><span class="p">(</span><span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;axoness_dict.pkl&#39;</span><span class="p">)</span>
+    <span class="n">cs_dict</span> <span class="o">=</span> <span class="n">load_pkl2obj</span><span class="p">(</span><span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;cs_dict.pkl&#39;</span><span class="p">)</span>
+    <span class="n">ax_keys</span> <span class="o">=</span> <span class="n">ax_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">ax_keys</span><span class="p">:</span>
+        <span class="n">new_names</span> <span class="o">=</span> <span class="n">convert_to_standard_cs_name</span><span class="p">(</span><span class="n">k</span><span class="p">)</span>
+        <span class="n">param</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">for</span> <span class="n">var</span> <span class="ow">in</span> <span class="n">new_names</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">center_coord</span> <span class="o">=</span> <span class="n">cs_dict</span><span class="p">[</span><span class="n">var</span><span class="p">][</span><span class="s1">&#39;center_coord&#39;</span><span class="p">]</span>
+                <span class="n">param</span> <span class="o">=</span> <span class="p">(</span><span class="n">center_coord</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">cs_dir</span><span class="p">)</span>
+                <span class="k">break</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="k">continue</span>
+        <span class="k">if</span> <span class="n">param</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Didnt find CS of key </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">k</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">params</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">param</span><span class="p">)</span>
+    <span class="n">new_vals</span> <span class="o">=</span> <span class="n">start_multiprocess</span><span class="p">(</span><span class="n">update_single_cs_properties</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span>
+                                  <span class="n">debug</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">new_property_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">new_vals</span><span class="p">:</span>
+        <span class="n">new_property_dict</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">val</span>
+    <span class="k">return</span> <span class="n">new_property_dict</span></div>
+
+
+<div class="viewcode-block" id="update_single_cs_properties"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.update_single_cs_properties">[docs]</a><span class="k">def</span> <span class="nf">update_single_cs_properties</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Helper function of update_property_dict</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">center_coord</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">key</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">cs_dir</span> <span class="o">=</span> <span class="n">params</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">cs_nb</span><span class="p">,</span> <span class="n">skel1</span><span class="p">,</span> <span class="n">skel2</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;(\d+)_(\d+)_(\d+)&#39;</span><span class="p">,</span> <span class="n">key</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">skel1_path</span><span class="p">,</span> <span class="n">skel2_path</span> <span class="o">=</span> <span class="n">get_paths_of_skelID</span><span class="p">([</span><span class="n">skel1</span><span class="p">,</span> <span class="n">skel2</span><span class="p">],</span>
+            <span class="n">traced_skel_dir</span><span class="o">=</span><span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;/../neurons/&#39;</span><span class="p">)</span>
+    <span class="n">skel1_anno</span> <span class="o">=</span> <span class="n">load_ordered_mapped_skeleton</span><span class="p">(</span><span class="n">skel1_path</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">skel2_anno</span> <span class="o">=</span> <span class="n">load_ordered_mapped_skeleton</span><span class="p">(</span><span class="n">skel2_path</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">a_nodes</span> <span class="o">=</span> <span class="p">[</span><span class="n">node</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">skel1_anno</span><span class="o">.</span><span class="n">getNodes</span><span class="p">()]</span>
+    <span class="n">b_nodes</span> <span class="o">=</span> <span class="p">[</span><span class="n">node</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">skel2_anno</span><span class="o">.</span><span class="n">getNodes</span><span class="p">()]</span>
+    <span class="n">a_coords</span> <span class="o">=</span> <span class="n">arr</span><span class="p">([</span><span class="n">node</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">()</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">a_nodes</span><span class="p">])</span>\
+               <span class="o">*</span> <span class="n">skel1_anno</span><span class="o">.</span><span class="n">scaling</span>
+    <span class="n">b_coords</span> <span class="o">=</span> <span class="n">arr</span><span class="p">([</span><span class="n">node</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">()</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">b_nodes</span><span class="p">])</span>\
+               <span class="o">*</span> <span class="n">skel2_anno</span><span class="o">.</span><span class="n">scaling</span>
+    <span class="n">a_tree</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">cKDTree</span><span class="p">(</span><span class="n">a_coords</span><span class="p">)</span>
+    <span class="n">b_tree</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">cKDTree</span><span class="p">(</span><span class="n">b_coords</span><span class="p">)</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">a_near</span> <span class="o">=</span> <span class="n">a_tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">center_coord</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">_</span><span class="p">,</span> <span class="n">b_near</span> <span class="o">=</span> <span class="n">b_tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">center_coord</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+    <span class="n">property_entry</span> <span class="o">=</span> <span class="p">{</span><span class="n">skel1</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;spiness&#39;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">a_nodes</span><span class="p">[</span><span class="n">a_near</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;spiness_pred&quot;</span><span class="p">]),</span>
+                              <span class="s1">&#39;axoness&#39;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">a_nodes</span><span class="p">[</span><span class="n">a_near</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;axoness_pred&quot;</span><span class="p">])},</span>
+                      <span class="n">skel2</span><span class="p">:</span> <span class="p">{</span><span class="s1">&#39;spiness&#39;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">b_nodes</span><span class="p">[</span><span class="n">b_near</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;spiness_pred&quot;</span><span class="p">]),</span>
+                              <span class="s1">&#39;axoness&#39;</span><span class="p">:</span> <span class="nb">int</span><span class="p">(</span><span class="n">b_nodes</span><span class="p">[</span><span class="n">b_near</span><span class="p">]</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;axoness_pred&quot;</span><span class="p">])}}</span>
+    <span class="k">return</span> <span class="n">key</span><span class="p">,</span> <span class="n">property_entry</span></div>
+
+
+<div class="viewcode-block" id="write_property_dict"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.write_property_dict">[docs]</a><span class="k">def</span> <span class="nf">write_property_dict</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Write property dictionary to working directory</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cs_dir : str</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">new_property_dict</span> <span class="o">=</span> <span class="n">update_property_dict</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">)</span>
+    <span class="n">write_obj2pkl</span><span class="p">(</span><span class="n">new_property_dict</span><span class="p">,</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;property_dict.pkl&#39;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="write_axoness_dicts"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.write_axoness_dicts">[docs]</a><span class="k">def</span> <span class="nf">write_axoness_dicts</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Write axoness dictionaries to working directory</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cs_dir : str</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">new_ax_all</span> <span class="o">=</span> <span class="n">update_axoness_dict</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">,</span> <span class="n">syn_only</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">write_obj2pkl</span><span class="p">(</span><span class="n">new_ax_all</span><span class="p">,</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;/axoness_dict_all.pkl&#39;</span><span class="p">)</span>
+    <span class="n">new_ax</span> <span class="o">=</span> <span class="n">update_axoness_dict</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">,</span> <span class="n">syn_only</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="n">write_obj2pkl</span><span class="p">(</span><span class="n">new_ax</span><span class="p">,</span> <span class="n">cs_dir</span> <span class="o">+</span> <span class="s1">&#39;/axoness_dict.pkl&#39;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="get_number_cs_details"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.get_number_cs_details">[docs]</a><span class="k">def</span> <span class="nf">get_number_cs_details</span><span class="p">(</span><span class="n">cs_path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Prints number of synapse candidates and number of contact sites</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cs_path : str</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">sj_samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span>
+                       <span class="n">get_filepaths_from_dir</span><span class="p">(</span><span class="n">cs_path</span><span class="o">+</span><span class="s1">&#39;cs_sj/&#39;</span><span class="p">,</span> <span class="n">ending</span><span class="o">=</span><span class="s1">&#39;nml&#39;</span><span class="p">)]</span>
+    <span class="n">sj_vc_samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span>
+                        <span class="n">get_filepaths_from_dir</span><span class="p">(</span><span class="n">cs_path</span><span class="o">+</span><span class="s1">&#39;cs_vc_sj/&#39;</span><span class="p">,</span> <span class="n">ending</span><span class="o">=</span><span class="s1">&#39;nml&#39;</span><span class="p">)]</span>
+    <span class="n">vc_samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span>
+                       <span class="n">get_filepaths_from_dir</span><span class="p">(</span><span class="n">cs_path</span><span class="o">+</span><span class="s1">&#39;cs_vc/&#39;</span><span class="p">,</span> <span class="n">ending</span><span class="o">=</span><span class="s1">&#39;nml&#39;</span><span class="p">)]</span>
+    <span class="n">cs_samples</span> <span class="o">=</span> <span class="p">[</span><span class="n">path</span> <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span>
+                       <span class="n">get_filepaths_from_dir</span><span class="p">(</span><span class="n">cs_path</span><span class="o">+</span><span class="s1">&#39;cs/&#39;</span><span class="p">,</span> <span class="n">ending</span><span class="o">=</span><span class="s1">&#39;nml&#39;</span><span class="p">)]</span>
+    <span class="n">cs_only</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">vc_samples</span><span class="p">)</span> <span class="o">+</span> <span class="nb">len</span><span class="p">(</span><span class="n">cs_samples</span><span class="p">)</span>
+    <span class="n">syn_only</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">sj_samples</span><span class="p">)</span><span class="o">+</span><span class="nb">len</span><span class="p">(</span><span class="n">sj_vc_samples</span><span class="p">)</span>
+    <span class="nb">print</span> <span class="s2">&quot;Found </span><span class="si">%d</span><span class="s2"> syn-candidates and </span><span class="si">%d</span><span class="s2"> contact sites.&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">syn_only</span><span class="p">,</span>
+                                                             <span class="n">cs_only</span><span class="o">+</span><span class="n">syn_only</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="conn_dict_wrapper"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.conn_dict_wrapper">[docs]</a><span class="k">def</span> <span class="nf">conn_dict_wrapper</span><span class="p">(</span><span class="n">wd</span><span class="p">,</span> <span class="nb">all</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Wrapper function to write connectivity dictionary to working directory</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">all</span><span class="p">:</span>
+        <span class="n">suffix</span> <span class="o">=</span> <span class="s2">&quot;_all&quot;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">suffix</span> <span class="o">=</span> <span class="s2">&quot;&quot;</span>
+    <span class="n">synapse_matrix</span><span class="p">(</span><span class="n">wd</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="n">suffix</span><span class="p">)</span>
+    <span class="n">syn_type_majority_vote</span><span class="p">(</span><span class="n">wd</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="n">suffix</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="synapse_matrix"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.synapse_matrix">[docs]</a><span class="k">def</span> <span class="nf">synapse_matrix</span><span class="p">(</span><span class="n">wd</span><span class="p">,</span> <span class="n">type_threshold</span><span class="o">=</span><span class="mf">0.225</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">,</span>
+                   <span class="n">exclude_dendrodendro</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    wd : str</span>
+<span class="sd">    type_threshold : float</span>
+<span class="sd">    suffix : str</span>
+<span class="sd">    exclude_dendrodendro : bool</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">save_folder</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/contactsites/&#39;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">save_folder</span><span class="p">):</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">save_folder</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/cs_dict</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">cs_dict</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/axoness_dict</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">ax_dict</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/celltype_pred_dict.pkl&#39;</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">cell_type_dict</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+    <span class="n">kd_asym</span> <span class="o">=</span> <span class="n">KnossosDataset</span><span class="p">()</span>
+    <span class="n">kd_asym</span><span class="o">.</span><span class="n">initialize_from_knossos_path</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/knossosdatasets/asymmetric/&#39;</span><span class="p">)</span>
+    <span class="n">kd_sym</span> <span class="o">=</span> <span class="n">KnossosDataset</span><span class="p">()</span>
+    <span class="n">kd_sym</span><span class="o">.</span><span class="n">initialize_from_knossos_path</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/knossosdatasets/symmetric/&#39;</span><span class="p">)</span>
+
+    <span class="n">ids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">cs_keys</span> <span class="o">=</span> <span class="n">cs_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">cs_key</span> <span class="ow">in</span> <span class="n">cs_keys</span><span class="p">:</span>
+        <span class="n">skels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;[\d]+&#39;</span><span class="p">,</span> <span class="n">cs_key</span><span class="p">)[:</span><span class="mi">2</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+        <span class="n">ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">skels</span><span class="p">)</span>
+
+    <span class="n">ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span>
+    <span class="n">id_mapper</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)):</span>
+        <span class="n">id_mapper</span><span class="p">[</span><span class="n">ids</span><span class="p">[</span><span class="n">ii</span><span class="p">]]</span> <span class="o">=</span> <span class="n">ii</span>
+
+    <span class="n">axo_axo_dict</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="n">size_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">coord_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">syn_type_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">partner_cell_type_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">partner_ax_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">cs_key_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">phil_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">first_key</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">second_key</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">:</span>
+            <span class="n">size_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">coord_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">syn_type_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">partner_cell_type_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">partner_ax_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">cs_key_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">phil_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)]</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="n">phil_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)][</span><span class="s2">&quot;total_size_area&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">phil_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)][</span><span class="s2">&quot;sizes_area&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">phil_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)][</span><span class="s2">&quot;syn_types_prob&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">phil_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)][</span><span class="s2">&quot;syn_types_pred&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">phil_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)][</span><span class="s2">&quot;coords&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">phil_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)][</span><span class="s1">&#39;partner_axoness&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">phil_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)][</span><span class="s1">&#39;partner_cell_type&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">phil_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)][</span><span class="s1">&#39;cs_area&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">phil_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)][</span><span class="s1">&#39;total_cs_area&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">phil_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)][</span><span class="s1">&#39;syn_pred&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="n">fails</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">syn_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">([</span><span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">),</span> <span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">ii</span><span class="p">,</span> <span class="n">cs_key</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">cs_keys</span><span class="p">):</span>
+        <span class="n">skels</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;[\d]+&#39;</span><span class="p">,</span> <span class="n">cs_key</span><span class="p">)</span>
+        <span class="c1"># if cs_dict[cs_key][&#39;syn_pred&#39;]:</span>
+        <span class="n">ax_key</span> <span class="o">=</span> <span class="n">skels</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span> <span class="o">+</span> <span class="n">skels</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+</span> <span class="s1">&#39;_&#39;</span> <span class="o">+</span> <span class="n">skels</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">ax</span> <span class="o">=</span> <span class="n">ax_dict</span><span class="p">[</span><span class="n">ax_key</span><span class="p">]</span>
+        <span class="n">this_keys</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">cs_dict</span><span class="p">[</span><span class="n">cs_key</span><span class="p">][</span><span class="s1">&#39;syn_pred&#39;</span><span class="p">]:</span>
+            <span class="n">overlap_vx</span> <span class="o">=</span> <span class="n">cs_dict</span><span class="p">[</span><span class="n">cs_key</span><span class="p">][</span><span class="s1">&#39;overlap_vx&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mi">9</span><span class="p">,</span><span class="mi">9</span><span class="p">,</span><span class="mi">20</span><span class="p">])</span>
+            <span class="n">sym_values</span> <span class="o">=</span> <span class="n">kd_sym</span><span class="o">.</span><span class="n">from_raw_cubes_to_list</span><span class="p">(</span><span class="n">overlap_vx</span><span class="p">)</span>
+            <span class="n">asym_values</span> <span class="o">=</span> <span class="n">kd_asym</span><span class="o">.</span><span class="n">from_raw_cubes_to_list</span><span class="p">(</span><span class="n">overlap_vx</span><span class="p">)</span>
+            <span class="n">this_type</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">sym_values</span><span class="p">))</span><span class="o">/</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">sym_values</span><span class="p">)</span><span class="o">+</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">asym_values</span><span class="p">))</span>
+            <span class="n">overlap</span> <span class="o">=</span> <span class="n">cs_dict</span><span class="p">[</span><span class="n">cs_key</span><span class="p">][</span><span class="s1">&#39;overlap_area&#39;</span><span class="p">]</span><span class="o">/</span><span class="mi">2</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">this_type</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">overlap</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">2</span><span class="p">):</span>
+            <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">ax</span><span class="p">[</span><span class="n">this_keys</span><span class="p">[</span><span class="n">ii</span><span class="p">]])</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">or</span> <span class="ow">not</span> <span class="n">exclude_dendrodendro</span><span class="p">:</span>
+                <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">ax</span><span class="p">[</span><span class="n">this_keys</span><span class="p">[(</span><span class="n">ii</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">%</span><span class="mi">2</span><span class="p">]])</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">this_keys</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span> <span class="ow">in</span> <span class="n">axo_axo_dict</span><span class="p">:</span>
+                        <span class="n">axo_axo_dict</span><span class="p">[</span><span class="n">this_keys</span><span class="p">[</span><span class="n">ii</span><span class="p">]]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">this_keys</span><span class="p">[(</span><span class="n">ii</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">%</span><span class="mi">2</span><span class="p">])</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">axo_axo_dict</span><span class="p">[</span><span class="n">this_keys</span><span class="p">[</span><span class="n">ii</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[</span><span class="n">this_keys</span><span class="p">[(</span><span class="n">ii</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">%</span><span class="mi">2</span><span class="p">]]</span>
+
+                <span class="n">syn_matrix</span><span class="p">[</span><span class="n">id_mapper</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">this_keys</span><span class="p">[</span><span class="n">ii</span><span class="p">])],</span> <span class="n">id_mapper</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">this_keys</span><span class="p">[(</span><span class="n">ii</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">%</span><span class="mi">2</span><span class="p">])]]</span> <span class="o">+=</span> <span class="mi">1</span>
+
+                <span class="n">dict_key</span> <span class="o">=</span> <span class="n">this_keys</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="n">this_keys</span><span class="p">[(</span><span class="n">ii</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">%</span><span class="mi">2</span><span class="p">]</span>
+                <span class="n">cs_key_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cs_key</span><span class="p">)</span>
+                <span class="n">coord_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cs_dict</span><span class="p">[</span><span class="n">cs_key</span><span class="p">][</span><span class="s1">&#39;center_coord&#39;</span><span class="p">])</span>
+                <span class="n">syn_type_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">this_type</span><span class="p">)</span>
+                <span class="n">size_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">overlap</span><span class="p">)</span>
+                <span class="n">partner_ax_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">ax</span><span class="p">[</span><span class="n">this_keys</span><span class="p">[(</span><span class="n">ii</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">%</span><span class="mi">2</span><span class="p">]]))</span>
+                <span class="n">partner_cell_type_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cell_type_dict</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">this_keys</span><span class="p">[(</span><span class="n">ii</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">%</span><span class="mi">2</span><span class="p">])])</span>
+
+                <span class="n">phil_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">][</span><span class="s2">&quot;total_size_area&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="n">overlap</span>
+                <span class="n">phil_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">][</span><span class="s2">&quot;sizes_area&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">overlap</span><span class="p">)</span>
+                <span class="n">phil_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">][</span><span class="s2">&quot;cs_area&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cs_dict</span><span class="p">[</span><span class="n">cs_key</span><span class="p">][</span><span class="s1">&#39;mean_cs_area&#39;</span><span class="p">]</span><span class="o">/</span><span class="mf">2.e6</span><span class="p">)</span>
+                <span class="n">phil_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">][</span><span class="s2">&quot;total_cs_area&quot;</span><span class="p">]</span> <span class="o">+=</span> <span class="n">cs_dict</span><span class="p">[</span><span class="n">cs_key</span><span class="p">][</span><span class="s1">&#39;mean_cs_area&#39;</span><span class="p">]</span><span class="o">/</span><span class="mf">2.e6</span>
+                <span class="n">phil_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">][</span><span class="s2">&quot;syn_types_prob&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">this_type</span><span class="p">)</span>
+                <span class="n">phil_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">][</span><span class="s2">&quot;syn_types_pred&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">this_type</span> <span class="o">&gt;</span> <span class="n">type_threshold</span><span class="p">))</span>
+                <span class="n">phil_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">][</span><span class="s2">&quot;coords&quot;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cs_dict</span><span class="p">[</span><span class="n">cs_key</span><span class="p">][</span><span class="s1">&#39;center_coord&#39;</span><span class="p">])</span>
+                <span class="n">phil_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">][</span><span class="s1">&#39;partner_axoness&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">ax</span><span class="p">[</span><span class="n">this_keys</span><span class="p">[(</span><span class="n">ii</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">%</span><span class="mi">2</span><span class="p">]]))</span>
+                <span class="n">phil_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">][</span><span class="s1">&#39;partner_cell_type&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cell_type_dict</span><span class="p">[</span><span class="nb">int</span><span class="p">(</span><span class="n">this_keys</span><span class="p">[(</span><span class="n">ii</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">%</span><span class="mi">2</span><span class="p">])])</span>
+                <span class="n">phil_dict</span><span class="p">[</span><span class="n">dict_key</span><span class="p">][</span><span class="s1">&#39;syn_pred&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">cs_dict</span><span class="p">[</span><span class="n">cs_key</span><span class="p">][</span><span class="s1">&#39;syn_pred&#39;</span><span class="p">])</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">exclude_dendrodendro</span><span class="p">:</span>
+        <span class="n">suffix</span> <span class="o">=</span> <span class="s2">&quot;_no_exclusion&quot;</span> <span class="o">+</span> <span class="n">suffix</span>
+
+    <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">save_folder</span><span class="o">+</span><span class="s2">&quot;/syn_matrix</span><span class="si">%s</span><span class="s2">.npy&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="n">syn_matrix</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/id_mapper</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">id_mapper</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/size_dict</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">size_dict</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/syn_type_dict</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">syn_type_dict</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/coord_dict</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">coord_dict</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/cs_key_dict</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">cs_key_dict</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/partner_ax_dict</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">partner_ax_dict</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/partner_cell_type_dict</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">partner_cell_type_dict</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/connectivity_dict</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">phil_dict</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="syn_type_majority_vote"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.syn_type_majority_vote">[docs]</a><span class="k">def</span> <span class="nf">syn_type_majority_vote</span><span class="p">(</span><span class="n">wd</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Majority vote of synapse type</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    int, int</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">save_folder</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/contactsites/&#39;</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/connectivity_dict</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">phil_dict</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/cs_dict</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;r&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">cs_dict</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+    <span class="n">maj_type_dict</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="n">ids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">cs_keys</span> <span class="o">=</span> <span class="n">cs_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">cs_key</span> <span class="ow">in</span> <span class="n">cs_keys</span><span class="p">:</span>
+        <span class="n">skels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;[\d]+&#39;</span><span class="p">,</span> <span class="n">cs_key</span><span class="p">)[:</span><span class="mi">2</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+        <span class="n">ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">skels</span><span class="p">)</span>
+
+    <span class="n">ids</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">unique</span><span class="p">(</span><span class="n">ids</span><span class="p">)</span>
+    <span class="n">id_mapper</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)):</span>
+        <span class="n">id_mapper</span><span class="p">[</span><span class="n">ids</span><span class="p">[</span><span class="n">ii</span><span class="p">]]</span> <span class="o">=</span> <span class="n">ii</span>
+
+    <span class="n">types</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">sizes</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">first_key</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">:</span>
+        <span class="n">types</span><span class="o">.</span><span class="n">append</span><span class="p">([])</span>
+        <span class="n">sizes</span><span class="o">.</span><span class="n">append</span><span class="p">([])</span>
+        <span class="k">for</span> <span class="n">second_key</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">:</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)</span>
+            <span class="n">types</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">phil_dict</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="s2">&quot;syn_types_pred&quot;</span><span class="p">])</span>
+            <span class="n">sizes</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">phil_dict</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="s2">&quot;sizes_area&quot;</span><span class="p">])</span>
+            <span class="n">phil_dict</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="s2">&quot;syn_types_pred_maj&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="n">maj_type_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="n">maj_types</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)):</span>
+        <span class="n">this_types</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">this_sizes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">jj</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">ids</span><span class="p">)):</span>
+            <span class="n">this_types</span> <span class="o">+=</span> <span class="n">types</span><span class="p">[</span><span class="n">ii</span><span class="p">][</span><span class="n">jj</span><span class="p">]</span>
+            <span class="n">this_sizes</span> <span class="o">+=</span> <span class="n">sizes</span><span class="p">[</span><span class="n">ii</span><span class="p">][</span><span class="n">jj</span><span class="p">]</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">this_types</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="c1"># maj_types.append(np.argmax(np.bincount(this_types)))</span>
+            <span class="n">sum0</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">this_sizes</span><span class="p">)[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">this_types</span><span class="p">)</span><span class="o">==</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">sum1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">this_sizes</span><span class="p">)[</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">this_types</span><span class="p">)</span><span class="o">==</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">maj_types</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">sum0</span> <span class="o">&lt;</span> <span class="n">sum1</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">maj_types</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">)</span>
+
+    <span class="n">change_count</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">syn_count</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">ii</span><span class="p">,</span> <span class="n">first_key</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">ids</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">second_key</span> <span class="ow">in</span> <span class="n">ids</span><span class="p">:</span>
+            <span class="n">key</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">first_key</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">second_key</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">maj_types</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="n">phil_dict</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="s2">&quot;syn_types_pred_maj&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">maj_types</span><span class="p">[</span><span class="n">ii</span><span class="p">]]</span><span class="o">*</span><span class="nb">len</span><span class="p">(</span><span class="n">phil_dict</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="s2">&quot;syn_types_pred&quot;</span><span class="p">])</span>
+                <span class="n">maj_type_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">maj_types</span><span class="p">[</span><span class="n">ii</span><span class="p">]]</span><span class="o">*</span><span class="nb">len</span><span class="p">(</span><span class="n">phil_dict</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="s2">&quot;syn_types_pred&quot;</span><span class="p">])</span>
+                <span class="n">change_count</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">phil_dict</span><span class="p">[</span><span class="n">key</span><span class="p">][</span><span class="s2">&quot;syn_types_pred&quot;</span><span class="p">])</span><span class="o">-</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">maj_type_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]))</span>
+                <span class="n">syn_count</span> <span class="o">+=</span> <span class="nb">len</span><span class="p">(</span><span class="n">maj_type_dict</span><span class="p">[</span><span class="n">key</span><span class="p">])</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/maj_syn_types</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">maj_type_dict</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">save_folder</span> <span class="o">+</span> <span class="s2">&quot;/connectivity_dict</span><span class="si">%s</span><span class="s2">.pkl&quot;</span> <span class="o">%</span> <span class="n">suffix</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">phil_dict</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="create_synapse_skeleton"><a class="viewcode-back" href="../../syconn.html#syconn.contactsites.create_synapse_skeleton">[docs]</a><span class="k">def</span> <span class="nf">create_synapse_skeleton</span><span class="p">(</span><span class="n">wd</span><span class="p">):</span>
+    <span class="n">cs_dir</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/contactsites/&#39;</span>
+    <span class="n">cs_nodes</span><span class="p">,</span> <span class="n">cs_feats</span> <span class="o">=</span> <span class="n">collect_contact_sites</span><span class="p">(</span><span class="n">cs_dir</span><span class="p">,</span> <span class="n">only_sj</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+    <span class="n">clf_path</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/models/rf_synapses/rfc_syn.pkl&#39;</span>
+    <span class="c1"># print &quot;\nUsing %s for synapse prediction.&quot; % clf_path</span>
+    <span class="n">rfc_syn</span> <span class="o">=</span> <span class="n">joblib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">clf_path</span><span class="p">)</span>
+    <span class="n">syn_probas</span> <span class="o">=</span> <span class="n">rfc_syn</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">cs_feats</span><span class="p">)</span>
+    <span class="n">synapse_skels</span> <span class="o">=</span> <span class="n">Skeleton</span><span class="p">()</span>
+    <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">get_filepaths_from_dir</span><span class="p">(</span><span class="n">wd</span><span class="o">+</span><span class="s1">&#39;/tracings/&#39;</span><span class="p">):</span>
+        <span class="n">tracing</span> <span class="o">=</span> <span class="n">load_ordered_mapped_skeleton</span><span class="p">(</span><span class="n">p</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">synapse_skels</span><span class="o">.</span><span class="n">add_annotation</span><span class="p">(</span><span class="n">tracing</span><span class="p">)</span>
+    <span class="n">synapse_skels</span><span class="o">.</span><span class="n">scaling</span> <span class="o">=</span> <span class="n">tracing</span><span class="o">.</span><span class="n">scaling</span>
+    <span class="n">new_node_lst</span> <span class="o">=</span> <span class="p">[</span><span class="n">n</span> <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">synapse_skels</span><span class="o">.</span><span class="n">getNodes</span><span class="p">()]</span>
+    <span class="n">tracing_node_tree</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">cKDTree</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">n</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">()</span> <span class="k">for</span> <span class="n">n</span>
+                                        <span class="ow">in</span> <span class="n">new_node_lst</span><span class="p">]))</span>
+    <span class="k">for</span> <span class="n">ii</span><span class="p">,</span> <span class="n">syn_nodes</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">cs_nodes</span><span class="p">):</span>
+        <span class="n">skel_nodes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">center_node</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">syn_nodes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;Wrong number of synapse nodes. It is </span><span class="si">%d</span><span class="s2">&quot;</span> \
+                                    <span class="s2">&quot;instead of 3.&quot;</span> <span class="o">%</span> <span class="nb">len</span><span class="p">(</span><span class="n">syn_nodes</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">syn_nodes</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s1">&#39;center&#39;</span> <span class="ow">in</span> <span class="n">n</span><span class="o">.</span><span class="n">getComment</span><span class="p">():</span>
+                <span class="n">center_node</span> <span class="o">=</span> <span class="n">n</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">skel_nodes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">n</span><span class="p">)</span>
+        <span class="n">new_syn_anno</span> <span class="o">=</span> <span class="n">SkeletonAnnotation</span><span class="p">()</span>
+        <span class="n">new_syn_anno</span><span class="o">.</span><span class="n">scaling</span> <span class="o">=</span> <span class="n">synapse_skels</span><span class="o">.</span><span class="n">scaling</span>
+        <span class="k">for</span> <span class="n">k</span><span class="p">,</span> <span class="n">v</span> <span class="ow">in</span> <span class="n">center_node</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">k</span> <span class="ow">in</span> <span class="p">[</span><span class="s2">&quot;inVp&quot;</span><span class="p">,</span> <span class="s2">&quot;node&quot;</span><span class="p">,</span> <span class="s2">&quot;id&quot;</span><span class="p">,</span> <span class="s2">&quot;inMag&quot;</span><span class="p">,</span> <span class="s2">&quot;radius&quot;</span><span class="p">,</span> <span class="s2">&quot;time&quot;</span><span class="p">,</span> <span class="s2">&quot;x&quot;</span><span class="p">,</span>
+                     <span class="s2">&quot;y&quot;</span><span class="p">,</span> <span class="s2">&quot;z&quot;</span><span class="p">,</span> <span class="s2">&quot;edge&quot;</span><span class="p">,</span> <span class="s2">&quot;comment&quot;</span><span class="p">,</span> <span class="s2">&quot;content&quot;</span><span class="p">,</span> <span class="s2">&quot;target&quot;</span><span class="p">]:</span>
+                <span class="k">continue</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">new_syn_anno</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">v</span>
+        <span class="n">syn_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">syn_probas</span><span class="p">[</span><span class="n">ii</span><span class="p">])</span>
+        <span class="n">new_syn_anno</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;synapticCleft&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">syn_pred</span><span class="p">)</span>
+        <span class="n">new_syn_anno</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;syn_proba&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bool</span><span class="p">(</span><span class="n">syn_probas</span><span class="p">[</span><span class="n">ii</span><span class="p">][</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">new_syn_anno</span><span class="o">.</span><span class="n">addNode</span><span class="p">(</span><span class="n">SkeletonNode</span><span class="p">()</span><span class="o">.</span><span class="n">from_scratch</span><span class="p">(</span><span class="n">new_syn_anno</span><span class="p">,</span>
+                             <span class="n">center_node</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">()[</span><span class="mi">0</span><span class="p">],</span>
+                             <span class="n">center_node</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">()[</span><span class="mi">1</span><span class="p">],</span>
+                             <span class="n">center_node</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">()[</span><span class="mi">2</span><span class="p">],</span>
+                             <span class="n">radius</span><span class="o">=</span><span class="n">center_node</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;radius&quot;</span><span class="p">]))</span>
+        <span class="n">new_syn_anno</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;axo-axonic&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">False</span>
+        <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="n">skel_nodes</span><span class="p">:</span>
+            <span class="n">n_in_anno</span> <span class="o">=</span> <span class="n">new_node_lst</span><span class="p">[</span><span class="n">tracing_node_tree</span><span class="o">.</span><span class="n">query_ball_point</span><span class="p">(</span>
+                <span class="n">n</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">(),</span> <span class="n">r</span><span class="o">=</span><span class="mi">1</span><span class="p">)[</span><span class="mi">0</span><span class="p">]]</span>
+            <span class="k">if</span> <span class="nb">int</span><span class="p">(</span><span class="n">n</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;axoness_pred&#39;</span><span class="p">]):</span>
+                <span class="c1">#</span>
+                <span class="k">if</span> <span class="s1">&#39;preSynapse&#39;</span> <span class="ow">in</span> <span class="n">new_syn_anno</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+                    <span class="n">new_syn_anno</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;postSynapse&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_in_anno</span><span class="o">.</span><span class="n">getID</span><span class="p">()</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">new_syn_anno</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;preSynapse&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_in_anno</span><span class="o">.</span><span class="n">getID</span><span class="p">()</span>
+                    <span class="n">new_syn_anno</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s2">&quot;axo-axonic&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="kc">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">new_syn_anno</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="s1">&#39;postSynapse&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">n_in_anno</span><span class="o">.</span><span class="n">getID</span><span class="p">()</span>
+        <span class="n">synapse_skels</span><span class="o">.</span><span class="n">add_annotation</span><span class="p">(</span><span class="n">new_syn_anno</span><span class="p">)</span>
+    <span class="n">synapse_skels</span><span class="o">.</span><span class="n">to_kzip</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s2">&quot;/contactsites/synapses_skel.k.zip&quot;</span><span class="p">)</span></div>
+
+
+
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../index.html">SyConn a documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../index.html" >Module code</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2016, Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.8.
+    </div>
+  </body>
+</html>

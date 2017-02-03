@@ -1,0 +1,860 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>syconn.utils.segmentationdataset &#8212; SyConn a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/sphinxdoc.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     'a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="top" title="SyConn a documentation" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">SyConn a documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &#187;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for syconn.utils.segmentationdataset</h1><div class="highlight"><pre>
+<span></span><span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">cPickle</span> <span class="k">as</span> <span class="nn">pickle</span>
+<span class="kn">from</span> <span class="nn">knossos_utils</span> <span class="k">import</span> <span class="n">chunky</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="k">import</span> <span class="n">ndimage</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="k">import</span> <span class="n">spatial</span>
+<span class="kn">import</span> <span class="nn">shutil</span>
+<span class="kn">from</span> <span class="nn">multiprocessing</span> <span class="k">import</span> <span class="n">Pool</span>
+<span class="kn">import</span> <span class="nn">glob</span>
+
+<span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1"># SyConn - Synaptic connectivity inference toolkit</span>
+<span class="c1">#</span>
+<span class="c1"># Copyright (c) 2016 - now</span>
+<span class="c1"># Max-Planck-Institute for Medical Research, Heidelberg, Germany</span>
+<span class="c1"># Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld</span>
+
+
+<span class="k">try</span><span class="p">:</span>
+    <span class="kn">import</span> <span class="nn">QSUB_MAIN</span> <span class="k">as</span> <span class="nn">qm</span>
+    <span class="n">qsub_available</span> <span class="o">=</span> <span class="kc">True</span>
+<span class="k">except</span><span class="p">:</span>
+    <span class="n">qsub_available</span> <span class="o">=</span> <span class="kc">False</span>
+
+<span class="kn">from</span> <span class="nn">syconn.utils</span> <span class="k">import</span> <span class="n">basics</span>
+
+
+<div class="viewcode-block" id="get_rel_path"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.get_rel_path">[docs]</a><span class="k">def</span> <span class="nf">get_rel_path</span><span class="p">(</span><span class="n">obj_name</span><span class="p">,</span> <span class="n">filename</span><span class="p">,</span> <span class="n">suffix</span><span class="o">=</span><span class="s2">&quot;&quot;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns path from ChunkDataset foler to UltrastructuralDataset folder</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    obj_name: str</span>
+<span class="sd">        ie. hdf5name</span>
+<span class="sd">    filename: str</span>
+<span class="sd">        Filename of the prediction in the chunkdataset</span>
+<span class="sd">    suffix: str</span>
+<span class="sd">        suffix of name</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    rel_path: str</span>
+<span class="sd">        relative path from ChunkDataset folder to UltrastructuralDataset folder</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">suffix</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">suffix</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;_&quot;</span><span class="p">:</span>
+        <span class="n">suffix</span> <span class="o">=</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="n">suffix</span>
+    <span class="k">return</span> <span class="s2">&quot;/obj_&quot;</span> <span class="o">+</span> <span class="n">obj_name</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> \
+           <span class="n">filename</span> <span class="o">+</span> <span class="n">suffix</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span></div>
+
+
+<div class="viewcode-block" id="path_in_voxel_folder"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.path_in_voxel_folder">[docs]</a><span class="k">def</span> <span class="nf">path_in_voxel_folder</span><span class="p">(</span><span class="n">obj_id</span><span class="p">,</span> <span class="n">chunk_nb</span><span class="p">):</span>
+    <span class="n">lower</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">obj_id</span> <span class="o">/</span> <span class="mi">1000</span><span class="p">)</span> <span class="o">*</span> <span class="mi">1000</span>
+    <span class="n">upper</span> <span class="o">=</span> <span class="n">lower</span> <span class="o">+</span> <span class="mi">999</span>
+    <span class="k">return</span> <span class="nb">str</span><span class="p">(</span><span class="n">lower</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">upper</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="nb">str</span><span class="p">(</span><span class="n">obj_id</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;_&quot;</span> <span class="o">+</span> \
+           <span class="nb">str</span><span class="p">(</span><span class="n">chunk_nb</span><span class="p">)</span> <span class="o">+</span> <span class="s2">&quot;.npz&quot;</span></div>
+
+
+<div class="viewcode-block" id="extract_and_save_all_hull_voxels_thread"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.extract_and_save_all_hull_voxels_thread">[docs]</a><span class="k">def</span> <span class="nf">extract_and_save_all_hull_voxels_thread</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">object_dataset_path</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">set_cnt</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">obj_key_list</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+
+    <span class="n">object_dataset</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span><span class="n">object_dataset_path</span><span class="p">)</span>
+    <span class="n">set_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">obj_key</span> <span class="ow">in</span> <span class="n">obj_key_list</span><span class="p">:</span>
+        <span class="n">obj</span> <span class="o">=</span> <span class="n">object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">obj_key</span><span class="p">]</span>
+        <span class="n">vx</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">voxels</span>
+        <span class="n">hull_vx</span> <span class="o">=</span> <span class="n">vx</span><span class="p">[</span><span class="n">obj</span><span class="o">.</span><span class="n">create_hull_ids</span><span class="p">()]</span>
+        <span class="n">set_dict</span><span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">obj_id</span><span class="p">)]</span> <span class="o">=</span> <span class="n">hull_vx</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">savez_compressed</span><span class="p">(</span><span class="n">path</span> <span class="o">+</span> <span class="s2">&quot;/</span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">set_cnt</span><span class="p">,</span> <span class="o">**</span><span class="n">set_dict</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="extract_and_save_all_hull_voxels"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.extract_and_save_all_hull_voxels">[docs]</a><span class="k">def</span> <span class="nf">extract_and_save_all_hull_voxels</span><span class="p">(</span><span class="n">object_dataset_path</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                     <span class="n">nb_processes</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">use_qsub</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                     <span class="n">queue</span><span class="o">=</span><span class="s2">&quot;full&quot;</span><span class="p">):</span>
+    <span class="n">object_dataset</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span><span class="n">object_dataset_path</span><span class="p">)</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">object_dataset</span><span class="o">.</span><span class="n">path</span> <span class="o">+</span> <span class="s2">&quot;/hull_voxels/&quot;</span>
+
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">)</span> <span class="ow">and</span> <span class="n">overwrite</span><span class="p">:</span>
+        <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+        <span class="k">pass</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Hull &#39;</span><span class="si">%s</span><span class="s2">&#39; directory already exists.&quot;</span> <span class="o">%</span> <span class="n">path</span><span class="p">)</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+
+    <span class="n">obj_keys</span> <span class="o">=</span> <span class="n">object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+
+    <span class="n">objs_p_job</span> <span class="o">=</span> <span class="mi">2000</span>
+    <span class="k">while</span> <span class="nb">len</span><span class="p">(</span><span class="n">obj_keys</span><span class="p">)</span><span class="o">/</span><span class="nb">float</span><span class="p">(</span><span class="n">objs_p_job</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1000</span><span class="p">:</span>
+        <span class="n">objs_p_job</span> <span class="o">+=</span> <span class="mi">500</span>
+        <span class="k">if</span> <span class="n">objs_p_job</span> <span class="o">&gt;=</span> <span class="mi">4000</span><span class="p">:</span>
+            <span class="k">break</span>
+
+    <span class="nb">print</span> <span class="s2">&quot;</span><span class="si">%d</span><span class="s2"> objects per jobs&quot;</span> <span class="o">%</span> <span class="n">objs_p_job</span>
+
+    <span class="n">set_cnt</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">multi_params</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">obj_key_list</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">ii</span><span class="p">,</span> <span class="n">obj_key</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">obj_keys</span><span class="p">):</span>
+        <span class="n">object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">obj_key</span><span class="p">]</span><span class="o">.</span><span class="n">_path_to_hull_voxel</span> <span class="o">=</span> \
+            <span class="n">path</span> <span class="o">+</span> <span class="s2">&quot;/</span><span class="si">%d</span><span class="s2">.npz&quot;</span> <span class="o">%</span> <span class="n">set_cnt</span>
+        <span class="n">obj_key_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obj_key</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">obj_key_list</span><span class="p">)</span> <span class="o">==</span> <span class="n">objs_p_job</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="n">ii</span><span class="o">+</span><span class="mi">1</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">obj_keys</span><span class="p">)):</span>
+            <span class="n">multi_params</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">path</span> <span class="o">+</span> <span class="s2">&quot;/</span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">set_cnt</span><span class="p">,</span> <span class="n">object_dataset_path</span><span class="p">,</span>
+                                 <span class="n">obj_key_list</span><span class="p">])</span>
+            <span class="n">obj_key_list</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">set_cnt</span> <span class="o">+=</span> <span class="mi">1</span>
+
+    <span class="k">if</span> <span class="n">use_qsub</span> <span class="ow">and</span> <span class="n">qsub_available</span><span class="p">:</span>
+        <span class="n">path_to_out</span> <span class="o">=</span> <span class="n">qm</span><span class="o">.</span><span class="n">QSUB_script</span><span class="p">(</span><span class="n">multi_params</span><span class="p">,</span> <span class="s2">&quot;extract_and_save_all_hull_voxels&quot;</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="n">queue</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">nb_processes</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">pool</span> <span class="o">=</span> <span class="n">Pool</span><span class="p">(</span><span class="n">nb_processes</span><span class="p">)</span>
+            <span class="n">pool</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">extract_and_save_all_hull_voxels_thread</span><span class="p">,</span> <span class="n">multi_params</span><span class="p">)</span>
+            <span class="n">pool</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="n">pool</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">map</span><span class="p">(</span><span class="n">extract_and_save_all_hull_voxels_thread</span><span class="p">,</span> <span class="n">multi_params</span><span class="p">)</span>
+
+    <span class="n">save_dataset</span><span class="p">(</span><span class="n">object_dataset</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="extract_and_save_all_hull_voxels_loop"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.extract_and_save_all_hull_voxels_loop">[docs]</a><span class="k">def</span> <span class="nf">extract_and_save_all_hull_voxels_loop</span><span class="p">(</span><span class="n">object_dataset_paths</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span>
+                                          <span class="n">nb_processes</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">use_qsub</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="s2">&quot;full&quot;</span><span class="p">):</span>
+    <span class="k">for</span> <span class="n">object_dataset_path</span> <span class="ow">in</span> <span class="n">object_dataset_paths</span><span class="p">:</span>
+        <span class="n">extract_and_save_all_hull_voxels</span><span class="p">(</span><span class="n">object_dataset_path</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="n">overwrite</span><span class="p">,</span>
+                                         <span class="n">nb_processes</span><span class="o">=</span><span class="n">nb_processes</span><span class="p">,</span> <span class="n">use_qsub</span><span class="o">=</span><span class="n">use_qsub</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="n">queue</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="check_all_hulls_thread"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.check_all_hulls_thread">[docs]</a><span class="k">def</span> <span class="nf">check_all_hulls_thread</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+    <span class="n">object_dataset</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span><span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+    <span class="n">misses</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()[</span><span class="n">step</span><span class="o">*</span><span class="mi">100000</span><span class="p">:</span> <span class="p">(</span><span class="n">step</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span><span class="mi">100000</span><span class="p">]:</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">hull_voxels</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+            <span class="n">misses</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">misses</span></div>
+
+
+<div class="viewcode-block" id="check_all_hulls"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.check_all_hulls">[docs]</a><span class="k">def</span> <span class="nf">check_all_hulls</span><span class="p">(</span><span class="n">object_dataset_path</span><span class="p">,</span> <span class="n">nb_processes</span><span class="p">,</span> <span class="n">use_qsub</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="s2">&quot;full&quot;</span><span class="p">):</span>
+    <span class="n">object_dataset</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span><span class="n">object_dataset_path</span><span class="p">)</span>
+    <span class="n">multi_params</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">ceil</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="p">)</span><span class="o">/</span><span class="mi">10000</span><span class="p">))):</span>
+        <span class="n">multi_params</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">object_dataset_path</span><span class="p">,</span> <span class="n">step</span><span class="p">])</span>
+
+    <span class="k">if</span> <span class="n">use_qsub</span> <span class="ow">and</span> <span class="n">qsub_available</span><span class="p">:</span>
+        <span class="n">path_to_out</span> <span class="o">=</span> <span class="n">qm</span><span class="o">.</span><span class="n">QSUB_script</span><span class="p">(</span><span class="n">multi_params</span><span class="p">,</span> <span class="s2">&quot;check_all_hulls&quot;</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="n">queue</span><span class="p">)</span>
+
+        <span class="n">out_files</span> <span class="o">=</span> <span class="n">glob</span><span class="o">.</span><span class="n">glob</span><span class="p">(</span><span class="n">path_to_out</span> <span class="o">+</span> <span class="s2">&quot;/*&quot;</span><span class="p">)</span>
+        <span class="n">misses</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">out_file</span> <span class="ow">in</span> <span class="n">out_files</span><span class="p">:</span>
+            <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">out_file</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+                <span class="n">misses</span> <span class="o">+=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">f</span><span class="p">)</span>
+
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">nb_processes</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">pool</span> <span class="o">=</span> <span class="n">Pool</span><span class="p">(</span><span class="n">nb_processes</span><span class="p">)</span>
+            <span class="n">results</span> <span class="o">=</span> <span class="n">pool</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">check_all_hulls_thread</span><span class="p">,</span> <span class="n">multi_params</span><span class="p">)</span>
+            <span class="n">pool</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="n">pool</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">results</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">check_all_hulls_thread</span><span class="p">,</span> <span class="n">multi_params</span><span class="p">)</span>
+
+        <span class="n">misses</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">result</span> <span class="ow">in</span> <span class="n">results</span><span class="p">:</span>
+            <span class="n">misses</span> <span class="o">+=</span> <span class="n">result</span>
+    <span class="k">return</span> <span class="n">misses</span></div>
+
+
+<div class="viewcode-block" id="check_all_hulls_loop"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.check_all_hulls_loop">[docs]</a><span class="k">def</span> <span class="nf">check_all_hulls_loop</span><span class="p">(</span><span class="n">object_dataset_paths</span><span class="p">,</span> <span class="n">nb_processes</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">use_qsub</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="s2">&quot;full&quot;</span><span class="p">):</span>
+    <span class="n">misses</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">object_dataset_path</span> <span class="ow">in</span> <span class="n">object_dataset_paths</span><span class="p">:</span>
+        <span class="n">misses</span><span class="p">[</span><span class="n">object_dataset_path</span><span class="p">]</span> <span class="o">=</span> <span class="n">check_all_hulls</span><span class="p">(</span><span class="n">object_dataset_path</span><span class="p">,</span> <span class="n">nb_processes</span><span class="o">=</span><span class="n">nb_processes</span><span class="p">,</span>
+                                                      <span class="n">use_qsub</span><span class="o">=</span><span class="n">use_qsub</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="n">queue</span><span class="p">)</span>
+        <span class="nb">print</span> <span class="s2">&quot;</span><span class="si">%s</span><span class="s2">: </span><span class="si">%d</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">object_dataset_path</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">misses</span><span class="p">[</span><span class="n">object_dataset_path</span><span class="p">]))</span>
+        <span class="nb">print</span> <span class="n">misses</span><span class="p">[</span><span class="n">object_dataset_path</span><span class="p">]</span>
+        <span class="nb">print</span>
+        <span class="nb">print</span> <span class="s2">&quot;---------------------------------------------------------&quot;</span>
+        <span class="nb">print</span>
+    <span class="k">return</span> <span class="n">misses</span></div>
+
+
+<div class="viewcode-block" id="save_dataset"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.save_dataset">[docs]</a><span class="k">def</span> <span class="nf">save_dataset</span><span class="p">(</span><span class="n">object_dataset</span><span class="p">,</span> <span class="n">path</span><span class="o">=</span><span class="s2">&quot;auto&quot;</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">path</span> <span class="o">==</span> <span class="s2">&quot;auto&quot;</span><span class="p">:</span>
+        <span class="n">path</span> <span class="o">=</span> <span class="n">object_dataset</span><span class="o">.</span><span class="n">path</span>
+
+    <span class="n">object_dataset</span><span class="o">.</span><span class="n">_temp_sizes</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">object_dataset</span><span class="o">.</span><span class="n">_temp_rep_coords</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">object_dataset</span><span class="o">.</span><span class="n">_temp_ids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">object_dataset</span><span class="o">.</span><span class="n">_temp_rep_coord_kdtree</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># with closing(shelve.open(path+&quot;/shelve_object_dictionary&quot;, flag=&quot;n&quot;, protocol=2)) as sdict:</span>
+    <span class="c1">#     for key in object_dataset.object_dict.keys():</span>
+    <span class="c1">#         sdict[str(key)] = object_dataset.object_dict[key]</span>
+
+    <span class="c1"># with open(path+&quot;object_dictionary.pkl&quot;, &quot;w&quot;) as file:</span>
+    <span class="c1">#     pickle.dump(object_dataset.object_dict, file, protocol=2)</span>
+    <span class="c1">#</span>
+    <span class="c1"># object_dataset.object_dict = {}</span>
+
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="o">+</span><span class="s2">&quot;/object_dataset.pkl&quot;</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> \
+            <span class="k">as</span> <span class="n">output</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">object_dataset</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="n">pickle</span><span class="o">.</span><span class="n">HIGHEST_PROTOCOL</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="load_dataset"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.load_dataset">[docs]</a><span class="k">def</span> <span class="nf">load_dataset</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">use_shelve</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="o">+</span><span class="s2">&quot;/object_dataset.pkl&quot;</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="nb">input</span><span class="p">:</span>
+        <span class="n">this_input</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="nb">input</span><span class="p">)</span>
+
+    <span class="c1"># if use_shelve:</span>
+    <span class="c1">#     this_input.object_dict = {}</span>
+    <span class="c1">#     this_input.object_dict = shelve.open(path+&quot;/shelve_object_dictionary&quot;, flag=&#39;r&#39;, protocol=2)</span>
+
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">normpath</span><span class="p">(</span><span class="n">this_input</span><span class="o">.</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)</span> <span class="o">!=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">normpath</span><span class="p">(</span><span class="n">path</span><span class="p">)</span><span class="o">.</span><span class="n">strip</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">):</span>
+        <span class="nb">print</span> <span class="s2">&quot;Updating paths...&quot;</span>
+        <span class="n">this_input</span><span class="o">.</span><span class="n">_path_to_chunk_dataset_head</span> <span class="o">=</span><span class="s2">&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">path</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="s2">&quot;/&quot;</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[:</span><span class="o">-</span><span class="mi">2</span><span class="p">]:</span>
+                <span class="n">this_input</span><span class="o">.</span><span class="n">_path_to_chunk_dataset_head</span> <span class="o">+=</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">part</span>
+        <span class="k">else</span><span class="p">:</span>
+             <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[:</span><span class="o">-</span><span class="mi">1</span><span class="p">]:</span>
+                <span class="n">this_input</span><span class="o">.</span><span class="n">_path_to_chunk_dataset_head</span> <span class="o">+=</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">part</span>
+
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">this_input</span><span class="o">.</span><span class="n">object_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">this_input</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">_path_dataset</span> <span class="o">=</span> <span class="n">path</span>
+            <span class="k">for</span> <span class="n">nb_voxel_path</span> <span class="ow">in</span> \
+                    <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">this_input</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">path_to_voxel</span><span class="p">)):</span>
+                <span class="n">this_path</span> <span class="o">=</span> <span class="n">this_input</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">_path_to_voxel</span><span class="p">[</span><span class="n">nb_voxel_path</span><span class="p">]</span>
+                <span class="n">voxel_path</span> <span class="o">=</span> <span class="n">path</span>
+                <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">this_path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]:</span>
+                    <span class="n">voxel_path</span> <span class="o">+=</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">part</span>
+
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">this_path</span> <span class="o">=</span> <span class="n">this_input</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">_path_to_hull_voxel</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">this_path</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">if</span> <span class="n">this_path</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">hull_voxel_path</span> <span class="o">=</span> <span class="n">path</span>
+                <span class="k">for</span> <span class="n">part</span> <span class="ow">in</span> <span class="n">this_path</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s2">&quot;/&quot;</span><span class="p">)[</span><span class="o">-</span><span class="mi">2</span><span class="p">:]:</span>
+                    <span class="n">hull_voxel_path</span> <span class="o">+=</span> <span class="s2">&quot;/&quot;</span> <span class="o">+</span> <span class="n">part</span>
+
+                <span class="n">this_input</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">_path_to_voxel</span><span class="p">[</span><span class="n">nb_voxel_path</span><span class="p">]</span> <span class="o">=</span> <span class="n">voxel_path</span>
+
+        <span class="nb">print</span> <span class="s2">&quot;... finished.&quot;</span>
+    <span class="n">this_input</span><span class="o">.</span><span class="n">_temp_sizes</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">this_input</span><span class="o">.</span><span class="n">_temp_rep_coords</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">return</span> <span class="n">this_input</span></div>
+
+
+<div class="viewcode-block" id="update_dataset"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.update_dataset">[docs]</a><span class="k">def</span> <span class="nf">update_dataset</span><span class="p">(</span><span class="n">object_dataset</span><span class="p">,</span> <span class="n">update_objects</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">recalculate_rep_coords</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="k">if</span> <span class="n">recalculate_rep_coords</span><span class="p">:</span>
+        <span class="n">update_objects</span> <span class="o">=</span> <span class="kc">True</span>
+
+    <span class="n">up_object_dataset</span> <span class="o">=</span> <span class="n">UltrastructuralDataset</span><span class="p">(</span><span class="n">object_dataset</span><span class="o">.</span><span class="n">_type</span><span class="p">,</span>
+                                            <span class="n">object_dataset</span><span class="o">.</span><span class="n">_rel_path_home</span><span class="p">,</span>
+                                            <span class="n">object_dataset</span><span class="o">.</span><span class="n">_path_to_chunk_dataset_head</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">update_objects</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">obj</span> <span class="o">=</span> <span class="n">object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span>
+            <span class="n">up_object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span> <span class="o">=</span> <span class="n">SegmentationObject</span><span class="p">(</span><span class="n">key</span><span class="p">,</span>
+                                                        <span class="n">obj</span><span class="o">.</span><span class="n">_path_dataset</span><span class="p">,</span>
+                                                        <span class="n">obj</span><span class="o">.</span><span class="n">_path_to_voxel</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">recalculate_rep_coords</span><span class="p">:</span>
+                <span class="n">up_object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">calculate_rep_coord</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">up_object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">_rep_coord</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">rep_coord</span>
+            <span class="n">up_object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">_size</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">size</span>
+            <span class="n">up_object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">_obj_id</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">obj_id</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">up_object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">_path_to_hull_voxel</span> <span class="o">=</span> \
+                    <span class="n">obj</span><span class="o">.</span><span class="n">_path_to_hull_voxel</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">up_object_dataset</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">_path_to_hull_voxel</span> <span class="o">=</span> \
+                    <span class="kc">None</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">up_object_dataset</span><span class="o">.</span><span class="n">object_dict</span> <span class="o">=</span> <span class="n">object_dataset</span><span class="o">.</span><span class="n">object_dict</span>
+
+    <span class="k">if</span> <span class="n">overwrite</span><span class="p">:</span>
+        <span class="n">save_dataset</span><span class="p">(</span><span class="n">up_object_dataset</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">up_object_dataset</span></div>
+
+
+<div class="viewcode-block" id="updating_segmentationDatasets_thread"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.updating_segmentationDatasets_thread">[docs]</a><span class="k">def</span> <span class="nf">updating_segmentationDatasets_thread</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+    <span class="n">path</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">update_objects</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+    <span class="n">recalculate_rep_coords</span> <span class="o">=</span> <span class="n">args</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+
+    <span class="n">sset</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">sset</span> <span class="o">=</span> <span class="n">update_dataset</span><span class="p">(</span><span class="n">sset</span><span class="p">,</span> <span class="n">update_objects</span><span class="o">=</span><span class="n">update_objects</span><span class="p">,</span>
+                          <span class="n">recalculate_rep_coords</span><span class="o">=</span><span class="n">recalculate_rep_coords</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="update_multiple_datasets"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.update_multiple_datasets">[docs]</a><span class="k">def</span> <span class="nf">update_multiple_datasets</span><span class="p">(</span><span class="n">paths</span><span class="p">,</span> <span class="n">update_objects</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">recalculate_rep_coords</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">nb_processes</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">use_qsub</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="s2">&quot;full&quot;</span><span class="p">):</span>
+    <span class="n">multi_params</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">paths</span><span class="p">:</span>
+        <span class="n">multi_params</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">path</span><span class="p">,</span> <span class="n">update_objects</span><span class="p">,</span> <span class="n">recalculate_rep_coords</span><span class="p">])</span>
+
+    <span class="k">if</span> <span class="n">use_qsub</span> <span class="ow">and</span> <span class="n">qsub_available</span><span class="p">:</span>
+        <span class="n">path_to_out</span> <span class="o">=</span> <span class="n">qm</span><span class="o">.</span><span class="n">QSUB_script</span><span class="p">(</span><span class="n">multi_params</span><span class="p">,</span> <span class="s2">&quot;updating_segmentationDatasets&quot;</span><span class="p">,</span> <span class="n">queue</span><span class="o">=</span><span class="n">queue</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">nb_processes</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">pool</span> <span class="o">=</span> <span class="n">Pool</span><span class="p">(</span><span class="n">nb_processes</span><span class="p">)</span>
+            <span class="n">pool</span><span class="o">.</span><span class="n">map</span><span class="p">(</span><span class="n">updating_segmentationDatasets_thread</span><span class="p">,</span> <span class="n">multi_params</span><span class="p">)</span>
+            <span class="n">pool</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="n">pool</span><span class="o">.</span><span class="n">join</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">map</span><span class="p">(</span><span class="n">updating_segmentationDatasets_thread</span><span class="p">,</span> <span class="n">multi_params</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="UltrastructuralDataset"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.UltrastructuralDataset">[docs]</a><span class="k">class</span> <span class="nc">UltrastructuralDataset</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj_type</span><span class="p">,</span> <span class="n">rel_path_home</span><span class="p">,</span> <span class="n">path_to_chunk_dataset_head</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_type</span> <span class="o">=</span> <span class="n">obj_type</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rel_path_home</span> <span class="o">=</span> <span class="n">rel_path_home</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_path_to_chunk_dataset_head</span> <span class="o">=</span> <span class="n">path_to_chunk_dataset_head</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">object_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_temp_sizes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_temp_rep_coords</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_temp_ids</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_temp_rep_coord_kdtree</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_node_ids</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="c1"># enables efficient pickling</span>
+    <span class="k">def</span> <span class="nf">__getstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">paths_to_voxel</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">paths_to_hull_voxel</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">sizes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">obj_ids</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">rep_coords</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">bounding_boxes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">most_distant_voxels</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">obj</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">object_dict</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="n">paths_to_voxel</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">_path_to_voxel</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">paths_to_hull_voxel</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">_path_to_hull_voxel</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">paths_to_hull_voxel</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+            <span class="n">sizes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+            <span class="n">obj_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">obj_id</span><span class="p">)</span>
+            <span class="n">rep_coords</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">rep_coord</span><span class="p">)</span>
+            <span class="n">bounding_boxes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">_bounding_box</span><span class="p">)</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">most_distant_voxels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">_most_distant_voxel</span><span class="p">)</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">most_distant_voxels</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">scaling</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">_scaling</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">scaling</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">10.</span><span class="p">,</span> <span class="mf">10.</span><span class="p">,</span> <span class="mf">20.</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="p">(</span><span class="n">paths_to_voxel</span><span class="p">,</span> <span class="n">paths_to_hull_voxel</span><span class="p">,</span> <span class="n">sizes</span><span class="p">,</span> <span class="n">obj_ids</span><span class="p">,</span> <span class="n">rep_coords</span><span class="p">,</span> <span class="n">bounding_boxes</span><span class="p">,</span> <span class="n">most_distant_voxels</span><span class="p">,</span>
+                <span class="n">scaling</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_type</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rel_path_home</span><span class="p">,</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">_path_to_chunk_dataset_head</span><span class="p">)</span>
+
+    <span class="c1"># enables efficient pickling</span>
+    <span class="k">def</span> <span class="nf">__setstate__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">):</span>
+        <span class="n">paths_to_voxel</span><span class="p">,</span> <span class="n">paths_to_hull_voxel</span><span class="p">,</span> <span class="n">sizes</span><span class="p">,</span> <span class="n">obj_ids</span><span class="p">,</span> <span class="n">rep_coords</span><span class="p">,</span> <span class="n">bounding_boxes</span><span class="p">,</span> <span class="n">most_distant_voxels</span><span class="p">,</span> \
+            <span class="n">scaling</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_type</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rel_path_home</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_to_chunk_dataset_head</span> <span class="o">=</span> <span class="n">state</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">object_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_temp_sizes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_temp_rep_coords</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_temp_ids</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_temp_rep_coord_kdtree</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_node_ids</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="k">for</span> <span class="n">ii</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">paths_to_hull_voxel</span><span class="p">)):</span>
+            <span class="n">obj</span> <span class="o">=</span> <span class="n">SegmentationObject</span><span class="p">(</span><span class="n">obj_ids</span><span class="p">[</span><span class="n">ii</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_to_chunk_dataset_head</span><span class="o">+</span><span class="bp">self</span><span class="o">.</span><span class="n">_rel_path_home</span><span class="p">,</span>
+                                     <span class="n">paths_to_voxel</span><span class="p">[</span><span class="n">ii</span><span class="p">])</span>
+            <span class="n">obj</span><span class="o">.</span><span class="n">_path_to_hull_voxel</span> <span class="o">=</span> <span class="n">paths_to_hull_voxel</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span>
+            <span class="n">obj</span><span class="o">.</span><span class="n">_size</span> <span class="o">=</span> <span class="n">sizes</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span>
+            <span class="n">obj</span><span class="o">.</span><span class="n">_rep_coord</span> <span class="o">=</span> <span class="n">rep_coords</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span>
+            <span class="n">obj</span><span class="o">.</span><span class="n">_bounding_box</span> <span class="o">=</span> <span class="n">bounding_boxes</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span>
+            <span class="n">obj</span><span class="o">.</span><span class="n">_most_distant_voxel</span> <span class="o">=</span> <span class="n">most_distant_voxels</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span>
+            <span class="n">obj</span><span class="o">.</span><span class="n">_scaling</span> <span class="o">=</span> <span class="n">scaling</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">obj_ids</span><span class="p">[</span><span class="n">ii</span><span class="p">]]</span> <span class="o">=</span> <span class="n">obj</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">type</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_type</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">path</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_to_chunk_dataset_head</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rel_path_home</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">chunk_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">chunky</span><span class="o">.</span><span class="n">load_dataset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_path_to_chunk_dataset_head</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">knossos_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">chunk_dataset</span><span class="o">.</span><span class="n">dataset</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">sizes</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_temp_sizes</span> <span class="o">==</span> <span class="p">[]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">init_properties</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_temp_sizes</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">rep_coords</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">as_list</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_temp_rep_coords</span> <span class="o">==</span> <span class="p">[]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">init_properties</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_temp_rep_coords</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">ids</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span>  <span class="bp">self</span><span class="o">.</span><span class="n">_temp_ids</span> <span class="o">==</span> <span class="p">[]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">init_properties</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_temp_ids</span>
+
+<div class="viewcode-block" id="UltrastructuralDataset.init_properties"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.UltrastructuralDataset.init_properties">[docs]</a>    <span class="k">def</span> <span class="nf">init_properties</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_temp_ids</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_temp_sizes</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_temp_rep_coords</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">object_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_temp_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_temp_rep_coords</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">rep_coord</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_temp_sizes</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">key</span><span class="p">]</span><span class="o">.</span><span class="n">size</span><span class="p">)</span>
+        <span class="k">return</span></div>
+
+<div class="viewcode-block" id="UltrastructuralDataset.find_object_with_coordinate"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.UltrastructuralDataset.find_object_with_coordinate">[docs]</a>    <span class="k">def</span> <span class="nf">find_object_with_coordinate</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coordinate</span><span class="p">,</span> <span class="n">initial_radius_nm</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span>
+                                    <span class="n">hull_search_radius_nm</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span>
+                                    <span class="n">hull_reduction_by</span><span class="o">=</span><span class="mi">20</span><span class="p">,</span>
+                                    <span class="n">scaling</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">return_if_contained</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">hull_reduction_by</span> <span class="o">&lt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">hull_reduction_by</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="n">hull_reduction_by</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">hull_reduction_by</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">scaling</span> <span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">9.</span><span class="p">,</span> <span class="mf">9.</span><span class="p">,</span> <span class="mf">21.</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">scaling</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">scaling</span><span class="p">)</span>
+
+        <span class="n">coordinate</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">coordinate</span><span class="p">)</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_temp_rep_coord_kdtree</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_temp_rep_coord_kdtree</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">cKDTree</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">rep_coords</span><span class="p">)</span><span class="o">*</span><span class="n">scaling</span><span class="p">)</span>
+        <span class="n">candidate_indices</span> <span class="o">=</span> \
+            <span class="bp">self</span><span class="o">.</span><span class="n">_temp_rep_coord_kdtree</span><span class="o">.</span><span class="n">query_ball_point</span><span class="p">(</span><span class="n">coordinate</span><span class="o">*</span><span class="n">scaling</span><span class="p">,</span>
+                                                         <span class="n">initial_radius_nm</span><span class="p">)</span>
+        <span class="n">objs_ids</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="n">obj_dist_list</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">candidate_indices</span><span class="p">:</span>
+            <span class="n">obj</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ids</span><span class="p">[</span><span class="n">index</span><span class="p">]]</span>
+            <span class="n">objs_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">obj_id</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">obj</span><span class="o">.</span><span class="n">check_if_coordinate_is_contained</span><span class="p">(</span><span class="n">coordinate</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">return_if_contained</span><span class="p">:</span>
+                    <span class="k">return</span> <span class="p">[</span><span class="n">obj</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">obj_dist_list</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="n">obj</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="n">hull_search_radius_nm</span> <span class="o">&gt;</span> <span class="mi">0</span> <span class="ow">and</span> <span class="nb">len</span><span class="p">(</span><span class="n">candidate_indices</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">hull_coordinates</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="n">length_list</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">index</span> <span class="ow">in</span> <span class="n">candidate_indices</span><span class="p">:</span>
+                <span class="n">obj</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">ids</span><span class="p">[</span><span class="n">index</span><span class="p">]]</span>
+                <span class="n">obj_hull_vx</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">hull_voxels</span><span class="p">[::</span><span class="n">hull_reduction_by</span><span class="p">]</span>
+                <span class="n">hull_coordinates</span> <span class="o">+=</span> <span class="n">obj_hull_vx</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+                <span class="n">length_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">obj_hull_vx</span><span class="o">.</span><span class="n">tolist</span><span class="p">()))</span>
+
+            <span class="n">hull_coordinates</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">hull_coordinates</span><span class="p">)</span>
+            <span class="n">hull_tree</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">cKDTree</span><span class="p">(</span><span class="n">hull_coordinates</span><span class="o">*</span><span class="n">scaling</span><span class="p">)</span>
+            <span class="n">closest_hull_indices</span> <span class="o">=</span> <span class="n">hull_tree</span><span class="o">.</span><span class="n">query_ball_point</span><span class="p">(</span><span class="n">coordinate</span><span class="o">*</span><span class="n">scaling</span><span class="p">,</span>
+                                                              <span class="n">hull_search_radius_nm</span><span class="p">)</span>
+
+            <span class="n">distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">hull_coordinates</span><span class="p">))</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+            <span class="n">distances</span><span class="p">[</span><span class="n">closest_hull_indices</span><span class="p">]</span> <span class="o">=</span> \
+                <span class="n">spatial</span><span class="o">.</span><span class="n">distance</span><span class="o">.</span><span class="n">cdist</span><span class="p">([</span><span class="n">coordinate</span><span class="o">*</span><span class="n">scaling</span><span class="p">],</span>
+                                       <span class="n">hull_coordinates</span><span class="p">[</span><span class="n">closest_hull_indices</span><span class="p">]</span><span class="o">*</span><span class="n">scaling</span><span class="p">)</span>
+
+            <span class="n">distance_list</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">ii</span><span class="p">,</span> <span class="n">index</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">candidate_indices</span><span class="p">):</span>
+                <span class="n">cur_pos</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">length_list</span><span class="p">[:(</span><span class="n">ii</span><span class="p">)]))</span>
+                <span class="n">this_distances</span> <span class="o">=</span> <span class="n">distances</span><span class="p">[</span><span class="n">cur_pos</span><span class="p">:</span> <span class="p">(</span><span class="n">cur_pos</span><span class="o">+</span><span class="n">length_list</span><span class="p">[</span><span class="n">ii</span><span class="p">])]</span>
+                <span class="n">closest</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">this_distances</span><span class="p">)</span>
+                <span class="n">distance_list</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">ids</span><span class="p">[</span><span class="n">index</span><span class="p">],</span> <span class="n">closest</span><span class="p">])</span>
+
+            <span class="n">distance_list</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">distance_list</span><span class="p">)</span>
+            <span class="n">distance_list</span> <span class="o">=</span> <span class="n">distance_list</span><span class="p">[</span><span class="n">distance_list</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">argsort</span><span class="p">()]</span><span class="o">.</span><span class="n">tolist</span><span class="p">()</span>
+            <span class="k">for</span> <span class="n">entry</span> <span class="ow">in</span> <span class="n">distance_list</span><span class="p">:</span>
+                <span class="n">obj_dist_list</span><span class="o">.</span><span class="n">append</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">object_dict</span><span class="p">[</span><span class="n">entry</span><span class="p">[</span><span class="mi">0</span><span class="p">]],</span> <span class="n">entry</span><span class="p">[</span><span class="mi">1</span><span class="p">]])</span>
+            <span class="k">return</span> <span class="n">obj_dist_list</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">None</span></div></div>
+
+
+<div class="viewcode-block" id="SegmentationObject"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.SegmentationObject">[docs]</a><span class="k">class</span> <span class="nc">SegmentationObject</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">obj_id</span><span class="p">,</span> <span class="n">path_dataset</span><span class="p">,</span> <span class="n">path_to_voxels</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_path_to_voxel</span> <span class="o">=</span> <span class="n">path_to_voxels</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_path_to_hull_voxel</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_size</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_obj_id</span> <span class="o">=</span> <span class="n">obj_id</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_rep_coord</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_bounding_box</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_path_dataset</span> <span class="o">=</span> <span class="n">path_dataset</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_most_distant_voxel</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">path_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_dataset</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">bounding_box</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bounding_box</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="nb">min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">voxels</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="nb">max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">voxels</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_bounding_box</span> <span class="o">=</span> <span class="p">[</span><span class="nb">min</span><span class="p">,</span> <span class="nb">max</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_bounding_box</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">voxels</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">this_voxels</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">path_to_voxel</span><span class="p">:</span>
+            <span class="n">new_voxels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">path</span><span class="p">)[</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obj_id</span><span class="p">)]</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">this_voxels</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">this_voxels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">new_voxels</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">this_voxels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">concatenate</span><span class="p">((</span><span class="n">this_voxels</span><span class="p">,</span>
+                                              <span class="n">new_voxels</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">this_voxels</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">hull_voxels</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">path_to_hull_voxels</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">path_to_hull_voxels</span><span class="p">)[</span><span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">obj_id</span><span class="p">)]</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="c1"># print &quot;Hull Voxels need to be calculated&quot;</span>
+                <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_hull_voxels</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c1"># print &quot;Hull Voxels need to be calculated&quot;</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">create_hull_voxels</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">size</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_size</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">calculate_size</span><span class="p">()</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_size</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">obj_id</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_obj_id</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">rep_coord</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_rep_coord</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">path_to_hull_voxels</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_to_hull_voxel</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">path_to_voxel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_path_to_voxel</span><span class="p">,</span> <span class="n">basestring</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_path_to_voxel</span> <span class="o">=</span> <span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">_path_to_voxel</span><span class="p">]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_path_to_voxel</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">scaling</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">most_distant_voxel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_most_distant_voxel</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">voxel_distances</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">distance</span><span class="o">.</span><span class="n">cdist</span><span class="p">([</span><span class="bp">self</span><span class="o">.</span><span class="n">rep_coord</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">scaling</span><span class="p">],</span>
+                                                      <span class="bp">self</span><span class="o">.</span><span class="n">voxels</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">scaling</span><span class="p">)</span>
+            <span class="n">voxel_distances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">voxel_distances</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_most_distant_voxel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">voxels</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">voxel_distances</span> <span class="o">==</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">voxel_distances</span><span class="p">))]</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">_most_distant_voxel</span>
+
+<div class="viewcode-block" id="SegmentationObject.closest_point"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.SegmentationObject.closest_point">[docs]</a>    <span class="k">def</span> <span class="nf">closest_point</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coordinate</span><span class="p">,</span> <span class="n">scaling</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">scaling</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">scaling</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">10.</span><span class="p">,</span> <span class="mf">10.</span><span class="p">,</span> <span class="mf">10.</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">scaling</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">scaling</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">path_to_hull_voxels</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">vx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">hull_voxels</span><span class="p">)</span><span class="o">*</span><span class="n">scaling</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">vx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">voxels</span><span class="p">)</span><span class="o">*</span><span class="n">scaling</span>
+
+        <span class="n">distances</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">distance</span><span class="o">.</span><span class="n">cdist</span><span class="p">([</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">coordinate</span><span class="p">)</span><span class="o">*</span><span class="n">scaling</span><span class="p">],</span> <span class="n">vx</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">vx</span><span class="p">[</span><span class="n">distances</span> <span class="o">==</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">distances</span><span class="p">)][</span><span class="mi">0</span><span class="p">]</span></div>
+
+<div class="viewcode-block" id="SegmentationObject.check_if_coordinate_is_contained"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.SegmentationObject.check_if_coordinate_is_contained">[docs]</a>    <span class="k">def</span> <span class="nf">check_if_coordinate_is_contained</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coordinate</span><span class="p">):</span>
+        <span class="n">a</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">voxels</span>
+        <span class="n">b</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">coordinate</span><span class="p">)</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">a</span> <span class="o">==</span> <span class="n">b</span><span class="p">)</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">ndim</span> <span class="o">-</span> <span class="n">b</span><span class="o">.</span><span class="n">ndim</span><span class="p">,</span> <span class="n">a</span><span class="o">.</span><span class="n">ndim</span><span class="p">))</span><span class="o">.</span><span class="n">any</span><span class="p">()</span></div>
+
+<div class="viewcode-block" id="SegmentationObject.add_path"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.SegmentationObject.add_path">[docs]</a>    <span class="k">def</span> <span class="nf">add_path</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other_obj</span><span class="p">):</span>
+        <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">other_obj</span><span class="o">.</span><span class="n">_path_to_voxel</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_path_to_voxel</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_size</span> <span class="o">=</span> <span class="kc">None</span></div>
+
+<div class="viewcode-block" id="SegmentationObject.write_to_overlaycube"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.SegmentationObject.write_to_overlaycube">[docs]</a>    <span class="k">def</span> <span class="nf">write_to_overlaycube</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kd</span><span class="p">,</span> <span class="n">mags</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">size_filter</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">entry</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">write_to_cube</span><span class="p">(</span><span class="n">kd</span><span class="p">,</span> <span class="n">mags</span><span class="p">,</span> <span class="n">size_filter</span><span class="p">,</span> <span class="n">entry</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SegmentationObject.write_to_cube"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.SegmentationObject.write_to_cube">[docs]</a>    <span class="k">def</span> <span class="nf">write_to_cube</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">kd</span><span class="p">,</span> <span class="n">mags</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">size_filter</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span> <span class="n">entry</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span>
+                      <span class="n">as_raw</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">mags</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">mags</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">mag</span>
+        <span class="n">this_bb</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">bounding_box</span><span class="p">)</span>
+        <span class="n">this_bb</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">overwrite</span><span class="p">:</span>
+            <span class="k">for</span> <span class="n">dim</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">3</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">this_bb</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">dim</span><span class="p">]</span> <span class="o">%</span> <span class="mi">128</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">this_bb</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">dim</span><span class="p">]</span> <span class="o">-=</span> <span class="n">this_bb</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">dim</span><span class="p">]</span> <span class="o">%</span> <span class="mi">128</span>
+                <span class="k">if</span> <span class="n">this_bb</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">dim</span><span class="p">]</span> <span class="o">%</span> <span class="mi">128</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                    <span class="n">this_bb</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">dim</span><span class="p">]</span> <span class="o">-=</span> <span class="n">this_bb</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">dim</span><span class="p">]</span> <span class="o">%</span> <span class="mi">128</span> <span class="o">+</span> <span class="mi">128</span>
+        <span class="n">bb_size</span> <span class="o">=</span> <span class="n">this_bb</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="n">this_bb</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">as_raw</span><span class="p">:</span>
+            <span class="n">datatype</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">uint8</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">datatype</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">uint32</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">size</span> <span class="o">&gt;</span> <span class="n">size_filter</span><span class="p">:</span>
+            <span class="n">voxels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">voxels</span><span class="p">)</span> <span class="o">-</span> <span class="n">this_bb</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                              <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint32</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">ndim</span><span class="p">(</span><span class="n">voxels</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="nb">print</span> <span class="s2">&quot;No voxels found in </span><span class="si">%s</span><span class="s2">. Shape: </span><span class="si">%s</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">type</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">voxels</span><span class="o">.</span><span class="n">shape</span><span class="p">))</span>
+                <span class="k">return</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">overwrite</span><span class="p">:</span>
+                    <span class="n">matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">voxels</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">voxels</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span>
+                                       <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">voxels</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">])</span><span class="o">+</span><span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">datatype</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="k">if</span> <span class="n">as_raw</span><span class="p">:</span>
+                        <span class="n">matrix</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">from_raw_cubes_to_matrix</span><span class="p">(</span><span class="n">bb_size</span><span class="p">,</span> <span class="n">this_bb</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+                    <span class="k">else</span><span class="p">:</span>
+                        <span class="n">matrix</span> <span class="o">=</span> <span class="n">kd</span><span class="o">.</span><span class="n">from_overlay_cubes_to_matrix</span><span class="p">(</span><span class="n">bb_size</span><span class="p">,</span> <span class="n">this_bb</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+            <span class="k">if</span> <span class="n">entry</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+                <span class="n">matrix</span><span class="p">[</span><span class="n">voxels</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">voxels</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">voxels</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">obj_id</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">matrix</span><span class="p">[</span><span class="n">voxels</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">voxels</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">voxels</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]]</span> <span class="o">=</span> <span class="n">entry</span>
+            <span class="n">kd</span><span class="o">.</span><span class="n">from_matrix_to_cubes</span><span class="p">(</span><span class="n">this_bb</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">data</span><span class="o">=</span><span class="p">[</span><span class="n">matrix</span><span class="p">],</span> <span class="n">nb_threads</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">mags</span><span class="o">=</span><span class="n">mags</span><span class="p">,</span> <span class="n">overwrite</span><span class="o">=</span><span class="ow">not</span> <span class="n">overwrite</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SegmentationObject.create_hull_voxels"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.SegmentationObject.create_hull_voxels">[docs]</a>    <span class="k">def</span> <span class="nf">create_hull_voxels</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">voxels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">voxels</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">voxels</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">voxels_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">voxels</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+            <span class="n">x_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">voxels_array</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span> <span class="o">-</span> <span class="mi">2</span>
+            <span class="n">x_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">voxels_array</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span> <span class="o">+</span> <span class="mi">2</span>
+            <span class="n">y_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">voxels_array</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">-</span> <span class="mi">2</span>
+            <span class="n">y_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">voxels_array</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">+</span> <span class="mi">2</span>
+            <span class="n">z_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">voxels_array</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">])</span> <span class="o">-</span> <span class="mi">2</span>
+            <span class="n">z_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">voxels_array</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">])</span> <span class="o">+</span> <span class="mi">2</span>
+
+            <span class="n">matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">x_max</span><span class="o">-</span><span class="n">x_min</span><span class="p">,</span> <span class="n">y_max</span><span class="o">-</span><span class="n">y_min</span><span class="p">,</span> <span class="n">z_max</span><span class="o">-</span><span class="n">z_min</span><span class="p">),</span>
+                              <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+
+            <span class="n">lower_boarder</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">basics</span><span class="o">.</span><span class="n">negative_to_zero</span><span class="p">(</span><span class="n">x_min</span><span class="p">),</span>
+                                      <span class="n">basics</span><span class="o">.</span><span class="n">negative_to_zero</span><span class="p">(</span><span class="n">y_min</span><span class="p">),</span>
+                                      <span class="n">basics</span><span class="o">.</span><span class="n">negative_to_zero</span><span class="p">(</span><span class="n">z_min</span><span class="p">)],</span>
+                                     <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+
+            <span class="n">voxels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">voxels</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span> <span class="o">-</span> <span class="n">lower_boarder</span>
+            <span class="n">matrix</span><span class="p">[</span><span class="n">voxels</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">voxels</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">voxels</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]]</span> <span class="o">=</span> <span class="mi">1</span>
+
+            <span class="n">k</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span>
+                          <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">]],</span>
+                          <span class="p">[[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">],</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]]])</span>
+            <span class="n">coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argwhere</span><span class="p">((</span><span class="n">ndimage</span><span class="o">.</span><span class="n">convolve</span><span class="p">(</span><span class="n">matrix</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s2">&quot;constant&quot;</span><span class="p">,</span> <span class="n">cval</span><span class="o">=</span><span class="mf">0.</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">7</span><span class="p">)</span><span class="o">*</span><span class="n">matrix</span> <span class="o">==</span> <span class="mi">1</span><span class="p">)</span> <span class="o">+</span> <span class="n">lower_boarder</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">coords</span> <span class="o">=</span> <span class="n">voxels</span>
+        <span class="k">return</span> <span class="n">coords</span></div>
+
+<div class="viewcode-block" id="SegmentationObject.create_hull_ids"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.SegmentationObject.create_hull_ids">[docs]</a>    <span class="k">def</span> <span class="nf">create_hull_ids</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="n">voxels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">voxels</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">voxels</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">voxels_array</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">voxels</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+            <span class="c1"># print voxels_array.shape</span>
+            <span class="n">x_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">voxels_array</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span> <span class="o">-</span> <span class="mi">2</span>
+            <span class="n">x_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">voxels_array</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">])</span> <span class="o">+</span> <span class="mi">2</span>
+            <span class="n">y_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">voxels_array</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">-</span> <span class="mi">2</span>
+            <span class="n">y_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">voxels_array</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">])</span> <span class="o">+</span> <span class="mi">2</span>
+            <span class="n">z_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">voxels_array</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">])</span> <span class="o">-</span> <span class="mi">2</span>
+            <span class="n">z_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">voxels_array</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">])</span> <span class="o">+</span> <span class="mi">2</span>
+
+            <span class="n">matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">x_max</span><span class="o">-</span><span class="n">x_min</span><span class="p">,</span> <span class="n">y_max</span><span class="o">-</span><span class="n">y_min</span><span class="p">,</span> <span class="n">z_max</span><span class="o">-</span><span class="n">z_min</span><span class="p">),</span>
+                              <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+
+            <span class="n">lower_boarder</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">basics</span><span class="o">.</span><span class="n">negative_to_zero</span><span class="p">(</span><span class="n">x_min</span><span class="p">),</span>
+                                      <span class="n">basics</span><span class="o">.</span><span class="n">negative_to_zero</span><span class="p">(</span><span class="n">y_min</span><span class="p">),</span>
+                                      <span class="n">basics</span><span class="o">.</span><span class="n">negative_to_zero</span><span class="p">(</span><span class="n">z_min</span><span class="p">)],</span>
+                                     <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+
+            <span class="n">voxels</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">voxels</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span> <span class="o">-</span> <span class="n">lower_boarder</span>
+            <span class="n">matrix</span><span class="p">[</span><span class="n">voxels</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">],</span> <span class="n">voxels</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">],</span> <span class="n">voxels</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]]</span> <span class="o">=</span> <span class="mi">1</span>
+
+            <span class="n">hull_voxel_ids</span> <span class="o">=</span> <span class="p">[]</span>
+            <span class="k">for</span> <span class="n">nb_voxel</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">voxels</span><span class="p">)):</span>
+                <span class="n">voxel</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">voxels</span><span class="p">[</span><span class="n">nb_voxel</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">matrix</span><span class="p">[</span><span class="n">voxel</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">voxel</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">voxel</span><span class="p">[</span><span class="mi">2</span><span class="p">]]</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">hull_voxel_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">nb_voxel</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">matrix</span><span class="p">[</span><span class="n">voxel</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">voxel</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">voxel</span><span class="p">[</span><span class="mi">2</span><span class="p">]]</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">hull_voxel_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">nb_voxel</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">matrix</span><span class="p">[</span><span class="n">voxel</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">voxel</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="n">voxel</span><span class="p">[</span><span class="mi">2</span><span class="p">]]</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">hull_voxel_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">nb_voxel</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">matrix</span><span class="p">[</span><span class="n">voxel</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">voxel</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">,</span> <span class="n">voxel</span><span class="p">[</span><span class="mi">2</span><span class="p">]]</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">hull_voxel_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">nb_voxel</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">matrix</span><span class="p">[</span><span class="n">voxel</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">voxel</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">voxel</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">hull_voxel_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">nb_voxel</span><span class="p">)</span>
+                <span class="k">elif</span> <span class="n">matrix</span><span class="p">[</span><span class="n">voxel</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">voxel</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">voxel</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">+</span><span class="mi">1</span><span class="p">]</span> <span class="o">!=</span> <span class="mi">1</span><span class="p">:</span>
+                    <span class="n">hull_voxel_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">nb_voxel</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">hull_voxel_ids</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">return</span> <span class="n">hull_voxel_ids</span></div>
+
+<div class="viewcode-block" id="SegmentationObject.add_voxel"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.SegmentationObject.add_voxel">[docs]</a>    <span class="k">def</span> <span class="nf">add_voxel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coordinate</span><span class="p">):</span>
+       <span class="k">raise</span> <span class="ne">NotImplementedError</span></div>
+
+<div class="viewcode-block" id="SegmentationObject.remove_voxel_file"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.SegmentationObject.remove_voxel_file">[docs]</a>    <span class="k">def</span> <span class="nf">remove_voxel_file</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span></div>
+        <span class="c1"># for path in self.path_to_voxel:</span>
+        <span class="c1">#     os.remove(path)</span>
+
+<div class="viewcode-block" id="SegmentationObject.calculate_rep_coord"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.SegmentationObject.calculate_rep_coord">[docs]</a>    <span class="k">def</span> <span class="nf">calculate_rep_coord</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">calculate_size</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">voxels</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">sample_size</span><span class="o">=</span><span class="mi">200</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">voxels</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">voxels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">voxels</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">voxels</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="c1"># self._rep_coord = np.array([np.mean(voxels[:, 0]),</span>
+            <span class="c1">#                             np.mean(voxels[:, 1]),</span>
+            <span class="c1">#                             np.mean(voxels[:, 2])],</span>
+            <span class="c1">#                            dtype=np.int)</span>
+            <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">shuffle</span><span class="p">(</span><span class="n">voxels</span><span class="p">)</span>
+            <span class="n">dist</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">distance</span><span class="o">.</span><span class="n">cdist</span><span class="p">(</span><span class="n">voxels</span><span class="p">[:</span><span class="n">sample_size</span><span class="p">],</span> <span class="n">voxels</span><span class="p">[:</span><span class="n">sample_size</span><span class="p">])</span>
+            <span class="nb">sum</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">dist</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="n">pos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">where</span><span class="p">(</span><span class="nb">sum</span> <span class="o">==</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="nb">sum</span><span class="p">))[</span><span class="mi">0</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_rep_coord</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">voxels</span><span class="p">[:</span><span class="n">sample_size</span><span class="p">][</span><span class="n">pos</span><span class="p">])</span>
+
+            <span class="c1"># if not self.check_if_coordinate_is_contained(self._rep_coord):</span>
+            <span class="c1">#     if fast_correction:</span>
+            <span class="c1">#         self._rep_coord = np.array(voxels[int(len(voxels)/2)], dtype=np.int)</span>
+            <span class="c1">#     else:</span>
+            <span class="c1">#         step = len(voxels)/300</span>
+            <span class="c1">#         if step == 0:</span>
+            <span class="c1">#             step = 1</span>
+            <span class="c1">#         dist = spatial.distance.cdist(voxels[::step], voxels[::step])</span>
+            <span class="c1">#         sum = np.sum(dist, 1)</span>
+            <span class="c1">#         pos = np.where(sum == np.min(sum))[0]</span>
+            <span class="c1">#         self._rep_coord = np.array(voxels[::step][pos])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_rep_coord</span> <span class="o">=</span> <span class="n">voxels</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="k">if</span> <span class="n">calculate_size</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">calculate_size</span><span class="p">(</span><span class="n">voxels</span><span class="o">=</span><span class="n">voxels</span><span class="p">)</span></div>
+
+<div class="viewcode-block" id="SegmentationObject.calculate_size"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.segmentationdataset.SegmentationObject.calculate_size">[docs]</a>    <span class="k">def</span> <span class="nf">calculate_size</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">voxels</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+        <span class="k">if</span> <span class="n">voxels</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">voxels</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">voxels</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">voxels</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_size</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">voxels</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_size</span> <span class="o">=</span> <span class="mi">1</span></div></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">SyConn a documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2016, Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.8.
+    </div>
+  </body>
+</html>
