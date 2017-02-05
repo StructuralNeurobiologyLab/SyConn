@@ -11,6 +11,7 @@ from knossos_utils import chunky, knossosdataset
 import cPickle as pkl
 import glob
 import numpy as np
+import os
 from scipy import ndimage
 
 
@@ -299,14 +300,16 @@ def extract_voxels_thread(args):
     hdf5names = args[3]
     suffix = args[4]
 
+    c_coordinates = chunk.coordinates.astype(np.int32)
+
     for nb_hdf5_name in range(len(hdf5names)):
         # print "Extracting"
         object_dataset = {}
         hdf5_name = hdf5names[nb_hdf5_name]
-        this_segmentation = datahandler.load_from_h5py(chunk.folder + filename +
-                                              "_stitched_components%s.h5" %
-                                              suffix,
-                                              [hdf5_name])[0]
+        path = chunk.folder + filename + "_stitched_components%s.h5" % suffix
+        if not os.path.exists(path):
+            path = chunk.folder + filename + ".h5"
+        this_segmentation = datahandler.load_from_h5py(path, [hdf5_name])[0]
 
         nonzero = np.nonzero(this_segmentation)
 
@@ -317,10 +320,12 @@ def extract_voxels_thread(args):
             value = this_segmentation[this_x, this_y, this_z]
             if value in object_dataset:
                 object_dataset[value].append(
-                    np.array([this_x, this_y, this_z]) + chunk.coordinates)
+                    np.array([this_x, this_y, this_z], dtype=np.int32) +
+                    chunk.coordinates)
             else:
                 object_dataset[value] = \
-                    [np.array([this_x, this_y, this_z]) + chunk.coordinates]
+                    [np.array([this_x, this_y, this_z], dtype=np.int32) +
+                     chunk.coordinates]
 
         set_dict = {}
         map_dict = {}
@@ -329,9 +334,11 @@ def extract_voxels_thread(args):
             set_dict[str(id)] = object_dataset[id]
             map_dict[id] = [chunk.number, set_cnt]
 
-            if len(set_dict) == 1000:
+            if len(set_dict) == 100:
                 np.savez_compressed(path_head_folder +
-                                    segmentationdataset.get_rel_path(hdf5_name, filename, suffix=suffix) +
+                                    segmentationdataset.get_rel_path(hdf5_name,
+                                                                     filename,
+                                                                     suffix=suffix) +
                                     "/voxels/%d_%d" % (chunk.number, set_cnt),
                                     **set_dict)
                 set_dict = {}
@@ -339,12 +346,15 @@ def extract_voxels_thread(args):
 
         if len(set_dict) > 0:
             np.savez_compressed(path_head_folder + "/" +
-                                segmentationdataset.get_rel_path(hdf5_name, filename, suffix=suffix) +
+                                segmentationdataset.get_rel_path(hdf5_name,
+                                                                 filename,
+                                                                 suffix=suffix) +
                                 "/voxels/%d_%d" % (chunk.number, set_cnt),
                                 **set_dict)
 
         f = open(path_head_folder + "/" +
-                 segmentationdataset.get_rel_path(hdf5_name, filename, suffix=suffix) +
+                 segmentationdataset.get_rel_path(hdf5_name, filename,
+                                                  suffix=suffix) +
                  "/map_dicts/map_%d.pkl" % chunk.number, "w")
         pkl.dump(map_dict, f, pkl.HIGHEST_PROTOCOL)
         f.close()
@@ -403,9 +413,8 @@ def create_objects_from_voxels_thread(args):
                     for dest in map_dict[this_key]:
                         paths.append(path_dataset + "/voxels/%d_%d.npz" %
                                      (dest[0], dest[1]))
-                    object_dict[this_key] = segmentationdataset.SegmentationObject(this_key,
-                                                                                   path_dataset,
-                                                                                   paths)
+                    object_dict[this_key] = segmentationdataset.\
+                        SegmentationObject(this_key, path_dataset, paths)
                     object_dict[this_key].calculate_rep_coord(
                         calculate_size=True)
 
