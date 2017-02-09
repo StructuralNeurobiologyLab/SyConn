@@ -10,6 +10,7 @@ from knossos_utils import chunky, knossosdataset
 
 import cPickle as pkl
 import glob
+import h5py
 import numpy as np
 import os
 from scipy import ndimage
@@ -300,66 +301,42 @@ def extract_voxels_thread(args):
     hdf5names = args[3]
     suffix = args[4]
 
-    c_coordinates = chunk.coordinates.astype(np.int32)
-
     for nb_hdf5_name in range(len(hdf5names)):
-        # print "Extracting"
-        object_dataset = {}
         hdf5_name = hdf5names[nb_hdf5_name]
         path = chunk.folder + filename + "_stitched_components%s.h5" % suffix
         if not os.path.exists(path):
             path = chunk.folder + filename + ".h5"
         this_segmentation = datahandler.load_from_h5py(path, [hdf5_name])[0]
 
-        nonzero = np.nonzero(this_segmentation)
-
-        for index in range(len(nonzero[0])):
-            this_x = nonzero[0][index]
-            this_y = nonzero[1][index]
-            this_z = nonzero[2][index]
-            value = this_segmentation[this_x, this_y, this_z]
-            if value in object_dataset:
-                object_dataset[value].append(
-                    np.array([this_x, this_y, this_z], dtype=np.int32) +
-                    chunk.coordinates)
-            else:
-                object_dataset[value] = \
-                    [np.array([this_x, this_y, this_z], dtype=np.int32) +
-                     chunk.coordinates]
-
-        set_dict = {}
+        unique_ids = np.unique(this_segmentation)
         map_dict = {}
-        set_cnt = 0
-        for id in object_dataset.keys():
-            set_dict[str(id)] = object_dataset[id]
-            map_dict[id] = [chunk.number, set_cnt]
 
-            if len(set_dict) == 100:
-                np.savez_compressed(path_head_folder +
-                                    segmentationdataset.get_rel_path(hdf5_name,
-                                                                     filename,
-                                                                     suffix=suffix) +
-                                    "/voxels/%d_%d" % (chunk.number, set_cnt),
-                                    **set_dict)
-                set_dict = {}
-                set_cnt += 1
+        with h5py.File(path_head_folder + "/" +
+                       segmentationdataset.get_rel_path(hdf5_name, filename,
+                                                        suffix=suffix) +
+                       "/voxels/chunk_%d.h5" % chunk.number) as f:
 
-        if len(set_dict) > 0:
-            np.savez_compressed(path_head_folder + "/" +
-                                segmentationdataset.get_rel_path(hdf5_name,
-                                                                 filename,
-                                                                 suffix=suffix) +
-                                "/voxels/%d_%d" % (chunk.number, set_cnt),
-                                **set_dict)
+            f.create_dataset("offset", data=chunk.offset)
+            for unique_id in unique_ids:
+                if unique_id == 0:
+                    continue
 
-        f = open(path_head_folder + "/" +
-                 segmentationdataset.get_rel_path(hdf5_name, filename,
-                                                  suffix=suffix) +
-                 "/map_dicts/map_%d.pkl" % chunk.number, "w")
-        pkl.dump(map_dict, f, pkl.HIGHEST_PROTOCOL)
-        f.close()
+                id_mask = this_segmentation == unique_id
+                id_mask, in_chunk_offset = basics.crop_bool_array(id_mask)
+                f.create_dataset("%d" % unique_id, data=id_mask,
+                                 compression="gzip")
+                f.create_dataset("%d_offset" % unique_id, data=in_chunk_offset)
 
-        this_segmentation = []
+                map_dict[unique_id] = chunk.number
+
+            f = open(path_head_folder + "/" +
+                     segmentationdataset.get_rel_path(hdf5_name, filename,
+                                                      suffix=suffix) +
+                     "/map_dicts/map_%d.pkl" % chunk.number, "w")
+            pkl.dump(map_dict, f, pkl.HIGHEST_PROTOCOL)
+            f.close()
+
+            this_segmentation = []
 
 
 def concatenate_mappings_thread(args):
@@ -409,10 +386,10 @@ def create_objects_from_voxels_thread(args):
         if len(chunk_map_dict) > 0:
             for this_key in chunk_map_dict.keys():
                 paths = []
-                if chunk_map_dict[this_key] == map_dict[this_key][0]:
-                    for dest in map_dict[this_key]:
-                        paths.append(path_dataset + "/voxels/%d_%d.npz" %
-                                     (dest[0], dest[1]))
+                if chunk_map_dict[this_key] == map_dict[this_key]:
+                    for k in map_dict[this_key]:
+                        paths.append(path_dataset + "/voxels/chunk_%d.h5" % k)
+                    #TODO: Adjust!
                     object_dict[this_key] = segmentationdataset.\
                         SegmentationObject(this_key, path_dataset, paths)
                     object_dict[this_key].calculate_rep_coord(
