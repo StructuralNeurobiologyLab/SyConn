@@ -19,7 +19,7 @@ config = {
                    'features and connectivity. ',
     'author': 'Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld',
     'url': 'syconn.org',
-    'download_url': 'https://github.com/pschubert/SyConn.git',
+    'download_url': 'https://github.com/StructuralNeurobiologyLab/SyConn.git',
     'author_email': '',
     'version': '0.1',
     'install_requires': ['cython', 'knossos_utils', 'nose',
