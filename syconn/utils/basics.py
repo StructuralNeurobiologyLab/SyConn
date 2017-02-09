@@ -23,6 +23,27 @@ def switch_array_entries(this_array, entries):
     return this_array
 
 
+def crop_bool_array(arr):
+    """
+    Crops a bool array to its True region
+
+    :param arr: 3d bool array
+        array to crop
+    :return: 3d bool array, list
+        cropped array, offset
+    """
+    in_mask_indices = [np.flatnonzero(arr.sum(axis=(1, 2))),
+                       np.flatnonzero(arr.sum(axis=(0, 2))),
+                       np.flatnonzero(arr.sum(axis=(0, 1)))]
+
+    return arr[in_mask_indices[0].min(): in_mask_indices[0].max() + 1,
+               in_mask_indices[1].min(): in_mask_indices[1].max() + 1,
+               in_mask_indices[2].min(): in_mask_indices[2].max() + 1],\
+           [in_mask_indices[0].min(),
+            in_mask_indices[1].min(),
+            in_mask_indices[2].min()]
+
+
 def negative_to_zero(a):
     """
     Sets negative values of array a to zero.
