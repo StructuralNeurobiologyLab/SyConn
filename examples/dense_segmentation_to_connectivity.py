@@ -10,7 +10,7 @@
 
 import argparse
 
-from syconn.utils import densedataset
+from syconn.utils import densedataset_helper as ddh
 from syconn.processing import initialization, objectextraction as oe
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
@@ -62,21 +62,28 @@ if not "/" == main_path[-1]:
 kd_raw = knossosdataset.KnossosDataset()
 kd_raw.initialize_from_knossos_path(knossos_raw_path)
 
-if os.path.exists(main_path + "chunkdataset.chunk_dataset.pkl"):
-    cset = chunky.load_dataset(main_path + "chunkdataset.chunk_dataset.pkl")
+if os.path.exists(main_path + "/chunkdataset/chunk_dataset.pkl"):
+    cset = chunky.load_dataset(main_path + "/chunkdataset/")
 else:
-    cset = initialization.initialize_cset(kd_raw, main_path, [512, 512, 512])
+    cset = initialization.initialize_cset(kd_raw, main_path, [512, 512, 256])
+    chunky.save_dataset(cset)
 
 # ------------------------------------------------------------ SuperVoxel Extraction
 
+if qsub_queue or qsub_pe:
+    import_batch_size = int(len(cset.chunk_dict.keys()) / 1000)
+else:
+    import_batch_size = None
+
 # Write segmentation to chunky first
-densedataset.export_dense_segmentation_to_cset(cset, kd_raw, datatype=np.uint16,
-                                               nb_cpus=20, pe=qsub_pe,
-                                               queue=qsub_queue)
+# ddh.export_dense_segmentation_to_cset(cset, kd_raw, datatype=np.uint32,
+#                                                nb_cpus=8, pe=qsub_pe,
+#                                                queue=qsub_queue,
+#                                                batch_size=import_batch_size)
 
 # Extract supervoxels as objects
-# oe.from_ids_to_objects(cset, "dense_segmentation", ["sv"],
-#                        debug=False, qsub_pe=qsub_pe, qsub_queue=qsub_queue)
+oe.from_ids_to_objects(cset, "dense_segmentation", ["sv"],
+                       debug=False, qsub_pe=qsub_pe, qsub_queue=qsub_queue)
 
 #
 # # ------------ Create hull and map objects to tracings and classify compartments
