@@ -4,16 +4,16 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
-
-from ..utils import datahandler, basics, segmentationdataset
-from knossos_utils import chunky, knossosdataset
-
 import cPickle as pkl
 import glob
 import h5py
 import numpy as np
 import os
 from scipy import ndimage
+
+from ..utils import datahandler, basics#, segmentationdataset
+from knossos_utils import chunky, knossosdataset
+from datasetrepresentations import ultrastructure, segmentation
 
 
 def gauss_threshold_connected_components_thread(args):
@@ -312,11 +312,11 @@ def extract_voxels_thread(args):
         map_dict = {}
 
         with h5py.File(path_head_folder + "/" +
-                       segmentationdataset.get_rel_path(hdf5_name, filename,
+                       ultrastructure.get_rel_path(hdf5_name, filename,
                                                         suffix=suffix) +
-                       "/voxels/chunk_%d.h5" % chunk.number) as f:
+                       "/voxels/chunk_%d.h5" % chunk.number, "w") as f:
 
-            f.create_dataset("offset", data=chunk.offset)
+            f.create_dataset("offset", data=chunk.coordinates)
             for unique_id in unique_ids:
                 if unique_id == 0:
                     continue
@@ -326,11 +326,13 @@ def extract_voxels_thread(args):
                 f.create_dataset("%d" % unique_id, data=id_mask,
                                  compression="gzip")
                 f.create_dataset("%d_offset" % unique_id, data=in_chunk_offset)
+                f.create_dataset("%d_size" % unique_id,
+                                 data=int(np.sum(id_mask)))
 
                 map_dict[unique_id] = chunk.number
 
             f = open(path_head_folder + "/" +
-                     segmentationdataset.get_rel_path(hdf5_name, filename,
+                     ultrastructure.get_rel_path(hdf5_name, filename,
                                                       suffix=suffix) +
                      "/map_dicts/map_%d.pkl" % chunk.number, "w")
             pkl.dump(map_dict, f, pkl.HIGHEST_PROTOCOL)
@@ -370,7 +372,7 @@ def create_objects_from_voxels_thread(args):
     suffix = args[5]
 
     path_dataset = path_head_folder + \
-                   segmentationdataset.get_rel_path(hdf5_name, filename, suffix)
+                   ultrastructure.get_rel_path(hdf5_name, filename, suffix)
 
     f = open(path_dataset + "/direct_map.pkl", "r")
     map_dict = pkl.load(f)
@@ -385,13 +387,12 @@ def create_objects_from_voxels_thread(args):
 
         if len(chunk_map_dict) > 0:
             for this_key in chunk_map_dict.keys():
-                paths = []
+                chunk_ids = []
                 if chunk_map_dict[this_key] == map_dict[this_key]:
                     for k in map_dict[this_key]:
-                        paths.append(path_dataset + "/voxels/chunk_%d.h5" % k)
-                    #TODO: Adjust!
-                    object_dict[this_key] = segmentationdataset.\
-                        SegmentationObject(this_key, path_dataset, paths)
+                        chunk_ids.append(k)
+                    object_dict[this_key] = segmentation.\
+                        SegmentationObject(this_key, path_dataset, chunk_ids)
                     object_dict[this_key].calculate_rep_coord(
                         calculate_size=True)
 
@@ -406,8 +407,8 @@ def create_datasets_from_objects_thread(args):
     filename = args[2]
     suffix = args[3]
 
-    rel_path = segmentationdataset.get_rel_path(hdf5_name, filename, suffix)
-    sset = segmentationdataset.UltrastructuralDataset(hdf5_name, rel_path,
+    rel_path = ultrastructure.get_rel_path(hdf5_name, filename, suffix)
+    sset = ultrastructure.UltrastructuralDataset(hdf5_name, rel_path,
                                                    path_head_folder)
 
     for obj_dict_path in glob.glob(path_head_folder + rel_path +
@@ -418,4 +419,4 @@ def create_datasets_from_objects_thread(args):
 
         sset.object_dict.update(this_obj_dict)
 
-    segmentationdataset.save_dataset(sset)
+    ultrastructure.save_dataset(sset)
