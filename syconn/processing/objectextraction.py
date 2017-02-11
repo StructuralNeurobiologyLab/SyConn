@@ -14,7 +14,8 @@ import glob
 
 from ..processing import objectextraction_helper as oeh
 from ..multi_proc import multi_proc_main as mpm
-from ..utils import datahandler, segmentationdataset
+from ..utils import datahandler#, segmentationdataset
+from datasetrepresentations import ultrastructure
 
 
 def calculate_chunk_numbers_for_box(cset, offset, size):
@@ -506,7 +507,7 @@ def concatenate_mappings(cset, filename, hdf5names, debug=False, suffix=""):
 
     multi_params = []
     for hdf5_name in hdf5names:
-        rel_path = segmentationdataset.get_rel_path(hdf5_name, filename, suffix)
+        rel_path = ultrastructure.get_rel_path(hdf5_name, filename, suffix)
         map_dict_paths = glob.glob(cset.path_head_folder + rel_path +
                                    "/map_dicts/*")
         multi_params.append([cset.path_head_folder, rel_path, map_dict_paths])
@@ -548,7 +549,7 @@ def create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
         counter = 0
         hdf5_name = hdf5names[nb_hdf5_name]
         path_dataset = cset.path_head_folder + \
-                       segmentationdataset.get_rel_path(hdf5_name, filename, suffix)
+                       ultrastructure.get_rel_path(hdf5_name, filename, suffix)
         if not os.path.exists(path_dataset + "/object_dicts/"):
             os.makedirs(path_dataset + "/object_dicts/")
 
@@ -806,7 +807,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
 
     for hdf5_name in hdf5names:
         path = cset.path_head_folder + "/" + \
-               segmentationdataset.get_rel_path(hdf5_name, filename, suffix)
+               ultrastructure.get_rel_path(hdf5_name, filename, suffix)
         if not os.path.exists(path + "/map_dicts/"):
             os.makedirs(path + "/map_dicts/")
         if not os.path.exists(path + "/voxels/"):
@@ -1016,7 +1017,7 @@ def from_ids_to_objects(cset, filename, hdf5names, chunk_list=None, debug=False,
 
     for hdf5_name in hdf5names:
         path = cset.path_head_folder + "/" + \
-               segmentationdataset.get_rel_path(hdf5_name, filename, suffix)
+               ultrastructure.get_rel_path(hdf5_name, filename, suffix)
         if not os.path.exists(path + "/map_dicts/"):
             os.makedirs(path + "/map_dicts/")
         if not os.path.exists(path + "/voxels/"):
