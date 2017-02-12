@@ -1,0 +1,550 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>syconn.utils.basics &#8212; SyConn a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/sphinxdoc.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     'a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="top" title="SyConn a documentation" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">SyConn a documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &#187;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for syconn.utils.basics</h1><div class="highlight"><pre>
+<span></span><span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1"># SyConn - Synaptic connectivity inference toolkit</span>
+<span class="c1">#</span>
+<span class="c1"># Copyright (c) 2016 - now</span>
+<span class="c1"># Max-Planck-Institute for Medical Research, Heidelberg, Germany</span>
+<span class="c1"># Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="k">import</span> <span class="n">spatial</span>
+<span class="kn">from</span> <span class="nn">numpy</span> <span class="k">import</span> <span class="n">array</span> <span class="k">as</span> <span class="n">arr</span>
+<span class="kn">from</span> <span class="nn">math</span> <span class="k">import</span> <span class="nb">pow</span><span class="p">,</span> <span class="n">sqrt</span><span class="p">,</span> <span class="n">ceil</span>
+<span class="kn">from</span> <span class="nn">scipy</span> <span class="k">import</span> <span class="n">ndimage</span>
+<span class="kn">from</span> <span class="nn">scipy.spatial</span> <span class="k">import</span> <span class="n">ConvexHull</span>
+<span class="kn">from</span> <span class="nn">scipy.spatial.qhull</span> <span class="k">import</span> <span class="n">QhullError</span>
+<span class="kn">import</span> <span class="nn">warnings</span>
+<span class="kn">import</span> <span class="nn">re</span>
+
+
+<div class="viewcode-block" id="switch_array_entries"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.switch_array_entries">[docs]</a><span class="k">def</span> <span class="nf">switch_array_entries</span><span class="p">(</span><span class="n">this_array</span><span class="p">,</span> <span class="n">entries</span><span class="p">):</span>
+    <span class="n">entry_0</span> <span class="o">=</span> <span class="n">this_array</span><span class="p">[</span><span class="n">entries</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+    <span class="n">this_array</span><span class="p">[</span><span class="n">entries</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="n">this_array</span><span class="p">[</span><span class="n">entries</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+    <span class="n">this_array</span><span class="p">[</span><span class="n">entries</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">entry_0</span>
+    <span class="k">return</span> <span class="n">this_array</span></div>
+
+
+<div class="viewcode-block" id="negative_to_zero"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.negative_to_zero">[docs]</a><span class="k">def</span> <span class="nf">negative_to_zero</span><span class="p">(</span><span class="n">a</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Sets negative values of array a to zero.</span>
+<span class="sd">    :param a: numpy array</span>
+<span class="sd">    :return: array a with non negativ values.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">a</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">a</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span></div>
+
+
+<div class="viewcode-block" id="get_orth_plane"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.get_orth_plane">[docs]</a><span class="k">def</span> <span class="nf">get_orth_plane</span><span class="p">(</span><span class="n">node_com</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculates orthogonal plane and skeleton interpolation for each node.</span>
+<span class="sd">    :param node_com: Spatially ordered list of nodes</span>
+<span class="sd">    :return: orthogonal vector and vector representing skeleton interpolation</span>
+<span class="sd">    at each node</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">lin_interp</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">node_com</span><span class="p">),</span> <span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">node_com</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">node_com</span><span class="p">),</span> <span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">),</span> <span class="n">lin_interp</span>
+    <span class="n">lin_interp</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">node_com</span><span class="p">[</span><span class="mi">2</span><span class="p">:]</span> <span class="o">-</span> <span class="n">node_com</span><span class="p">[:</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">lin_interp</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">node_com</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">node_com</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">lin_interp</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">node_com</span><span class="p">[</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">node_com</span><span class="p">[</span><span class="o">-</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">lin_interp</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">lin_interp</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">][</span><span class="n">n</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">lin_interp</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="o">/</span> <span class="n">n</span><span class="p">)[</span><span class="n">n</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="n">lin_interp</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">][</span><span class="n">n</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">lin_interp</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">1</span><span class="p">]</span> <span class="o">/</span> <span class="n">n</span><span class="p">)[</span><span class="n">n</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="n">lin_interp</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">][</span><span class="n">n</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">(</span><span class="n">lin_interp</span><span class="p">[</span><span class="o">...</span><span class="p">,</span> <span class="mi">2</span><span class="p">]</span> <span class="o">/</span> <span class="n">n</span><span class="p">)[</span><span class="n">n</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">lin_interp</span><span class="p">[:,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">lin_interp</span><span class="p">[:,</span> <span class="mi">1</span><span class="p">]</span>
+    <span class="n">z</span> <span class="o">=</span> <span class="n">lin_interp</span><span class="p">[:,</span> <span class="mi">2</span><span class="p">]</span>
+    <span class="n">orth_plane</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">node_com</span><span class="p">),</span> <span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+    <span class="n">inner_prod</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">node_com</span><span class="p">),</span> <span class="mi">1</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">node_com</span><span class="p">)):</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">z</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="mf">0.0</span><span class="p">):</span>
+            <span class="n">orth_plane</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">arr</span><span class="p">([</span><span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">y</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="o">-</span><span class="mf">1.0</span><span class="o">*</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span><span class="o">+</span><span class="n">y</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">/</span><span class="n">z</span><span class="p">[</span><span class="n">i</span><span class="p">]])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">y</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="mf">0.0</span><span class="p">):</span>
+                <span class="n">orth_plane</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">arr</span><span class="p">([</span><span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="o">-</span><span class="mf">1.0</span><span class="o">*</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span><span class="o">+</span><span class="n">z</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">/</span><span class="n">y</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                                        <span class="n">z</span><span class="p">[</span><span class="n">i</span><span class="p">]])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="mf">0.0</span><span class="p">):</span>
+                    <span class="n">orth_plane</span><span class="p">[</span><span class="n">i</span><span class="p">,</span> <span class="p">:]</span> <span class="o">=</span> <span class="n">arr</span><span class="p">([</span><span class="o">-</span><span class="mf">1.0</span><span class="o">*</span><span class="p">(</span><span class="n">y</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span><span class="o">+</span><span class="n">z</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">/</span><span class="n">x</span><span class="p">[</span><span class="n">i</span><span class="p">],</span>
+                                            <span class="n">y</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">z</span><span class="p">[</span><span class="n">i</span><span class="p">]])</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="nb">print</span> <span class="s2">&quot;WARNING: Problem finding orth. plane. &quot;</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="n">lin_interp</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">inner_prod</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">inner</span><span class="p">(</span><span class="n">orth_plane</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">lin_interp</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+        <span class="n">n</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">orth_plane</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+        <span class="k">if</span> <span class="n">n</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">orth_plane</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">/=</span> <span class="n">n</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">inner_prod</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">atol</span><span class="o">=</span><span class="mi">1</span><span class="n">e</span><span class="o">-</span><span class="mi">6</span><span class="p">),</span> <span class="s2">&quot;Planes are not orthogonal!&quot;</span>
+    <span class="k">return</span> <span class="n">orth_plane</span><span class="p">,</span> <span class="n">lin_interp</span></div>
+
+
+<div class="viewcode-block" id="rotation_matrix"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.rotation_matrix">[docs]</a><span class="k">def</span> <span class="nf">rotation_matrix</span><span class="p">(</span><span class="n">axis</span><span class="p">,</span> <span class="n">theta</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Get rotation matrix along axis and angle</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    axis: np.array</span>
+<span class="sd">        rotation-axis</span>
+<span class="sd">    theta: float</span>
+<span class="sd">        angle to rotate</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.array</span>
+<span class="sd">        rotation matrix associated with counterclockwise rotation about</span>
+<span class="sd">        the given axis by theta radians.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">axis</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">axis</span><span class="p">)</span>
+    <span class="n">theta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">theta</span><span class="p">)</span>
+    <span class="n">axis</span> <span class="o">=</span> <span class="n">axis</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">axis</span><span class="p">,</span> <span class="n">axis</span><span class="p">))</span>
+    <span class="n">a</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cos</span><span class="p">(</span><span class="n">theta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">,</span> <span class="n">d</span> <span class="o">=</span> <span class="o">-</span><span class="n">axis</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sin</span><span class="p">(</span><span class="n">theta</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="n">aa</span><span class="p">,</span> <span class="n">bb</span><span class="p">,</span> <span class="n">cc</span><span class="p">,</span> <span class="n">dd</span> <span class="o">=</span> <span class="n">a</span> <span class="o">*</span> <span class="n">a</span><span class="p">,</span> <span class="n">b</span> <span class="o">*</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span> <span class="o">*</span> <span class="n">c</span><span class="p">,</span> <span class="n">d</span> <span class="o">*</span> <span class="n">d</span>
+    <span class="n">bc</span><span class="p">,</span> <span class="n">ad</span><span class="p">,</span> <span class="n">ac</span><span class="p">,</span> <span class="n">ab</span><span class="p">,</span> <span class="n">bd</span><span class="p">,</span> <span class="n">cd</span> <span class="o">=</span> <span class="n">b</span><span class="o">*</span><span class="n">c</span><span class="p">,</span> <span class="n">a</span><span class="o">*</span><span class="n">d</span><span class="p">,</span> <span class="n">a</span><span class="o">*</span><span class="n">c</span><span class="p">,</span> <span class="n">a</span><span class="o">*</span><span class="n">b</span><span class="p">,</span> <span class="n">b</span><span class="o">*</span><span class="n">d</span><span class="p">,</span> <span class="n">c</span><span class="o">*</span><span class="n">d</span>
+    <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([[</span><span class="n">aa</span><span class="o">+</span><span class="n">bb</span><span class="o">-</span><span class="n">cc</span><span class="o">-</span><span class="n">dd</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="p">(</span><span class="n">bc</span><span class="o">+</span><span class="n">ad</span><span class="p">),</span> <span class="mi">2</span><span class="o">*</span><span class="p">(</span><span class="n">bd</span><span class="o">-</span><span class="n">ac</span><span class="p">)],</span>
+                     <span class="p">[</span><span class="mi">2</span><span class="o">*</span><span class="p">(</span><span class="n">bc</span><span class="o">-</span><span class="n">ad</span><span class="p">),</span> <span class="n">aa</span><span class="o">+</span><span class="n">cc</span><span class="o">-</span><span class="n">bb</span><span class="o">-</span><span class="n">dd</span><span class="p">,</span> <span class="mi">2</span><span class="o">*</span><span class="p">(</span><span class="n">cd</span><span class="o">+</span><span class="n">ab</span><span class="p">)],</span>
+                     <span class="p">[</span><span class="mi">2</span><span class="o">*</span><span class="p">(</span><span class="n">bd</span><span class="o">+</span><span class="n">ac</span><span class="p">),</span> <span class="mi">2</span><span class="o">*</span><span class="p">(</span><span class="n">cd</span><span class="o">-</span><span class="n">ab</span><span class="p">),</span> <span class="n">aa</span><span class="o">+</span><span class="n">dd</span><span class="o">-</span><span class="n">bb</span><span class="o">-</span><span class="n">cc</span><span class="p">]])</span></div>
+
+
+<div class="viewcode-block" id="pre_process_volume"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.pre_process_volume">[docs]</a><span class="k">def</span> <span class="nf">pre_process_volume</span><span class="p">(</span><span class="n">vol</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Processes raw data to get membrane shapes.</span>
+<span class="sd">    :param vol: array raw data</span>
+<span class="sd">    :return: array membrane</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">thres</span> <span class="o">=</span> <span class="mi">120</span>
+    <span class="n">vol</span> <span class="o">=</span> <span class="n">ndimage</span><span class="o">.</span><span class="n">filters</span><span class="o">.</span><span class="n">gaussian_filter</span><span class="p">(</span><span class="n">vol</span><span class="p">,</span> <span class="n">sigma</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">mode</span><span class="o">=</span><span class="s1">&#39;wrap&#39;</span><span class="p">)</span>
+    <span class="n">binary</span> <span class="o">=</span> <span class="n">vol</span> <span class="o">&gt;</span> <span class="n">thres</span>
+    <span class="n">edges</span> <span class="o">=</span> <span class="n">ndimage</span><span class="o">.</span><span class="n">filters</span><span class="o">.</span><span class="n">generic_gradient_magnitude</span><span class="p">(</span><span class="n">binary</span><span class="p">,</span>
+                                                       <span class="n">ndimage</span><span class="o">.</span><span class="n">filters</span><span class="o">.</span><span class="n">sobel</span><span class="p">)</span>
+    <span class="n">edges</span> <span class="o">=</span> <span class="p">(</span><span class="n">edges</span> <span class="o">*</span> <span class="mi">255</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint8</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">edges</span></div>
+
+
+<div class="viewcode-block" id="unit_normal"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.unit_normal">[docs]</a><span class="k">def</span> <span class="nf">unit_normal</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">,</span> <span class="n">c</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculates the unit normal vector of a given polygon defined by the</span>
+<span class="sd">    points a,b and c.</span>
+<span class="sd">    :param a, b, c: Each is an array of length 3</span>
+<span class="sd">    :return: unit normal vector</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">([[</span><span class="mi">1</span><span class="p">,</span> <span class="n">a</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">a</span><span class="p">[</span><span class="mi">2</span><span class="p">]],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">b</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">b</span><span class="p">[</span><span class="mi">2</span><span class="p">]],</span> <span class="p">[</span><span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">c</span><span class="p">[</span><span class="mi">2</span><span class="p">]]])</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">([[</span><span class="n">a</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">,</span> <span class="n">a</span><span class="p">[</span><span class="mi">2</span><span class="p">]],</span> <span class="p">[</span><span class="n">b</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">,</span> <span class="n">b</span><span class="p">[</span><span class="mi">2</span><span class="p">]],</span> <span class="p">[</span><span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="mi">1</span><span class="p">,</span> <span class="n">c</span><span class="p">[</span><span class="mi">2</span><span class="p">]]])</span>
+    <span class="n">z</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">([[</span><span class="n">a</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">a</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">b</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">b</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">1</span><span class="p">],</span> <span class="p">[</span><span class="n">c</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="mi">1</span><span class="p">]])</span>
+    <span class="n">magnitude</span> <span class="o">=</span> <span class="p">(</span><span class="n">x</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">y</span><span class="o">**</span><span class="mi">2</span> <span class="o">+</span> <span class="n">z</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span><span class="o">**.</span><span class="mi">5</span>
+    <span class="k">return</span> <span class="n">x</span> <span class="o">/</span> <span class="n">magnitude</span><span class="p">,</span> <span class="n">y</span> <span class="o">/</span> <span class="n">magnitude</span><span class="p">,</span> <span class="n">z</span> <span class="o">/</span> <span class="n">magnitude</span></div>
+
+
+<div class="viewcode-block" id="poly_area"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.poly_area">[docs]</a><span class="k">def</span> <span class="nf">poly_area</span><span class="p">(</span><span class="n">poly</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculates the area of a given polygon.</span>
+<span class="sd">    :param poly: list of points</span>
+<span class="sd">    :return: area of input polygon</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">poly</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">3</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span>
+    <span class="n">total</span> <span class="o">=</span> <span class="p">[</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span>
+    <span class="n">n</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">poly</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">n</span><span class="p">):</span>
+        <span class="n">vi1</span> <span class="o">=</span> <span class="n">poly</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">vi2</span> <span class="o">=</span> <span class="n">poly</span><span class="p">[(</span><span class="n">i</span><span class="o">+</span><span class="mi">1</span><span class="p">)</span> <span class="o">%</span> <span class="n">n</span><span class="p">]</span>
+        <span class="n">prod</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">cross</span><span class="p">(</span><span class="n">vi1</span><span class="p">,</span> <span class="n">vi2</span><span class="p">)</span>
+        <span class="n">total</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">+=</span> <span class="n">prod</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">total</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">+=</span> <span class="n">prod</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">total</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">+=</span> <span class="n">prod</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+    <span class="n">result</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">total</span><span class="p">,</span> <span class="n">unit_normal</span><span class="p">(</span><span class="n">poly</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">poly</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">poly</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
+    <span class="k">return</span> <span class="nb">abs</span><span class="p">(</span><span class="n">result</span> <span class="o">/</span> <span class="mi">2</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="convex_hull_area"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.convex_hull_area">[docs]</a><span class="k">def</span> <span class="nf">convex_hull_area</span><span class="p">(</span><span class="n">pts</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculates the surface area from a given point cloud using simplices of</span>
+<span class="sd">    its convex hull. For the estimation of the synapse contact area, divide by</span>
+<span class="sd">    a factor of two, in order to get the area of only one face (we assume that</span>
+<span class="sd">    the contact site is sufficiently thin represented by the points).</span>
+<span class="sd">    :param pts: np.array of coordinates in nm (scaled)</span>
+<span class="sd">    :return: Area of the point cloud (nm^2)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">pts</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mi">4</span><span class="p">:</span>
+        <span class="k">return</span> <span class="mi">0</span>
+    <span class="n">area</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">ch</span> <span class="o">=</span> <span class="n">ConvexHull</span><span class="p">(</span><span class="n">pts</span><span class="p">)</span>
+        <span class="n">triangles</span> <span class="o">=</span> <span class="n">ch</span><span class="o">.</span><span class="n">points</span><span class="p">[</span><span class="n">ch</span><span class="o">.</span><span class="n">simplices</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">triangle</span> <span class="ow">in</span> <span class="n">triangles</span><span class="p">:</span>
+            <span class="n">area</span> <span class="o">+=</span> <span class="n">poly_area</span><span class="p">(</span><span class="n">triangle</span><span class="p">)</span>
+    <span class="k">except</span> <span class="n">QhullError</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+        <span class="c1"># warnings.warn(&quot;%s encountered during calculation of convex hull &quot;</span>
+        <span class="c1">#               &quot;area with %d points. Returning 0 nm^2.&quot; %</span>
+        <span class="c1">#               (e, len(pts)), RuntimeWarning)</span>
+        <span class="k">pass</span>
+    <span class="k">return</span> <span class="n">area</span></div>
+
+
+<div class="viewcode-block" id="cell_object_coord_parser"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.cell_object_coord_parser">[docs]</a><span class="k">def</span> <span class="nf">cell_object_coord_parser</span><span class="p">(</span><span class="n">voxel_tree</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Extracts unique voxel coords from object tree list for cell objects</span>
+<span class="sd">    &#39;mitos&#39;, &#39;vc&#39; and &#39;sj&#39;.</span>
+
+<span class="sd">    :param voxel_tree: annotation object containing voxels of cell objects</span>
+<span class="sd">     [&#39;mitos&#39;, &#39;vc&#39;, &#39;sj&#39;]</span>
+<span class="sd">    :returns: coord arrays for &#39;mitos&#39;, &#39;vc&#39; and &#39;sj&#39;</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mito_coords</span><span class="o">=</span> <span class="p">[]</span>
+    <span class="n">vc_coords</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">sj_coords</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">voxel_tree</span><span class="o">.</span><span class="n">getNodes</span><span class="p">():</span>
+        <span class="n">comment</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">getComment</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s1">&#39;mitos&#39;</span> <span class="ow">in</span> <span class="n">comment</span><span class="p">:</span>
+            <span class="n">mito_coords</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">())</span>
+        <span class="k">elif</span> <span class="s1">&#39;vc&#39;</span> <span class="ow">in</span> <span class="n">comment</span><span class="p">:</span>
+            <span class="n">vc_coords</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">())</span>
+        <span class="k">elif</span> <span class="s1">&#39;sj&#39;</span> <span class="ow">in</span> <span class="n">comment</span><span class="p">:</span>
+            <span class="n">sj_coords</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">node</span><span class="o">.</span><span class="n">getCoordinate</span><span class="p">())</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Couldn&#39;t understand comment:&quot;</span><span class="p">,</span> <span class="n">comment</span>
+    <span class="k">return</span> <span class="n">arr</span><span class="p">(</span><span class="n">mito_coords</span><span class="p">),</span> <span class="n">arr</span><span class="p">(</span><span class="n">vc_coords</span><span class="p">),</span> <span class="n">arr</span><span class="p">(</span><span class="n">sj_coords</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="helper_samllest_dist"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.helper_samllest_dist">[docs]</a><span class="k">def</span> <span class="nf">helper_samllest_dist</span><span class="p">(</span><span class="n">args</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns the smallest distance of index ixs in dists.</span>
+<span class="sd">    :param ixs: list of in Indices of objects</span>
+<span class="sd">    :param annotation_ids: array of shape (m, )</span>
+<span class="sd">    :param dists: array of shape (m, )</span>
+<span class="sd">    :return: smallest distance of ixs found in dists.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">ixs</span><span class="p">,</span> <span class="n">annotation_ids</span><span class="p">,</span> <span class="n">dists</span> <span class="o">=</span> <span class="n">args</span>
+    <span class="n">smallest_dists</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">ixs</span><span class="p">,</span> <span class="p">)))</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">ix</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">ixs</span><span class="p">):</span>
+        <span class="n">smallest_dists</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">dists</span><span class="p">[</span><span class="n">annotation_ids</span> <span class="o">==</span> <span class="n">ix</span><span class="p">])</span>
+    <span class="k">return</span> <span class="n">ixs</span><span class="p">,</span> <span class="n">smallest_dists</span></div>
+
+
+<div class="viewcode-block" id="get_box_coords"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.get_box_coords">[docs]</a><span class="k">def</span> <span class="nf">get_box_coords</span><span class="p">(</span><span class="n">coord_array</span><span class="p">,</span> <span class="n">min_pos</span><span class="p">,</span> <span class="n">max_pos</span><span class="p">,</span> <span class="n">ret_bool_array</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Reduce coord_array to coordinates in bounding box defined by</span>
+<span class="sd">    global variable min_pos max_pos.</span>
+<span class="sd">    :param coord_array: array of coordinates</span>
+<span class="sd">    :return:</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">coord_array</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">))</span>
+    <span class="n">bool_1</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">coord_array</span> <span class="o">&gt;=</span> <span class="n">min_pos</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span> <span class="o">&amp;</span> \
+             <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">coord_array</span> <span class="o">&lt;=</span> <span class="n">max_pos</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">ret_bool_array</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">bool_1</span>
+    <span class="k">return</span> <span class="n">coord_array</span><span class="p">[</span><span class="n">bool_1</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="get_normals"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.get_normals">[docs]</a><span class="k">def</span> <span class="nf">get_normals</span><span class="p">(</span><span class="n">hull</span><span class="p">,</span> <span class="n">number_fitnodes</span><span class="o">=</span><span class="mi">12</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculate normals from given hull points using local convex hull fitting.</span>
+<span class="sd">    Orientation of normals is found using local center of mass.</span>
+<span class="sd">    :param hull: 3D coordinates of points representing cell hull</span>
+<span class="sd">    :type hull: np.array</span>
+<span class="sd">    :return: normals for each hull point</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">normals</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="n">hull</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+    <span class="n">hull_tree</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">cKDTree</span><span class="p">(</span><span class="n">hull</span><span class="p">)</span>
+    <span class="n">dists</span><span class="p">,</span> <span class="n">nearest_nodes_ixs</span> <span class="o">=</span> <span class="n">hull_tree</span><span class="o">.</span><span class="n">query</span><span class="p">(</span><span class="n">hull</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="n">number_fitnodes</span><span class="p">,</span>
+                                                <span class="n">distance_upper_bound</span><span class="o">=</span><span class="mi">1000</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">ii</span><span class="p">,</span> <span class="n">nearest_ixs</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">nearest_nodes_ixs</span><span class="p">):</span>
+        <span class="n">nearest_nodes</span> <span class="o">=</span> <span class="n">hull</span><span class="p">[</span><span class="n">nearest_ixs</span><span class="p">[</span><span class="n">dists</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span> <span class="o">!=</span> <span class="n">np</span><span class="o">.</span><span class="n">inf</span><span class="p">]]</span>
+        <span class="n">ch</span> <span class="o">=</span> <span class="n">ConvexHull</span><span class="p">(</span><span class="n">nearest_nodes</span><span class="p">,</span> <span class="n">qhull_options</span><span class="o">=</span><span class="s1">&#39;QJ Pp&#39;</span><span class="p">)</span>
+        <span class="n">triangles</span> <span class="o">=</span> <span class="n">ch</span><span class="o">.</span><span class="n">points</span><span class="p">[</span><span class="n">ch</span><span class="o">.</span><span class="n">simplices</span><span class="p">]</span>
+        <span class="n">normal</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">3</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+        <span class="c1"># average normal</span>
+        <span class="k">for</span> <span class="n">triangle</span> <span class="ow">in</span> <span class="n">triangles</span><span class="p">:</span>
+            <span class="n">cnt</span> <span class="o">=</span> <span class="mi">0</span>
+            <span class="n">n_help</span> <span class="o">=</span> <span class="n">unit_normal</span><span class="p">(</span><span class="n">triangle</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">triangle</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">triangle</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">isnan</span><span class="p">(</span><span class="n">n_help</span><span class="p">)):</span>
+                <span class="n">normal</span> <span class="o">+=</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">n_help</span><span class="p">)</span>
+        <span class="n">normal</span> <span class="o">/=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">normal</span><span class="p">)</span>
+        <span class="n">normal_sign</span> <span class="o">=</span> <span class="p">(</span><span class="n">hull</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">nearest_nodes</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span><span class="o">/</span>\
+                      <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">hull</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">nearest_nodes</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span>
+        <span class="n">normals</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span> <span class="o">=</span> <span class="n">normal</span> <span class="o">*</span> <span class="n">normal_sign</span>
+    <span class="k">return</span> <span class="n">normals</span></div>
+
+
+<div class="viewcode-block" id="calc_overlap"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.calc_overlap">[docs]</a><span class="k">def</span> <span class="nf">calc_overlap</span><span class="p">(</span><span class="n">point_list_a</span><span class="p">,</span> <span class="n">point_list_b</span><span class="p">,</span> <span class="n">max_dist</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculates the portion of points in list b being similar (distance max_dist)</span>
+<span class="sd">    to points from list a.</span>
+<span class="sd">    :param point_list_a:</span>
+<span class="sd">    :param point_list_b:</span>
+<span class="sd">    :param max_dist:</span>
+<span class="sd">    :return: Portion of similar points over number of points of list b and vice</span>
+<span class="sd">    versa, overlap area in nm^2, centercoord of overlap area and coord_list of</span>
+<span class="sd">    overlap points in point_list_b</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">point_list_a</span> <span class="o">=</span> <span class="n">arr</span><span class="p">(</span><span class="n">point_list_a</span><span class="p">)</span>
+    <span class="n">point_list_b</span> <span class="o">=</span> <span class="n">arr</span><span class="p">(</span><span class="n">point_list_b</span><span class="p">)</span>
+    <span class="n">tree_a</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">cKDTree</span><span class="p">(</span><span class="n">point_list_a</span><span class="p">)</span>
+    <span class="n">near_ids</span> <span class="o">=</span> <span class="n">tree_a</span><span class="o">.</span><span class="n">query_ball_point</span><span class="p">(</span><span class="n">point_list_b</span><span class="p">,</span> <span class="n">max_dist</span><span class="p">)</span>
+    <span class="n">total_id_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">([</span><span class="nb">id</span> <span class="k">for</span> <span class="n">sublist</span> <span class="ow">in</span> <span class="n">near_ids</span> <span class="k">for</span> <span class="nb">id</span> <span class="ow">in</span> <span class="n">sublist</span><span class="p">]))</span>
+    <span class="n">overlap_area</span> <span class="o">=</span> <span class="n">convex_hull_area</span><span class="p">(</span><span class="n">point_list_a</span><span class="p">[</span><span class="n">total_id_list</span><span class="p">])</span> <span class="o">/</span> <span class="mf">1.e6</span>
+    <span class="n">nb_unique_neighbors</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">([</span><span class="mi">1</span> <span class="k">for</span> <span class="n">sublist</span> <span class="ow">in</span> <span class="n">near_ids</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sublist</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">])</span>
+    <span class="n">portion_b</span> <span class="o">=</span> <span class="n">nb_unique_neighbors</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">point_list_b</span><span class="p">))</span>
+    <span class="n">tree_b</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">cKDTree</span><span class="p">(</span><span class="n">point_list_b</span><span class="p">)</span>
+    <span class="n">near_ids</span> <span class="o">=</span> <span class="n">tree_b</span><span class="o">.</span><span class="n">query_ball_point</span><span class="p">(</span><span class="n">point_list_a</span><span class="p">,</span> <span class="n">max_dist</span><span class="p">)</span>
+    <span class="n">nb_unique_neighbors</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">([</span><span class="mi">1</span> <span class="k">for</span> <span class="n">sublist</span> <span class="ow">in</span> <span class="n">near_ids</span> <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">sublist</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">])</span>
+    <span class="n">total_id_list</span> <span class="o">=</span> <span class="nb">list</span><span class="p">(</span><span class="nb">set</span><span class="p">([</span><span class="nb">id</span> <span class="k">for</span> <span class="n">sublist</span> <span class="ow">in</span> <span class="n">near_ids</span> <span class="k">for</span> <span class="nb">id</span> <span class="ow">in</span> <span class="n">sublist</span><span class="p">]))</span>
+    <span class="n">portion_a</span> <span class="o">=</span> <span class="n">nb_unique_neighbors</span> <span class="o">/</span> <span class="nb">float</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">point_list_a</span><span class="p">))</span>
+    <span class="n">near_ixs</span> <span class="o">=</span> <span class="p">[</span><span class="n">ix</span> <span class="k">for</span> <span class="n">sublist</span> <span class="ow">in</span> <span class="n">near_ids</span> <span class="k">for</span> <span class="n">ix</span> <span class="ow">in</span> <span class="n">sublist</span><span class="p">]</span>
+    <span class="n">center_coord</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">arr</span><span class="p">(</span><span class="n">point_list_b</span><span class="p">)[</span><span class="n">arr</span><span class="p">(</span><span class="n">near_ixs</span><span class="p">)],</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">portion_b</span><span class="p">,</span> <span class="n">portion_a</span><span class="p">,</span> <span class="n">overlap_area</span><span class="p">,</span> <span class="n">center_coord</span><span class="p">,</span>\
+           <span class="n">point_list_b</span><span class="p">[</span><span class="n">total_id_list</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="tuple_to_string"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.tuple_to_string">[docs]</a><span class="k">def</span> <span class="nf">tuple_to_string</span><span class="p">(</span><span class="n">coordinate</span><span class="p">,</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39;, &#39;</span><span class="p">,</span> <span class="n">dl</span><span class="o">=</span><span class="s1">&#39;(&#39;</span><span class="p">,</span> <span class="n">dr</span><span class="o">=</span><span class="s1">&#39;)&#39;</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">dl</span> <span class="o">+</span> <span class="n">sep</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">coordinate</span><span class="p">])</span> <span class="o">+</span> <span class="n">dr</span></div>
+
+
+<div class="viewcode-block" id="coordinate_from_string"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.coordinate_from_string">[docs]</a><span class="k">def</span> <span class="nf">coordinate_from_string</span><span class="p">(</span><span class="n">coord_string</span><span class="p">):</span>
+    <span class="n">coordinate_expression</span> <span class="o">=</span> <span class="s1">&#39;[(\[]{0,1}\s*(?P&lt;x&gt;-?\d+)\s*[,;]\s*(&#39;</span> \
+                            <span class="s1">&#39;?P&lt;y&gt;-?\d+)\s*[,;]\s*(?P&lt;z&gt;-?\d+)\s*[)\]{0,1}]&#39;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">x</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">coordinate_expression</span><span class="p">,</span> <span class="n">coord_string</span><span class="p">)</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s1">&#39;x&#39;</span><span class="p">))</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">coordinate_expression</span><span class="p">,</span> <span class="n">coord_string</span><span class="p">)</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s1">&#39;y&#39;</span><span class="p">))</span>
+        <span class="n">z</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="n">coordinate_expression</span><span class="p">,</span> <span class="n">coord_string</span><span class="p">)</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="s1">&#39;z&#39;</span><span class="p">))</span>
+    <span class="k">except</span> <span class="p">(</span><span class="ne">AttributeError</span><span class="p">,</span> <span class="ne">ValueError</span><span class="p">,</span> <span class="ne">TypeError</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="p">(</span><span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="p">,</span> <span class="n">z</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="coordinate_to_ewkt"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.coordinate_to_ewkt">[docs]</a><span class="k">def</span> <span class="nf">coordinate_to_ewkt</span><span class="p">(</span><span class="n">coordinate</span><span class="p">,</span> <span class="n">scale</span><span class="o">=</span><span class="s1">&#39;dataset&#39;</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">scale</span><span class="p">,</span> <span class="nb">str</span><span class="p">):</span>
+        <span class="n">scale</span> <span class="o">=</span> <span class="p">(</span><span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">)</span>
+
+    <span class="n">coordinate</span> <span class="o">=</span> <span class="p">(</span><span class="n">coordinate</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">scale</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                  <span class="n">coordinate</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="n">scale</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                  <span class="n">coordinate</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="n">scale</span><span class="p">[</span><span class="mi">2</span><span class="p">])</span>
+
+    <span class="k">return</span> <span class="s2">&quot;POINT(</span><span class="si">%s</span><span class="s2">)&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="s2">&quot; &quot;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">coordinate</span><span class="p">]),)</span></div>
+
+
+<div class="viewcode-block" id="has_equal_dimensions"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.has_equal_dimensions">[docs]</a><span class="k">def</span> <span class="nf">has_equal_dimensions</span><span class="p">(</span><span class="n">c</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return True if container types in iterable c have equal number of of</span>
+<span class="sd">    elements, False otherwise.</span>
+
+<span class="sd">    Example</span>
+<span class="sd">    -------</span>
+
+<span class="sd">    &gt;&gt;&gt; a = set(range(0, 10))</span>
+<span class="sd">    &gt;&gt;&gt; b = range(0, 10)</span>
+<span class="sd">    &gt;&gt;&gt; has_equal_dimensions([a, b])</span>
+<span class="sd">    True</span>
+<span class="sd">    &gt;&gt;&gt; a.add(100)</span>
+<span class="sd">    &gt;&gt;&gt; has_equal_dimensions([a, b])</span>
+<span class="sd">    False</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">lens</span> <span class="o">=</span> <span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">c</span><span class="p">]</span>
+    <span class="k">if</span> <span class="kc">True</span> <span class="ow">in</span> <span class="p">[</span><span class="nb">bool</span><span class="p">(</span><span class="n">x</span> <span class="o">-</span> <span class="n">y</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">lens</span><span class="p">,</span> <span class="n">lens</span><span class="p">[</span><span class="mi">1</span><span class="p">:])]:</span>
+        <span class="k">return</span> <span class="kc">False</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">return</span> <span class="kc">True</span></div>
+
+
+<div class="viewcode-block" id="average_coordinate"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.average_coordinate">[docs]</a><span class="k">def</span> <span class="nf">average_coordinate</span><span class="p">(</span><span class="n">c</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return the average coordinate (center of gravity) for an iterable of</span>
+<span class="sd">    coordinates.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+
+<span class="sd">    c : iterable of coordinates</span>
+<span class="sd">        Coordinates are represented as lists and must have the same number of</span>
+<span class="sd">        dimensions.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+
+<span class="sd">    avg_coordinate : iterable</span>
+
+<span class="sd">    Example</span>
+<span class="sd">    -------</span>
+
+<span class="sd">    &gt;&gt;&gt; average_coordinate([[1, 2, 3], [4, 5, 6]])</span>
+<span class="sd">    [2.5, 3.5, 4.5]</span>
+<span class="sd">    &gt;&gt;&gt; average_coordinate([])</span>
+<span class="sd">    []</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">has_equal_dimensions</span><span class="p">(</span><span class="n">c</span><span class="p">):</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s1">&#39;All coordinates must have equal number of dimensions &#39;</span>
+            <span class="s1">&#39;to calculate average.&#39;</span><span class="p">)</span>
+
+    <span class="n">avg_coordinate</span> <span class="o">=</span> <span class="p">[</span><span class="nb">sum</span><span class="p">([</span><span class="nb">float</span><span class="p">(</span><span class="n">y</span><span class="p">)</span> <span class="k">for</span> <span class="n">y</span> <span class="ow">in</span> <span class="n">x</span><span class="p">])</span> <span class="o">/</span> <span class="nb">len</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="o">*</span><span class="n">c</span><span class="p">)]</span>
+
+    <span class="k">return</span> <span class="n">avg_coordinate</span></div>
+
+
+<div class="viewcode-block" id="euclidian_distance"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.euclidian_distance">[docs]</a><span class="k">def</span> <span class="nf">euclidian_distance</span><span class="p">(</span><span class="n">c1</span><span class="p">,</span> <span class="n">c2</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">sqrt</span><span class="p">(</span><span class="nb">pow</span><span class="p">((</span><span class="n">c2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">-</span> <span class="n">c1</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span>
+     <span class="nb">pow</span><span class="p">((</span><span class="n">c2</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">-</span> <span class="n">c1</span><span class="p">[</span><span class="mi">1</span><span class="p">]),</span> <span class="mi">2</span><span class="p">)</span> <span class="o">+</span>
+     <span class="nb">pow</span><span class="p">((</span><span class="n">c2</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">-</span> <span class="n">c1</span><span class="p">[</span><span class="mi">2</span><span class="p">]),</span> <span class="mi">2</span><span class="p">))</span></div>
+
+
+<div class="viewcode-block" id="interpolate_between"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.interpolate_between">[docs]</a><span class="k">def</span> <span class="nf">interpolate_between</span><span class="p">(</span><span class="n">c1</span><span class="p">,</span> <span class="n">c2</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Return list of coordinates from c1 to c2, including them. Coordinates</span>
+<span class="sd">    are spaced by (approximately) one length unit.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">delta</span> <span class="o">=</span> <span class="n">FloatCoordinate</span><span class="p">(</span><span class="n">c1</span><span class="p">)</span> <span class="o">-</span> <span class="n">FloatCoordinate</span><span class="p">(</span><span class="n">c2</span><span class="p">)</span>
+    <span class="n">dist</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">ceil</span><span class="p">(</span><span class="n">euclidian_distance</span><span class="p">(</span><span class="n">c1</span><span class="p">,</span> <span class="n">c2</span><span class="p">)))</span>
+    <span class="n">step</span> <span class="o">=</span> <span class="n">delta</span> <span class="o">/</span> <span class="n">dist</span>
+
+    <span class="k">return</span> <span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">step</span> <span class="o">*</span> <span class="n">cur_step</span> <span class="o">+</span> <span class="n">c1</span><span class="p">)</span> <span class="k">for</span> <span class="n">cur_step</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="n">dist</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)]</span></div>
+
+
+<div class="viewcode-block" id="Coordinate"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.Coordinate">[docs]</a><span class="k">class</span> <span class="nc">Coordinate</span><span class="p">(</span><span class="nb">list</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Represents a coordinate of arbitrary dimensionality.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">c</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+
+<span class="sd">        c : Iterable of numeric types</span>
+<span class="sd">            Represents the coordinate.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">list</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">c</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__eq__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">sum</span><span class="p">([</span><span class="n">x</span> <span class="o">==</span> <span class="n">y</span> <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)])</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="k">return</span> <span class="kc">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="kc">False</span>
+
+    <span class="k">def</span> <span class="nf">__add__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)([</span><span class="n">x</span> <span class="o">+</span> <span class="n">y</span> <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)])</span>
+
+    <span class="k">def</span> <span class="nf">__sub__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)([</span><span class="n">x</span> <span class="o">-</span> <span class="n">y</span> <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)])</span>
+
+    <span class="k">def</span> <span class="nf">__mul__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">other</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="c1"># element-wise multiplication</span>
+            <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)([</span><span class="n">x</span> <span class="o">*</span> <span class="n">y</span> <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)])</span>
+        <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+            <span class="c1"># scalar multiplication</span>
+            <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)([</span><span class="n">x</span> <span class="o">*</span> <span class="n">other</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">])</span>
+
+    <span class="k">def</span> <span class="nf">__div__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="c1"># scalar multiplication</span>
+            <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)([</span><span class="n">x</span> <span class="o">/</span> <span class="n">other</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="bp">self</span><span class="p">])</span>
+        <span class="k">except</span> <span class="ne">TypeError</span><span class="p">:</span>
+            <span class="c1"># element-wise multiplication</span>
+            <span class="k">return</span> <span class="nb">type</span><span class="p">(</span><span class="bp">self</span><span class="p">)([</span><span class="n">x</span> <span class="o">/</span> <span class="n">y</span> <span class="k">for</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">other</span><span class="p">)])</span></div>
+
+
+<div class="viewcode-block" id="FloatCoordinate"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.basics.FloatCoordinate">[docs]</a><span class="k">class</span> <span class="nc">FloatCoordinate</span><span class="p">(</span><span class="n">Coordinate</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Represent a coordinate of arbitrary dimensionality, using floats.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">c</span><span class="p">):</span>
+        <span class="n">c</span> <span class="o">=</span> <span class="p">[</span><span class="nb">float</span><span class="p">(</span><span class="n">x</span><span class="p">)</span> <span class="k">for</span> <span class="n">x</span> <span class="ow">in</span> <span class="n">c</span><span class="p">]</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">FloatCoordinate</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">c</span><span class="p">)</span></div>
+
+
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">SyConn a documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2016, Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.8.
+    </div>
+  </body>
+</html>

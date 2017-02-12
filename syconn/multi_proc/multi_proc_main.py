@@ -43,7 +43,8 @@ def negative_to_zero(a):
 
 
 def QSUB_script(params, name, queue=None, pe=None, n_cores=1, sge_additional_flags='',
-                suffix="", job_name="default", script_folder=None):
+                suffix="", job_name="default", script_folder=None, delay=0,
+                delay_one=0):
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
@@ -71,6 +72,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, sge_additional_fla
         random name automatically
     script_folder: str or None
         directory in which the QSUB_* file is located
+    delay: int
+        delay in seconds after each job creation
+    delay_one: int
+        delay in seconds after the first job creation
 
     Returns
     -------
@@ -154,6 +159,12 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, sge_additional_fla
             job_name,
             sge_additional_flags,
             this_sh_path), shell=True)
+
+        if delay:
+            time.sleep(delay)
+
+        if ii == 0 and delay_one:
+            time.sleep(delay_one)
 
     print "All jobs are submitted: %s" % name
     while True:

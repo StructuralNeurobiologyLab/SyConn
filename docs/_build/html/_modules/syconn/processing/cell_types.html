@@ -1,0 +1,529 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>syconn.processing.cell_types &#8212; SyConn a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/sphinxdoc.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     'a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="top" title="SyConn a documentation" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">SyConn a documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &#187;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for syconn.processing.cell_types</h1><div class="highlight"><pre>
+<span></span><span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1"># SyConn - Synaptic connectivity inference toolkit</span>
+<span class="c1">#</span>
+<span class="c1"># Copyright (c) 2016 - now</span>
+<span class="c1"># Max-Planck-Institute for Medical Research, Heidelberg, Germany</span>
+<span class="c1"># Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld</span>
+
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="k">as</span> <span class="nn">plt</span>
+
+<span class="kn">from</span> <span class="nn">learning_rfc</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">..multi_proc.multi_proc_main</span> <span class="k">import</span> <span class="n">start_multiprocess</span>
+<span class="kn">from</span> <span class="nn">..processing.features</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">..utils.datahandler</span> <span class="k">import</span> <span class="n">get_filepaths_from_dir</span><span class="p">,</span>\
+    <span class="n">load_ordered_mapped_skeleton</span><span class="p">,</span> <span class="n">load_mapped_skeleton</span><span class="p">,</span> <span class="n">get_paths_of_skelID</span><span class="p">,</span>\
+    <span class="n">write_obj2pkl</span><span class="p">,</span> <span class="n">load_pkl2obj</span><span class="p">,</span> <span class="n">get_skelID_from_path</span>
+<span class="kn">from</span> <span class="nn">..utils.neuron</span> <span class="k">import</span> <span class="n">Neuron</span>
+
+<span class="n">rf_params</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;n_estimators&#39;</span><span class="p">:</span> <span class="mi">4000</span><span class="p">,</span> <span class="s1">&#39;oob_score&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;n_jobs&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+             <span class="s1">&#39;class_weight&#39;</span><span class="p">:</span> <span class="s1">&#39;balanced&#39;</span><span class="p">,</span> <span class="s1">&#39;max_features&#39;</span><span class="p">:</span> <span class="mf">0.66</span><span class="p">}</span>
+
+<span class="n">rf_params_nodewise</span> <span class="o">=</span> <span class="p">{</span><span class="s1">&#39;n_estimators&#39;</span><span class="p">:</span> <span class="mi">2000</span><span class="p">,</span> <span class="s1">&#39;oob_score&#39;</span><span class="p">:</span> <span class="kc">True</span><span class="p">,</span> <span class="s1">&#39;n_jobs&#39;</span><span class="p">:</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>
+                      <span class="s1">&#39;class_weight&#39;</span><span class="p">:</span> <span class="s1">&#39;balanced&#39;</span><span class="p">,</span> <span class="s1">&#39;max_features&#39;</span><span class="p">:</span> <span class="s1">&#39;auto&#39;</span><span class="p">}</span>
+
+
+<div class="viewcode-block" id="get_cell_type_labels"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.get_cell_type_labels">[docs]</a><span class="k">def</span> <span class="nf">get_cell_type_labels</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;Cell type labels for HVC(0), LMAN(0), STN(0), MSN(1), GP(2), FS(3)</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        convetion dictionary for cell type labels (str), returns integer</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">labels</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">labels</span><span class="p">[</span><span class="s2">&quot;HVC&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">labels</span><span class="p">[</span><span class="s2">&quot;LMAN&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">labels</span><span class="p">[</span><span class="s2">&quot;STN&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="n">labels</span><span class="p">[</span><span class="s2">&quot;MSN&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">1</span>
+    <span class="n">labels</span><span class="p">[</span><span class="s2">&quot;GP&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">2</span>
+    <span class="n">labels</span><span class="p">[</span><span class="s2">&quot;FS&quot;</span><span class="p">]</span> <span class="o">=</span> <span class="mi">3</span>
+    <span class="k">return</span> <span class="n">labels</span></div>
+
+
+<div class="viewcode-block" id="get_cell_type_classes_dict"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.get_cell_type_classes_dict">[docs]</a><span class="k">def</span> <span class="nf">get_cell_type_classes_dict</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        dictionary from integer label to full cell name as string</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">label_strings_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">label_strings_dict</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;Excitatory Axons&quot;</span>
+    <span class="n">label_strings_dict</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;Medium spiny Neurons&quot;</span>
+    <span class="n">label_strings_dict</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;Pallidal-like Neurons&quot;</span>
+    <span class="n">label_strings_dict</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;Inhibitory Interneurons&quot;</span>
+    <span class="n">cell_type_label_dict</span> <span class="o">=</span> <span class="n">get_cell_type_labels</span><span class="p">()</span>
+    <span class="n">cell_type_classes_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">cell_type_label_dict</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">cell_type_classes_dict</span><span class="p">[</span><span class="n">label_strings_dict</span><span class="p">[</span><span class="n">value</span><span class="p">]]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="n">cell_type_classes_dict</span><span class="p">[</span><span class="n">label_strings_dict</span><span class="p">[</span><span class="n">value</span><span class="p">]]</span> <span class="o">=</span> <span class="p">[</span><span class="n">key</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">cell_type_classes_dict</span></div>
+
+
+<div class="viewcode-block" id="save_cell_type_clf"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.save_cell_type_clf">[docs]</a><span class="k">def</span> <span class="nf">save_cell_type_clf</span><span class="p">(</span><span class="n">gt_path</span><span class="p">,</span> <span class="n">clf_used</span><span class="o">=</span><span class="s1">&#39;rf&#39;</span><span class="p">,</span> <span class="n">load_data</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Save axoness clf specified by clf_used to gt_directory.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    gt_path : str</span>
+<span class="sd">        path to cell type gt</span>
+<span class="sd">    clf_used : str</span>
+<span class="sd">    load_data : bool</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">X_cells_types</span><span class="p">,</span> <span class="n">Y_cells_types</span> <span class="o">=</span> <span class="n">load_celltype_gt</span><span class="p">(</span><span class="n">load_data</span><span class="o">=</span><span class="n">load_data</span><span class="p">)</span>
+    <span class="n">save_train_clf</span><span class="p">(</span><span class="n">X_cells_types</span><span class="p">,</span> <span class="n">Y_cells_types</span><span class="p">,</span> <span class="n">clf_used</span><span class="p">,</span> <span class="n">gt_path</span><span class="p">,</span> <span class="n">params</span><span class="o">=</span><span class="n">rf_params</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="load_celltype_gt"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.load_celltype_gt">[docs]</a><span class="k">def</span> <span class="nf">load_celltype_gt</span><span class="p">(</span><span class="n">wd</span><span class="p">,</span> <span class="n">load_data</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">return_ids</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Load ground truth of cell types</span>
+
+<span class="sd">    (HVC, LMAN, STN) =&gt; excitatory axons (0)</span>
+<span class="sd">    (MSN) =&gt; medium spiny neuron (1)</span>
+<span class="sd">    (GP) =&gt; pallidal-like neurons (2)</span>
+<span class="sd">    (FS) =&gt; inhibitory interneuron (3)</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    wd : str</span>
+<span class="sd">        Path to working directory</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    numpy.array, numpy.array</span>
+<span class="sd">        cell type features, cell type labels</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">load_data</span><span class="p">:</span>
+        <span class="n">save_cell_type_feats</span><span class="p">(</span><span class="n">wd</span><span class="p">)</span>
+    <span class="n">skel_ids</span><span class="p">,</span> <span class="n">skel_feat</span> <span class="o">=</span> <span class="n">load_celltype_feats</span><span class="p">(</span><span class="n">wd</span><span class="p">)</span>
+    <span class="n">skel_label</span> <span class="o">=</span> <span class="n">load_cell_gt</span><span class="p">(</span><span class="n">skel_ids</span><span class="p">)</span>
+    <span class="n">bool_arr</span> <span class="o">=</span> <span class="n">skel_label</span> <span class="o">!=</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="n">x</span> <span class="o">=</span> <span class="n">skel_feat</span><span class="p">[</span><span class="n">bool_arr</span><span class="p">]</span>
+    <span class="n">y</span> <span class="o">=</span> <span class="n">skel_label</span><span class="p">[</span><span class="n">bool_arr</span><span class="p">]</span>
+    <span class="k">if</span> <span class="n">return_ids</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint</span><span class="p">),</span> <span class="n">skel_ids</span><span class="p">[</span><span class="n">bool_arr</span><span class="p">]</span>
+    <span class="k">return</span> <span class="n">x</span><span class="p">,</span> <span class="n">y</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="find_cell_types_from_dict"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.find_cell_types_from_dict">[docs]</a><span class="k">def</span> <span class="nf">find_cell_types_from_dict</span><span class="p">(</span><span class="n">wd</span><span class="p">,</span> <span class="n">cell_type</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    wd : str</span>
+<span class="sd">        Path to working directory</span>
+<span class="sd">    cell_type : int</span>
+<span class="sd">        label (0 = EA, 1 = MSN, 2 = GP, 3 = INT)</span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of str</span>
+<span class="sd">        paths of cells of type cell_type.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">skel_dir</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/&#39;</span>
+    <span class="n">cell_type_dict</span> <span class="o">=</span> <span class="n">load_pkl2obj</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/celltype_labels.pkl&#39;</span><span class="p">)</span>
+    <span class="n">fpaths</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">label_dict</span> <span class="o">=</span> <span class="n">get_cell_type_labels</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">cell_type</span> <span class="ow">in</span> <span class="n">label_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">cell_type</span> <span class="o">=</span> <span class="n">label_dict</span><span class="o">.</span><span class="n">values</span><span class="p">()[</span><span class="n">label_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="n">cell_type</span><span class="p">)]</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">value</span> <span class="ow">in</span> <span class="n">cell_type_dict</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="k">if</span> <span class="n">value</span> <span class="o">==</span> <span class="n">cell_type</span><span class="p">:</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="n">get_paths_of_skelID</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">key</span><span class="p">)],</span> <span class="n">traced_skel_dir</span><span class="o">=</span><span class="n">skel_dir</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="n">fpaths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">fpaths</span></div>
+
+
+<div class="viewcode-block" id="get_id_dict_from_skel_ids"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.get_id_dict_from_skel_ids">[docs]</a><span class="k">def</span> <span class="nf">get_id_dict_from_skel_ids</span><span class="p">(</span><span class="n">skel_ids</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calc dictionary to get new label (from 0 to len(skel_paths) from</span>
+<span class="sd">    skeleton ID.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    skel_ids : list of int</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict, dict</span>
+<span class="sd">        Dictionary to get new ID with old ID, dictionary to get old ID</span>
+<span class="sd">        with new ID</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">id_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">rev_id_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">skel_id</span> <span class="ow">in</span> <span class="n">skel_ids</span><span class="p">:</span>
+        <span class="n">id_dict</span><span class="p">[</span><span class="n">skel_id</span><span class="p">]</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">id_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())</span>
+        <span class="n">rev_id_dict</span><span class="p">[</span><span class="nb">len</span><span class="p">(</span><span class="n">rev_id_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">())]</span> <span class="o">=</span> <span class="n">skel_id</span>
+    <span class="k">return</span> <span class="n">id_dict</span><span class="p">,</span> <span class="n">rev_id_dict</span></div>
+
+
+<div class="viewcode-block" id="load_cell_gt"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.load_cell_gt">[docs]</a><span class="k">def</span> <span class="nf">load_cell_gt</span><span class="p">(</span><span class="n">skel_ids</span><span class="p">,</span> <span class="n">wd</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Load cell types of skel ids</span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    skel_ids : list of int</span>
+<span class="sd">    wd : str</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.array</span>
+<span class="sd">        cell type labels</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">skel_labels</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">skel_ids</span><span class="p">))</span>
+    <span class="n">consensi_celltype_label</span> <span class="o">=</span> <span class="n">load_pkl2obj</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/celltype_labels.pkl&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">skel_ids</span><span class="p">)):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">class_nb</span> <span class="o">=</span> <span class="n">consensi_celltype_label</span><span class="p">[</span><span class="n">skel_ids</span><span class="p">[</span><span class="n">i</span><span class="p">]]</span>
+            <span class="n">skel_labels</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">class_nb</span>
+        <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+            <span class="k">pass</span>
+    <span class="c1"># print &quot;Using %d/%d labeled skeletons as GT for cell type RFC training.&quot; % \</span>
+    <span class="c1">#       (len(skel_labels[skel_labels != -1]), len(skel_labels))</span>
+    <span class="k">return</span> <span class="n">skel_labels</span></div>
+
+
+<div class="viewcode-block" id="load_celltype_feats"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.load_celltype_feats">[docs]</a><span class="k">def</span> <span class="nf">load_celltype_feats</span><span class="p">(</span><span class="n">wd</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Loads cell type feature and corresponding ids from dictionaries</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    wd : str</span>
+<span class="sd">        Path to working directory</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.array</span>
+<span class="sd">        cell type features</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/celltype_feat_dict.pkl&#39;</span><span class="p">):</span>
+        <span class="n">save_cell_type_feats</span><span class="p">(</span><span class="n">wd</span><span class="p">)</span>
+    <span class="n">feat_dict</span> <span class="o">=</span> <span class="n">load_pkl2obj</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/celltype_feat_dict.pkl&#39;</span><span class="p">)</span>
+    <span class="n">skeleton_feats</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">feat_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()),</span>
+                               <span class="nb">len</span><span class="p">(</span><span class="n">feat_dict</span><span class="o">.</span><span class="n">values</span><span class="p">()[</span><span class="mi">0</span><span class="p">])))</span>
+    <span class="n">skeleton_ids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">ii</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">feat_dict</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="n">skeleton_feats</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span> <span class="o">=</span> <span class="n">arr</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+        <span class="n">skeleton_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+        <span class="n">ii</span> <span class="o">+=</span> <span class="mi">1</span>
+    <span class="n">ixs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">skeleton_ids</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">arr</span><span class="p">(</span><span class="n">skeleton_ids</span><span class="p">)[</span><span class="n">ixs</span><span class="p">],</span> <span class="n">skeleton_feats</span><span class="p">[</span><span class="n">ixs</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="load_celltype_probas"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.load_celltype_probas">[docs]</a><span class="k">def</span> <span class="nf">load_celltype_probas</span><span class="p">(</span><span class="n">wd</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Loads cell type probabilities and corresponding ids from dictionaries</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    wd : str</span>
+<span class="sd">        Path to working directory</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.array, np.array</span>
+<span class="sd">        cell ids, cell label probabilities</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/celltype_proba_dict.pkl&#39;</span><span class="p">):</span>
+        <span class="n">predict_celltype_label</span><span class="p">(</span><span class="n">wd</span><span class="p">)</span>
+    <span class="n">proba_dict</span> <span class="o">=</span> <span class="n">load_pkl2obj</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/celltype_proba_dict.pkl&#39;</span><span class="p">)</span>
+    <span class="n">skel_probas</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">skeleton_ids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">proba_dict</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="n">skel_probas</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+        <span class="n">skeleton_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+    <span class="n">ixs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">skeleton_ids</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">arr</span><span class="p">(</span><span class="n">skeleton_ids</span><span class="p">)[</span><span class="n">ixs</span><span class="p">],</span> <span class="n">arr</span><span class="p">(</span><span class="n">skel_probas</span><span class="p">)[</span><span class="n">ixs</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="load_celltype_preds"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.load_celltype_preds">[docs]</a><span class="k">def</span> <span class="nf">load_celltype_preds</span><span class="p">(</span><span class="n">wd</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Loads cell type predictions and corresponding ids from dictionaries</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    wd : str</span>
+<span class="sd">        Path to working directory</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.array, np.array</span>
+<span class="sd">        cell ids, cell labels</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/celltype_pred_dict.pkl&#39;</span><span class="p">):</span>
+        <span class="n">predict_celltype_label</span><span class="p">(</span><span class="n">wd</span><span class="p">)</span>
+    <span class="n">pred_dict</span> <span class="o">=</span> <span class="n">load_pkl2obj</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/celltype_pred_dict.pkl&#39;</span><span class="p">)</span>
+    <span class="n">skel_probas</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">skeleton_ids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">key</span><span class="p">,</span> <span class="n">val</span> <span class="ow">in</span> <span class="n">pred_dict</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+        <span class="n">skel_probas</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">val</span><span class="p">)</span>
+        <span class="n">skeleton_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">key</span><span class="p">)</span>
+    <span class="n">ixs</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">skeleton_ids</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">arr</span><span class="p">(</span><span class="n">skeleton_ids</span><span class="p">)[</span><span class="n">ixs</span><span class="p">],</span> <span class="n">arr</span><span class="p">(</span><span class="n">skel_probas</span><span class="p">)[</span><span class="n">ixs</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="predict_celltype_label"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.predict_celltype_label">[docs]</a><span class="k">def</span> <span class="nf">predict_celltype_label</span><span class="p">(</span><span class="n">wd</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Predict celltyoe labels in working directory with pre-trained classifier</span>
+<span class="sd">    in subfolder models/rf_celltypes/rf.pkl</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    wd : str</span>
+<span class="sd">        path to working directory</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">rf</span> <span class="o">=</span> <span class="n">joblib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/models/rf_celltypes/rf.pkl&#39;</span><span class="p">)</span>
+    <span class="n">skeleton_ids</span><span class="p">,</span> <span class="n">skeleton_feats</span> <span class="o">=</span> <span class="n">load_celltype_feats</span><span class="p">(</span><span class="n">wd</span><span class="p">)</span>
+    <span class="n">skel_type_probas</span> <span class="o">=</span> <span class="n">rf</span><span class="o">.</span><span class="n">predict_proba</span><span class="p">(</span><span class="n">skeleton_feats</span><span class="p">)</span>
+    <span class="n">proba_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">cell_type_pred_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">ii</span><span class="p">,</span> <span class="n">proba</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">skel_type_probas</span><span class="p">):</span>
+        <span class="n">proba_dict</span><span class="p">[</span><span class="n">skeleton_ids</span><span class="p">[</span><span class="n">ii</span><span class="p">]]</span> <span class="o">=</span> <span class="n">proba</span>
+        <span class="n">cell_type_pred_dict</span><span class="p">[</span><span class="n">skeleton_ids</span><span class="p">[</span><span class="n">ii</span><span class="p">]]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">proba</span><span class="p">)</span>
+    <span class="n">write_obj2pkl</span><span class="p">(</span><span class="n">cell_type_pred_dict</span><span class="p">,</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/&#39;</span>
+                                            <span class="s1">&#39;celltype_pred_dict.pkl&#39;</span><span class="p">)</span>
+    <span class="n">write_obj2pkl</span><span class="p">(</span><span class="n">proba_dict</span><span class="p">,</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/celltype_proba_dict.pkl&#39;</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="save_cell_type_feats"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.save_cell_type_feats">[docs]</a><span class="k">def</span> <span class="nf">save_cell_type_feats</span><span class="p">(</span><span class="n">wd</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Saves cell type feature for type prediction</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    wd : str</span>
+<span class="sd">        Path to working directory</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">skel_dir</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/&#39;</span>
+    <span class="n">skel_paths</span> <span class="o">=</span> <span class="n">get_filepaths_from_dir</span><span class="p">(</span><span class="n">skel_dir</span><span class="p">)</span>
+    <span class="c1"># print &quot;Calculating cell type feats of %d tracings.&quot; % len(skel_paths)</span>
+    <span class="c1"># predict skeleton cell type probability</span>
+    <span class="n">skel_ids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">feat_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">params</span> <span class="o">=</span> <span class="p">[(</span><span class="n">p</span><span class="p">,</span> <span class="n">wd</span><span class="p">)</span> <span class="k">for</span> <span class="n">p</span> <span class="ow">in</span> <span class="n">skel_paths</span><span class="p">]</span>
+    <span class="n">result_tuple</span> <span class="o">=</span> <span class="n">start_multiprocess</span><span class="p">(</span><span class="n">calc_neuron_feat_star</span><span class="p">,</span> <span class="n">params</span><span class="p">,</span> <span class="n">debug</span><span class="o">=</span><span class="kc">True</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">feat</span><span class="p">,</span> <span class="n">skel_id</span> <span class="ow">in</span> <span class="n">result_tuple</span><span class="p">:</span>
+        <span class="n">skel_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">skel_id</span><span class="p">)</span>
+        <span class="n">feat_dict</span><span class="p">[</span><span class="n">skel_id</span><span class="p">]</span> <span class="o">=</span> <span class="n">feat</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">write_obj2pkl</span><span class="p">(</span><span class="n">feat_dict</span><span class="p">,</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/celltype_feat_dict.pkl&#39;</span><span class="p">)</span>
+    <span class="c1"># get example neuron and write neuron feature names</span>
+    <span class="n">cell</span> <span class="o">=</span> <span class="n">load_mapped_skeleton</span><span class="p">(</span><span class="n">skel_paths</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">cell</span><span class="o">.</span><span class="n">filename</span> <span class="o">=</span> <span class="n">skel_paths</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">neuron</span> <span class="o">=</span> <span class="n">Neuron</span><span class="p">(</span><span class="n">cell</span><span class="p">,</span> <span class="n">wd</span><span class="o">=</span><span class="n">wd</span><span class="p">)</span>
+    <span class="n">_</span> <span class="o">=</span> <span class="n">neuron</span><span class="o">.</span><span class="n">neuron_features</span>
+    <span class="n">feat_names</span> <span class="o">=</span> <span class="n">neuron</span><span class="o">.</span><span class="n">neuron_feature_names</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/celltype_feat_names.npy&#39;</span><span class="p">,</span> <span class="n">feat_names</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="calc_neuron_feat_star"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.calc_neuron_feat_star">[docs]</a><span class="k">def</span> <span class="nf">calc_neuron_feat_star</span><span class="p">(</span><span class="n">params</span><span class="p">):</span>
+    <span class="k">return</span> <span class="n">calc_neuron_feat</span><span class="p">(</span><span class="n">params</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">params</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="calc_neuron_feat"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.calc_neuron_feat">[docs]</a><span class="k">def</span> <span class="nf">calc_neuron_feat</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">wd</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Calculate neuron features using neuron class</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        path to mapped annotation kzip</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    numpy.array, numpy.array</span>
+<span class="sd">        cell type features, skeleton ID</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">orig_skel_id</span> <span class="o">=</span> <span class="n">get_skelID_from_path</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">cell</span> <span class="o">=</span> <span class="n">load_mapped_skeleton</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="kc">True</span><span class="p">,</span> <span class="kc">True</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="n">cell</span><span class="o">.</span><span class="n">filename</span> <span class="o">=</span> <span class="n">path</span>
+    <span class="n">neuron</span> <span class="o">=</span> <span class="n">Neuron</span><span class="p">(</span><span class="n">cell</span><span class="p">,</span> <span class="n">wd</span><span class="o">=</span><span class="n">wd</span><span class="p">)</span>
+    <span class="n">feats</span> <span class="o">=</span> <span class="n">neuron</span><span class="o">.</span><span class="n">neuron_features</span>
+    <span class="c1"># if np.any(np.isnan(feats)):</span>
+    <span class="c1">#     print &quot;Found nans in feautres of skel %s&quot; % path, \</span>
+    <span class="c1">#         neuron.neuron_feature_names[np.isnan(neuron.neuron_features[0])]</span>
+    <span class="c1">#     print neuron.neuron_features[0][np.isnan(neuron.neuron_features[0])]</span>
+    <span class="c1"># print &quot;Finished feature extraction of %s&quot; % path</span>
+    <span class="k">return</span> <span class="n">feats</span><span class="p">,</span> <span class="n">orig_skel_id</span></div>
+
+
+<div class="viewcode-block" id="write_feats_importance"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.write_feats_importance">[docs]</a><span class="k">def</span> <span class="nf">write_feats_importance</span><span class="p">(</span><span class="n">wd</span><span class="p">,</span> <span class="n">load_data</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">clf_used</span><span class="o">=</span><span class="s1">&#39;rf&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Writes out feature importances and feature names to gt_dir</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    wd : str</span>
+<span class="sd">    load_data : bool</span>
+<span class="sd">    clf_used : str</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">save_cell_type_clf</span><span class="p">(</span><span class="n">wd</span><span class="p">,</span> <span class="n">load_data</span><span class="o">=</span><span class="n">load_data</span><span class="p">,</span> <span class="n">clf_used</span><span class="o">=</span><span class="n">clf_used</span><span class="p">)</span>
+    <span class="n">feat_names</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/feat_names.npy&#39;</span><span class="p">)</span>
+
+    <span class="n">rf</span> <span class="o">=</span> <span class="n">joblib</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/models/celltypes/</span><span class="si">%s</span><span class="s1">.pkl&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">clf_used</span><span class="p">))</span>
+    <span class="n">importances</span> <span class="o">=</span> <span class="n">rf</span><span class="o">.</span><span class="n">feature_importances_</span>
+    <span class="n">feature_importance</span><span class="p">(</span><span class="n">rf</span><span class="p">,</span> <span class="n">save_path</span><span class="o">=</span><span class="s1">&#39;/home/pschuber/figures/cell_types/&#39;</span>
+                                     <span class="s1">&#39;rf_feat_importance.png&#39;</span><span class="p">)</span>
+    <span class="n">tree_imp</span> <span class="o">=</span> <span class="p">[</span><span class="n">tree</span><span class="o">.</span><span class="n">feature_importances_</span> <span class="k">for</span> <span class="n">tree</span> <span class="ow">in</span> <span class="n">rf</span><span class="o">.</span><span class="n">estimators_</span><span class="p">]</span>
+    <span class="n">std</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">std</span><span class="p">(</span><span class="n">tree_imp</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">tree_imp</span><span class="p">))</span>
+    <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">importances</span><span class="p">)</span> <span class="o">==</span> <span class="nb">len</span><span class="p">(</span><span class="n">feat_names</span><span class="p">),</span> <span class="s2">&quot;Number of names and features&quot;</span> \
+                                                <span class="s2">&quot;differs.&quot;</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/feat_importances.npy&#39;</span><span class="p">,</span> <span class="n">importances</span><span class="p">)</span>
+    <span class="n">np</span><span class="o">.</span><span class="n">save</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/feat_std.npy&#39;</span><span class="p">,</span> <span class="n">std</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="draw_feat_hist"><a class="viewcode-back" href="../../../syconn.processing.html#syconn.processing.cell_types.draw_feat_hist">[docs]</a><span class="k">def</span> <span class="nf">draw_feat_hist</span><span class="p">(</span><span class="n">wd</span><span class="p">,</span> <span class="n">k</span><span class="o">=</span><span class="mi">15</span><span class="p">,</span> <span class="n">classes</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">2</span><span class="p">,</span> <span class="mi">3</span><span class="p">),</span> <span class="n">nb_bars</span><span class="o">=</span><span class="mi">20</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Draws the histgoram(s) of the most k important feature(s)</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    wd : str</span>
+<span class="sd">        Path to working directory</span>
+<span class="sd">    k : int</span>
+<span class="sd">        Number of features to be plotted</span>
+<span class="sd">    classes : tuple</span>
+<span class="sd">        Class labels to evaluate</span>
+<span class="sd">    nb_bars : int</span>
+<span class="sd">        Number of bars in histogram</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">label_strings_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">label_strings_dict</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;Excitatory Axons&quot;</span>
+    <span class="n">label_strings_dict</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;Medium Spiny Neurons&quot;</span>
+    <span class="n">label_strings_dict</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;Pallidal-like Neurons&quot;</span>
+    <span class="n">label_strings_dict</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="s2">&quot;Inhibitory Interneurons&quot;</span>
+    <span class="n">importances</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/feat_importances.npy&#39;</span><span class="p">)</span>
+    <span class="n">feat_names</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/feat_names.npy&#39;</span><span class="p">)</span>
+    <span class="n">skel_ids</span><span class="p">,</span> <span class="n">feats</span> <span class="o">=</span> <span class="n">load_celltype_feats</span><span class="p">(</span><span class="n">wd</span><span class="p">)</span>
+    <span class="n">skel_ids2</span><span class="p">,</span> <span class="n">skel_type_probas</span> <span class="o">=</span> <span class="n">load_celltype_probas</span><span class="p">(</span><span class="n">wd</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">equal</span><span class="p">(</span><span class="n">skel_ids</span><span class="p">,</span> <span class="n">skel_ids2</span><span class="p">)),</span> <span class="s2">&quot;Skeleton ordering wrong for&quot;</span>\
+                                                  <span class="s2">&quot;probabilities and features.&quot;</span>
+    <span class="n">skel_preds</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argmax</span><span class="p">(</span><span class="n">skel_type_probas</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">argsort</span><span class="p">(</span><span class="n">importances</span><span class="p">)[::</span><span class="o">-</span><span class="mi">1</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">n</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">k</span><span class="p">):</span>
+        <span class="n">ix</span> <span class="o">=</span> <span class="n">indices</span><span class="p">[</span><span class="n">n</span><span class="p">]</span>
+        <span class="n">fig</span><span class="p">,</span> <span class="n">ax</span> <span class="o">=</span> <span class="n">plt</span><span class="o">.</span><span class="n">subplots</span><span class="p">()</span>
+        <span class="n">fig</span><span class="o">.</span><span class="n">patch</span><span class="o">.</span><span class="n">set_facecolor</span><span class="p">(</span><span class="s1">&#39;white&#39;</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">tick_params</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s1">&#39;major&#39;</span><span class="p">,</span> <span class="n">labelsize</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s1">&#39;out&#39;</span><span class="p">,</span>
+                        <span class="n">length</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>  <span class="n">right</span><span class="o">=</span><span class="s2">&quot;off&quot;</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="s2">&quot;off&quot;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">tick_params</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s1">&#39;major&#39;</span><span class="p">,</span> <span class="n">labelsize</span><span class="o">=</span><span class="mi">16</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s1">&#39;out&#39;</span><span class="p">,</span>
+                        <span class="n">length</span><span class="o">=</span><span class="mi">8</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">2</span><span class="p">,</span>  <span class="n">right</span><span class="o">=</span><span class="s2">&quot;off&quot;</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="s2">&quot;off&quot;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">tick_params</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="s1">&#39;x&#39;</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s1">&#39;minor&#39;</span><span class="p">,</span> <span class="n">labelsize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s1">&#39;out&#39;</span><span class="p">,</span>
+                        <span class="n">length</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="s2">&quot;off&quot;</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="s2">&quot;off&quot;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">tick_params</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="s1">&#39;y&#39;</span><span class="p">,</span> <span class="n">which</span><span class="o">=</span><span class="s1">&#39;minor&#39;</span><span class="p">,</span> <span class="n">labelsize</span><span class="o">=</span><span class="mi">12</span><span class="p">,</span> <span class="n">direction</span><span class="o">=</span><span class="s1">&#39;out&#39;</span><span class="p">,</span>
+                        <span class="n">length</span><span class="o">=</span><span class="mi">4</span><span class="p">,</span> <span class="n">width</span><span class="o">=</span><span class="mi">1</span><span class="p">,</span> <span class="n">right</span><span class="o">=</span><span class="s2">&quot;off&quot;</span><span class="p">,</span> <span class="n">top</span><span class="o">=</span><span class="s2">&quot;off&quot;</span><span class="p">,</span> <span class="n">pad</span><span class="o">=</span><span class="mi">10</span><span class="p">)</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">spines</span><span class="p">[</span><span class="s1">&#39;left&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">set_linewidth</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">spines</span><span class="p">[</span><span class="s1">&#39;bottom&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">set_linewidth</span><span class="p">(</span><span class="mi">2</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">spines</span><span class="p">[</span><span class="s1">&#39;right&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">spines</span><span class="p">[</span><span class="s1">&#39;top&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">set_visible</span><span class="p">(</span><span class="kc">False</span><span class="p">)</span>
+
+        <span class="n">curr_feat_name</span> <span class="o">=</span> <span class="n">feat_names</span><span class="p">[</span><span class="n">ix</span><span class="p">]</span>
+
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylabel</span><span class="p">(</span><span class="s1">&#39;Relative Counts&#39;</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlabel</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">&#39;</span> <span class="o">%</span> <span class="n">curr_feat_name</span><span class="p">,</span> <span class="n">fontsize</span><span class="o">=</span><span class="mi">18</span><span class="p">)</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">gcf</span><span class="p">()</span><span class="o">.</span><span class="n">subplots_adjust</span><span class="p">(</span><span class="n">bottom</span><span class="o">=</span><span class="mf">0.15</span><span class="p">)</span>
+        <span class="n">colors</span> <span class="o">=</span> <span class="p">[</span><span class="s1">&#39;r&#39;</span><span class="p">,</span> <span class="s1">&#39;b&#39;</span><span class="p">,</span> <span class="n">arr</span><span class="p">([</span><span class="mi">135</span><span class="p">,</span> <span class="mi">206</span><span class="p">,</span> <span class="mi">250</span><span class="p">])</span><span class="o">/</span><span class="mf">255.</span><span class="p">,</span>
+                  <span class="n">arr</span><span class="p">([</span><span class="mi">255</span><span class="p">,</span> <span class="mi">255</span><span class="p">,</span> <span class="mi">224</span><span class="p">])</span><span class="o">/</span><span class="mf">255.</span><span class="p">]</span>
+        <span class="n">mask_arr</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">feats</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">c</span> <span class="ow">in</span> <span class="n">classes</span><span class="p">:</span>
+            <span class="n">mask_arr</span> <span class="o">+=</span> <span class="n">skel_preds</span> <span class="o">==</span> <span class="n">c</span>
+        <span class="n">x_max</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">max</span><span class="p">(</span><span class="n">feats</span><span class="p">[</span><span class="n">mask_arr</span><span class="p">,</span> <span class="n">ix</span><span class="p">])</span>
+        <span class="n">x_min</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">(</span><span class="n">feats</span><span class="p">[</span><span class="n">mask_arr</span><span class="p">,</span> <span class="n">ix</span><span class="p">])</span>
+        <span class="n">ranges</span> <span class="o">=</span> <span class="p">(</span><span class="n">x_min</span><span class="p">,</span> <span class="n">x_max</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">ii</span><span class="p">,</span> <span class="n">c</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">classes</span><span class="p">):</span>
+            <span class="n">mask_arr</span> <span class="o">=</span> <span class="n">skel_preds</span> <span class="o">==</span> <span class="n">c</span>
+            <span class="n">ax</span><span class="o">.</span><span class="n">hist</span><span class="p">(</span><span class="n">feats</span><span class="p">[</span><span class="n">mask_arr</span><span class="p">][:,</span> <span class="n">ix</span><span class="p">],</span> <span class="n">normed</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="nb">range</span><span class="o">=</span><span class="n">ranges</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.8</span><span class="p">,</span>
+                    <span class="n">bins</span><span class="o">=</span><span class="n">nb_bars</span><span class="p">,</span> <span class="n">label</span><span class="o">=</span><span class="n">label_strings_dict</span><span class="p">[</span><span class="n">c</span><span class="p">],</span> <span class="n">color</span><span class="o">=</span><span class="n">colors</span><span class="p">[</span><span class="n">ii</span><span class="p">])</span>
+        <span class="n">ymin</span><span class="p">,</span> <span class="n">ymax</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">get_ylim</span><span class="p">()</span>
+        <span class="n">xmin</span><span class="p">,</span> <span class="n">xmax</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">get_xlim</span><span class="p">()</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_xlim</span><span class="p">(</span><span class="n">xmin</span><span class="p">,</span> <span class="n">xmax</span><span class="o">*</span><span class="mf">1.1</span><span class="p">)</span>
+        <span class="n">ax</span><span class="o">.</span><span class="n">set_ylim</span><span class="p">(</span><span class="n">ymin</span><span class="p">,</span> <span class="n">ymax</span><span class="o">*</span><span class="mf">1.1</span><span class="p">)</span>
+        <span class="n">legend</span> <span class="o">=</span> <span class="n">ax</span><span class="o">.</span><span class="n">legend</span><span class="p">(</span><span class="n">loc</span><span class="o">=</span><span class="s2">&quot;upper right&quot;</span><span class="p">,</span> <span class="n">frameon</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">prop</span><span class="o">=</span><span class="p">{</span><span class="s1">&#39;size&#39;</span><span class="p">:</span> <span class="mi">16</span><span class="p">})</span>
+        <span class="n">fig_path</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/figures/&#39;</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="n">fig_path</span> <span class="o">+</span> <span class="s2">&quot;/feat</span><span class="si">%d</span><span class="s2">hist</span><span class="si">%d</span><span class="s2">.png&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">n</span><span class="p">,</span> <span class="nb">len</span><span class="p">(</span><span class="n">classes</span><span class="p">)),</span> <span class="n">dpi</span><span class="o">=</span><span class="mi">600</span><span class="p">)</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">SyConn a documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2016, Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.8.
+    </div>
+  </body>
+</html>

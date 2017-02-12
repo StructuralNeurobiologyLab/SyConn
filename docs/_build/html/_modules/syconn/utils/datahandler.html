@@ -1,0 +1,856 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>syconn.utils.datahandler &#8212; SyConn a documentation</title>
+    
+    <link rel="stylesheet" href="../../../_static/sphinxdoc.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     'a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+    <link rel="top" title="SyConn a documentation" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">SyConn a documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" accesskey="U">Module code</a> &#187;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <h1>Source code for syconn.utils.datahandler</h1><div class="highlight"><pre>
+<span></span><span class="c1"># -*- coding: utf-8 -*-</span>
+<span class="c1"># SyConn - Synaptic connectivity inference toolkit</span>
+<span class="c1">#</span>
+<span class="c1"># Copyright (c) 2016 - now</span>
+<span class="c1"># Max-Planck-Institute for Medical Research, Heidelberg, Germany</span>
+<span class="c1"># Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="k">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">h5py</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">shutil</span>
+<span class="kn">import</span> <span class="nn">tempfile</span>
+<span class="kn">import</span> <span class="nn">zipfile</span>
+<span class="kn">from</span> <span class="nn">multiprocessing</span> <span class="k">import</span> <span class="n">cpu_count</span>
+<span class="kn">from</span> <span class="nn">basics</span> <span class="k">import</span> <span class="o">*</span>
+<span class="kn">from</span> <span class="nn">segmentationdataset</span> <span class="k">import</span> <span class="n">load_dataset</span>
+<span class="kn">from</span> <span class="nn">knossos_utils</span> <span class="k">import</span> <span class="n">skeleton_utils</span> <span class="k">as</span> <span class="n">su</span>
+<span class="kn">from</span> <span class="nn">..utils.segmentationdataset</span> <span class="k">import</span> <span class="n">UltrastructuralDataset</span>
+<span class="kn">from</span> <span class="nn">knossos_utils.skeleton</span> <span class="k">import</span> <span class="n">SkeletonAnnotation</span>
+<span class="kn">import</span> <span class="nn">cPickle</span> <span class="k">as</span> <span class="nn">pickle</span>
+
+
+<div class="viewcode-block" id="DataHandler"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.DataHandler">[docs]</a><span class="k">class</span> <span class="nc">DataHandler</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Initialized with paths or cell components (SegmentationObjects), path to</span>
+<span class="sd">    membrane prediction and source path of traced skeletons (to be computed).</span>
+<span class="sd">    DataHandler is needed for further processing.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    wd : str</span>
+<span class="sd">        path to working directory, by default all other paths will lead to</span>
+<span class="sd">        subfolders of this directory</span>
+<span class="sd">    mem_path : str</span>
+<span class="sd">        path to barrier prediction</span>
+<span class="sd">    cs_path : str</span>
+<span class="sd">        path to supervoxel data</span>
+<span class="sd">    myelin_ds_path : str</span>
+<span class="sd">        path to myelin prediction</span>
+<span class="sd">    skeleton_path : str</span>
+<span class="sd">        path to cell tracings</span>
+<span class="sd">    data_path : str</span>
+<span class="sd">        output directory for mapped cell tracings</span>
+<span class="sd">    scaling : np.array</span>
+<span class="sd">        scaling of dataset, s.t. after applying coordinates are isotropic and</span>
+<span class="sd">        in nm</span>
+<span class="sd">    mem : KnossosDataset</span>
+<span class="sd">        will be assigned automatically</span>
+<span class="sd">    mem_offset :</span>
+<span class="sd">        optional offeset of dataset</span>
+<span class="sd">    mitos/vc/sj : UltrastructuralDataset</span>
+<span class="sd">        Dataset which contains cell objects of mitochondria, vesicle clouds and</span>
+<span class="sd">        synaptic junctions respectively</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">wd</span><span class="p">,</span> <span class="n">scaling</span><span class="o">=</span><span class="p">(</span><span class="mf">9.</span><span class="p">,</span> <span class="mf">9.</span><span class="p">,</span> <span class="mf">20.</span><span class="p">)):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        wd : str</span>
+<span class="sd">            path to working directory</span>
+<span class="sd">        scaling : tuple of ints</span>
+<span class="sd">            scaling of data set, s.t. data is isotropic</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">wd</span> <span class="o">=</span> <span class="n">wd</span>
+        <span class="n">vc_source</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/chunkdataset/obj_vc_ARGUS_5/&#39;</span>
+        <span class="n">sj_source</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/chunkdataset/obj_sj_ARGUS_3/&#39;</span>
+        <span class="n">mito_source</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/chunkdataset/obj_mi_ARGUS_8/&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mem_path</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/knossosdatasets/rrbarrier/&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cs_path</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/chunkdataset/j0126_watershed_map/&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">myelin_ds_path</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s2">&quot;/knossosdatasets/myelin/&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data_path</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/neurons/&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">skeleton_path</span> <span class="o">=</span> <span class="n">wd</span> <span class="o">+</span> <span class="s1">&#39;/tracings/&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nb_cpus</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">min</span><span class="p">((</span><span class="n">cpu_count</span><span class="p">(),</span> <span class="mi">2</span><span class="p">))</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path</span><span class="p">):</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">makedirs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data_path</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scaling</span> <span class="o">=</span> <span class="n">arr</span><span class="p">(</span><span class="n">scaling</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mem</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mem_offset</span> <span class="o">=</span> <span class="n">arr</span><span class="p">([</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">])</span>
+        <span class="n">object_dict</span> <span class="o">=</span> <span class="p">{</span><span class="mi">0</span><span class="p">:</span> <span class="s2">&quot;mitos&quot;</span><span class="p">,</span> <span class="mi">1</span><span class="p">:</span> <span class="s2">&quot;vc&quot;</span><span class="p">,</span> <span class="mi">2</span><span class="p">:</span> <span class="s2">&quot;sj&quot;</span><span class="p">}</span>
+        <span class="n">objects</span> <span class="o">=</span> <span class="p">[</span><span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">,</span> <span class="kc">None</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">source</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">([</span><span class="n">mito_source</span><span class="p">,</span> <span class="n">vc_source</span><span class="p">,</span> <span class="n">sj_source</span><span class="p">]):</span>
+            <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">source</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">str</span><span class="p">:</span>
+                <span class="k">try</span><span class="p">:</span>
+                    <span class="n">obj</span> <span class="o">=</span> <span class="n">load_dataset</span><span class="p">(</span><span class="n">source</span><span class="p">)</span>
+                    <span class="n">obj</span><span class="o">.</span><span class="n">init_properties</span><span class="p">()</span>
+                    <span class="c1"># print &quot;Initialized %s objects.&quot; % object_dict[i]</span>
+                <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+                    <span class="n">obj</span> <span class="o">=</span> <span class="kc">None</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">obj</span> <span class="o">=</span> <span class="n">source</span>
+            <span class="n">objects</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">mitos</span> <span class="o">=</span> <span class="n">objects</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vc</span> <span class="o">=</span> <span class="n">objects</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sj</span> <span class="o">=</span> <span class="n">objects</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span></div>
+
+
+<div class="viewcode-block" id="load_ordered_mapped_skeleton"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.load_ordered_mapped_skeleton">[docs]</a><span class="k">def</span> <span class="nf">load_ordered_mapped_skeleton</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Load nml of mapped skeleton and order trees</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        Path to nml</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list</span>
+<span class="sd">        List of trees with order [skeleton, mitos, vc, sj, soma]</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">anno_dict</span> <span class="o">=</span> <span class="p">{</span><span class="s2">&quot;skeleton&quot;</span><span class="p">:</span> <span class="mi">0</span><span class="p">,</span> <span class="s2">&quot;mitos&quot;</span><span class="p">:</span> <span class="mi">1</span><span class="p">,</span> <span class="s2">&quot;vc&quot;</span><span class="p">:</span> <span class="mi">2</span><span class="p">,</span> <span class="s2">&quot;sj&quot;</span><span class="p">:</span> <span class="mi">3</span><span class="p">,</span> <span class="s2">&quot;soma&quot;</span><span class="p">:</span> <span class="mi">4</span><span class="p">}</span>
+    <span class="n">annotation</span> <span class="o">=</span> <span class="n">su</span><span class="o">.</span><span class="n">loadj0126NML</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">ordered_annotation</span> <span class="o">=</span> <span class="nb">list</span><span class="p">([[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[],</span> <span class="p">[]])</span>
+    <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="n">anno_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+        <span class="n">init_anno</span> <span class="o">=</span> <span class="n">SkeletonAnnotation</span><span class="p">()</span>
+        <span class="n">init_anno</span><span class="o">.</span><span class="n">scaling</span> <span class="o">=</span> <span class="p">[</span><span class="mi">9</span><span class="p">,</span> <span class="mi">9</span><span class="p">,</span> <span class="mi">20</span><span class="p">]</span>
+        <span class="n">init_anno</span><span class="o">.</span><span class="n">appendComment</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="n">ordered_annotation</span><span class="p">[</span><span class="n">anno_dict</span><span class="p">[</span><span class="n">name</span><span class="p">]]</span> <span class="o">=</span> <span class="n">init_anno</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">annotation</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="ow">not</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">([</span><span class="n">key</span> <span class="ow">in</span> <span class="n">annotation</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">getComment</span><span class="p">()</span>
+                                            <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">anno_dict</span><span class="o">.</span><span class="n">keys</span><span class="p">()]):</span>
+        <span class="n">ordered_annotation</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">annotation</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">anno</span> <span class="ow">in</span> <span class="n">annotation</span><span class="p">:</span>
+            <span class="n">c</span> <span class="o">=</span> <span class="n">anno</span><span class="o">.</span><span class="n">getComment</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">c</span> <span class="o">==</span> <span class="s1">&#39;&#39;</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="p">(</span><span class="s1">&#39;vc&#39;</span> <span class="ow">in</span> <span class="n">c</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="s1">&#39;p4&#39;</span> <span class="ow">in</span> <span class="n">c</span><span class="p">):</span>
+                <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;vc&#39;</span>
+            <span class="k">elif</span> <span class="p">(</span><span class="s1">&#39;sj&#39;</span> <span class="ow">in</span> <span class="n">c</span><span class="p">)</span> <span class="ow">or</span> <span class="p">(</span><span class="s1">&#39;az&#39;</span> <span class="ow">in</span> <span class="n">c</span><span class="p">):</span>
+                <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;sj&#39;</span>
+            <span class="k">elif</span> <span class="s1">&#39;mitos&#39;</span> <span class="ow">in</span> <span class="n">c</span><span class="p">:</span>
+                <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;mitos&#39;</span>
+            <span class="k">elif</span> <span class="s1">&#39;soma&#39;</span> <span class="ow">in</span> <span class="n">c</span><span class="p">:</span>
+                <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;soma&#39;</span>
+            <span class="k">elif</span> <span class="s1">&#39;skeleton&#39;</span> <span class="ow">in</span> <span class="n">c</span><span class="p">:</span>
+                <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;skeleton&#39;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="nb">print</span> <span class="s2">&quot;Using </span><span class="si">%s</span><span class="s2"> as skeleton tree.&quot;</span> <span class="o">%</span> <span class="n">c</span>
+                <span class="n">c</span> <span class="o">=</span> <span class="s1">&#39;skeleton&#39;</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">ordered_annotation</span><span class="p">[</span><span class="n">anno_dict</span><span class="p">[</span><span class="n">c</span><span class="p">]]</span> <span class="o">=</span> <span class="n">anno</span>
+            <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+                <span class="nb">print</span> <span class="s2">&quot;Found strange tree </span><span class="si">%s</span><span class="s2"> in skeleton at </span><span class="si">%s</span><span class="s2">.&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">c</span><span class="p">,</span> <span class="n">path</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">ordered_annotation</span></div>
+
+
+<div class="viewcode-block" id="load_files_from_kzip"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.load_files_from_kzip">[docs]</a><span class="k">def</span> <span class="nf">load_files_from_kzip</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">load_mitos</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Load all available files from annotation kzip</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        path to kzip</span>
+<span class="sd">    load_mitos : bool</span>
+<span class="sd">        load mito hull points and ids</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of np.array</span>
+<span class="sd">        coordinates [hull, mitos, vc, sj], id lists, normals</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">coord_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span>
+                  <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">))]</span>
+    <span class="n">hull_normals</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span>
+                    <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="mi">3</span><span class="p">))]</span>
+    <span class="c1"># id_list of cell objects</span>
+    <span class="n">id_list</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="p">)),</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="mi">0</span><span class="p">,</span> <span class="p">))]</span>
+    <span class="n">zf</span> <span class="o">=</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZipFile</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">filename</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">([</span><span class="s1">&#39;hull_points.xyz&#39;</span><span class="p">,</span> <span class="s1">&#39;mitos.txt&#39;</span><span class="p">,</span> <span class="s1">&#39;vc.txt&#39;</span><span class="p">,</span>
+                                  <span class="s1">&#39;sj.txt&#39;</span><span class="p">]):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">1</span> <span class="ow">and</span> <span class="n">load_mitos</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromstring</span><span class="p">(</span><span class="n">zf</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39; &#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">isscalar</span><span class="p">(</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span> <span class="ow">and</span> <span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="n">hull_normals</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">/</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)[:,</span> <span class="mi">3</span><span class="p">:]</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">/</span><span class="mi">6</span><span class="p">,</span> <span class="mi">6</span><span class="p">)[:,</span> <span class="p">:</span><span class="mi">3</span><span class="p">]</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">/</span><span class="mi">3</span><span class="p">,</span> <span class="mi">3</span><span class="p">)</span>
+            <span class="n">coord_list</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint32</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">IOError</span><span class="p">,</span> <span class="ne">ImportError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">):</span>
+            <span class="k">pass</span>
+    <span class="k">for</span> <span class="n">i</span><span class="p">,</span> <span class="n">filename</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">([</span><span class="s1">&#39;mitos_id.txt&#39;</span><span class="p">,</span> <span class="s1">&#39;vc_id.txt&#39;</span><span class="p">,</span> <span class="s1">&#39;sj_id.txt&#39;</span><span class="p">]):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">i</span> <span class="o">==</span> <span class="mi">0</span> <span class="ow">and</span> <span class="n">load_mitos</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">True</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">fromstring</span><span class="p">(</span><span class="n">zf</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">filename</span><span class="p">),</span> <span class="n">sep</span><span class="o">=</span><span class="s1">&#39; &#39;</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="k">if</span> <span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="o">-</span><span class="mi">1</span><span class="p">:</span>
+                <span class="k">continue</span>
+            <span class="n">id_list</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">data</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">uint32</span><span class="p">)</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">IOError</span><span class="p">,</span> <span class="ne">ImportError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">):</span>
+            <span class="k">pass</span>
+    <span class="n">zf</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">coord_list</span><span class="p">,</span> <span class="n">id_list</span><span class="p">,</span> <span class="n">hull_normals</span></div>
+
+
+<div class="viewcode-block" id="load_objpkl_from_kzip"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.load_objpkl_from_kzip">[docs]</a><span class="k">def</span> <span class="nf">load_objpkl_from_kzip</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Loads object pickle file from mapped skeleton kzip</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        Path to kzip</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of SegmentationObjectDataset</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">zf</span> <span class="o">=</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZipFile</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span>
+    <span class="n">object_datasets</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">ix</span><span class="p">,</span> <span class="n">filename</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">([</span><span class="s1">&#39;mitos.pkl&#39;</span><span class="p">,</span> <span class="s1">&#39;vc.pkl&#39;</span><span class="p">,</span> <span class="s1">&#39;sj.pkl&#39;</span><span class="p">]):</span>
+        <span class="n">object_datasets</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">UltrastructuralDataset</span><span class="p">(</span><span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="p">))</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">temp</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">TemporaryFile</span><span class="p">()</span>
+            <span class="n">temp</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">zf</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">filename</span><span class="p">))</span>
+            <span class="n">temp</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+            <span class="n">obj_ds</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">temp</span><span class="p">)</span>
+            <span class="n">object_datasets</span><span class="p">[</span><span class="n">ix</span><span class="p">]</span> <span class="o">=</span> <span class="n">obj_ds</span>
+        <span class="k">except</span> <span class="p">(</span><span class="ne">IOError</span><span class="p">,</span> <span class="ne">ImportError</span><span class="p">,</span> <span class="ne">KeyError</span><span class="p">):</span>
+            <span class="k">pass</span>
+    <span class="k">return</span> <span class="n">object_datasets</span></div>
+
+
+<div class="viewcode-block" id="load_anno_list"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.load_anno_list">[docs]</a><span class="k">def</span> <span class="nf">load_anno_list</span><span class="p">(</span><span class="n">fpaths</span><span class="p">,</span> <span class="n">load_mitos</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">append_obj</span><span class="o">=</span><span class="kc">True</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Load nml&#39;s given in nml_list and append according hull information from</span>
+<span class="sd">    xyz-file, as well as object coordinates from txt files in kzip (if given).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fpaths : list of str</span>
+<span class="sd">        paths to tracings</span>
+<span class="sd">    load_mitos: bool</span>
+<span class="sd">        load mito hull points and ids</span>
+<span class="sd">    append_obj : bool</span>
+<span class="sd">        load mapped cell objects</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of list of SkeletonAnnotations</span>
+<span class="sd">        list of mapped cell tracings</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">anno_list</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">cnt</span> <span class="o">=</span> <span class="mi">0</span>
+    <span class="k">for</span> <span class="n">path</span> <span class="ow">in</span> <span class="n">fpaths</span><span class="p">:</span>
+        <span class="n">cnt</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="n">mapped_skel</span> <span class="o">=</span> <span class="n">load_mapped_skeleton</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">append_obj</span><span class="p">,</span> <span class="n">load_mitos</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">mapped_skel</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">continue</span>
+        <span class="n">anno_list</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">mapped_skel</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">anno_list</span></div>
+
+
+<div class="viewcode-block" id="load_mapped_skeleton"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.load_mapped_skeleton">[docs]</a><span class="k">def</span> <span class="nf">load_mapped_skeleton</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">append_obj</span><span class="p">,</span> <span class="n">load_mitos</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Load mapped cell tracing and append mapped cell objects</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path : str</span>
+<span class="sd">        path to tracing kzip</span>
+<span class="sd">    append_obj : bool</span>
+<span class="sd">        append cell objects</span>
+<span class="sd">    load_mitos : bool</span>
+<span class="sd">        load mitochondria objects</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of SkeletonAnnotations</span>
+<span class="sd">        mapped cell tracings (skel, mito, vc, sj, soma)</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mapped_skel</span> <span class="o">=</span> <span class="n">load_ordered_mapped_skeleton</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">append_obj</span><span class="p">:</span>
+        <span class="n">skel</span> <span class="o">=</span> <span class="n">mapped_skel</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">obj_dicts</span> <span class="o">=</span> <span class="n">load_objpkl_from_kzip</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="n">skel</span><span class="o">.</span><span class="n">mitos</span> <span class="o">=</span> <span class="n">obj_dicts</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">skel</span><span class="o">.</span><span class="n">vc</span> <span class="o">=</span> <span class="n">obj_dicts</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="n">skel</span><span class="o">.</span><span class="n">sj</span> <span class="o">=</span> <span class="n">obj_dicts</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s1">&#39;k.zip&#39;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="n">path</span><span class="p">[:</span><span class="o">-</span><span class="mi">5</span><span class="p">]</span>
+        <span class="k">if</span> <span class="s1">&#39;nml&#39;</span> <span class="ow">in</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="n">path</span><span class="p">[:</span><span class="o">-</span><span class="mi">3</span><span class="p">]</span>
+        <span class="n">coord_list</span><span class="p">,</span> <span class="n">id_list</span><span class="p">,</span> <span class="n">hull_normals</span> <span class="o">=</span> \
+            <span class="n">load_files_from_kzip</span><span class="p">(</span><span class="n">path</span> <span class="o">+</span> <span class="s1">&#39;k.zip&#39;</span><span class="p">,</span> <span class="n">load_mitos</span><span class="p">)</span>
+        <span class="n">mito_hull_ids</span><span class="p">,</span> <span class="n">vc_hull_ids</span><span class="p">,</span> <span class="n">sj_hull_ids</span> <span class="o">=</span> <span class="n">id_list</span>
+        <span class="n">hull</span><span class="p">,</span> <span class="n">mitos</span><span class="p">,</span> <span class="n">vc</span><span class="p">,</span> <span class="n">sj</span> <span class="o">=</span> <span class="n">coord_list</span>
+        <span class="n">skel</span><span class="o">.</span><span class="n">hull_coords</span> <span class="o">=</span> <span class="n">hull</span>
+        <span class="n">skel</span><span class="o">.</span><span class="n">mito_hull_coords</span> <span class="o">=</span> <span class="n">mitos</span>
+        <span class="n">skel</span><span class="o">.</span><span class="n">mito_hull_ids</span> <span class="o">=</span> <span class="n">mito_hull_ids</span>
+        <span class="n">skel</span><span class="o">.</span><span class="n">vc_hull_coords</span> <span class="o">=</span> <span class="n">vc</span>
+        <span class="n">skel</span><span class="o">.</span><span class="n">vc_hull_ids</span> <span class="o">=</span> <span class="n">vc_hull_ids</span>
+        <span class="n">skel</span><span class="o">.</span><span class="n">sj_hull_coords</span> <span class="o">=</span> <span class="n">sj</span>
+        <span class="n">skel</span><span class="o">.</span><span class="n">sj_hull_ids</span> <span class="o">=</span> <span class="n">sj_hull_ids</span>
+        <span class="n">skel</span><span class="o">.</span><span class="n">hull_normals</span> <span class="o">=</span> <span class="n">hull_normals</span>
+    <span class="k">return</span> <span class="n">mapped_skel</span></div>
+
+
+<div class="viewcode-block" id="get_filepaths_from_dir"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.get_filepaths_from_dir">[docs]</a><span class="k">def</span> <span class="nf">get_filepaths_from_dir</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">ending</span><span class="o">=</span><span class="s1">&#39;k.zip&#39;</span><span class="p">,</span> <span class="n">recursively</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Collect all files with certain ending from directory.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    directory: str</span>
+<span class="sd">        path to lookup directory</span>
+<span class="sd">    ending: str</span>
+<span class="sd">        ending of files</span>
+<span class="sd">    recursively: boolean</span>
+<span class="sd">        add files from subdirectories</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of str</span>
+<span class="sd">        paths to files</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">recursively</span><span class="p">:</span>
+        <span class="n">files</span> <span class="o">=</span> <span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">r</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">r</span><span class="p">,</span><span class="n">s</span> <span class="p">,</span><span class="n">fs</span> <span class="ow">in</span>
+                 <span class="n">os</span><span class="o">.</span><span class="n">walk</span><span class="p">(</span><span class="n">directory</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="n">fs</span> <span class="k">if</span> <span class="n">ending</span> <span class="ow">in</span> <span class="n">f</span><span class="p">[</span><span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">ending</span><span class="p">):]]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">files</span> <span class="o">=</span> <span class="p">[</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">directory</span><span class="p">,</span> <span class="n">f</span><span class="p">)</span> <span class="k">for</span> <span class="n">f</span> <span class="ow">in</span> <span class="nb">next</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">walk</span><span class="p">(</span><span class="n">directory</span><span class="p">))[</span><span class="mi">2</span><span class="p">]</span>
+                 <span class="k">if</span> <span class="n">ending</span> <span class="ow">in</span> <span class="n">f</span><span class="p">[</span><span class="o">-</span><span class="nb">len</span><span class="p">(</span><span class="n">ending</span><span class="p">):]]</span>
+    <span class="k">return</span> <span class="n">files</span></div>
+
+
+<div class="viewcode-block" id="get_paths_of_skelID"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.get_paths_of_skelID">[docs]</a><span class="k">def</span> <span class="nf">get_paths_of_skelID</span><span class="p">(</span><span class="n">id_list</span><span class="p">,</span> <span class="n">traced_skel_dir</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Gather paths to kzip of skeletons with ID in id_list</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    id_list: list of str</span>
+<span class="sd">        skeleton ID&#39;s</span>
+<span class="sd">    traced_skel_dir: str</span>
+<span class="sd">        directory of mapped skeletons</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    list of str</span>
+<span class="sd">        paths of skeletons in id_list</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mapped_skel_paths</span> <span class="o">=</span> <span class="n">get_filepaths_from_dir</span><span class="p">(</span><span class="n">traced_skel_dir</span><span class="p">)</span>
+    <span class="n">mapped_skel_ids</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;iter_\d+_(\d+)&#39;</span><span class="p">,</span> <span class="s1">&#39;&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">mapped_skel_paths</span><span class="p">))</span>
+    <span class="n">wanted_paths</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">skelID</span> <span class="ow">in</span> <span class="n">id_list</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">path</span> <span class="o">=</span> <span class="n">mapped_skel_paths</span><span class="p">[</span><span class="n">mapped_skel_ids</span><span class="o">.</span><span class="n">index</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">skelID</span><span class="p">))]</span>
+            <span class="n">wanted_paths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+        <span class="k">except</span><span class="p">:</span>
+            <span class="n">wanted_paths</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="kc">None</span><span class="p">)</span>
+            <span class="k">pass</span>
+    <span class="k">return</span> <span class="n">wanted_paths</span></div>
+
+
+<div class="viewcode-block" id="supp_fname_from_fpath"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.supp_fname_from_fpath">[docs]</a><span class="k">def</span> <span class="nf">supp_fname_from_fpath</span><span class="p">(</span><span class="n">fpath</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Returns supported filename from path to written file to write it to</span>
+<span class="sd">    kzip</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fpath : str</span>
+<span class="sd">        path to file</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    str</span>
+<span class="sd">        filename if supported, else ValueError</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">file_name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">fpath</span><span class="p">)</span>
+    <span class="k">if</span> <span class="s1">&#39;.nml&#39;</span> <span class="ow">in</span> <span class="n">file_name</span> <span class="ow">or</span> <span class="s1">&#39;.xml&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;annotation.xml&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;.xyz&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;hull_points.xyz&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;mitos.txt&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;mitos.txt&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;vc.txt&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;vc.txt&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;sj.txt&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;sj.txt&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;mitos_id.txt&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;mitos_id.txt&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;vc_id.txt&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;vc_id.txt&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;sj_id.txt&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;sj_id.txt&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;mitos.pkl&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;mitos.pkl&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;vc.pkl&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;vc.pkl&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;sj.pkl&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;sj.pkl&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;axoness_feat.csv&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;axoness_feat.csv&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;spiness_feat.csv&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;spiness_feat.csv&#39;</span>
+    <span class="k">elif</span> <span class="s1">&#39;mergelist.txt&#39;</span> <span class="ow">in</span> <span class="n">file_name</span><span class="p">:</span>
+        <span class="n">file_name</span> <span class="o">=</span> <span class="s1">&#39;mergelist.txt&#39;</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">ValueError</span>
+    <span class="k">return</span> <span class="n">file_name</span></div>
+
+
+<div class="viewcode-block" id="write_data2kzip"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.write_data2kzip">[docs]</a><span class="k">def</span> <span class="nf">write_data2kzip</span><span class="p">(</span><span class="n">kzip_path</span><span class="p">,</span> <span class="n">fpath</span><span class="p">,</span> <span class="n">force_overwrite</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Write supported files to kzip of mapped annotation</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    kzip_path : str</span>
+<span class="sd">    fpath : str</span>
+<span class="sd">    force_overwrite : bool</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">file_name</span> <span class="o">=</span> <span class="n">supp_fname_from_fpath</span><span class="p">(</span><span class="n">fpath</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">kzip_path</span><span class="p">):</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">force_overwrite</span><span class="p">:</span>
+                <span class="k">with</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZipFile</span><span class="p">(</span><span class="n">kzip_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZIP_DEFLATED</span><span class="p">)</span> <span class="k">as</span> <span class="n">zf</span><span class="p">:</span>
+                    <span class="n">zf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">fpath</span><span class="p">,</span> <span class="n">file_name</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">remove_from_zip</span><span class="p">(</span><span class="n">kzip_path</span><span class="p">,</span> <span class="n">file_name</span><span class="p">)</span>
+                <span class="k">with</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZipFile</span><span class="p">(</span><span class="n">kzip_path</span><span class="p">,</span> <span class="s2">&quot;a&quot;</span><span class="p">,</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZIP_DEFLATED</span><span class="p">)</span> <span class="k">as</span> <span class="n">zf</span><span class="p">:</span>
+                    <span class="n">zf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">fpath</span><span class="p">,</span> <span class="n">file_name</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">,</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Couldn&#39;t open file </span><span class="si">%s</span><span class="s2"> for reading and&quot;</span> \
+                  <span class="s2">&quot; overwriting.&quot;</span> <span class="o">%</span> <span class="n">kzip_path</span><span class="p">,</span> <span class="n">e</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZipFile</span><span class="p">(</span><span class="n">kzip_path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">,</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZIP_DEFLATED</span><span class="p">)</span> <span class="k">as</span> <span class="n">zf</span><span class="p">:</span>
+                <span class="n">zf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">fpath</span><span class="p">,</span> <span class="n">file_name</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span><span class="p">,</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span> <span class="s2">&quot;Couldn&#39;t open file </span><span class="si">%s</span><span class="s2"> for writing.&quot;</span> <span class="o">%</span> <span class="n">kzip_path</span><span class="p">,</span> <span class="n">e</span>
+    <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">fpath</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="remove_from_zip"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.remove_from_zip">[docs]</a><span class="k">def</span> <span class="nf">remove_from_zip</span><span class="p">(</span><span class="n">zipfname</span><span class="p">,</span> <span class="o">*</span><span class="n">filenames</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Removes filenames from zipfile</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    zipfname : str</span>
+<span class="sd">        Path to zipfile</span>
+<span class="sd">    filenames : list of str</span>
+<span class="sd">        files to delete</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">tempdir</span> <span class="o">=</span> <span class="n">tempfile</span><span class="o">.</span><span class="n">mkdtemp</span><span class="p">()</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">tempname</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">tempdir</span><span class="p">,</span> <span class="s1">&#39;new.zip&#39;</span><span class="p">)</span>
+        <span class="k">with</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZipFile</span><span class="p">(</span><span class="n">zipfname</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">zipread</span><span class="p">:</span>
+            <span class="k">with</span> <span class="n">zipfile</span><span class="o">.</span><span class="n">ZipFile</span><span class="p">(</span><span class="n">tempname</span><span class="p">,</span> <span class="s1">&#39;w&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">zipwrite</span><span class="p">:</span>
+                <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">zipread</span><span class="o">.</span><span class="n">infolist</span><span class="p">():</span>
+                    <span class="k">if</span> <span class="n">item</span><span class="o">.</span><span class="n">filename</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">filenames</span><span class="p">:</span>
+                        <span class="n">data</span> <span class="o">=</span> <span class="n">zipread</span><span class="o">.</span><span class="n">read</span><span class="p">(</span><span class="n">item</span><span class="o">.</span><span class="n">filename</span><span class="p">)</span>
+                        <span class="n">zipwrite</span><span class="o">.</span><span class="n">writestr</span><span class="p">(</span><span class="n">item</span><span class="p">,</span> <span class="n">data</span><span class="p">)</span>
+        <span class="n">shutil</span><span class="o">.</span><span class="n">move</span><span class="p">(</span><span class="n">tempname</span><span class="p">,</span> <span class="n">zipfname</span><span class="p">)</span>
+    <span class="k">finally</span><span class="p">:</span>
+        <span class="n">shutil</span><span class="o">.</span><span class="n">rmtree</span><span class="p">(</span><span class="n">tempdir</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="get_skelID_from_path"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.get_skelID_from_path">[docs]</a><span class="k">def</span> <span class="nf">get_skelID_from_path</span><span class="p">(</span><span class="n">skel_path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Parse skeleton id from filename</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    skel_path : str</span>
+<span class="sd">        path to skeleton</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    int</span>
+<span class="sd">        skeleton ID</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s1">&#39;iter_0_(\d+)&#39;</span><span class="p">,</span> <span class="n">skel_path</span><span class="p">)[</span><span class="mi">0</span><span class="p">])</span></div>
+
+
+<div class="viewcode-block" id="connect_soma_tracing"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.connect_soma_tracing">[docs]</a><span class="k">def</span> <span class="nf">connect_soma_tracing</span><span class="p">(</span><span class="n">soma</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Connect tracings of soma, s.t. a lot of rays are emitted. Connects nearby</span>
+<span class="sd">     (kd-tree) nodes of soma tracings with edges</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    soma: SkeletonAnnotation</span>
+<span class="sd">        Soma tracing</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    SkeletonAnnotation</span>
+<span class="sd">        Sparsely connected soma tracing</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">node_list</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">node</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">soma</span><span class="o">.</span><span class="n">getNodes</span><span class="p">()])</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">node</span><span class="o">.</span><span class="n">getCoordinate_scaled</span><span class="p">()</span> <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">node_list</span><span class="p">])</span>
+    <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">soma</span>
+    <span class="n">tree</span> <span class="o">=</span> <span class="n">spatial</span><span class="o">.</span><span class="n">cKDTree</span><span class="p">(</span><span class="n">coords</span><span class="p">)</span>
+    <span class="n">near_nodes_list</span> <span class="o">=</span> <span class="n">tree</span><span class="o">.</span><span class="n">query_ball_point</span><span class="p">(</span><span class="n">coords</span><span class="p">,</span> <span class="mi">4000</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">ii</span><span class="p">,</span> <span class="n">node</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">node_list</span><span class="p">):</span>
+        <span class="n">near_nodes_ids</span> <span class="o">=</span> <span class="n">near_nodes_list</span><span class="p">[</span><span class="n">ii</span><span class="p">]</span>
+        <span class="n">near_nodes</span> <span class="o">=</span> <span class="n">node_list</span><span class="p">[</span><span class="n">near_nodes_ids</span><span class="p">]</span>
+        <span class="k">for</span> <span class="n">nn</span> <span class="ow">in</span> <span class="n">near_nodes</span><span class="p">:</span>
+            <span class="n">soma</span><span class="o">.</span><span class="n">addEdge</span><span class="p">(</span><span class="n">node</span><span class="p">,</span> <span class="n">nn</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">soma</span></div>
+
+
+<div class="viewcode-block" id="cell_object_id_parser"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.cell_object_id_parser">[docs]</a><span class="k">def</span> <span class="nf">cell_object_id_parser</span><span class="p">(</span><span class="n">obj_trees</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Extracts unique object ids from object tree list for cell objects</span>
+<span class="sd">    &#39;mitos&#39;, &#39;vc&#39; and &#39;sj&#39;</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    obj_trees : list of annotation objects [&#39;mitos&#39;, &#39;vc&#39;, &#39;sj&#39;]</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    dict</span>
+<span class="sd">        keys &#39;mitos&#39;, &#39;vc&#39; and &#39;sj&#39; containing unique object ID&#39;s as values</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mito_ids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">vc_ids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="n">sj_ids</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">obj_trees</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">getNodes</span><span class="p">():</span>
+        <span class="n">comment</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">getComment</span><span class="p">()</span>
+        <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">-([^,]+)&#39;</span> <span class="o">%</span> <span class="s1">&#39;mitos&#39;</span><span class="p">,</span> <span class="n">comment</span><span class="p">)</span>
+        <span class="n">mito_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)))</span>
+    <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">obj_trees</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">getNodes</span><span class="p">():</span>
+        <span class="n">comment</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">getComment</span><span class="p">()</span>
+        <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">-([^,]+)&#39;</span> <span class="o">%</span> <span class="s1">&#39;vc&#39;</span><span class="p">,</span> <span class="n">comment</span><span class="p">)</span>
+        <span class="n">vc_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)))</span>
+    <span class="k">for</span> <span class="n">node</span> <span class="ow">in</span> <span class="n">obj_trees</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">.</span><span class="n">getNodes</span><span class="p">():</span>
+        <span class="n">comment</span> <span class="o">=</span> <span class="n">node</span><span class="o">.</span><span class="n">getComment</span><span class="p">()</span>
+        <span class="n">match</span> <span class="o">=</span> <span class="n">re</span><span class="o">.</span><span class="n">search</span><span class="p">(</span><span class="s1">&#39;</span><span class="si">%s</span><span class="s1">-([^,]+)&#39;</span> <span class="o">%</span> <span class="s1">&#39;sj&#39;</span><span class="p">,</span> <span class="n">comment</span><span class="p">)</span>
+        <span class="n">sj_ids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="nb">int</span><span class="p">(</span><span class="n">match</span><span class="o">.</span><span class="n">group</span><span class="p">(</span><span class="mi">1</span><span class="p">)))</span>
+    <span class="n">obj_id_dict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="n">obj_id_dict</span><span class="p">[</span><span class="s1">&#39;mitos&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">mito_ids</span>
+    <span class="n">obj_id_dict</span><span class="p">[</span><span class="s1">&#39;vc&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">vc_ids</span>
+    <span class="n">obj_id_dict</span><span class="p">[</span><span class="s1">&#39;sj&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">sj_ids</span>
+    <span class="k">return</span> <span class="n">obj_id_dict</span></div>
+
+
+<div class="viewcode-block" id="write_obj2pkl"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.write_obj2pkl">[docs]</a><span class="k">def</span> <span class="nf">write_obj2pkl</span><span class="p">(</span><span class="n">objects</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Writes object to pickle file</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    objects : UltrastructuralDatasetObject</span>
+<span class="sd">    path : str</span>
+<span class="sd">        destianation</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">output</span><span class="p">:</span>
+        <span class="n">pickle</span><span class="o">.</span><span class="n">dump</span><span class="p">(</span><span class="n">objects</span><span class="p">,</span> <span class="n">output</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="load_pkl2obj"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.load_pkl2obj">[docs]</a><span class="k">def</span> <span class="nf">load_pkl2obj</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Loads pickle file of object</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path: str</span>
+<span class="sd">        path of source file</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    UltrastructuralDatasetObject</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;rb&#39;</span><span class="p">)</span> <span class="k">as</span> <span class="n">inp</span><span class="p">:</span>
+        <span class="n">objects</span> <span class="o">=</span> <span class="n">pickle</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">inp</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">objects</span></div>
+
+
+<div class="viewcode-block" id="helper_get_voxels"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.helper_get_voxels">[docs]</a><span class="k">def</span> <span class="nf">helper_get_voxels</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Helper function to receive object voxel</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    obj : SegmentationObject</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.array</span>
+<span class="sd">        object voxels</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">voxels</span> <span class="o">=</span> <span class="n">obj</span><span class="o">.</span><span class="n">voxels</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([])</span>
+    <span class="k">return</span> <span class="n">voxels</span></div>
+
+
+<div class="viewcode-block" id="helper_get_hull_voxels"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.helper_get_hull_voxels">[docs]</a><span class="k">def</span> <span class="nf">helper_get_hull_voxels</span><span class="p">(</span><span class="n">obj</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Helper function to receive object hull voxels.</span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    obj : SegmentationObject</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    np.array</span>
+<span class="sd">        object hull voxels</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">return</span> <span class="n">obj</span><span class="o">.</span><span class="n">hull_voxels</span></div>
+
+
+<div class="viewcode-block" id="hull2text"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.hull2text">[docs]</a><span class="k">def</span> <span class="nf">hull2text</span><span class="p">(</span><span class="n">hull_coords</span><span class="p">,</span> <span class="n">normals</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Writes hull coordinates and normals to xyz file. Each line corresponds to</span>
+<span class="sd">    coordinates and normal vector of one point x y z n_x n_y n_z.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    hull_coords : np.array</span>
+<span class="sd">    normals : np.array</span>
+<span class="sd">    path : str</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># add ray-end-points to nml and to txt file (incl. normals)</span>
+    <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">hull_coords</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+        <span class="n">end_point</span> <span class="o">=</span> <span class="n">hull_coords</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">normal</span> <span class="o">=</span> <span class="n">normals</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> </span><span class="si">%0.4f</span><span class="s2"> </span><span class="si">%0.4f</span><span class="s2"> </span><span class="si">%0.4f</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">end_point</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">end_point</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
+                                                  <span class="n">end_point</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">normal</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                                  <span class="n">normal</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">normal</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="obj_hull2text"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.obj_hull2text">[docs]</a><span class="k">def</span> <span class="nf">obj_hull2text</span><span class="p">(</span><span class="n">id_list</span><span class="p">,</span> <span class="n">hull_coords_list</span><span class="p">,</span> <span class="n">path</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;Writes object hull coordinates and corresponding object ids to txt file.</span>
+<span class="sd">    Each line corresponds to id and coordinate vector of one object: id x y z</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    id_list : np.array</span>
+<span class="sd">    hull_coords_list : np.array</span>
+<span class="sd">    path : str</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c1"># add ray-end-points to nml and to txt file (incl. normals)</span>
+    <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">hull_coords_list</span><span class="p">)):</span>
+        <span class="n">coord</span> <span class="o">=</span> <span class="n">hull_coords_list</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="s2"> </span><span class="si">%d</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">coord</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">coord</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">coord</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="k">if</span> <span class="n">id_list</span> <span class="ow">is</span> <span class="p">[]:</span>
+        <span class="k">return</span>
+    <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">[:</span><span class="o">-</span><span class="mi">4</span><span class="p">]</span><span class="o">+</span><span class="s1">&#39;_id.txt&#39;</span><span class="p">,</span> <span class="s1">&#39;wb&#39;</span><span class="p">)</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">hull_coords_list</span><span class="p">)):</span>
+        <span class="n">ix</span> <span class="o">=</span> <span class="n">id_list</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s2">&quot;</span><span class="si">%d</span><span class="se">\n</span><span class="s2">&quot;</span> <span class="o">%</span> <span class="n">ix</span><span class="p">)</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="load_from_h5py"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.load_from_h5py">[docs]</a><span class="k">def</span> <span class="nf">load_from_h5py</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">hdf5_names</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">as_dict</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Loads data from a h5py File</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    path: str</span>
+<span class="sd">    hdf5_names: list of str</span>
+<span class="sd">        if None, all keys will be loaded</span>
+<span class="sd">    as_dict: boolean</span>
+<span class="sd">        if False a list is returned</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    data: dict or np.array</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">as_dict</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="p">[]</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">f</span> <span class="o">=</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s1">&#39;r&#39;</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">hdf5_names</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="n">hdf5_names</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">hdf5_name</span> <span class="ow">in</span> <span class="n">hdf5_names</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">as_dict</span><span class="p">:</span>
+                <span class="n">data</span><span class="p">[</span><span class="n">hdf5_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">f</span><span class="p">[</span><span class="n">hdf5_name</span><span class="p">]</span><span class="o">.</span><span class="n">value</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">data</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">f</span><span class="p">[</span><span class="n">hdf5_name</span><span class="p">]</span><span class="o">.</span><span class="n">value</span><span class="p">)</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Error at Path: </span><span class="si">%s</span><span class="s2">, with labels:&quot;</span> <span class="o">%</span> <span class="n">path</span><span class="p">,</span> <span class="n">hdf5_names</span><span class="p">)</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="k">return</span> <span class="n">data</span></div>
+
+
+<div class="viewcode-block" id="save_to_h5py"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.save_to_h5py">[docs]</a><span class="k">def</span> <span class="nf">save_to_h5py</span><span class="p">(</span><span class="n">data</span><span class="p">,</span> <span class="n">path</span><span class="p">,</span> <span class="n">hdf5_names</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Saves data to h5py File</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    data: list of np.arrays</span>
+<span class="sd">    path: str</span>
+<span class="sd">    hdf5_names: list of str</span>
+<span class="sd">        has to be the same length as data</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    nothing</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="p">(</span><span class="ow">not</span> <span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">dict</span><span class="p">)</span> <span class="ow">and</span> <span class="n">hdf5_names</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;hdf5names has to be set, when data is a list&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">isfile</span><span class="p">(</span><span class="n">path</span><span class="p">):</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">path</span><span class="p">)</span>
+    <span class="n">f</span> <span class="o">=</span> <span class="n">h5py</span><span class="o">.</span><span class="n">File</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="s2">&quot;w&quot;</span><span class="p">)</span>
+    <span class="k">if</span> <span class="nb">type</span><span class="p">(</span><span class="n">data</span><span class="p">)</span> <span class="ow">is</span> <span class="nb">dict</span><span class="p">:</span>
+        <span class="k">for</span> <span class="n">key</span> <span class="ow">in</span> <span class="n">data</span><span class="o">.</span><span class="n">keys</span><span class="p">():</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="n">key</span><span class="p">],</span>
+                             <span class="n">compression</span><span class="o">=</span><span class="s2">&quot;gzip&quot;</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">hdf5_names</span><span class="p">)</span> <span class="o">!=</span> <span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">):</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+            <span class="k">raise</span> <span class="ne">Exception</span><span class="p">(</span><span class="s2">&quot;Not enough or to much hdf5-names given!&quot;</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">nb_data</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">data</span><span class="p">)):</span>
+            <span class="n">f</span><span class="o">.</span><span class="n">create_dataset</span><span class="p">(</span><span class="n">hdf5_names</span><span class="p">[</span><span class="n">nb_data</span><span class="p">],</span> <span class="n">data</span><span class="o">=</span><span class="n">data</span><span class="p">[</span><span class="n">nb_data</span><span class="p">],</span>
+                             <span class="n">compression</span><span class="o">=</span><span class="s2">&quot;gzip&quot;</span><span class="p">)</span>
+    <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span></div>
+
+
+<div class="viewcode-block" id="switch_array_entries"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.switch_array_entries">[docs]</a><span class="k">def</span> <span class="nf">switch_array_entries</span><span class="p">(</span><span class="n">this_array</span><span class="p">,</span> <span class="n">entries</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Switches to array entries</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    this_array: np.array</span>
+<span class="sd">    entries: list of int</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    this_array: np.array</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">entry_0</span> <span class="o">=</span> <span class="n">this_array</span><span class="p">[</span><span class="n">entries</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span>
+    <span class="n">this_array</span><span class="p">[</span><span class="n">entries</span><span class="p">[</span><span class="mi">0</span><span class="p">]]</span> <span class="o">=</span> <span class="n">this_array</span><span class="p">[</span><span class="n">entries</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span>
+    <span class="n">this_array</span><span class="p">[</span><span class="n">entries</span><span class="p">[</span><span class="mi">1</span><span class="p">]]</span> <span class="o">=</span> <span class="n">entry_0</span>
+    <span class="k">return</span> <span class="n">this_array</span></div>
+
+
+<div class="viewcode-block" id="cut_array_in_one_dim"><a class="viewcode-back" href="../../../syconn.utils.html#syconn.utils.datahandler.cut_array_in_one_dim">[docs]</a><span class="k">def</span> <span class="nf">cut_array_in_one_dim</span><span class="p">(</span><span class="n">array</span><span class="p">,</span> <span class="n">start</span><span class="p">,</span> <span class="n">end</span><span class="p">,</span> <span class="n">dim</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Cuts an array along a dimension</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    array: np.array</span>
+<span class="sd">    start: int</span>
+<span class="sd">    end: int</span>
+<span class="sd">    dim: int</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    array: np.array</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">start</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">start</span><span class="p">)</span>
+    <span class="n">end</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">end</span><span class="p">)</span>
+    <span class="k">if</span> <span class="n">dim</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+        <span class="n">array</span> <span class="o">=</span> <span class="n">array</span><span class="p">[</span><span class="n">start</span><span class="p">:</span> <span class="n">end</span><span class="p">,</span> <span class="p">:,</span> <span class="p">:]</span>
+    <span class="k">elif</span> <span class="n">dim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">array</span> <span class="o">=</span> <span class="n">array</span><span class="p">[:,</span> <span class="n">start</span><span class="p">:</span> <span class="n">end</span><span class="p">,</span> <span class="p">:]</span>
+    <span class="k">elif</span> <span class="n">dim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">array</span> <span class="o">=</span> <span class="n">array</span><span class="p">[:,</span> <span class="p">:,</span> <span class="n">start</span><span class="p">:</span><span class="n">end</span><span class="p">]</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">()</span>
+
+    <span class="k">return</span> <span class="n">array</span></div>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="nav-item nav-item-0"><a href="../../../index.html">SyConn a documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="../../index.html" >Module code</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2016, Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.8.
+    </div>
+  </body>
+</html>

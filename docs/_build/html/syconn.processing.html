@@ -1,0 +1,2217 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>syconn.processing &#8212; SyConn a documentation</title>
+    
+    <link rel="stylesheet" href="_static/sphinxdoc.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    './',
+        VERSION:     'a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <script type="text/javascript" src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <link rel="index" title="Index" href="genindex.html" />
+    <link rel="search" title="Search" href="search.html" />
+    <link rel="top" title="SyConn a documentation" href="index.html" />
+    <link rel="up" title="SyConn API" href="syconn.html" />
+    <link rel="next" title="syconn.multi_proc" href="syconn.multi_proc.html" />
+    <link rel="prev" title="SyConn API" href="syconn.html" /> 
+  </head>
+  <body role="document">
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="syconn.multi_proc.html" title="syconn.multi_proc"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="syconn.html" title="SyConn API"
+             accesskey="P">previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">SyConn a documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="syconn.html" accesskey="U">SyConn API</a> &#187;</li> 
+      </ul>
+    </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">syconn.processing</a><ul>
+<li><a class="reference internal" href="#module-syconn.processing.axoness">syconn.processing.axoness</a></li>
+<li><a class="reference internal" href="#module-syconn.processing.cell_types">syconn.processing.cell_types</a></li>
+<li><a class="reference internal" href="#module-syconn.processing.features">syconn.processing.features</a></li>
+<li><a class="reference internal" href="#module-syconn.processing.learning_rfc">syconn.processing.learning_rfc</a></li>
+<li><a class="reference internal" href="#module-syconn.processing.mapper">syconn.processing.mapper</a></li>
+<li><a class="reference internal" href="#module-syconn.processing.spiness">syconn.processing.spiness</a></li>
+<li><a class="reference internal" href="#module-syconn.processing.synapticity">syconn.processing.synapticity</a></li>
+<li><a class="reference internal" href="#module-syconn.processing.initialization">syconn.processing.initialization</a></li>
+<li><a class="reference internal" href="#module-syconn.processing.objectextraction">syconn.processing.objectextraction</a></li>
+<li><a class="reference internal" href="#module-syconn.processing.watershed_segmentation">syconn.processing.watershed_segmentation</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="syconn.html"
+                        title="previous chapter">SyConn API</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="syconn.multi_proc.html"
+                        title="next chapter">syconn.multi_proc</a></p>
+  <div role="note" aria-label="source link">
+    <h3>This Page</h3>
+    <ul class="this-page-menu">
+      <li><a href="_sources/syconn.processing.txt"
+            rel="nofollow">Show Source</a></li>
+    </ul>
+   </div>
+<div id="searchbox" style="display: none" role="search">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <div><input type="text" name="q" /></div>
+      <div><input type="submit" value="Go" /></div>
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body" role="main">
+            
+  <div class="section" id="syconn-processing">
+<h1>syconn.processing<a class="headerlink" href="#syconn-processing" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="module-syconn.processing.axoness">
+<span id="syconn-processing-axoness"></span><h2>syconn.processing.axoness<a class="headerlink" href="#module-syconn.processing.axoness" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="syconn.processing.axoness.calc_distance2soma">
+<code class="descclassname">syconn.processing.axoness.</code><code class="descname">calc_distance2soma</code><span class="sig-paren">(</span><em>graph</em>, <em>nodes</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/axoness.html#calc_distance2soma"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.axoness.calc_distance2soma" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates the distance to a soma node for each node and stores it
+inplace in node.data[&#8216;dist2soma&#8217;]. Building depth first search graph at
+each node for sorted node ordering.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>graph</strong> (<em>graph of SKeletonAnnotation</em>) &#8211; </li>
+<li><strong>nodes</strong> (<em>SkeletonNodes</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.axoness.predict_axoness_from_node_comments">
+<code class="descclassname">syconn.processing.axoness.</code><code class="descname">predict_axoness_from_node_comments</code><span class="sig-paren">(</span><em>anno</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/axoness.html#predict_axoness_from_node_comments"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.axoness.predict_axoness_from_node_comments" title="Permalink to this definition">¶</a></dt>
+<dd><p>Exctracts axoness prediction from node comment for given contact site
+annotation.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>anno</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation"><em>SkeletonAnnotation</em></a>) &#8211; Contact site</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">skeleton IDS, skeleton axoness</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">numpy.array, numpy.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.axoness.predict_axoness_from_nodes">
+<code class="descclassname">syconn.processing.axoness.</code><code class="descname">predict_axoness_from_nodes</code><span class="sig-paren">(</span><em>anno</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/axoness.html#predict_axoness_from_nodes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.axoness.predict_axoness_from_nodes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Exctracts axoness prediction from nodes for given contact site annotation</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>anno</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation"><em>SkeletonAnnotation</em></a>) &#8211; contact site.</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">skeleton IDS, skeleton axoness</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">numpy.array, numpy.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+<div class="section" id="module-syconn.processing.cell_types">
+<span id="syconn-processing-cell-types"></span><h2>syconn.processing.cell_types<a class="headerlink" href="#module-syconn.processing.cell_types" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="syconn.processing.cell_types.calc_neuron_feat">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">calc_neuron_feat</code><span class="sig-paren">(</span><em>path</em>, <em>wd</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#calc_neuron_feat"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.calc_neuron_feat" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate neuron features using neuron class</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> (<em>str</em>) &#8211; path to mapped annotation kzip</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">cell type features, skeleton ID</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">numpy.array, numpy.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.calc_neuron_feat_star">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">calc_neuron_feat_star</code><span class="sig-paren">(</span><em>params</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#calc_neuron_feat_star"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.calc_neuron_feat_star" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.draw_feat_hist">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">draw_feat_hist</code><span class="sig-paren">(</span><em>wd</em>, <em>k=15</em>, <em>classes=(0</em>, <em>1</em>, <em>2</em>, <em>3)</em>, <em>nb_bars=20</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#draw_feat_hist"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.draw_feat_hist" title="Permalink to this definition">¶</a></dt>
+<dd><p>Draws the histgoram(s) of the most k important feature(s)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>wd</strong> (<em>str</em>) &#8211; Path to working directory</li>
+<li><strong>k</strong> (<em>int</em>) &#8211; Number of features to be plotted</li>
+<li><strong>classes</strong> (<em>tuple</em>) &#8211; Class labels to evaluate</li>
+<li><strong>nb_bars</strong> (<em>int</em>) &#8211; Number of bars in histogram</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.find_cell_types_from_dict">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">find_cell_types_from_dict</code><span class="sig-paren">(</span><em>wd</em>, <em>cell_type</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#find_cell_types_from_dict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.find_cell_types_from_dict" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>wd</strong> (<em>str</em>) &#8211; Path to working directory</li>
+<li><strong>cell_type</strong> (<em>int</em>) &#8211; label (0 = EA, 1 = MSN, 2 = GP, 3 = INT)</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">paths of cells of type cell_type.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list of str</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.get_cell_type_classes_dict">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">get_cell_type_classes_dict</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#get_cell_type_classes_dict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.get_cell_type_classes_dict" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">dictionary from integer label to full cell name as string</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.get_cell_type_labels">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">get_cell_type_labels</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#get_cell_type_labels"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.get_cell_type_labels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Cell type labels for HVC(0), LMAN(0), STN(0), MSN(1), GP(2), FS(3)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">convetion dictionary for cell type labels (str), returns integer</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">dict</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.get_id_dict_from_skel_ids">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">get_id_dict_from_skel_ids</code><span class="sig-paren">(</span><em>skel_ids</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#get_id_dict_from_skel_ids"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.get_id_dict_from_skel_ids" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calc dictionary to get new label (from 0 to len(skel_paths) from
+skeleton ID.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>skel_ids</strong> (<em>list of int</em>) &#8211; </td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">Dictionary to get new ID with old ID, dictionary to get old ID
+with new ID</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">dict, dict</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.load_cell_gt">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">load_cell_gt</code><span class="sig-paren">(</span><em>skel_ids</em>, <em>wd</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#load_cell_gt"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.load_cell_gt" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load cell types of skel ids
+:param skel_ids:
+:type skel_ids: list of int
+:param wd:
+:type wd: str</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">cell type labels</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">np.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.load_celltype_feats">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">load_celltype_feats</code><span class="sig-paren">(</span><em>wd</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#load_celltype_feats"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.load_celltype_feats" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads cell type feature and corresponding ids from dictionaries</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>wd</strong> (<em>str</em>) &#8211; Path to working directory</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">cell type features</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">np.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.load_celltype_gt">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">load_celltype_gt</code><span class="sig-paren">(</span><em>wd</em>, <em>load_data=True</em>, <em>return_ids=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#load_celltype_gt"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.load_celltype_gt" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load ground truth of cell types</p>
+<p>(HVC, LMAN, STN) =&gt; excitatory axons (0)
+(MSN) =&gt; medium spiny neuron (1)
+(GP) =&gt; pallidal-like neurons (2)
+(FS) =&gt; inhibitory interneuron (3)</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>wd</strong> (<em>str</em>) &#8211; Path to working directory</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">cell type features, cell type labels</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">numpy.array, numpy.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.load_celltype_preds">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">load_celltype_preds</code><span class="sig-paren">(</span><em>wd</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#load_celltype_preds"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.load_celltype_preds" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads cell type predictions and corresponding ids from dictionaries</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>wd</strong> (<em>str</em>) &#8211; Path to working directory</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">cell ids, cell labels</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">np.array, np.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.load_celltype_probas">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">load_celltype_probas</code><span class="sig-paren">(</span><em>wd</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#load_celltype_probas"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.load_celltype_probas" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads cell type probabilities and corresponding ids from dictionaries</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>wd</strong> (<em>str</em>) &#8211; Path to working directory</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">cell ids, cell label probabilities</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">np.array, np.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.predict_celltype_label">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">predict_celltype_label</code><span class="sig-paren">(</span><em>wd</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#predict_celltype_label"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.predict_celltype_label" title="Permalink to this definition">¶</a></dt>
+<dd><p>Predict celltyoe labels in working directory with pre-trained classifier
+in subfolder models/rf_celltypes/rf.pkl</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>wd</strong> (<em>str</em>) &#8211; path to working directory</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.save_cell_type_clf">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">save_cell_type_clf</code><span class="sig-paren">(</span><em>gt_path</em>, <em>clf_used='rf'</em>, <em>load_data=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#save_cell_type_clf"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.save_cell_type_clf" title="Permalink to this definition">¶</a></dt>
+<dd><p>Save axoness clf specified by clf_used to gt_directory.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>gt_path</strong> (<em>str</em>) &#8211; path to cell type gt</li>
+<li><strong>clf_used</strong> (<em>str</em>) &#8211; </li>
+<li><strong>load_data</strong> (<em>bool</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.save_cell_type_feats">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">save_cell_type_feats</code><span class="sig-paren">(</span><em>wd</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#save_cell_type_feats"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.save_cell_type_feats" title="Permalink to this definition">¶</a></dt>
+<dd><p>Saves cell type feature for type prediction</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>wd</strong> (<em>str</em>) &#8211; Path to working directory</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.cell_types.write_feats_importance">
+<code class="descclassname">syconn.processing.cell_types.</code><code class="descname">write_feats_importance</code><span class="sig-paren">(</span><em>wd</em>, <em>load_data=True</em>, <em>clf_used='rf'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/cell_types.html#write_feats_importance"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.cell_types.write_feats_importance" title="Permalink to this definition">¶</a></dt>
+<dd><p>Writes out feature importances and feature names to gt_dir</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>wd</strong> (<em>str</em>) &#8211; </li>
+<li><strong>load_data</strong> (<em>bool</em>) &#8211; </li>
+<li><strong>clf_used</strong> (<em>str</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+<div class="section" id="module-syconn.processing.features">
+<span id="syconn-processing-features"></span><h2>syconn.processing.features<a class="headerlink" href="#module-syconn.processing.features" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="syconn.processing.features.assign_property2node">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">assign_property2node</code><span class="sig-paren">(</span><em>node</em>, <em>pred</em>, <em>property</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#assign_property2node"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.assign_property2node" title="Permalink to this definition">¶</a></dt>
+<dd><p>Assign prediction of property to node</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>node</strong> (<em>NewSkeletonNode</em>) &#8211; </li>
+<li><strong>pred</strong> (<em>prediction appropriate to property</em>) &#8211; </li>
+<li><strong>property</strong> (<em>property to change</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.calc_prop_feat_dict">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">calc_prop_feat_dict</code><span class="sig-paren">(</span><em>source</em>, <em>dist=6000</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#calc_prop_feat_dict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.calc_prop_feat_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates property feature</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>source</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation"><em>SkeletonAnnotation</em></a>) &#8211; </li>
+<li><strong>dist</strong> (<em>int</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"><ul class="simple">
+<li><em>dict, list of str, bool</em></li>
+<li><em>Dictionary of property features, list of feature names, bool if spiness</em></li>
+<li><em>feature are given</em></li>
+</ul>
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.celltype_axoness_feature">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">celltype_axoness_feature</code><span class="sig-paren">(</span><em>anno</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#celltype_axoness_feature"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.celltype_axoness_feature" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates axones feature of mapped sekeleton for cell type prediction.
+These include proportion of axon, dendrite and soma pathlengths and maximum
+degree of soma nodes.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">axoness features</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">np.array (n x 4)</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.get_obj_density">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">get_obj_density</code><span class="sig-paren">(</span><em>source</em>, <em>property='axoness_pred'</em>, <em>value=1</em>, <em>obj='mito'</em>, <em>return_abs_density=True</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#get_obj_density"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.get_obj_density" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate pathlength of nodes using edges</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>anno</strong> (<em>list of SkeletonAnnotation</em>) &#8211; </li>
+<li><strong>property</strong> (<em>str</em>) &#8211; e.g. &#8216;axoness_pred&#8217;</li>
+<li><strong>value</strong> (<em>int</em>) &#8211; value of property to check</li>
+<li><strong>obj</strong> (<em>str</em>) &#8211; mito/vc/sj</li>
+<li><strong>return_abs_density</strong> (<em>bool</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"></p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">return: length in um</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.majority_vote">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">majority_vote</code><span class="sig-paren">(</span><em>anno</em>, <em>property='axoness'</em>, <em>max_dist=6000</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#majority_vote"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.majority_vote" title="Permalink to this definition">¶</a></dt>
+<dd><p>Smoothes (average using sliding window of 2 times max_dist and majority
+vote) property prediction in annotation, whereas for axoness somata are
+untouched.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>anno</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation"><em>SkeletonAnnotation</em></a>) &#8211; </li>
+<li><strong>property</strong> (<em>str</em>) &#8211; which property to average</li>
+<li><strong>max_dist</strong> (<em>int</em>) &#8211; maximum distance (in nm) for sliding window used in majority voting</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.morphology_feature">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">morphology_feature</code><span class="sig-paren">(</span><em>source</em>, <em>max_nn_dist=6000</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#morphology_feature"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.morphology_feature" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates features for discrimination tasks of neurite identities, such as
+axon vs. dendrite or cell types classification. Estimated on interpolated
+skeleton nodes. Features are calculated with a sliding window approach for
+each node. Window is 2*max_nn_dist (nm).</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>source</strong> (<em>str</em>) &#8211; Path to anno or MappedSkeletonObject</li>
+<li><strong>max_nn_dist</strong> (<em>float</em>) &#8211; Radius in which neighboring nodes are found and
+used for calculating features in nm.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">two arrays of features for each node. number of nodes x 28 (22 radius
+feature and 6 object features), bool if spiness feature are given</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">numpy.array, numpary.array, list of int, bool</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.node_branch_end_distance">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">node_branch_end_distance</code><span class="sig-paren">(</span><em>nml</em>, <em>dist</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#node_branch_end_distance"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.node_branch_end_distance" title="Permalink to this definition">¶</a></dt>
+<dd><p>Set distances to next branch resp. end point for each node (distance is
+capped by given parameter dist) in .data dictionary of each node
+and returns values with node ids</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>nml</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation"><em>SkeletonAnnotation</em></a>) &#8211; </li>
+<li><strong>dist</strong> (<em>int</em>) &#8211; maximum distance value to occur</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">distances to nearest end/branch point, node ids</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">np.array, np.array</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.nodes_in_pathlength">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">nodes_in_pathlength</code><span class="sig-paren">(</span><em>anno</em>, <em>max_path_len</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#nodes_in_pathlength"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.nodes_in_pathlength" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find nodes reachable in max_path_len from source node, calculated for
+every node in anno.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>anno</strong> (<em>AnnotationObject</em>) &#8211; </li>
+<li><strong>max_path_len</strong> (<em>float</em>) &#8211; Maximum distance from source node</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"><ul class="simple">
+<li><em>list of lists containing reachable nodes in max_path_len where</em></li>
+<li><em>outer list has length len(anno.getNodes())</em></li>
+</ul>
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.objfeat2skelnode">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">objfeat2skelnode</code><span class="sig-paren">(</span><em>node_coords</em>, <em>node_radii</em>, <em>node_ids</em>, <em>nearby_node_list</em>, <em>obj_dict</em>, <em>scaling</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#objfeat2skelnode"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.objfeat2skelnode" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate features of UltrastructuralDatasetObjects along Skeleton</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>node_coords</strong> (<em>np.array</em>) &#8211; </li>
+<li><strong>node_radii</strong> (<em>np.array</em>) &#8211; </li>
+<li><strong>node_ids</strong> (<em>np.array</em>) &#8211; </li>
+<li><strong>nearby_node_list</strong> (<em>list of list of SkeletonNodes</em>) &#8211; </li>
+<li><strong>obj_dict</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.segmentationdataset.UltrastructuralDataset" title="syconn.utils.segmentationdataset.UltrastructuralDataset"><em>UltrastructuralDataset</em></a>) &#8211; </li>
+<li><strong>scaling</strong> (<em>tuple</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">The two features are absolute number of assigned objects and
+mean voxel size of the objects</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">np.array (dimension nb_skelnodes x 2)</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.pathlength_of_property">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">pathlength_of_property</code><span class="sig-paren">(</span><em>anno</em>, <em>property</em>, <em>value</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#pathlength_of_property"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.pathlength_of_property" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate pathlength of nodes with certain property value</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>anno</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation"><em>SkeletonAnnotation</em></a>) &#8211; mapped cell tracing</li>
+<li><strong>property</strong> (<em>str</em>) &#8211; spiness / axoness</li>
+<li><strong>value</strong> (<em>int</em>) &#8211; classification result, e.g. 0, 1, 2</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">length (in um)</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">int</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.propertyfeat2skelnode">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">propertyfeat2skelnode</code><span class="sig-paren">(</span><em>node_list</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#propertyfeat2skelnode"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.propertyfeat2skelnode" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate nodewise radius feature</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>node_list</strong> (<em>list</em>) &#8211; grouped nodes</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">number of nodes times 22 features, containing mean radius,
+sigma of radii, 20 hist features</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">np.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.radfeat2skelnode">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">radfeat2skelnode</code><span class="sig-paren">(</span><em>nearby_node_list</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#radfeat2skelnode"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.radfeat2skelnode" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate nodewise radius feature</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>nearby_node_list</strong> (<em>list of list of SkeletonNodes</em>) &#8211; grouped tracing nodes</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">array of number of nodes times 22 features, containing mean radius,
+sigma of radii, 20 hist features, spinehead features and whether
+spiness features are returned</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">np.array, np.array, bool</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.radius_feats_from_nodes">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">radius_feats_from_nodes</code><span class="sig-paren">(</span><em>nodes</em>, <em>nb_bins=10</em>, <em>max_rad=5000</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#radius_feats_from_nodes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.radius_feats_from_nodes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates mean, std and histogram features</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>nodes</strong> (<em>list of SkeletonNodes</em>) &#8211; </li>
+<li><strong>nb_bins</strong> (<em>int</em>) &#8211; Number of bins for histogram features</li>
+<li><strong>max_rad</strong> (<em>int</em>) &#8211; maximum radius to plot on histogram x-axis</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">radius features with dim. nb_bins+2</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">np.array</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.sj_per_spinehead">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">sj_per_spinehead</code><span class="sig-paren">(</span><em>anno</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#sj_per_spinehead"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.sj_per_spinehead" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculate number of sj per spinehead. Iterate over all mapped sj objects and
+find nearest skeleton node. If skeleton node has spiness prediction == 1
+(spinehead) then increment counter of this node by one.
+After the loop sum over all counter and divide by the number of nodes which
+have at least one sj assigned.</p>
+<p>:param :
+:type : param anno: SkeletonAnnotation</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Average number of sj per spinehead (assumes there is no spinehead
+without sj)</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">float</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.spiness_feats_from_nodes">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">spiness_feats_from_nodes</code><span class="sig-paren">(</span><em>nodes</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#spiness_feats_from_nodes"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.spiness_feats_from_nodes" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates spiness feats including abs. number of spineheads, mean and
+standard deviation (std) of spinehead size, mean spinehead probability and
+mean and std of spineneck lengths.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>nodes</strong> (<em>list of SkeletonNodes</em>) &#8211; </td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">spiness features, dim. of 6</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">np.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.update_property_feat_kzip">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">update_property_feat_kzip</code><span class="sig-paren">(</span><em>path2kzip</em>, <em>dist=6000</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#update_property_feat_kzip"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.update_property_feat_kzip" title="Permalink to this definition">¶</a></dt>
+<dd><p>Recompute axoness feature of skeleton at path2kzip and writes it to
+.k.zip</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>path2kzip</strong> (<em>str</em>) &#8211; Path to mapped skeleton</li>
+<li><strong>dist</strong> (<em>int</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.features.update_property_feat_kzip_star">
+<code class="descclassname">syconn.processing.features.</code><code class="descname">update_property_feat_kzip_star</code><span class="sig-paren">(</span><em>args</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/features.html#update_property_feat_kzip_star"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.features.update_property_feat_kzip_star" title="Permalink to this definition">¶</a></dt>
+<dd><p>Helper function for update_property_feat_kzip</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-syconn.processing.learning_rfc">
+<span id="syconn-processing-learning-rfc"></span><h2>syconn.processing.learning_rfc<a class="headerlink" href="#module-syconn.processing.learning_rfc" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="syconn.processing.learning_rfc.cell_classification">
+<code class="descclassname">syconn.processing.learning_rfc.</code><code class="descname">cell_classification</code><span class="sig-paren">(</span><em>node_pred</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/learning_rfc.html#cell_classification"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.learning_rfc.cell_classification" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform majority vote</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>node_pred</strong> (<em>np.array of int</em>) &#8211; arbitrary array of integer</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">maximum occurring integer in array</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">int</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.learning_rfc.feature_importance">
+<code class="descclassname">syconn.processing.learning_rfc.</code><code class="descname">feature_importance</code><span class="sig-paren">(</span><em>rf</em>, <em>save_path=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/learning_rfc.html#feature_importance"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.learning_rfc.feature_importance" title="Permalink to this definition">¶</a></dt>
+<dd><p>Plots feature importance of sklearn RandomForest</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>rf</strong> (<em>RandomForestClassifier</em>) &#8211; </li>
+<li><strong>save_path</strong> (<em>str</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.learning_rfc.fscore">
+<code class="descclassname">syconn.processing.learning_rfc.</code><code class="descname">fscore</code><span class="sig-paren">(</span><em>rec</em>, <em>prec</em>, <em>beta=1.0</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/learning_rfc.html#fscore"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.learning_rfc.fscore" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates f-score with beta value</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>rec</strong> (<em>np.array</em>) &#8211; recall</li>
+<li><strong>prec</strong> (<em>np.array</em>) &#8211; precision</li>
+<li><strong>beta</strong> (<em>float</em>) &#8211; weighting of precision</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">f-score</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">np.array</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.learning_rfc.init_clf">
+<code class="descclassname">syconn.processing.learning_rfc.</code><code class="descname">init_clf</code><span class="sig-paren">(</span><em>clf_used</em>, <em>params=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/learning_rfc.html#init_clf"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.learning_rfc.init_clf" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.learning_rfc.load_csv2feat">
+<code class="descclassname">syconn.processing.learning_rfc.</code><code class="descname">load_csv2feat</code><span class="sig-paren">(</span><em>fpath</em>, <em>prop='axoness'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/learning_rfc.html#load_csv2feat"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.learning_rfc.load_csv2feat" title="Permalink to this definition">¶</a></dt>
+<dd><p>Load csvfile from kzip and return numpy array and list of header names.
+List line is supposed to be the probability prediction.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>fpath</strong> (<em>str</em>) &#8211; Source file path</li>
+<li><strong>prop</strong> (<em>str</em>) &#8211; property which should be loaded</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">features, feature names</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">np.array, list of str</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.learning_rfc.load_rfcs">
+<code class="descclassname">syconn.processing.learning_rfc.</code><code class="descname">load_rfcs</code><span class="sig-paren">(</span><em>rf_axoness_p</em>, <em>rf_spiness_p</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/learning_rfc.html#load_rfcs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.learning_rfc.load_rfcs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Loads pickeled Random Forest Classifier for axoness and spiness. If path is
+not valid returns None</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>rf_axoness_p</strong> (<em>str</em>) &#8211; Path to pickeled axonnes rf directory</li>
+<li><strong>rf_spiness_p</strong> (<em>str</em>) &#8211; Path to pickeled spiness rf directory</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"></p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">RFC axoness, spiness or None</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.learning_rfc.loo_proba">
+<code class="descclassname">syconn.processing.learning_rfc.</code><code class="descname">loo_proba</code><span class="sig-paren">(</span><em>x</em>, <em>y</em>, <em>clf_used='rf'</em>, <em>use_pca=False</em>, <em>params=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/learning_rfc.html#loo_proba"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.learning_rfc.loo_proba" title="Permalink to this definition">¶</a></dt>
+<dd><p>Perform leave-one-out</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>x</strong> (<em>np.array</em>) &#8211; features</li>
+<li><strong>y</strong> (<em>np.array</em>) &#8211; labels</li>
+<li><strong>clf_used</strong> (<em>str</em>) &#8211; classifier</li>
+<li><strong>use_pca</strong> (<em>bool</em>) &#8211; perform principal component analysis on features x in advance</li>
+<li><strong>params</strong> (<em>dict</em>) &#8211; parameter for classifier</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">class probability, hard classification</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">np.array, np.array</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.learning_rfc.novel_multiclass_prediction">
+<code class="descclassname">syconn.processing.learning_rfc.</code><code class="descname">novel_multiclass_prediction</code><span class="sig-paren">(</span><em>f_scores</em>, <em>thresholds</em>, <em>probs</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/learning_rfc.html#novel_multiclass_prediction"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.learning_rfc.novel_multiclass_prediction" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.learning_rfc.plot_corr">
+<code class="descclassname">syconn.processing.learning_rfc.</code><code class="descname">plot_corr</code><span class="sig-paren">(</span><em>x, y, title='', xr=[-1, -1], yr=[-1, -1], save_path=None, nbins=5, xlabel='Size x', ylabel='Size y'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/learning_rfc.html#plot_corr"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.learning_rfc.plot_corr" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.learning_rfc.plot_pr">
+<code class="descclassname">syconn.processing.learning_rfc.</code><code class="descname">plot_pr</code><span class="sig-paren">(</span><em>precision, recall, title='', r=[0.67, 1.01], legend_labels=None, save_path=None, nbins=5, colorVals=None, xlabel='Recall', ylabel='Precision', l_pos='lower left', legend=True, r_x=[0.67, 1.01], ls=22</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/learning_rfc.html#plot_pr"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.learning_rfc.plot_pr" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.learning_rfc.save_train_clf">
+<code class="descclassname">syconn.processing.learning_rfc.</code><code class="descname">save_train_clf</code><span class="sig-paren">(</span><em>X</em>, <em>y</em>, <em>clf_used</em>, <em>dir_path</em>, <em>use_pca=False</em>, <em>params=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/learning_rfc.html#save_train_clf"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.learning_rfc.save_train_clf" title="Permalink to this definition">¶</a></dt>
+<dd><p>Train classifier specified by clf_used to dir_path. Train with features X
+and labels y</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>X</strong> (<em>np.array</em>) &#8211; features</li>
+<li><strong>y</strong> (<em>np.array</em>) &#8211; labels</li>
+<li><strong>clf_used</strong> (<em>str</em>) &#8211; &#8216;rf&#8217; or &#8216;svm&#8217; for RandomForest or SupportVectorMachine, respectively</li>
+<li><strong>dir_path</strong> (<em>str</em>) &#8211; directory where to save pkl files of clf</li>
+<li><strong>use_pca</strong> (<em>bool</em>) &#8211; flag if pca should be performed</li>
+<li><strong>params</strong> (<em>dict</em>) &#8211; parameters for classifier</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.learning_rfc.write_feat2csv">
+<code class="descclassname">syconn.processing.learning_rfc.</code><code class="descname">write_feat2csv</code><span class="sig-paren">(</span><em>fpath</em>, <em>feat_arr</em>, <em>feat_names=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/learning_rfc.html#write_feat2csv"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.learning_rfc.write_feat2csv" title="Permalink to this definition">¶</a></dt>
+<dd><p>Writes array with column names to csv file</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>fpath</strong> (<em>str</em>) &#8211; Path to file</li>
+<li><strong>feat_arr</strong> (<em>np.array</em>) &#8211; feature array</li>
+<li><strong>feat_names</strong> (<em>list of str</em>) &#8211; feature names</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+<div class="section" id="module-syconn.processing.mapper">
+<span id="syconn-processing-mapper"></span><h2>syconn.processing.mapper<a class="headerlink" href="#module-syconn.processing.mapper" title="Permalink to this headline">¶</a></h2>
+<dl class="class">
+<dt id="syconn.processing.mapper.SkeletonMapper">
+<em class="property">class </em><code class="descclassname">syconn.processing.mapper.</code><code class="descname">SkeletonMapper</code><span class="sig-paren">(</span><em>source</em>, <em>dh</em>, <em>ix=None</em>, <em>soma=None</em>, <em>context_range=6000</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#SkeletonMapper"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper" title="Permalink to this definition">¶</a></dt>
+<dd><p>Bases: <code class="xref py py-class docutils literal"><span class="pre">object</span></code></p>
+<p>Class to handle mapping of cell objects (mitochondria, vesicle clouds,
+synaptic clefts) to tracings. Mapping parameters are saved as attributes.</p>
+<dl class="attribute">
+<dt id="syconn.processing.mapper.SkeletonMapper.soma">
+<code class="descname">soma</code><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.soma" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>SkeletonAnnotation</em> &#8211; Soma tracing</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="syconn.processing.mapper.SkeletonMapper.old_anno">
+<code class="descname">old_anno</code><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.old_anno" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>SkeletonAnnotation</em> &#8211; original tracing where estimated cell radius is saved at each node</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="syconn.processing.mapper.SkeletonMapper.anno">
+<code class="descname">anno</code><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.anno" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>SkeletonAnnotation</em> &#8211; interpolated tracing skeleton for hull calculation</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt>
+<code class="descname">mitos/vc/sj</code></dt>
+<dd><p><em>segmentationDataset</em> &#8211; Dictionaries in which mapped cell objects are saved</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="syconn.processing.mapper.SkeletonMapper.ix">
+<code class="descname">ix</code><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.ix" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>int</em> &#8211; mapped skeleton id</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="syconn.processing.mapper.SkeletonMapper.write_obj_voxel">
+<code class="descname">write_obj_voxel</code><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.write_obj_voxel" title="Permalink to this definition">¶</a></dt>
+<dd><p><em>bool</em> &#8211; write object voxel to kzip as binary file</p>
+</dd></dl>
+
+<dl class="method">
+<dt id="syconn.processing.mapper.SkeletonMapper.annotate_object">
+<code class="descname">annotate_object</code><span class="sig-paren">(</span><em>objects</em>, <em>radius</em>, <em>method</em>, <em>objtype</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#SkeletonMapper.annotate_object"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.annotate_object" title="Permalink to this definition">¶</a></dt>
+<dd><p>Redirects mapping task to desired method-function</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>objects</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.segmentationdataset.UltrastructuralDataset" title="syconn.utils.segmentationdataset.UltrastructuralDataset"><em>UltrastructuralDataset</em></a>) &#8211; </li>
+<li><strong>radius</strong> (<em>int</em>) &#8211; Radius of kd-tree in units of nm.</li>
+<li><strong>method</strong> (<em>str</em>) &#8211; either &#8216;hull&#8217;, &#8216;kd&#8217; or &#8216;supervoxel&#8217;</li>
+<li><strong>objtype</strong> (<em>string</em>) &#8211; characterising object type</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">mapped object ID&#8217;s</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="syconn.processing.mapper.SkeletonMapper.annotate_objects">
+<code class="descname">annotate_objects</code><span class="sig-paren">(</span><em>dh</em>, <em>radius=1200</em>, <em>method='hull'</em>, <em>thresh=2.2</em>, <em>filter_size=(0</em>, <em>0</em>, <em>0)</em>, <em>nb_neighbors=20</em>, <em>nb_hull_vox=500</em>, <em>neighbor_radius=220</em>, <em>detect_outlier=True</em>, <em>nb_rays=20</em>, <em>nb_voting_neighbors=100</em>, <em>max_dist_mult=1.4</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#SkeletonMapper.annotate_objects"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.annotate_objects" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates self.object with annotated objects as UltrastructuralDataset,
+where object is in {mitos, vc, sj}</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>dh</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.datahandler.DataHandler" title="syconn.utils.datahandler.DataHandler"><em>DataHandler</em></a>) &#8211; object containing SegmentationDataObjects mitos, vc, sj</li>
+<li><strong>radius</strong> (<em>int</em>) &#8211; Radius in nm. Single integer if integer radius is for all
+objects the same. If list of three integer stick to ordering
+[mitos, vc, sj].</li>
+<li><strong>method</strong> (<em>str</em>) &#8211; Either &#8216;kd&#8217; for fix radius or &#8216;hull&#8217;/&#8217;supervoxel&#8217; if
+membrane is available.</li>
+<li><strong>thresh</strong> (<em>float</em>) &#8211; Denotes the factor which is multiplied with the maximum
+membrane probability. The resulting value is used as threshold after
+which the membrane is assumed to be existant.</li>
+<li><strong>filter_size</strong> (<em>int</em>) &#8211; List of integer for each object [mitos, vc, sj]</li>
+<li><strong>nb_neighbors</strong> (<em>int</em>) &#8211; minimum number of neighbors needed during
+outlier detection for a single hull point to survive.</li>
+<li><strong>nb_hull_vox</strong> (<em>int</em>) &#8211; Number of object hull voxels which are used to
+estimate spatial proximity to skeleton (inside or outside).</li>
+<li><strong>neighbor_radius</strong> (<em>int</em>) &#8211; Radius (nm) of ball in which to look for supporting
+hull voxels. Used during outlier detection.</li>
+<li><strong>detect_outlier</strong> (<em>bool</em>) &#8211; use outlier-detection if True.</li>
+<li><strong>nb_rays</strong> (<em>int</em>) &#8211; Number of rays send at each skeleton node
+(multiplied by a factor of 5). Defines the angle between two rays
+(=360 / nb_rays) in the orthogonal plane.</li>
+<li><strong>nb_voting_neighbors</strong> (<em>int</em>) &#8211; Number votes of skeleton hull voxels (membrane
+representation) for object-mapping. Used for vc and mitos during
+geometrical position estimation of object nodes.</li>
+<li><strong>max_dist_mult</strong> (<em>float</em>) &#8211; Multiplier for radius to estimate maximal distance of hull points
+to source node.</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="syconn.processing.mapper.SkeletonMapper.calc_myelinisation">
+<code class="descname">calc_myelinisation</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#SkeletonMapper.calc_myelinisation"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.calc_myelinisation" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates myelinisation at each node and writes it to
+node.data[&#8220;myelin_pred&#8221;]</p>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="syconn.processing.mapper.SkeletonMapper.cset">
+<code class="descname">cset</code><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.cset" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="syconn.processing.mapper.SkeletonMapper.get_plot_obj">
+<code class="descname">get_plot_obj</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#SkeletonMapper.get_plot_obj"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.get_plot_obj" title="Permalink to this definition">¶</a></dt>
+<dd><p>Extracts coordinates from annotated SegmentationObjects</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">object-voxels for each object</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">np.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="syconn.processing.mapper.SkeletonMapper.hull_coords">
+<code class="descname">hull_coords</code><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.hull_coords" title="Permalink to this definition">¶</a></dt>
+<dd><p>Scaled hull coordinates of skeleton membrane</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Coordinate each hull point</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">np.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="syconn.processing.mapper.SkeletonMapper.hull_normals">
+<code class="descname">hull_normals</code><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.hull_normals" title="Permalink to this definition">¶</a></dt>
+<dd><p>Normal for each hull point pointing outwards</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">Normal vector of each hull point pointing outwards</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">np.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="syconn.processing.mapper.SkeletonMapper.hull_sampling">
+<code class="descname">hull_sampling</code><span class="sig-paren">(</span><em>thresh=2.2</em>, <em>nb_rays=20</em>, <em>nb_neighbors=20</em>, <em>neighbor_radius=220</em>, <em>detect_outlier=True</em>, <em>max_dist_mult=1.4</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#SkeletonMapper.hull_sampling"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.hull_sampling" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates hull of tracing</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>thresh</strong> (<em>float</em>) &#8211; factor of maximum occurring prediction value
+after which membrane is triggered active.</li>
+<li><strong>nb_rays</strong> (<em>int</em>) &#8211; Number of rays send at each skeleton node
+(multiplied by a factor of 5). Defines the angle between two rays
+(=360 / nb_rays) in the orthogonal plane.</li>
+<li><strong>nb_neighbors</strong> (<em>int</em>) &#8211; minimum number of neighbors needed during
+outlier detection for a single hull point to survive.</li>
+<li><strong>neighbor_radius</strong> (<em>int</em>) &#8211; Radius of ball in which to look for supporting
+hull voxels. Used during outlier detection.</li>
+<li><strong>detect_outlier</strong> (<em>bool</em>) &#8211; use outlier-detection if True.</li>
+<li><strong>max_dist_mult</strong> (<em>float</em>) &#8211; Multiplier for radius to generate maximal distance of hull points
+to source node.</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">Average radius per node in (9,9,20) corrected units estimated by
+rays propagated through Membrane prediction until threshold reached.</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">numpy.array</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="syconn.processing.mapper.SkeletonMapper.merge_soma_tracing">
+<code class="descname">merge_soma_tracing</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#SkeletonMapper.merge_soma_tracing"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.merge_soma_tracing" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="method">
+<dt id="syconn.processing.mapper.SkeletonMapper.predict_property">
+<code class="descname">predict_property</code><span class="sig-paren">(</span><em>rf</em>, <em>prop</em>, <em>max_neck2endpoint_dist=3000</em>, <em>max_head2endpoint_dist=600</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#SkeletonMapper.predict_property"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.predict_property" title="Permalink to this definition">¶</a></dt>
+<dd><p>Predict property (axoness, spiness) of tracings</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>rf</strong> (<em>RandomForestClassifier</em>) &#8211; </li>
+<li><strong>prop</strong> (<em>str</em>) &#8211; property name</li>
+<li><strong>max_neck2endpoint_dist</strong> (<em>int</em>) &#8211; </li>
+<li><strong>max_head2endpoint_dist</strong> (<em>int</em>) &#8211; </li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="syconn.processing.mapper.SkeletonMapper.property_features">
+<code class="descname">property_features</code><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.property_features" title="Permalink to this definition">¶</a></dt>
+<dd><p>Getter of property features, calculates axoness/spiness features
+if necessary</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">property features, if spiness feature are given</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">np.array, bool</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="attribute">
+<dt id="syconn.processing.mapper.SkeletonMapper.skel_radius">
+<code class="descname">skel_radius</code><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.skel_radius" title="Permalink to this definition">¶</a></dt>
+<dd><p>Radius of membrane at each skeleton node</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">cell radius at self.nodes</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">np.array</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="syconn.processing.mapper.SkeletonMapper.write2kzip">
+<code class="descname">write2kzip</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#SkeletonMapper.write2kzip"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.write2kzip" title="Permalink to this definition">¶</a></dt>
+<dd><p>Writes interpolated skeleton (and annotated objects) to nml at path.
+If self.write_obj_voxel flag is True a .txt file containing all object
+voxel with id is written in k.zip</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> (<em>str</em>) &#8211; Path to kzip destination</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="method">
+<dt id="syconn.processing.mapper.SkeletonMapper.write2pkl">
+<code class="descname">write2pkl</code><span class="sig-paren">(</span><em>path</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#SkeletonMapper.write2pkl"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.SkeletonMapper.write2pkl" title="Permalink to this definition">¶</a></dt>
+<dd><p>Writes MappedSkeleton object to .pkl file. Path is extracted from
+dh._datapath and MappedSkeleton ID.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>path</strong> (<em>str</em>) &#8211; Path to kzip destination</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.calc_syn_dict">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">calc_syn_dict</code><span class="sig-paren">(</span><em>features</em>, <em>axoness_info</em>, <em>get_all=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#calc_syn_dict"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.calc_syn_dict" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates dictionary of synapses. Keys are ids of pre cells and values are
+dictionaries of corresponding synapses with post cell ids.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>features</strong> (<em>np.array</em>) &#8211; synapse feature</li>
+<li><strong>axoness_info</strong> (<em>np.array</em>) &#8211; string containing axoness information of cells</li>
+<li><strong>get_all</strong> (<em>bool</em>) &#8211; collect all contact sites</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">synapse features, axoness information, connectivity,           post synaptic cell ids, synapse predictions, axoness</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">np.array, np.array, dict, np.array, np.array, dict</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.cs_btw_annos">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">cs_btw_annos</code><span class="sig-paren">(</span><em>anno_a</em>, <em>anno_b</em>, <em>max_hull_dist</em>, <em>concom_dist</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#cs_btw_annos"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.cs_btw_annos" title="Permalink to this definition">¶</a></dt>
+<dd><p>Computes contact sites between two annotation objects and returns hull
+points of both skeletons near contact site.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>anno_a</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation"><em>SkeletonAnnotation</em></a>) &#8211; Annotation object A</li>
+<li><strong>anno_b</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation"><em>SkeletonAnnotation</em></a>) &#8211; Annotation object B</li>
+<li><strong>max_hull_dist</strong> (<em>int</em>) &#8211; Maximum distance between skeletons in nm</li>
+<li><strong>concom_dist</strong> (<em>int</em>) &#8211; maximum distance of connected components (nm)</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">List of hull coordinates for each contact site</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.feature_valid_syns">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">feature_valid_syns</code><span class="sig-paren">(</span><em>cs_dir</em>, <em>only_sj=True</em>, <em>only_syn=True</em>, <em>all_contacts=False</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#feature_valid_syns"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.feature_valid_syns" title="Permalink to this definition">¶</a></dt>
+<dd><p>Returns the features of valid synapses predicted by synapse rfc</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>cs_dir</strong> (<em>str</em>) &#8211; Path to computed contact sites.</li>
+<li><strong>only_sj</strong> (<em>bool</em>) &#8211; Return feature of all contact sites with mapped sj.</li>
+<li><strong>only_syn</strong> (<em>bool</em>) &#8211; Returns feature only if synapse was predicted</li>
+<li><strong>all_contacts</strong> (<em>bool</em>) &#8211; Use all contact sites for feature extraction</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">features, array of contact site IDS, boolean array of synapse prediction</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">np.array (n x f), np.array (n x 1), np.array (n x 1)</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.get_radii_hull">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">get_radii_hull</code><span class="sig-paren">(</span><em>args</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#get_radii_hull"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.get_radii_hull" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.max_nodes_in_path">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">max_nodes_in_path</code><span class="sig-paren">(</span><em>anno</em>, <em>source_node</em>, <em>max_number</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#max_nodes_in_path"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.max_nodes_in_path" title="Permalink to this definition">¶</a></dt>
+<dd><p>Find specified number of nodes along skeleton from source node (BFS).</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>anno</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation"><em>SkeletonAnnotation</em></a>) &#8211; tracing on which to search</li>
+<li><strong>source_node</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonNode" title="syconn.utils.skeleton.SkeletonNode"><em>SkeletonNode</em></a>) &#8211; Starting node</li>
+<li><strong>max_number</strong> (<em>int</em>) &#8211; Maximum number of nodes</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">Tracing nodes up to certain distance from source node</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">list of SkeletonNodes</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.node_id2key">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">node_id2key</code><span class="sig-paren">(</span><em>segdataobject</em>, <em>node_ids</em>, <em>filter_size</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#node_id2key"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.node_id2key" title="Permalink to this definition">¶</a></dt>
+<dd><p>Maps list indices in node_ids to keys of SegmentationObjects. Filters
+objects bigger than filter_size.</p>
+<p>:param :
+:type : param segdataobject: UltrastructuralDataset of object type currently processed
+:param :
+:type : param node_ids: List of list containing annotated object ids for each node
+:param :
+:type : param filter_size: int minimum number of voxels of object</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Returns:</th><td class="field-body">objects keys</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Return type:</th><td class="field-body">list</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.outlier_detection">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">outlier_detection</code><span class="sig-paren">(</span><em>point_list</em>, <em>min_num_neigh</em>, <em>radius</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#outlier_detection"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.outlier_detection" title="Permalink to this definition">¶</a></dt>
+<dd><p>Finds hull outlier using point density criterion</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>point_list</strong> (<em>list</em>) &#8211; List of coordinates</li>
+<li><strong>min_num_neigh</strong> (<em>int</em>) &#8211; Minimum number of neighbors, s.t. hull-point survives.</li>
+<li><strong>radius</strong> (<em>int</em>) &#8211; Radius in nm to look for neighbors</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">Cleaned point cloud</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">numpy.array</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.prepare_syns_btw_annos">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">prepare_syns_btw_annos</code><span class="sig-paren">(</span><em>pairwise_paths</em>, <em>dest_path</em>, <em>max_hull_dist=60</em>, <em>concom_dist=300</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#prepare_syns_btw_annos"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.prepare_syns_btw_annos" title="Permalink to this definition">¶</a></dt>
+<dd><p>Checks pairwise for contact sites between annotation objects found at paths
+in nml_list. Adds sj, vc and nearest skeleton nodes to found contact sites.
+Writes &#8216;contact_sites.nml&#8217; to nml-path containing contact sites of all
+nml&#8217;s.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>pairwise_paths</strong> (<em>list of str</em>) &#8211; List of pairwise paths to nml&#8217;s</li>
+<li><strong>dest_path</strong> (<em>str</em>) &#8211; Path to directory where to store result of
+synapse mapping</li>
+<li><strong>max_hull_dist</strong> (<em>float</em>) &#8211; maximum distance between skeletons in nm</li>
+<li><strong>concom_dist</strong> (<em>float</em>) &#8211; Maximum distance of connected components (nm)</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.read_pair_cs">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">read_pair_cs</code><span class="sig-paren">(</span><em>pair_path</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#read_pair_cs"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.read_pair_cs" title="Permalink to this definition">¶</a></dt>
+<dd><p>Helper function to collect pairwise contact site information. Extracts
+axoness prediction.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>pair_path</strong> (<em>str</em>) &#8211; path to pairwise contact site kzip</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">annotation object without contact site hull voxel</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation">SkeletonAnnotation</a></td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.readout_cs_info">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">readout_cs_info</code><span class="sig-paren">(</span><em>args</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#readout_cs_info"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.readout_cs_info" title="Permalink to this definition">¶</a></dt>
+<dd><p>Helper function of feature_valid_syns</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>args</strong> (<em>tuple</em>) &#8211; path to file and queue</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body">synapse features, contact site ID</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body">np.array, str</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.similarity_check">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">similarity_check</code><span class="sig-paren">(</span><em>skel_a</em>, <em>skel_b</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#similarity_check"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.similarity_check" title="Permalink to this definition">¶</a></dt>
+<dd><p>If absolute number of identical nodes is bigger then certain threshold
+return similar.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>skel_a</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation"><em>SkeletonAnnotation</em></a>) &#8211; Skeleton a</li>
+<li><strong>skel_b</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation"><em>SkeletonAnnotation</em></a>) &#8211; Skeleton b</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">skel_a and skel_b are similar</p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">bool</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.similarity_check_star">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">similarity_check_star</code><span class="sig-paren">(</span><em>params</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#similarity_check_star"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.similarity_check_star" title="Permalink to this definition">¶</a></dt>
+<dd><p>Helper function</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.syn_btw_anno_pair">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">syn_btw_anno_pair</code><span class="sig-paren">(</span><em>params</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#syn_btw_anno_pair"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.syn_btw_anno_pair" title="Permalink to this definition">¶</a></dt>
+<dd><p>Get synapse information between two mapped annotation objects. Details are
+written to pairwise nml (all contact sites between pairs contained) and
+to nml for each contact site.</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>params</strong> (<em>list</em>) &#8211; [path_a, path_b, max_hull_dist, concom_dist]</li>
+<li><strong>path_a</strong> (<em>str</em>) &#8211; path to mapped annotation object</li>
+<li><strong>path_b</strong> (<em>str</em>) &#8211; path to mapped annotation object</li>
+<li><strong>max_hull_dist</strong> (<em>float</em>) &#8211; maximum distance between skeletons (nm)</li>
+<li><strong>concom_dist</strong> (<em>float</em>) &#8211; maximum distance of connected components (nm)</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.mapper.translate_dense_tracings">
+<code class="descclassname">syconn.processing.mapper.</code><code class="descname">translate_dense_tracings</code><span class="sig-paren">(</span><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/mapper.html#translate_dense_tracings"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.mapper.translate_dense_tracings" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-syconn.processing.spiness">
+<span id="syconn-processing-spiness"></span><h2>syconn.processing.spiness<a class="headerlink" href="#module-syconn.processing.spiness" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="syconn.processing.spiness.assign_neck">
+<code class="descclassname">syconn.processing.spiness.</code><code class="descname">assign_neck</code><span class="sig-paren">(</span><em>anno</em>, <em>max_head2endpoint_dist=600</em>, <em>max_neck2endpoint_dist=3000</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/spiness.html#assign_neck"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.spiness.assign_neck" title="Permalink to this definition">¶</a></dt>
+<dd><p>Assign nodes between spine head node and first node with degree 2 as
+spine necks inplace.
+head (1) and shaft (0). Key for prediction is &#8220;spiness_pred&#8221;</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>anno</strong> (<a class="reference internal" href="syconn.utils.html#syconn.utils.skeleton.SkeletonAnnotation" title="syconn.utils.skeleton.SkeletonAnnotation"><em>SkeletonAnnotation</em></a>) &#8211; mapped cell tracing</li>
+<li><strong>max_head2endpoint_dist</strong> (<em>int</em>) &#8211; maximum distance between spine head and endpoint on graph</li>
+<li><strong>max_neck2endpoint_dist</strong> (<em>int</em>) &#8211; maximum distance between spine neck and endpoint on graph</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.spiness.collect_spineheads">
+<code class="descclassname">syconn.processing.spiness.</code><code class="descname">collect_spineheads</code><span class="sig-paren">(</span><em>anno</em>, <em>dist=6000</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/spiness.html#collect_spineheads"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.spiness.collect_spineheads" title="Permalink to this definition">¶</a></dt>
+<dd><p>Searches nodes in annotation for nodes with spinehead prediciton
+and returns them as list (no copy!).</p>
+</dd></dl>
+
+</div>
+<div class="section" id="module-syconn.processing.synapticity">
+<span id="syconn-processing-synapticity"></span><h2>syconn.processing.synapticity<a class="headerlink" href="#module-syconn.processing.synapticity" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="syconn.processing.synapticity.calc_syn_feature">
+<code class="descclassname">syconn.processing.synapticity.</code><code class="descname">calc_syn_feature</code><span class="sig-paren">(</span><em>gt_samples, ignore_keys=['Barrier', 'Skel'], new_data=False, test_data=False, detailed_cs_dir='/lustre/pschuber/m_consensi_rr/nml_obj/contact_sites_new3/'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/synapticity.html#calc_syn_feature"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.synapticity.calc_syn_feature" title="Permalink to this definition">¶</a></dt>
+<dd><p>collect synpase feature of all contact sites. Additionally, ground truth
+values if test_data is True.
+:param gt_samples: List of paths to contact sites
+:param ignore_keys: Which keys to ignore in string if collecting GT value
+:param new_data: outdated
+:param test_data: whether to collect GT value
+:param detailed_cs_dir: path to folder containing the contact sites
+:return:</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.synapticity.helper_load_sj_feat">
+<code class="descclassname">syconn.processing.synapticity.</code><code class="descname">helper_load_sj_feat</code><span class="sig-paren">(</span><em>args</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/synapticity.html#helper_load_sj_feat"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.synapticity.helper_load_sj_feat" title="Permalink to this definition">¶</a></dt>
+<dd><table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><strong>args</strong> &#8211; </td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"></td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.synapticity.pairwise_syn_feature_calc">
+<code class="descclassname">syconn.processing.synapticity.</code><code class="descname">pairwise_syn_feature_calc</code><span class="sig-paren">(</span><em>args</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/synapticity.html#pairwise_syn_feature_calc"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.synapticity.pairwise_syn_feature_calc" title="Permalink to this definition">¶</a></dt>
+<dd><p>Helper function for calc_syn_feature. Collects feature of contact site.
+:param args: path to contact sites, list of ingore keys, path to
+contact_sites folder, q of multiprocess manager, bool new data(old),
+bool test_data (whether to collect gt_value)
+:return: synapse feature, ground truth value</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.synapticity.parse_synfeature_from_node">
+<code class="descclassname">syconn.processing.synapticity.</code><code class="descname">parse_synfeature_from_node</code><span class="sig-paren">(</span><em>node</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/synapticity.html#parse_synfeature_from_node"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.synapticity.parse_synfeature_from_node" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parases values of features from string.
+:param node: node with values of feature_names
+:return: array of float values for each feature</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.synapticity.parse_synfeature_from_txt">
+<code class="descclassname">syconn.processing.synapticity.</code><code class="descname">parse_synfeature_from_txt</code><span class="sig-paren">(</span><em>txt</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/synapticity.html#parse_synfeature_from_txt"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.synapticity.parse_synfeature_from_txt" title="Permalink to this definition">¶</a></dt>
+<dd><p>Parases values of features from string.
+:param txt: String with values of feature_names, like &#8216;area1.5_dist2.3&#8217;
+:return: array of float values for each feature</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.synapticity.save_synapse_clf">
+<code class="descclassname">syconn.processing.synapticity.</code><code class="descname">save_synapse_clf</code><span class="sig-paren">(</span><em>gt_path</em>, <em>clf_used='rf'</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/synapticity.html#save_synapse_clf"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.synapticity.save_synapse_clf" title="Permalink to this definition">¶</a></dt>
+<dd><p>Save synapse clf specified by clf_used to gt_directory.
+:param gt_path: str to directory of synapse ground truth
+:param clf_used: &#8216;rf&#8217; or &#8216;svm&#8217;</p>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.synapticity.syn_sign_prediction">
+<code class="descclassname">syconn.processing.synapticity.</code><code class="descname">syn_sign_prediction</code><span class="sig-paren">(</span><em>voxels</em>, <em>kd_path_sym</em>, <em>kd_path_asym</em>, <em>threshold=0.25</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/synapticity.html#syn_sign_prediction"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.synapticity.syn_sign_prediction" title="Permalink to this definition">¶</a></dt>
+<dd></dd></dl>
+
+</div>
+<div class="section" id="module-syconn.processing.initialization">
+<span id="syconn-processing-initialization"></span><h2>syconn.processing.initialization<a class="headerlink" href="#module-syconn.processing.initialization" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="syconn.processing.initialization.initialize_cset">
+<code class="descclassname">syconn.processing.initialization.</code><code class="descname">initialize_cset</code><span class="sig-paren">(</span><em>kd</em>, <em>home_path</em>, <em>chunksize</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/initialization.html#initialize_cset"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.initialization.initialize_cset" title="Permalink to this definition">¶</a></dt>
+<dd><p>Initializes a ChunkDataset</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>kd</strong> (<em>KnossosDataset</em>) &#8211; KnossosDataset instance of the corresponding raw data</li>
+<li><strong>home_path</strong> (<em>str</em>) &#8211; path to main folder</li>
+<li><strong>chunksize</strong> (<em>np.array</em>) &#8211; size of each chunk; typically in the order of ~ [1000, 1000, 500]</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first"><strong>cset</strong></p>
+</td>
+</tr>
+<tr class="field-odd field"><th class="field-name">Return type:</th><td class="field-body"><p class="first last">ChunkDataset</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+<div class="section" id="module-syconn.processing.objectextraction">
+<span id="syconn-processing-objectextraction"></span><h2>syconn.processing.objectextraction<a class="headerlink" href="#module-syconn.processing.objectextraction" title="Permalink to this headline">¶</a></h2>
+<dl class="function">
+<dt id="syconn.processing.objectextraction.apply_merge_list">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">apply_merge_list</code><span class="sig-paren">(</span><em>cset</em>, <em>chunk_list</em>, <em>filename</em>, <em>hdf5names</em>, <em>merge_list_dict</em>, <em>debug</em>, <em>suffix=''</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#apply_merge_list"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.apply_merge_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>Applies merge list to all chunks</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>cset</strong> (<em>chunkdataset instance</em>) &#8211; </li>
+<li><strong>chunk_list</strong> (<em>list of int</em>) &#8211; Selective list of chunks for which this function should work on. If None
+all chunks are used.</li>
+<li><strong>filename</strong> (<em>str</em>) &#8211; Filename of the prediction in the chunkdataset</li>
+<li><strong>hdf5names</strong> (<em>list of str</em>) &#8211; List of names/ labels to be extracted and processed from the prediction
+file</li>
+<li><strong>merge_list_dict</strong> (<em>dictionary</em>) &#8211; mergedict for each hdf5name</li>
+<li><strong>debug</strong> (<em>boolean</em>) &#8211; If true multiprocessed steps only operate on one core using &#8216;map&#8217; which
+allows for better error messages</li>
+<li><strong>suffix</strong> (<em>str</em>) &#8211; Suffix for the intermediate results</li>
+<li><strong>qsub_pe</strong> (<em>str or None</em>) &#8211; qsub parallel environment</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.objectextraction.calculate_chunk_numbers_for_box">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">calculate_chunk_numbers_for_box</code><span class="sig-paren">(</span><em>cset</em>, <em>offset</em>, <em>size</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#calculate_chunk_numbers_for_box"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.calculate_chunk_numbers_for_box" title="Permalink to this definition">¶</a></dt>
+<dd><p>Calculates the chunk ids that are (partly) contained it the defined volume</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>cset</strong> (<em>ChunkDataset</em>) &#8211; </li>
+<li><strong>offset</strong> (<em>np.array</em>) &#8211; offset of the volume to the origin</li>
+<li><strong>size</strong> (<em>np.array</em>) &#8211; size of the volume</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"><ul class="simple">
+<li><strong>chunk_list</strong> (<em>list</em>) &#8211; chunk ids</li>
+<li><strong>dictionary</strong> (<em>dict</em>) &#8211; with reverse mapping</li>
+</ul>
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.objectextraction.concatenate_mappings">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">concatenate_mappings</code><span class="sig-paren">(</span><em>cset</em>, <em>filename</em>, <em>hdf5names</em>, <em>debug=False</em>, <em>suffix=''</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#concatenate_mappings"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.concatenate_mappings" title="Permalink to this definition">¶</a></dt>
+<dd><p>Combines all map dicts</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>cset</strong> (<em>chunkdataset instance</em>) &#8211; </li>
+<li><strong>filename</strong> (<em>str</em>) &#8211; Filename of the prediction in the chunkdataset</li>
+<li><strong>hdf5names</strong> (<em>list of str</em>) &#8211; List of names/ labels to be extracted and processed from the prediction
+file</li>
+<li><strong>debug</strong> (<em>boolean</em>) &#8211; If true multiprocessed steps only operate on one core using &#8216;map&#8217; which
+allows for better error messages</li>
+<li><strong>suffix</strong> (<em>str</em>) &#8211; Suffix for the intermediate results</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.objectextraction.create_datasets_from_objects">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">create_datasets_from_objects</code><span class="sig-paren">(</span><em>cset</em>, <em>filename</em>, <em>hdf5names</em>, <em>debug=False</em>, <em>suffix=''</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#create_datasets_from_objects"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.create_datasets_from_objects" title="Permalink to this definition">¶</a></dt>
+<dd><p>Create dataset instance from objects</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>cset</strong> (<em>chunkdataset instance</em>) &#8211; </li>
+<li><strong>filename</strong> (<em>str</em>) &#8211; Filename of the prediction in the chunkdataset</li>
+<li><strong>hdf5names</strong> (<em>list of str</em>) &#8211; List of names/ labels to be extracted and processed from the prediction
+file</li>
+<li><strong>debug</strong> (<em>boolean</em>) &#8211; If true multiprocessed steps only operate on one core using &#8216;map&#8217; which
+allows for better error messages</li>
+<li><strong>suffix</strong> (<em>str</em>) &#8211; Suffix for the intermediate results</li>
+<li><strong>qsub_pe</strong> (<em>str or None</em>) &#8211; qsub parallel environment</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.objectextraction.create_objects_from_voxels">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">create_objects_from_voxels</code><span class="sig-paren">(</span><em>cset</em>, <em>filename</em>, <em>hdf5names</em>, <em>granularity=15</em>, <em>debug=False</em>, <em>suffix=''</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#create_objects_from_voxels"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.create_objects_from_voxels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates object instances from extracted voxels</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>cset</strong> (<em>chunkdataset instance</em>) &#8211; </li>
+<li><strong>filename</strong> (<em>str</em>) &#8211; Filename of the prediction in the chunkdataset</li>
+<li><strong>hdf5names</strong> (<em>list of str</em>) &#8211; List of names/ labels to be extracted and processed from the prediction
+file</li>
+<li><strong>granularity</strong> (<em>int</em>) &#8211; Defines granularity for partitioning data for multiprocessing</li>
+<li><strong>debug</strong> (<em>boolean</em>) &#8211; If true multiprocessed steps only operate on one core using &#8216;map&#8217; which
+allows for better error messages</li>
+<li><strong>suffix</strong> (<em>str</em>) &#8211; Suffix for the intermediate results</li>
+<li><strong>qsub_pe</strong> (<em>str or None</em>) &#8211; qsub parallel environment</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.objectextraction.extract_voxels">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">extract_voxels</code><span class="sig-paren">(</span><em>cset</em>, <em>filename</em>, <em>hdf5names</em>, <em>debug=False</em>, <em>chunk_list=None</em>, <em>suffix=''</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#extract_voxels"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.extract_voxels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Extracts voxels for each component id</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>cset</strong> (<em>chunkdataset instance</em>) &#8211; </li>
+<li><strong>filename</strong> (<em>str</em>) &#8211; Filename of the prediction in the chunkdataset</li>
+<li><strong>hdf5names</strong> (<em>list of str</em>) &#8211; List of names/ labels to be extracted and processed from the prediction
+file</li>
+<li><strong>chunk_list</strong> (<em>list of int</em>) &#8211; Selective list of chunks for which this function should work on. If None
+all chunks are used.</li>
+<li><strong>debug</strong> (<em>boolean</em>) &#8211; If true multiprocessed steps only operate on one core using &#8216;map&#8217; which
+allows for better error messages</li>
+<li><strong>suffix</strong> (<em>str</em>) &#8211; Suffix for the intermediate results</li>
+<li><strong>qsub_pe</strong> (<em>str or None</em>) &#8211; qsub parallel environment</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.objectextraction.from_ids_to_objects">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">from_ids_to_objects</code><span class="sig-paren">(</span><em>cset</em>, <em>filename</em>, <em>hdf5names</em>, <em>chunk_list=None</em>, <em>debug=False</em>, <em>offset=None</em>, <em>size=None</em>, <em>suffix=''</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#from_ids_to_objects"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.from_ids_to_objects" title="Permalink to this definition">¶</a></dt>
+<dd><p>Main function for the object extraction step; combines all needed steps</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>cset</strong> (<em>chunkdataset instance</em>) &#8211; </li>
+<li><strong>filename</strong> (<em>str</em>) &#8211; Filename of the prediction in the chunkdataset</li>
+<li><strong>hdf5names</strong> (<em>list of str</em>) &#8211; List of names/ labels to be extracted and processed from the prediction
+file</li>
+<li><strong>chunk_list</strong> (<em>list of int</em>) &#8211; Selective list of chunks for which this function should work on. If None
+all chunks are used.</li>
+<li><strong>debug</strong> (<em>boolean</em>) &#8211; If true multiprocessed steps only operate on one core using &#8216;map&#8217; which
+allows for better error messages</li>
+<li><strong>offset</strong> (<em>np.array</em>) &#8211; offset of the volume to the origin</li>
+<li><strong>size</strong> (<em>np.array</em>) &#8211; size of the volume</li>
+<li><strong>suffix</strong> (<em>str</em>) &#8211; Suffix for the intermediate results</li>
+<li><strong>qsub_pe</strong> (<em>str or None</em>) &#8211; qsub parallel environment</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.objectextraction.from_probabilities_to_objects">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">from_probabilities_to_objects</code><span class="sig-paren">(</span><em>cset</em>, <em>filename</em>, <em>hdf5names</em>, <em>overlap='auto'</em>, <em>sigmas=None</em>, <em>thresholds=None</em>, <em>chunk_list=None</em>, <em>debug=False</em>, <em>swapdata=0</em>, <em>label_density=array([ 1.</em>, <em>1.</em>, <em>1.])</em>, <em>offset=None</em>, <em>size=None</em>, <em>membrane_filename=None</em>, <em>membrane_kd_path=None</em>, <em>hdf5_name_membrane=None</em>, <em>suffix=''</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#from_probabilities_to_objects"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.from_probabilities_to_objects" title="Permalink to this definition">¶</a></dt>
+<dd><p>Main function for the object extraction step; combines all needed steps</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>cset</strong> (<em>chunkdataset instance</em>) &#8211; </li>
+<li><strong>filename</strong> (<em>str</em>) &#8211; Filename of the prediction in the chunkdataset</li>
+<li><strong>hdf5names</strong> (<em>list of str</em>) &#8211; List of names/ labels to be extracted and processed from the prediction
+file</li>
+<li><strong>overlap</strong> (<em>str or np.array</em>) &#8211; Defines the overlap with neighbouring chunks that is left for later
+processing steps; if &#8216;auto&#8217; the overlap is calculated from the sigma and
+the stitch_overlap (here: [1., 1., 1.])</li>
+<li><strong>sigmas</strong> (<em>list of lists or None</em>) &#8211; Defines the sigmas of the gaussian filters applied to the probability
+maps. Has to be the same length as hdf5names. If None no gaussian filter
+is applied</li>
+<li><strong>thresholds</strong> (<em>list of float</em>) &#8211; Threshold for cutting the probability map. Has to be the same length as
+hdf5names. If None zeros are used instead (not recommended!)</li>
+<li><strong>chunk_list</strong> (<em>list of int</em>) &#8211; Selective list of chunks for which this function should work on. If None
+all chunks are used.</li>
+<li><strong>debug</strong> (<em>boolean</em>) &#8211; If true multiprocessed steps only operate on one core using &#8216;map&#8217; which
+allows for better error messages</li>
+<li><strong>swapdata</strong> (<em>boolean</em>) &#8211; If true an x-z swap is applied to the data prior to processing</li>
+<li><strong>label_density</strong> (<em>np.array</em>) &#8211; Defines the density of the data. If the data was downsampled prior to
+saving; it has to be interpolated first before processing due to
+alignment issues with the coordinate system. Two-times downsampled
+data would have a label_density of [2, 2, 2]</li>
+<li><strong>offset</strong> (<em>np.array</em>) &#8211; offset of the volume to the origin</li>
+<li><strong>size</strong> (<em>np.array</em>) &#8211; size of the volume</li>
+<li><strong>membrane_filename</strong> (<em>str</em>) &#8211; One way to allow access to a membrane segmentation when processing
+vesicle clouds. Filename of the prediction in the chunkdataset. The
+threshold is currently set at 0.4.</li>
+<li><strong>membrane_kd_path</strong> (<em>str</em>) &#8211; One way to allow access to a membrane segmentation when processing
+vesicle clouds. Path to the knossosdataset containing a membrane
+segmentation. The threshold is currently set at 0.4.</li>
+<li><strong>hdf5_name_membrane</strong> (<em>str</em>) &#8211; When using the membrane_filename this key has to be given to access the
+data in the saved chunk</li>
+<li><strong>suffix</strong> (<em>str</em>) &#8211; Suffix for the intermediate results</li>
+<li><strong>qsub_pe</strong> (<em>str or None</em>) &#8211; qsub parallel environment</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.objectextraction.from_probabilities_to_objects_parameter_sweeping">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">from_probabilities_to_objects_parameter_sweeping</code><span class="sig-paren">(</span><em>cset</em>, <em>filename</em>, <em>hdf5names</em>, <em>nb_thresholds</em>, <em>overlap='auto'</em>, <em>sigmas=None</em>, <em>chunk_list=None</em>, <em>swapdata=0</em>, <em>label_density=array([ 1.</em>, <em>1.</em>, <em>1.])</em>, <em>offset=None</em>, <em>size=None</em>, <em>membrane_filename=None</em>, <em>membrane_kd_path=None</em>, <em>hdf5_name_membrane=None</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#from_probabilities_to_objects_parameter_sweeping"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.from_probabilities_to_objects_parameter_sweeping" title="Permalink to this definition">¶</a></dt>
+<dd><p>Sweeps over different thresholds. Each objectextraction resutls are saved in
+a seperate folder, all intermediate steps are saved with a different suffix</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>cset</strong> (<em>chunkdataset instance</em>) &#8211; </li>
+<li><strong>filename</strong> (<em>str</em>) &#8211; Filename of the prediction in the chunkdataset</li>
+<li><strong>hdf5names</strong> (<em>list of str</em>) &#8211; List of names/ labels to be extracted and processed from the prediction
+file</li>
+<li><strong>nb_thresholds</strong> (<em>integer</em>) &#8211; number of thresholds and therefore runs of objectextractions to do;
+the actual thresholds are equally spaced</li>
+<li><strong>overlap</strong> (<em>str or np.array</em>) &#8211; Defines the overlap with neighbouring chunks that is left for later
+processing steps; if &#8216;auto&#8217; the overlap is calculated from the sigma and
+the stitch_overlap (here: [1., 1., 1.])</li>
+<li><strong>sigmas</strong> (<em>list of lists or None</em>) &#8211; Defines the sigmas of the gaussian filters applied to the probability
+maps. Has to be the same length as hdf5names. If None no gaussian filter
+is applied</li>
+<li><strong>chunk_list</strong> (<em>list of int</em>) &#8211; Selective list of chunks for which this function should work on. If None
+all chunks are used.</li>
+<li><strong>swapdata</strong> (<em>boolean</em>) &#8211; If true an x-z swap is applied to the data prior to processing</li>
+<li><strong>label_density</strong> (<em>np.array</em>) &#8211; Defines the density of the data. If the data was downsampled prior to
+saving; it has to be interpolated first before processing due to
+alignment issues with the coordinate system. Two-times downsampled
+data would have a label_density of [2, 2, 2]</li>
+<li><strong>offset</strong> (<em>np.array</em>) &#8211; offset of the volume to the origin</li>
+<li><strong>size</strong> (<em>np.array</em>) &#8211; size of the volume</li>
+<li><strong>membrane_filename</strong> (<em>str</em>) &#8211; One way to allow access to a membrane segmentation when processing
+vesicle clouds. Filename of the prediction in the chunkdataset. The
+threshold is currently set at 0.4.</li>
+<li><strong>membrane_kd_path</strong> (<em>str</em>) &#8211; One way to allow access to a membrane segmentation when processing
+vesicle clouds. Path to the knossosdataset containing a membrane
+segmentation. The threshold is currently set at 0.4.</li>
+<li><strong>hdf5_name_membrane</strong> (<em>str</em>) &#8211; When using the membrane_filename this key has to be given to access the
+data in the saved chunk</li>
+<li><strong>suffix</strong> (<em>str</em>) &#8211; Suffix for the intermediate results</li>
+<li><strong>qsub_pe</strong> (<em>str</em>) &#8211; qsub parallel environment name</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue name</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.objectextraction.gauss_threshold_connected_components">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">gauss_threshold_connected_components</code><span class="sig-paren">(</span><em>cset</em>, <em>filename</em>, <em>hdf5names</em>, <em>overlap='auto'</em>, <em>sigmas=None</em>, <em>thresholds=None</em>, <em>chunk_list=None</em>, <em>debug=False</em>, <em>swapdata=False</em>, <em>label_density=array([ 1.</em>, <em>1.</em>, <em>1.])</em>, <em>membrane_filename=None</em>, <em>membrane_kd_path=None</em>, <em>hdf5_name_membrane=None</em>, <em>fast_load=False</em>, <em>suffix=''</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#gauss_threshold_connected_components"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.gauss_threshold_connected_components" title="Permalink to this definition">¶</a></dt>
+<dd><p>Extracts connected component from probability maps
+1. Gaussian filter (defined by sigma)
+2. Thresholding (defined by threshold)
+3. Connected components analysis</p>
+<p>In case of vesicle clouds (hdf5_name in [&#8220;p4&#8221;, &#8220;vc&#8221;]) the membrane
+segmentation is used to cut connected vesicle clouds across cells
+apart (only if membrane segmentation is provided).</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>cset</strong> (<em>chunkdataset instance</em>) &#8211; </li>
+<li><strong>filename</strong> (<em>str</em>) &#8211; Filename of the prediction in the chunkdataset</li>
+<li><strong>hdf5names</strong> (<em>list of str</em>) &#8211; List of names/ labels to be extracted and processed from the prediction
+file</li>
+<li><strong>overlap</strong> (<em>str or np.array</em>) &#8211; Defines the overlap with neighbouring chunks that is left for later
+processing steps; if &#8216;auto&#8217; the overlap is calculated from the sigma and
+the stitch_overlap (here: [1., 1., 1.])</li>
+<li><strong>sigmas</strong> (<em>list of lists or None</em>) &#8211; Defines the sigmas of the gaussian filters applied to the probability
+maps. Has to be the same length as hdf5names. If None no gaussian filter
+is applied</li>
+<li><strong>thresholds</strong> (<em>list of float</em>) &#8211; Threshold for cutting the probability map. Has to be the same length as
+hdf5names. If None zeros are used instead (not recommended!)</li>
+<li><strong>chunk_list</strong> (<em>list of int</em>) &#8211; Selective list of chunks for which this function should work on. If None
+all chunks are used.</li>
+<li><strong>debug</strong> (<em>boolean</em>) &#8211; If true multiprocessed steps only operate on one core using &#8216;map&#8217; which
+allows for better error messages</li>
+<li><strong>swapdata</strong> (<em>boolean</em>) &#8211; If true an x-z swap is applied to the data prior to processing</li>
+<li><strong>label_density</strong> (<em>np.array</em>) &#8211; Defines the density of the data. If the data was downsampled prior to
+saving; it has to be interpolated first before processing due to
+alignment issues with the coordinate system. Two-times downsampled
+data would have a label_density of [2, 2, 2]</li>
+<li><strong>membrane_filename</strong> (<em>str</em>) &#8211; One way to allow access to a membrane segmentation when processing
+vesicle clouds. Filename of the prediction in the chunkdataset. The
+threshold is currently set at 0.4.</li>
+<li><strong>membrane_kd_path</strong> (<em>str</em>) &#8211; One way to allow access to a membrane segmentation when processing
+vesicle clouds. Path to the knossosdataset containing a membrane
+segmentation. The threshold is currently set at 0.4.</li>
+<li><strong>hdf5_name_membrane</strong> (<em>str</em>) &#8211; When using the membrane_filename this key has to be given to access the
+data in the saved chunk</li>
+<li><strong>fast_load</strong> (<em>boolean</em>) &#8211; If true the data of chunk is blindly loaded without checking for enough
+offset to compute the overlap area. Faster, because no neighbouring
+chunk has to be accessed since the default case loads th overlap area
+from them.</li>
+<li><strong>suffix</strong> (<em>str</em>) &#8211; Suffix for the intermediate results</li>
+<li><strong>qsub_pe</strong> (<em>str or None</em>) &#8211; qsub parallel environment</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"><ul class="simple">
+<li><strong>results_as_list</strong> (<em>list</em>) &#8211; list containing information about the number of connected components
+in each chunk</li>
+<li><strong>overlap</strong> (<em>np.array</em>)</li>
+<li><strong>stitch overlap</strong> (<em>np.array</em>)</li>
+</ul>
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.objectextraction.make_merge_list">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">make_merge_list</code><span class="sig-paren">(</span><em>hdf5names</em>, <em>stitch_list</em>, <em>max_labels</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#make_merge_list"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.make_merge_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a merge list from a stitch list by mapping all connected ids to
+one id</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
+<li><strong>hdf5names</strong> (<em>list of str</em>) &#8211; List of names/ labels to be extracted and processed from the prediction
+file</li>
+<li><strong>stitch_list</strong> (<em>dictionary</em>) &#8211; Contains pairs of overlapping component ids for each hdf5name</li>
+<li><strong>dictionary</strong> (<em>max_labels</em>) &#8211; Contains the number of different component ids for each hdf5name</li>
+</ul>
+</td>
+</tr>
+<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first last"><ul class="simple">
+<li><strong>merge_dict</strong> (<em>dictionary</em>) &#8211; mergelist for each hdf5name</li>
+<li><strong>merge_list_dict</strong> (<em>dictionary</em>) &#8211; mergedict for each hdf5name</li>
+</ul>
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.objectextraction.make_stitch_list">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">make_stitch_list</code><span class="sig-paren">(</span><em>cset</em>, <em>filename</em>, <em>hdf5names</em>, <em>chunk_list</em>, <em>stitch_overlap</em>, <em>overlap</em>, <em>debug</em>, <em>suffix=''</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#make_stitch_list"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.make_stitch_list" title="Permalink to this definition">¶</a></dt>
+<dd><p>Creates a stitch list for the overlap region between chunks</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>cset</strong> (<em>chunkdataset instance</em>) &#8211; </li>
+<li><strong>filename</strong> (<em>str</em>) &#8211; Filename of the prediction in the chunkdataset</li>
+<li><strong>hdf5names</strong> (<em>list of str</em>) &#8211; List of names/ labels to be extracted and processed from the prediction
+file</li>
+<li><strong>chunk_list</strong> (<em>list of int</em>) &#8211; Selective list of chunks for which this function should work on. If None
+all chunks are used.</li>
+<li><strong>overlap</strong> (<em>np.array</em>) &#8211; Defines the overlap with neighbouring chunks that is left for later
+processing steps</li>
+<li><strong>stitch_overlap</strong> (<em>np.array</em>) &#8211; Defines the overlap with neighbouring chunks that is left for stitching</li>
+<li><strong>debug</strong> (<em>boolean</em>) &#8211; If true multiprocessed steps only operate on one core using &#8216;map&#8217; which
+allows for better error messages</li>
+<li><strong>suffix</strong> (<em>str</em>) &#8211; Suffix for the intermediate results</li>
+<li><strong>qsub_pe</strong> (<em>str or None</em>) &#8211; qsub parallel environment</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue</li>
+<li><strong>Returns</strong> &#8211; </li>
+<li><strong>--------</strong> &#8211; </li>
+<li><strong>stitch_list</strong> (<em>list</em>) &#8211; list of overlapping component ids</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+<dl class="function">
+<dt id="syconn.processing.objectextraction.make_unique_labels">
+<code class="descclassname">syconn.processing.objectextraction.</code><code class="descname">make_unique_labels</code><span class="sig-paren">(</span><em>cset</em>, <em>filename</em>, <em>hdf5names</em>, <em>chunk_list</em>, <em>max_nb_dict</em>, <em>chunk_translator</em>, <em>debug</em>, <em>suffix=''</em>, <em>qsub_pe=None</em>, <em>qsub_queue=None</em><span class="sig-paren">)</span><a class="reference internal" href="_modules/syconn/processing/objectextraction.html#make_unique_labels"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#syconn.processing.objectextraction.make_unique_labels" title="Permalink to this definition">¶</a></dt>
+<dd><p>Makes labels unique across chunks</p>
+<table class="docutils field-list" frame="void" rules="none">
+<col class="field-name" />
+<col class="field-body" />
+<tbody valign="top">
+<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first last simple">
+<li><strong>cset</strong> (<em>chunkdataset instance</em>) &#8211; </li>
+<li><strong>filename</strong> (<em>str</em>) &#8211; Filename of the prediction in the chunkdataset</li>
+<li><strong>hdf5names</strong> (<em>list of str</em>) &#8211; List of names/ labels to be extracted and processed from the prediction
+file</li>
+<li><strong>chunk_list</strong> (<em>list of int</em>) &#8211; Selective list of chunks for which this function should work on. If None
+all chunks are used.</li>
+<li><strong>max_nb_dict</strong> (<em>dictionary</em>) &#8211; Maps each chunk id to a integer describing which needs to be added to
+all its entries</li>
+<li><strong>chunk_translator</strong> (<em>boolean</em>) &#8211; Remapping from chunk ids to position in chunk_list</li>
+<li><strong>debug</strong> (<em>boolean</em>) &#8211; If true multiprocessed steps only operate on one core using &#8216;map&#8217; which
+allows for better error messages</li>
+<li><strong>suffix</strong> (<em>str</em>) &#8211; Suffix for the intermediate results</li>
+<li><strong>qsub_pe</strong> (<em>str or None</em>) &#8211; qsub parallel environment</li>
+<li><strong>qsub_queue</strong> (<em>str or None</em>) &#8211; qsub queue</li>
+</ul>
+</td>
+</tr>
+</tbody>
+</table>
+</dd></dl>
+
+</div>
+<div class="section" id="module-syconn.processing.watershed_segmentation">
+<span id="syconn-processing-watershed-segmentation"></span><h2>syconn.processing.watershed_segmentation<a class="headerlink" href="#module-syconn.processing.watershed_segmentation" title="Permalink to this headline">¶</a></h2>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related" role="navigation" aria-label="related navigation">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="syconn.multi_proc.html" title="syconn.multi_proc"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="syconn.html" title="SyConn API"
+             >previous</a> |</li>
+        <li class="nav-item nav-item-0"><a href="index.html">SyConn a documentation</a> &#187;</li>
+          <li class="nav-item nav-item-1"><a href="syconn.html" >SyConn API</a> &#187;</li> 
+      </ul>
+    </div>
+    <div class="footer" role="contentinfo">
+        &#169; Copyright 2016, Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld.
+      Created using <a href="http://sphinx-doc.org/">Sphinx</a> 1.4.8.
+    </div>
+  </body>
+</html>
