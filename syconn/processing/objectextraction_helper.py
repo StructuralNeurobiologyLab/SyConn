@@ -10,10 +10,11 @@ import h5py
 import numpy as np
 import os
 from scipy import ndimage
+import time
 
 from ..utils import datahandler, basics#, segmentationdataset
 from knossos_utils import chunky, knossosdataset
-from datasetrepresentations import ultrastructure, segmentation
+from syconnfs.representations import segmentation
 
 
 def gauss_threshold_connected_components_thread(args):
@@ -303,48 +304,66 @@ def extract_voxels_thread(args):
 
     for nb_hdf5_name in range(len(hdf5names)):
         hdf5_name = hdf5names[nb_hdf5_name]
+        segdataset = segmentation.SegmentationDataset(hdf5_name, version=0,
+                                                      working_dir=path_head_folder,
+                                                      autoload=False)
         path = chunk.folder + filename + "_stitched_components%s.h5" % suffix
         if not os.path.exists(path):
             path = chunk.folder + filename + ".h5"
         this_segmentation = datahandler.load_from_h5py(path, [hdf5_name])[0]
 
         unique_ids = np.unique(this_segmentation)
-        map_dict = {}
+        for unique_id in unique_ids:
+            if unique_id == 0:
+                continue
 
-        with h5py.File(path_head_folder + "/" +
-                       ultrastructure.get_rel_path(hdf5_name, filename,
-                                                        suffix=suffix) +
-                       "/voxels/chunk_%d.h5" % chunk.number, "w") as f:
+            id_mask = this_segmentation == unique_id
+            id_mask, in_chunk_offset = basics.crop_bool_array(id_mask)
+            abs_offset = chunk.coordinates + np.array(in_chunk_offset)
+            abs_offset = abs_offset.astype(np.int)
+            segobj = segmentation.SegmentationObject(unique_id, hdf5_name,
+                                                     version=segdataset.version,
+                                                     working_dir=segdataset.working_dir,
+                                                     autoload=False)
+            segobj.save_voxels(id_mask, abs_offset)
 
-            f.create_dataset("offset", data=chunk.coordinates)
-            for unique_id in unique_ids:
-                if unique_id == 0:
-                    continue
 
-                id_mask = this_segmentation == unique_id
-                id_mask, in_chunk_offset = basics.crop_bool_array(id_mask)
-                f.create_dataset("%d" % unique_id, data=id_mask,
-                                 compression="gzip")
-                f.create_dataset("%d_offset" % unique_id, data=in_chunk_offset)
-                f.create_dataset("%d_size" % unique_id,
-                                 data=int(np.sum(id_mask)))
+        # unique_ids = np.unique(this_segmentation)
+        # map_dict = {}
+        #
+        # with h5py.File(segdataset.voxel_dir +
+        #                "/chunk_%d.h5" % chunk.number, "w") as f:
+        #
+        #     f.create_dataset("offset", data=chunk.coordinates)
+        #     for unique_id in unique_ids:
+        #         if unique_id == 0:
+        #             continue
+        #
+        #         id_mask = this_segmentation == unique_id
+        #         id_mask, in_chunk_offset = basics.crop_bool_array(id_mask)
+        #         f.create_dataset("%d" % unique_id, data=id_mask,
+        #                          compression="gzip")
+        #         f.create_dataset("%d_offset" % unique_id, data=in_chunk_offset)
+        #         f.create_dataset("%d_size" % unique_id,
+        #                          data=int(np.sum(id_mask)))
+        #
+        #         map_dict[unique_id] = chunk.number
+        #
+        # f = open(segdataset.path + "/map_dicts/map_%d.pkl" % chunk.number, "w")
+        # pkl.dump(map_dict, f, pkl.HIGHEST_PROTOCOL)
+        # f.close()
 
-                map_dict[unique_id] = chunk.number
-
-            f = open(path_head_folder + "/" +
-                     ultrastructure.get_rel_path(hdf5_name, filename,
-                                                      suffix=suffix) +
-                     "/map_dicts/map_%d.pkl" % chunk.number, "w")
-            pkl.dump(map_dict, f, pkl.HIGHEST_PROTOCOL)
-            f.close()
-
-            this_segmentation = []
+        this_segmentation = []
 
 
 def concatenate_mappings_thread(args):
     path_head_folder = args[0]
-    rel_path = args[1]
+    hdf5_name = args[1]
     map_dict_paths = args[2]
+
+    segdataset = segmentation.SegmentationDataset(hdf5_name, version=0,
+                                                  working_dir=path_head_folder,
+                                                  autoload=False)
 
     map_dict = {}
     for this_path in map_dict_paths:
@@ -353,70 +372,168 @@ def concatenate_mappings_thread(args):
         f.close()
 
         for this_key in this_map_dict.keys():
-            if map_dict.has_key(this_key):
+            if this_key in map_dict:
                 map_dict[this_key].append(this_map_dict[this_key])
             else:
                 map_dict[this_key] = [this_map_dict[this_key]]
 
-    f = open(path_head_folder + rel_path + "/direct_map.pkl", "w")
-    pkl.dump(map_dict, f, pkl.HIGHEST_PROTOCOL)
-    f.close()
+    segdataset.save_voxel_mapping(map_dict)
+
+
+# def partition_voxel_mappings_thread(args):
+#     path_head_folder = args[0]
+#     hdf5_name = args[1]
+#
+#     segdataset = segmentation.SegmentationDataset(hdf5_name, version=0,
+#                                                   working_dir=path_head_folder,
+#                                                   autoload=False)
+#
+#     with open(segdataset.path + "/direct_map.pkl", "r") as f:
+#         map_dict = pkl.load(f)
+
+
+
+
+# def partition_voxel_mappings_thread(args):
+#     path_head_folder = args[0]
+#     rel_path = args[1]
+#     start = args[2]
+#     number_of_objects = args[3]
+#
+#     counter = 0
+#
+#     with open(path_head_folder + rel_path + "/direct_map.pkl", "r") as f:
+#         map_dict = pkl.load(f)
+#
+#     stride = 10000
+#     keys = np.sort(map_dict.keys())
+#
+#     threshold = None
+#     wait_state = True
+#     finish_state = False
+#     current_map_dict = {}
+#
+#     if start == -1:
+#         start = 0
+#         wait_state = False
+#         threshold = int(np.ceil(keys[0] / float(stride))) * stride
+#         counter += 1
+#
+#     for key in keys[start:]:
+#         print key, counter
+#         if threshold is None:
+#             threshold = int(np.ceil(key / float(stride))) * stride
+#
+#         if key >= threshold:
+#             if len(current_map_dict) and not wait_state:
+#                 with open(path_head_folder + rel_path +
+#                           "/map_dicts/voxel_mapping_%d.pkl"
+#                                           % (threshold-stride), "w") as f:
+#                     pkl.dump(map_dict, f, pkl.HIGHEST_PROTOCOL)
+#
+#             current_map_dict = {}
+#             threshold = int(np.ceil(key / float(stride))) * stride
+#             wait_state = False
+#
+#             if finish_state:
+#                 break
+#
+#         current_map_dict[key] = map_dict[key]
+#         counter += 1
+#
+#         if counter >= number_of_objects:
+#             finish_state = True
+#
+#
+#
+#     if len(current_map_dict):
+#         with open(path_head_folder + rel_path +
+#                                   "/map_dicts/voxel_mapping_%d.pkl"
+#                                   % (threshold - stride), "w") as f:
+#             pkl.dump(map_dict, f, pkl.HIGHEST_PROTOCOL)
 
 
 def create_objects_from_voxels_thread(args):
     path_head_folder = args[0]
-    map_dict_paths = args[1]
-    filename = args[2]
-    hdf5_name = args[3]
-    save_path = args[4]
-    suffix = args[5]
+    obj_ids = args[1]
+    hdf5_name = args[2]
+    save_path = args[3]
 
-    path_dataset = path_head_folder + \
-                   ultrastructure.get_rel_path(hdf5_name, filename, suffix)
+    segdataset = segmentation.SegmentationDataset(hdf5_name, version=0,
+                                                  working_dir=path_head_folder,
+                                                  autoload=False)
 
-    f = open(path_dataset + "/direct_map.pkl", "r")
-    map_dict = pkl.load(f)
-    f.close()
+    info_dict = {}
+    for obj_id in obj_ids:
+        obj = segmentation.SegmentationObject(obj_id, segdataset.type,
+                                              version=segdataset.version,
+                                              working_dir=segdataset.working_dir,
+                                              autoload=False)
 
-    object_dict = {}
-    for map_dict_path in map_dict_paths:
-
-        f = open(map_dict_path, "r")
-        chunk_map_dict = pkl.load(f)
-        f.close()
-
-        if len(chunk_map_dict) > 0:
-            for this_key in chunk_map_dict.keys():
-                chunk_ids = []
-                if chunk_map_dict[this_key] == map_dict[this_key]:
-                    for k in map_dict[this_key]:
-                        chunk_ids.append(k)
-                    object_dict[this_key] = segmentation.\
-                        SegmentationObject(this_key, path_dataset, chunk_ids)
-                    object_dict[this_key].calculate_rep_coord(
-                        calculate_size=True)
+        obj.calculate_rep_coord()
+        info_dict[obj_id] = [obj.size, obj.rep_coord[0], obj.rep_coord[1],
+                             obj.rep_coord[2]]
 
     f = open(save_path, "w")
-    pkl.dump(object_dict, f, pkl.HIGHEST_PROTOCOL)
+    pkl.dump(info_dict, f, pkl.HIGHEST_PROTOCOL)
     f.close()
 
 
 def create_datasets_from_objects_thread(args):
     path_head_folder = args[0]
     hdf5_name = args[1]
-    filename = args[2]
-    suffix = args[3]
 
-    rel_path = ultrastructure.get_rel_path(hdf5_name, filename, suffix)
-    sset = ultrastructure.UltrastructuralDataset(hdf5_name, rel_path,
-                                                   path_head_folder)
-
-    for obj_dict_path in glob.glob(path_head_folder + rel_path +
-                                           "/object_dicts/*"):
+    segdataset = segmentation.SegmentationDataset(hdf5_name, version=0,
+                                                  working_dir=path_head_folder,
+                                                  autoload=False)
+    info_dict = {}
+    for obj_dict_path in glob.glob(segdataset.path + "/object_dicts/*"):
         f = open(obj_dict_path, "r")
-        this_obj_dict = pkl.load(f)
+        this_info_dict = pkl.load(f)
         f.close()
 
-        sset.object_dict.update(this_obj_dict)
+        info_dict.update(this_info_dict)
 
-    ultrastructure.save_dataset(sset)
+    segdataset.save_from_dict(info_dict)
+
+
+# def create_datasets_from_objects_thread(args):
+#     path_head_folder = args[0]
+#     hdf5_name = args[1]
+#
+#     segdataset = segmentation.SegmentationDataset(hdf5_name, version=0,
+#                                                   working_dir=path_head_folder,
+#                                                   autoload=False)
+#
+#     for obj_dict_path in glob.glob(segdataset.path + "/object_dicts/*"):
+#         f = open(obj_dict_path, "r")
+#         this_obj_dict = pkl.load(f)
+#         f.close()
+#
+#         segdataset.object_dict.update(this_obj_dict)
+#
+#     segdataset.save()
+
+
+def validate_chunks_thread(args):
+    chunk = args[0]
+    filename = args[1]
+    hdf5names = args[2]
+
+    path = chunk.folder + filename + ".h5"
+    if os.path.exists(path):
+        path = chunk.folder + filename + ".h5"
+        try:
+            this_segmentation = datahandler.load_from_h5py(path, hdf5names,
+                                                           as_dict=True)
+            for hdf5name in hdf5names:
+                if np.sum(this_segmentation[hdf5name]) == 0:
+                    with open(chunk.folder + "/errors_%s.txt" % filename, "a") as f:
+                        f.write("zero error @ %s" % hdf5name)
+        except:
+            with open(chunk.folder + "/errors_%s.txt" % filename, "a") as f:
+                f.write("load error")
+    else:
+        with open(chunk.folder + "/errors_%s.txt" % filename, "a") as f:
+            f.write("existence error")
+

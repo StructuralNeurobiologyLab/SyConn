@@ -8,14 +8,30 @@
 import numpy as np
 import os
 import time
-import cPickle as pickle
+import cPickle as pkl
 import networkx as nx
 import glob
 
 from ..processing import objectextraction_helper as oeh
 from ..multi_proc import multi_proc_main as mpm
 from ..utils import datahandler#, segmentationdataset
-from datasetrepresentations import ultrastructure
+from syconnfs.representations import segmentation
+
+
+def validate_chunks(cset, filename, hdf5names, qsub_pe=None, qsub_queue=None):
+    multi_params = []
+    for chunk in cset.chunk_dict.values():
+        multi_params.append([chunk, filename, hdf5names])
+
+    if qsub_pe is None and qsub_queue is None:
+        results = mpm.start_multiprocess(oeh.validate_chunks_thread,
+                                         multi_params, debug=False)
+    elif mpm.__QSUB__:
+        path_to_out = mpm.QSUB_script(multi_params,
+                                      "validate_chunks",
+                                      pe=qsub_pe, queue=qsub_queue)
+    else:
+        raise Exception("QSUB not available")
 
 
 def calculate_chunk_numbers_for_box(cset, offset, size):
@@ -195,7 +211,7 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
         results_as_list = []
         for out_file in out_files:
             with open(out_file) as f:
-                for entry in pickle.load(f):
+                for entry in pkl.load(f):
                     results_as_list.append(entry)
     else:
         raise Exception("QSUB not available")
@@ -328,7 +344,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
 
         for out_file in out_files:
             with open(out_file) as f:
-                result = pickle.load(f)
+                result = pkl.load(f)
                 for hdf5_name in hdf5names:
                     elems = result[hdf5_name]
                     for elem in elems:
@@ -413,7 +429,7 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
     merge_list_dict_path = cset.path_head_folder + "merge_list_dict.pkl"
 
     f = open(merge_list_dict_path, "w")
-    pickle.dump(merge_list_dict, f)
+    pkl.dump(merge_list_dict, f)
     f.close()
 
     for nb_chunk in chunk_list:
@@ -507,16 +523,60 @@ def concatenate_mappings(cset, filename, hdf5names, debug=False, suffix=""):
 
     multi_params = []
     for hdf5_name in hdf5names:
-        rel_path = ultrastructure.get_rel_path(hdf5_name, filename, suffix)
-        map_dict_paths = glob.glob(cset.path_head_folder + rel_path +
-                                   "/map_dicts/*")
-        multi_params.append([cset.path_head_folder, rel_path, map_dict_paths])
+        segdataset = segmentation.SegmentationDataset(hdf5_name, version=0,
+                                                      working_dir=cset.path_head_folder,
+                                                      autoload=False)
+        map_dict_paths = glob.glob(segdataset.path + "/map_dicts/*")
+        multi_params.append([cset.path_head_folder, hdf5_name, map_dict_paths])
 
     mpm.start_multiprocess(oeh.concatenate_mappings_thread,
                            multi_params, debug=debug)
 
 
-def create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
+# def partition_voxel_mappings(cset, filename, hdf5names, debug=False,
+#                                     suffix="", qsub_pe=None, qsub_queue=None):
+#     """
+#     Combines all map dicts
+#
+#     Parameters
+#     ----------
+#     cset : chunkdataset instance
+#     filename : str
+#         Filename of the prediction in the chunkdataset
+#     hdf5names: list of str
+#         List of names/ labels to be extracted and processed from the prediction
+#         file
+#     debug: boolean
+#         If true multiprocessed steps only operate on one core using 'map' which
+#         allows for better error messages
+#     suffix: str
+#         Suffix for the intermediate results
+#
+#     """
+#
+#     multi_params = []
+#     for hdf5_name in hdf5names:
+#         rel_path = ultrastructure.get_rel_path(hdf5_name, filename, suffix)
+#         with open(cset.path_head_folder + rel_path + "/direct_map.pkl", "r") as f:
+#             map_dict = pkl.load(f)
+#
+#         stride = 20000
+#         for start in range(0, len(map_dict.keys()), stride):
+#
+#             multi_params.append([cset.path_head_folder, rel_path,
+#                                  start-1, stride+1])
+#
+#     if qsub_pe is None and qsub_queue is None:
+#         results = mpm.start_multiprocess(oeh.extract_voxels_thread,
+#                                          multi_params, debug=debug)
+#
+#     elif mpm.__QSUB__:
+#         path_to_out = mpm.QSUB_script(multi_params,
+#                                       "partition_voxel_mappings",
+#                                       pe=qsub_pe, queue=qsub_queue)
+
+
+def create_objects_from_voxels(cset, filename, hdf5names, stride=10000,
                                debug=False, suffix="", qsub_pe=None,
                                qsub_queue=None):
     """
@@ -530,7 +590,7 @@ def create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
     hdf5names: list of str
         List of names/ labels to be extracted and processed from the prediction
         file
-    granularity: int
+    stride: int
         Defines granularity for partitioning data for multiprocessing
     debug: boolean
         If true multiprocessed steps only operate on one core using 'map' which
@@ -548,21 +608,22 @@ def create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
     for nb_hdf5_name in range(len(hdf5names)):
         counter = 0
         hdf5_name = hdf5names[nb_hdf5_name]
-        path_dataset = cset.path_head_folder + \
-                       ultrastructure.get_rel_path(hdf5_name, filename, suffix)
-        if not os.path.exists(path_dataset + "/object_dicts/"):
-            os.makedirs(path_dataset + "/object_dicts/")
+        segdataset = segmentation.SegmentationDataset(hdf5_name, version=0,
+                                                      working_dir=cset.path_head_folder,
+                                                      autoload=False)
 
-        map_dict_paths = glob.glob(path_dataset + "/map_dicts/map_*")
+        if not os.path.exists(segdataset.path + "/object_dicts/"):
+            os.makedirs(segdataset.path + "/object_dicts/")
 
-        for step in range(
-                int(np.ceil(len(map_dict_paths) / float(granularity)))):
-            this_map_dict_paths = map_dict_paths[step * granularity:
-                                                    (step + 1) * granularity]
-            save_path = path_dataset + "/object_dicts/dict_%d.pkl" % counter
-            multi_params.append([cset.path_head_folder, this_map_dict_paths,
-                                 filename, hdf5_name, save_path, suffix,
-                                 counter])
+        obj_folders = glob.glob(segdataset.so_storage_path + "/*/*/*")
+        obj_ids = [int(os.path.basename(path)) for path in obj_folders]
+
+        for obj_id_block in [obj_ids[i:i + stride] for i in
+                             xrange(0, len(obj_ids), stride)]:
+
+            save_path = segdataset.path + "/object_dicts/dict_%d.pkl" % counter
+            multi_params.append([cset.path_head_folder, obj_id_block,
+                                 hdf5_name, save_path])
             counter += 1
 
     if qsub_pe is None and qsub_queue is None:
@@ -605,7 +666,7 @@ def create_datasets_from_objects(cset, filename, hdf5names, debug=False,
     multi_params = []
     for hdf5_name in hdf5names:
         multi_params.append(
-            [cset.path_head_folder, hdf5_name, filename, suffix])
+            [cset.path_head_folder, hdf5_name])
 
     if qsub_pe is None and qsub_queue is None:
         mpm.start_multiprocess(oeh.create_datasets_from_objects_thread,
@@ -1016,37 +1077,48 @@ def from_ids_to_objects(cset, filename, hdf5names, chunk_list=None, debug=False,
                 chunk_translator[chunk_list[ii]] = ii
 
     for hdf5_name in hdf5names:
-        path = cset.path_head_folder + "/" + \
-               ultrastructure.get_rel_path(hdf5_name, filename, suffix)
-        if not os.path.exists(path + "/map_dicts/"):
-            os.makedirs(path + "/map_dicts/")
-        if not os.path.exists(path + "/voxels/"):
-            os.makedirs(path + "/voxels/")
-        if not os.path.exists(path + "/hull_voxels/"):
-            os.makedirs(path + "/hull_voxels/")
+        segdataset = segmentation.SegmentationDataset(hdf5_name, version=0,
+                                                      working_dir=cset.path_head_folder,
+                                                      autoload=False)
+        if not os.path.exists(segdataset.path + "/map_dicts/"):
+            os.makedirs(segdataset.path + "/map_dicts/")
+        if not os.path.exists(segdataset.path + "/voxels/"):
+            os.makedirs(segdataset.path + "/voxels/")
+        if not os.path.exists(segdataset.path + "/hull_voxels/"):
+            os.makedirs(segdataset.path + "/hull_voxels/")
+
+    # --------------------------------------------------------------------------
+
+    # time_start = time.time()
+    # extract_voxels(cset, filename, hdf5names, debug=debug,
+    #                chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
+    #                qsub_queue=qsub_queue)
+    # all_times.append(time.time() - time_start)
+    # step_names.append("voxel extraction")
+    # print "\nTime needed for extracting voxels: %.3fs" % all_times[-1]
+
+    # --------------------------------------------------------------------------
+
+    # time_start = time.time()
+    # concatenate_mappings(cset, filename, hdf5names, debug=debug, suffix=suffix)
+    # all_times.append(time.time() - time_start)
+    # step_names.append("concatenate mappings")
+    # print "\nTime needed for concatenating mappings: %.3fs" % all_times[-1]
+
+    # --------------------------------------------------------------------------
+
+    # time_start = time.time()
+    # partition_voxel_mappings(cset, filename, hdf5names, debug=debug,
+    #                          suffix=suffix, qsub_pe=qsub_pe,
+    #                          qsub_queue=qsub_queue)
+    # all_times.append(time.time() - time_start)
+    # step_names.append("partition voxel mappings")
+    # print "\nTime needed for partitioning voxel mappings: %.3fs" % all_times[-1]
 
     # --------------------------------------------------------------------------
 
     time_start = time.time()
-    extract_voxels(cset, filename, hdf5names, debug=debug,
-                   chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
-                   qsub_queue=qsub_queue)
-    all_times.append(time.time() - time_start)
-    step_names.append("voxel extraction")
-    print "\nTime needed for extracting voxels: %.3fs" % all_times[-1]
-
-    # --------------------------------------------------------------------------
-
-    time_start = time.time()
-    concatenate_mappings(cset, filename, hdf5names, debug=debug, suffix=suffix)
-    all_times.append(time.time() - time_start)
-    step_names.append("concatenate mappings")
-    print "\nTime needed for concatenating mappings: %.3fs" % all_times[-1]
-
-    # --------------------------------------------------------------------------
-
-    time_start = time.time()
-    create_objects_from_voxels(cset, filename, hdf5names, granularity=15,
+    create_objects_from_voxels(cset, filename, hdf5names,
                                debug=debug, suffix=suffix, qsub_pe=qsub_pe,
                                qsub_queue=qsub_queue)
     all_times.append(time.time() - time_start)
