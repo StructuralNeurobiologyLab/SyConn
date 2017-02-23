@@ -76,10 +76,22 @@ else:
     import_batch_size = None
 
 # Write segmentation to chunky first
-# ddh.export_dense_segmentation_to_cset(cset, kd_raw, datatype=np.uint32,
-#                                                nb_cpus=8, pe=qsub_pe,
-#                                                queue=qsub_queue,
-#                                                batch_size=import_batch_size)
+ddh.export_dense_segmentation_to_cset(cset, kd_raw, datatype=np.uint32,
+                                               nb_cpus=8, pe=qsub_pe,
+                                               queue=qsub_queue,
+                                               batch_size=import_batch_size)
+# ch_sz = cset.chunk_size
+# xs = [ch_sz[0]*i for i in range(8, 12)]
+# ys = [ch_sz[0]*i for i in range(8, 12)]
+# zs = [ch_sz[0]*i for i in range(8, 12)]
+# chunk_list = []
+# for x in xs:
+#     for y in ys:
+#         for z in zs:
+#             chunk_list.append(cset.coord_dict[tuple([x, y, z])])
+
+oe.validate_chunks(cset, "dense_segmentation", ["sv"], qsub_pe=qsub_pe,
+                   qsub_queue=qsub_queue)
 
 # Extract supervoxels as objects
 oe.from_ids_to_objects(cset, "dense_segmentation", ["sv"],
