@@ -4,7 +4,8 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-from syconn.processing import initialization
+
+from syconn.processing import initialization, objectextraction
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 from syconn.multi_proc import multi_proc_main as mpm
@@ -28,12 +29,14 @@ path_barrier_cnn_1 = [home_dir + "/syconn_paper_models/BIRD_barrier_config.py",
 path_barrier_cnn_2 = [home_dir + "/syconn_paper_models/BIRD_rbarrier_config.py",
                       home_dir + "/syconn_paper_models/BIRD_rbarrier.param"]
 
-path_to_knossosdataset =
-path_to_chunkdaset =
+path_to_knossosdataset = "/lustre/sdorkenw/j0126_cubed_realligned/"
+path_to_chunkdaset = "/lustre/sdorkenw/j0126_cset_realligned/chunkdataset/"
 
 n_jobs = 100
 
-qsub_pe = # gpu pe
+qsub_pe_gpu = "synapse0102"  # gpu pe
+qsub_pe_cpu = "openmp"  # gpu pe
+
 
 # ------------------------------------------------------------------------ Setup
 
@@ -77,9 +80,11 @@ for _ in range(n_jobs):
                    batch_size1, kd_raw.knossos_path])
 
 # mpm.SUBP_script(params, "join_chunky_inference")
-mpm.QSUB_script(params, "join_chunky_inference", pe=qsub_pe, delay=10,
+mpm.QSUB_script(params, "join_chunky_inference", pe=qsub_pe_gpu, delay=10,
                 delay_one=600)
 
+objectextraction.validate_chunks(cset, "MIGA", ["mi", "vc", "sj"],
+                                 qsub_pe=qsub_pe_cpu)
 # Synaptic junctions, vesicle clouds, mitochondria - stage 2 -------------------
 params = []
 for i_job in range(n_jobs):
@@ -90,8 +95,11 @@ for i_job in range(n_jobs):
                    batch_size1, kd_raw.knossos_path])
 
 # mpm.SUBP_script(params, "join_chunky_inference")
-mpm.QSUB_script(params, "join_chunky_inference", pe=qsub_pe, delay=10,
+mpm.QSUB_script(params, "join_chunky_inference", pe=qsub_pe_gpu, delay=10,
                 delay_one=600)
+
+objectextraction.validate_chunks(cset, "ARGUS", ["mi", "vc", "sj"],
+                                 qsub_pe=qsub_pe_cpu)
 
 # Type of synaptic junctions ---------------------------------------------------
 params = []
@@ -103,9 +111,11 @@ for i_job in range(n_jobs):
                    batch_size1, kd_raw.knossos_path])
 
 # mpm.SUBP_script(params, "join_chunky_inference")
-mpm.QSUB_script(params, "join_chunky_inference", pe=qsub_pe, delay=10,
+mpm.QSUB_script(params, "join_chunky_inference", pe=qsub_pe_gpu, delay=10,
                 delay_one=600)
 
+objectextraction.validate_chunks(cset, "TYPE", ["asym", "sym"],
+                                 qsub_pe=qsub_pe_cpu)
 # Barrier - stage 1 ------------------------------------------------------------
 params = []
 for i_job in range(n_jobs):
@@ -116,18 +126,24 @@ for i_job in range(n_jobs):
                    batch_size2, kd_raw.knossos_path])
 
 # mpm.SUBP_script(params, "join_chunky_inference")
-mpm.QSUB_script(params, "join_chunky_inference", pe=qsub_pe, delay=10,
+mpm.QSUB_script(params, "join_chunky_inference", pe=qsub_pe_gpu, delay=10,
                 delay_one=600)
 
+objectextraction.validate_chunks(cset, "BARRIER", ["bar"],
+                                 qsub_pe=qsub_pe_cpu)
 # Barrier - stage 2 ------------------------------------------------------------
 params = []
 for i_job in range(n_jobs):
     params.append([cset,
-                   path_barrier_cnn_1[0],
-                   path_barrier_cnn_1[1],
+                   path_barrier_cnn_2[0],
+                   path_barrier_cnn_2[1],
                    ["RBARRIER", "BARRIER"], ["none", "bar"], offset,
                    batch_size2, kd_raw.knossos_path])
 
 # mpm.SUBP_script(params, "join_chunky_inference")
-mpm.QSUB_script(params, "join_chunky_inference", pe=qsub_pe, delay=10,
+mpm.QSUB_script(params, "join_chunky_inference", pe=qsub_pe_gpu, delay=10,
                 delay_one=600)
+
+objectextraction.validate_chunks(cset, "RBARRIER", ["bar"],
+                                 qsub_pe=qsub_pe_cpu)
+
