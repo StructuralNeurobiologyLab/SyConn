@@ -5,6 +5,7 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
+from ..multi_proc import multi_proc_main as mpm
 
 from knossos_utils import chunky, knossosdataset
 import numpy as np
