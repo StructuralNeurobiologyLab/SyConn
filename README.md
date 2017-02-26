@@ -8,4 +8,4 @@ If you use parts of this code base in your academic projects, please cite the co
 
 Documentation
 --------------
-To get started, please have a look at our [documentation](https://structuralneurobiologylab.github.io/SyConn/documentation/), with information on how to run our [example](https://github.com/StructuralNeurobiologyLab/SyConn/blob/master/examples/full_run_example.py). We will also present more general information about SyConn on our [Website](https://structuralneurobiologylab.github.io/SyConn/) soon.
+To get started, please have a look at our [documentation](https://structuralneurobiologylab.github.io/SyConn/documentation/), with information on how to run our [example](https://github.com/StructuralNeurobiologyLab/SyConn/blob/master/examples/full_run_example.py). We also present more general information about SyConn on our [Website](https://structuralneurobiologylab.github.io/SyConn/).
