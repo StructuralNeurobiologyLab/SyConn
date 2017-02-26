@@ -44,7 +44,7 @@ html, body {
 
 @include breakpoint($on-large) {
 	.page-separator {
-		background: #efefef url(../images/bg-grey.jpg) no-repeat center center;
+		background: #efefef url(../images/bg.jpg) no-repeat center center;
 		background-size: cover;
 		border-left: 1px solid #313438;
 		position: fixed;
