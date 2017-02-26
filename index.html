@@ -41,7 +41,7 @@ layout: default
 <section class="section">
 	<article class="row">
 		<div class="col">
-			<p>Teravoxel volume electron microscopy datasets from neural tissue can now be acquired in weeks, but data analysis requires years of manual labor (see also <a href="#Fig1">Fig. 1</a>). The SyConn framework uses deep convolutional neural networks (CNN) and random forest classifiers (RFC) to infer a richly-annotated synaptic connectivity matrix from manual neurite skeleton reconstructions by automatically identifying mitochondria, synapses and their types, axons, dendrites, spines, myelin, somata and cell types.</p>
+			<p><strong>In short:</strong> Teravoxel volume electron microscopy datasets from neural tissue can now be acquired in weeks, but data analysis requires years of manual labor (see also <a href="#Fig1">Fig. 1</a>). The SyConn framework uses deep convolutional neural networks (CNN) and random forest classifiers (RFC) to infer a richly-annotated synaptic connectivity matrix from manual neurite skeleton reconstructions by automatically identifying mitochondria, synapses and their types, axons, dendrites, spines, myelin, somata and cell types.</p>
 		</div>
 
 		<div class="col">
@@ -57,10 +57,7 @@ layout: default
 	</article>
 
 	<article>
-		<p>SyConn automates all steps shown in <a href="#Fig1">Fig. 1</a>, but the neurite reconstruction, where it only requires manual skeleton reconstructions instead of volume segmentations. Using several recursive 3D CNNs we first detect cell boundaries and all kinds of ultrastructures such as synaptic junctions (<a href="#Fig2">Fig. 2b</a>). Using a ray cast approach we extract a hull for each skeleton based on the boundary prediction (<a href="#Fig2">Fig. 2a</a>), which is then used to map mitochdondria, synaptic junctions and vesicle clouds to each cell (<a href="#Fig2">Fig. 2c</a>). Leveraging this information SyConn uses RFCs to partition neurons into their subcellular parts (axon, dendrite, soma; <a href="#Fig2">Fig. 2d</a>) and to assign them to one of four broad cell types (<a href="#Fig2">Fig. 2e</a>). Finally, we combine this into a richly annotated synaptic connectivity matrix (<a href="#Fig2">Fig. 2f</a>).  </p>
-	</article>
-	<article>
-		<p>To test SyConn, we detected ultrastructural objects in three serial block-face electron microscopy (SBEM) data sets (zebra finch Area X, size: 97.9 × 95.6 × 115 μm³; zebrafish spinal cord, size: 81.8 × 89.9 × 210 μm³; mouse striatum, size: 17.9 × 15.0 × 69 μm³) and created a wiring diagram of the zebra finch basal-ganglia (Area X) from 612 skeleton reconstructions traced with KNOSSOS (<a href="https://knossostool.org/">knossostool.org</a>).</p>
+		<p>SyConn automates all steps shown in <a href="#Fig1">Fig. 1</a>, but the neurite reconstruction, where it only requires manual skeleton reconstructions instead of volume segmentations (compare hatched bars and full bars in <a href="#Fig1">Fig. 1</a>). Using several recursive 3D CNNs we first detect cell boundaries and all kinds of ultrastructures such as synaptic junctions (<a href="#Fig2">Fig. 2b</a>). Using a ray cast approach we extract a hull for each skeleton based on the boundary prediction (<a href="#Fig2">Fig. 2a</a>), which is then used to map mitochdondria, synaptic junctions and vesicle clouds to each cell (<a href="#Fig2">Fig. 2c</a>). Leveraging this information SyConn uses RFCs to partition neurons into their subcellular parts (axon, dendrite, soma; <a href="#Fig2">Fig. 2d</a>) and to assign them to one of four broad cell types (<a href="#Fig2">Fig. 2e</a>). Finally, we combine this into a richly annotated synaptic connectivity matrix (<a href="#Fig2">Fig. 2f</a>).  </p>
 	</article>
 
 	<article>
@@ -71,6 +68,10 @@ layout: default
 			</figcaption>
 		</figure>
 	</article>
+
+	<article>
+		<p>To test SyConn, we detected ultrastructural objects in three serial block-face electron microscopy (SBEM) data sets (zebra finch Area X, size: 97.9 × 95.6 × 115 μm³; zebrafish spinal cord, size: 81.8 × 89.9 × 210 μm³; mouse striatum, size: 17.9 × 15.0 × 69 μm³) and created a wiring diagram of the zebra finch basal-ganglia (Area X) from 612 skeleton reconstructions traced with KNOSSOS (<a href="https://knossostool.org/">knossostool.org</a>).</p>
+	</article>
 </section>
 
 <section class="section" id="GettingStartedSection">
@@ -79,7 +80,7 @@ layout: default
 			<h2 class="subtitle">Getting Started</h2>
 		</header>
 
-		<p>Python 2.7 is required (we recommend Anaconda). SyConn has been tested on Linux distributions so far (CentOS and Arch Linux).</p>
+		<p>Python 2.7 is required (we recommend Anaconda). SyConn has been tested on Linux distributions (CentOS and Arch Linux).</p>
 	</article>
 
 	<article class="inbetween-article">
@@ -89,7 +90,7 @@ layout: default
 	</article>
 
 	<article>
-		<p>Example instructions ...</p>
+		<p>All requirements should be automatically installed, when following the instructions. Together with the provide sample data (<a href="http://brainpuzzler.org/downloads/SyConnDenseCube.zip">SyConnDenseCube.zip</a>) including our trained models one is able to run most parts of SyConn.</p>
 	</article>
 </section>
 
