@@ -3,11 +3,10 @@ html {
 }
 
 body {
-	font-family: "Source Sans Pro", serif;
-	font-size: 1.6rem;
+	font-family: "Lucida Grande", "Lucida Sans Unicode", "Lucida Sans", Verdana, Tahoma, sans-serif;
+	font-size: 1.8rem;
 	line-height: 1.6;
-	color: darken(#777b81, 5);
-	font-weight: 300;
+	color: black;
 }
 
 p + p,
@@ -22,9 +21,7 @@ li ~ li {
 }
 
 h1, h2, h3, h4, h5, h6 {
-	font-family: "Oak Light", sans-serif;
 	color: darken(#777b81, 15);
-	font-weight: 600;
 	line-height: 1.2;
 }
 

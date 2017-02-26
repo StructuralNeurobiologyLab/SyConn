@@ -16,8 +16,8 @@ layout: default
 	</div>
 
 </header>
-<!-- 
-<section class="section">
+
+<!-- <section class="section">
 	<article class="row">
 		<div class="col">
 			<h2 class="subtitle">About the Paper</h2>
@@ -35,43 +35,11 @@ layout: default
 		</div>
 	</article>
 </section>
-
-<section class="section">
-	<article>
-		<h2 class="subtitle">References</h2>
-
-		<p>SyConn is based on <strong class="-strong-light">ELEKTRONN</strong> (<a href="http://elektronn.org">elektronn.org</a>) and the KNOSSOS Python tools.<sup>1</sup></p>
-
-		<ol class="footnotes">
-			<li><sup>1</sup>KNOSSOS is used for visualization and annotation of 3D EM data sets.</li>
-		</ol>
-	</article>
-</section>
-
-<section class="section">
-	<article>
-		<header>
-			<h2 class="subtitle">Getting Started</h2>
-			<p>Something</p>
-		</header>
-
-		<p>Python 2.7 is required (we recommend Anaconda). SyConn has been tested on Linux distributions so far (CentOS and Arch Linux).</p>
-	</article>
-
-	<article class="inbetween-article">
-		<span class="tag">Quickstart</span>
-
-		{% include code_installation.html %}
-	</article>
-
-	<article>
-		<p>Example instructions ...</p>
-	</article>
-</section>
 -->
 
+
 <section class="section">
-	<article class="row -middle">
+	<article class="row">
 		<div class="col">
 			<p>Teravoxel volume electron microscopy datasets from neural tissue can now be acquired in weeks, but data analysis requires years of manual labor (see also <a href="#Fig1">Fig. 1</a>). The SyConn framework uses deep convolutional neural networks (CNN) and random forest classifiers (RFC) to infer a richly-annotated synaptic connectivity matrix from manual neurite skeleton reconstructions by automatically identifying mitochondria, synapses and their types, axons, dendrites, spines, myelin, somata and cell types.</p>
 		</div>
@@ -79,17 +47,49 @@ layout: default
 		<div class="col">
 			<figure id="Fig1">
 				<img src="{{ "/images/timing_plot.png" | prepend: site.baseurl}}" alt="Timing plot comparison">
-				<figcaption><strong>Fig. 1:</strong> Estimated times for the dense manual annotations of all individual steps required for acquiring a wiring matrix from EM datasets. Hatched bars are skeletonization times.<br>
+				<figcaption>
+					<strong>Fig. 1:</strong> Estimated times for the dense manual annotations of all individual steps required for acquiring a wiring matrix from EM datasets. Hatched bars are skeletonization times.<br>
 
-				<strong>Volumes:</strong> j012 (songbird Area X): 0.00108 mm³; zebrafish larval brain: 0.048 mm³ 45; mouse brain, grey matter: 112 mm³.</figcaption>
+					<strong>Volumes:</strong> j012 (songbird Area X): 0.00108 mm³; zebrafish larval brain: 0.048 mm³ 45; mouse brain, grey matter: 112 mm³.
+				</figcaption>
 			</figure>
 		</div>
+	</article>
+
+	<article>
+		<figure id="Fig1">
+			<img src="{{ "/images/website_workflow.png" | prepend: site.baseurl}}" alt="SyConn Workflow">
+			<figcaption>
+				<strong>Fig. 2:</strong> ... ...
+			</figcaption>
+		</figure>
 	</article>
 </section>
 
 <section class="section">
 	<article>
 		<p><strong>SyConn</strong> was developed in Prof. Winfried Denk’s department <a href="https://www.neuro.mpg.de/denk"><em>Electrons - Photons - Neurons</em></a> at the Max Planck Institute of Neurobiolgy in Martinsried, Germany.</p>
+	</article>
+</section>
+
+
+<section class="section" id="GettingStartedSection">
+	<article>
+		<header>
+			<h2 class="subtitle">Getting Started</h2>
+		</header>
+
+		<p>Python 2.7 is required (we recommend Anaconda). SyConn has been tested on Linux distributions so far (CentOS and Arch Linux).</p>
+	</article>
+
+	<article class="inbetween-article">
+		<h3 class="tag">Quickstart</h3>
+
+		{% include code_installation.html %}
+	</article>
+
+	<article>
+		<p>Example instructions ...</p>
 	</article>
 </section>
 
@@ -142,5 +142,14 @@ layout: default
 				</div>
 			</div>
 		</div>
+	</article>
+</section>
+
+
+<section class="section">
+	<article>
+		<h2 class="subtitle">References</h2>
+
+		<p>SyConn is based on <strong class="-strong-light">ELEKTRONN</strong> (<a href="http://elektronn.org">elektronn.org</a>) and the KNOSSOS Python tools. KNOSSOS is used for visualization and annotation of 3D EM data sets.</p>
 	</article>
 </section>

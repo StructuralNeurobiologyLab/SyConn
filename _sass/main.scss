@@ -13,14 +13,6 @@ $accent-color: #24b47e;
 	}
 }
 
-@font-face {
-	font-family: "Oak Light";
-	font-style: normal;
-	src: url("../fonts/oak-light.ttf") format("truetype");
-}
-
-@import url('https://fonts.googleapis.com/css?family=Source+Sans+Pro:300,300i,400,400i,600');
-
 // Grid & Reset.
 @import 'reset';
 @import 'grid';

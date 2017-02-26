@@ -1,9 +1,20 @@
 .about-gallery {
 	margin-left: -2em;
 	margin-right: -2em;
+	font-size: 1.6rem;
 
 	.col + .col {
 		margin-left: 0;
+	}
+
+	.user + .user, .col + .col {
+		border-top: 1px solid #ccc;
+	}
+
+	@include breakpoint($on-small) {
+		.user + .user, .col + .col {
+			border: 0;
+		}
 	}
 
 	@include breakpoint($on-medium) {
@@ -16,7 +27,7 @@
 		}
 
 		.col + .col {
-			position: relative; 
+			position: relative;
 
 			&:before {
 				position: absolute;
@@ -42,16 +53,12 @@
 	.user {
 		padding: 2em 2em 2em 1em;
 		text-align: center;
-		
+
 		&.-with-picture {
 			height: 300px;
 			overflow: hidden;
 		}
 	}
-
-	.user + .user, .col + .col {
-			border-top: 1px solid #ccc;
-		}
 
 	.image {
 		width: 128px;

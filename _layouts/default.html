@@ -8,32 +8,16 @@
 	<!-- {% include top-bar.html %} -->
 
 	<div class="page-separator"></div>
-	<div class="page-overlay"></div>
-	
+
 	<article class="page-content">
 		{{ content }}
 	</article>
 
 	{% include footer.html %}
 
-	<script src="{{ "/js/jquery-3.1.1.min.js" | prepend: site.baseurl }}"></script>
+<!-- 	<script src="{{ "/js/jquery-3.1.1.min.js" | prepend: site.baseurl }}"></script>
 	<script src="{{ "/js/jquery.mobile-events.min.js" | prepend: site.baseurl }}"></script>
-	<script src="{{ "/js/cocoen.min.js" | prepend: site.baseurl }}"></script>
-	<script>
-		var divs = $('.page-overlay');
-		$(window).scroll(function(){
-		   var percent = $(document).scrollTop() / ($(document).height() - $(window).height());
-		   divs.css('opacity', percent);
-		});
-
-		$(document).ready(function(){
-			$('.cocoen').cocoen();
-		});
-
-		$("nav > .toggle").on("click", function () {
-			$(".sidebar").toggleClass("-expand");
-		});
-	</script>
+	<script src="{{ "/js/cocoen.min.js" | prepend: site.baseurl }}"></script> -->
 </body>
 
 </html>

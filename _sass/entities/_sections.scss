@@ -19,7 +19,19 @@ html, body {
 .section {
 	article {
 		padding: 1em 2em;
+
+		h2 {
+			margin-bottom: 2em;
+		}
 	}
+}
+
+.section + .section {
+	margin-top: 4em;
+}
+
+.section:last-of-type {
+	padding-bottom: 4em;
 }
 
 .inbetween-article {
@@ -34,7 +46,7 @@ html, body {
 	.page-separator {
 		background: #efefef url(../images/bg-grey.jpg) no-repeat center center;
 		background-size: cover;
-		border-left: 1px solid #bbb;
+		border-left: 1px solid #313438;
 		position: fixed;
 		height: calc(100% + 150px);
 		width: calc(25% + 150px);
@@ -82,7 +94,7 @@ html, body {
 }
 
 .header {
-	padding: 4em 2em 1em;
+	padding: 4em 4em 1em;
 
 	.button-list {
 		margin-top: 2em;
@@ -97,16 +109,12 @@ html, body {
 	}
 
 	@include breakpoint($on-large) {
-		padding: 4em calc(150px + 4em) 2em 4em;
+		padding: 4em calc(150px + 4em) 4em 4em;
 
 		.col + .col {
 			margin-top: 0;
 		}
 	}
-}
-
-.section:last-of-type {
-	padding-bottom: 1em;
 }
 
 figure {
