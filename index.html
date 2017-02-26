@@ -55,6 +55,7 @@ layout: default
 			</figure>
 		</div>
 	</article>
+
 	<article>
 		<p>SyConn automates all steps shown in <a href="#Fig1">Fig. 1</a>, but the neurite reconstruction, where it only requires manual skeleton reconstructions instead of volume segmentations. Using several recursive 3D CNNs we first detect cell boundaries and all kinds of ultrastructures such as synaptic junctions (<a href="#Fig2">Fig. 2b</a>). Using a ray cast approach we extract a hull for each skeleton based on the boundary prediction (<a href="#Fig2">Fig. 2a</a>), which is then used to map mitochdondria, synaptic junctions and vesicle clouds to each cell (<a href="#Fig2">Fig. 2c</a>). Leveraging this information SyConn uses RFCs to partition neurons into their subcellular parts (axon, dendrite, soma; <a href="#Fig2">Fig. 2d</a>) and to assign them to one of four broad cell types (<a href="#Fig2">Fig. 2e</a>). Finally, we combine this into a richly annotated synaptic connectivity matrix (<a href="#Fig2">Fig. 2f</a>).  </p>
 	</article>
@@ -154,6 +155,6 @@ layout: default
 	<article>
 		<h2 class="subtitle">References</h2>
 
-		<p>SyConn is based on <strong class="-strong-light">ELEKTRONN</strong> (<a href="http://elektronn.org">elektronn.org</a>) and the KNOSSOS Python tools. KNOSSOS is used for visualization and annotation of 3D EM data sets.</p>
+		<p>SyConn is based on <strong class="-strong-light">ELEKTRONN</strong> (<a href="http://elektronn.org">elektronn.org</a>) and the KNOSSOS Python tools (<a href="https://github.com/knossos-project/knossos_utils">github</a>). KNOSSOS (<a href="https://knossostool.org/">knossostool.org</a>) is used for visualization and annotation of 3D EM data sets.</p>
 	</article>
 </section>
