@@ -17,6 +17,22 @@ from knossos_utils import chunky, knossosdataset
 from syconnfs.representations import segmentation
 
 
+def extract_ids_thread(args):
+    chunk = args[0]
+    filename = args[1]
+    hdf5names = args[2]
+
+    ids = {}
+
+    path = chunk.folder + filename + ".h5"
+    this_segmentation = datahandler.load_from_h5py(path, hdf5names,
+                                                   as_dict=True)
+    for hdf5_name in hdf5names:
+        ids[hdf5_name] = np.unique(this_segmentation[hdf5_name])
+
+    return [chunk.number, ids]
+
+
 def validate_chunks_thread(args):
     chunk = args[0]
     filename = args[1]
@@ -38,6 +54,31 @@ def validate_chunks_thread(args):
     else:
         with open(chunk.folder + "/errors_%s.txt" % filename, "a") as f:
             f.write("existence error")
+
+
+def validate_knossos_cubes_thread(args):
+    cset_path = args[0]
+    filename = args[1]
+    hdf5names = args[2]
+    coord_start = args[3]
+    stride = args[4]
+
+    cset = chunky.load_dataset(cset_path, update_paths=True)
+
+    coords = []
+    for x in range(0, cset.box_size[0], 128):
+        for y in range(0, cset.box_size[1], 128):
+            for z in range(0, cset.box_size[2], 128):
+                coords.append([x, y, z])
+
+    for coord in coords[coord_start: coord_start + stride]:
+        cube = cset.from_chunky_to_matrix([128, 128, 128], coord, filename,
+                                          hdf5names)
+        for hdf5name in hdf5names:
+            if np.sum(cube[hdf5name]) == 0:
+                with open(cset.path_head_folder + "/errors_%s_%d_%d_%d.txt" %
+                        (filename, coord[0], coord[1], coord[2]), "w") as f:
+                    f.write("zero error @ %s" % hdf5name)
 
 
 def gauss_threshold_connected_components_thread(args):
@@ -264,11 +305,12 @@ def make_stitch_list_thread(args):
                             overlap[id] - stitch_overlap[id],
                             overlap[id] + stitch_overlap[id], id)
 
-            this_shape = cc_area[0].shape
-            for x in range(this_shape[0]):
-                for y in range(this_shape[1]):
-                    for z in range(this_shape[2]):
-                        for nb_hdf5_name in range(len(hdf5names)):
+            for nb_hdf5_name in range(len(hdf5names)):
+                this_shape = cc_area[nb_hdf5_name].shape
+                for x in range(this_shape[0]):
+                    for y in range(this_shape[1]):
+                        for z in range(this_shape[2]):
+
                             hdf5_name = hdf5names[nb_hdf5_name]
                             this_id = cc_area[nb_hdf5_name][x, y, z]
                             compare_id = \
@@ -349,3 +391,4 @@ def extract_voxels_thread(args):
                                                      version=segdataset.version,
                                                      working_dir=segdataset.working_dir)
             segobj.save_voxels(id_mask, abs_offset)
+            print unique_id

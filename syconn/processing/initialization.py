@@ -9,7 +9,7 @@ from knossos_utils import chunky
 import numpy as np
 
 
-def initialize_cset(kd, home_path, chunksize):
+def initialize_cset(kd, path, chunksize):
     """
     Initializes a ChunkDataset
 
@@ -17,7 +17,7 @@ def initialize_cset(kd, home_path, chunksize):
     ----------
     kd: KnossosDataset
         KnossosDataset instance of the corresponding raw data
-    home_path: str
+    path: str
         path to main folder
     chunksize: np.array
         size of each chunk; typically in the order of ~ [1000, 1000, 500]
@@ -29,7 +29,7 @@ def initialize_cset(kd, home_path, chunksize):
     """
 
     cset = chunky.ChunkDataset()
-    cset.initialize(kd, kd.boundary, chunksize, home_path + "/chunkdataset/",
+    cset.initialize(kd, kd.boundary, chunksize, path + "/",
                     box_coords=[0, 0, 0], fit_box_size=True)
     chunky.save_dataset(cset)
 

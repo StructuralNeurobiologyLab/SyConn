@@ -13,9 +13,26 @@ import networkx as nx
 import glob
 
 from ..processing import objectextraction_helper as oeh
+from ..processing import predictor_cnn as pc
 from ..multi_proc import multi_proc_main as mpm
 from ..utils import datahandler#, segmentationdataset
 from syconnfs.representations import segmentation
+
+
+def correct_padding(cset, filename, offset, qsub_pe=None, qsub_queue=None):
+    multi_params = []
+    for chunk in cset.chunk_dict.values():
+        multi_params.append([chunk, filename, offset])
+
+    if qsub_pe is None and qsub_queue is None:
+        results = mpm.start_multiprocess(pc.correct_padding_thread,
+                                         multi_params, debug=False)
+    elif mpm.__QSUB__:
+        path_to_out = mpm.QSUB_script(multi_params,
+                                      "correct_padding",
+                                      pe=qsub_pe, queue=qsub_queue)
+    else:
+        raise Exception("QSUB not available")
 
 
 def validate_chunks(cset, filename, hdf5names, qsub_pe=None, qsub_queue=None):
@@ -32,6 +49,64 @@ def validate_chunks(cset, filename, hdf5names, qsub_pe=None, qsub_queue=None):
                                       pe=qsub_pe, queue=qsub_queue)
     else:
         raise Exception("QSUB not available")
+
+
+def validate_knossos_cubes(cset, filename, hdf5names, stride=200, qsub_pe=None, qsub_queue=None):
+    coords = []
+    for x in range(0, cset.box_size[0], 128):
+        for y in range(0, cset.box_size[1], 128):
+            for z in range(0, cset.box_size[2], 128):
+                coords.append([x, y, z])
+
+    multi_params = []
+    for coord_start in xrange(0, len(coords), stride):
+        multi_params.append([cset.path_head_folder, filename, hdf5names, coord_start, stride])
+
+    if qsub_pe is None and qsub_queue is None:
+        results = mpm.start_multiprocess(oeh.validate_chunks_thread,
+                                         multi_params, debug=False)
+    elif mpm.__QSUB__:
+        path_to_out = mpm.QSUB_script(multi_params,
+                                      "validate_knossos_cubes",
+                                      pe=qsub_pe, queue=qsub_queue)
+    else:
+        raise Exception("QSUB not available")
+
+
+def extract_ids(cset, filename, hdf5names, qsub_pe=None, qsub_queue=None):
+    multi_params = []
+    for chunk in cset.chunk_dict.values():
+        multi_params.append([chunk, filename, hdf5names])
+
+    if qsub_pe is None and qsub_queue is None:
+        results = mpm.start_multiprocess(oeh.extract_ids_thread,
+                                         multi_params, debug=False)
+    elif mpm.__QSUB__:
+        # path_to_out = mpm.QSUB_script(multi_params,
+        #                               "extract_ids",
+        #                               pe=qsub_pe, queue=qsub_queue)
+
+        path_to_out = "/home/sdorkenw/QSUB/extract_ids_folder/out/"
+        out_files = glob.glob(path_to_out + "/*")
+        results = []
+        for out_file in out_files:
+            with open(out_file) as f:
+                results.append(pkl.load(f))
+    else:
+        raise Exception("QSUB not available")
+
+    id_mapping = {}
+    for hdf5_name in hdf5names:
+        id_mapping[hdf5_name] = {}
+        for result in results:
+            for this_id in result[1][hdf5_name]:
+                if this_id in id_mapping[hdf5_name]:
+                    id_mapping[hdf5_name][this_id].append(result[0])
+                else:
+                    id_mapping[hdf5_name][this_id] = [result[0]]
+
+    with open(cset.path_head_folder + "/ids_" + filename + ".pkl", "w") as f:
+        pkl.dump(id_mapping, f)
 
 
 def calculate_chunk_numbers_for_box(cset, offset, size):
@@ -867,16 +942,15 @@ def from_ids_to_objects(cset, filename, hdf5names, chunk_list=None, debug=False,
             for ii in range(len(chunk_list)):
                 chunk_translator[chunk_list[ii]] = ii
 
-    for hdf5_name in hdf5names:
-        segdataset = segmentation.SegmentationDataset(hdf5_name, version=0,
-                                                      working_dir=cset.path_head_folder,
-                                                      autoload=False)
-        if not os.path.exists(segdataset.path + "/map_dicts/"):
-            os.makedirs(segdataset.path + "/map_dicts/")
-        if not os.path.exists(segdataset.path + "/voxels/"):
-            os.makedirs(segdataset.path + "/voxels/")
-        if not os.path.exists(segdataset.path + "/hull_voxels/"):
-            os.makedirs(segdataset.path + "/hull_voxels/")
+    # for hdf5_name in hdf5names:
+    #     segdataset = segmentation.SegmentationDataset(hdf5_name, version=0,
+    #                                                   working_dir=cset.path_head_folder)
+    #     if not os.path.exists(segdataset.path + "/map_dicts/"):
+    #         os.makedirs(segdataset.path + "/map_dicts/")
+    #     if not os.path.exists(segdataset.path + "/voxels/"):
+    #         os.makedirs(segdataset.path + "/voxels/")
+    #     if not os.path.exists(segdataset.path + "/hull_voxels/"):
+    #         os.makedirs(segdataset.path + "/hull_voxels/")
 
     # --------------------------------------------------------------------------
 
