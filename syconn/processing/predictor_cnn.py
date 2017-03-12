@@ -309,14 +309,16 @@ def join_chunky_inference(cset, config_path, param_path, names,
                     (np.array(chunk.size) + 2 * offset) / mag,
                     (chunk.coordinates - offset) / mag,
                     mag=mag,
-                    invert_data=invert_data)
+                    invert_data=invert_data,
+                    mirror_oob=True)
                 raw_data = raw_data[None, :, :, :]
             else:
                 raw_data = kd.from_raw_cubes_to_matrix(
                     (np.array(chunk.size) + 2 * offset) / mag,
                     (chunk.coordinates - offset) / mag,
                     mag=mag,
-                    invert_data=invert_data)
+                    invert_data=invert_data,
+                    mirror_oob=True)
                 time_rec = time.time()
                 rec_labels = []
                 for label in labels:
@@ -351,10 +353,37 @@ def join_chunky_inference(cset, config_path, param_path, names,
             break
 
 
-if __name__ == "__main__":
-    kd = knossosdataset.KnossosDataset()
-    kd.initialize_from_knossos_path("/mnt/axon/home/sdorkenw/SyConnDenseCube/knossodatasets/raw/")
-    cset = initialization.initialize_cset(kd, "/mnt/axon/home/sdorkenw/SyConnDenseCube/", [500, 500, 250])
-    join_chunky_inference(cset, "/mnt/axon/home/sdorkenw/SyConnDenseCube/models/BIRD_MIGA_config.py",
-                          "/mnt/axon/home/sdorkenw/SyConnDenseCube/models/BIRD_MIGA.param",
-                          ["MIGA"], ["sj", "vc", "mi"], [200, 200, 100], [50, 270, 270], kd=kd)
+def correct_padding_thread(args):
+    chunk = args[0]
+    filename = args[1]
+    offset = args[2]
+
+    data_dict = {}
+    changed = False
+
+    with h5py.File("%s%s.h5" % (chunk.folder, filename), "r") as f:
+        for hdf5_name in f.keys():
+            data = f[hdf5_name].value
+            for dim in range(3):
+                if data.shape[dim] != chunk.size[dim] + offset[dim] * 2:
+                    changed = True
+                    padding = np.zeros((3, 2), dtype=np.int)
+                    if chunk.coordinates[dim] == 0:
+                        padding[dim, 0] = chunk.size[dim] + offset[dim] * 2 - data.shape[dim]
+                    else:
+                        padding[dim, 1] = chunk.size[dim] + offset[dim] * 2 - data.shape[dim]
+                    data = np.pad(data, padding, mode="constant",
+                                  constant_values=0)
+            data_dict[hdf5_name] = data
+
+    if changed:
+        os.rename("%s%s.h5" % (chunk.folder, filename),
+                  "%s%s_broken.h5" % (chunk.folder, filename))
+
+    with h5py.File("%s%s_corrected.h5" % (chunk.folder, filename), "w") as f:
+        for hdf5_name in data_dict.keys():
+            f[hdf5_name] = data_dict[hdf5_name]
+
+
+
+
