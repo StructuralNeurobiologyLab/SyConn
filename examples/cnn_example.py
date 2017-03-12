@@ -30,7 +30,7 @@ path_barrier_cnn_2 = [home_dir + "/syconn_paper_models/BIRD_rbarrier_config.py",
                       home_dir + "/syconn_paper_models/BIRD_rbarrier.param"]
 
 path_to_knossosdataset = "/lustre/sdorkenw/j0126_cubed_realligned/"
-path_to_chunkdaset = "/lustre/sdorkenw/j0126_cset_realligned/chunkdataset/"
+path_to_chunkdataset = "/lustre/sdorkenw/j0126_dense_syconn_v2/chunkdataset_u/"
 
 n_jobs = 100
 
@@ -40,13 +40,16 @@ qsub_pe_cpu = "openmp"  # gpu pe
 
 # ------------------------------------------------------------------------ Setup
 
+if not os.path.exists(path_to_chunkdataset):
+    os.makedirs(path_to_chunkdataset)
+
 kd_raw = knossosdataset.KnossosDataset()
 kd_raw.initialize_from_knossos_path(path_to_knossosdataset)
 
-if os.path.exists(path_to_chunkdaset + "/chunk_dataset.pkl"):
-    cset = chunky.load_dataset(path_to_chunkdaset)
+if os.path.exists(path_to_chunkdataset + "/chunk_dataset.pkl"):
+    cset = chunky.load_dataset(path_to_chunkdataset)
 else:
-    cset = initialization.initialize_cset(kd_raw, path_to_chunkdaset,
+    cset = initialization.initialize_cset(kd_raw, path_to_chunkdataset,
                                           [1850, 1850, 120])
 
 

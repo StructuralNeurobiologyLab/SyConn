@@ -24,9 +24,9 @@ import shutil
 
 
 def parseargs():
-    parser = argparse.ArgumentParser(
-    usage="Evaluate </path/to_work_dir>"
-          "[--qsub_pe <str>] [--qsub_queue <str>]")
+    parser = argparse.ArgumentParser(usage="Evaluate </path/to_work_dir>"
+                                           "[--qsub_pe <str>] "
+                                           "[--qsub_queue <str>]")
     parser.add_argument("main_path", type=str)
     parser.add_argument("--qsub_pe", type=str, default=None)
     parser.add_argument("--qsub_queue", type=str, default=None)
@@ -42,13 +42,11 @@ qsub_pe = commandline_args.qsub_pe
 qsub_queue = commandline_args.qsub_queue
 
 knossos_raw_path = main_path + "/j0126_realigned_v4b_cbs_ext0_fix.conf"
-# knossos_raw_path = main_path + "/knossosdatasets/raw/"
 
 if not "/" == main_path[-1]:
     main_path += "/"
 
 # ------------------------------------------------------------------------ Setup
-
 
 # assert os.path.exists(main_path + "/models/rf_synapses/rfc_syn.pkl")
 # assert os.path.exists(main_path + "/models/rf_axoness/rf.pkl")
@@ -62,37 +60,126 @@ if not "/" == main_path[-1]:
 kd_raw = knossosdataset.KnossosDataset()
 kd_raw.initialize_from_knossos_path(knossos_raw_path)
 
-if os.path.exists(main_path + "/chunkdataset/chunk_dataset.pkl"):
-    cset = chunky.load_dataset(main_path + "/chunkdataset/")
+if os.path.exists(main_path + "/chunkdataset_sv_v3/chunk_dataset.pkl"):
+    cset_sv = chunky.load_dataset(main_path + "/chunkdataset_sv_v3/",
+                                  update_paths=True)
+    chunky.save_dataset(cset_sv)
 else:
-    cset = initialization.initialize_cset(kd_raw, main_path, [512, 512, 256])
-    chunky.save_dataset(cset)
+    cset_sv = initialization.initialize_cset(kd_raw, main_path + "/chunkdataset_sv_v3/",
+                                             [512, 512, 256])
+    chunky.save_dataset(cset_sv)
 
-# -------------------------------------------------------- SuperVoxel Extraction
+# if os.path.exists(main_path + "/chunkdataset_u/chunk_dataset.pkl"):
+#     cset_u = chunky.load_dataset(main_path + "/chunkdataset_u/",
+#                                  update_paths=True)
+#     chunky.save_dataset(cset_u)
+# else:
+#     cset_u = initialization.initialize_cset(kd_raw, main_path + "/chunkdataset_u/",
+#                                             [1850, 1850, 120])
+#     chunky.save_dataset(cset_u)
+
+# -------------------------------------------------------- Supervoxel Extraction
 
 if qsub_queue or qsub_pe:
-    import_batch_size = int(len(cset.chunk_dict.keys()) / 1000)
+    import_batch_size = int(len(cset_sv.chunk_dict.keys()) / 1000)
 else:
     import_batch_size = None
 
-# Write segmentation to chunky first
-ddh.export_dense_segmentation_to_cset(cset, kd_raw, datatype=np.uint32,
-                                               nb_cpus=8, pe=qsub_pe,
-                                               queue=qsub_queue,
-                                               batch_size=import_batch_size)
+# # Write segmentation to chunky first
+ddh.export_dense_segmentation_to_cset(cset_sv, kd_raw, datatype=np.uint32,
+                                      nb_cpus=8, pe=qsub_pe,
+                                      queue=qsub_queue,
+                                      batch_size=import_batch_size)
 
-
-oe.validate_chunks(cset, "dense_segmentation", ["sv"], qsub_pe=qsub_pe,
+oe.validate_chunks(cset_sv, "dense_segmentation", ["sv"], qsub_pe=qsub_pe,
                    qsub_queue=qsub_queue)
 
-# Extract supervoxels as objects
-oe.from_ids_to_objects(cset, "dense_segmentation", ["sv"],
+oe.extract_ids(cset_sv, "dense_segmentation", ["sv"], qsub_pe=qsub_pe,
+               qsub_queue=qsub_queue)
+
+# # Extract supervoxels as objects
+oe.from_ids_to_objects(cset_sv, "dense_segmentation", ["sv"],
                        debug=False, qsub_pe=qsub_pe, qsub_queue=qsub_queue)
 
+# ------------------------------------------------------- Export knossosdatasets
 
+# if not os.path.exists(main_path + "/knossosdatasets/"):
+#     os.makedirs(main_path + "/knossosdatasets/")
+#
+# kd_bar = knossosdataset.KnossosDataset()
+# if os.path.exists(main_path + "knossosdatasets/rbarrier/"):
+#     kd_bar.initialize_from_knossos_path(main_path + "/knossosdatasets/rbarrier/")
+# else:
+#     kd_bar.initialize_without_conf(main_path + "knossosdatasets/rbarrier/",
+#                                    boundary=kd_raw.boundary,
+#                                    scale=kd_raw.scale,
+#                                    experiment_name="j0126_rbarrier",
+#                                    mags=[1, 2, 4, 8])
+#     cset_u.export_cset_to_kd(kd_bar, "RBARRIER", ["bar"], nb_threads=[8, 1],
+#                              coordinate=None, size=None,
+#                              stride=[4 * 128, 4 * 128, 4 * 128],
+#                              as_raw=True,
+#                              unified_labels=False)
 
+# kd_asym = knossosdataset.KnossosDataset()
+# if os.path.exists(main_path + "knossosdatasets/asymmetric/"):
+#     kd_asym.initialize_from_knossos_path(main_path +
+#                                          "/knossosdatasets/asymmetric/")
+# else:
+#     kd_asym.initialize_without_conf(main_path + "knossosdatasets/asymmetric/",
+#                                     boundary=kd_raw.boundary,
+#                                     scale=kd_raw.scale,
+#                                     experiment_name="j0126_asymmetric",
+#                                     mags=[1, 2, 4, 8])
+#     cset_u.export_cset_to_kd(kd_asym, "TYPE", ["asym"], nb_threads=[1, 1],
+#                              coordinate=None, size=None,
+#                              stride=[4 * 128, 4 * 128, 4 * 128],
+#                              as_raw=True,
+#                              unified_labels=False)
+#
+# kd_sym = knossosdataset.KnossosDataset()
+# if os.path.exists(main_path + "knossosdatasets/symmetric/"):
+#     kd_sym.initialize_from_knossos_path(main_path +
+#                                         "/knossosdatasets/symmetric/")
+# else:
+#     kd_sym.initialize_without_conf(main_path + "knossosdatasets/symmetric/",
+#                                    boundary=kd_raw.boundary,
+#                                    scale=kd_raw.scale,
+#                                    experiment_name="j0126_symmetric",
+#                                    mags=[1, 2, 4, 8])
+#     cset_u.export_cset_to_kd(kd_sym, "TYPE", ["sym"], nb_threads=[1, 1],
+#                              coordinate=None, size=None,
+#                              stride=[4 * 128, 4 * 128, 4 * 128],
+#                              as_raw=True,
+#                              unified_labels=False)
 
+# -------------------------------------------- Ultrastructural object extraction
 
+# oe.from_probabilities_to_objects(cset_u, "ARGUS_corrected",
+#                                  ["sj"],
+#                                  thresholds=[int(4*255/21.)],
+#                                  debug=False,
+#                                  suffix="3",
+#                                  qsub_pe=qsub_pe,
+#                                  qsub_queue=qsub_queue)
+#
+# oe.from_probabilities_to_objects(cset_u, "ARGUS_corrected",
+#                                  ["vc"],
+#                                  thresholds=[int(6*255/21.)],
+#                                  debug=False,
+#                                  suffix="5",
+#                                  # membrane_filename="BARRIER_corrected",
+#                                  # hdf5_name_membrane="bar",
+#                                  qsub_pe=qsub_pe,
+#                                  qsub_queue=qsub_queue)
+#
+# oe.from_probabilities_to_objects(cset_u, "ARGUS_corrected",
+#                                  ["mi"],
+#                                  thresholds=[int(9*255/21.)],
+#                                  debug=False,
+#                                  suffix="8",
+#                                  qsub_pe=qsub_pe,
+#                                  qsub_queue=qsub_queue)
 
 
 # # ------------ Create hull and map objects to tracings and classify compartments
