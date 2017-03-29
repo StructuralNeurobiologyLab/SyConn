@@ -1,6 +1,5 @@
 cython
 numpy
-matplotlib
 scikit-learn == 0.17.1
 scipy
 networkx
