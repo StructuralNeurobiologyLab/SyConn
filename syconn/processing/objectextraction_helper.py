@@ -389,6 +389,7 @@ def extract_voxels_thread(args):
             abs_offset = abs_offset.astype(np.int)
             segobj = segmentation.SegmentationObject(unique_id, hdf5_name,
                                                      version=segdataset.version,
-                                                     working_dir=segdataset.working_dir)
+                                                     working_dir=segdataset.working_dir,
+                                                     create=True)
             segobj.save_voxels(id_mask, abs_offset)
             print unique_id

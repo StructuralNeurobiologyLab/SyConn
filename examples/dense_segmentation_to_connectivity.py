@@ -11,7 +11,7 @@
 import argparse
 
 from syconn.utils import densedataset_helper as ddh
-from syconn.processing import initialization, objectextraction as oe
+from syconn.processing import initialization, objectextraction as oe, contact_sites as cs
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 from syconn.multi_proc import multi_proc_main as mpm
@@ -41,7 +41,8 @@ main_path = os.path.abspath(commandline_args.main_path)
 qsub_pe = commandline_args.qsub_pe
 qsub_queue = commandline_args.qsub_queue
 
-knossos_raw_path = main_path + "/j0126_realigned_v4b_cbs_ext0_fix.conf"
+# knossos_raw_path = main_path + "/j0126_realigned_v4b_cbs_ext0_fix.conf"
+knossos_raw_path = main_path + "/knossosdatasets/google_seg/"
 
 if not "/" == main_path[-1]:
     main_path += "/"
@@ -60,12 +61,12 @@ if not "/" == main_path[-1]:
 kd_raw = knossosdataset.KnossosDataset()
 kd_raw.initialize_from_knossos_path(knossos_raw_path)
 
-if os.path.exists(main_path + "/chunkdataset_sv_v3/chunk_dataset.pkl"):
-    cset_sv = chunky.load_dataset(main_path + "/chunkdataset_sv_v3/",
+if os.path.exists(main_path + "/chunkdataset_sv_v1/chunk_dataset.pkl"):
+    cset_sv = chunky.load_dataset(main_path + "/chunkdataset_sv_v1/",
                                   update_paths=True)
     chunky.save_dataset(cset_sv)
 else:
-    cset_sv = initialization.initialize_cset(kd_raw, main_path + "/chunkdataset_sv_v3/",
+    cset_sv = initialization.initialize_cset(kd_raw, main_path + "/chunkdataset_sv_v1/",
                                              [512, 512, 256])
     chunky.save_dataset(cset_sv)
 
@@ -86,20 +87,30 @@ else:
     import_batch_size = None
 
 # # Write segmentation to chunky first
-ddh.export_dense_segmentation_to_cset(cset_sv, kd_raw, datatype=np.uint32,
-                                      nb_cpus=8, pe=qsub_pe,
-                                      queue=qsub_queue,
-                                      batch_size=import_batch_size)
+# ddh.export_dense_segmentation_to_cset(cset_sv, kd_raw, datatype=np.uint32,
+#                                       nb_cpus=10, pe=qsub_pe,
+#                                       queue=qsub_queue,
+#                                       batch_size=import_batch_size)
+#
+# oe.validate_chunks(cset_sv, "dense_segmentation", ["sv"], qsub_pe=qsub_pe,
+#                    qsub_queue=qsub_queue)
+#
+# oe.extract_ids(cset_sv, "dense_segmentation", ["sv"], qsub_pe=qsub_pe,
+#                qsub_queue=qsub_queue)
 
-oe.validate_chunks(cset_sv, "dense_segmentation", ["sv"], qsub_pe=qsub_pe,
-                   qsub_queue=qsub_queue)
+# Extract supervoxels as objects
+# oe.from_ids_to_objects(cset_sv, "dense_segmentation", ["sv"],
+#                        debug=False, qsub_pe=qsub_pe, qsub_queue=qsub_queue)
 
-oe.extract_ids(cset_sv, "dense_segmentation", ["sv"], qsub_pe=qsub_pe,
-               qsub_queue=qsub_queue)
+# ------------------------------------------------------- Contact Site detection
 
-# # Extract supervoxels as objects
-oe.from_ids_to_objects(cset_sv, "dense_segmentation", ["sv"],
-                       debug=False, qsub_pe=qsub_pe, qsub_queue=qsub_queue)
+# cs.find_contact_sites(cset_sv, knossos_raw_path, "cs_sv", qsub_pe=qsub_pe,
+#                       qsub_queue=qsub_queue)
+
+
+cs.extract_contact_sites(cset_sv, "cs_sv", main_path, qsub_pe=qsub_pe,
+                         qsub_queue=qsub_queue)
+
 
 # ------------------------------------------------------- Export knossosdatasets
 
@@ -155,7 +166,7 @@ oe.from_ids_to_objects(cset_sv, "dense_segmentation", ["sv"],
 
 # -------------------------------------------- Ultrastructural object extraction
 
-# oe.from_probabilities_to_objects(cset_u, "ARGUS_corrected",
+# oe.from_probabilities_to_objects(cset_u, "ARGUS",
 #                                  ["sj"],
 #                                  thresholds=[int(4*255/21.)],
 #                                  debug=False,
@@ -163,7 +174,7 @@ oe.from_ids_to_objects(cset_sv, "dense_segmentation", ["sv"],
 #                                  qsub_pe=qsub_pe,
 #                                  qsub_queue=qsub_queue)
 #
-# oe.from_probabilities_to_objects(cset_u, "ARGUS_corrected",
+# oe.from_probabilities_to_objects(cset_u, "ARGUS",
 #                                  ["vc"],
 #                                  thresholds=[int(6*255/21.)],
 #                                  debug=False,
@@ -173,7 +184,7 @@ oe.from_ids_to_objects(cset_sv, "dense_segmentation", ["sv"],
 #                                  qsub_pe=qsub_pe,
 #                                  qsub_queue=qsub_queue)
 #
-# oe.from_probabilities_to_objects(cset_u, "ARGUS_corrected",
+# oe.from_probabilities_to_objects(cset_u, "ARGUS",
 #                                  ["mi"],
 #                                  thresholds=[int(9*255/21.)],
 #                                  debug=False,

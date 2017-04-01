@@ -2,6 +2,7 @@ import numpy as np
 import scipy.ndimage
 
 from ..utils import datahandler, basics
+from syconnfs.representations import segmentation
 
 from knossos_utils import chunky, knossosdataset
 
@@ -39,6 +40,7 @@ def detect_cs(arr):
     edges = scipy.ndimage.convolve(arr.astype(np.int), jac) < 0
 
     edges = edges.astype(np.uint32)
+    # edges[arr == 0] = True
     arr = arr.astype(np.uint32)
 
     # cs_seg = cse.process_chunk(edges, arr, [7, 7, 3])
@@ -95,3 +97,34 @@ def process_block_nonzero(edges, arr, stencil=(7, 7, 3)):
         chunk = arr[x: x + stencil[0], y: y + stencil[1], z: z + stencil[2]]
         out[x, y, z] = kernel(chunk, center_id)
     return out
+
+
+def extract_pre_cs_thread(args):
+    chunk_block = args[0]
+    working_dir = args[1]
+    filename = args[2]
+    version = args[3]
+
+    segdataset = segmentation.SegmentationDataset("cs_pre",
+                                                  version=version,
+                                                  working_dir=working_dir)
+    for chunk in chunk_block:
+        path = chunk.folder + filename + ".h5"
+
+        this_segmentation = datahandler.load_from_h5py(path, ["cs"])[0]
+
+        unique_ids = np.unique(this_segmentation)
+        for unique_id in unique_ids:
+            if unique_id == 0:
+                continue
+
+            id_mask = this_segmentation == unique_id
+            id_mask, in_chunk_offset = basics.crop_bool_array(id_mask)
+            abs_offset = chunk.coordinates + np.array(in_chunk_offset)
+            abs_offset = abs_offset.astype(np.int)
+            segobj = segmentation.SegmentationObject(unique_id, "cs_pre",
+                                                     version=segdataset.version,
+                                                     working_dir=segdataset.working_dir,
+                                                     create=True)
+            segobj.save_voxels(id_mask, abs_offset)
+            print unique_id

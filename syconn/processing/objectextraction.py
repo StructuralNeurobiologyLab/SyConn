@@ -565,7 +565,8 @@ def extract_voxels(cset, filename, hdf5names, debug=False, chunk_list=None,
     for hdf5_name in hdf5names:
         segdataset = segmentation.SegmentationDataset(hdf5_name,
                                                       version="new",
-                                                      working_dir=workfolder)
+                                                      working_dir=workfolder,
+                                                      create=True)
         dataset_versions[hdf5_name] = segdataset.version
 
     multi_params = []

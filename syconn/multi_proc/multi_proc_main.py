@@ -28,7 +28,7 @@ except subprocess.CalledProcessError:
     __QSUB__ = False
 
 home_dir = os.environ['HOME'] + "/"
-path_to_scripts_default = os.path.dirname(__file__)
+path_to_scripts_default = os.path.abspath(os.path.dirname(__file__))
 qsub_work_folder = "%s/QSUB/" % home_dir
 subp_work_folder = "%s/SUBP/" % home_dir
 username = getpass.getuser()
