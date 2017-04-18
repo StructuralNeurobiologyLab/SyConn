@@ -46,7 +46,7 @@ def detect_cs(arr):
     # cs_seg = cse.process_chunk(edges, arr, [7, 7, 3])
     cs_seg = process_block_nonzero(edges, arr, [7, 7, 3])
 
-    return cs_seg
+    return edges, cs_seg
 
 
 def kernel(chunk, center_id):
