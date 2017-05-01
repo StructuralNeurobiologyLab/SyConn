@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+	<meta charset="utf-8">
+	<meta http-equiv="X-UA-Compatible" content="IE=edge">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+
+	<title>SyConn</title>
+	<meta name="description" content="Write an awesome description for your new site here. You can edit this line in _config.yml. It will appear in your document head meta (for Google search results) and in your feed.xml site description.
+">
+	<meta name="keywords" content="Python, framework, CNN, neuronal network, machine learning">
+
+	<link rel="stylesheet" href="/SyConn/css/main.css">
+	<link rel="stylesheet" href="/SyConn/css/cocoen.min.css">
+	<link rel="stylesheet" href="/SyConn/css/ionicons.min.css">
+	<link rel="canonical" href="http://localhost:4000/SyConn/">
+</head>
+
+<body class="">
+
+	<!-- <div class="top-bar">
+	<a href="#"><i class="icon ion-social-github"></i> GitHub</a>
+	<a href="#"><i class="icon ion ion-university"></i> Documentation</a>
+</div> -->
+
+	<div class="page-separator"></div>
+
+	<article class="page-content">
+		<header class="header row" id="Top">
+	<div class="col">
+		<h1>SyConn</h1>
+
+		<p class="subtitle">Automated synaptic connectivity inference<br> for volume electron microscopy</p>
+
+		<ul class="button-list -horizontal">
+			<li><a class="button" href="https://github.com/StructuralNeurobiologyLab/SyConn"><i class="icon ion ion-social-github"></i> GitHub Repository</a></li>
+			<li><a class="button" href="http://brainpuzzler.org/downloads/SyConnDenseCube.zip"><i class="icon ion ion-cube"></i> Sample data with code snapshot</a></li>
+			<li><a class="button" href="https://structuralneurobiologylab.github.io/SyConn/documentation"><i class="icon ion ion-university"></i> Documentation</a></li>
+			<li><a class="button" href="http://www.nature.com/nmeth/journal/vaop/ncurrent/full/nmeth.4206.html"><i class="icon ion-ios-paper"></i> Publication</a></li>
+		</ul>
+	</div>
+
+</header>
+
+<!-- <section class="section">
+	<article class="row">
+		<div class="col">
+			<h2 class="subtitle">About the Paper</h2>
+
+			<p>At first, membrane and intracellular space is predicted as barrier (black) and cell components, such as mitochondria (blue), vesicle clouds (green) and synaptic junctions (red) are inferred using a CNN with a 3D perceptive field of view (image below). Additionally, another 3D CNN predicts symmetric and asymmetric synaptic junction regions which get combined with the predicted synaptic junctions later on.</p>
+		</div>
+
+		<div class="col">
+			<aside class="_no-padding comparison-slider">
+				<div class="cocoen">
+					<img src="/SyConnimages/img_182.png" alt="">
+					<img src="/SyConnimages/overlay_test_182.png" alt="">
+				</div>
+			</aside>
+		</div>
+	</article>
+</section>
+-->
+
+
+<section class="section">
+	<article class="row">
+		<div class="col">
+			<p><strong>In short:</strong> Teravoxel volume electron microscopy datasets from neural tissue can now be acquired in weeks, but data analysis requires years of manual labor (see also <a href="#Fig1">Fig. 1</a>). The SyConn framework uses deep convolutional neural networks (CNN) and random forest classifiers (RFC) to infer a richly-annotated synaptic connectivity matrix from manual neurite skeleton reconstructions by automatically identifying mitochondria, synapses and their types, axons, dendrites, spines, myelin, somata and cell types.</p>
+		</div>
+
+		<div class="col">
+			<figure id="Fig1">
+				<img src="/SyConn/images/timing_plot.png" alt="Timing plot comparison">
+				<figcaption>
+					<strong>Fig. 1:</strong> Estimated times for the dense manual annotations of all individual steps required for acquiring a wiring matrix from EM datasets. Hatched bars are skeletonization times.<br>
+
+					<strong>Volumes:</strong> j012 (songbird Area X): 0.00108 mm³; zebrafish larval brain: 0.048 mm³ 45; mouse brain, grey matter: 112 mm³.
+				</figcaption>
+			</figure>
+		</div>
+	</article>
+
+	<article>
+		<p>SyConn automates all steps shown in <a href="#Fig1">Fig. 1</a>, but the neurite reconstruction, where it only requires manual skeleton reconstructions instead of volume segmentations (compare hatched bars and full bars in <a href="#Fig1">Fig. 1</a>). Using several recursive 3D CNNs we first detect cell boundaries and all kinds of ultrastructures such as synaptic junctions (<a href="#Fig2">Fig. 2b</a>). Using a ray cast approach we extract a hull for each skeleton based on the boundary prediction (<a href="#Fig2">Fig. 2a</a>), which is then used to map mitochdondria, synaptic junctions and vesicle clouds to each cell (<a href="#Fig2">Fig. 2c</a>). Leveraging this information SyConn uses RFCs to partition neurons into their subcellular parts (axon, dendrite, soma; <a href="#Fig2">Fig. 2d</a>) and to assign them to one of four broad cell types (<a href="#Fig2">Fig. 2e</a>). Finally, we combine this into a richly annotated synaptic connectivity matrix (<a href="#Fig2">Fig. 2f</a>).  </p>
+	</article>
+
+	<article>
+		<figure id="Fig2">
+			<img src="/SyConn/images/website_workflow.png" alt="SyConn Workflow">
+			<figcaption>
+				<strong>Fig. 2:</strong> Workflow of SyConn with the most important steps. Inputs are the raw data and manually traced skeletons. The hull in (a) is extracted with a ray casting approach based on a barrier map from a 3D CNN. Ultrastructures in (b) refer to synaptic junctions (red), vesicle clouds (green) and mitochondria (blue), which were also inferred by a 3D CNN. The cell in (d) was automatically partitioned in axon (red), dendrite (light gray) and soma (dark gray) using an RFC. Cells in (e) are GP (left) MSN (right) and shown with their mitochondria (blue). The connectivity matrix in (f) encodes cumulated synaptic area between each cell pair.
+			</figcaption>
+		</figure>
+	</article>
+
+	<article>
+		<p>To test SyConn, we detected ultrastructural objects in three serial block-face electron microscopy (SBEM) data sets (zebra finch Area X, size: 97.9 × 95.6 × 115 μm³; zebrafish spinal cord, size: 81.8 × 89.9 × 210 μm³; mouse striatum, size: 17.9 × 15.0 × 69 μm³) and created a wiring diagram of the zebra finch basal-ganglia (Area X) from 612 skeleton reconstructions traced with KNOSSOS (<a href="https://knossostool.org/">knossostool.org</a>).</p>
+	</article>
+</section>
+
+<section class="section" id="GettingStartedSection">
+	<article>
+		<header>
+			<h2 class="subtitle">Getting Started</h2>
+		</header>
+
+		<p>Python 2.7 is required (we recommend Anaconda). SyConn has been tested on Linux distributions (CentOS and Arch Linux).</p>
+	</article>
+
+	<article class="inbetween-article">
+		<h3 class="tag">Quickstart</h3>
+
+		<div class="code-block"><pre class="line-numbers">1
+2
+3
+4
+5
+6</pre><pre><code><figure class="highlight"><pre><code class="language-shell" data-lang="shell">git clone https://github.com/SyConn
+<span class="nb">cd </span>SyConn
+pip install -r requirements.txt --upgrade
+
+<span class="c"># Run the example (with sample data from the link on top of this page): </span></code></pre></figure><figure class="highlight"><pre><code class="language-python" data-lang="python"><span class="n">python2</span> <span class="n">SyConn</span><span class="o">/</span><span class="n">examples</span><span class="o">/</span><span class="n">full_run_example</span><span class="o">.</span><span class="n">py</span> <span class="o">&lt;/</span><span class="n">path</span><span class="o">/</span><span class="n">to</span><span class="o">/</span><span class="n">example_folder</span><span class="o">&gt;</span> <span class="p">[</span><span class="o">--</span><span class="n">gpus</span> <span class="p">{</span><span class="bp">None</span> <span class="o">|</span> <span class="o">&lt;</span><span class="nb">int</span><span class="o">&gt;</span> <span class="o">&lt;</span><span class="nb">int</span><span class="o">&gt;</span> <span class="o">...</span><span class="p">},</span> <span class="o">--</span><span class="n">CNNsize</span> <span class="p">{</span><span class="mi">1</span> <span class="o">|</span> <span class="o">&lt;</span><span class="nb">int</span><span class="o">&gt;</span><span class="p">},</span> <span class="o">--</span><span class="n">qsub_pe</span> <span class="p">{</span><span class="bp">None</span> <span class="o">|</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">},</span> <span class="o">--</span><span class="n">qsub_queue</span> <span class="p">{</span><span class="bp">None</span> <span class="o">|</span> <span class="o">&lt;</span><span class="nb">str</span><span class="o">&gt;</span><span class="p">}]</span></code></pre></figure></pre></code></div>
+	</article>
+
+	<article>
+		<p>All requirements should be automatically installed, when following the instructions. Together with the provided sample data (<a href="http://brainpuzzler.org/downloads/SyConnDenseCube.zip">SyConnDenseCube.zip</a>, 564MB) including our trained models one is able to run most parts of SyConn.</p>
+	</article>
+</section>
+
+
+<section class="section" id="GroundtruthSection">
+	<article>
+		<header>
+			<h2 class="subtitle">Ground Truth</h2>
+		</header>
+
+		<p> The provided sample package contains trained CNNs, but no ground truth. Ground truth can be downloaded from the provided links below. The readme file in the zip container explains how the ground truth was used for training in SyConn.
+
+		<p> Zebrafinsh:</p>
+		<p> Synaptic junctions, mitochondria and vesicle clouds: <a href="http://brainpuzzler.org/downloads/gt_syconn_bird_sj_vc_mi.zip">gt_syconn_bird_sj_vc_mi.zip</a> (5GB) </p>
+	</article>
+
+</section>
+
+
+<section class="section" id="PublicationSection">
+	<article>
+		<header>
+			<h2 class="subtitle">Publication</h2>
+		</header>
+
+		<p>SyConn was published in <a href="http://www.nature.com/nmeth/journal/vaop/ncurrent/full/nmeth.4206.html">Nature Methods</a>. If you use parts of this code base or data in your academic projects, please cite the corresponding publication.</p>
+	</article>
+
+	<article class="inbetween-article">
+		<h3 class="tag">BibTex</h3>
+
+		<div class="code-block">
+<code><figure class="highlight"><pre><code class="language-shell" data-lang="shell"> @ARTICLE<span class="o">{</span>SyConn2017,
+   title     <span class="o">=</span> <span class="s2">"Automated synaptic connectivity inference for volume electron
+                microscopy"</span>,
+   author    <span class="o">=</span> <span class="s2">"Dorkenwald, Sven and Schubert, Philipp J and Killinger, Marius F
+                and Urban, Gregor and Mikula, Shawn and Svara, Fabian and
+                Kornfeld, Joergen"</span>,
+   abstract  <span class="o">=</span> <span class="s2">"SyConn is a computational framework that infers the synaptic
+                wiring of neurons in volume electron microscopy data sets with
+                machine learning. It has been applied to zebra finch, mouse and
+                zebrafish neuronal tissue samples."</span>,
+   journal   <span class="o">=</span> <span class="s2">"Nat. Methods"</span>,
+   publisher <span class="o">=</span> <span class="s2">"Nature Publishing Group, a division of Macmillan Publishers Limited. All Rights Reserved."</span>,
+   year      <span class="o">=</span> 2017,
+   month     <span class="o">=</span> Feb,
+   day       <span class="o">=</span> 27,
+   url       <span class="o">=</span> http://dx.doi.org/10.1038/nmeth.4206
+ <span class="o">}</span></code></pre></figure></code></div>
+	</article>
+</section>
+
+
+
+<section class="section" id="AboutSection">
+	<article>
+		<header>
+			<h2 class="subtitle">Contributors</h2>
+		</header>
+
+		<div class="about-gallery row">
+			<div class="col">
+				<div class="user -with-picture">
+					<img class="image" src="/SyConn/images/team/sven.jpg">
+
+					<h4>Sven Dorkenwald</h4>
+					<p>SyConn development and evaluation</p>
+				</div>
+
+				<div class="user">
+					<h4>Marius Killinger and Gregor Urban</h4>
+					<p>ELEKTRONN development.</p>
+				</div>
+			</div>
+
+			<div class="col">
+				<div class="user -with-picture">
+					<img class="image" src="/SyConn/images/team/philipp.jpg">
+					<div class="description">
+						<h4>Philipp Schubert</h4>
+						<p>SyConn development and evaluation</p>
+					</div>
+				</div>
+
+				<div class="user">
+					<h4>Fabian Svara and Shawn Mikula</h4>
+					<p>Dataset contributions</p>
+				</div>
+			</div>
+
+			<div class="col">
+				<div class="user -with-picture">
+					<img class="image" src="/SyConn/images/team/joergen.png">
+					<div class="description">
+						<h4>Jörgen Kornfeld</h4>
+						<p>SyConn development and evaluation</p>
+					</div>
+				</div>
+
+				<div class="user">
+				</div>
+			</div>
+		</div>
+	</article>
+</section>
+
+<section class="section">
+	<article>
+		<p>SyConn was developed in Prof. Winfried Denk’s department <a href="https://www.neuro.mpg.de/denk"><em>Electrons - Photons - Neurons</em></a> at the Max Planck Institute of Neurobiolgy in Martinsried, Germany.</p>
+	</article>
+</section>
+
+<section class="section">
+	<article>
+		<h2 class="subtitle">References</h2>
+
+		<p>SyConn is based on ELEKTRONN (<a href="http://elektronn.org">elektronn.org</a>) and the KNOSSOS Python tools (<a href="https://github.com/knossos-project/knossos_utils">github</a>). KNOSSOS (<a href="https://knossostool.org/">knossostool.org</a>) is used for visualization and annotation of 3D EM data sets.</p>
+	</article>
+</section>
+	</article>
+
+	<footer class="bottom-footer">
+	<div class="top container -medium _center">
+		<div class="row refer-links">
+			<div class="refer-link col">
+				<a href="http://www.mpimf-heidelberg.mpg.de/en">
+					<figure class="MPI-Logo">
+						<img src="/SyConn/images/mpi.svg" alt="MPI Logo" />
+						<span>Max Planck Institute for Medical Research</span>
+					</figure>
+				</a>
+			</div>
+
+			<div class="refer-link col">
+				<a href="http://www.neuro.mpg.de/home">
+					<img class="" src="/SyConn/images/mpi-of-neurobiology.png" alt="Max Planck Institute of Neurobiolgy Logo" />
+				</a>
+			</div>
+
+			<div class="refer-link col">
+				<a href="http://elektronn.org">
+					<img class="" src="/SyConn/images/elektronn-title.svg" alt="ELEKTRONN Logo" />
+				</a>
+			</div>
+		</div>
+
+		<div class="row">
+			<div class="col">
+				<ul class="sub-navigation">
+					<li><a href="#Top">Top</a></li>
+					<li><a href="#GettingStartedSection">Getting Started</a></li>
+					<li><a href="#AboutSection">Contributors</a></li>
+				</ul>
+			</div>
+
+			<div class="col">
+				<ul class="sub-navigation">
+					<li><a href="http://www.mpimf-heidelberg.mpg.de/en">Max Planck Institute for Medical Research, Heidelberg, Germany</a></li>
+					<li><a href="http://www.neuro.mpg.de/home">Max Planck Institute of Neurobiolgy, Martinsried, Germany</a></li>
+				</ul>
+			</div>
+
+			<div class="col">
+				<ul class="sub-navigation">
+					<li><a href="https://github.com/StructuralNeurobiologyLab/SyConn">GitHub Repository</a></li>
+					<li><a href="https://structuralneurobiologylab.github.io/SyConn/documentation">Documentation</a></li>
+				</ul>
+			</div>
+		</div>
+	</div>
+
+	<div class="footer">
+		<div class="container -medium _center">
+			<p>© 2017 — Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld</p>
+		</div>
+	</div>
+</footer>
+
+<!-- 	<script src="/SyConn/js/jquery-3.1.1.min.js"></script>
+	<script src="/SyConn/js/jquery.mobile-events.min.js"></script>
+	<script src="/SyConn/js/cocoen.min.js"></script> -->
+</body>
+
+</html>
