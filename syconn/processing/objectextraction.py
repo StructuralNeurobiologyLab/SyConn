@@ -606,6 +606,7 @@ def extract_voxels(cset, filename, hdf5names=None, overlaydataset_path=None,
                                      script_folder=script_folder,
                                      n_max_co_processes=n_max_processes)
 
+        path_to_out = "/u/sdorkenw/QSUB/extract_voxels_folder/out/"
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -671,7 +672,7 @@ def combine_voxels(workfolder, hdf5names=None, stride=100, qsub_pe=None,
     multi_params = []
 
     for hdf5_name in hdf5names:
-        with open(workfolder + "/%s_temp/remapping_dict.pkl" % hdf5_name, "w") as f:
+        with open(workfolder + "/%s_temp/remapping_dict.pkl" % hdf5_name, "r") as f:
             remap_dict = pkl.load(f)
 
         so_ids = remap_dict.keys()
@@ -684,7 +685,7 @@ def combine_voxels(workfolder, hdf5names=None, stride=100, qsub_pe=None,
         for so_id_block in [so_id_dict.values()[i:i + stride]
                             for i in xrange(0, len(so_id_dict), stride)]:
 
-            multi_params.append([workfolder, hdf5names, so_id_block,
+            multi_params.append([workfolder, hdf5_name, so_id_block,
                                  dataset_versions[hdf5_name]])
 
     if qsub_pe is None and qsub_queue is None:
