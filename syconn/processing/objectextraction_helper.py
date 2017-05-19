@@ -412,7 +412,9 @@ def extract_voxels_thread(args):
         voxel_dc = VoxelDict(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl",
                              read_only=False,
                              timeout=3600)
-        next_id = int(voxel_paths[cur_path_id].replace("/", ""))
+
+        p_parts = dvoxel_paths[cur_path_id].strip("/").split("/")
+        next_id = "%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]), int(p_parts[2]))
 
         for i_unique_id in range(len(unique_ids)):
             unique_id = unique_ids[i_unique_id]
@@ -434,7 +436,8 @@ def extract_voxels_thread(args):
                 voxel_dc = VoxelDict(dataset_path + voxel_paths[cur_path_id],
                                      read_only=False,
                                      timeout=3600)
-                next_id = int(voxel_paths[cur_path_id].replace("/", ""))
+                p_parts = dvoxel_paths[cur_path_id].strip("/").split("/")
+                next_id = "%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]), int(p_parts[2]))
             else:
                 next_id += 100000
 
@@ -449,11 +452,11 @@ def combine_voxels_thread(args):
     so_id_lists = args[2]
     dataset_version = args[3]
 
-    dataset_temp_path = workfolder + "/temp_%s/" % hdf5_name
-    with open(dataset_temp_path + "/mapping_dict.pkl", "r") as f:
+    dataset_temp_path = workfolder + "/%s_temp/" % hdf5_name
+    with open(dataset_temp_path + "/remapping_dict.pkl", "r") as f:
         mapping_dict = pkl.load(f)
 
-    segdataset = segmentation.representations.SegmentationDataset(
+    segdataset = segmentation.SegmentationDataset(
         obj_type=hdf5_name, working_dir=workfolder, version=dataset_version)
 
     for so_ids in so_id_lists:
@@ -470,7 +473,7 @@ def combine_voxels_thread(args):
 
         for so_id in so_ids:
             for i_fragment_id in range(len(mapping_dict[so_id])):
-                fragment_id = mapping_dict[so_id]
+                fragment_id = mapping_dict[so_id][i_fragment_id]
                 voxel_dc_read = VoxelDict(dataset_temp_path +
                                           utils.subfold_from_ix(fragment_id) +
                                           "/voxel.pkl")
