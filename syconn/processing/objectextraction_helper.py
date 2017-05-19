@@ -414,7 +414,7 @@ def extract_voxels_thread(args):
                              timeout=3600)
 
         p_parts = dvoxel_paths[cur_path_id].strip("/").split("/")
-        next_id = "%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]), int(p_parts[2]))
+        next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]), int(p_parts[2])))
 
         for i_unique_id in range(len(unique_ids)):
             unique_id = unique_ids[i_unique_id]
@@ -437,7 +437,7 @@ def extract_voxels_thread(args):
                                      read_only=False,
                                      timeout=3600)
                 p_parts = dvoxel_paths[cur_path_id].strip("/").split("/")
-                next_id = "%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]), int(p_parts[2]))
+                next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]), int(p_parts[2])))
             else:
                 next_id += 100000
 
