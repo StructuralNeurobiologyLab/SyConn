@@ -8,15 +8,21 @@
 import numpy as np
 import os
 import time
+from collections import defaultdict
 import cPickle as pkl
 import networkx as nx
 import glob
+import shutil
 
 from ..processing import objectextraction_helper as oeh
 from ..processing import predictor_cnn as pc
 from ..multi_proc import multi_proc_main as mpm
 from ..utils import datahandler#, segmentationdataset
 from syconnfs.representations import segmentation
+from syconnmp import qsub_utils as qu
+from syconnmp import shared_mem as sm
+
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../multi_proc/")
 
 
 def correct_padding(cset, filename, offset, qsub_pe=None, qsub_queue=None):
@@ -153,6 +159,7 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
                                          chunk_list=None,
                                          debug=False,
                                          swapdata=False,
+                                         prob_kd_path_dict=None,
                                          membrane_filename=None,
                                          membrane_kd_path=None,
                                          hdf5_name_membrane=None,
@@ -262,7 +269,7 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
         multi_params.append(
             [cset.chunk_dict[nb_chunk], cset.path_head_folder, filename,
              hdf5names, overlap,
-             sigmas, thresholds, swapdata,
+             sigmas, thresholds, swapdata, prob_kd_path_dict,
              membrane_filename, membrane_kd_path,
              hdf5_name_membrane, fast_load, suffix])
 
@@ -525,8 +532,9 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
         raise Exception("QSUB not available")
 
 
-def extract_voxels(cset, filename, hdf5names, debug=False, chunk_list=None,
-                   suffix="", use_work_dir=True, qsub_pe=None, qsub_queue=None):
+def extract_voxels(cset, filename, hdf5names=None, overlaydataset_path=None,
+                   chunk_list=None, suffix="", use_work_dir=True, qsub_pe=None,
+                   qsub_queue=None, n_max_processes=None):
     """
     Extracts voxels for each component id
 
@@ -561,27 +569,134 @@ def extract_voxels(cset, filename, hdf5names, debug=False, chunk_list=None,
     else:
         workfolder = cset.path_head_folder
 
+    voxel_rel_paths = ["/%d/%d/%d/" % ((ix // 1e3) % 1e2,
+                                       (ix // 1e1) % 1e2, ix % 10)
+                       for ix in range(100000)]
+
+    voxel_rel_paths_2stage = ["/%d/%d/" % ((ix // 1e2) % 1e2,
+                                           ix % 1e2)
+                              for ix in range(10000)]
+
+    for hdf5_name in hdf5names:
+        dataset_path = workfolder + "/%s_temp" % hdf5_name
+        if os.path.exists(dataset_path):
+            shutil.rmtree(dataset_path)
+
+        for p in voxel_rel_paths_2stage:
+            os.makedirs(dataset_path + p)
+
+    multi_params = []
+    block_steps = np.linspace(0, len(voxel_rel_paths), len(chunk_list)+1).astype(np.int)
+
+    for nb_chunk in chunk_list:
+        multi_params.append([cset.chunk_dict[nb_chunk], workfolder,
+                             filename, hdf5names, overlaydataset_path,
+                             suffix,
+                             voxel_rel_paths[block_steps[nb_chunk]:
+                                             block_steps[nb_chunk+1]]])
+
+    if qsub_pe is None and qsub_queue is None:
+        results = sm.start_multiprocess(oeh.extract_voxels_thread,
+                                        multi_params, nb_cpus=1)
+
+    elif qu.__QSUB__:
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "extract_voxels",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_max_co_processes=n_max_processes)
+
+        out_files = glob.glob(path_to_out + "/*")
+        results = []
+        for out_file in out_files:
+            with open(out_file) as f:
+                results.append(pkl.load(f))
+
+    else:
+        raise Exception("QSUB not available")
+
+    for hdf5_name in hdf5names:
+
+        remap_dict = defaultdict(list)
+        for result in results:
+            for key, value in result[hdf5_name].iteritems():
+                remap_dict[key].append(value)
+
+        with open(workfolder + "/%s_temp/remapping_dict.pkl" % hdf5_name, "w") as f:
+            pkl.dump(remap_dict, f)
+
+
+def combine_voxels(workfolder, hdf5names=None, stride=100, qsub_pe=None,
+                   qsub_queue=None, n_max_processes=None):
+    """
+    Extracts voxels for each component id
+
+    Parameters
+    ----------
+    cset : chunkdataset instance
+    filename : str
+        Filename of the prediction in the chunkdataset
+    hdf5names: list of str
+        List of names/ labels to be extracted and processed from the prediction
+        file
+    chunk_list: list of int
+        Selective list of chunks for which this function should work on. If None
+        all chunks are used.
+    debug: boolean
+        If true multiprocessed steps only operate on one core using 'map' which
+        allows for better error messages
+    suffix: str
+        Suffix for the intermediate results
+    qsub_pe: str or None
+        qsub parallel environment
+    qsub_queue: str or None
+        qsub queue
+
+    """
+    voxel_rel_paths_2stage = ["/%d/%d/" % ((ix // 1e2) % 1e2,
+                                           ix % 1e2)
+                              for ix in range(10000)]
+    
     dataset_versions = {}
     for hdf5_name in hdf5names:
-        segdataset = segmentation.SegmentationDataset(hdf5_name,
-                                                      version="new",
+        segdataset = segmentation.SegmentationDataset(obj_type=hdf5_name,
                                                       working_dir=workfolder,
+                                                      version="new",
                                                       create=True)
         dataset_versions[hdf5_name] = segdataset.version
 
+        for p in voxel_rel_paths_2stage:
+            os.makedirs(segdataset.so_storage_path + p)
+
     multi_params = []
-    for nb_chunk in chunk_list:
-        multi_params.append([cset.chunk_dict[nb_chunk], workfolder,
-                             filename, hdf5names, suffix, dataset_versions])
+
+    for hdf5_name in hdf5names:
+        with open(workfolder + "/%s_temp/remapping_dict.pkl" % hdf5_name, "w") as f:
+            remap_dict = pkl.load(f)
+
+        so_ids = remap_dict.keys()
+
+        so_id_dict = defaultdict(list)
+        for so_id in so_ids:
+            so_id_str = "%.5d" % so_id
+            so_id_dict[so_id_str[-5:]].append(so_id)
+
+        for so_id_block in [so_id_dict.values()[i:i + stride]
+                            for i in xrange(0, len(so_id_dict), stride)]:
+
+            multi_params.append([workfolder, hdf5names, so_id_block,
+                                 dataset_versions[hdf5_name]])
 
     if qsub_pe is None and qsub_queue is None:
-        results = mpm.start_multiprocess(oeh.extract_voxels_thread,
-                                         multi_params, debug=debug)
+        results = sm.start_multiprocess(oeh.combine_voxels_thread,
+                                        multi_params, nb_cpus=1)
 
-    elif mpm.__QSUB__:
-        path_to_out = mpm.QSUB_script(multi_params,
-                                      "extract_voxels",
-                                      pe=qsub_pe, queue=qsub_queue)
+    elif qu.__QSUB__:
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "combine_voxels",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_max_co_processes=n_max_processes)
 
     else:
         raise Exception("QSUB not available")
@@ -595,6 +710,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                                   swapdata=0,
                                   offset=None,
                                   size=None,
+                                  prob_kd_path_dict=None,
                                   membrane_filename=None,
                                   membrane_kd_path=None,
                                   hdf5_name_membrane=None,
@@ -661,6 +777,13 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     """
     all_times = []
     step_names = []
+
+    if prob_kd_path_dict is not None:
+        kd_keys = prob_kd_path_dict.keys()
+        assert len(kd_keys) == len(hdf5names)
+        for kd_key in kd_keys:
+            assert kd_key in hdf5names
+
     if size is not None and offset is not None:
         chunk_list, chunk_translator = \
             calculate_chunk_numbers_for_box(cset, offset, size)
@@ -681,8 +804,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     if sigmas is not None and swapdata == 1:
         for nb_sigma in range(len(sigmas)):
             if len(sigmas[nb_sigma]) == 3:
-                sigmas[nb_sigma] = datahandler.switch_array_entries(sigmas[nb_sigma],
-                                                           [0, 2])
+                sigmas[nb_sigma] = \
+                    datahandler.switch_array_entries(sigmas[nb_sigma], [0, 2])
 
     # --------------------------------------------------------------------------
 
@@ -692,6 +815,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
         hdf5names, overlap, sigmas, thresholds,
         chunk_list, debug,
         swapdata,
+        prob_kd_path_dict=prob_kd_path_dict,
         membrane_filename=membrane_filename,
         membrane_kd_path=membrane_kd_path,
         hdf5_name_membrane=hdf5_name_membrane,
@@ -896,9 +1020,10 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
     print "--------------------------\n"
 
 
-def from_ids_to_objects(cset, filename, hdf5names, chunk_list=None, debug=False,
-                        offset=None, size=None, suffix="", qsub_pe=None,
-                        qsub_queue=None):
+def from_ids_to_objects(cset, filename, hdf5names=None,
+                        overlaydataset_path=None, chunk_list=None, offset=None,
+                        size=None, suffix="", qsub_pe=None, qsub_queue=None,
+                        n_max_processes=None):
     """
     Main function for the object extraction step; combines all needed steps
 
@@ -928,6 +1053,8 @@ def from_ids_to_objects(cset, filename, hdf5names, chunk_list=None, debug=False,
         qsub queue
 
     """
+    assert overlaydataset_path is not None or hdf5names is not None
+
     all_times = []
     step_names = []
     if size is not None and offset is not None:
@@ -943,25 +1070,26 @@ def from_ids_to_objects(cset, filename, hdf5names, chunk_list=None, debug=False,
             for ii in range(len(chunk_list)):
                 chunk_translator[chunk_list[ii]] = ii
 
-    # for hdf5_name in hdf5names:
-    #     segdataset = segmentation.SegmentationDataset(hdf5_name, version=0,
-    #                                                   working_dir=cset.path_head_folder)
-    #     if not os.path.exists(segdataset.path + "/map_dicts/"):
-    #         os.makedirs(segdataset.path + "/map_dicts/")
-    #     if not os.path.exists(segdataset.path + "/voxels/"):
-    #         os.makedirs(segdataset.path + "/voxels/")
-    #     if not os.path.exists(segdataset.path + "/hull_voxels/"):
-    #         os.makedirs(segdataset.path + "/hull_voxels/")
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    extract_voxels(cset, filename, hdf5names,
+                   overlaydataset_path=overlaydataset_path,
+                   chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
+                   qsub_queue=qsub_queue, n_max_processes=n_max_processes)
+    all_times.append(time.time() - time_start)
+    step_names.append("voxel extraction")
+    print "\nTime needed for extracting voxels: %.3fs" % all_times[-1]
 
     # --------------------------------------------------------------------------
 
     time_start = time.time()
-    extract_voxels(cset, filename, hdf5names, debug=debug,
-                   chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
-                   qsub_queue=qsub_queue)
+    combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
+                   hdf5names, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+                   n_max_processes=n_max_processes)
     all_times.append(time.time() - time_start)
-    step_names.append("voxel extraction")
-    print "\nTime needed for extracting voxels: %.3fs" % all_times[-1]
+    step_names.append("combine voxels")
+    print "\nTime needed for combining voxels: %.3fs" % all_times[-1]
 
     # --------------------------------------------------------------------------
 
