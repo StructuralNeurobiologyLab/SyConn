@@ -16,6 +16,11 @@ import warnings
 import re
 
 
+def argsort(seq):
+    # http://stackoverflow.com/questions/3071415/efficient-method-to-calculate-the-rank-vector-of-a-list-in-python
+    return sorted(range(len(seq)), key=seq.__getitem__)
+
+
 def switch_array_entries(this_array, entries):
     entry_0 = this_array[entries[0]]
     this_array[entries[0]] = this_array[entries[1]]
