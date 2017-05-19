@@ -438,7 +438,7 @@ def extract_voxels_thread(args):
             else:
                 next_id += 100000
 
-        voxel_dc.save2pkl(dataset_path + voxel_paths[cur_path_id])
+        voxel_dc.save2pkl(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl")
 
     return map_dict
 
