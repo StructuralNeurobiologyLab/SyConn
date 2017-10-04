@@ -11,7 +11,7 @@ import networkx as nx
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import itertools
 import sys
-from .mesh_utils import merge_someshs, get_bb_size
+from .meshs import merge_someshs, get_bb_size
 from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess
 import warnings
 

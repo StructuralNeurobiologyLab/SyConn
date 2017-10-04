@@ -21,7 +21,7 @@ import sys
 from .segmentation import SegmentationObject
 from .utils import knossos_ml_from_sso, colorcode_vertices, colorcode_vertices_color,\
     knossos_ml_from_svixs, subfold_from_ix, subfold_from_ix_SSO
-from ..proc.mesh_utils import write_mesh2kzip, merge_someshs
+from ..proc.meshs import write_mesh2kzip, merge_someshs
 from ..proc.rendering import render_sampled_sso, comp_window, \
     multi_render_sampled_svidlist, render_sso_coords
 from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton

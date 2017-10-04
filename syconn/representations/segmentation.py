@@ -32,7 +32,7 @@ from ..config import parser
 from ..handler.compression import LZ4Dict, MeshDict, VoxelDict, AttributeDict
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .utils import subfold_from_ix, surface_samples, knossos_ml_from_svixs
-from ..proc.mesh_utils import get_object_mesh, write_mesh2kzip
+from ..proc.meshs import get_object_mesh, write_mesh2kzip
 from ..handler.basics import get_filepaths_from_dir, safe_copy, group_ids_to_so_storage, write_txt2kzip
 import segmentation_helper as sh
 import warnings
