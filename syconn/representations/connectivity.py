@@ -1,3 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import cPickle as pkl
 import glob
 
@@ -22,7 +29,7 @@ from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 
 # TODO: get from config
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../qsub_scripts/")
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 try:
     default_wd_available = True

@@ -27,8 +27,7 @@ from ..proc.rendering import render_sampled_sso, comp_window, \
 from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
 from ..proc.general import single_conn_comp_img, timeit
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
-    coordpath2anno, load_skeleton, write_skeleton, load_pkl2obj, \
-    write_obj2pkl, flatten_list, chunkify
+    coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..handler.compression import AttributeDict, MeshDict
 from ..config import parser
 import segmentation
@@ -38,6 +37,7 @@ import skel_based_classifier as sbc
 from .segmentation_helper import predict_sos_views
 
 from knossos_utils import skeleton, knossosdataset
+from knossos_utils.skeleton_utils import load_skeleton, write_skeleton
 import warnings
 import time
 import seaborn as sns
@@ -63,7 +63,7 @@ from ..extraction.ssd_assembly import assembly
 
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../qsub_scripts/")
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 try:
     default_wd_available = True

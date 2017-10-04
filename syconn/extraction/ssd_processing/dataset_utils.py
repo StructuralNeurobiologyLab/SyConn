@@ -16,7 +16,7 @@ from syconnmp import shared_mem as sm
 
 import dataset_proc as dp
 
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/qsub_scripts/")
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
 
 
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,

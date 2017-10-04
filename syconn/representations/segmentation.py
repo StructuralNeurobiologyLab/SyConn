@@ -19,7 +19,7 @@ from knossos_utils import knossosdataset
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 # TODO: get from config
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../qsub_scripts/")
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 try:
     default_wd_available = True

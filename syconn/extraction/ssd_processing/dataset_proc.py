@@ -11,7 +11,7 @@ from syconnfs.representations import super_segmentation as ss
 
 from syconnmp import qsub_utils as qu
 from syconnmp import shared_mem as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/qsub_scripts/")
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
 
 
 def aggregate_segmentation_object_mappings(ssd, obj_types,

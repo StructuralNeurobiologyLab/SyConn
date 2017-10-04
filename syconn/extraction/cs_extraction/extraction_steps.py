@@ -11,7 +11,7 @@ from syconnmp import shared_mem as sm
 
 from knossos_utils import chunky, knossosdataset
 
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/qsub_scripts/")
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
 
 
 def find_contact_sites(cset, knossos_path, filename, n_max_co_processes=None,

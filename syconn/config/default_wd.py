@@ -1,12 +1,9 @@
-# wd = "/wholebrain/scratch/areaxfs/"
-wd = "/u/pschuber/areaxfs/"
-import os
-import socket
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
 #
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 # # define global working directory
-# # wd = "/u/pschuber/areaxfs/"
-sn = socket.gethostname()
-if sn == "L-N1-050" or sn == "fordprefect":
-    # wd = "/home/pschuber/mnt/external2/j0126_dense_syconn_v1/"
-    wd = "/home/pschuber/mnt/wb/wholebrain/u/pschuber/areaxfs/"
-wd = os.path.expanduser(wd)
+wd = "/wholebrain/scratch/areaxfs/"

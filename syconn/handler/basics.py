@@ -22,7 +22,7 @@ import logging
 
 __all__ = ["get_filepaths_from_dir", "write_obj2pkl", "load_pkl2obj",
            "write_data2kzip", "remove_from_zip", "chunkify", "flatten_list",
-           "get_skelID_from_path", "write_txt2kzip", "load_skeleton"]
+           "get_skelID_from_path", "write_txt2kzip"]
 
 
 def argsort(seq):
@@ -100,76 +100,6 @@ def coordpath2anno(coords, scaling=(10, 10, 20), add_edges=True):
         for i in range(1, len(rep_nodes)):
             anno.addEdge(rep_nodes[i-1], rep_nodes[i])
     return anno
-
-
-def write_skeleton(path, new_annos, update=True):
-    """
-
-    Parameters
-    ----------
-    path : str
-    new_annos : SkeletonAnnotation, list, dict
-    update : bool
-    """
-    if isinstance(new_annos, SkeletonAnnotation):
-        new_annos = [new_annos]
-
-    if isinstance(new_annos, list):
-        new_anno_dict = {}
-        for anno in new_annos:
-            if len(anno.comment) == 0:
-                raise Exception("insufficient annotation comment!")
-
-            new_anno_dict[anno.comment] = anno
-        new_annos = new_anno_dict
-
-    assert isinstance(new_annos, dict)
-    if len(new_annos.keys()) == 0:
-        return
-
-    if os.path.exists(path) and update:
-        annos = load_skeleton(path)
-        annos.update(new_annos)
-    else:
-        annos = new_annos
-
-    knossos_skeleton = Skeleton()
-    for anno_key in annos.keys():
-        if len(annos[anno_key].comment) == 0:
-            annos[anno_key].comment = anno_key
-
-        knossos_skeleton.add_annotation(annos[anno_key])
-
-    knossos_skeleton.to_kzip(path)
-
-
-def load_skeleton(path):
-    """Load nml of mapped skeleton and order trees
-
-    Parameters
-    ----------
-    path : str
-        Path to kzip
-
-    Returns
-    -------
-    dict
-        Dict of trees
-    """
-    anno_dict = {}
-    try:
-        annotations = loadj0126NML(path)
-    except Exception, e:
-        # if e == "k.zip file does not contain annotation.xml":
-        print e
-        annotations = []
-    # else:
-        #     raise(e)
-
-    for anno in annotations:
-        anno_dict[anno.comment] = anno
-
-    return anno_dict
 
 
 def get_filepaths_from_dir(directory, ending='k.zip', recursively=False):
