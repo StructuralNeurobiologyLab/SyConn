@@ -8,9 +8,11 @@ from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import itertools
 import sys
 from .mesh_utils import merge_someshs, get_bb_size
-from syconnmp.shared_mem import start_multiprocess_obj, start_multiprocess
+from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess
 import warnings
 
+
+# TODO: move parameters to config.ini
 # min. connected component size of glia nodes/SV after thresholding glia proba
 min_cc_size_glia = 8e3 # in nm; L1-norm on vertex bounding box
 # minimum pathlength through (on surface of) glia at which it is considered to be a false merger and being removed

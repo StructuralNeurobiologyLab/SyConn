@@ -16,7 +16,6 @@ import subprocess
 import sys
 import time
 
-import utils
 
 __QSUB__ = True
 try:
@@ -227,7 +226,7 @@ def show_progress(job_name, n_jobs_total, time_diff):
         sys.stdout.write('\rAll jobs were finished in %.2fs\n' % time_diff)
         return True
     else:
-        progress = 100 * (n_jobs_total - utils.negative_to_zero(nb_rp)) / \
+        progress = 100 * (n_jobs_total - negative_to_zero(nb_rp)) / \
                    float(n_jobs_total)
         sys.stdout.write('\rProgress: %.2f%% in %.2fs' % (progress, time_diff))
         sys.stdout.flush()
@@ -260,3 +259,10 @@ def delete_jobs_by_name(job_name):
     command = command[:-2]
 
     subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+
+
+def negative_to_zero(a):
+    if a > 0:
+        return a
+    else:
+        return 0

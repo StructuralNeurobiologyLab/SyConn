@@ -14,12 +14,14 @@ import re
 import scipy.ndimage
 
 import pandas as pd
-from syconnfs.representations import segmentation as sd
+from ..representations import segmentation as sd
 import time
 import networkx as nx
 
-from syconnmp import qsub_utils as qu
-from syconnmp import shared_mem as sm
+from ..mp import qsub_utils as qu
+from ..mp import shared_mem as sm
+
+# TODO: get from config
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../qsub_scripts/")
 
 try:

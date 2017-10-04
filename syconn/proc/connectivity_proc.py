@@ -7,9 +7,11 @@ from ..representations import segmentation, connectivity_helper as ch, \
     super_segmentation as ss, utils
 import connectivity_proc_helper as cph
 
-from syconnmp import qsub_utils as qu
-from syconnmp import shared_mem as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../qsub_scripts/")
+from ..mp import qsub_utils as qu
+from ..mp import shared_mem as sm
+
+# TODO import from config
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def filter_relevant_cs_agg(cs_agg, ssd):

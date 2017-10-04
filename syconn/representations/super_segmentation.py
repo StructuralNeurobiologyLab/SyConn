@@ -21,11 +21,11 @@ import sys
 from .segmentation import SegmentationObject
 from .utils import knossos_ml_from_sso, colorcode_vertices, colorcode_vertices_color,\
     knossos_ml_from_svixs, subfold_from_ix, subfold_from_ix_SSO
-from ..processing.mesh_utils import write_mesh2kzip, merge_someshs
-from ..processing.rendering import render_sampled_sso, comp_window, \
+from ..proc.mesh_utils import write_mesh2kzip, merge_someshs
+from ..proc.rendering import render_sampled_sso, comp_window, \
     multi_render_sampled_svidlist, render_sso_coords
-from ..processing.graphs import split_glia, split_subcc, create_mst_skeleton
-from ..processing.general import single_conn_comp_img
+from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
+from ..proc.general import single_conn_comp_img, timeit
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_skeleton, write_skeleton, load_pkl2obj, \
     write_obj2pkl, flatten_list, chunkify
@@ -34,11 +34,11 @@ from ..config import parser
 import segmentation
 import super_segmentation_helper as ssh
 import skel_based_classifier as sbc
+# TODO: missing dependency
 from .segmentation_helper import predict_sos_views
 
 from knossos_utils import skeleton, knossosdataset
 import warnings
-from ..processing.general import timeit
 import time
 import seaborn as sns
 try:
@@ -58,11 +58,11 @@ except:
     #       "Install skeletopyze from https://github.com/funkey/skeletopyze"
 
 
-from syconnproc.ssd_processing import dataset_proc as dp, dataset_utils as du
-from syconnproc.ssd_assembly import assembly
+from ..extraction.ssd_processing import dataset_proc as dp, dataset_utils as du
+from ..extraction.ssd_assembly import assembly
 
-from syconnmp import qsub_utils as qu
-from syconnmp import shared_mem as sm
+from ..mp import qsub_utils as qu
+from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../qsub_scripts/")
 
 try:

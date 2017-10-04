@@ -24,8 +24,8 @@ except ImportError:
 import skel_based_classifier_helper as sbch
 import super_segmentation as ss
 
-from syconnmp import qsub_utils as qu
-from syconnmp import shared_mem as sm
+from ..mp import qsub_utils as qu
+from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../qsub_scripts/")
 
 feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",

@@ -5,10 +5,10 @@ sys.dont_write_bytecode = True
 
 # need to specify paths to syconnfs code base manually if not in path
 # make this a GUI setting
-
+# TODO: get from config
 syconnfs_path = '/wholebrain/scratch/areaxfs/'
 
-from syconnfs.representations import super_segmentation as ss
+from ..representations import super_segmentation as ss
 
 
 class main_class(QtGui.QDialog):

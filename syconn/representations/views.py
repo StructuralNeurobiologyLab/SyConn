@@ -1,4 +1,3 @@
-# SyConnFS
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 from ..handler.compression import load_lz4_compressed, save_lz4_compressed

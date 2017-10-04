@@ -1,4 +1,3 @@
-# SyConnFS
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 import itertools
@@ -15,7 +14,7 @@ try:
 except ImportError:
     print('Vigra not available')
 
-from syconnmp.shared_mem import start_multiprocess_obj
+from ..mp.shared_mem import start_multiprocess_obj
 __all__ = ["MeshObject", "get_object_mesh", "merge_meshs", "triangulation",
            "get_random_centered_coords", "write_sso2kzip", "write_mesh2kzip"]
 
@@ -158,21 +157,20 @@ def triangulation(pts, resolution=256, scaling=(10, 10, 20)):
         bb = np.max(pts, axis=0) + 5
         volume = np.zeros(bb, dtype=np.float32)
         volume[pts[:, 0], pts[:, 1], pts[:, 2]] = 1
-        # volume = multiBinaryErosion(volume, 1).astype(np.float32)
-        # TODO: Take anisotropy into account when calculating distances...
-        # TODO: try to correct with anistropic smoothing and dimension independent rescaling to match bounding box
-        dt = boundaryDistanceTransform(volume, boundary="InterpixelBoundary") #InterpixelBoundary, OuterBoundary, InnerBoundary
-        dt[volume == 1] *= -1
-        volume = gaussianSmoothing(dt, scaling[0], step_size=scaling) # this works because only the relative step_size between the dimensions is interesting, therefore we can neglect shrink_fct
-        if np.sum(volume<0) == 0: # less smoothing
-            volume = gaussianSmoothing(dt, scaling[0]/2, step_size=scaling)
     else:
         volume = pts
+        vecs = np.argwhere(pts != 0)
+        extent_orig = np.max(vecs, axis=0)
         offset = np.zeros((3, ))
-    try:
-        verts, ind, _, _ = measure.marching_cubes(volume, 0, gradient_direction="descent") # also calculates normals!
-    except ValueError:
-        raise()
+    # volume = multiBinaryErosion(volume, 1).astype(np.float32)
+    # TODO: Take anisotropy into account when calculating distances...
+    # TODO: try to correct with anistropic smoothing and dimension independent rescaling to match bounding box
+    dt = boundaryDistanceTransform(volume, boundary="InterpixelBoundary") #InterpixelBoundary, OuterBoundary, InnerBoundary
+    dt[volume == 1] *= -1
+    volume = gaussianSmoothing(dt, scaling[0], step_size=scaling) # this works because only the relative step_size between the dimensions is interesting, therefore we can neglect shrink_fct
+    if np.sum(volume<0) == 0: # less smoothing
+        volume = gaussianSmoothing(dt, scaling[0]/2, step_size=scaling)
+    verts, ind, _, _ = measure.marching_cubes(volume, 0, gradient_direction="descent") # also calculates normals!
     verts -= np.min(verts, axis=0)
     extent_post = np.max(verts, axis=0)
     new_fact = extent_orig / extent_post # scale independent for each dimension, s.t. the bounding box coords are the same

@@ -15,7 +15,6 @@ import subprocess
 import sys
 import time
 
-import utils
 
 home_dir = os.environ['HOME'] + "/"
 path_to_scripts_default = os.path.dirname(__file__)
@@ -128,11 +127,11 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
     start = time.time()
     if nb_cpus > 1:
         pool = MyPool(nb_cpus)
-        result = pool.map(utils.multi_helper_obj, params)
+        result = pool.map(multi_helper_obj, params)
         pool.close()
         pool.join()
     else:
-        result = map(utils.multi_helper_obj, params)
+        result = map(multi_helper_obj, params)
 
     if verbose:
         print "\nTime to compute:", time.time() - start
@@ -196,3 +195,30 @@ def SUBP_script(params, name, suffix="", delay=0):
         p.wait()
 
     return path_to_out
+
+
+def multi_helper_obj(args):
+    """
+    Generic helper emthod for multiprocessed jobs. Calls the given object
+    method.
+
+    Parameters
+    ----------
+    args : iterable
+        object, method name, optional: kwargs
+
+    Returns
+    -------
+
+    """
+    attr_str = args[0]
+    obj = args[1]
+    if len(args) == 3:
+        kwargs = args[2]
+    else:
+        kwargs = {}
+    attr = getattr(obj, attr_str)
+    # check if attr is callable, i.e. a method to be called
+    if not hasattr(attr, '__call__'):
+        return attr
+    return attr(**kwargs)

@@ -1,4 +1,3 @@
-# SyConnFS
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 import numpy as np
@@ -159,8 +158,10 @@ def apply_equalhist(arr):
 
     """
     if not __cv2__:
-        warnings.warn("CV2 not properly installed.", ImportWarning)
-        return arr
+        try:
+            import cv2
+        except ImportError, e:
+            raise ImportError("cv2 not properly installed:\n %s" % str(e))
     if arr.shape[-1] != 1:
         arr = arr[..., None]
     if arr.dtype != np.uint8:
@@ -183,8 +184,10 @@ def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
 
     """
     if not __cv2__:
-        warnings.warn("CV2 not properly installed.", ImportWarning)
-        return arr
+        try:
+            import cv2
+        except ImportError, e:
+            raise ImportError("cv2 not properly installed:\n %s" % str(e))
     if arr.ndim == 2:
         arr = arr[..., None]
     if arr.dtype != np.uint8:
@@ -343,3 +346,33 @@ def timeit(func):
               (nb_samples, end - start, (end - start) / nb_samples)
         return res
     return timeit_wrapper
+
+
+def cut_array_in_one_dim(array, start, end, dim):
+    """
+    Cuts an array along a dimension
+
+    Parameters
+    ----------
+    array: np.array
+    start: int
+    end: int
+    dim: int
+
+    Returns
+    -------
+    array: np.array
+
+    """
+    start = int(start)
+    end = int(end)
+    if dim == 0:
+        array = array[start: end, :, :]
+    elif dim == 1:
+        array = array[:, start: end, :]
+    elif dim == 2:
+        array = array[:, :, start:end]
+    else:
+        raise NotImplementedError()
+
+    return array

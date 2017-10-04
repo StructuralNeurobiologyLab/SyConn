@@ -16,8 +16,9 @@ import re
 from scipy import ndimage, spatial
 
 from knossos_utils import knossosdataset
-from syconnmp import qsub_utils as qu
-from syconnmp import shared_mem as sm
+from ..mp import qsub_utils as qu
+from ..mp import shared_mem as sm
+# TODO: get from config
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../qsub_scripts/")
 
 try:
@@ -31,7 +32,7 @@ from ..config import parser
 from ..handler.compression import LZ4Dict, MeshDict, VoxelDict, AttributeDict
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .utils import subfold_from_ix, surface_samples, knossos_ml_from_svixs
-from ..processing.mesh_utils import get_object_mesh, write_mesh2kzip
+from ..proc.mesh_utils import get_object_mesh, write_mesh2kzip
 from ..handler.basics import get_filepaths_from_dir, safe_copy, group_ids_to_so_storage, write_txt2kzip
 import segmentation_helper as sh
 import warnings

@@ -12,7 +12,7 @@ import numpy as np
 import h5py
 import os
 import shutil
-from syconnmp.shared_mem import start_multiprocess
+from ..mp.shared_mem import start_multiprocess
 import warnings
 __all__ = ["arrtolz4string", "lz4stringtoarr", "load_lz4_meshdict_items",
            "load_lz4_compressed", "add_lz4_meshdict_items", "init_lz4_meshdict",

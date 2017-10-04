@@ -4,226 +4,143 @@
 
 import numpy as np
 from scipy import spatial
-import warnings
-from multiprocessing import Pool
-from syconnmp.shared_mem import start_multiprocess
-from numba import jit
-from ..handler.basics import chunkify
+from knossos_utils.knossosdataset import KnossosDataset
+from skimage.segmentation import find_boundaries
+from ..representations.segmentation import SegmentationDataset, SegmentationObject
+from ..representations.super_segmentation import SuperSegmentationObject
 
 
-# ------------------------------------------------------------------------------
-# Hull mapping -----------------------------------------------------------------
-
-# ------------------------------------------------------------------------------
-# Parameters
-map_radius = 1200
-nb_vox = 500
-max_sj_dist = 125.
-obj_min_votes = {'mito': 235, 'vc': 210, 'sj': 346} #changed vc value (orig: 191)
-obj_min_size = {'mito': 2786, 'vc': 1594, 'sj': 250}
-neighbor_radius = 220
-nb_voting_neighbors = 100
-
-
-def map_objects(raw_mesh, skel_coords, obj):
+def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
     """
-    Map objects of mesh using point cloud method (SyConn). Either path to
-    object dataset or dataset itsself has to be given.
+    Map glia properties within subvolume to SegmentationObject (cs). Requires
+    attribute 'neuron_partners'.
 
     Parameters
     ----------
-    raw_mesh : MeshObject
-    skel_coords : np.array
-        Coordinates of (cell/mesh) skeleton
-    obj : SegmentationDataset
-        Cell objects
-
-    Returns
-    -------
-    list
-        mapped object IDs
+    so : SegmentationObject
+    box_size : np.array
+        size in voxels (XYZ), default: (500, 500, 250)
+    min_frag_size : int
+    overwrite : bool
     """
-    global local_max_sj_dist
-    local_max_sj_dist = max_sj_dist / raw_mesh.max_dist
-    vert_resh = np.array(raw_mesh.vert_resh)
-    normals_resh = np.array(raw_mesh.normals_resh)
-
-    objtype = obj._type
-    mapped_obj_ids = []
-    premapped_obj_ids = map_with_kdtree(obj, skel_coords)
-    print "%d %s candidates." % (len(premapped_obj_ids), objtype)
-    curr_objects = [obj.object_dict[key] for key in premapped_obj_ids]
-    for co in curr_objects:
-        co._type = objtype
-    pool = Pool(processes=4)
-    curr_object_voxels = pool.map(get_voxels, curr_objects)
-    pool.close()
-    pool.join()
-    curr_object_voxels = [raw_mesh.transform_external_coords(curr_vx) for
-                          curr_vx in curr_object_voxels]
-    # separate data in chunks
-    chunk_objids = chunkify(premapped_obj_ids, 10)
-    chunk_objvoxels = chunkify(curr_object_voxels, 10)
-    params = [(vert_resh, normals_resh, ch_objvx, ch_objids, objtype)
-              for ch_objvx, ch_objids in zip(chunk_objvoxels, chunk_objids)]
-    # process chunks
-    chunks = start_multiprocess(mapping_helper, params, nb_cpus=4, debug=False)
-    for chunk in chunks:
-        for el in chunk:
-            curr_obj_id = el[0]
-            is_in_hull = el[1]
-            if is_in_hull:
-                mapped_obj_ids.append(curr_obj_id)
-    return mapped_obj_ids
-
-
-def mapping_helper(args):
-    """
-    Multiprocessing helper function for mapping objects.
-
-    Parameters
-    ----------
-    args : tuple of (np.array, np.array, np.array, np.array, str)
-        (vertices [N, 3], normals [N, 3], object voxels [M, L], object ids [M,],
-        object type
-
-    Returns
-    -------
-    np.array (bool)
-        Objects with IDs in object ids (args[3]) are mapped or not.
-    """
-    vert_resh = args[0]
-    normals_resh = args[1]
-    curr_object_voxels = args[2]
-    premapped_obj_ids = args[3]
-    objtype = args[4]
-    sjtrue = (objtype == 'sj')
-    min_votes = obj_min_votes[objtype]
-    tree = spatial.cKDTree(vert_resh)
-    res = []
-    for i in range(len(curr_object_voxels)):
-        curr_obj_id = premapped_obj_ids[i]
-        rand_voxels = curr_object_voxels[i]
-        if len(rand_voxels) == 0:
-            res.append((curr_obj_id, False))
+    if not overwrite:
+        so.load_attr_dict()
+        if "glia_vol_frac" in so.attr_dict.keys():
+            return
+    if box_size is None:
+        box_size = np.array([300, 300, 150])
+    kd = KnossosDataset()
+    # Hack
+    kd.initialize_from_knossos_path(
+        so.working_dir + "knossosdatasets/j0126_realigned_v4b_cbs_ext0_fix/")
+    bndry = np.array(kd.boundary)
+    if np.any(so.rep_coord >= bndry) or np.any(so.rep_coord < np.zeros_like(bndry)):
+        print so.id, so.rep_coord
+        so.save_attributes(["glia_vol_frac", "glia_sv_ids", "glia_cov_frac", "glia_cov"], [-1, -1, -1, -1])
+        return
+    c = so.rep_coord - (box_size // 2)
+    c, box_size = crop_box_to_bndry(c, box_size, bndry)
+    seg = kd.from_overlaycubes_to_matrix(box_size, c, show_progress=False)
+    ids, cnts = np.unique(seg, return_counts=True)
+    sv_ds = SegmentationDataset("sv", working_dir=so.working_dir)
+    # remove small fragments, but include background label 0 in
+    # cnts for proper volume estimation
+    ids = ids[cnts >= min_frag_size]
+    cnts = cnts[cnts >= min_frag_size]
+    glia_vx = 0
+    glia_sv_ids = []
+    for ix, cnt in zip(ids, cnts):
+        if ix == 0:  # ignore ECS
             continue
-        is_in_hull = 0
-        if sjtrue:
-            n_hullnodes_dists, _ = tree.query(rand_voxels, k=20)
-            for ii in range(len(rand_voxels)):
-                is_in_hull += check_number_nn(n_hullnodes_dists[ii])
-                # no chance of getting over min votes
-                if len(rand_voxels)-ii+is_in_hull < min_votes:
-                    break
-        else:
-            _, skel_hull_ixs = tree.query(rand_voxels, k=nb_voting_neighbors)
-            for ii in range(len(skel_hull_ixs)):
-                vx_near_cellixs = skel_hull_ixs[ii]
-                is_in_hull += check_hull_normals(rand_voxels[ii],
-                                                 vert_resh[vx_near_cellixs],
-                                                 normals_resh[vx_near_cellixs])
-                # no chance of getting over min votes
-                if len(rand_voxels)-ii+is_in_hull < min_votes:
-                    break
-        res.append((curr_obj_id, is_in_hull >= min_votes))
-    return res
+        sv = sv_ds.get_segmentation_object(ix)
+        if sv.glia_pred():
+            glia_vx += cnt
+            glia_sv_ids.append(ix)
+    nb_box_vx = np.sum(cnts)
+    glia_vol_frac = glia_vx / float(nb_box_vx)
+
+    # get glia coverage
+    neuron_ids = so.attr_dict["neuron_partners"]
+    sso = SuperSegmentationObject(neuron_ids[0], working_dir=so.working_dir,
+                                  create=False)
+    sso.load_attr_dict()
+    neuron_sv_ids = list(sso.sv_ids)
+    sso = SuperSegmentationObject(neuron_ids[1], working_dir=so.working_dir,
+                                  create=False)
+    sso.load_attr_dict()
+    neuron_sv_ids += list(sso.sv_ids)
+    sv_ids_in_seg = np.array([ix in ids for ix in neuron_sv_ids], dtype=bool)
+    assert np.sum(sv_ids_in_seg) >= 2
+    nb_cov_vx, frac_cov_vx = get_glia_coverage(seg, neuron_sv_ids, glia_sv_ids,
+                                               300, kd.scale)
+    so.save_attributes(["glia_vol_frac", "glia_sv_ids",
+                        "glia_cov_frac", "glia_cov"],
+                       [glia_vol_frac, glia_sv_ids, frac_cov_vx,
+                        nb_cov_vx])
 
 
-def get_voxels(obj):
+def get_glia_coverage(seg, neuron_ids, glia_ids, max_dist, scale):
     """
-    Get hull voxels of cell object.
+    Computes the glia coverage of neurons in a segmentation volume. Neurons
+    and glia are treated as two classes and coverage is defined as neuron
+    boundary voxels close (within max_dist) to the glia boundary.
 
     Parameters
     ----------
-    obj : SegmentationObject
+    seg : np.array
+    neuron_ids : list
+    glia_ids : list
+    max_dist : int/float
+    scale : np.array
+
+    Returns
+    -------
+    int, float
+        Number and fraction of neuron boundary voxels close to glia boundary
+    """
+    seg = np.array(seg, np.int)
+    for ix in neuron_ids:
+        seg[seg == ix] = -1
+    for ix in glia_ids:
+        seg[seg == ix] = -2
+    neuron_bndry = find_boundaries(seg == -1, mode='inner', background=0)
+    glia_bndry = find_boundaries(seg == -2, mode='inner', background=0)
+    neuron_bndry = np.argwhere(neuron_bndry) * scale
+    glia_bndry = np.argwhere(glia_bndry) * scale
+    kd_t = spatial.cKDTree(neuron_bndry)
+    dists, close_neuron_vx = kd_t.query(glia_bndry, distance_upper_bound=max_dist)
+    close_neuron_vx = close_neuron_vx[dists <= max_dist]
+    close_neuron_vx = np.unique(close_neuron_vx)
+    return len(close_neuron_vx), float(len(close_neuron_vx)) / len(neuron_bndry)
+
+
+def crop_box_to_bndry(offset, box_size, bndry):
+    """
+    Restricts box_size and offset to valid values, i.e. within an upper
+    limit (bndry) and a lower limit (0, 0, 0).
+
+    Parameters
+    ----------
+    offset : np.array
+    box_size : np.array / list
+    bndry : np.array
 
     Returns
     -------
     np.array
-        Randomly drawn object voxels of size nb_vox
+        Valid box size and offset
     """
-    try:
-        if obj.size < obj_min_size[obj._type]:
-            return np.zeros((0, 3))
-        if obj.size > 4 * obj_min_size[obj._type]:
-            voxels = obj.voxels[::4]
-        else:
-            voxels = obj.voxels
-        rand_ixs = np.arange(len(voxels))
-        np.random.shuffle(rand_ixs)
-        rand_ixs = rand_ixs[:nb_vox]
-        return voxels[rand_ixs]
-    except (KeyError, IOError) as e:
-        warnings.warn("Object not found during voxel collection.",
-                      RuntimeWarning)
-        print e
-        return np.array([])
-
-
-@jit
-def check_hull_normals(obj_coord, hull_coords, dir_vecs):
-    """
-    Check if object coordinates are inside hull using normals.
-
-    Parameters
-    ----------
-    obj_coord : np.array
-    hull_coords : np.array
-    dir_vecs : np.array
-
-    Returns
-    -------
-    np.array (bool)
-    """
-    norm = np.linalg.norm(dir_vecs, axis=1)
-    dir_vecs /= norm[:, None]
-    obj_coord = obj_coord[None, :]
-    left_side = np.inner(obj_coord, dir_vecs)
-    right_side = np.sum(dir_vecs * hull_coords, axis=1)
-    sign = np.sign(left_side - right_side)
-    return np.sum(sign) < 0
-
-
-@jit
-def check_number_nn(n_hullnodes_dists):
-    """
-    Check if mean of distances is below local_max_sj_dist
-    (specified at top).
-
-    Parameters
-    ----------
-    n_hullnodes_dists : np.array
-
-    Returns
-    -------
-    bool
-    """
-    mean_dists = np.mean(n_hullnodes_dists)
-    return mean_dists < local_max_sj_dist
-
-
-def map_with_kdtree(obj, skel_coords, max_radius=map_radius):
-    """
-    Map objects to skeleton coordinates using a kd-tree. Maximum distance is
-    given by map_radius at top.
-    Parameters
-    ----------
-    obj : SegmentationDataset
-    skel_coords : np.array
-    max_radius: int
-
-    Returns
-    -------
-    np.array
-    IDs of mapped objects
-    """
-    obj_coords = np.array(obj.rep_coords)
-    obj_ids = np.array(obj.ids)
-    tree = spatial.cKDTree(obj_coords)
-    mapped_ixs = []
-    for coord in skel_coords:
-        mapped_ixs += list(tree.query_ball_point(coord, max_radius))
-    if len(mapped_ixs) == 0:
-        return np.zeros((0, ))
-    mapped_obj_ids = np.unique(obj_ids[np.array(mapped_ixs)])
-    return mapped_obj_ids
+    diff = offset.copy() + box_size.copy() - bndry
+    if np.any(diff > 0):
+        # print offset, box_size, bndry
+        diff[diff < 0] = 0
+        box_size -= diff
+        # print offset, box_size, bndry
+    if np.any(offset < 0):
+        # print offset, box_size, bndry
+        diff = offset.copy()
+        diff[diff > 0] = 0
+        box_size += diff
+        offset[offset < 0] = 0
+        # print offset, box_size, bndry
+    return offset, box_size

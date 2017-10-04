@@ -1,4 +1,3 @@
-# SyConnFS
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 from ctypes import sizeof, c_float, c_void_p, c_uint
