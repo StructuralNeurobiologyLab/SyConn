@@ -5,7 +5,6 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
-from collections import defaultdict
 import cPickle as pkl
 import glob
 import networkx as nx
@@ -14,16 +13,15 @@ import os
 import scipy.ndimage
 import shutil
 import time
-
+from collections import defaultdict
 from knossos_utils import knossosdataset, chunky
 
-from syconnfs.representations import segmentation
 
-from syconnmp import qsub_utils as qu
-from syconnmp import shared_mem as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
+script_folder = os.path.abspath(os.path.dirname(__file__) + "../QSUB_scripts/")
 
-from ..utils import basics, general
+from syconn.mp import qsub_utils as qu, shared_mem as sm
+from syconn.utils import general, basics
+from syconn.reps import segmentation
 
 
 def gauss_threshold_connected_components(cset, filename, hdf5names,
@@ -232,7 +230,7 @@ def _gauss_threshold_connected_components_thread(args):
 
         if hdf5_name in ["p4", "vc"] and membrane_filename is not None and \
                         hdf5_name_membrane is not None:
-            membrane_data = basics.load_from_h5py(chunk.folder+membrane_filename+".h5",
+            membrane_data = basics.load_from_h5py(chunk.folder + membrane_filename + ".h5",
                                                   hdf5_name_membrane)[0]
             membrane_data_shape = membrane_data.shape
             offset = (np.array(membrane_data_shape) - np.array(tmp_data.shape)) / 2
@@ -433,7 +431,7 @@ def _make_stitch_list_thread(args):
     chunk = cset.chunk_dict[nb_chunk]
     cc_data_list = basics.load_from_h5py(chunk.folder + filename +
                                          "_unique_components%s.h5"
-                                     % suffix, hdf5names)
+                                         % suffix, hdf5names)
     neighbours, pos = cset.get_neighbouring_chunks(chunk, chunk_list=chunk_list,
                                                    con_mode=7)
 

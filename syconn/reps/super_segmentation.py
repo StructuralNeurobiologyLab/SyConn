@@ -5,42 +5,43 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-from collections import Counter
 import cPickle as pkl
 import glob
+import networkx as nx
 import numpy as np
 import os
 import re
-import shutil
 import scipy.spatial
-from multiprocessing.pool import ThreadPool
-import networkx as nx
-from scipy import spatial
+import seaborn as sns
+import shutil
 import sys
+import time
+import warnings
+from collections import Counter
+from knossos_utils import skeleton, knossosdataset
+from knossos_utils.skeleton_utils import load_skeleton, write_skeleton
+from multiprocessing.pool import ThreadPool
+from scipy import spatial
 
+import segmentation
+import super_segmentation_helper as ssh
+from syconn_deprecated import skel_based_classifier as sbc
 from .segmentation import SegmentationObject
-from .utils import knossos_ml_from_sso, colorcode_vertices, colorcode_vertices_color,\
+# TODO: missing dependency
+from .segmentation_helper import predict_sos_views
+from .utils import knossos_ml_from_sso, colorcode_vertices, \
+    colorcode_vertices_color, \
     knossos_ml_from_svixs, subfold_from_ix, subfold_from_ix_SSO
-from ..proc.meshs import write_mesh2kzip, merge_someshs
-from ..proc.rendering import render_sampled_sso, comp_window, \
-    multi_render_sampled_svidlist, render_sso_coords
-from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
-from ..proc.general import single_conn_comp_img, timeit
+from ..config import parser
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..handler.compression import AttributeDict, MeshDict
-from ..config import parser
-import segmentation
-import super_segmentation_helper as ssh
-import skel_based_classifier as sbc
-# TODO: missing dependency
-from .segmentation_helper import predict_sos_views
+from ..proc.general import single_conn_comp_img, timeit
+from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
+from ..proc.meshs import write_mesh2kzip, merge_someshs
+from ..proc.rendering import render_sampled_sso, comp_window, \
+    multi_render_sampled_svidlist, render_sso_coords
 
-from knossos_utils import skeleton, knossosdataset
-from knossos_utils.skeleton_utils import load_skeleton, write_skeleton
-import warnings
-import time
-import seaborn as sns
 try:
     from knossos_utils import mergelist_tools
 except ImportError:

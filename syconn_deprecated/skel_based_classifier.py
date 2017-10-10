@@ -29,10 +29,10 @@ except ImportError:
     keras_avail = False
 
 import skel_based_classifier_helper as sbch
-import super_segmentation as ss
+import syconn.reps.super_segmentation as ss
 
-from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from syconn.mp import qsub_utils as qu
+from syconn.mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",

@@ -3,13 +3,13 @@ import glob
 import numpy as np
 import os
 import scipy.ndimage
-from ..utils import datahandler, basics
-
+from knossos_utils import chunky, knossosdataset
 from syconnfs.representations import segmentation
 from syconnmp import qsub_utils as qu
 from syconnmp import shared_mem as sm
 
-from knossos_utils import chunky, knossosdataset
+from syconn.extraction.utils import datahandler
+from syconn.utils import basics
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
 

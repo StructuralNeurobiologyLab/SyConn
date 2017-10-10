@@ -6,7 +6,7 @@ import scipy.spatial
 import time
 import glob
 
-from ..representations import super_segmentation as ss, segmentation, \
+from ..reps import super_segmentation as ss, segmentation, \
     connectivity_helper as ch
 from ..handler.compression import VoxelDict, AttributeDict
 
@@ -22,7 +22,7 @@ import scipy.spatial
 import time
 import glob
 
-from ..representations import super_segmentation as ss, segmentation, \
+from ..reps import super_segmentation as ss, segmentation, \
     connectivity_helper as ch
 from ..handler.compression import VoxelDict, AttributeDict
 

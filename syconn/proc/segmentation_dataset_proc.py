@@ -1,20 +1,19 @@
-from collections import defaultdict
 import cPickle as pkl
 import glob
 import numpy as np
 import os
-
+from collections import defaultdict
 from knossos_utils import knossosdataset
-
 from syconnmp import qsub_utils as qu
 from syconnmp import shared_mem as sm
+
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
 
 
 from syconnfs.handler.compression import LZ4Dict, MeshDict, VoxelDict, AttributeDict
 from syconnfs.representations import segmentation
 
-from ..utils import basics, general
+from syconn.utils import basics, general
 
 
 def dataset_analysis(sd, recompute=True, stride=100, qsub_pe=None,

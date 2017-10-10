@@ -4,6 +4,7 @@ import itertools
 from knossos_utils import knossosdataset
 import numpy as np
 import os
+from knossos_utils.skeleton_utils import loadj0126NML
 
 import dataset_realignement_helper as drh
 
@@ -83,3 +84,28 @@ def realign_from_target_w_kd(inv_coord_map_path, kd_from_path, kd_to_path,
                                          n_cores=nb_cpus,
                                          pe=qsub_pe, queue=qsub_queue,
                                          script_folder=script_folder)
+
+
+def collect_and_realign_cs_gt(paths, realign_map, save_path=None):
+    gt = {"True": [], "False": []}
+
+    for path in paths:
+        annotations = loadj0126NML(path)
+        for anno in annotations:
+            nodes = anno.getNodes()
+            for node in nodes:
+                comment = node.getComment()
+                if "True" in comment:
+                    gt["True"].append(node.getCoordinate())
+                elif "False" in comment and not "False CS" in comment \
+                        and not "False Barrier" in comment:
+                    gt["False"].append(node.getCoordinate())
+
+    gt["True"] = drh.realign_coords(gt["True"], realign_map)
+    gt["False"] = drh.realign_coords(gt["False"], realign_map)
+
+    if save_path is None:
+        return gt
+    else:
+        with open(save_path, "w") as f:
+            pkl.dump(gt, f)

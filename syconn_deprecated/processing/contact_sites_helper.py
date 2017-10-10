@@ -15,10 +15,10 @@ def contact_site_detection_thread(args):
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(knossos_path)
 
-    overlap = np.array([3, 3, 1], dtype=np.int)
+    overlap = np.array([6, 6, 3], dtype=np.int)
     offset = np.array(chunk.coordinates - overlap)
     size = 2 * overlap + np.array(chunk.size)
-    data = kd.from_overlaycubes_to_matrix(size, offset, datatype=np.uint32)
+    data = kd.from_overlaycubes_to_matrix(size, offset, datatype=np.uint64).astype(np.uint32)
 
     contacts = detect_cs(data)
 
@@ -44,9 +44,9 @@ def detect_cs(arr):
     arr = arr.astype(np.uint32)
 
     # cs_seg = cse.process_chunk(edges, arr, [7, 7, 3])
-    cs_seg = process_block_nonzero(edges, arr, [7, 7, 3])
+    cs_seg = process_block_nonzero(edges, arr, [13, 13, 7])
 
-    return edges, cs_seg
+    return cs_seg
 
 
 def kernel(chunk, center_id):

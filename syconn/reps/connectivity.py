@@ -21,7 +21,7 @@ import re
 import scipy.ndimage
 
 import pandas as pd
-from ..representations import segmentation as sd
+from ..reps import segmentation as sd
 import time
 import networkx as nx
 

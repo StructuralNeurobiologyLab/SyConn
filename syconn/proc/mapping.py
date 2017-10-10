@@ -9,8 +9,8 @@ import numpy as np
 from scipy import spatial
 from knossos_utils.knossosdataset import KnossosDataset
 from skimage.segmentation import find_boundaries
-from ..representations.segmentation import SegmentationDataset, SegmentationObject
-from ..representations.super_segmentation import SuperSegmentationObject
+from ..reps.segmentation import SegmentationDataset, SegmentationObject
+from ..reps.super_segmentation import SuperSegmentationObject
 
 
 def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):

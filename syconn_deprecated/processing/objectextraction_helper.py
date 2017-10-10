@@ -17,6 +17,7 @@ from knossos_utils import chunky, knossosdataset
 from syconnfs.representations import segmentation, utils
 from syconnfs.handler.compression import VoxelDict
 
+
 def extract_ids_thread(args):
     chunk = args[0]
     filename = args[1]

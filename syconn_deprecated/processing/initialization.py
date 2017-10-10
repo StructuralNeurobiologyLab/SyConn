@@ -29,7 +29,7 @@ def initialize_cset(kd, path, chunksize):
     """
 
     cset = chunky.ChunkDataset()
-    cset.initialize(kd, kd.boundary, chunksize, path + "/",
+    cset.initialize(kd, kd.boundary.copy(), chunksize, path + "/",
                     box_coords=[0, 0, 0], fit_box_size=True)
     chunky.save_dataset(cset)
 

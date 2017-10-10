@@ -8,7 +8,7 @@
 import sys
 
 import cPickle as pkl
-from syconnfs.processing import connectivity_proc_helper as cph
+from syconnproc.cs_processing import processing_steps as ps
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -21,7 +21,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = cph.combine_and_split_cs_agg_helper(args)
+out = ps._combine_and_split_cs_agg_helper(args)
 
-# with open(path_out_file, "wb") as f:
-#     pkl.dump(out, f)
+with open(path_out_file, "wb") as f:
+    pkl.dump(out, f)

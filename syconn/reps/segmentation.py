@@ -31,13 +31,11 @@ from ..config import parser
 
 from ..handler.compression import LZ4Dict, MeshDict, VoxelDict, AttributeDict
 from ..handler.basics import load_pkl2obj, write_obj2pkl
-from .utils import subfold_from_ix, surface_samples, knossos_ml_from_svixs
-from ..proc.meshs import get_object_mesh, write_mesh2kzip
+from utils import subfold_from_ix, surface_samples, knossos_ml_from_svixs
 from ..handler.basics import get_filepaths_from_dir, safe_copy, group_ids_to_so_storage, write_txt2kzip
-import segmentation_helper as sh
 import warnings
 
-from syconnproc.obj_processing import dataset_proc, dataset_utils
+from ..proc import segmentation_dataset_proc as sdp, segmentation_sdu as sdu, meshs
 
 
 class SegmentationDataset(object):
@@ -200,7 +198,7 @@ class SegmentationDataset(object):
     @property
     def ids(self):
         if self._ids is None:
-            dataset_utils.acquire_obj_ids(self)
+            sdu.acquire_obj_ids(self)
         return self._ids
 
     @property
@@ -450,10 +448,10 @@ class SegmentationObject(object):
     def voxels(self):
         if self._voxels is None:
             if self.voxel_caching:
-                self._voxels = dataset_utils.load_voxels(self)
+                self._voxels = sdu.load_voxels(self)
                 return self._voxels
             else:
-                return dataset_utils.load_voxels(self)
+                return sdu.load_voxels(self)
         else:
             return self._voxels
 
@@ -461,10 +459,10 @@ class SegmentationObject(object):
     def voxel_list(self):
         if self._voxel_list is None:
             if self.voxel_caching:
-                self._voxel_list = dataset_utils.load_voxel_list(self)
+                self._voxel_list = sdu.load_voxel_list(self)
                 return self._voxel_list
             else:
-                return dataset_utils.load_voxel_list(self)
+                return sdu.load_voxel_list(self)
         else:
             return self._voxel_list
 
@@ -477,10 +475,10 @@ class SegmentationObject(object):
     def mesh(self):
         if self._mesh is None:
             if self.mesh_caching:
-                self._mesh = dataset_utils.load_mesh(self)
+                self._mesh = sdu.load_mesh(self)
                 return self._mesh
             else:
-                return dataset_utils.load_mesh(self)
+                return sdu.load_mesh(self)
         else:
             return self._mesh
 
@@ -532,25 +530,25 @@ class SegmentationObject(object):
             return coords.astype(np.float32)
 
     def save_voxels(self, bin_arr, offset):
-        dataset_utils.save_voxels(self, bin_arr, offset)
+        sdu.save_voxels(self, bin_arr, offset)
 
     def load_voxels(self, voxel_dc=None):
-        return dataset_utils.load_voxels(self, voxel_dc=voxel_dc)
+        return sdu.load_voxels(self, voxel_dc=voxel_dc)
 
     def load_voxels_downsampled(self, downsampling=(2, 2, 1)):
-        return dataset_utils.load_voxels_downsampled(self, downsampling=downsampling)
+        return sdu.load_voxels_downsampled(self, downsampling=downsampling)
 
     def load_voxel_list(self):
-        return dataset_utils.load_voxel_list(self)
+        return sdu.load_voxel_list(self)
 
     def load_voxel_list_downsampled(self, downsampling=(2, 2, 1)):
-        return dataset_utils.load_voxel_list_downsampled(self, downsampling=downsampling)
+        return sdu.load_voxel_list_downsampled(self, downsampling=downsampling)
 
     def load_mesh(self, recompute=False):
-        return dataset_utils.load_mesh(self, recompute=recompute)
+        return sdu.load_mesh(self, recompute=recompute)
 
     def glia_pred(self, thresh=0.168, pred_key_appendix=""):
-        return dataset_proc.glia_pred
+        return sdp.glia_pred
 
     def axoness_preds(self, pred_key_appendix=""):
         assert self.type == "sv"
@@ -577,7 +575,7 @@ class SegmentationObject(object):
             warnings.warn("Creating mesh from SV (%d) with max-length of "
                           "%0.0fum. This can lead to precision loss." %
                           (self.id, np.linalg.norm(self.shape*self.scaling)/1e3))
-        return get_object_mesh(self)
+        return meshs.get_object_mesh(self)
 
     def _save_mesh(self, ind, vert):
         mesh_dc = MeshDict(self.mesh_path, read_only=False)
@@ -604,8 +602,8 @@ class SegmentationObject(object):
                 color = ext_color
         if ply_name == "":
             ply_name = str(self.id)
-        write_mesh2kzip(dest_path, mesh[0], mesh[1], color,
-                        ply_fname=ply_name + ".ply")
+        meshs.write_mesh2kzip(dest_path, mesh[0], mesh[1], color,
+                              ply_fname=ply_name + ".ply")
 
     def mergelist2kzip(self, dest_path):
         self.load_attr_dict()
@@ -688,7 +686,7 @@ class SegmentationObject(object):
         else:
             return None
 
-    def calculate_rep_coord(self, voxel_dc=None):
+    def calculate_rep_coord(self, voxel_dc=None, fast=False):
         if voxel_dc is None:
            voxel_dc = VoxelDict(self.voxel_path, read_only=True)
 
@@ -720,29 +718,38 @@ class SegmentationObject(object):
         else:
             central_block_id = 0
 
-        vx = bin_arrs[central_block_id]
+        vx = bin_arrs[central_block_id].copy()
         central_block_offset = block_offsets[central_block_id]
 
-        vx = ndimage.gaussian_filter(vx.astype(np.float),
-                                     sigma=[15, 15, 7])
+        vx = ndimage.morphology.distance_transform_edt(
+            np.pad(vx, 1, mode="constant", constant_values=0))[1:-1, 1:-1, 1:-1]
 
-        max_loc = np.argmax(vx)
-        vx_sh = vx.shape
-        vx = None
+        max_locs = np.where(vx == vx.max())
 
-        max_loc_z = max_loc % vx_sh[2]
-        max_loc_y = ((max_loc - max_loc_z) / vx_sh[2]) % vx_sh[1]
-        max_loc_x = ((max_loc - max_loc_z - max_loc_y * vx_sh[2]) /
-                     vx_sh[1] / vx_sh[2]) % vx_sh[0]
+        max_loc_id = int(len(max_locs[0]) / 2)
+        max_loc = np.array([max_locs[0][max_loc_id],
+                            max_locs[1][max_loc_id],
+                            max_locs[2][max_loc_id]])
 
-        self._rep_coord = np.array([max_loc_x, max_loc_y, max_loc_z]) + \
-                          central_block_offset
+        if not fast:
+            vx = ndimage.gaussian_filter(vx, sigma=[15, 15, 7])
+            max_locs = np.where(vx == vx.max())
+
+            max_loc_id = int(len(max_locs[0]) / 2)
+            better_loc = np.array([max_locs[0][max_loc_id],
+                                   max_locs[1][max_loc_id],
+                                   max_locs[2][max_loc_id]])
+
+            if bin_arrs[central_block_id][better_loc[0], better_loc[1], better_loc[2]]:
+                max_loc = better_loc
+
+        self._rep_coord = max_loc + central_block_offset
 
     def calculate_bounding_box(self):
-        _ = dataset_utils.load_voxels(self)
+        _ = sdu.load_voxels(self)
 
     def calculate_size(self):
-        _ = dataset_utils.load_voxels(self)
+        _ = sdu.load_voxels(self)
 
     def save_kzip(self, path, kd=None, write_id=None):
         if write_id is None:
@@ -830,4 +837,4 @@ class SegmentationObject(object):
                             this_voxel_list[:, 1],
                             this_voxel_list[:, 2]] = True
 
-                dataset_utils.save_voxels(new_so_obj, this_voxels, bb[0], size=len(voxel_ids))
+                sdu.save_voxels(new_so_obj, this_voxels, bb[0], size=len(voxel_ids))

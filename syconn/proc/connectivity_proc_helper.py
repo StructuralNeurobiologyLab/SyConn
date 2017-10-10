@@ -12,7 +12,7 @@ import os
 import scipy.spatial
 import time
 
-from ..representations import super_segmentation as ss, segmentation, \
+from ..reps import super_segmentation as ss, segmentation, \
     connectivity_helper as ch
 from ..handler.compression import VoxelDict, AttributeDict
 

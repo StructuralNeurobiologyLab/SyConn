@@ -18,7 +18,8 @@ from ..processing import objectextraction_helper as oeh
 from ..processing import predictor_cnn as pc
 from ..multi_proc import multi_proc_main as mpm
 from ..utils import datahandler#, segmentationdataset
-from syconnfs.representations import segmentation
+from syconnfs.representations import segmentation, utils
+
 from syconnmp import qsub_utils as qu
 from syconnmp import shared_mem as sm
 
@@ -569,13 +570,10 @@ def extract_voxels(cset, filename, hdf5names=None, overlaydataset_path=None,
     else:
         workfolder = cset.path_head_folder
 
-    voxel_rel_paths = ["/%d/%d/%d/" % ((ix // 1e3) % 1e2,
-                                       (ix // 1e1) % 1e2, ix % 10)
-                       for ix in range(100000)]
+    voxel_rel_paths = [utils.subfold_from_ix(ix) for ix in range(100000)]
 
-    voxel_rel_paths_2stage = ["/%d/%d/" % ((ix // 1e2) % 1e2,
-                                           ix % 1e2)
-                              for ix in range(10000)]
+    voxel_rel_paths_2stage = np.unique([utils.subfold_from_ix(ix)[:-2]
+                                        for ix in range(100000)])
 
     for hdf5_name in hdf5names:
         dataset_path = workfolder + "/%s_temp" % hdf5_name
@@ -606,7 +604,7 @@ def extract_voxels(cset, filename, hdf5names=None, overlaydataset_path=None,
                                      script_folder=script_folder,
                                      n_max_co_processes=n_max_processes)
 
-        path_to_out = "/u/sdorkenw/QSUB/extract_voxels_folder/out/"
+        # path_to_out = "/u/sdorkenw/QSUB/extract_voxels_folder/out/"
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -654,10 +652,9 @@ def combine_voxels(workfolder, hdf5names=None, stride=100, qsub_pe=None,
         qsub queue
 
     """
-    voxel_rel_paths_2stage = ["/%d/%d/" % ((ix // 1e2) % 1e2,
-                                           ix % 1e2)
-                              for ix in range(10000)]
-    
+    voxel_rel_paths_2stage = np.unique([utils.subfold_from_ix(ix)[:-2]
+                                        for ix in range(100000)])
+
     dataset_versions = {}
     for hdf5_name in hdf5names:
         segdataset = segmentation.SegmentationDataset(obj_type=hdf5_name,

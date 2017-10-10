@@ -10,7 +10,7 @@ import glob
 import numpy as np
 import os
 
-from ..representations import segmentation, connectivity_helper as ch, \
+from ..reps import segmentation, connectivity_helper as ch, \
     super_segmentation as ss, utils
 import connectivity_proc_helper as cph
 

@@ -8,7 +8,7 @@
 import sys
 
 import cPickle as pkl
-from syconnfs.representations import super_segmentation_helper as ssh
+from syconnproc.ssd_processing import dataset_proc as dp
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -21,7 +21,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = ssh.reskeletonize_objects_big_ones_thread(args)
+out = dp._reskeletonize_objects_big_ones_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

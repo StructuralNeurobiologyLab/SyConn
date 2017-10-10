@@ -8,7 +8,7 @@
 import sys
 
 import cPickle as pkl
-from syconnproc.cs_processing import processing_steps as ps
+from syconn.processing import checking_helper as ch
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -21,7 +21,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = ps._map_objects_to_cs_thread(args)
+out = ch.find_missing_overlaycubes_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

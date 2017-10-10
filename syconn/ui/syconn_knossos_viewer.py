@@ -15,7 +15,7 @@ sys.dont_write_bytecode = True
 # TODO: get from config
 syconnfs_path = '/wholebrain/scratch/areaxfs/'
 
-from ..representations import super_segmentation as ss
+from ..reps import super_segmentation as ss
 
 
 class main_class(QtGui.QDialog):

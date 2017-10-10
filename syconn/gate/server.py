@@ -9,7 +9,7 @@ import sys
 # temporary for easier development
 sys.path.append('/u/jkor/repos/knossos_utils')
 
-from ..representations import super_segmentation as ss
+from ..reps import super_segmentation as ss
 
 from flask import Flask
 from flask import request
