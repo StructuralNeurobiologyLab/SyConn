@@ -11,7 +11,7 @@ import numpy as np
 import os
 
 from ..reps import segmentation, connectivity_helper as ch, \
-    super_segmentation as ss, utils
+    super_segmentation as ss, rep_helper
 import connectivity_proc_helper as cph
 
 from ..mp import qsub_utils as qu
@@ -58,10 +58,10 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
 
     rel_cs_to_cs_agg_ids = filter_relevant_cs_agg(cs_agg, ssd)
 
-    voxel_rel_paths_2stage = np.unique([utils.subfold_from_ix(ix)[:-2]
+    voxel_rel_paths_2stage = np.unique([rep_helper.subfold_from_ix(ix)[:-2]
                                         for ix in range(100000)])
 
-    voxel_rel_paths = [utils.subfold_from_ix(ix) for ix in range(100000)]
+    voxel_rel_paths = [rep_helper.subfold_from_ix(ix) for ix in range(100000)]
     block_steps = np.linspace(0, len(voxel_rel_paths),
                               int(np.ceil(float(len(rel_cs_to_cs_agg_ids)) / stride)) + 1).astype(np.int)
 

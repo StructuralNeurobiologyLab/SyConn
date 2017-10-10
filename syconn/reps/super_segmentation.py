@@ -29,7 +29,7 @@ from syconn_deprecated import skel_based_classifier as sbc
 from .segmentation import SegmentationObject
 # TODO: missing dependency
 from .segmentation_helper import predict_sos_views
-from .utils import knossos_ml_from_sso, colorcode_vertices, \
+from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     colorcode_vertices_color, \
     knossos_ml_from_svixs, subfold_from_ix, subfold_from_ix_SSO
 from ..config import parser
@@ -59,8 +59,9 @@ except:
     #       "Install skeletopyze from https://github.com/funkey/skeletopyze"
 
 
-from ..extraction.ssd_processing import dataset_proc as dp, dataset_utils as du
-from ..extraction.ssd_assembly import assembly
+from ..proc import super_segmentation_dataset_proc as dp, \
+    super_segmentation_dataset_utils as du
+from ..proc.super_segmentation_dataset_assembly import assemble_from_mergelist
 
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
@@ -258,7 +259,7 @@ class SuperSegmentationDataset(object):
                                                 working_dir=self.working_dir)
 
     def apply_mergelist(self, sv_mapping):
-        assembly.assemble_from_mergelist(self, sv_mapping)
+        assemble_from_mergelist(self, sv_mapping)
 
     def get_super_segmentation_object(self, obj_id, new_mapping=False,
                                       caching=True, create=False):
@@ -1087,7 +1088,7 @@ class SuperSegmentationObject(object):
     def calculate_skeleton(self, size_threshold=1e20, kd=None,
                            coord_scaling=(8, 8, 4), plain=False, cleanup=True,
                            nb_threads=1):
-
+        raise NotImplementedError
 
     def save_skeleton_to_kzip(self, dest_path=None):
         try:

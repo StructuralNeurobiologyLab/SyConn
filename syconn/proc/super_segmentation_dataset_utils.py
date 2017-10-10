@@ -8,13 +8,12 @@ import scipy
 
 from knossos_utils import knossosdataset
 
-from syconnfs.representations import super_segmentation as ss
-from syconnfs.representations import segmentation
+from ..reps import super_segmentation as ss
+from ..reps import segmentation
 
-from syconnmp import qsub_utils as qu
-from syconnmp import shared_mem as sm
+from ..mp import qsub_utils as qu
+from ..mp import shared_mem as sm
 
-import dataset_proc as dp
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
 

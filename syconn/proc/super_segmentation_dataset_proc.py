@@ -5,12 +5,10 @@ import numpy as np
 import os
 import scipy
 
-from knossos_utils import knossosdatase
+from ..reps import super_segmentation as ss
 
-from syconnfs.representations import super_segmentation as ss
-
-from syconnmp import qsub_utils as qu
-from syconnmp import shared_mem as sm
+from ..mp import qsub_utils as qu
+from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
 
 

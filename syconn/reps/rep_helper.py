@@ -232,13 +232,9 @@ def subfold_from_ix(ix):
     -------
     str
     """
-    # return "/%d/%d/%d/" % ((ix // 1e3) % 1e2, (ix // 1e1) % 1e2, ix % 10)
     id_str = "00000" + str(ix)
     subfold = "/%d/%d/%d/" % \
            (int(id_str[-5:-3]), int(id_str[-3:-1]), int(id_str[-1]))
-    # if subfold != "/%d/%d/%d/" % ((ix // 1e3) % 1e2, (ix // 1e1) % 1e2, ix % 10):
-    #     warnings.warn("Temporary RuntimeWarning: New subfolder for object %d "
-    #                   "does not match with previous path." % ix, RuntimeWarning)
     return subfold
 
 

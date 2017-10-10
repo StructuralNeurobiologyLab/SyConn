@@ -2,11 +2,9 @@ import cPickle as pkl
 import glob
 import os
 
-from syconnmp import qsub_utils as qu
-from syconnmp import shared_mem as sm
+from ..mp import qsub_utils as qu
+from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../multi_proc/")
-
-import checking_helper as ch
 
 
 def find_missing_overlaycubes(path, stride=100, qsub_pe=None, qsub_queue=None,
