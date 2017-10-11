@@ -35,7 +35,7 @@ from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
 from ..handler.basics import get_filepaths_from_dir, safe_copy, group_ids_to_so_storage, write_txt2kzip
 import warnings
 
-from ..proc import segmentation_dataset_proc as sdp, segmentation_dataset_utils as sdu, meshs
+from ..proc import segmentation_dataset_utils as sdu, meshs
 
 
 class SegmentationDataset(object):
@@ -548,7 +548,7 @@ class SegmentationObject(object):
         return sdu.load_mesh(self, recompute=recompute)
 
     def glia_pred(self, thresh=0.168, pred_key_appendix=""):
-        return sdp.glia_pred
+        return sdu.glia_pred_so(self, thresh, pred_key_appendix)
 
     def axoness_preds(self, pred_key_appendix=""):
         assert self.type == "sv"

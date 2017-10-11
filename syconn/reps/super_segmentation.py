@@ -28,7 +28,7 @@ import super_segmentation_helper as ssh
 from syconn_deprecated import skel_based_classifier as sbc
 from .segmentation import SegmentationObject
 # TODO: missing dependency
-from .segmentation_helper import predict_sos_views
+from ..proc.segmentation_dataset_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     colorcode_vertices_color, \
     knossos_ml_from_svixs, subfold_from_ix, subfold_from_ix_SSO

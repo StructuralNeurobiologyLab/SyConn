@@ -2,7 +2,22 @@ import glob
 import numpy as np
 import os
 
-from syconnfs.handler.compression import LZ4Dict, MeshDict, VoxelDict, AttributeDict
+from ..handler.compression import LZ4Dict, MeshDict, VoxelDict, AttributeDict
+
+
+def glia_pred_so(so, thresh, pred_key_appendix):
+    assert so.type == "sv"
+    pred_key = "glia_probas" + pred_key_appendix
+    if not pred_key in so.attr_dict:
+        so.load_attr_dict()
+    preds = np.array(so.attr_dict[pred_key][:, 1] > thresh, dtype=np.int)
+    pred = np.mean(so.attr_dict[pred_key][:, 1]) > thresh
+    if pred == 0:
+        return 0
+    glia_votes = np.sum(preds)
+    if glia_votes > int(len(preds) * 0.7):
+        return 1
+    return 0
 
 
 def acquire_obj_ids(sd):
