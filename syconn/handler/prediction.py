@@ -159,7 +159,7 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None):
     ----------
     zip_fname: str
     kd_p : str
-    foreground_labels : iterable
+    foreground_ids : iterable
         ids which have to be converted to foreground, i.e. 1. Everything
         else is considered background (0). If None, everything except 0 is
         treated as foreground.
@@ -180,7 +180,9 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None):
     ----------
     fname: str
         Path where h5 file should be saved
-    foreground_labels : iterable
+    raw : np.array
+    label : np.array
+    foreground_ids : iterable
         ids which have to be converted to foreground, i.e. 1. Everything
         else is considered background (0). If None, everything except 0 is
         treated as foreground.

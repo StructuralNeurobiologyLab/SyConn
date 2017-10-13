@@ -7,3 +7,8 @@
 
 # # define global working directory
 wd = "/wholebrain/scratch/areaxfs/"
+
+# min. connected component size of glia nodes/SV after thresholding glia proba
+min_cc_size_glia = 8e3 # in nm; L1-norm on vertex bounding box
+# min. connected component size of neuron nodes/SV after thresholding glia proba
+min_cc_size_neuron = 8e3 # in nm; L1-norm on vertex bounding box

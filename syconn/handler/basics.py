@@ -80,6 +80,8 @@ def coordpath2anno(coords, scaling=(10, 10, 20), add_edges=True):
     ----------
     coords : np.array
         scaled cooridnates
+    scaling : tuple
+    add_edges : bool
 
     Returns
     -------

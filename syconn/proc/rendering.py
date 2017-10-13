@@ -7,7 +7,7 @@
 
 from ctypes import sizeof, c_float, c_void_p, c_uint
 from PIL import Image
-from general import normalize_img, rgb2gray
+from syconn.proc.image import rgb2gray, apply_clahe, normalize_img
 from scipy.ndimage.filters import gaussian_filter
 import numpy as np
 import time
@@ -17,7 +17,7 @@ from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
 from .meshs import merge_meshs, get_random_centered_coords, \
     MeshObject, calc_rot_matrices, flag_empty_spaces
-from .general import apply_clahe
+
 try:
     import os
     if not os.environ.get('PYOPENGL_PLATFORM'):
@@ -123,6 +123,7 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False):
     ws : tuple
     colored : bool
     depth_map : bool
+    clahe : bool
 
     Returns
     -------
@@ -209,7 +210,7 @@ def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False):
 
 
 def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
-                    nb_simplices=3, ws=(2048, 2048), physical_scale=None,
+                    ws=(2048, 2048), physical_scale=None,
                     enable_lightning=False, depth_map=False,
                     nb_views=3):
     """
@@ -227,8 +228,6 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
     physical_scale :
     enable_lightning :
     depth_map :
-    multi_use : bool
-        whether to use already create OpenGL environment or not.
     nb_views : int
         two views parallel to main component, and N-2 views (evenly spaced in
         angle space) perpendicular to it.
@@ -442,9 +441,12 @@ def render_mesh_coords(coords, ind, vert, clahe=False, verbose=False, ws=(256, 1
     vert : np.array [N, 1]
     clahe : bool
     verbose : bool
+    ws : tuple
+        Window size
     rot_matrices : np.array
     views_key : str
     return_rot_matrices : bool
+    depth_map : bool
 
     Returns
     -------
@@ -506,6 +508,11 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
     verbose : bool
     clahe : bool
     add_cellobjects : bool
+    cellobjects_only : bool
+    woglia : bool
+        without glia
+    overwrite : bool
+    return_views : bool
     cellobjects_only : bool
     """
     # get coordinates for N SV's in SSO

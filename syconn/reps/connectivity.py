@@ -28,12 +28,11 @@ import networkx as nx
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 
-# TODO: get from config
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 try:
     default_wd_available = True
-    from ..config.default_wd import wd
+    from ..config.global_params import wd
 except:
     default_wd_available = False
 

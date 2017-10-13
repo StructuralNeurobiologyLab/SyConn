@@ -12,7 +12,7 @@ from scipy import spatial
 from skimage import measure
 from sklearn.decomposition import PCA
 from ..handler.basics import write_txt2kzip
-from .general import apply_pca
+from syconn.proc.image import apply_pca
 from scipy.ndimage.morphology import binary_erosion
 try:
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing, multiBinaryErosion
@@ -148,6 +148,7 @@ def triangulation(pts, resolution=256, scaling=(10, 10, 20)):
     -------
     array, array
         indices [N, 3], vertices [N, 3]
+    scaling : tuple
     """
     #  TODO: check offset again!
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3
@@ -189,7 +190,8 @@ def get_object_mesh(obj, res=None):
     Parameters
     ----------
     obj : SegmentationObject
-
+    res : int
+        mesh resolution in vx (default: sv: 256, sj: 100, vc: 100, mi: 150)
     Returns
     -------
     array [N, 1], array [M, 1]
@@ -473,6 +475,9 @@ def merge_someshs(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
         Number of simplices, e.g. for triangles nb_simplices=3
     color_vals : iterable of float
         color values for every mesh, N x 4 (rgba). No normalization!
+    nb_cpus : int
+    cmpt : matplotlib colormap
+    alpha : float
 
     Returns
     -------

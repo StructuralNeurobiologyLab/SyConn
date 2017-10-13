@@ -14,16 +14,7 @@ import sys
 from .meshs import merge_someshs, get_bb_size
 from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess
 import warnings
-
-
-# TODO: move parameters to config.ini
-# min. connected component size of glia nodes/SV after thresholding glia proba
-min_cc_size_glia = 8e3 # in nm; L1-norm on vertex bounding box
-# minimum pathlength through (on surface of) glia at which it is considered to be a false merger and being removed
-max_glia_path_length = 1e3 #  OUTDATED; in nm
-# min. connected component size of neuron nodes/SV after thresholding glia proba
-min_cc_size_neuron = 8e3 # in nm; L1-norm on vertex bounding box
-
+from ..config.global_params import min_cc_size_glia, min_cc_size_neuron
 
 def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     """
@@ -73,14 +64,14 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
 
     Parameters
     ----------
-    sso : nx.Graph
+    nx_g : nx.Graph
     thresh : float
-    single : bool
     clahe : bool
     shortest_paths_dest_dir : str
         None (default), else path to directory to write shortest paths
         between neuron type SV end nodes
     nb_cpus : int
+    pred_key_appendix : str
 
     Returns
     -------
@@ -214,39 +205,6 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
 
     support_glia_nodes = set()
 
-    # # excluded because of generality
-    # if 0:#len(glia_dict) < 1e4:
-    #     # find shortest paths between end nodes which are of neuron type containing glia SV
-    #     glia_paths = get_glia_paths(g, glia_dict, neuron2ccsize_dict,
-    #                                 min_cc_size_neuron,
-    #                                 glia2ccsize_dict, min_cc_size_glia)
-    #     # if only two neuron parts have to be connected, be more generous
-    #     mgpl = 5e3 if len(glia_paths) == 1 else max_glia_path_length
-    #     for p in glia_paths:
-    #         glia_pred_path = np.array([glia_dict[n] for n in p])
-    #         glia_pred_ixs = np.nonzero(glia_pred_path)[0]
-    #         glia_start, glia_stop = np.min(glia_pred_ixs)-1, np.max(glia_pred_ixs)+1
-    #         cropped_p = np.array(p)[glia_start:glia_stop]
-    #         try:
-    #             path_length = glia_path_length(cropped_p, glia_dict, shortest_paths_dest_dir)
-    #         # some vertices were not connected using maximum distance of 500 nm
-    #         # (happens in soma, contains a lot of leaf nodes anyway)
-    #         except nx.NetworkXNoPath:
-    #             continue
-    #         curr_supp_nodes = []
-    #         if path_length < mgpl:
-    #             for n in cropped_p:
-    #                 if glia_dict[n] > 0:
-    #                     support_glia_nodes.add(n)
-    #                     curr_supp_nodes.append(n)
-    # else:
-    #     print "Encountered huge SSV (%d SV's). Won't apply support-glia " \
-    #           "detection between neuron type leaf SVs." % (len(glia_dict))
-
-    # first, identify sufficiently big neuron CC's and supportive glia SV -> remove from original graph and store as glia graph
-    # second, find glia CC's and identify small glia CC's -> probably fragmets belonging to neuron CC's -> add those to neuron graph containing [neuron CC's+supportive glia+small glia CC's (orphaned SV)]
-    # third, iterate over original graph and remove all sufficiently big glia CC's and supportive glia SV
-    # if node is neuron type of certain size or supportive glia remove from glia graph
     tiny_glia_fragments = []
     for n in g_glia.nodes_iter():
         if glia2ccsize_dict[n] < min_cc_size_glia:

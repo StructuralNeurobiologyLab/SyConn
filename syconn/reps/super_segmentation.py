@@ -18,6 +18,8 @@ import sys
 import time
 import warnings
 from collections import Counter
+
+import syconn.proc.ssd
 from knossos_utils import skeleton, knossosdataset
 from knossos_utils.skeleton_utils import load_skeleton, write_skeleton
 from multiprocessing.pool import ThreadPool
@@ -27,8 +29,7 @@ import segmentation
 import super_segmentation_helper as ssh
 from syconn_deprecated import skel_based_classifier as sbc
 from .segmentation import SegmentationObject
-# TODO: missing dependency
-from ..proc.segmentation_dataset_proc import predict_sos_views
+from ..proc.sd import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     colorcode_vertices_color, \
     knossos_ml_from_svixs, subfold_from_ix, subfold_from_ix_SSO
@@ -36,7 +37,8 @@ from ..config import parser
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..handler.compression import AttributeDict, MeshDict
-from ..proc.general import single_conn_comp_img, timeit
+from ..proc.general import timeit
+from syconn.proc.image import single_conn_comp_img
 from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
 from ..proc.meshs import write_mesh2kzip, merge_someshs
 from ..proc.rendering import render_sampled_sso, comp_window, \
@@ -59,9 +61,8 @@ except:
     #       "Install skeletopyze from https://github.com/funkey/skeletopyze"
 
 
-from ..proc import super_segmentation_dataset_proc as dp, \
-    super_segmentation_dataset_utils as du
-from ..proc.super_segmentation_dataset_assembly import assemble_from_mergelist
+from ..proc import ssd as dp
+from ..proc.ssd_assembly import assemble_from_mergelist
 
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
@@ -69,7 +70,7 @@ script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 try:
     default_wd_available = True
-    from ..config.default_wd import wd
+    from ..config.global_params import wd
 except:
     default_wd_available = False
 
@@ -296,23 +297,23 @@ class SuperSegmentationDataset(object):
     def save_dataset_deep(self, extract_only=False, attr_keys=(), stride=1000,
                           qsub_pe=None, qsub_queue=None, nb_cpus=1,
                           n_max_co_processes=None):
-        du.save_dataset_deep(self, extract_only=extract_only,
-                             attr_keys=attr_keys, stride=stride,
-                             qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-                             nb_cpus=nb_cpus,
-                             n_max_co_processes=n_max_co_processes)
+        syconn.proc.ssd.save_dataset_deep(self, extract_only=extract_only,
+                                          attr_keys=attr_keys, stride=stride,
+                                          qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+                                          nb_cpus=nb_cpus,
+                                          n_max_co_processes=n_max_co_processes)
 
     def export_to_knossosdataset(self, kd, stride=1000, qsub_pe=None,
                                  qsub_queue=None, nb_cpus=10):
-        du.export_to_knossosdataset(self, kd, stride=stride, qsub_pe=qsub_pe,
-                                    qsub_queue=qsub_queue, nb_cpus=nb_cpus)
+        syconn.proc.ssd.export_to_knossosdataset(self, kd, stride=stride, qsub_pe=qsub_pe,
+                                                 qsub_queue=qsub_queue, nb_cpus=nb_cpus)
 
     def convert_knossosdataset(self, sv_kd_path, ssv_kd_path,
                                stride=256, qsub_pe=None, qsub_queue=None,
                                nb_cpus=None):
-        du.convert_knossosdataset(self, sv_kd_path, ssv_kd_path,
-                                  stride=stride, qsub_pe=qsub_pe,
-                                  qsub_queue=qsub_queue, nb_cpus=nb_cpus)
+        syconn.proc.ssd.convert_knossosdataset(self, sv_kd_path, ssv_kd_path,
+                                               stride=stride, qsub_pe=qsub_pe,
+                                               qsub_queue=qsub_queue, nb_cpus=nb_cpus)
 
     def aggregate_segmentation_object_mappings(self, obj_types,
                                                stride=1000, qsub_pe=None,
@@ -922,8 +923,8 @@ class SuperSegmentationObject(object):
         return self._edge_graph
 
     def load_voxels_downsampled(self, downsampling=(2, 2, 1), nb_threads=10):
-        du.load_voxels_downsampled(self, downsampling=downsampling,
-                                   nb_threads=nb_threads)
+        syconn.proc.ssd.load_voxels_downsampled(self, downsampling=downsampling,
+                                                nb_threads=nb_threads)
 
     def get_seg_objects(self, obj_type):
         if obj_type not in self._objects:

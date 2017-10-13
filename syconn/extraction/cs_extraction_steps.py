@@ -4,12 +4,12 @@ import numpy as np
 import os
 import scipy.ndimage
 from knossos_utils import chunky, knossosdataset
-from syconnfs.representations import segmentation
-from syconnmp import qsub_utils as qu
-from syconnmp import shared_mem as sm
+from ..reps import segmentation
+from ..mp import qsub_utils as qu
+from ..mp import shared_mem as sm
 
-from syconn.extraction.utils import datahandler
-from syconn.utils import basics
+from ..handler import compression
+from ..proc.general import crop_bool_array
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
 
@@ -81,7 +81,7 @@ def _contact_site_detection_thread(args):
 
     contacts = detect_cs(data)
 
-    datahandler.save_to_h5py([contacts],
+    compression.save_to_h5py([contacts],
                              chunk.folder + filename +
                              ".h5", ["cs"])
 
@@ -170,7 +170,7 @@ def _extract_pre_cs_thread(args):
     for chunk in chunk_block:
         path = chunk.folder + filename + ".h5"
 
-        this_segmentation = datahandler.load_from_h5py(path, ["cs"])[0]
+        this_segmentation = compression.load_from_h5py(path, ["cs"])[0]
 
         unique_ids = np.unique(this_segmentation)
         for unique_id in unique_ids:
@@ -178,7 +178,7 @@ def _extract_pre_cs_thread(args):
                 continue
 
             id_mask = this_segmentation == unique_id
-            id_mask, in_chunk_offset = basics.crop_bool_array(id_mask)
+            id_mask, in_chunk_offset = crop_bool_array(id_mask)
             abs_offset = chunk.coordinates + np.array(in_chunk_offset)
             abs_offset = abs_offset.astype(np.int)
             segobj = segmentation.SegmentationObject(unique_id, "cs_pre",

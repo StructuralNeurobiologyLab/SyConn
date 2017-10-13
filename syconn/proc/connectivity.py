@@ -12,12 +12,11 @@ import os
 
 from ..reps import segmentation, connectivity_helper as ch, \
     super_segmentation as ss, rep_helper
-import connectivity_proc_helper as cph
+import connectivity_helper as cph
 
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 
-# TODO import from config
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 

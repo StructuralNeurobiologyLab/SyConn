@@ -13,17 +13,19 @@ import networkx as nx
 import numpy as np
 import os
 import re
+
+import syconn.reps.segmentation_helper
 from scipy import ndimage, spatial
 
 from knossos_utils import knossosdataset
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
-# TODO: get from config
+
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 try:
     default_wd_available = True
-    from ..config.default_wd import wd
+    from ..config.global_params import wd
 except:
     default_wd_available = False
 
@@ -35,7 +37,7 @@ from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
 from ..handler.basics import get_filepaths_from_dir, safe_copy, group_ids_to_so_storage, write_txt2kzip
 import warnings
 
-from ..proc import segmentation_dataset_utils as sdu, meshs
+from ..proc import meshs
 
 
 class SegmentationDataset(object):
@@ -198,7 +200,7 @@ class SegmentationDataset(object):
     @property
     def ids(self):
         if self._ids is None:
-            sdu.acquire_obj_ids(self)
+            syconn.reps.segmentation_helper.acquire_obj_ids(self)
         return self._ids
 
     @property
@@ -262,6 +264,7 @@ class SegmentationObject(object):
         self._mesh = None
         self._config = config
         self._views = None
+        self.skeleton = None
 
         if working_dir is None:
             if default_wd_available:
@@ -448,10 +451,10 @@ class SegmentationObject(object):
     def voxels(self):
         if self._voxels is None:
             if self.voxel_caching:
-                self._voxels = sdu.load_voxels(self)
+                self._voxels = syconn.reps.segmentation_helper.load_voxels(self)
                 return self._voxels
             else:
-                return sdu.load_voxels(self)
+                return syconn.reps.segmentation_helper.load_voxels(self)
         else:
             return self._voxels
 
@@ -459,10 +462,10 @@ class SegmentationObject(object):
     def voxel_list(self):
         if self._voxel_list is None:
             if self.voxel_caching:
-                self._voxel_list = sdu.load_voxel_list(self)
+                self._voxel_list = syconn.reps.segmentation_helper.load_voxel_list(self)
                 return self._voxel_list
             else:
-                return sdu.load_voxel_list(self)
+                return syconn.reps.segmentation_helper.load_voxel_list(self)
         else:
             return self._voxel_list
 
@@ -475,10 +478,10 @@ class SegmentationObject(object):
     def mesh(self):
         if self._mesh is None:
             if self.mesh_caching:
-                self._mesh = sdu.load_mesh(self)
+                self._mesh = syconn.reps.segmentation_helper.load_mesh(self)
                 return self._mesh
             else:
-                return sdu.load_mesh(self)
+                return syconn.reps.segmentation_helper.load_mesh(self)
         else:
             return self._mesh
 
@@ -530,25 +533,25 @@ class SegmentationObject(object):
             return coords.astype(np.float32)
 
     def save_voxels(self, bin_arr, offset):
-        sdu.save_voxels(self, bin_arr, offset)
+        syconn.reps.segmentation_helper.save_voxels(self, bin_arr, offset)
 
     def load_voxels(self, voxel_dc=None):
-        return sdu.load_voxels(self, voxel_dc=voxel_dc)
+        return syconn.reps.segmentation_helper.load_voxels(self, voxel_dc=voxel_dc)
 
     def load_voxels_downsampled(self, downsampling=(2, 2, 1)):
-        return sdu.load_voxels_downsampled(self, downsampling=downsampling)
+        return syconn.reps.segmentation_helper.load_voxels_downsampled(self, downsampling=downsampling)
 
     def load_voxel_list(self):
-        return sdu.load_voxel_list(self)
+        return syconn.reps.segmentation_helper.load_voxel_list(self)
 
     def load_voxel_list_downsampled(self, downsampling=(2, 2, 1)):
-        return sdu.load_voxel_list_downsampled(self, downsampling=downsampling)
+        return syconn.reps.segmentation_helper.load_voxel_list_downsampled(self, downsampling=downsampling)
 
     def load_mesh(self, recompute=False):
-        return sdu.load_mesh(self, recompute=recompute)
+        return syconn.reps.segmentation_helper.load_mesh(self, recompute=recompute)
 
     def glia_pred(self, thresh=0.168, pred_key_appendix=""):
-        return sdu.glia_pred_so(self, thresh, pred_key_appendix)
+        return syconn.reps.segmentation_helper.glia_pred_so(self, thresh, pred_key_appendix)
 
     def axoness_preds(self, pred_key_appendix=""):
         assert self.type == "sv"
@@ -746,10 +749,10 @@ class SegmentationObject(object):
         self._rep_coord = max_loc + central_block_offset
 
     def calculate_bounding_box(self):
-        _ = sdu.load_voxels(self)
+        _ = syconn.reps.segmentation_helper.load_voxels(self)
 
     def calculate_size(self):
-        _ = sdu.load_voxels(self)
+        _ = syconn.reps.segmentation_helper.load_voxels(self)
 
     def save_kzip(self, path, kd=None, write_id=None):
         if write_id is None:
@@ -837,4 +840,4 @@ class SegmentationObject(object):
                             this_voxel_list[:, 1],
                             this_voxel_list[:, 2]] = True
 
-                sdu.save_voxels(new_so_obj, this_voxels, bb[0], size=len(voxel_ids))
+                syconn.reps.segmentation_helper.save_voxels(new_so_obj, this_voxels, bb[0], size=len(voxel_ids))

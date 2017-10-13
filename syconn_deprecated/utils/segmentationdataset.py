@@ -23,7 +23,7 @@ try:
 except:
     qsub_available = False
 
-from syconn.utils import basics
+from ..utils import basics
 
 
 def get_rel_path(obj_name, filename, suffix=""):

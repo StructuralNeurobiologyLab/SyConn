@@ -9,13 +9,10 @@ from PythonQt import QtGui, Qt, QtCore
 import KnossosModule
 import sys
 sys.dont_write_bytecode = True
-
-# need to specify paths to syconnfs code base manually if not in path
-# make this a GUI setting
-# TODO: get from config
-syconnfs_path = '/wholebrain/scratch/areaxfs/'
-
 from ..reps import super_segmentation as ss
+# make this a GUI setting / enter path to directory manually
+from ..config.global_params import wd
+syconnfs_path = wd
 
 
 class main_class(QtGui.QDialog):

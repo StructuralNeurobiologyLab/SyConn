@@ -1041,9 +1041,8 @@ def sso_views_to_modelinput(sso, nb_views):
 
 # consumes an ssv_id
 # returns a dict with the corrected diameters in the key 'diameters'
-def radius_correction(args):
+def radius_correction(ssv_id, ssds):
 
-    ssv_id = args[0]
     skel_radius = {}
 
 

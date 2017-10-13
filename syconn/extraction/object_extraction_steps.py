@@ -20,7 +20,7 @@ from knossos_utils import knossosdataset, chunky
 script_folder = os.path.abspath(os.path.dirname(__file__) + "../QSUB_scripts/")
 
 from syconn.mp import qsub_utils as qu, shared_mem as sm
-from syconn.utils import general, basics
+from ..proc.general import cut_array_in_one_dim
 from syconn.reps import segmentation
 
 
@@ -458,13 +458,13 @@ def _make_stitch_list_thread(args):
                         cc_data_list_to_compare[nb_hdf5_name]
 
                     cc_area[nb_hdf5_name] = \
-                        basics.cut_array_in_one_dim(
+                        cut_array_in_one_dim(
                             this_cc_data,
                             overlap[ii] - stitch_overlap[ii],
                             overlap[ii] + stitch_overlap[ii], ii)
 
                     cc_area_to_compare[nb_hdf5_name] = \
-                        basics.cut_array_in_one_dim(
+                        cut_array_in_one_dim(
                             this_cc_data_to_compare,
                             this_cc_data_to_compare.shape[ii] - overlap[ii] -
                             stitch_overlap[ii],
@@ -479,13 +479,13 @@ def _make_stitch_list_thread(args):
                         cc_data_list_to_compare[nb_hdf5_name]
 
                     cc_area[nb_hdf5_name] = \
-                        basics.cut_array_in_one_dim(
+                        cut_array_in_one_dim(
                             this_cc_data,
                             -overlap[id] - stitch_overlap[id],
                             -overlap[id] + stitch_overlap[id], id)
 
                     cc_area_to_compare[nb_hdf5_name] = \
-                        basics.cut_array_in_one_dim(
+                        cut_array_in_one_dim(
                             this_cc_data_to_compare,
                             overlap[id] - stitch_overlap[id],
                             overlap[id] + stitch_overlap[id], id)
