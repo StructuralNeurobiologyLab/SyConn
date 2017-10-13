@@ -1,9 +1,6 @@
-# -*- coding: utf-8 -*-
-# SyConn - Synaptic connectivity inference toolkit
-#
-# Copyright (c) 2016 - now
-# Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# SyConnFS
+# Copyright (c) 2016 Philipp J. Schubert
+# All rights reserved
 
 import numpy as np
 from scipy import spatial
@@ -76,6 +73,7 @@ def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
     assert np.sum(sv_ids_in_seg) >= 2
     nb_cov_vx, frac_cov_vx = get_glia_coverage(seg, neuron_sv_ids, glia_sv_ids,
                                                300, kd.scale)
+
     so.save_attributes(["glia_vol_frac", "glia_sv_ids",
                         "glia_cov_frac", "glia_cov"],
                        [glia_vol_frac, glia_sv_ids, frac_cov_vx,

@@ -50,8 +50,9 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75):
     return raw.astype(np.float32) / 255., label
 
 
-def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5,
-                 dest_path=None, overwrite=False):
+def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5, mfp_active=False,
+                 dest_path=None, overwrite=False, gpu_ix=0,
+                 imposed_patch_size=None):
     """
     Extract objects from kzip
 
@@ -66,8 +67,11 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5,
     clf_thresh : float
         classification threshold
     overwrite : bool
+    mfp_active : False
+    imposed_patch_size : tuple
     dest_path : str
         path to destination folder, if None folder of k.zip is used.
+    gpu_ix : int
     """
     cube_name = os.path.splitext(os.path.basename(kzip_p))[0]
     if dest_path is None:
@@ -76,8 +80,13 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5,
         raw, labels = load_gt_from_kzip(kzip_p, kd_p=kd_path,
                                         raw_data_offset=0)
         raw = xyz2zxy(raw)
-        m = modelload(m_path, imposed_batch_size=1)
-        pred = m.predict_dense(raw[None,], pad_raw=True)[1]
+        initgpu(gpu_ix)
+        m = modelload(m_path, imposed_patch_size=list(imposed_patch_size)
+        if isinstance(imposed_patch_size, tuple) else imposed_patch_size,
+                      override_mfp_to_active=mfp_active, imposed_batch_size=1)
+        original_do_rates = m.dropout_rates
+        m.dropout_rates = ([0.0, ] * len(original_do_rates))
+        pred = m.predict_dense(raw[None, ], pad_raw=True)[1]
         # remove area without sufficient FOV
         pred = zxy2xyz(pred)
         raw = zxy2xyz(raw)
