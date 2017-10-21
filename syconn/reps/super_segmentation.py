@@ -18,13 +18,10 @@ import sys
 import time
 import warnings
 from collections import Counter
-
-import syconn.proc.ssd
+from ..proc import ssd
 from knossos_utils import skeleton, knossosdataset
 from knossos_utils.skeleton_utils import load_skeleton, write_skeleton
-from multiprocessing.pool import ThreadPool
 from scipy import spatial
-
 import segmentation
 import super_segmentation_helper as ssh
 from syconn_deprecated import skel_based_classifier as sbc
@@ -38,20 +35,17 @@ from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, 
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..handler.compression import AttributeDict, MeshDict
 from ..proc.general import timeit
-from syconn.proc.image import single_conn_comp_img
+from ..proc.image import single_conn_comp_img
 from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
 from ..proc.meshs import write_mesh2kzip, merge_someshs
 from ..proc.rendering import render_sampled_sso, comp_window, \
     multi_render_sampled_svidlist, render_sso_coords
-
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
-
 skeletopyze_available = False
 attempted_skeletopyze_import = False
-
 try:
     import skeletopyze
     skeletopyze_available = True
@@ -59,15 +53,11 @@ except:
     skeletopyze_available = False
     # print "skeletopyze not found - you won't be able to compute skeletons. " \
     #       "Install skeletopyze from https://github.com/funkey/skeletopyze"
-
-
 from ..proc import ssd as dp
 from ..proc.ssd_assembly import assemble_from_mergelist
-
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-
 try:
     default_wd_available = True
     from ..config.global_params import wd
@@ -297,7 +287,7 @@ class SuperSegmentationDataset(object):
     def save_dataset_deep(self, extract_only=False, attr_keys=(), stride=1000,
                           qsub_pe=None, qsub_queue=None, nb_cpus=1,
                           n_max_co_processes=None):
-        syconn.proc.ssd.save_dataset_deep(self, extract_only=extract_only,
+        ssd.save_dataset_deep(self, extract_only=extract_only,
                                           attr_keys=attr_keys, stride=stride,
                                           qsub_pe=qsub_pe, qsub_queue=qsub_queue,
                                           nb_cpus=nb_cpus,
@@ -305,13 +295,13 @@ class SuperSegmentationDataset(object):
 
     def export_to_knossosdataset(self, kd, stride=1000, qsub_pe=None,
                                  qsub_queue=None, nb_cpus=10):
-        syconn.proc.ssd.export_to_knossosdataset(self, kd, stride=stride, qsub_pe=qsub_pe,
+        ssd.export_to_knossosdataset(self, kd, stride=stride, qsub_pe=qsub_pe,
                                                  qsub_queue=qsub_queue, nb_cpus=nb_cpus)
 
     def convert_knossosdataset(self, sv_kd_path, ssv_kd_path,
                                stride=256, qsub_pe=None, qsub_queue=None,
                                nb_cpus=None):
-        syconn.proc.ssd.convert_knossosdataset(self, sv_kd_path, ssv_kd_path,
+        ssd.convert_knossosdataset(self, sv_kd_path, ssv_kd_path,
                                                stride=stride, qsub_pe=qsub_pe,
                                                qsub_queue=qsub_queue, nb_cpus=nb_cpus)
 
@@ -336,7 +326,7 @@ class SuperSegmentationDataset(object):
         multi_params = []
         for ssv_id_block in [self.ssv_ids[i:i + stride]
                              for i in
-                             xrange(0, len(self.ssv_ids), stride)]:
+                             range(0, len(self.ssv_ids), stride)]:
             multi_params.append([ssv_id_block, self.version, self.version_dict,
                                  self.working_dir])
 
@@ -923,7 +913,7 @@ class SuperSegmentationObject(object):
         return self._edge_graph
 
     def load_voxels_downsampled(self, downsampling=(2, 2, 1), nb_threads=10):
-        syconn.proc.ssd.load_voxels_downsampled(self, downsampling=downsampling,
+        ssd.load_voxels_downsampled(self, downsampling=downsampling,
                                                 nb_threads=nb_threads)
 
     def get_seg_objects(self, obj_type):

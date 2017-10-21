@@ -4,39 +4,22 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-
-from collections import defaultdict
-import cPickle as pkl
-import errno
-import glob
-import networkx as nx
-import numpy as np
 import os
-import re
-
-import syconn.reps.segmentation_helper
 from scipy import ndimage, spatial
-
 from knossos_utils import knossosdataset
-from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
-
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-
 try:
     default_wd_available = True
     from ..config.global_params import wd
 except:
     default_wd_available = False
-
 from ..config import parser
-
-from ..handler.compression import LZ4Dict, MeshDict, VoxelDict, AttributeDict
+from ..handler.compression import LZ4Dict
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
-from ..handler.basics import get_filepaths_from_dir, safe_copy, group_ids_to_so_storage, write_txt2kzip
+from ..handler.basics import get_filepaths_from_dir, safe_copy, write_txt2kzip
 import warnings
-
+from .segmentation_helper import *
 from ..proc import meshs
 
 
@@ -200,7 +183,7 @@ class SegmentationDataset(object):
     @property
     def ids(self):
         if self._ids is None:
-            syconn.reps.segmentation_helper.acquire_obj_ids(self)
+            acquire_obj_ids(self)
         return self._ids
 
     @property
@@ -451,10 +434,10 @@ class SegmentationObject(object):
     def voxels(self):
         if self._voxels is None:
             if self.voxel_caching:
-                self._voxels = syconn.reps.segmentation_helper.load_voxels(self)
+                self._voxels = load_voxels(self)
                 return self._voxels
             else:
-                return syconn.reps.segmentation_helper.load_voxels(self)
+                return load_voxels(self)
         else:
             return self._voxels
 
@@ -462,10 +445,10 @@ class SegmentationObject(object):
     def voxel_list(self):
         if self._voxel_list is None:
             if self.voxel_caching:
-                self._voxel_list = syconn.reps.segmentation_helper.load_voxel_list(self)
+                self._voxel_list = load_voxel_list(self)
                 return self._voxel_list
             else:
-                return syconn.reps.segmentation_helper.load_voxel_list(self)
+                return load_voxel_list(self)
         else:
             return self._voxel_list
 
@@ -478,10 +461,10 @@ class SegmentationObject(object):
     def mesh(self):
         if self._mesh is None:
             if self.mesh_caching:
-                self._mesh = syconn.reps.segmentation_helper.load_mesh(self)
+                self._mesh = load_mesh(self)
                 return self._mesh
             else:
-                return syconn.reps.segmentation_helper.load_mesh(self)
+                return load_mesh(self)
         else:
             return self._mesh
 
@@ -533,25 +516,25 @@ class SegmentationObject(object):
             return coords.astype(np.float32)
 
     def save_voxels(self, bin_arr, offset):
-        syconn.reps.segmentation_helper.save_voxels(self, bin_arr, offset)
+        save_voxels(self, bin_arr, offset)
 
     def load_voxels(self, voxel_dc=None):
-        return syconn.reps.segmentation_helper.load_voxels(self, voxel_dc=voxel_dc)
+        return load_voxels(self, voxel_dc=voxel_dc)
 
     def load_voxels_downsampled(self, downsampling=(2, 2, 1)):
-        return syconn.reps.segmentation_helper.load_voxels_downsampled(self, downsampling=downsampling)
+        return load_voxels_downsampled(self, downsampling=downsampling)
 
     def load_voxel_list(self):
-        return syconn.reps.segmentation_helper.load_voxel_list(self)
+        return load_voxel_list(self)
 
     def load_voxel_list_downsampled(self, downsampling=(2, 2, 1)):
-        return syconn.reps.segmentation_helper.load_voxel_list_downsampled(self, downsampling=downsampling)
+        return load_voxel_list_downsampled(self, downsampling=downsampling)
 
     def load_mesh(self, recompute=False):
-        return syconn.reps.segmentation_helper.load_mesh(self, recompute=recompute)
+        return load_mesh(self, recompute=recompute)
 
     def glia_pred(self, thresh=0.168, pred_key_appendix=""):
-        return syconn.reps.segmentation_helper.glia_pred_so(self, thresh, pred_key_appendix)
+        return glia_pred_so(self, thresh, pred_key_appendix)
 
     def axoness_preds(self, pred_key_appendix=""):
         assert self.type == "sv"
@@ -749,10 +732,10 @@ class SegmentationObject(object):
         self._rep_coord = max_loc + central_block_offset
 
     def calculate_bounding_box(self):
-        _ = syconn.reps.segmentation_helper.load_voxels(self)
+        _ = load_voxels(self)
 
     def calculate_size(self):
-        _ = syconn.reps.segmentation_helper.load_voxels(self)
+        _ = load_voxels(self)
 
     def save_kzip(self, path, kd=None, write_id=None):
         if write_id is None:
@@ -840,4 +823,4 @@ class SegmentationObject(object):
                             this_voxel_list[:, 1],
                             this_voxel_list[:, 2]] = True
 
-                syconn.reps.segmentation_helper.save_voxels(new_so_obj, this_voxels, bb[0], size=len(voxel_ids))
+                save_voxels(new_so_obj, this_voxels, bb[0], size=len(voxel_ids))

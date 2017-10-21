@@ -173,16 +173,16 @@ def write_txt2kzip(kzip_path, text, fname_in_zip, force_overwrite=False):
                     with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED,
                                          allowZip64=True) as zf:
                         zf.writestr(fname_in_zip, text)
-            except Exception, e:
-                print "Couldn't open file %s for reading and" \
-                      " overwriting." % kzip_path, e
+            except Exception as e:
+                print("Couldn't open file %s for reading and" \
+                      " overwriting." % kzip_path, e)
         else:
             try:
                 with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED,
                                      allowZip64=True) as zf:
                     zf.writestr(fname_in_zip, text)
-            except Exception, e:
-                print "Couldn't open file %s for writing." % kzip_path, e
+            except Exception as e:
+                print("Couldn't open file %s for writing." % kzip_path, e)
 
 
 def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
@@ -212,16 +212,16 @@ def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
                     with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED,
                                          allowZip64=True) as zf:
                         zf.write(fpath, file_name)
-            except Exception, e:
-                print "Couldn't open file %s for reading and" \
-                      " overwriting." % kzip_path, e
+            except Exception as e:
+                print("Couldn't open file %s for reading and" \
+                      " overwriting." % kzip_path, e)
         else:
             try:
                 with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED,
                                      allowZip64=True) as zf:
                     zf.write(fpath, file_name)
-            except Exception, e:
-                print "Couldn't open file %s for writing." % kzip_path, e
+            except Exception as e:
+                print("Couldn't open file %s for writing." % kzip_path, e)
         os.remove(fpath)
 
 

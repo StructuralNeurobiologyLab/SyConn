@@ -19,11 +19,10 @@ try:
     import skeletopyze
     skeletopyze_available = True
 except:
-    print "skeletopyze not found - you won't be able to compute skeletons. " \
-              "Install skeletopyze from https://github.com/funkey/skeletopyze"
+    print("skeletopyze not found - you won't be able to compute skeletons. "
+          "Install skeletopyze from https://github.com/funkey/skeletopyze")
 
 import super_segmentation as ss
-import segmentation
 from knossos_utils import knossosdataset
 from scipy import spatial
 

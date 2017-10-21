@@ -35,7 +35,7 @@ def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
         so.working_dir + "knossosdatasets/j0126_realigned_v4b_cbs_ext0_fix/")
     bndry = np.array(kd.boundary)
     if np.any(so.rep_coord >= bndry) or np.any(so.rep_coord < np.zeros_like(bndry)):
-        print so.id, so.rep_coord
+        print(so.id, so.rep_coord)
         so.save_attributes(["glia_vol_frac", "glia_sv_ids", "glia_cov_frac", "glia_cov"], [-1, -1, -1, -1])
         return
     c = so.rep_coord - (box_size // 2)

@@ -5,16 +5,13 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-import sys
-import time
-
 import numpy as np
 __cv2__ = True
 try:
     from cv2 import createCLAHE
     from cv2 import equalizeHist
-except ImportError, e:
-    print "Could not import cv2.", e
+except ImportError as e:
+    print("Could not import cv2.", e)
     __cv2__ = False
 import warnings
 
@@ -166,7 +163,7 @@ def apply_equalhist(arr):
     if not __cv2__:
         try:
             import cv2
-        except ImportError, e:
+        except ImportError as e:
             raise ImportError("cv2 not properly installed:\n %s" % str(e))
     if arr.shape[-1] != 1:
         arr = arr[..., None]
@@ -192,7 +189,7 @@ def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
     if not __cv2__:
         try:
             import cv2
-        except ImportError, e:
+        except ImportError as e:
             raise ImportError("cv2 not properly installed:\n %s" % str(e))
     if arr.ndim == 2:
         arr = arr[..., None]

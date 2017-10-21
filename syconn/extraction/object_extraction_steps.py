@@ -19,9 +19,9 @@ from knossos_utils import knossosdataset, chunky
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "../QSUB_scripts/")
 
-from syconn.mp import qsub_utils as qu, shared_mem as sm
+from ..mp import qsub_utils as qu, shared_mem as sm
 from ..proc.general import cut_array_in_one_dim
-from syconn.reps import segmentation
+from ..reps import segmentation
 
 
 def gauss_threshold_connected_components(cset, filename, hdf5names,

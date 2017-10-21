@@ -12,8 +12,7 @@ from scipy import spatial
 from skimage import measure
 from sklearn.decomposition import PCA
 from ..handler.basics import write_txt2kzip
-from syconn.proc.image import apply_pca
-from scipy.ndimage.morphology import binary_erosion
+from .image import apply_pca
 try:
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing, multiBinaryErosion
 except ImportError:

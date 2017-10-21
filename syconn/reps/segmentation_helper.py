@@ -1,20 +1,7 @@
-import cPickle as pkl
 import glob
-
-import networkx as nx
 import numpy as np
 import os
-import scipy.spatial
-from syconn.handler.compression import VoxelDict, AttributeDict, MeshDict
-
-from ..handler.basics import chunkify
-from syconn.proc.image import single_conn_comp_img
-from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess
-from ..handler.compression import  VoxelDict, AttributeDict
-from ..mp.shared_mem import start_multiprocess_obj
-from .rep_helper import subfold_from_ix
-import segmentation
-from knossos_utils import knossosdataset
+from ..handler.compression import MeshDict, VoxelDict, AttributeDict
 
 
 def glia_pred_so(so, thresh, pred_key_appendix):
@@ -79,7 +66,7 @@ def load_voxels(so, voxel_dc=None):
 
     so._size = 0
     if so.id not in voxel_dc:
-        print "Voxels for id %d do not exist" % so.id
+        print("Voxels for id %d do not exist" % so.id)
         return -1
 
     bin_arrs, block_offsets = voxel_dc[so.id]
@@ -171,26 +158,26 @@ def load_mesh(so, recompute=False):
         try:
             mesh_dc = MeshDict(so.mesh_path)
             indices, vertices = mesh_dc[so.id][0], mesh_dc[so.id][1]
-        except Exception, e:
-            print "\n---------------------------------------------------\n" \
+        except Exception as e:
+            print("\n---------------------------------------------------\n" \
                   "\n%s\nException occured when loading mesh.pkl of SO (%s)" \
                   "with id %d." \
                   "\n---------------------------------------------------\n"\
-                  % (e, so.type, so.id)
+                  % (e, so.type, so.id))
             return np.zeros((0, )).astype(np.int), np.zeros((0, ))
     else:
         if so.type == "sv":
-            print "\n-----------------------\n" \
+            print("\n-----------------------\n" \
                   "Mesh of SV %d not found.\n" \
-                  "-------------------------\n" % so.id
+                  "-------------------------\n" % so.id)
             return np.zeros((0,)).astype(np.int), np.zeros((0,))
         indices, vertices = so._mesh_from_scratch()
         try:
             so._save_mesh(indices, vertices)
-        except Exception, e:
-            print "\n-----------------------\n" \
+        except Exception as e:
+            print("\n-----------------------\n" \
                   "Mesh of %s %d could not be saved:\n%s\n" \
-                  "-------------------------\n" % (so.type, so.id, e)
+                  "-------------------------\n" % (so.type, so.id, e))
     vertices = np.array(vertices, dtype=np.int)
     indices = np.array(indices, dtype=np.int)
     return indices, vertices
