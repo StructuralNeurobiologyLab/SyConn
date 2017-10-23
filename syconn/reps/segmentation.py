@@ -5,6 +5,9 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 import os
+import errno
+import networkx as nx
+import re
 from scipy import ndimage, spatial
 from knossos_utils import knossosdataset
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")

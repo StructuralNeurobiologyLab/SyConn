@@ -3,18 +3,13 @@ import glob
 import numpy as np
 import os
 from collections import defaultdict
-
 from .image import single_conn_comp_img
 from knossos_utils import knossosdataset
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
-
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
-
-
 from ..handler.compression import VoxelDict, AttributeDict
 from ..reps import segmentation
-
 from ..handler import basics
 
 

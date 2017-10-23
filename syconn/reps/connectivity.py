@@ -37,6 +37,7 @@ def make_colormap(seq):
     seq: a sequence of floats and RGB-tuples. The floats should be increasing
     and in the interval (0,1).
     """
+    import matplotlib.colors as mcolors
     seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
     cdict = {'red': [], 'green': [], 'blue': []}
     for i, item in enumerate(seq):
@@ -58,6 +59,7 @@ def diverge_map(low=(239/255., 65/255., 50/255.),
     ends of the spectrum. they can be either color strings
     or rgb color tuples
     """
+    import matplotlib.colors as mcolors
     c = mcolors.ColorConverter().to_rgb
     if isinstance(low, basestring): low = c(low)
     if isinstance(high, basestring): high = c(high)
@@ -533,7 +535,10 @@ class ConnectivityMatrix(object):
         big_entries : bool
             artificially increase pixel size from 1 to 3 for better visualization
         """
-
+        import matplotlib
+        matplotlib.use("agg")
+        from matplotlib import gridspec
+        import matplotlib.pyplot as plt
         if cum:
             entry_width = 1
 
