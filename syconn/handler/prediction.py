@@ -197,8 +197,7 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None):
     label = xyz2zxy(label)
     print("Raw:", raw.shape, raw.dtype, raw.min(), raw.max())
     print("Label:", label.shape, label.dtype, label.min(), label.max())
-    print("-----------------\nGT Summary:\n%s\n" % \)
-          str(Counter(label.flatten()).items())
+    print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
     if not fname[:-2] == "h5":
         fname = fname + ".h5"
     save_to_h5py([raw, label], fname, hdf5_names=["raw", "label"])
