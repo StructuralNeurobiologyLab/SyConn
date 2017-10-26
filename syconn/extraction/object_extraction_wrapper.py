@@ -1,6 +1,47 @@
 import numpy as np
+import time
+import os
 
-import object_extraction_steps as oes
+from ..handler import basics
+from . import object_extraction_steps as oes
+
+
+def calculate_chunk_numbers_for_box(cset, offset, size):
+    """
+    Calculates the chunk ids that are (partly) contained it the defined volume
+
+    Parameters
+    ----------
+    cset : ChunkDataset
+    offset : np.array
+        offset of the volume to the origin
+    size: np.array
+        size of the volume
+
+    Returns
+    -------
+    chunk_list: list
+        chunk ids
+    dictionary: dict
+        with reverse mapping
+
+    """
+
+    for dim in range(3):
+        offset_overlap = offset[dim] % cset.chunk_size[dim]
+        offset[dim] -= offset_overlap
+        size[dim] += offset_overlap
+        size[dim] += (cset.chunk_size[dim] - size[dim]) % cset.chunk_size[dim]
+
+    chunk_list = []
+    translator = {}
+    for x in range(offset[0], offset[0]+size[0], cset.chunk_size[0]):
+        for y in range(offset[1], offset[1]+size[1], cset.chunk_size[1]):
+            for z in range(offset[2], offset[2]+size[2], cset.chunk_size[2]):
+                chunk_list.append(cset.coord_dict[tuple([x, y, z])])
+                translator[chunk_list[-1]] = len(chunk_list)-1
+    print "Chunk List contains %d elements." % len(chunk_list)
+    return chunk_list, translator
 
 
 def from_probabilities_to_objects(cset, filename, hdf5names,
@@ -15,9 +56,11 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                                   membrane_filename=None,
                                   membrane_kd_path=None,
                                   hdf5_name_membrane=None,
+                                  n_folders_fs=1000,
                                   suffix="",
                                   qsub_pe=None,
-                                  qsub_queue=None):
+                                  qsub_queue=None,
+                                  n_max_processes=None):
     """
     Main function for the object extraction step; combines all needed steps
     Parameters
@@ -104,7 +147,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
         for nb_sigma in range(len(sigmas)):
             if len(sigmas[nb_sigma]) == 3:
                 sigmas[nb_sigma] = \
-                    datahandler.switch_array_entries(sigmas[nb_sigma], [0, 2])
+                    basics.switch_array_entries(sigmas[nb_sigma], [0, 2])
 
     # --------------------------------------------------------------------------
 
@@ -120,7 +163,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
         hdf5_name_membrane=hdf5_name_membrane,
         fast_load=True, suffix=suffix,
         qsub_pe=qsub_pe,
-        qsub_queue=qsub_queue)
+        qsub_queue=qsub_queue,
+        n_max_processes=n_max_processes)
 
     stitch_overlap = overlap_info[1]
     overlap = overlap_info[0]
@@ -157,7 +201,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     time_start = time.time()
     oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                            chunk_translator, debug, suffix=suffix,
-                           qsub_pe=qsub_pe, qsub_queue=qsub_queue)
+                           qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+                           n_max_processes=n_max_processes)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
     print "\nTime needed for unique labels: %.3fs" % all_times[-1]
@@ -168,7 +213,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     stitch_list = oes.make_stitch_list(cset, filename, hdf5names, chunk_list,
                                        stitch_overlap, overlap, debug,
                                        suffix=suffix, qsub_pe=qsub_pe,
-                                       qsub_queue=qsub_queue)
+                                       qsub_queue=qsub_queue,
+                                       n_max_processes=n_max_processes)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
     print "\nTime needed for stitch list: %.3fs" % all_times[-1]
@@ -189,7 +235,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     time_start = time.time()
     oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                          debug, suffix=suffix, qsub_pe=qsub_pe,
-                         qsub_queue=qsub_queue)
+                         qsub_queue=qsub_queue, n_max_processes=n_max_processes)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
     print "\nTime needed for applying merge list: %.3fs" % all_times[-1]
@@ -197,15 +243,25 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     # --------------------------------------------------------------------------
 
     time_start = time.time()
-    oes.extract_voxels(cset, filename, hdf5names, debug=debug,
-                       chunk_list=chunk_list, suffix=suffix, use_work_dir=True,
-                       qsub_pe=qsub_pe, qsub_queue=qsub_queue)
+    oes.extract_voxels(cset, filename, hdf5names, n_folders_fs=n_folders_fs,
+                       debug=debug, chunk_list=chunk_list, suffix=suffix,
+                       use_work_dir=True, qsub_pe=qsub_pe,
+                       qsub_queue=qsub_queue, n_max_processes=n_max_processes)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
     print "\nTime needed for extracting voxels: %.3fs" % all_times[-1]
 
     # --------------------------------------------------------------------------
 
+    time_start = time.time()
+    oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
+                       hdf5names, n_folders_fs=n_folders_fs, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+                       n_max_processes=n_max_processes)
+    all_times.append(time.time() - time_start)
+    step_names.append("combine voxels")
+    print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
+
+    # --------------------------------------------------------------------------
     print "\nTime overview:"
     for ii in range(len(all_times)):
         print "%s: %.3fs" % (step_names[ii], all_times[ii])

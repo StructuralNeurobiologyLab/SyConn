@@ -15,26 +15,6 @@ import warnings
 from collections import Counter
 
 
-def copy_sso2diff_version(sso, new_version, safe=True):
-    """
-    Copy SuperSegmentatioObject to new working directory.
-
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    new_version : str
-    safe : bool
-    """
-    raise(NotImplementedError)
-    orig_version = sso.version
-    old_ssv_dir = sso.ssv_dir
-    sso._version = new_version
-    new_ssv_dir = sso.ssv_dir
-    print "From: %s\nTo: %s\n" % (old_ssv_dir, new_ssv_dir)
-    # copytree(old_ssv_dir, new_ssv_dir)
-    sso._version = orig_version
-
-
 def parse_cc_dict_from_kml(kml_path):
     """
 
@@ -221,20 +201,34 @@ def get_rel_path(obj_name, filename, suffix=""):
            filename + suffix + "/"
 
 
-def subfold_from_ix(ix):
+def subfold_from_ix(ix, n_folders):
     """
 
     Parameters
     ----------
     ix : int
+    n_folders: int
 
     Returns
     -------
     str
     """
+    assert n_folders in [10**i for i in range(6)]
+
+    order = int(np.log10(n_folders))
+
     id_str = "00000" + str(ix)
-    subfold = "/%d/%d/%d/" % \
-           (int(id_str[-5:-3]), int(id_str[-3:-1]), int(id_str[-1]))
+
+    subfold = "/"
+
+    if order % 2 == 1:
+        subfold += "%s/" % id_str[-order]
+        order -= 1
+
+    for f_order in range(0, order, 2):
+        idx = len(id_str) - order + f_order
+        subfold += "%s/" % id_str[idx: idx + 2]
+
     return subfold
 
 
@@ -249,6 +243,7 @@ def subfold_from_ix_2nd_stage(ix):
     -------
     str
     """
+    raise ImportError('Check correct functionality before using it')
     # return "/%d/%d/%d/" % ((ix // 1e3) % 1e2, (ix // 1e1) % 1e2, ix % 10)
     id_str = "00000" + str(ix)
     return "/%d/%d/" % (int(id_str[-4:-2]), int(id_str[-2:]))
@@ -265,6 +260,8 @@ def ix_from_subfold(subfold):
     -------
     int
     """
+
+    raise NotImplementedError("Outdated")
     parts = subfold.strip("/").split("/")
     return int("%.2d%.2d%d" % (int(parts[0]), int(parts[1]), int(parts[2])))
 
@@ -280,6 +277,8 @@ def subfold_from_ix_SSO(ix):
     -------
     str
     """
+
+    raise NotImplementedError("Outdated")
     return "/%d/%d/%d/" % (ix % 1e2, ix % 1e4, ix)
 
 

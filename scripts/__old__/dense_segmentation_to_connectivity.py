@@ -11,11 +11,12 @@
 import argparse
 
 from syconn.utils import densedataset_helper as ddh
-from syconn.processing import initialization, objectextraction as oe, contact_sites as cs
+# from syconn.processing import initialization, objectextraction as oe, contact_sites as cs
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 from syconn.multi_proc import multi_proc_main as mpm
-import syconn
+# import syconn
+from syconn.extraction import object_extraction_wrapper as oew
 
 import glob
 import numpy as np
@@ -24,7 +25,7 @@ import shutil
 
 
 def parseargs():
-    parser = argparse.ArgumentParser(usage="Evaluate </path/to_work_dir>"
+    parser = argparse.ArgumentParser(usage="</path/to_work_dir>"
                                            "[--qsub_pe <str>] "
                                            "[--qsub_queue <str>]")
     parser.add_argument("main_path", type=str)
@@ -35,14 +36,14 @@ def parseargs():
 commandline_args = parseargs()
 
 home_dir = os.environ['HOME'] + "/"
-syconn_dir = syconn.__path__[0] + "/"
+# syconn_dir = syconn.__path__[0] + "/"
 
 main_path = os.path.abspath(commandline_args.main_path)
 qsub_pe = commandline_args.qsub_pe
 qsub_queue = commandline_args.qsub_queue
 
 # knossos_raw_path = main_path + "/j0126_realigned_v4b_cbs_ext0_fix.conf"
-knossos_raw_path = main_path + "/knossosdatasets/google_seg/"
+knossos_raw_path = main_path + "/knossosdatasets/j0126_realigned_v4b_cbs_ext0_fix/"
 
 if not "/" == main_path[-1]:
     main_path += "/"
@@ -61,30 +62,41 @@ if not "/" == main_path[-1]:
 kd_raw = knossosdataset.KnossosDataset()
 kd_raw.initialize_from_knossos_path(knossos_raw_path)
 
-if os.path.exists(main_path + "/chunkdataset_sv_v1/chunk_dataset.pkl"):
-    cset_sv = chunky.load_dataset(main_path + "/chunkdataset_sv_v1/",
-                                  update_paths=True)
-    chunky.save_dataset(cset_sv)
-else:
-    cset_sv = initialization.initialize_cset(kd_raw, main_path + "/chunkdataset_sv_v1/",
-                                             [512, 512, 256])
-    chunky.save_dataset(cset_sv)
-
-# if os.path.exists(main_path + "/chunkdataset_u/chunk_dataset.pkl"):
-#     cset_u = chunky.load_dataset(main_path + "/chunkdataset_u/",
-#                                  update_paths=True)
-#     chunky.save_dataset(cset_u)
+# if os.path.exists(main_path + "/chunkdataset_sv_v1/chunk_dataset.pkl"):
+#     cset_sv = chunky.load_dataset(main_path + "/chunkdataset_sv_v1/",
+#                                   update_paths=True)
+#     chunky.save_dataset(cset_sv)
 # else:
-#     cset_u = initialization.initialize_cset(kd_raw, main_path + "/chunkdataset_u/",
-#                                             [1850, 1850, 120])
-#     chunky.save_dataset(cset_u)
+# cset_sv = initialization.initialize_cset(kd_raw, main_path + "/chunkdataset_sv_v2/",
+#                                          [1024, 1024, 256])
+# chunky.save_dataset(cset_sv)
+
+if os.path.exists(main_path + "/chunkdataset_u_v2/chunk_dataset.pkl"):
+    cset_u = chunky.load_dataset(main_path + "/chunkdataset_u_v2/",
+                                 update_paths=True)
+    chunky.save_dataset(cset_u)
+# else:
+# cset_u = initialization.initialize_cset(kd_raw, main_path + "/chunkdataset_u_v2/",
+#                                         [1850, 1850, 120])
+# chunky.save_dataset(cset_u)
+
+
+# if os.path.exists(main_path + "/chunkdataset_cs_v2/chunk_dataset.pkl"):
+#     cset_cs = chunky.load_dataset(main_path + "/chunkdataset_cs_v2/",
+#                                   update_paths=True)
+#     chunky.save_dataset(cset_cs)
+# else:
+#     cset_cs = initialization.initialize_cset(kd_raw, main_path + "/chunkdataset_cs_v2/",
+#                                              [512, 512, 256])
+#     chunky.save_dataset(cset_cs)
+
 
 # -------------------------------------------------------- Supervoxel Extraction
 
-if qsub_queue or qsub_pe:
-    import_batch_size = int(len(cset_sv.chunk_dict.keys()) / 1000)
-else:
-    import_batch_size = None
+# if qsub_queue or qsub_pe:
+#     import_batch_size = int(len(cset_sv.chunk_dict.keys()) / 1000)
+# else:
+#     import_batch_size = None
 
 # # Write segmentation to chunky first
 # ddh.export_dense_segmentation_to_cset(cset_sv, kd_raw, datatype=np.uint32,
@@ -100,17 +112,22 @@ else:
 
 # Extract supervoxels as objects
 # oe.from_ids_to_objects(cset_sv, "dense_segmentation", ["sv"],
-#                        debug=False, qsub_pe=qsub_pe, qsub_queue=qsub_queue)
+#                        overlaydataset_path=knossos_raw_path, qsub_pe=qsub_pe,
+#                        qsub_queue=qsub_queue, n_max_processes=240)
 
 # ------------------------------------------------------- Contact Site detection
 
-# cs.find_contact_sites(cset_sv, knossos_raw_path, "cs_sv", qsub_pe=qsub_pe,
-#                       qsub_queue=qsub_queue)
+# cs.find_contact_sites(cset_cs, knossos_raw_path, "cs_sv", qsub_pe=qsub_pe,
+#                       qsub_queue=qsub_queue, n_max_co_processes=100)
 
 
-cs.extract_contact_sites(cset_sv, "cs_sv", main_path, qsub_pe=qsub_pe,
-                         qsub_queue=qsub_queue)
+# cs.extract_contact_sites(cset_sv, "cs_sv", main_path,
+#                          n_max_co_processes=100, qsub_pe=qsub_pe,
+#                          qsub_queue=qsub_queue)
 
+
+# oe.from_ids_to_objects(cset_cs, "cs_sv", ["cs_agg"], qsub_pe=qsub_pe,
+#                        qsub_queue=qsub_queue, n_max_processes=150)
 
 # ------------------------------------------------------- Export knossosdatasets
 
@@ -166,24 +183,37 @@ cs.extract_contact_sites(cset_sv, "cs_sv", main_path, qsub_pe=qsub_pe,
 
 # -------------------------------------------- Ultrastructural object extraction
 
-# oe.from_probabilities_to_objects(cset_u, "ARGUS",
-#                                  ["sj"],
-#                                  thresholds=[int(4*255/21.)],
-#                                  debug=False,
-#                                  suffix="3",
-#                                  qsub_pe=qsub_pe,
-#                                  qsub_queue=qsub_queue)
+# print "Extracting SJ"
 #
-# oe.from_probabilities_to_objects(cset_u, "ARGUS",
-#                                  ["vc"],
-#                                  thresholds=[int(6*255/21.)],
-#                                  debug=False,
-#                                  suffix="5",
-#                                  # membrane_filename="BARRIER_corrected",
-#                                  # hdf5_name_membrane="bar",
-#                                  qsub_pe=qsub_pe,
-#                                  qsub_queue=qsub_queue)
+# oe.from_ids_to_objects(cset_u, "ARGUS_stitched_components3", ["sj"],
+#                        qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+#                        n_max_processes=240)
+
+
+# print "Extracting MI"
 #
+# oe.from_ids_to_objects(cset_u, "ARGUS_stitched_components8", ["mi"],
+#                        qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+#                        n_max_processes=200)
+
+
+# print "Extracting VC"
+#
+# oe.from_ids_to_objects(cset_u, "ARGUS_stitched_components5", ["vc"],
+#                        qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+#                        n_max_processes=200)
+
+oew.from_probabilities_to_objects(cset_u, "ARGUS",
+                                  ["sj"],
+                                  thresholds=[int(4*255/21.)],
+                                  debug=False,
+                                  suffix="rf_3",
+                                  qsub_pe=qsub_pe,
+                                  qsub_queue=qsub_queue,
+                                  n_max_processes=100,
+                                  n_folders_fs=10000)
+
+
 # oe.from_probabilities_to_objects(cset_u, "ARGUS",
 #                                  ["mi"],
 #                                  thresholds=[int(9*255/21.)],
@@ -192,6 +222,15 @@ cs.extract_contact_sites(cset_sv, "cs_sv", main_path, qsub_pe=qsub_pe,
 #                                  qsub_pe=qsub_pe,
 #                                  qsub_queue=qsub_queue)
 
+# oe.from_probabilities_to_objects(cset_u, "ARGUS",
+#                                  ["vc"],
+#                                  thresholds=[int(6*255/21.)],
+#                                  debug=False,
+#                                  suffix="5",
+#                                  membrane_filename="RBARRIER",
+#                                  # hdf5_name_membrane="bar",
+#                                  qsub_pe=qsub_pe,
+#                                  qsub_queue=qsub_queue)
 
 # # ------------ Create hull and map objects to tracings and classify compartments
 #

@@ -8,6 +8,7 @@
 from collections import defaultdict
 import warnings
 import numpy as np
+import h5py
 import os
 import shutil
 import tempfile
@@ -28,6 +29,117 @@ __all__ = ["get_filepaths_from_dir", "write_obj2pkl", "load_pkl2obj",
 def argsort(seq):
     # http://stackoverflow.com/questions/3071415/efficient-method-to-calculate-the-rank-vector-of-a-list-in-python
     return sorted(range(len(seq)), key=seq.__getitem__)
+
+
+def load_from_h5py(path, hdf5_names=None, as_dict=False):
+    """
+    Loads data from a h5py File
+
+    Parameters
+    ----------
+    path: str
+    hdf5_names: list of str
+        if None, all keys will be loaded
+    as_dict: boolean
+        if False a list is returned
+
+    Returns
+    -------
+    data: dict or np.array
+
+    """
+    if as_dict:
+        data = {}
+    else:
+        data = []
+    try:
+        f = h5py.File(path, 'r')
+        if hdf5_names is None:
+            hdf5_names = f.keys()
+        for hdf5_name in hdf5_names:
+            if as_dict:
+                data[hdf5_name] = f[hdf5_name].value
+            else:
+                data.append(f[hdf5_name].value)
+    except:
+        raise Exception("Error at Path: %s, with labels:" % path, hdf5_names)
+    f.close()
+    return data
+
+
+def save_to_h5py(data, path, hdf5_names=None):
+    """
+    Saves data to h5py File
+
+    Parameters
+    ----------
+    data: list of np.arrays
+    path: str
+    hdf5_names: list of str
+        has to be the same length as data
+
+    Returns
+    -------
+    nothing
+
+    """
+    if (not type(data) is dict) and hdf5_names is None:
+        raise Exception("hdf5names has to be set, when data is a list")
+    if os.path.isfile(path):
+        os.remove(path)
+    f = h5py.File(path, "w")
+    if type(data) is dict:
+        for key in data.keys():
+            f.create_dataset(key, data=data[key],
+                             compression="gzip")
+    else:
+        if len(hdf5_names) != len(data):
+            f.close()
+            raise Exception("Not enough or to much hdf5-names given!")
+        for nb_data in range(len(data)):
+            f.create_dataset(hdf5_names[nb_data], data=data[nb_data],
+                             compression="gzip")
+    f.close()
+
+
+def switch_array_entries(this_array, entries):
+    entry_0 = this_array[entries[0]]
+    this_array[entries[0]] = this_array[entries[1]]
+    this_array[entries[1]] = entry_0
+    return this_array
+
+
+def crop_bool_array(arr):
+    """
+    Crops a bool array to its True region
+
+    :param arr: 3d bool array
+        array to crop
+    :return: 3d bool array, list
+        cropped array, offset
+    """
+    in_mask_indices = [np.flatnonzero(arr.sum(axis=(1, 2))),
+                       np.flatnonzero(arr.sum(axis=(0, 2))),
+                       np.flatnonzero(arr.sum(axis=(0, 1)))]
+
+    return arr[in_mask_indices[0].min(): in_mask_indices[0].max() + 1,
+               in_mask_indices[1].min(): in_mask_indices[1].max() + 1,
+               in_mask_indices[2].min(): in_mask_indices[2].max() + 1],\
+           [in_mask_indices[0].min(),
+            in_mask_indices[1].min(),
+            in_mask_indices[2].min()]
+
+
+def negative_to_zero(a):
+    """
+    Sets negative values of array a to zero.
+    :param a: numpy array
+    :return: array a with non negativ values.
+    """
+    if a > 0:
+        return a
+    else:
+        return 0
 
 
 def group_ids_to_so_storage(ids, params, significant_digits=5):
