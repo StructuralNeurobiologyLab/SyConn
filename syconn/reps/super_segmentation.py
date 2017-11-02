@@ -1079,7 +1079,52 @@ class SuperSegmentationObject(object):
     def calculate_skeleton(self, size_threshold=1e20, kd=None,
                            coord_scaling=(8, 8, 4), plain=False, cleanup=True,
                            nb_threads=1):
-        raise NotImplementedError
+        if np.product(self.shape) < size_threshold:
+            # vx = self.load_voxels_downsampled(coord_scaling)
+            # vx = self.voxels[::coord_scaling[0],
+            #                  ::coord_scaling[1],
+            #                  ::coord_scaling[2]]
+            vx = self.load_voxels_downsampled(downsampling=coord_scaling)
+            vx = scipy.ndimage.morphology.binary_closing(
+                np.pad(vx, 3, mode="constant", constant_values=0), iterations=3)
+            vx = vx[3: -3, 3: -3, 3:-3]
+
+            if plain:
+                nodes, edges, diameters = \
+                    ssh.reskeletonize_plain(vx, coord_scaling=coord_scaling)
+                nodes = np.array(nodes, dtype=np.int) + self.bounding_box[0]
+            else:
+                nodes, edges, diameters = \
+                    ssh.reskeletonize_chunked(self.id, self.shape,
+                                              self.bounding_box[0],
+                                              self.scaling,
+                                              voxels=vx,
+                                              coord_scaling=coord_scaling,
+                                              nb_threads=nb_threads)
+
+        elif kd is not None:
+            nodes, edges, diameters = \
+                ssh.reskeletonize_chunked(self.id, self.shape,
+                                          self.bounding_box[0], self.scaling,
+                                          kd=kd, coord_scaling=coord_scaling,
+                                          nb_threads=nb_threads)
+        else:
+            return
+
+        nodes = np.array(nodes, dtype=np.int)
+        edges = np.array(edges, dtype=np.int)
+        diameters = np.array(diameters, dtype=np.float)
+
+        self.skeleton = {}
+        self.skeleton["edges"] = edges
+        self.skeleton["nodes"] = nodes
+        self.skeleton["diameters"] = diameters
+
+        if cleanup:
+            for i in range(2):
+                if len(self.skeleton["edges"]) > 2:
+                    self.skeleton = ssh.cleanup_skeleton(self.skeleton,
+                                                         coord_scaling)
 
     def save_skeleton_to_kzip(self, dest_path=None):
         try:

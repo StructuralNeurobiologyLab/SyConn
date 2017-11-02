@@ -219,6 +219,11 @@ def binarize_labels(labels, foreground_ids):
     """
     new_labels = np.zeros_like(labels)
     if foreground_ids is None:
+        if len(np.unique(labels)) > 2:
+            print("------------ WARNING -------------\n"
+                  "Found more than two different labels during label "
+                  "conversion\n"
+                  "----------------------------------")
         new_labels[labels != 0] = 1
     else:
         try:
