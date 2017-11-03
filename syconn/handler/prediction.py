@@ -54,7 +54,7 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5, mfp_active=False,
                  dest_path=None, overwrite=False, gpu_ix=0,
                  imposed_patch_size=None):
     """
-    Extract objects from kzip
+    Predicts data contained in k.zip file (defined by bounding box in knossos)
 
     Parameters
     ----------
@@ -99,6 +99,51 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5, mfp_active=False,
     overlaycubes2kzip(dest_path + "/%s_pred.k.zip" % cube_name,
                       (pred >= clf_thresh).astype(np.uint32),
                       offset, kd_path)
+
+
+def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
+               gpu_ix=0, imposed_patch_size=None, hdf5_data_key=None,
+               data_is_zxy=True):
+    """
+    Predicts data from h5 file. Assumes raw data is already float32.
+
+    Parameters
+    ----------
+    h5_path : str
+        path to h5 containing the raw data
+    m_path : str
+        path to predictive model
+    clf_thresh : float
+        classification threshold, if None, no thresholding
+    overwrite : bool
+    mfp_active : False
+    imposed_patch_size : tuple
+    dest_path : str
+        path to destination folder, if None predicitons are written to h5 file
+    gpu_ix : int
+    hdf5_data_key: str
+        if None, it uses the first entry in the list returned by
+        'load_from_h5py'
+    data_is_zxy : bool
+        if False, it will assumes data is [X, Y, Z]
+    """
+    raw = load_from_h5py(h5_path, hdf5_names=[hdf5_data_key] if hdf5_data_key else
+                         None)[0]
+    if not data_is_zxy:
+        raw = xyz2zxy(raw)
+    initgpu(gpu_ix)
+    m = modelload(m_path, imposed_patch_size=list(imposed_patch_size)
+    if isinstance(imposed_patch_size, tuple) else imposed_patch_size,
+                  override_mfp_to_active=mfp_active, imposed_batch_size=1)
+    original_do_rates = m.dropout_rates
+    m.dropout_rates = ([0.0, ] * len(original_do_rates))
+    pred = m.predict_dense(raw[None, ], pad_raw=True)[1]
+    if not data_is_zxy:
+        pred = zxy2xyz(pred)
+        raw = zxy2xyz(raw)
+    if clf_thresh:
+        pred = (pred >= clf_thresh).astype(np.float32)
+    save_to_h5py([raw, pred], h5_path, [hdf5_data_key, "pred"])
 
 
 def overlaycubes2kzip(dest_p, vol, offset, kd_path):
