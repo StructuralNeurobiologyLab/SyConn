@@ -414,5 +414,6 @@ def chunk_pred(ch, model):
     model : str or model object
     """
     raw = ch.raw_data()
-    pred = prediction_helper(raw, model)
+    pred = prediction_helper(raw, model) * 255
+    pred = pred.astype(np.uint8)
     ch.save_chunk(pred, "pred", "pred", overwrite=True)
