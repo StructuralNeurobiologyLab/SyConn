@@ -11,7 +11,6 @@ from multiprocessing.pool import ThreadPool
 import networkx as nx
 import numpy as np
 import scipy.ndimage
-import scipy.spatial
 from knossos_utils.skeleton_utils import annotation_to_nx_graph
 import os
 import copy
@@ -19,11 +18,10 @@ try:
     import skeletopyze
     skeletopyze_available = True
 except:
-    print "skeletopyze not found - you won't be able to compute skeletons. " \
-              "Install skeletopyze from https://github.com/funkey/skeletopyze"
+    print("skeletopyze not found - you won't be able to compute skeletons. "
+          "Install skeletopyze from https://github.com/funkey/skeletopyze")
 
 import super_segmentation as ss
-import segmentation
 from knossos_utils import knossosdataset
 from scipy import spatial
 
@@ -342,7 +340,7 @@ def cleanup_skeleton(skeleton, scaling):
 
     end_nodes = np.argwhere(node_degrees <= 1).squeeze()
 
-    distances = scipy.spatial.distance.cdist(skeleton["nodes"] * scaling,
+    distances = spatial.distance.cdist(skeleton["nodes"] * scaling,
                                              skeleton["nodes"] * scaling)
 
     max_dist = np.max(distances)
@@ -774,8 +772,8 @@ def reskeletonize_chunked(obj_id, volume_shape, volume_offset, scaling,
     node_ids, node_degrees = np.unique(g_edges, return_counts=True)
     end_nodes = node_ids[node_degrees == 1]
 
-    kdtree = scipy.spatial.cKDTree(g_nodes * scaling)
-    distances = scipy.spatial.distance.cdist(g_nodes[end_nodes] * scaling,
+    kdtree = spatial.cKDTree(g_nodes * scaling)
+    distances = spatial.distance.cdist(g_nodes[end_nodes] * scaling,
                                              g_nodes[end_nodes] * scaling)
 
     distances[np.triu_indices_from(distances)] = max_dist_step + 1
@@ -1044,8 +1042,6 @@ def sso_views_to_modelinput(sso, nb_views):
 def radius_correction(ssv_id, ssds):
 
     skel_radius = {}
-
-
     sso = ssds.get_super_segmentation_object(ssv_id)
     sso.load_skeleton()
     sso_skel = sso.skeleton
@@ -1057,7 +1053,7 @@ def radius_correction(ssv_id, ssds):
     vert = sso_mesh[1].reshape((-1, 3))
     # vert_sparse = vert[0::10]
     vert_sparse = vert[:]
-    tree = sp.cKDTree(skel_node * np.array([10, 10, 20]))
+    tree = spatial.cKDTree(skel_node * np.array([10, 10, 20]))
     centroid_arr = [[0, 0, 0]]
 
     # dists, ixs = tree.query(vert_sparse, 1)
@@ -1095,7 +1091,7 @@ def radius_correction(ssv_id, ssds):
             # skel_node[el] = centroid
             if el < len(found_coords):
                 skel_radius[str(found_coords[el])] = med_rad
-    found_tree = sp.cKDTree(found_coords)
+    found_tree = spatial.cKDTree(found_coords)
     for el in missing_coords_ixs:
         nearest_found_node = found_tree.query(skel_node[el], 1)
         diameters[el] = diameters[nearest_found_node[1]]

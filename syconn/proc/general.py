@@ -37,8 +37,8 @@ def timeit(func):
         end = time.time()
         sys.stdout.write("\r%0.2f\n" % 1.0)
         sys.stdout.flush()
-        print "Prediction of %d samples took %.4gs; %.4gs/sample." % \
-              (nb_samples, end - start, (end - start) / nb_samples)
+        print("Prediction of %d samples took %.4gs; %.4gs/sample." % \
+              (nb_samples, end - start, (end - start) / nb_samples))
         return res
     return timeit_wrapper
 

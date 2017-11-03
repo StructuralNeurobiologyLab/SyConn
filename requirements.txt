@@ -9,7 +9,6 @@ fasteners
 cython
 numpy
 scikit-learn
-cPickle
 git+https://github.com/knossos-project/knossos_utils.git
 git+https://github.com/ELEKTRONN/ELEKTRONN2.git
 -e . --global-option="build_ext"

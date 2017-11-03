@@ -3,20 +3,14 @@ import glob
 import numpy as np
 import os
 from collections import defaultdict
-
-import syconn.proc.image
+from .image import single_conn_comp_img
 from knossos_utils import knossosdataset
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
-
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
-
-
-from ..handler.compression import LZ4Dict, MeshDict, VoxelDict, AttributeDict
+from ..handler.compression import VoxelDict, AttributeDict
 from ..reps import segmentation
-
 from ..handler import basics
-from . import general
 
 
 def dataset_analysis(sd, recompute=True, stride=100, qsub_pe=None,
@@ -468,8 +462,8 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
             data = views[kk]
             for i in range(len(data)):
                 sing_cc = np.concatenate([
-                                             syconn.proc.image.single_conn_comp_img(data[i, 0, :1]),
-                                             syconn.proc.image.single_conn_comp_img(data[i, 0, 1:])])
+                                             single_conn_comp_img(data[i, 0, :1]),
+                                             single_conn_comp_img(data[i, 0, 1:])])
                 data[i, 0] = sing_cc
             views[kk] = data
         part_views = np.cumsum([0] + [len(v) for v in views])

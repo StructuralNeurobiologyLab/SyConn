@@ -11,9 +11,7 @@ import networkx as nx
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import itertools
 import sys
-from .meshs import merge_someshs, get_bb_size
 from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess
-import warnings
 from ..config.global_params import min_cc_size_glia, min_cc_size_neuron
 
 def split_subcc(g, max_nb, verbose=False, start_nodes=None):
@@ -451,8 +449,8 @@ def create_mst_skeleton(coords, max_dist=6000, force_single_cc=True):
         if not force_single_cc:
             break
         max_dist += 2e3
-        print "Generated skeleton is not a single connected component. " \
-              "Increasing maximum node distance to %0.0f" % (max_dist)
+        print("Generated skeleton is not a single connected component. " \
+              "Increasing maximum node distance to %0.0f" % (max_dist))
         pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
         g = nx.Graph()
         weights = np.array(

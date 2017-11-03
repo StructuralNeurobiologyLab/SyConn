@@ -6,7 +6,6 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-
 import cPickle as pkl
 from syconnproc.ssd_processing import dataset_proc as dp
 

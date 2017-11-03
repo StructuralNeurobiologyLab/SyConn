@@ -28,7 +28,7 @@ def aggregate_segmentation_object_mappings(ssd, obj_types,
     multi_params = []
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
                          for i in
-                         xrange(0, len(ssd.ssv_ids), stride)]:
+                         range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, obj_types])
 
@@ -88,7 +88,7 @@ def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
     multi_params = []
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
                          for i in
-                         xrange(0, len(ssd.ssv_ids), stride)]:
+                         range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, obj_types])
 
@@ -188,7 +188,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
 
     multi_params = []
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-                         for i in xrange(0, len(ssd.ssv_ids), stride)]:
+                         for i in range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, extract_only, attr_keys])
 
@@ -253,7 +253,7 @@ def _write_super_segmentation_dataset_thread(args):
     attr_dict = dict(id=[])
 
     for ssv_obj_id in ssv_obj_ids:
-        print ssv_obj_id
+        print(ssv_obj_id)
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
                                                     new_mapping=True,
                                                     create=True)
@@ -318,7 +318,7 @@ def export_to_knossosdataset(ssd, kd, stride=1000, qsub_pe=None,
                              qsub_queue=None, nb_cpus=10):
     multi_params = []
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-                         for i in xrange(0, len(ssd.ssv_ids), stride)]:
+                         for i in range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, kd.knossos_path, nb_cpus])
 
@@ -350,7 +350,7 @@ def _export_to_knossosdataset_thread(args):
     ssd.load_mapping_dict()
 
     for ssv_obj_id in ssv_obj_ids:
-        print ssv_obj_id
+        print(ssv_obj_id)
 
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
 
@@ -458,7 +458,7 @@ def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
     multi_params = []
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
                          for i in
-                         xrange(0, len(ssd.ssv_ids), stride)]:
+                         range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, obj_types, apply_mapping])
     # TODO @Sven: which function is requiered here? I changed it from _export_skeletons to ssh.export_skeletons
@@ -483,7 +483,7 @@ def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
     else:
         raise Exception("QSUB not available")
 
-    print "N no skeletons: %d" % no_skel_cnt
+    print("N no skeletons: %d" % no_skel_cnt)
 
 
 def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):

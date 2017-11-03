@@ -4,45 +4,34 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-
-from collections import defaultdict
-import cPickle as pkl
 import errno
-import glob
-import networkx as nx
-import numpy as np
 import os
 import re
+import shutil
+import networkx as nx
 
-import syconn.reps.segmentation_helper
 from scipy import ndimage, spatial
-
 from knossos_utils import knossosdataset
-from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
-
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-
 try:
     default_wd_available = True
     from ..config.global_params import wd
 except:
     default_wd_available = False
-
 from ..config import parser
-
-from ..handler.compression import LZ4Dict, MeshDict, VoxelDict, AttributeDict
+from ..handler.compression import LZ4Dict
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
-from ..handler.basics import get_filepaths_from_dir, safe_copy, group_ids_to_so_storage, write_txt2kzip
+from ..handler.basics import get_filepaths_from_dir, safe_copy, write_txt2kzip
 import warnings
-
+from .segmentation_helper import *
 from ..proc import meshs
 
 
 class SegmentationDataset(object):
     def __init__(self, obj_type, version=None, working_dir=None, scaling=None,
-                 version_dict=None, create=False, config=None):
+                 version_dict=None, create=False, config=None,
+                 n_folders_fs=None):
         """ Dataset Initialization
 
         :param obj_type: str
@@ -59,15 +48,24 @@ class SegmentationDataset(object):
             whether or not to create this dataset on disk
         :param config: str
             content of configuration file
+        :param n_folders: int
+
         """
 
         self._type = obj_type
         self.object_dict = {}
 
+        self._n_folders_fs = n_folders_fs
+
         self._sizes = None
         self._ids = None
         self._rep_coords = None
         self._config = config
+
+        if n_folders_fs is not None:
+            if not n_folders_fs in [10**i for i in range(6)]:
+                raise Exception("n_folders_fs must be in",
+                                [10**i for i in range(6)])
 
         if working_dir is None:
             if default_wd_available:
@@ -99,8 +97,11 @@ class SegmentationDataset(object):
         elif version == "new":
             other_datasets = \
                 glob.glob(self.working_dir + "/%s_[0-9]" % self.type) + \
-                glob.glob(self.working_dir + "/%s_[0-9][0-9]" % self.type)
+                glob.glob(self.working_dir + "/%s_[0-9][0-9]" % self.type) + \
+                glob.glob(self.working_dir + "/%s_[0-9][0-9][0-9]" % self.type)
+
             max_version = -1
+
             for other_dataset in other_datasets:
                 other_version = \
                     int(re.findall("[\d]+",
@@ -132,6 +133,28 @@ class SegmentationDataset(object):
     @property
     def type(self):
         return self._type
+
+    @property
+    def n_folders_fs(self):
+        if self._n_folders_fs is None:
+            p = glob.glob("%s*" % self.so_storage_path)
+            if len(p) == 0:
+                raise Exception("No storage folder found and no number of "
+                                "subfolders specified (n_folders_fs))")
+
+            bp = os.path.basename(p[0])
+
+            if bp == self.so_storage_path_base:
+                self._n_folders_fs = 100000
+                try:
+                    shutil.move(p[0], self.so_storage_path)
+                except:
+                    pass
+
+            else:
+                self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
+
+        return self._n_folders_fs
 
     @property
     def working_dir(self):
@@ -166,12 +189,20 @@ class SegmentationDataset(object):
         return os.path.exists(self.version_dict_path)
 
     @property
+    def so_storage_path_base(self):
+        return "so_storage"
+
+    @property
     def so_storage_path(self):
-        return "%s/so_storage/" % self.path
+        return "%s/%s_%d/" % (self.path, self.so_storage_path_base,
+                              self.n_folders_fs)
 
     @property
     def so_dir_paths(self):
-        return glob.glob(self.so_storage_path + "/*/*/*")
+        depth = int(self.n_folders_fs // 2 + self.n_folders_fs % 2)
+        p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
+
+        return glob.glob(p)
 
     @property
     def config(self):
@@ -185,7 +216,7 @@ class SegmentationDataset(object):
             if os.path.exists(self.path_sizes):
                 self._sizes = np.load(self.path_sizes)
             else:
-                print "sizes were not calculated..."
+                print("sizes were not calculated...")
         return self._sizes
 
     @property
@@ -194,13 +225,13 @@ class SegmentationDataset(object):
             if os.path.exists(self.path_rep_coords):
                 self._rep_coords = np.load(self.path_rep_coords)
             else:
-                print "rep coords were not calculated..."
+                print("rep coords were not calculated...")
         return self._rep_coords
 
     @property
     def ids(self):
         if self._ids is None:
-            syconn.reps.segmentation_helper.acquire_obj_ids(self)
+            acquire_obj_ids(self)
         return self._ids
 
     @property
@@ -231,7 +262,8 @@ class SegmentationDataset(object):
                                   version=self.version,
                                   working_dir=self.working_dir,
                                   scaling=self.scaling,
-                                  create=create)
+                                  create=create,
+                                  n_folders_fs=self.n_folders_fs)
 
     def save_version_dict(self):
         write_obj2pkl(self.version_dict_path, self.version_dict)
@@ -245,11 +277,12 @@ class SegmentationObject(object):
     def __init__(self, obj_id, obj_type="sv", version=None, working_dir=None,
                  rep_coord=None, size=None, scaling=(10, 10, 20), create=False,
                  voxel_caching=True, mesh_cashing=False, view_caching=False,
-                 config=None):
+                 config=None, n_folders_fs=None):
         self._id = int(obj_id)
         self._type = obj_type
         self._rep_coord = rep_coord
         self._size = size
+        self._n_folders_fs = n_folders_fs
 
         self.attr_dict = {}
         self._bounding_box = None
@@ -317,6 +350,24 @@ class SegmentationObject(object):
         return self._type
 
     @property
+    def n_folders_fs(self):
+        if self._n_folders_fs is None:
+            p = glob.glob("%s*" % self.so_storage_path)
+            if len(p) == 0:
+                raise Exception("No storage folder found and no number of "
+                                "subfolders specified (n_folders_fs))")
+
+            bp = os.path.basename(p[0])
+
+            if bp == self.so_storage_path_base:
+                raise Exception("Need to rename storage folder - initialize "
+                                "dataset with single thread")
+            else:
+                self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
+
+        return self._n_folders_fs
+
+    @property
     def id(self):
         return self._id
 
@@ -365,9 +416,18 @@ class SegmentationObject(object):
         return "%s/%s/" % (self.working_dir, self.identifier)
 
     @property
+    def so_storage_path_base(self):
+        return "so_storage"
+
+    @property
+    def so_storage_path(self):
+        return "%s/%s_%d/" % (self.segds_dir, self.so_storage_path_base,
+                              self.n_folders_fs)
+
+    @property
     def segobj_dir(self):
-        return "%s/so_storage/%s/" % (self.segds_dir,
-                                      subfold_from_ix(self.id))
+        return "%s/%s/" % (self.so_storage_path,
+                           subfold_from_ix(self.id, self.n_folders_fs))
 
     @property
     def mesh_path(self):
@@ -451,10 +511,10 @@ class SegmentationObject(object):
     def voxels(self):
         if self._voxels is None:
             if self.voxel_caching:
-                self._voxels = syconn.reps.segmentation_helper.load_voxels(self)
+                self._voxels = load_voxels(self)
                 return self._voxels
             else:
-                return syconn.reps.segmentation_helper.load_voxels(self)
+                return load_voxels(self)
         else:
             return self._voxels
 
@@ -462,10 +522,10 @@ class SegmentationObject(object):
     def voxel_list(self):
         if self._voxel_list is None:
             if self.voxel_caching:
-                self._voxel_list = syconn.reps.segmentation_helper.load_voxel_list(self)
+                self._voxel_list = load_voxel_list(self)
                 return self._voxel_list
             else:
-                return syconn.reps.segmentation_helper.load_voxel_list(self)
+                return load_voxel_list(self)
         else:
             return self._voxel_list
 
@@ -478,10 +538,10 @@ class SegmentationObject(object):
     def mesh(self):
         if self._mesh is None:
             if self.mesh_caching:
-                self._mesh = syconn.reps.segmentation_helper.load_mesh(self)
+                self._mesh = load_mesh(self)
                 return self._mesh
             else:
-                return syconn.reps.segmentation_helper.load_mesh(self)
+                return load_mesh(self)
         else:
             return self._mesh
 
@@ -533,25 +593,25 @@ class SegmentationObject(object):
             return coords.astype(np.float32)
 
     def save_voxels(self, bin_arr, offset):
-        syconn.reps.segmentation_helper.save_voxels(self, bin_arr, offset)
+        save_voxels(self, bin_arr, offset)
 
     def load_voxels(self, voxel_dc=None):
-        return syconn.reps.segmentation_helper.load_voxels(self, voxel_dc=voxel_dc)
+        return load_voxels(self, voxel_dc=voxel_dc)
 
     def load_voxels_downsampled(self, downsampling=(2, 2, 1)):
-        return syconn.reps.segmentation_helper.load_voxels_downsampled(self, downsampling=downsampling)
+        return load_voxels_downsampled(self, downsampling=downsampling)
 
     def load_voxel_list(self):
-        return syconn.reps.segmentation_helper.load_voxel_list(self)
+        return load_voxel_list(self)
 
     def load_voxel_list_downsampled(self, downsampling=(2, 2, 1)):
-        return syconn.reps.segmentation_helper.load_voxel_list_downsampled(self, downsampling=downsampling)
+        return load_voxel_list_downsampled(self, downsampling=downsampling)
 
     def load_mesh(self, recompute=False):
-        return syconn.reps.segmentation_helper.load_mesh(self, recompute=recompute)
+        return load_mesh(self, recompute=recompute)
 
     def glia_pred(self, thresh=0.168, pred_key_appendix=""):
-        return syconn.reps.segmentation_helper.glia_pred_so(self, thresh, pred_key_appendix)
+        return glia_pred_so(self, thresh, pred_key_appendix)
 
     def axoness_preds(self, pred_key_appendix=""):
         assert self.type == "sv"
@@ -695,7 +755,7 @@ class SegmentationObject(object):
 
         if not self.id in voxel_dc:
             self._bounding_box = np.array([[-1, -1, -1], [-1, -1, -1]])
-            print "No voxels found in VoxelDict!"
+            print("No voxels found in VoxelDict!")
             return
 
         bin_arrs, block_offsets = voxel_dc[self.id]
@@ -749,10 +809,10 @@ class SegmentationObject(object):
         self._rep_coord = max_loc + central_block_offset
 
     def calculate_bounding_box(self):
-        _ = syconn.reps.segmentation_helper.load_voxels(self)
+        _ = load_voxels(self)
 
     def calculate_size(self):
-        _ = syconn.reps.segmentation_helper.load_voxels(self)
+        _ = load_voxels(self)
 
     def save_kzip(self, path, kd=None, write_id=None):
         if write_id is None:
@@ -791,8 +851,8 @@ class SegmentationObject(object):
             try:
                 safe_copy(src_filename, dest_filename, safe=safe)
             except Exception, e:
-                print e
-                print "Skipped", fnames[i]
+                print(e)
+                print("Skipped", fnames[i])
                 pass
         # copy attr_dict values
         self.load_attr_dict()
@@ -840,4 +900,4 @@ class SegmentationObject(object):
                             this_voxel_list[:, 1],
                             this_voxel_list[:, 2]] = True
 
-                syconn.reps.segmentation_helper.save_voxels(new_so_obj, this_voxels, bb[0], size=len(voxel_ids))
+                save_voxels(new_so_obj, this_voxels, bb[0], size=len(voxel_ids))

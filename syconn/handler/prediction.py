@@ -1,14 +1,11 @@
 import re
-import matplotlib
-
-matplotlib.use("Agg")
 from .basics import read_txt_from_zip
 from collections import Counter
 from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils.knossosdataset import KnossosDataset
 from elektronn2.neuromancer.model import modelload
 from elektronn2.utils.gpu import initgpu
-from syconnfs.handler.compression import load_from_h5py, save_to_h5py
+from .compression import load_from_h5py, save_to_h5py
 import numpy as np
 import os
 import sys
@@ -37,7 +34,7 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75):
     kd.initialize_from_knossos_path(kd_p)
     scaling = np.array(kd.scale, dtype=np.int)
     raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling)
-    print "Using scale adapted raw offset:", raw_data_offset
+    print("Using scale adapted raw offset:", raw_data_offset)
     raw = kd.from_raw_cubes_to_matrix(size + 2 * raw_data_offset,
                                       offset - raw_data_offset, nb_threads=2,
                                       mag=1, show_progress=False)
@@ -243,10 +240,9 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None):
     """
     label = binarize_labels(label, foreground_ids)
     label = xyz2zxy(label)
-    print "Raw:", raw.shape, raw.dtype, raw.min(), raw.max()
-    print "Label:", label.shape, label.dtype, label.min(), label.max()
-    print "-----------------\nGT Summary:\n%s\n" % \
-          str(Counter(label.flatten()).items())
+    print("Raw:", raw.shape, raw.dtype, raw.min(), raw.max())
+    print("Label:", label.shape, label.dtype, label.min(), label.max())
+    print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
     if not fname[:-2] == "h5":
         fname = fname + ".h5"
     save_to_h5py([raw, label], fname, hdf5_names=["raw", "label"])
@@ -268,6 +264,11 @@ def binarize_labels(labels, foreground_ids):
     """
     new_labels = np.zeros_like(labels)
     if foreground_ids is None:
+        if len(np.unique(labels)) > 2:
+            print("------------ WARNING -------------\n"
+                  "Found more than two different labels during label "
+                  "conversion\n"
+                  "----------------------------------")
         new_labels[labels != 0] = 1
     else:
         try:
@@ -347,7 +348,7 @@ def pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     cd.initialize(kd, kd.boundary, [512, 512, 128], cd_p,
                   overlap=offset, box_coords=np.zeros(3))
     nb_ch = len(cd.chunk_dict.keys())
-    print "Starting prediction of %d chunks.\n" % nb_ch
+    print("Starting prediction of %d chunks.\n" % nb_ch)
     cnt = 0
     for chunk in cd.chunk_dict.values():
         sys.stdout.write("%d/%d" % (cnt, nb_ch))

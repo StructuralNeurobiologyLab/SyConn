@@ -7,7 +7,7 @@
 
 from ctypes import sizeof, c_float, c_void_p, c_uint
 from PIL import Image
-from syconn.proc.image import rgb2gray, apply_clahe, normalize_img
+from .image import rgb2gray, apply_clahe, normalize_img
 from scipy.ndimage.filters import gaussian_filter
 import numpy as np
 import time
@@ -28,8 +28,8 @@ try:
     from OpenGL.GLU import *
     from OpenGL.osmesa import *
     from OpenGL.GL.framebufferobjects import *
-except Exception, e:
-    print "Problem loading OpenGL:", e
+except Exception as e:
+    print("Problem loading OpenGL:", e)
     pass
 
 # ------------------------------------------------------------------------------
@@ -649,26 +649,6 @@ def multi_render_sampled_svidlist(svixs):
     cmd = "python %s/../examples/render_helper_svidlist.py" % fpath
     for ix in svixs:
         cmd += " %d" % ix
-    err_cnt = 0
-    # while True:
-    res = os.system(cmd)
-        # proably error due to installing updated syconnfs version
-        # if res == "0":
-        #     break
-        # elif res == "512":
-        #     time.sleep(1)
-        #     err_cnt += 1
-        # else:
-        #     print "\n---------------------------------------------------\n" \
-        #           "Error during multi_render_sampled_svidlist(%d)\n" \
-        #           "%s\n---------------------------------------------------\n" %\
-        #           (svixs[0], res)
-        # if err_cnt > 10:
-        #     print "\n---------------------------------------------------\n" \
-        #           "Error during multi_render_sampled_svidlist(%d)\n" \
-        #           "%s\n---------------------------------------------------\n" %\
-        #           (svixs[0], res)
-        #     return
 
 
 def multi_render_sampled_sso(sso_ix):
@@ -684,25 +664,5 @@ def multi_render_sampled_sso(sso_ix):
     fpath = os.path.dirname(os.path.abspath(__file__))
     cmd = "python %s/../examples/render_helper_sso.py" % fpath
     cmd += " %d" % sso_ix
-    err_cnt = 0
-    # while True:
-    res = os.system(cmd)
-        # # proably error due to installing updated syconnfs version
-        # if res == "0":
-        #     break
-        # elif res == "512":
-        #     time.sleep(1)
-        #     err_cnt += 1
-        # else:
-        #     print "\n---------------------------------------------------\n" \
-        #           "Error during multi_render_sampled_svidlist(%d)\n" \
-        #           "%s\n---------------------------------------------------\n" %\
-        #           (sso_ix, res)
-        # if err_cnt > 10:
-        #     print "\n---------------------------------------------------\n" \
-        #           "Error during multi_render_sampled_svidlist(%d)\n" \
-        #           "%s\n---------------------------------------------------\n" %\
-        #           (sso_ix, res)
-        #     return
 
 

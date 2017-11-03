@@ -21,4 +21,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-csh.contact_site_detection_thread(args)
+out = csh.contact_site_detection_thread(args)
+
+with open(path_out_file, "wb") as f:
+    pkl.dump(out, f)

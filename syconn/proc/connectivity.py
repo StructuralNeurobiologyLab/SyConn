@@ -12,7 +12,7 @@ import os
 
 from ..reps import segmentation, connectivity_helper as ch, \
     super_segmentation as ss, rep_helper
-import connectivity_helper as cph
+import .connectivity_helper as cph
 
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
@@ -74,7 +74,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
     i_block = 0
     multi_params = []
     for block in [rel_cs_to_cs_agg_ids_items[i:i + stride]
-                  for i in xrange(0, len(rel_cs_to_cs_agg_ids_items), stride)]:
+                  for i in range(0, len(rel_cs_to_cs_agg_ids_items), stride)]:
         multi_params.append([wd, block,
                              voxel_rel_paths[block_steps[i_block]: block_steps[i_block+1]],
                              cs_agg.version, cs.version, ssd.scaling, cs_gap_nm])

@@ -8,7 +8,7 @@
 import sys
 
 import cPickle as pkl
-from syconn.processing import checking_helper as ch
+from syconn.proc import checking_helper as ch
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
