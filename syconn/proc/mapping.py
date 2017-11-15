@@ -6,8 +6,11 @@ import numpy as np
 from scipy import spatial
 from knossos_utils.knossosdataset import KnossosDataset
 from skimage.segmentation import find_boundaries
+
+from syconn.reps.super_segmentation_object import SuperSegmentationObject
+from syconn.reps.super_segmentation_helper import get_sso_axoness_from_coord
 from ..reps.segmentation import SegmentationDataset, SegmentationObject
-from ..reps.super_segmentation import SuperSegmentationObject
+from ..reps.super_segmentation_object import SuperSegmentationObject
 
 
 def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
@@ -145,3 +148,22 @@ def crop_box_to_bndry(offset, box_size, bndry):
         offset[offset < 0] = 0
         # print offset, box_size, bndry
     return offset, box_size
+
+
+def map_cs_properties(cs):
+    cs.load_attr_dict()
+    if "neuron_partner_ct" in cs.attr_dict:
+        return
+    partners = cs.attr_dict["neuron_partners"]
+    partner_ax = np.zeros(2, dtype=np.uint8)
+    partner_ct = np.zeros(2, dtype=np.uint8)
+    for kk, ix in enumerate(partners):
+        sso = SuperSegmentationObject(ix, working_dir="/wholebrain"
+                                                         "/scratch/areaxfs/")
+        sso.load_attr_dict()
+        ax = get_sso_axoness_from_coord(sso, cs.rep_coord)
+        partner_ax[kk] = np.uint(ax)
+        partner_ct[kk] = np.uint(sso.attr_dict["celltype_cnn"])
+    cs.attr_dict["neuron_partner_ax"] = partner_ax
+    cs.attr_dict["neuron_partner_ct"] = partner_ct
+    cs.save_attr_dict()

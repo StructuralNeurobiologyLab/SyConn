@@ -9,7 +9,7 @@ import sys
 # temporary for easier development
 sys.path.append('/u/jkor/repos/knossos_utils')
 
-from ..reps import super_segmentation as ss
+from ..reps.super_segmentation import SuperSegmentationDataset
 
 from flask import Flask
 from flask import request
@@ -49,7 +49,7 @@ class SyConnFS_backend(object):
         
         :param syconnfs_path: str 
         """
-        self.ssd = ss.SuperSegmentationDataset(syconnfs_path)
+        self.ssd = SuperSegmentationDataset(syconnfs_path)
         # warmup of ssv_ids?
         self.ssd.ssv_ids
 

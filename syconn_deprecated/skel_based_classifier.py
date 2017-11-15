@@ -29,7 +29,7 @@ except ImportError:
     keras_avail = False
 
 import skel_based_classifier_helper as sbch
-import syconn.reps.super_segmentation as ss
+import syconn.reps.super_segmentation_object as ss
 
 from syconn.mp import qsub_utils as qu
 from syconn.mp import shared_mem as sm

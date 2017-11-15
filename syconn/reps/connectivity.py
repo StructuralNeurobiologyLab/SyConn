@@ -27,7 +27,7 @@ except:
 
 from ..config import parser
 import connectivity_helper as ch
-import super_segmentation as ss
+import super_segmentation_object as ss
 import segmentation
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 

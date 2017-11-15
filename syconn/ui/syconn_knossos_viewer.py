@@ -9,7 +9,7 @@ from PythonQt import QtGui, Qt, QtCore
 import KnossosModule
 import sys
 sys.dont_write_bytecode = True
-from ..reps import super_segmentation as ss
+from ..reps import super_segmentation_object as ss
 # make this a GUI setting / enter path to directory manually
 from ..config.global_params import wd
 syconnfs_path = wd

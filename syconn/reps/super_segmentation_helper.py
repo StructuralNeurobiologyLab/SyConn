@@ -5,273 +5,26 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-from collections import Counter
+import copy
 import itertools
+from collections import Counter
 from multiprocessing.pool import ThreadPool
+
 import networkx as nx
 import numpy as np
+import scipy
 import scipy.ndimage
 from knossos_utils.skeleton_utils import annotation_to_nx_graph
-import os
-import copy
+
+from syconn.reps import segmentation
+
 try:
     import skeletopyze
     skeletopyze_available = True
 except:
     print("skeletopyze not found - you won't be able to compute skeletons. "
           "Install skeletopyze from https://github.com/funkey/skeletopyze")
-
-import super_segmentation as ss
-from knossos_utils import knossosdataset
 from scipy import spatial
-
-
-def write_super_segmentation_dataset_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    extract_only = args[4]
-    attr_keys = args[5]
-
-    ssd = ss.SuperSegmentationDataset(working_dir, version, version_dict)
-
-    try:
-        ssd.load_mapping_dict()
-        mapping_dict_avail = True
-    except:
-        mapping_dict_avail = False
-
-    attr_dict = dict(id=[])
-
-    for ssv_obj_id in ssv_obj_ids:
-        print ssv_obj_id
-        ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
-                                                    new_mapping=True,
-                                                    create=True)
-
-        if ssv_obj.attr_dict_exists:
-            ssv_obj.load_attr_dict()
-
-        if not extract_only:
-
-            if len(ssv_obj.attr_dict["sv"]) == 0:
-                if mapping_dict_avail:
-                    ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
-
-                    if ssv_obj.attr_dict_exists:
-                        ssv_obj.load_attr_dict()
-                else:
-                    raise Exception("No mapping information found")
-        if not extract_only:
-            if "rep_coord" not in ssv_obj.attr_dict:
-                ssv_obj.attr_dict["rep_coord"] = ssv_obj.rep_coord
-            if "bounding_box" not in ssv_obj.attr_dict:
-                ssv_obj.attr_dict["bounding_box"] = ssv_obj.bounding_box
-            if "size" not in ssv_obj.attr_dict:
-                ssv_obj.attr_dict["size"] = ssv_obj.size
-
-        ssv_obj.attr_dict["sv"] = np.array(ssv_obj.attr_dict["sv"],
-                                           dtype=np.int)
-
-        if extract_only:
-            ignore = False
-            for attribute in attr_keys:
-                if not attribute in ssv_obj.attr_dict:
-                    ignore = True
-                    break
-            if ignore:
-                continue
-
-            attr_dict["id"].append(ssv_obj_id)
-
-            for attribute in attr_keys:
-                if attribute not in attr_dict:
-                    attr_dict[attribute] = []
-
-                if attribute in ssv_obj.attr_dict:
-                    attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
-                else:
-                    attr_dict[attribute].append(None)
-        else:
-            attr_dict["id"].append(ssv_obj_id)
-            for attribute in ssv_obj.attr_dict.keys():
-                if attribute not in attr_dict:
-                    attr_dict[attribute] = []
-
-                attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
-
-                ssv_obj.save_attr_dict()
-
-    return attr_dict
-
-
-def export_to_knossosdataset_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    kd_path = args[4]
-    nb_threads = args[5]
-
-    kd = knossosdataset.KnossosDataset().initialize_from_knossos_path(kd_path)
-
-    ssd = ss.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_obj_id in ssv_obj_ids:
-        print ssv_obj_id
-
-        ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
-
-        offset = ssv_obj.bounding_box[0]
-        if not 0 in offset:
-            kd.from_matrix_to_cubes(ssv_obj.bounding_booffset,
-                                    data=ssv_obj.voxels.astype(np.uint32) *
-                                         ssv_obj_id,
-                                    overwrite=False,
-                                    nb_threads=nb_threads)
-
-
-def convert_knossosdataset_thread(args):
-    version = args[0]
-    version_dict = args[1]
-    working_dir = args[2]
-    nb_threads = args[3]
-    sv_kd_path = args[4]
-    ssv_kd_path = args[5]
-    offsets = args[6]
-    size = args[7]
-
-    sv_kd = knossosdataset.KnossosDataset()
-    sv_kd.initialize_from_knossos_path(sv_kd_path)
-    ssv_kd = knossosdataset.KnossosDataset()
-    ssv_kd.initialize_from_knossos_path(ssv_kd_path)
-
-    ssd = ss.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_id_changer()
-
-    for offset in offsets:
-        block = sv_kd.from_overlaycubes_to_matrix(size, offset,
-                                                  datatype=np.uint32,
-                                                  nb_threads=nb_threads)
-
-        block = ssd.id_changer[block]
-
-        ssv_kd.from_matrix_to_cubes(offset,
-                                    data=block.astype(np.uint32),
-                                    datatype=np.uint32,
-                                    overwrite=False,
-                                    nb_threads=nb_threads)
-
-        raw = sv_kd.from_raw_cubes_to_matrix(size, offset,
-                                             nb_threads=nb_threads)
-
-        ssv_kd.from_matrix_to_cubes(offset,
-                                    data=raw,
-                                    datatype=np.uint8,
-                                    as_raw=True,
-                                    overwrite=False,
-                                    nb_threads=nb_threads)
-
-
-def aggregate_segmentation_object_mappings_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-
-    ssd = ss.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        mappings = dict((obj_type, Counter()) for obj_type in obj_types)
-
-        for sv in ssv.svs:
-            sv.load_attr_dict()
-            for obj_type in obj_types:
-                if "mapping_%s_ids" % obj_type in sv.attr_dict:
-                    keys = sv.attr_dict["mapping_%s_ids" % obj_type]
-                    values = sv.attr_dict["mapping_%s_ratios" % obj_type]
-                    mappings[obj_type] += Counter(dict(zip(keys, values)))
-
-        ssv.load_attr_dict()
-        for obj_type in obj_types:
-            if obj_type in mappings:
-                ssv.attr_dict["mapping_%s_ids" % obj_type] = \
-                    mappings[obj_type].keys()
-                ssv.attr_dict["mapping_%s_ratios" % obj_type] = \
-                    mappings[obj_type].values()
-
-        ssv.save_attr_dict()
-
-
-def apply_mapping_decisions_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-
-    ssd = ss.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        for obj_type in obj_types:
-            if obj_type == "sj":
-                correct_for_background = True
-            else:
-                correct_for_background = False
-
-            ssv.apply_mapping_decision(obj_type,
-                                       correct_for_background=correct_for_background,
-                                       save=True)
-
-
-def reskeletonize_objects_small_ones_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = ss.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        print "------------", ssv_id
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        if np.product(ssv.shape) > 1e10:
-            continue
-        # elif np.product(ssv.shape) > 10**3:
-        #     ssv.calculate_skeleton(coord_scaling=(8, 8, 4))
-        elif ssv.size > 0:
-            ssv.calculate_skeleton(coord_scaling=(8, 8, 4), plain=True)
-        else:
-            ssv.skeleton = {"nodes": [], "edges": [], "diameters": []}
-        ssv.save_skeleton()
-        ssv.clear_cache()
-
-
-def reskeletonize_objects_big_ones_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = ss.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        if np.product(ssv.shape) > 1e10:
-            ssv.calculate_skeleton(coord_scaling=(10, 10, 5), plain=True)
-        else:
-            continue
-        ssv.save_skeleton()
-        ssv.clear_cache()
 
 
 def reskeletonize_plain(volume, coord_scaling=(2, 2, 1), node_offset=0):
@@ -828,123 +581,6 @@ def reskeletonize_chunked(obj_id, volume_shape, volume_offset, scaling,
     return g_nodes, g_edges, g_diameters
 
 
-def export_skeletons(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-    apply_mapping = args[5]
-
-    ssd = ss.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    no_skel_cnt = 0
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-
-        try:
-            ssv.load_skeleton()
-            skeleton_avail = True
-        except:
-            skeleton_avail = False
-            no_skel_cnt += 1
-
-        if not skeleton_avail:
-            continue
-
-        if ssv.size == 0:
-            continue
-
-        if len(ssv.skeleton["nodes"]) == 0:
-            continue
-
-        try:
-            ssv.save_skeleton_to_kzip()
-
-            for obj_type in obj_types:
-                if apply_mapping:
-                    if obj_type == "sj":
-                        correct_for_background = True
-                    else:
-                        correct_for_background = False
-                    ssv.apply_mapping_decision(obj_type,
-                                               correct_for_background=correct_for_background)
-
-            ssv.save_objects_to_kzip_sparse(obj_types)
-
-        except:
-            pass
-
-    return no_skel_cnt
-
-
-def associate_objs_with_skel_nodes_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-
-    ssd = ss.SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.load_skeleton()
-        if len(ssv.skeleton["nodes"]) > 0:
-            ssv.associate_objs_with_skel_nodes(obj_types)
-
-
-def predict_axoness_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = ss.SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-
-        if not ssv.load_skeleton():
-            continue
-
-        ssv.load_attr_dict()
-        if "assoc_sj" in ssv.attr_dict:
-            ssv.predict_axoness(feature_context_nm=5000, clf_name="rfc")
-        elif len(ssv.skeleton["nodes"]) > 0:
-            try:
-                ssv.associate_objs_with_skel_nodes(("sj", "mi", "vc"))
-                ssv.predict_axoness(feature_context_nm=5000, clf_name="rfc")
-            except:
-                pass
-
-
-def predict_cell_type_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = ss.SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-
-        if not ssv.load_skeleton():
-            continue
-
-        ssv.load_attr_dict()
-        if "assoc_sj" in ssv.attr_dict:
-            ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
-        elif len(ssv.skeleton["nodes"]) > 0:
-            try:
-                ssv.associate_objs_with_skel_nodes(("sj", "mi", "vc"))
-                ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
-            except:
-                pass
-
-
 def majority_vote(anno, prop, max_dist):
     """
     Smoothes (average using sliding window of 2 times max_dist and majority
@@ -1127,20 +763,112 @@ def get_sso_axoness_from_coord(sso, coord, k=5):
     return cnt.most_common(n=1)[0][0]
 
 
-def map_cs_properties(cs):
-    cs.load_attr_dict()
-    if "neuron_partner_ct" in cs.attr_dict:
+def calculate_skeleton(sso, size_threshold=1e20, kd=None,
+                       coord_scaling=(8, 8, 4), plain=False, cleanup=True,
+                       nb_threads=1):
+
+    if np.product(sso.shape) < size_threshold:
+        # vx = self.load_voxels_downsampled(coord_scaling)
+        # vx = self.voxels[::coord_scaling[0],
+        #                  ::coord_scaling[1],
+        #                  ::coord_scaling[2]]
+        vx = sso.load_voxels_downsampled(downsampling=coord_scaling)
+        vx = scipy.ndimage.morphology.binary_closing(
+            np.pad(vx, 3, mode="constant", constant_values=0), iterations=3)
+        vx = vx[3: -3, 3: -3, 3:-3]
+
+        if plain:
+            nodes, edges, diameters = \
+                reskeletonize_plain(vx, coord_scaling=coord_scaling)
+            nodes = np.array(nodes, dtype=np.int) + sso.bounding_box[0]
+        else:
+            nodes, edges, diameters = \
+                reskeletonize_chunked(sso.id, sso.shape,
+                                      sso.bounding_box[0],
+                                      sso.scaling,
+                                      voxels=vx,
+                                      coord_scaling=coord_scaling,
+                                      nb_threads=nb_threads)
+
+    elif kd is not None:
+        nodes, edges, diameters = \
+            reskeletonize_chunked(sso.id, sso.shape,
+                                  sso.bounding_box[0], sso.scaling,
+                                  kd=kd, coord_scaling=coord_scaling,
+                                  nb_threads=nb_threads)
+    else:
         return
-    partners = cs.attr_dict["neuron_partners"]
-    partner_ax = np.zeros(2, dtype=np.uint8)
-    partner_ct = np.zeros(2, dtype=np.uint8)
-    for kk, ix in enumerate(partners):
-        sso = ss.SuperSegmentationObject(ix, working_dir="/wholebrain"
-                                                         "/scratch/areaxfs/")
-        sso.load_attr_dict()
-        ax = get_sso_axoness_from_coord(sso, cs.rep_coord)
-        partner_ax[kk] = np.uint(ax)
-        partner_ct[kk] = np.uint(sso.attr_dict["celltype_cnn"])
-    cs.attr_dict["neuron_partner_ax"] = partner_ax
-    cs.attr_dict["neuron_partner_ct"] = partner_ct
-    cs.save_attr_dict()
+
+    nodes = np.array(nodes, dtype=np.int)
+    edges = np.array(edges, dtype=np.int)
+    diameters = np.array(diameters, dtype=np.float)
+
+    sso.skeleton = {}
+    sso.skeleton["edges"] = edges
+    sso.skeleton["nodes"] = nodes
+    sso.skeleton["diameters"] = diameters
+
+    if cleanup:
+        for i in range(2):
+            if len(sso.skeleton["edges"]) > 2:
+                sso.skeleton = cleanup_skeleton(sso.skeleton,
+                                                    coord_scaling)
+
+
+def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
+    def _load_sv_voxels_thread(args):
+        sv_id = args[0]
+        sv = segmentation.SegmentationObject(sv_id,
+                                             obj_type="sv",
+                                             version=sso.version_dict[
+                                                 "sv"],
+                                             working_dir=sso.working_dir,
+                                             config=sso.config,
+                                             voxel_caching=False)
+        if sv.voxels_exist:
+            box = [np.array(sv.bounding_box[0] - sso.bounding_box[0],
+                            dtype=np.int)]
+
+            box[0] /= downsampling
+            size = np.array(sv.bounding_box[1] -
+                            sv.bounding_box[0], dtype=np.float)
+            size = np.ceil(size.astype(np.float) /
+                           downsampling).astype(np.int)
+
+            box.append(box[0] + size)
+
+            sv_voxels = sv.voxels
+            if not isinstance(sv_voxels, int):
+                sv_voxels = sv_voxels[::downsampling[0],
+                            ::downsampling[1],
+                            ::downsampling[2]]
+
+                voxels[box[0][0]: box[1][0],
+                box[0][1]: box[1][1],
+                box[0][2]: box[1][2]][sv_voxels] = True
+
+    downsampling = np.array(downsampling, dtype=np.int)
+
+    if len(sso.sv_ids) == 0:
+        return None
+
+    voxel_box_size = sso.bounding_box[1] - sso.bounding_box[0]
+    voxel_box_size = voxel_box_size.astype(np.float)
+
+    voxel_box_size = np.ceil(voxel_box_size / downsampling).astype(np.int)
+
+    voxels = np.zeros(voxel_box_size, dtype=np.bool)
+
+    multi_params = []
+    for sv_id in sso.sv_ids:
+        multi_params.append([sv_id])
+
+    if nb_threads > 1:
+        pool = ThreadPool(nb_threads)
+        pool.map(_load_sv_voxels_thread, multi_params)
+        pool.close()
+        pool.join()
+    else:
+        map(_load_sv_voxels_thread, multi_params)
+
+    return voxels

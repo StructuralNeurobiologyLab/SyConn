@@ -201,35 +201,51 @@ def get_rel_path(obj_name, filename, suffix=""):
            filename + suffix + "/"
 
 
-def subfold_from_ix(ix, n_folders):
+def subfold_from_ix(ix, n_folders=0):
     """
 
     Parameters
     ----------
     ix : int
-    n_folders: int
 
     Returns
     -------
     str
     """
-    assert n_folders in [10**i for i in range(6)]
-
-    order = int(np.log10(n_folders))
-
     id_str = "00000" + str(ix)
-
-    subfold = "/"
-
-    if order % 2 == 1:
-        subfold += "%s/" % id_str[-order]
-        order -= 1
-
-    for f_order in range(0, order, 2):
-        idx = len(id_str) - order + f_order
-        subfold += "%s/" % id_str[idx: idx + 2]
-
+    subfold = "/%d/%d/%d/" % \
+           (int(id_str[-5:-3]), int(id_str[-3:-1]), int(id_str[-1]))
     return subfold
+
+# def subfold_from_ix(ix, n_folders):
+#     """
+#
+#     Parameters
+#     ----------
+#     ix : int
+#     n_folders: int
+#
+#     Returns
+#     -------
+#     str
+#     """
+#     assert n_folders in [10**i for i in range(6)]
+#
+#     order = int(np.log10(n_folders))
+#
+#     id_str = "00000" + str(ix)
+#
+#     subfold = "/"
+#
+#     if order % 2 == 1:
+#         subfold += "%s/" % id_str[-order]
+#         order -= 1
+#
+#     for f_order in range(0, order, 2):
+#         idx = len(id_str) - order + f_order
+#         subfold += "%s/" % id_str[idx: idx + 2]
+#
+#     return subfold
 
 
 def subfold_from_ix_2nd_stage(ix):
@@ -278,7 +294,7 @@ def subfold_from_ix_SSO(ix):
     str
     """
 
-    raise NotImplementedError("Outdated")
+    # raise NotImplementedError("Outdated")
     return "/%d/%d/%d/" % (ix % 1e2, ix % 1e4, ix)
 
 

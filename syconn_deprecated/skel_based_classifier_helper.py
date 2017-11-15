@@ -7,7 +7,7 @@
 
 import numpy as np
 
-import syconn.reps.super_segmentation as ss
+import syconn.reps.super_segmentation_object as ss
 import skel_based_classifier as sbc
 
 

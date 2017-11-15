@@ -426,8 +426,13 @@ class SegmentationObject(object):
 
     @property
     def segobj_dir(self):
-        return "%s/%s/" % (self.so_storage_path,
-                           subfold_from_ix(self.id, self.n_folders_fs))
+        return "%s/so_storage/%s/" % (self.segds_dir,
+                                      subfold_from_ix(self.id))
+
+    # @property
+    # def segobj_dir(self):
+    #     return "%s/%s/" % (self.so_storage_path,
+    #                        subfold_from_ix(self.id, self.n_folders_fs))
 
     @property
     def mesh_path(self):

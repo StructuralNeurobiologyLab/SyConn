@@ -10,9 +10,8 @@ import glob
 import numpy as np
 import os
 
-from ..reps import segmentation, connectivity_helper as ch, \
-    super_segmentation as ss, rep_helper
-import .connectivity_helper as cph
+from ..reps import segmentation, connectivity_helper as cph, \
+    super_segmentation_object as ss, rep_helper
 
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
