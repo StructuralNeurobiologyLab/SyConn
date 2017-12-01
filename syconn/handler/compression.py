@@ -359,6 +359,55 @@ class VoxelDict(VoxelDictL):
         super(VoxelDictL, self).__init__(inp, **kwargs)
 
 
+class SkeletonDict(LZ4DictBase):
+    """
+    Stores skeleton dictionaries (keys: "nodes", "diameters", "edges") as
+    compressed numpy arrays.
+    """
+
+    def __init__(self, inp, **kwargs):
+        super(SkeletonDict, self).__init__(inp, **kwargs)
+
+    def __getitem__(self, item):
+        """
+
+        Parameters
+        ----------
+        item : int/str
+
+        Returns
+        -------
+        dict
+        """
+        try:
+            return self._cache_dc[item]
+        except KeyError:
+            pass
+        comp_arrs = self._dc_intern[item]
+        skeleton = {"nodes": lz4string_listtoarr(comp_arrs[0], dtype=np.uint32),
+                       "diameters": lz4string_listtoarr(comp_arrs[1], dtype=np.float32),
+                       "edges": lz4string_listtoarr(comp_arrs[2], dtype=np.uint32)}
+        if self._cache_decomp:
+            self._cache_dc[item] = skeleton
+        return skeleton
+
+    def __setitem__(self, key, skeleton):
+        """
+
+        Parameters
+        ----------
+        key : int/str
+        value : list of np.array
+            [indices, vertices]
+        """
+        if self._cache_decomp:
+            self._cache_dc[key] = skeleton
+        comp_n = arrtolz4string_list(skeleton["nodes"].astype(dtype=np.uint32))
+        comp_d = arrtolz4string_list(skeleton["diameters"].astype(dtype=np.float32))
+        comp_e = arrtolz4string_list(skeleton["edges"].astype(dtype=np.uint32))
+        self._dc_intern[key] = [comp_n, comp_d, comp_e]
+
+
 def arrtolz4string(arr):
     """
     Converts (multi-dimensional) array to lz4 compressed string.
