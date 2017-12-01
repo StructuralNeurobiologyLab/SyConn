@@ -194,8 +194,10 @@ class SegmentationDataset(object):
 
     @property
     def so_storage_path(self):
-        return "%s/%s_%d/" % (self.path, self.so_storage_path_base,
-                              self.n_folders_fs)
+        return "%s/so_storage/" % self.path
+    # def so_storage_path(self):
+    #     return "%s/%s_%d/" % (self.path, self.so_storage_path_base,
+    #                           self.n_folders_fs)
 
     @property
     def so_dir_paths(self):
