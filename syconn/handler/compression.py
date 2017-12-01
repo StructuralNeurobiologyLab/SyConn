@@ -6,9 +6,15 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 try:
-    from lz4.block import compress, decompress
+    try:
+        from lz4.block import compress, decompress
+    except ImportError:
+        from lz4 import compress, decompress
+    LOCKING = True
 except ImportError:
-    from lz4 import compress, decompress
+    print("lz4 could not be imported. Locking will be disabled by default."
+          "Please install lz4 to enable locking (pip install lz4).")
+    LOCKING = False
 import time
 import fasteners
 from .basics import load_pkl2obj, write_obj2pkl
@@ -34,7 +40,7 @@ class LZ4DictBase(dict):
     additionally (save decompressing time when accessing items frequently).
     """
     def __init__(self, inp_p, cache_decomp=False, read_only=True,
-                 max_delay=100, timeout=1000, disable_locking=False):
+                 max_delay=100, timeout=1000, disable_locking=not LOCKING):
         super(LZ4DictBase, self).__init__()
         self.read_only = read_only
         self.a_lock = None
@@ -202,115 +208,6 @@ class LZ4Dict(LZ4DictBase):
         self._dc_intern[key] = value_intern
 
 
-class VoxelDict(LZ4DictBase):
-    """
-    Customized dictionary to store compressed numpy arrays, but with a 
-    intuitive user interface, i.e. compression will happen in background.
-    kwarg 'cache_decomp' can be enabled to cache decompressed arrays 
-    additionally (save decompressing time). LOCKING DISABLED!!!
-    """
-
-    def __init__(self, inp, **kwargs):
-        super(VoxelDict, self).__init__(inp, **kwargs)
-
-    def __getitem__(self, item):
-        """
-        Parameters
-        ----------
-        item : int/str
-
-        Returns
-        -------
-        list of np.array, list of np.array
-            Decompressed voxel masks with corresponding offsets
-        """
-        try:
-            return self._cache_dc[item], self._dc_intern[item]["off"]
-        except KeyError:
-            pass
-
-        value_intern = self._dc_intern[item]
-        dt = np.dtype(value_intern["dt"])
-        sh = value_intern["sh"]
-        offsets = value_intern["off"]
-        comp_arrs = value_intern["arr"]
-        decomp_arrs = []
-        for i in range(len(sh)):
-            decomp_arrs.append(lz4string_listtoarr(comp_arrs[i], dt, sh[i]))
-        if self._cache_decomp:
-            self._cache_dc[item] = decomp_arrs
-        return decomp_arrs, offsets
-
-    def __setitem__(self, key, values):
-        """
-        
-        Parameters
-        ----------
-        key : int/str
-            E.g. SO ID.
-        values : list of np.array
-            E.g. voxel masks
-        offsets : list of np.array
-            offset for each voxel mask
-        """
-        voxel_masks, offsets = values
-        assert np.all([voxel_masks[0].dtype == v.dtype for v in voxel_masks])
-        assert len(voxel_masks) == len(offsets)
-        if self._cache_decomp:
-            self._cache_dc[key] = voxel_masks
-        sh = [v.shape for v in voxel_masks]
-        for i in range(len(sh)):
-            curr_sh = list(sh[i])
-            curr_sh[0] = -1
-            sh[i] = curr_sh
-        value_intern = {"arr": [arrtolz4string_list(v) for v in voxel_masks],
-                        "sh": sh, "dt": voxel_masks[0].dtype.str, "off": offsets}
-        self._dc_intern[key] = value_intern
-
-    def append(self, key, voxel_mask, offset):
-        value_intern = self._dc_intern[key]
-        dt = np.dtype(value_intern["dt"])
-        sh = value_intern["sh"]
-        offsets = value_intern["off"] + [offset]
-        comp_arrs = value_intern["arr"]
-
-        assert dt == voxel_mask.dtype.str
-
-        curr_sh = list(voxel_mask.shape)
-        curr_sh[0] = -1
-        sh.append(curr_sh)
-
-        value_intern = {"arr": comp_arrs + [arrtolz4string_list(voxel_mask)],
-                        "sh": sh, "dt": dt, "off": offsets}
-        self._dc_intern[key] = value_intern
-
-    def save2pkl(self, dest_path=None):
-        if dest_path is None:
-            dest_path = self._path
-        write_obj2pkl(dest_path, self._dc_intern)
-
-    def load_pkl(self, source_path=None):
-        if source_path is None:
-            source_path = self._path
-
-        if not os.path.isdir(os.path.split(source_path)[0]):
-            try:
-                os.makedirs(os.path.split(source_path)[0])
-            except:
-                pass
-
-        if os.path.isfile(source_path):
-            try:
-                self._dc_intern = load_pkl2obj(source_path)
-            except EOFError:
-                warnings.warn("Could not load LZ4Dict (%s). 'save2pkl' will"
-                              " overwrite broken .pkl file." % self._path,
-                              RuntimeWarning)
-                self._dc_intern = {}
-        else:
-            self._dc_intern = {}
-
-
 class VoxelDictL(LZ4DictBase):
     """
     Customized dictionary to store compressed numpy arrays, but with a 
@@ -442,6 +339,24 @@ class MeshDict(LZ4DictBase):
         comp_ind = arrtolz4string_list(mesh[0].astype(dtype=np.uint32))
         comp_vert = arrtolz4string_list(mesh[1].astype(dtype=np.float32))
         self._dc_intern[key] = [comp_ind, comp_vert]
+
+
+class VoxelDict(VoxelDictL):
+    """
+    Customized dictionary to store compressed numpy arrays, but with a
+    intuitive user interface, i.e. compression will happen in background.
+    kwarg 'cache_decomp' can be enabled to cache decompressed arrays
+    additionally (save decompressing time).
+
+    No locking provided in this class!
+    """
+
+    def __init__(self, inp, **kwargs):
+        if "disable_locking" in kwargs:
+            assert kwargs["disable_locking"], "Locking must be disabled " \
+                                              "in this class. Use VoxelDictL" \
+                                              "to enable locking."
+        super(VoxelDictL, self).__init__(inp, **kwargs)
 
 
 def arrtolz4string(arr):

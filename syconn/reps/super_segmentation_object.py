@@ -67,10 +67,12 @@ class SuperSegmentationObject(object):
     def __init__(self, ssv_id, version=None, version_dict=None,
                  working_dir=None, create=True, sv_ids=None, scaling=None,
                  object_caching=True, voxel_caching=True, mesh_cashing=False,
-                 view_caching=False, config=None, nb_cpus=1):
+                 view_caching=False, config=None, nb_cpus=1,
+                 enable_locking=True):
         self.nb_cpus = nb_cpus
         self._id = ssv_id
         self.attr_dict = dict(mi=[], sj=[], vc=[], sv=[])
+        self.enable_locking = enable_locking
 
         self._rep_coord = None
         self._size = None
@@ -427,7 +429,8 @@ class SuperSegmentationObject(object):
         return os.path.isfile(self.attr_dict_path)
 
     def mesh_exists(self, obj_type):
-        mesh_dc = MeshDict(self.mesh_dc_path)
+        mesh_dc = MeshDict(self.mesh_dc_path,
+                           disable_locking=not self.enable_locking)
         return obj_type in mesh_dc
 
     @property
@@ -532,13 +535,15 @@ class SuperSegmentationObject(object):
     def _load_obj_mesh(self, obj_type="sv", rewrite=False):
         if not rewrite and self.mesh_exists(obj_type) and not \
                         self.version == "tmp":
-            mesh_dc = MeshDict(self.mesh_dc_path)
+            mesh_dc = MeshDict(self.mesh_dc_path,
+                               disable_locking=not self.enable_locking)
             ind, vert = mesh_dc[obj_type]
         else:
             ind, vert = merge_someshs(self.get_seg_objects(obj_type),
                                       nb_cpus=self.nb_cpus)
             if not self.version == "tmp":
-                mesh_dc = MeshDict(self.mesh_dc_path, read_only=False)
+                mesh_dc = MeshDict(self.mesh_dc_path, read_only=False,
+                                   disable_locking=not self.enable_locking)
                 mesh_dc[obj_type] = [ind, vert]
                 mesh_dc.save2pkl()
         return np.array(ind, dtype=np.int), np.array(vert, dtype=np.int)
@@ -1233,7 +1238,8 @@ class SuperSegmentationObject(object):
             # # HACK
             dest_dir = "/wholebrain/scratch/pschuber/ssv3_splits_v2/%s" % subfold_from_ix_SSO(
                 self.id)
-            ad = AttributeDict(dest_dir + "attr_dict.pkl", read_only=True)
+            ad = AttributeDict(dest_dir + "attr_dict.pkl", read_only=True,
+                           disable_locking=not self.enable_locking)
             if self.id in ad:
                 return
             # # HACK END
@@ -1272,7 +1278,8 @@ class SuperSegmentationObject(object):
             # HACK
             if not os.path.isdir(dest_dir):
                 os.makedirs(dest_dir)
-            ad = AttributeDict(dest_dir + "attr_dict.pkl", read_only=False)
+            ad = AttributeDict(dest_dir + "attr_dict.pkl", read_only=False,
+                           disable_locking=not self.enable_locking)
             ad[self.id]["glia_svs"] = glia_ccs_ixs
             ad[self.id]["nonglia_svs"] = non_glia_ccs_ixs
             ad.save2pkl()
@@ -1281,7 +1288,8 @@ class SuperSegmentationObject(object):
     def load_gliasplit_ad(self):
         dest_dir = "/wholebrain/scratch/pschuber/ssv3_splits_v2/%s" % subfold_from_ix_SSO(
             self.id)
-        ad = AttributeDict(dest_dir + "attr_dict.pkl", read_only=True)
+        ad = AttributeDict(dest_dir + "attr_dict.pkl", read_only=True,
+                           disable_locking=not self.enable_locking)
         return ad[self.id]
 
     def gliasplit2mesh(self, dest_path=None):

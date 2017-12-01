@@ -277,7 +277,7 @@ class SegmentationObject(object):
     def __init__(self, obj_id, obj_type="sv", version=None, working_dir=None,
                  rep_coord=None, size=None, scaling=(10, 10, 20), create=False,
                  voxel_caching=True, mesh_cashing=False, view_caching=False,
-                 config=None, n_folders_fs=None):
+                 config=None, n_folders_fs=None, enable_locking=True):
         self._id = int(obj_id)
         self._type = obj_type
         self._rep_coord = rep_coord
@@ -287,6 +287,7 @@ class SegmentationObject(object):
         self.attr_dict = {}
         self._bounding_box = None
         self._paths_to_voxels = None
+        self.enable_locking = enable_locking
 
         self._voxel_caching = voxel_caching
         self._mesh_caching = mesh_cashing
@@ -504,12 +505,14 @@ class SegmentationObject(object):
     def attr_dict_exists(self):
         if not os.path.isfile(self.attr_dict_path):
             return False
-        glob_attr_dc = AttributeDict(self.attr_dict_path)
+        glob_attr_dc = AttributeDict(self.attr_dict_path,
+                                     disable_locking=not self.enable_locking)
         return self.id in glob_attr_dc
 
     @property
     def voxels_exist(self):
-        voxel_dc = VoxelDict(self.voxel_path, read_only=True)
+        voxel_dc = VoxelDict(self.voxel_path, read_only=True,
+                             disable_locking=not self.enable_locking)
         return self.id in voxel_dc
 
     @property
@@ -536,7 +539,8 @@ class SegmentationObject(object):
 
     @property
     def mesh_exists(self):
-        mesh_dc = MeshDict(self.mesh_path)
+        mesh_dc = MeshDict(self.mesh_path,
+                           disable_locking=not self.enable_locking)
         return self.id in mesh_dc
 
     @property
@@ -563,12 +567,14 @@ class SegmentationObject(object):
 
     @property
     def sample_locations_exist(self):
-        location_dc = LZ4Dict(self.locations_path)
+        location_dc = LZ4Dict(self.locations_path,
+                              disable_locking=not self.enable_locking)
         return self.id in location_dc
 
     @property
     def views_exist(self, woglia=True):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia))
+        view_dc = LZ4Dict(self.view_path(woglia=woglia),
+                          disable_locking=not self.enable_locking)
         return self.id in view_dc
 
     @property
@@ -589,10 +595,12 @@ class SegmentationObject(object):
     def sample_locations(self, force=False):
         assert self.type == "sv"
         if self.sample_locations_exist and not force:
-            return LZ4Dict(self.locations_path)[self.id]
+            return LZ4Dict(self.locations_path,
+                           disable_locking=not self.enable_locking)[self.id]
         else:
             coords = surface_samples(self.mesh[1].reshape(-1, 3))
-            loc_dc = LZ4Dict(self.locations_path, read_only=False)
+            loc_dc = LZ4Dict(self.locations_path, read_only=False,
+                             disable_locking=not self.enable_locking)
             loc_dc[self.id] = coords.astype(np.float32)
             loc_dc.save2pkl()
             return coords.astype(np.float32)
@@ -646,7 +654,8 @@ class SegmentationObject(object):
         return meshs.get_object_mesh(self)
 
     def _save_mesh(self, ind, vert):
-        mesh_dc = MeshDict(self.mesh_path, read_only=False)
+        mesh_dc = MeshDict(self.mesh_path, read_only=False,
+                           disable_locking=not self.enable_locking)
         mesh_dc[self.id] = [ind, vert]
         mesh_dc.save2pkl()
 
@@ -679,14 +688,16 @@ class SegmentationObject(object):
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
     def load_views(self, woglia=True, raw_only=False):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia))
+        view_dc = LZ4Dict(self.view_path(woglia=woglia),
+                          disable_locking=not self.enable_locking)
         views = view_dc[self.id]
         if raw_only:
             views = views[:, :1]
         return np.array(views, dtype=np.float32)
 
     def save_views(self, views, woglia=True, cellobjects_only=False):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia), read_only=False)
+        view_dc = LZ4Dict(self.view_path(woglia=woglia), read_only=False,
+                          disable_locking=not self.enable_locking)
         if cellobjects_only:
             assert self.id in view_dc, "SV must already contain raw views " \
                                        "if adding views for cellobjects only."
@@ -698,13 +709,15 @@ class SegmentationObject(object):
 
     def load_attr_dict(self):
         try:
-             glob_attr_dc = AttributeDict(self.attr_dict_path)
+             glob_attr_dc = AttributeDict(self.attr_dict_path,
+                                          disable_locking=not self.enable_locking)
              self.attr_dict = glob_attr_dc[self.id]
         except (IOError, EOFError):
             return -1  # should always return the same type (before: {})
 
     def save_attr_dict(self):
-        glob_attr_dc = AttributeDict(self.attr_dict_path, read_only=False)
+        glob_attr_dc = AttributeDict(self.attr_dict_path, read_only=False,
+                                     disable_locking=not self.enable_locking)
         if self.id in glob_attr_dc:
             orig_dc = glob_attr_dc[self.id]
             orig_dc.update(self.attr_dict)
@@ -732,7 +745,8 @@ class SegmentationObject(object):
         assert len(attr_keys) == len(attr_values), "Key-value lengths did not" \
                                                    " agree while saving attri" \
                                                    "butes of SSO %d." % self.id
-        glob_attr_dc = AttributeDict(self.attr_dict_path, read_only=False)
+        glob_attr_dc = AttributeDict(self.attr_dict_path, read_only=False,
+                                     disable_locking=not self.enable_locking)
         for k, v in zip(attr_keys, attr_values):
             glob_attr_dc[self.id][k] = v
         glob_attr_dc.save2pkl()
@@ -756,7 +770,8 @@ class SegmentationObject(object):
 
     def calculate_rep_coord(self, voxel_dc=None, fast=False):
         if voxel_dc is None:
-           voxel_dc = VoxelDict(self.voxel_path, read_only=True)
+           voxel_dc = VoxelDict(self.voxel_path, read_only=True,
+                                disable_locking=not self.enable_locking)
 
         if not self.id in voxel_dc:
             self._bounding_box = np.array([[-1, -1, -1], [-1, -1, -1]])
