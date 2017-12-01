@@ -34,12 +34,13 @@ class LZ4DictBase(dict):
     additionally (save decompressing time when accessing items frequently).
     """
     def __init__(self, inp_p, cache_decomp=False, read_only=True,
-                 max_delay=100, timeout=1000):
+                 max_delay=100, timeout=1000, disable_locking=False):
         super(LZ4DictBase, self).__init__()
         self.read_only = read_only
         self.a_lock = None
         self.max_delay = max_delay
         self.timeout = timeout
+        self.disable_locking = disable_locking
         self._cache_decomp = cache_decomp
         self._cache_dc = {}
         self._dc_intern = {}
@@ -109,7 +110,7 @@ class LZ4DictBase(dict):
             dest_path = self._path
         write_obj2pkl(dest_path + ".tmp", self._dc_intern)
         shutil.move(dest_path + ".tmp", dest_path)
-        if not self.read_only:
+        if not self.read_only and not self.disable_locking:
             self.a_lock.release()
 
     def load_pkl(self, source_path=None):
@@ -123,13 +124,14 @@ class LZ4DictBase(dict):
             except:
                 pass
         # acquires lock until released when saving or after loading if self.read_only
-        self.a_lock = fasteners.InterProcessLock(lock_path)
-        start = time.time()
-        gotten = self.a_lock.acquire(blocking=True, timeout=self.timeout,
-                                     delay=0.1, max_delay=self.max_delay)
-        if not gotten:
-            raise RuntimeError("Unable to acquire file lock for %s after"
-                               "%0.0fs." % (source_path, time.time()-start))
+        if not self.disable_locking:
+            self.a_lock = fasteners.InterProcessLock(lock_path)
+            start = time.time()
+            gotten = self.a_lock.acquire(blocking=True, timeout=self.timeout,
+                                         delay=0.1, max_delay=self.max_delay)
+            if not gotten:
+                raise RuntimeError("Unable to acquire file lock for %s after"
+                                   "%0.0fs." % (source_path, time.time()-start))
         if os.path.isfile(source_path):
             try:
                 self._dc_intern = load_pkl2obj(source_path)
@@ -140,7 +142,7 @@ class LZ4DictBase(dict):
                 self._dc_intern = {}
         else:
             self._dc_intern = {}
-        if self.read_only:
+        if self.read_only and not self.disable_locking:
             self.a_lock.release()
 
 
