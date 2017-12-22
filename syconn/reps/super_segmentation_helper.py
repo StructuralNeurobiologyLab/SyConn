@@ -673,69 +673,85 @@ def sso_views_to_modelinput(sso, nb_views):
     out_d = out_d.reshape((4, -1, nb_views, 128, 256)).swapaxes(1, 0)
     return out_d
 
-# consumes an ssv_id
-# returns a dict with the corrected diameters in the key 'diameters'
-def radius_correction(ssv_id, ssds):
+
+
+def radius_correction(sso):
+    """
+    radius correction : algorithm find nodes first and iterates over the finder bunch of meshes
+    :param sso: super segmentation object
+    :return: skeleton with the corrected diameters in the key 'diameters'
+    """
 
     skel_radius = {}
-    sso = ssds.get_super_segmentation_object(ssv_id)
-    sso.load_skeleton()
-    sso_skel = sso.skeleton
 
-    skel_node = sso_skel['nodes']
-    diameters = sso_skel['diameters']
-
-    sso_mesh = sso.mesh
-    vert = sso_mesh[1].reshape((-1, 3))
+    skel_node = sso.skeleton['nodes']
+    diameters = sso.skeleton['diameters']
     # vert_sparse = vert[0::10]
-    vert_sparse = vert[:]
+    vert_sparse = sso.mesh[1].reshape((-1, 3))
     tree = spatial.cKDTree(skel_node * np.array([10, 10, 20]))
     centroid_arr = [[0, 0, 0]]
 
-    # dists, ixs = tree.query(vert_sparse, 1)
+
     dists, ixs = tree.query(vert_sparse, 1)
-    all_node_ixs = np.arange(len(skel_node))
     all_found_node_ixs = np.unique(ixs)
     found_coords = skel_node[all_found_node_ixs]
     all_skel_node_ixs = np.arange(len(skel_node))
     missing_coords_ixs = list(set(all_skel_node_ixs) - set(all_found_node_ixs))
-    missing_coords = skel_node[missing_coords_ixs]
 
-    for el in all_found_node_ixs:
+    for ii, el in enumerate(all_found_node_ixs):
         for i in np.where(ixs == el):
-            vert = [[]]
-            for a in i:
-                vert.append(vert_sparse[a] / np.array([10, 10, 20]))
-            x = [p[0] for p in vert[1:]]
-            y = [p[1] for p in vert[1:]]
-            z = [p[2] for p in vert[1:]]
-            centroid = np.asarray((sum(x) / len(vert[1:]), sum(y) / len(vert[1:]), sum(z) / len(vert[1:])))
+            vert = [vert_sparse[a] / np.array([10, 10, 20]) for a in i]
+
+            x = [p[0] for p in vert]
+            y = [p[1] for p in vert]
+            z = [p[2] for p in vert]
+            centroid = np.asarray((sum(x) / len(vert), sum(y) / len(vert), sum(z) / len(vert)))
             rad = []
-            for vert_el in vert[1:]:
+            for vert_el in vert:
                 rad.append(np.linalg.norm(centroid - vert_el))
-            # med_rad = np.median(rad)
-
             med_rad = np.median(rad)
-            # new_rad = [inx for inx in rad if abs(inx-med_rad) < 0.988*np.var(rad)]
-            new_rad = [inx for inx in rad if inx > 0.4 * med_rad]
+            new_rad = [inx for inx in rad if abs(inx-med_rad) < 0.9*np.var(rad)]
 
-            # med_rad = np.median(rad[len(rad)])
             med_rad = np.median(new_rad)
-
-
+            if new_rad == []:
+                med_rad = diameters[el]
+            else:
+                print(rad, vert)
             diameters[el] = med_rad * 2
-            # skel_node[el] = centroid
             if el < len(found_coords):
                 skel_radius[str(found_coords[el])] = med_rad
+            break
+    found_coords = skel_node[all_found_node_ixs]
     found_tree = spatial.cKDTree(found_coords)
     for el in missing_coords_ixs:
         nearest_found_node = found_tree.query(skel_node[el], 1)
         diameters[el] = diameters[nearest_found_node[1]]
-        # skel_node[el] = skel_node[nearest_found_node[1]]
+    sso.skeleton['diameters'] = diameters
+    return sso.skeleton
 
-    sso_skel['diameters'] = diameters
 
-    return sso_skel
+def radius_correction_found_vertices(sso):
+    """
+    Algorithm finds two nearest two nearest vertices and takes the median of the distances for every node
+    (gives better result than radius_correction)
+    :param sso: super segmentation object
+    :return: skeleton with diameters estimated
+    """
+
+    skel_node = sso.skeleton['nodes']
+    diameters = sso.skeleton['diameters']
+    vert_sparse = sso.mesh[1].reshape((-1, 3))
+    tree = spatial.cKDTree(vert_sparse)
+
+
+    dists, all_found_vertices_ixs = tree.query(skel_node * np.array([10, 10, 20]), 2)
+
+    for ii, el in enumerate(skel_node):
+        diameters[ii] = np.median(dists[ii]) *2/10
+
+
+    sso.skeleton['diameters'] = diameters
+    return sso.skeleton
 
 
 def get_sso_axoness_from_coord(sso, coord, k=5):
