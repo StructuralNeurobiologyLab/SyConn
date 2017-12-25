@@ -300,7 +300,7 @@ class SegmentationObject(object):
         self._mesh = None
         self._config = config
         self._views = None
-        self.skeleton = None
+        self._skeleton = None
 
         if working_dir is None:
             if default_wd_available:
@@ -387,6 +387,10 @@ class SegmentationObject(object):
         return self._mesh_caching
 
     @property
+    def skeleton_caching(self):
+        return self._skeleton_caching
+
+    @property
     def view_caching(self):
         return self._view_caching
 
@@ -440,6 +444,10 @@ class SegmentationObject(object):
     @property
     def mesh_path(self):
         return self.segobj_dir + "mesh.pkl"
+
+    @property
+    def skeleton_path(self):
+        return self.segobj_dir + "skeletons.pkl"
 
     @property
     def attr_dict_path(self):
@@ -517,6 +525,7 @@ class SegmentationObject(object):
                              disable_locking=not self.enable_locking)
         return self.id in voxel_dc
 
+
     @property
     def voxels(self):
         if self._voxels is None:
@@ -546,6 +555,12 @@ class SegmentationObject(object):
         return self.id in mesh_dc
 
     @property
+    def skeleton_exists(self):
+        skeleton_dc = SkeletonDict(self.skeleton_path,
+                           disable_locking=not self.enable_locking)
+        return self.id in skeleton_dc
+
+    @property
     def mesh(self):
         if self._mesh is None:
             if self.mesh_caching:
@@ -555,6 +570,17 @@ class SegmentationObject(object):
                 return load_mesh(self)
         else:
             return self._mesh
+
+    @property
+    def skeleton(self):
+        if self._skeleton is None:
+            if self.skeleton_caching:
+                self._skeleton = load_skeleton(self)
+                return self._skeleton
+            else:
+                return load_skeleton(self)
+        else:
+            return self._skeleton
 
     @property
     def mesh_bb(self):
@@ -624,6 +650,9 @@ class SegmentationObject(object):
 
     def load_mesh(self, recompute=False):
         return load_mesh(self, recompute=recompute)
+
+    def load_skeleton(self, recompute=False):
+        return load_skeleton(self, recompute=recompute)
 
     def glia_pred(self, thresh=0.168, pred_key_appendix=""):
         return glia_pred_so(self, thresh, pred_key_appendix)
@@ -715,7 +744,7 @@ class SegmentationObject(object):
                                           disable_locking=not self.enable_locking)
              self.attr_dict = glob_attr_dc[self.id]
         except (IOError, EOFError):
-            return -1  # should always return the same type (before: {})
+            return -1  #
 
     def save_attr_dict(self):
         glob_attr_dc = AttributeDict(self.attr_dict_path, read_only=False,
@@ -859,7 +888,23 @@ class SegmentationObject(object):
         self._voxel_list = None
         self._mesh = None
         self._views = None
-        self.skeleton = None
+        self._skeleton = None
+
+    # SKELETON
+    @property
+    def skeleton_dict_path(self):
+        print(self.segobj_dir)
+        return self.segobj_dir + "/skeletons.pkl"
+
+    def save_skeleton(self):
+
+        skeleton_dc = AttributeDict(self.skeleton_dict_path, read_only=False)
+        skeleton_dc[self.id] = self.skeleton
+        skeleton_dc.save2pkl()
+
+    def load_skeleton(self):
+        skeleton_dc = AttributeDict(self.skeleton_dict_path, read_only=True)
+        self.skeleton = skeleton_dc[self.id]
 
     def copy2dir(self, dest_dir, safe=True):
         # get all files in home directory
