@@ -1,7 +1,7 @@
 import glob
 import numpy as np
 import os
-from ..handler.compression import MeshDict, VoxelDict, AttributeDict
+from ..handler.compression import MeshDict, VoxelDict, AttributeDict, SkeletonDict
 
 
 def glia_pred_so(so, thresh, pred_key_appendix):
@@ -181,3 +181,29 @@ def load_mesh(so, recompute=False):
     vertices = np.array(vertices, dtype=np.int)
     indices = np.array(indices, dtype=np.int)
     return indices, vertices
+
+
+def load_skeleton(so, recompute=False):
+    if not recompute and so.skeleton_exists:
+        try:
+            skeleton_dc = SkeletonDict(so.skeleton_path)
+            nodes, diameters, edges = skeleton_dc[so.id]['nodes'], skeleton_dc[so.id]['diameters'], skeleton_dc[so.id]['edges']
+        except Exception as e:
+            print("\n---------------------------------------------------\n" \
+                  "\n%s\nException occured when loading skeletons.pkl of SO (%s)" \
+                  "with id %d." \
+                  "\n---------------------------------------------------\n"\
+                  % (e, so.type, so.id))
+            return np.zeros((0, )).astype(np.int), np.zeros((0, )),np.zeros((0,)).astype(np.int)
+    else:
+        if so.type == "sv":
+            print("\n-----------------------\n" \
+                  "Skeleton of SV %d not found.\n" \
+                  "-------------------------\n" % so.id)
+            return np.zeros((0,)).astype(np.int), np.zeros((0,)),np.zeros((0,)).astype(np.int)
+
+    nodes = np.array(nodes, dtype=np.int)
+    diameters = np.array(diameters, dtype=np.float)
+    edges = np.array(edges, dtype=np.int)
+
+    return nodes, diameters, edges
