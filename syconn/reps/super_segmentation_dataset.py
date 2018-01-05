@@ -5,7 +5,11 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-import cPickle as pkl
+try:
+    import cPickle as pkl
+except:
+    import Pickle as pkl
+
 import numpy as np
 import re
 import glob
@@ -346,7 +350,7 @@ class SuperSegmentationDataset(object):
         multi_params = []
         for ssv_id_block in [self.ssv_ids[i:i + stride]
                              for i in
-                             xrange(0, len(self.ssv_ids), stride)]:
+                             range(0, len(self.ssv_ids), stride)]:
             multi_params.append([ssv_id_block, self.version, self.version_dict,
                                  self.working_dir, obj_types, apply_mapping])
 
@@ -371,7 +375,7 @@ class SuperSegmentationDataset(object):
         else:
             raise Exception("QSUB not available")
 
-        print "N no skeletons: %d" % no_skel_cnt
+        print("N no skeletons: %d" % no_skel_cnt)
 
     def associate_objs_with_skel_nodes(self, obj_types, stride=1000,
                                        qsub_pe=None, qsub_queue=None,
@@ -379,7 +383,7 @@ class SuperSegmentationDataset(object):
         multi_params = []
         for ssv_id_block in [self.ssv_ids[i:i + stride]
                              for i in
-                             xrange(0, len(self.ssv_ids), stride)]:
+                             range(0, len(self.ssv_ids), stride)]:
             multi_params.append([ssv_id_block, self.version, self.version_dict,
                                  self.working_dir, obj_types])
 
@@ -403,7 +407,7 @@ class SuperSegmentationDataset(object):
         multi_params = []
         for ssv_id_block in [self.ssv_ids[i:i + stride]
                              for i in
-                             xrange(0, len(self.ssv_ids), stride)]:
+                             range(0, len(self.ssv_ids), stride)]:
             multi_params.append([ssv_id_block, self.version, self.version_dict,
                                  self.working_dir])
 
@@ -426,7 +430,7 @@ class SuperSegmentationDataset(object):
         multi_params = []
         for ssv_id_block in [self.ssv_ids[i:i + stride]
                              for i in
-                             xrange(0, len(self.ssv_ids), stride)]:
+                             range(0, len(self.ssv_ids), stride)]:
             multi_params.append([ssv_id_block, self.version, self.version_dict,
                                  self.working_dir])
 
@@ -1086,7 +1090,7 @@ def export_to_knossosdataset_thread(args):
     ssd.load_mapping_dict()
 
     for ssv_obj_id in ssv_obj_ids:
-        print ssv_obj_id
+        print(ssv_obj_id)
 
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
 
@@ -1207,7 +1211,7 @@ def reskeletonize_objects_small_ones_thread(args):
     ssd.load_mapping_dict()
 
     for ssv_id in ssv_obj_ids:
-        print "------------", ssv_id
+        print("------------", ssv_id)
         ssv = ssd.get_super_segmentation_object(ssv_id, True)
         if np.product(ssv.shape) > 1e10:
             continue
@@ -1259,7 +1263,7 @@ def write_super_segmentation_dataset_thread(args):
     attr_dict = dict(id=[])
 
     for ssv_obj_id in ssv_obj_ids:
-        print ssv_obj_id
+        print(ssv_obj_id)
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
                                                     new_mapping=True,
                                                     create=True)

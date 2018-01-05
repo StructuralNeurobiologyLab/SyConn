@@ -7,7 +7,7 @@ from .image import single_conn_comp_img
 from knossos_utils import knossosdataset
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 from ..handler.compression import VoxelDict, AttributeDict
 from ..reps import segmentation
 from ..handler import basics
@@ -92,15 +92,22 @@ def _dataset_analysis_thread(args):
     global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[])
 
     for p in paths:
+        print(p)
         if not len(os.listdir(p)) > 0:
             os.rmdir(p)
         else:
             this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
                                          read_only=not recompute, timeout=3600)
             if recompute:
-                this_vx_dc = VoxelDict(p + "/voxel.pkl", read_only=True, timeout=3600)
+                this_vx_dc = VoxelDict(p + "/voxel.pkl",
+                                       read_only=True, timeout=3600)
+                so_ids = this_vx_dc.keys()
+            else:
+                so_ids = this_attr_dc.keys()
 
-            for so_id in this_attr_dc.keys():
+            print(so_ids)
+
+            for so_id in so_ids:
                 global_attr_dict["id"].append(so_id)
                 so = segmentation.SegmentationObject(so_id, obj_type,
                                                      version, working_dir)
@@ -133,7 +140,7 @@ def _dataset_analysis_thread(args):
 
 
 def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=None,
+                      qsub_pe=None, qsub_queue=None, nb_cpus=1,
                       n_max_co_processes=None):
     """ Maps objects to SVs
 

@@ -80,14 +80,7 @@ class SegmentationDataset(object):
 
         # self._config = parser.Config(self.working_dir)
 
-        if scaling is None:
-            try:
-                self._scaling = \
-                    np.array(self.config.entries["Dataset"]["scaling"])
-            except:
-                self._scaling = np.array([1, 1, 1])
-        else:
-            self._scaling = scaling
+        self._scaling = scaling
 
         if version is None:
             try:
@@ -136,25 +129,28 @@ class SegmentationDataset(object):
 
     @property
     def n_folders_fs(self):
+        # TODO: Fix self referencing loop
+        # if self._n_folders_fs is None:
+        #     p = glob.glob("%s*" % self.so_storage_path)
+        #     if len(p) == 0:
+        #         raise Exception("No storage folder found and no number of "
+        #                         "subfolders specified (n_folders_fs))")
+        #
+        #     bp = os.path.basename(p[0])
+        #
+        #     if bp == self.so_storage_path_base:
+        #         self._n_folders_fs = 100000
+        #         try:
+        #             shutil.move(p[0], self.so_storage_path)
+        #         except:
+        #             pass
+        #
+        #     else:
+        #         self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
         if self._n_folders_fs is None:
-            p = glob.glob("%s*" % self.so_storage_path)
-            if len(p) == 0:
-                raise Exception("No storage folder found and no number of "
-                                "subfolders specified (n_folders_fs))")
-
-            bp = os.path.basename(p[0])
-
-            if bp == self.so_storage_path_base:
-                self._n_folders_fs = 100000
-                try:
-                    shutil.move(p[0], self.so_storage_path)
-                except:
-                    pass
-
-            else:
-                self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
-
-        return self._n_folders_fs
+            return 100000
+        else:
+             return self._n_folders_fs
 
     @property
     def working_dir(self):
@@ -194,14 +190,18 @@ class SegmentationDataset(object):
 
     @property
     def so_storage_path(self):
-        return "%s/so_storage/" % self.path
-    # def so_storage_path(self):
-    #     return "%s/%s_%d/" % (self.path, self.so_storage_path_base,
-    #                           self.n_folders_fs)
+        if self._n_folders_fs is None:
+            return "%s/so_storage/" % self.path
+        elif self._n_folders_fs == 100000 and os.path.exists("%s/so_storage/" % self.path):
+            return "%s/so_storage/" % self.path
+        else:
+            return "%s/%s_%d/" % (self.path, self.so_storage_path_base,
+                                  self.n_folders_fs)
 
     @property
     def so_dir_paths(self):
-        depth = int(self.n_folders_fs // 2 + self.n_folders_fs % 2)
+        depth = int(np.log10(self.n_folders_fs) // 2 +
+                    np.log10(self.n_folders_fs) % 2)
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
 
         return glob.glob(p)
@@ -238,6 +238,13 @@ class SegmentationDataset(object):
 
     @property
     def scaling(self):
+        if self._scaling is None:
+            try:
+                self._scaling = \
+                    np.array(self.config.entries["Dataset"]["scaling"])
+            except:
+                self._scaling = np.array([1, 1, 1])
+
         return self._scaling
 
     @property
@@ -310,14 +317,7 @@ class SegmentationObject(object):
         else:
             self._working_dir = working_dir
 
-        if scaling is None:
-            try:
-                self._scaling = \
-                    np.array(self.config.entries["Dataset"]["scaling"])
-            except:
-                self._scaling = np.array([1, 1, 1])
-        else:
-            self._scaling = scaling
+        self._scaling = scaling
 
         if version is None:
             try:
@@ -354,21 +354,24 @@ class SegmentationObject(object):
 
     @property
     def n_folders_fs(self):
+        # TODO: Fix self referencing loop
+        # if self._n_folders_fs is None:
+        #     p = glob.glob("%s*" % self.so_storage_path)
+        #     if len(p) == 0:
+        #         raise Exception("No storage folder found and no number of "
+        #                         "subfolders specified (n_folders_fs))")
+        #
+        #     bp = os.path.basename(p[0])
+        #
+        #     if bp == self.so_storage_path_base:
+        #         raise Exception("Need to rename storage folder - initialize "
+        #                         "dataset with single thread")
+        #     else:
+        #         self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
         if self._n_folders_fs is None:
-            p = glob.glob("%s*" % self.so_storage_path)
-            if len(p) == 0:
-                raise Exception("No storage folder found and no number of "
-                                "subfolders specified (n_folders_fs))")
-
-            bp = os.path.basename(p[0])
-
-            if bp == self.so_storage_path_base:
-                raise Exception("Need to rename storage folder - initialize "
-                                "dataset with single thread")
-            else:
-                self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
-
-        return self._n_folders_fs
+            return 100000
+        else:
+            return self._n_folders_fs
 
     @property
     def id(self):
@@ -396,6 +399,13 @@ class SegmentationObject(object):
 
     @property
     def scaling(self):
+        if self._scaling is None:
+            try:
+                self._scaling = \
+                    np.array(self.config.entries["Dataset"]["scaling"])
+            except:
+                self._scaling = np.array([1, 1, 1])
+
         return self._scaling
 
     @property
@@ -428,18 +438,28 @@ class SegmentationObject(object):
 
     @property
     def so_storage_path(self):
-        return "%s/%s_%d/" % (self.segds_dir, self.so_storage_path_base,
-                              self.n_folders_fs)
-
-    @property
-    def segobj_dir(self):
-        return "%s/so_storage/%s/" % (self.segds_dir,
-                                      subfold_from_ix(self.id))
+        if self._n_folders_fs is None:
+            return "%s/%s/" % (self.segds_dir, self.so_storage_path_base)
+        elif self._n_folders_fs == 100000 and os.path.exists("%s/%s/" % (self.segds_dir, self.so_storage_path_base)):
+            return "%s/%s/" % (self.segds_dir, self.so_storage_path_base)
+        else:
+            return "%s/%s_%d/" % (self.segds_dir, self.so_storage_path_base,
+                                  self.n_folders_fs)
 
     # @property
     # def segobj_dir(self):
-    #     return "%s/%s/" % (self.so_storage_path,
-    #                        subfold_from_ix(self.id, self.n_folders_fs))
+    #     return "%s/so_storage/%s/" % (self.segds_dir,
+    #                                   subfold_from_ix(self.id))
+
+    @property
+    def segobj_dir(self):
+        if os.path.exists("%s/%s/voxel.pkl" % (self.so_storage_path,
+                                      subfold_from_ix(self.id, self.n_folders_fs))):
+            return "%s/%s/" % (self.so_storage_path,
+                               subfold_from_ix(self.id, self.n_folders_fs))
+        else:
+            return "%s/%s/" % (self.so_storage_path,
+                               subfold_from_ix(self.id, self.n_folders_fs, old_version=True))
 
     @property
     def mesh_path(self):
@@ -467,7 +487,6 @@ class SegmentationObject(object):
         return self.segobj_dir + "/voxel.pkl"
 
     #                                                                 PROPERTIES
-
     @property
     def cs_partner(self):
         if "cs" in self.type:

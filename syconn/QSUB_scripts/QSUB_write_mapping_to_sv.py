@@ -8,7 +8,7 @@
 import sys
 
 import cPickle as pkl
-from syconnproc.obj_processing import dataset_proc as dp
+from syconn.proc import sd as sd_proc
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -21,7 +21,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = dp._write_mapping_to_sv_thread(args)
+out = sd_proc._write_mapping_to_sv_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

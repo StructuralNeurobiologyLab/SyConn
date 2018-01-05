@@ -16,7 +16,7 @@ import time
 from collections import defaultdict
 from knossos_utils import knossosdataset, chunky
 
-script_folder = os.path.abspath(os.path.dirname(__file__) + "../QSUB_scripts/")
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 from ..mp import qsub_utils as qu, shared_mem as sm
 from ..proc.general import cut_array_in_one_dim
@@ -151,11 +151,12 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
             for entry in result:
                 results_as_list.append(entry)
 
-    elif sm.__QSUB__:
+    elif qu.__QSUB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "gauss_threshold_connected_components",
                                      pe=qsub_pe, queue=qsub_queue,
                                      n_cores=nb_cpus,
+                                     script_folder=script_folder,
                                      n_max_co_processes=n_max_co_processes)
 
         out_files = glob.glob(path_to_out + "/*")
@@ -310,9 +311,10 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                                          multi_params, debug=debug)
 
     elif qu.__QSUB__:
-        path_to_out = sm.QSUB_script(multi_params,
+        path_to_out = qu.QSUB_script(multi_params,
                                      "make_unique_labels",
                                      pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
                                      n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -399,9 +401,10 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
 
     elif qu.__QSUB__:
         path_to_out = qu.QSUB_script(multi_params,
-                                    "make_stitch_list",
-                                    pe=qsub_pe, queue=qsub_queue,
-                                    n_max_co_processes=n_max_co_processes)
+                                     "make_stitch_list",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_max_co_processes=n_max_co_processes)
 
         out_files = glob.glob(path_to_out + "/*")
 
@@ -436,7 +439,7 @@ def _make_stitch_list_thread(args):
     cc_data_list = basics.load_from_h5py(chunk.folder + filename +
                                          "_unique_components%s.h5"
                                          % suffix, hdf5names)
-    neighbours, pos = cset.get_neighbouring_chunks(chunk, chunk_list=chunk_list,
+    neighbours, pos = cset.get_neighbouring_chunks(chunk, chunklist=chunk_list,
                                                    con_mode=7)
 
     neighbours = neighbours[np.any(pos > 0, axis=1)]
@@ -607,6 +610,7 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
         path_to_out = qu.QSUB_script(multi_params,
                                      "apply_merge_list",
                                      pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
                                      n_max_co_processes=n_max_co_processes)
 
     else:
@@ -644,10 +648,10 @@ def _apply_merge_list_thread(args):
                         hdf5names)
 
 
-def extract_voxels(cset, filename, hdf5names=None, n_folders_fs=100000,
+def extract_voxels(cset, filename, hdf5names=None, n_folders_fs=10000,
                    overlaydataset_path=None, chunk_list=None, suffix="",
                    use_work_dir=True, qsub_pe=None, qsub_queue=None,
-                   n_max_processes=None):
+                   n_max_co_processes=None):
     """
     Extracts voxels for each component id
 
@@ -715,7 +719,7 @@ def extract_voxels(cset, filename, hdf5names=None, n_folders_fs=100000,
                                      "extract_voxels",
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=script_folder,
-                                     n_max_co_processes=n_max_processes)
+                                     n_max_co_processes=n_max_co_processes)
 
         out_files = glob.glob(path_to_out + "/*")
         results = []
@@ -784,7 +788,7 @@ def _extract_voxels_thread(args):
                              timeout=3600)
 
         p_parts = voxel_paths[cur_path_id].strip("/").split("/")
-        next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]), int(p_parts[2])))
+        next_id = int("".join("%.2d" % int(part) for part in p_parts))
 
         for i_unique_id in range(len(unique_ids)):
             unique_id = unique_ids[i_unique_id]
@@ -807,7 +811,7 @@ def _extract_voxels_thread(args):
                                      read_only=False,
                                      timeout=3600)
                 p_parts = voxel_paths[cur_path_id].strip("/").split("/")
-                next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]), int(p_parts[2])))
+                next_id = int("".join("%.2d" % int(part) for part in p_parts))
             else:
                 next_id += n_folders_fs
 
@@ -817,7 +821,7 @@ def _extract_voxels_thread(args):
 
 
 def combine_voxels(workfolder, hdf5names=None, n_folders_fs=100000, stride=100,
-                   qsub_pe=None, qsub_queue=None, n_max_processes=None):
+                   qsub_pe=None, qsub_queue=None, n_max_co_processes=None):
     """
     Extracts voxels for each component id
 
@@ -875,7 +879,7 @@ def combine_voxels(workfolder, hdf5names=None, n_folders_fs=100000, stride=100,
                             for i in range(0, len(so_id_dict), stride)]:
 
             multi_params.append([workfolder, hdf5_name, so_id_block,
-                                 dataset_versions[hdf5_name]])
+                                 dataset_versions[hdf5_name], n_folders_fs])
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_combine_voxels_thread,
@@ -886,7 +890,7 @@ def combine_voxels(workfolder, hdf5names=None, n_folders_fs=100000, stride=100,
                                      "combine_voxels",
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=script_folder,
-                                     n_max_co_processes=n_max_processes)
+                                     n_max_co_processes=n_max_co_processes)
 
     else:
         raise Exception("QSUB not available")
@@ -897,16 +901,18 @@ def _combine_voxels_thread(args):
     hdf5_name = args[1]
     so_id_lists = args[2]
     dataset_version = args[3]
+    n_folders_fs = args[4]
 
     dataset_temp_path = workfolder + "/%s_temp/" % hdf5_name
     with open(dataset_temp_path + "/remapping_dict.pkl", "r") as f:
         mapping_dict = pkl.load(f)
 
     segdataset = segmentation.SegmentationDataset(
-        obj_type=hdf5_name, working_dir=workfolder, version=dataset_version)
+        obj_type=hdf5_name, working_dir=workfolder, version=dataset_version,
+        n_folders_fs=n_folders_fs)
 
     for so_ids in so_id_lists:
-        voxel_rel_path = rh.subfold_from_ix(so_ids[0])
+        voxel_rel_path = rh.subfold_from_ix(so_ids[0], n_folders_fs)
 
         if not os.path.exists(segdataset.so_storage_path + voxel_rel_path):
             try:
@@ -921,7 +927,8 @@ def _combine_voxels_thread(args):
             for i_fragment_id in range(len(mapping_dict[so_id])):
                 fragment_id = mapping_dict[so_id][i_fragment_id]
                 voxel_dc_read = VoxelDict(dataset_temp_path +
-                                          rh.subfold_from_ix(fragment_id) +
+                                          rh.subfold_from_ix(fragment_id,
+                                                             n_folders_fs) +
                                           "/voxel.pkl")
 
                 bin_arrs, block_offsets = voxel_dc_read[fragment_id]

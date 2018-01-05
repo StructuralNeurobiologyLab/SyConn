@@ -21,7 +21,12 @@ from collections import Counter
 
 import syconn.reps.super_segmentation_helper
 from knossos_utils import skeleton, knossosdataset
-from knossos_utils.skeleton_utils import load_skeleton, write_skeleton
+
+try:
+    from knossos_utils.skeleton_utils import load_skeleton, write_skeleton
+except:
+    pass
+
 from scipy import spatial
 import segmentation
 import super_segmentation_helper as ssh
@@ -46,6 +51,7 @@ except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
 skeletopyze_available = False
 attempted_skeletopyze_import = False
+
 try:
     import skeletopyze
     skeletopyze_available = True
@@ -56,6 +62,7 @@ except:
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
+
 try:
     default_wd_available = True
     from ..config.global_params import wd

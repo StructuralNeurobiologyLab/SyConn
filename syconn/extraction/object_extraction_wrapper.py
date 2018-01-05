@@ -60,7 +60,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                                   suffix="",
                                   qsub_pe=None,
                                   qsub_queue=None,
-                                  n_max_processes=None):
+                                  n_max_co_processes=None):
     """
     Main function for the object extraction step; combines all needed steps
     Parameters
@@ -164,7 +164,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
         fast_load=True, suffix=suffix,
         qsub_pe=qsub_pe,
         qsub_queue=qsub_queue,
-        n_max_processes=n_max_processes)
+        n_max_co_processes=n_max_co_processes)
 
     stitch_overlap = overlap_info[1]
     overlap = overlap_info[0]
@@ -202,7 +202,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                            chunk_translator, debug, suffix=suffix,
                            qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-                           n_max_processes=n_max_processes)
+                           n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
     print "\nTime needed for unique labels: %.3fs" % all_times[-1]
@@ -214,7 +214,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                                        stitch_overlap, overlap, debug,
                                        suffix=suffix, qsub_pe=qsub_pe,
                                        qsub_queue=qsub_queue,
-                                       n_max_processes=n_max_processes)
+                                       n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
     print "\nTime needed for stitch list: %.3fs" % all_times[-1]
@@ -235,7 +235,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     time_start = time.time()
     oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                          debug, suffix=suffix, qsub_pe=qsub_pe,
-                         qsub_queue=qsub_queue, n_max_processes=n_max_processes)
+                         qsub_queue=qsub_queue, n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
     print "\nTime needed for applying merge list: %.3fs" % all_times[-1]
@@ -244,9 +244,10 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
 
     time_start = time.time()
     oes.extract_voxels(cset, filename, hdf5names, n_folders_fs=n_folders_fs,
-                       debug=debug, chunk_list=chunk_list, suffix=suffix,
+                       chunk_list=chunk_list, suffix=suffix,
                        use_work_dir=True, qsub_pe=qsub_pe,
-                       qsub_queue=qsub_queue, n_max_processes=n_max_processes)
+                       qsub_queue=qsub_queue,
+                       n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
     print "\nTime needed for extracting voxels: %.3fs" % all_times[-1]
@@ -255,8 +256,9 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
 
     time_start = time.time()
     oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
-                       hdf5names, n_folders_fs=n_folders_fs, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-                       n_max_processes=n_max_processes)
+                       hdf5names, n_folders_fs=n_folders_fs, qsub_pe=qsub_pe,
+                       qsub_queue=qsub_queue,
+                       n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("combine voxels")
     print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
@@ -374,10 +376,10 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
     print "--------------------------\n"
 
 
-def from_ids_to_objects(cset, filename, hdf5names=None,
+def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
                         overlaydataset_path=None, chunk_list=None, offset=None,
                         size=None, suffix="", qsub_pe=None, qsub_queue=None,
-                        n_max_processes=None):
+                        n_max_co_processes=None):
     """
     Main function for the object extraction step; combines all needed steps
     Parameters
@@ -428,26 +430,29 @@ def from_ids_to_objects(cset, filename, hdf5names=None,
     oes.extract_voxels(cset, filename, hdf5names,
                        overlaydataset_path=overlaydataset_path,
                        chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
-                       qsub_queue=qsub_queue, n_max_processes=n_max_processes)
+                       qsub_queue=qsub_queue,
+                       n_folders_fs=n_folders_fs,
+                       n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
-    print "\nTime needed for extracting voxels: %.3fs" % all_times[-1]
+    print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
     time_start = time.time()
     oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
                        hdf5names, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-                       n_max_processes=n_max_processes)
+                       n_folders_fs=n_folders_fs,
+                       n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("combine voxels")
-    print "\nTime needed for combining voxels: %.3fs" % all_times[-1]
+    print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
-    print "\nTime overview:"
+    print("\nTime overview:")
     for ii in range(len(all_times)):
-        print "%s: %.3fs" % (step_names[ii], all_times[ii])
-    print "--------------------------"
-    print "Total Time: %.1f min" % (np.sum(all_times) / 60)
-    print "--------------------------\n\n"
+        print("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    print("--------------------------")
+    print("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    print("--------------------------\n\n")

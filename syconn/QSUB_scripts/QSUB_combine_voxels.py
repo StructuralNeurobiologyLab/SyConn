@@ -8,7 +8,7 @@
 import sys
 
 import cPickle as pkl
-from syconn.proc import sd as sd_proc
+from syconn.extraction import object_extraction_steps as oes
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -21,7 +21,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = sd_proc._map_objects_thread(args)
+out = oes._combine_voxels_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

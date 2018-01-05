@@ -31,7 +31,9 @@ def acquire_obj_ids(sd):
     if os.path.exists(sd.path_ids):
         sd._ids = np.load(sd.path_ids)
     else:
-        paths = glob.glob(sd.path + "/so_storage/*/*/*/")
+        paths = glob.glob(sd.so_storage_path + "/*/*/*/") + \
+                glob.glob(sd.so_storage_path + "/*/*/") + \
+                glob.glob(sd.so_storage_path + "/*/")
         sd._ids = []
         for path in paths:
             if os.path.exists(path + "voxel.pkl"):
@@ -50,7 +52,8 @@ def acquire_obj_ids(sd):
 def save_voxels(so, bin_arr, offset):
     assert bin_arr.dtype == bool
 
-    voxel_dc = VoxelDict(so.voxel_path, read_only=False, timeout=3600)
+    voxel_dc = VoxelDict(so.voxel_path, read_only=False, timeout=3600,
+                         disable_locking=True)
 
     if so.id in voxel_dc:
         voxel_dc.append(so.id, bin_arr, offset)

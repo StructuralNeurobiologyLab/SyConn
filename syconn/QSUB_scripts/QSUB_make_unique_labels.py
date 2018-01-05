@@ -8,7 +8,7 @@
 import sys
 
 import cPickle as pkl
-from syconnproc.obj_extraction import extraction_steps as es
+from syconn.extraction import object_extraction_steps as oes
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -21,7 +21,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = es._make_unique_labels_thread(args)
+out = oes._make_unique_labels_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

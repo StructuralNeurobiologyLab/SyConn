@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-_aggregate_segmentation_object_mappings_thread
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
@@ -7,7 +7,7 @@
 
 import sys
 import cPickle as pkl
-from syconnproc.ssd_processing import dataset_proc as dp
+from syconn.extraction import object_extraction_steps as oes
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -20,7 +20,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = dp._aggregate_segmentation_object_mappings_thread(args)
+out = oes._aggregate_segmentation_object_mappings_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)
