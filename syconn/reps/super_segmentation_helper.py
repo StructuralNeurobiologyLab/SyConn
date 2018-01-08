@@ -24,7 +24,8 @@ from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 
 from . import segmentation
-
+from syconn.reps.segmentation import SegmentationObject
+from syconn.reps.segmentation_helper import load_skeleton
 try:
     import skeletopyze
     skeletopyze_available = True
@@ -748,15 +749,14 @@ def radius_correction_found_vertices(sso):
 
     skel_node = sso.skeleton['nodes']
     diameters = sso.skeleton['diameters']
+
     vert_sparse = sso.mesh[1].reshape((-1, 3))
     tree = spatial.cKDTree(vert_sparse)
-
 
     dists, all_found_vertices_ixs = tree.query(skel_node * np.array([10, 10, 20]), 2)
 
     for ii, el in enumerate(skel_node):
         diameters[ii] = np.median(dists[ii]) *2/10
-
 
     sso.skeleton['diameters'] = diameters
     return sso.skeleton
@@ -1314,414 +1314,165 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
     return voxels
 
 
-def associate_objs_with_skel_nodes_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.load_skeleton()
-        if len(ssv.skeleton["nodes"]) > 0:
-            ssv.associate_objs_with_skel_nodes(obj_types)
-
-
-def predict_axoness_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-
-        if not ssv.load_skeleton():
-            continue
-
-        ssv.load_attr_dict()
-        if "assoc_sj" in ssv.attr_dict:
-            ssv.predict_axoness(feature_context_nm=5000, clf_name="rfc")
-        elif len(ssv.skeleton["nodes"]) > 0:
-            try:
-                ssv.associate_objs_with_skel_nodes(("sj", "mi", "vc"))
-                ssv.predict_axoness(feature_context_nm=5000, clf_name="rfc")
-            except:
-                pass
-
-
-def predict_cell_type_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-
-        if not ssv.load_skeleton():
-            continue
-
-        ssv.load_attr_dict()
-        if "assoc_sj" in ssv.attr_dict:
-            ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
-        elif len(ssv.skeleton["nodes"]) > 0:
-            try:
-                ssv.associate_objs_with_skel_nodes(("sj", "mi", "vc"))
-                ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
-            except:
-                pass
-
-
-def export_skeletons_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-    apply_mapping = args[5]
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    no_skel_cnt = 0
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-
-        try:
-            ssv.load_skeleton()
-            skeleton_avail = True
-        except:
-            skeleton_avail = False
-            no_skel_cnt += 1
-
-        if not skeleton_avail:
-            continue
-
-        if ssv.size == 0:
-            continue
-
-        if len(ssv.skeleton["nodes"]) == 0:
-            continue
-
-        try:
-            ssv.save_skeleton_to_kzip()
-
-            for obj_type in obj_types:
-                if apply_mapping:
-                    if obj_type == "sj":
-                        correct_for_background = True
-                    else:
-                        correct_for_background = False
-                    ssv.apply_mapping_decision(obj_type,
-                                               correct_for_background=correct_for_background)
-
-            ssv.save_objects_to_kzip_sparse(obj_types)
-
-        except:
-            pass
-
-    return no_skel_cnt
-
-
-def export_to_knossosdataset_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    kd_path = args[4]
-    nb_threads = args[5]
-
-    kd = KnossosDataset().initialize_from_knossos_path(kd_path)
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_obj_id in ssv_obj_ids:
-        print(ssv_obj_id)
-
-        ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
-
-        offset = ssv_obj.bounding_box[0]
-        if not 0 in offset:
-            kd.from_matrix_to_cubes(ssv_obj.bounding_booffset,
-                                    data=ssv_obj.voxels.astype(np.uint32) *
-                                         ssv_obj_id,
-                                    overwrite=False,
-                                    nb_threads=nb_threads)
-
-
-def convert_knossosdataset_thread(args):
-    version = args[0]
-    version_dict = args[1]
-    working_dir = args[2]
-    nb_threads = args[3]
-    sv_kd_path = args[4]
-    ssv_kd_path = args[5]
-    offsets = args[6]
-    size = args[7]
-
-    sv_kd = KnossosDataset()
-    sv_kd.initialize_from_knossos_path(sv_kd_path)
-    ssv_kd = KnossosDataset()
-    ssv_kd.initialize_from_knossos_path(ssv_kd_path)
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_id_changer()
-
-    for offset in offsets:
-        block = sv_kd.from_overlaycubes_to_matrix(size, offset,
-                                                  datatype=np.uint32,
-                                                  nb_threads=nb_threads)
-
-        block = ssd.id_changer[block]
-
-        ssv_kd.from_matrix_to_cubes(offset,
-                                    data=block.astype(np.uint32),
-                                    datatype=np.uint32,
-                                    overwrite=False,
-                                    nb_threads=nb_threads)
-
-        raw = sv_kd.from_raw_cubes_to_matrix(size, offset,
-                                             nb_threads=nb_threads)
-
-        ssv_kd.from_matrix_to_cubes(offset,
-                                    data=raw,
-                                    datatype=np.uint8,
-                                    as_raw=True,
-                                    overwrite=False,
-                                    nb_threads=nb_threads)
-
-
-def aggregate_segmentation_object_mappings_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        mappings = dict((obj_type, Counter()) for obj_type in obj_types)
-
-        for sv in ssv.svs:
-            sv.load_attr_dict()
-            for obj_type in obj_types:
-                if "mapping_%s_ids" % obj_type in sv.attr_dict:
-                    keys = sv.attr_dict["mapping_%s_ids" % obj_type]
-                    values = sv.attr_dict["mapping_%s_ratios" % obj_type]
-                    mappings[obj_type] += Counter(dict(zip(keys, values)))
-
-        ssv.load_attr_dict()
-        for obj_type in obj_types:
-            if obj_type in mappings:
-                ssv.attr_dict["mapping_%s_ids" % obj_type] = \
-                    mappings[obj_type].keys()
-                ssv.attr_dict["mapping_%s_ratios" % obj_type] = \
-                    mappings[obj_type].values()
-
-        ssv.save_attr_dict()
-
-
-def apply_mapping_decisions_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        for obj_type in obj_types:
-            if obj_type == "sj":
-                correct_for_background = True
-            else:
-                correct_for_background = False
-
-            ssv.apply_mapping_decision(obj_type,
-                                       correct_for_background=correct_for_background,
-                                       save=True)
-
-
-def reskeletonize_objects_small_ones_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        print("------------", ssv_id)
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        if np.product(ssv.shape) > 1e10:
-            continue
-        # elif np.product(ssv.shape) > 10**3:
-        #     ssv.calculate_skeleton(coord_scaling=(8, 8, 4))
-        elif ssv.size > 0:
-            ssv.calculate_skeleton(coord_scaling=(8, 8, 4), plain=True)
-        else:
-            ssv.skeleton = {"nodes": [], "edges": [], "diameters": []}
-        ssv.save_skeleton()
-        ssv.clear_cache()
-
-
-def reskeletonize_objects_big_ones_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        if np.product(ssv.shape) > 1e10:
-            ssv.calculate_skeleton(coord_scaling=(10, 10, 5), plain=True)
-        else:
-            continue
-        ssv.save_skeleton()
-        ssv.clear_cache()
-
-
-def write_super_segmentation_dataset_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    extract_only = args[4]
-    attr_keys = args[5]
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version, version_dict)
-
-    try:
-        ssd.load_mapping_dict()
-        mapping_dict_avail = True
-    except:
-        mapping_dict_avail = False
-
-    attr_dict = dict(id=[])
-
-    for ssv_obj_id in ssv_obj_ids:
-        print(ssv_obj_id)
-        ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
-                                                    new_mapping=True,
-                                                    create=True)
-
-        if ssv_obj.attr_dict_exists:
-            ssv_obj.load_attr_dict()
-
-        if not extract_only:
-
-            if len(ssv_obj.attr_dict["sv"]) == 0:
-                if mapping_dict_avail:
-                    ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
-
-                    if ssv_obj.attr_dict_exists:
-                        ssv_obj.load_attr_dict()
-                else:
-                    raise Exception("No mapping information found")
-        if not extract_only:
-            if "rep_coord" not in ssv_obj.attr_dict:
-                ssv_obj.attr_dict["rep_coord"] = ssv_obj.rep_coord
-            if "bounding_box" not in ssv_obj.attr_dict:
-                ssv_obj.attr_dict["bounding_box"] = ssv_obj.bounding_box
-            if "size" not in ssv_obj.attr_dict:
-                ssv_obj.attr_dict["size"] = ssv_obj.size
-
-        ssv_obj.attr_dict["sv"] = np.array(ssv_obj.attr_dict["sv"],
-                                           dtype=np.int)
-
-        if extract_only:
-            ignore = False
-            for attribute in attr_keys:
-                if not attribute in ssv_obj.attr_dict:
-                    ignore = True
-                    break
-            if ignore:
-                continue
-
-            attr_dict["id"].append(ssv_obj_id)
-
-            for attribute in attr_keys:
-                if attribute not in attr_dict:
-                    attr_dict[attribute] = []
-
-                if attribute in ssv_obj.attr_dict:
-                    attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
-                else:
-                    attr_dict[attribute].append(None)
-        else:
-            attr_dict["id"].append(ssv_obj_id)
-            for attribute in ssv_obj.attr_dict.keys():
-                if attribute not in attr_dict:
-                    attr_dict[attribute] = []
-
-                attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
-
-                ssv_obj.save_attr_dict()
-
-    return attr_dict
-
-
-def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
-    """
-    Render super voxel views located at given locations. Does not write views
-    to so.views_path
-
-    Parameters
-    ----------
-    so : SegmentationObject
-        super voxel ID
-    coords : np.array
-        Rendering locations
-    ws : tuple of int
-        Rendering windows size
-    add_cellobjects : bool
-    verbose : bool
-
-    Returns
-    -------
-    np.array
-        views
-    """
-    # initilaize temporary SSO for cellobject mapping purposes
-    sso = SuperSegmentationObject(np.random.randint(0, sys.maxint),
-                                  create=False,
-                                  working_dir="/wholebrain/scratch/areaxfs/",
-                                  version="tmp", scaling=(10, 10, 20))
-    sso._objects["sv"] = [so]
-    coords = sso.sample_locations(cache=False)[0]
-    if add_cellobjects:
-        sso.map_cellobjects()
-    views = render_sso_coords(sso, coords, ws=ws, add_cellobjects=add_cellobjects,
-                              verbose=verbose)
-    return views
-
-
-def glia_pred_exists(so):
+def create_new_skeleton(sv_id, sso):
+    so = SegmentationObject(sv_id, obj_type="sv",
+                            version=sso.version_dict[
+                                "sv"],
+                            working_dir=sso.working_dir,
+                            config=sso.config)
+    so.enable_locking = False
     so.load_attr_dict()
-    return "glia_probas" in so.attr_dict
+    nodes, diameters, edges = load_skeleton(so)
+
+    return nodes, diameters, edges
 
 
-def views2tripletinput(views):
-    views = views[:, :, :1] # use first view only
-    out_d = np.concatenate([views,
-                            np.ones_like(views),
-                            np.ones_like(views)], axis=2)
-    return out_d.astype(np.float32)
+def convert_coord(coord_list, scal):
+    return np.array([coord_list[1] + 1, coord_list[0] + 1, coord_list[2] + 1]) * np.array(scal)
+
+
+def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annotations=True):
+    """
+    Removes short stub branches, that are often added by annotators but
+    hardly represent true morphology.
+
+    :nx_g: network kx graph
+    :scal:
+    :param len_thres:
+    :param preserve_annotations:
+    :return:
+    """
+
+    if preserve_annotations:
+        new_nx_g = nx_g.copy()
+    else:
+        new_nx_g = nx_g
+
+    # find all tip nodes in an anno, ie degree 1 nodes
+    end_nodes = list({k for k, v in dict(nx_g.degree()).iteritems() if v == 1})
+
+    # DFS to first branch node
+    for end_node in end_nodes:
+        prune_nodes = []
+        for curr_node in nx.traversal.dfs_preorder_nodes(nx_g, end_node):
+            if nx_g.degree(curr_node) > 2:
+                loc_end = convert_coord(nx_g.node[end_node]['position'], scal)
+                loc_curr = convert_coord(nx_g.node[curr_node]['position'], scal)
+                b_len = np.linalg.norm(loc_end - loc_curr)
+                if b_len < len_thres:
+                    # remove this stub, i.e. prune the nodes that were
+                    # collected on our way to the branch point
+                    for prune_node in prune_nodes:
+                        new_nx_g.remove_node(prune_node)
+                        print('this got removed', prune_node, len(prune_nodes))
+                    break
+                else:
+                    break
+            # add this node to the list of nodes that MAY get removed
+            # in case a stub is detected later in the loop
+            prune_nodes.append(curr_node)
+
+    # Important assert. Please don't remove
+    assert nx.number_connected_components(new_nx_g) == 1
+
+    return new_nx_g
+
+
+def create_sso_skeleton(sso,pruning_thresh=700):
+
+    """
+    Creates the super super voxel skeleton
+    :param sso: Super Segmentation Object
+    :param pruning_thresh: threshold for pruning.
+    :return: sso with the skeleton dict updated/created
+    """
+
+    # Fetching Super voxel Skeletons
+    sso.load_attr_dict()
+    ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
+
+    for sv_id in sso.sv_ids:
+        nodes, diameters, edges = create_new_skeleton(sv_id, sso)
+        print('LENGTH', len(ssv_skel['nodes']) / 3, len(nodes) / 3, len(ssv_skel['edges']))
+
+        ssv_skel['edges'] = np.concatenate(
+            (ssv_skel['edges'], [(ix + (len(ssv_skel['nodes'])) / 3) for ix in edges]), axis=0)
+        ssv_skel['nodes'] = np.concatenate((ssv_skel['nodes'], nodes), axis=0)
+
+        ssv_skel['diameters'] = np.concatenate((ssv_skel['diameters'], diameters), axis=0)
+        print('LENGTH', len(ssv_skel['nodes']) / 3, len(nodes) / 3, len(ssv_skel['edges']))
+
+    skel_G = nx.Graph()
+    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
+
+    for inx, single_node in enumerate(new_nodes):
+        skel_G.add_node(inx, position=single_node)
+
+    new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
+    new_edges = [tuple(ix) for ix in new_edges]
+    skel_G.add_edges_from(new_edges)
+
+    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
+
+    # Stitching Super Voxel Skeletons
+    no_of_seg = len(list(nx.connected_components(skel_G)))
+
+    while no_of_seg != 1:
+
+        rest_nodes = []
+        current_set_of_nodes = []
+
+        list_of_comp = [c for c in sorted(nx.connected_components(skel_G), key=len, reverse=True)]
+
+        print(list(list_of_comp[1])[:10])
+
+        for single_rest_graph in list_of_comp[len(list(nx.connected_components(skel_G))) - no_of_seg + 1:]:
+            rest_nodes = rest_nodes + [list(skel_G.nodes[ix]['position']) for ix in single_rest_graph]
+
+        for single_rest_graph in list_of_comp[:len(list(nx.connected_components(skel_G))) - no_of_seg + 1]:
+            current_set_of_nodes = current_set_of_nodes + [list(skel_G.nodes[ix]['position']) for ix in
+                                                           single_rest_graph]
+
+        tree = spatial.cKDTree(rest_nodes, 1)
+        thread_lengths, indices = tree.query(current_set_of_nodes)
+
+        start_thread_index = np.argmin(thread_lengths)
+        stop_thread_index = indices[start_thread_index]
+
+        start_thread_node = new_nodes.tolist().index(current_set_of_nodes[start_thread_index])
+        stop_thread_node = new_nodes.tolist().index(rest_nodes[stop_thread_index])
+
+        skel_G.add_edge(start_thread_node, stop_thread_node)
+        print('added thread', start_thread_index, stop_thread_index, thread_lengths[start_thread_index],
+              len(list_of_comp[1:]))
+        no_of_seg -= 1
+
+    # Pruning the stitched Super Super Voxel Skeletons
+    if pruning_thresh !=0:
+        skel_G = prune_stub_branches(skel_G, len_thres=pruning_thresh)
+
+    sso.skeleton = {}
+    sso.skeleton['nodes'] = np.array([skel_G.nodes[ix]['position'] for ix in skel_G.nodes], dtype=np.uint32)
+    sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
+
+    # Important bit, please don't remove (needed after pruning)
+    temp_edges = np.array(skel_G.edges).reshape(-1)
+    temp_edges_sorted = np.unique(np.sort(temp_edges))
+    temp_edges_dict = {}
+
+    for ii, ix in enumerate(temp_edges_sorted):
+        temp_edges_dict[ix] = ii
+
+    temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
+
+    temp_edges = np.array(temp_edges).reshape([-1, 2])
+    sso.skeleton['edges'] = temp_edges
+
+    # Estimating the radii
+    sso.skeleton = radius_correction_found_vertices(sso)
+    sso.enable_locking = True
+    #
+    # sso.export_kzip(
+    #     "/wholebrain/scratch/areaxfs/pruned_radius_etmtd_skeletons/skelG_pruned_test_ignore_%d.k.zip" % sso.id)
+
+    return sso
