@@ -49,7 +49,7 @@ def extract_contact_sites(cset, filename, working_dir, stride=10,
     multi_params = []
     chunks = cset.chunk_dict.values()
     for chunk_block in [chunks[i: i + stride]
-                        for i in xrange(0, len(chunks), stride)]:
+                        for i in range(0, len(chunks), stride)]:
         multi_params.append([chunk_block, working_dir, filename,
                              segdataset.version])
 
@@ -186,4 +186,4 @@ def _extract_pre_cs_thread(args):
                                                      working_dir=segdataset.working_dir,
                                                      create=True)
             segobj.save_voxels(id_mask, abs_offset)
-            print unique_id
+            print(unique_id)
