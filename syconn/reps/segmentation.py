@@ -98,7 +98,7 @@ class SegmentationDataset(object):
             for other_dataset in other_datasets:
                 other_version = \
                     int(re.findall("[\d]+",
-                                   os.path.basename(other_dataset))[-1])
+                                   os.path.basename(other_dataset.strip('/')))[-1])
                 if max_version < other_version:
                     max_version = other_version
 
@@ -129,29 +129,26 @@ class SegmentationDataset(object):
 
     @property
     def n_folders_fs(self):
-        # TODO: Fix self referencing loop
-        # if self._n_folders_fs is None:
-        #     p = glob.glob("%s*" % self.so_storage_path)
-        #     if len(p) == 0:
-        #         raise Exception("No storage folder found and no number of "
-        #                         "subfolders specified (n_folders_fs))")
-        #
-        #     bp = os.path.basename(p[0])
-        #
-        #     if bp == self.so_storage_path_base:
-        #         self._n_folders_fs = 100000
-        #         try:
-        #             shutil.move(p[0], self.so_storage_path)
-        #         except:
-        #             pass
-        #
-        #     else:
-        #         self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
         if self._n_folders_fs is None:
-            n_fold_dc = {"sv": 100000, "sj": 10000, "vc": 10000, "mi": 10000}
-            return n_fold_dc[self.type] if self.type in n_fold_dc else 100000
-        else:
-             return self._n_folders_fs
+            ps = glob.glob("%s/%s*/" % (self.path, self.so_storage_path_base))
+            if len(ps) == 0:
+                raise Exception("No storage folder found and no number of "
+                                "subfolders specified (n_folders_fs))")
+
+
+            bp = os.path.basename(ps[0].strip('/'))
+            for p in ps:
+                bp = os.path.basename(p.strip('/'))
+                if bp == self.so_storage_path_base:
+                    bp = os.path.basename(p.strip('/'))
+                    break
+
+            if bp == self.so_storage_path_base:
+                self._n_folders_fs = 100000
+            else:
+                self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
+
+        return self._n_folders_fs
 
     @property
     def working_dir(self):
@@ -191,7 +188,7 @@ class SegmentationDataset(object):
 
     @property
     def so_storage_path(self):
-        if self._n_folders_fs is None:
+        if self._n_folders_fs is None and os.path.exists("%s/so_storage/" % self.path):
             return "%s/so_storage/" % self.path
         elif self._n_folders_fs == 100000 and os.path.exists("%s/so_storage/" % self.path):
             return "%s/so_storage/" % self.path
@@ -355,25 +352,26 @@ class SegmentationObject(object):
 
     @property
     def n_folders_fs(self):
-        # TODO: Fix self referencing loop
-        # if self._n_folders_fs is None:
-        #     p = glob.glob("%s*" % self.so_storage_path)
-        #     if len(p) == 0:
-        #         raise Exception("No storage folder found and no number of "
-        #                         "subfolders specified (n_folders_fs))")
-        #
-        #     bp = os.path.basename(p[0])
-        #
-        #     if bp == self.so_storage_path_base:
-        #         raise Exception("Need to rename storage folder - initialize "
-        #                         "dataset with single thread")
-        #     else:
-        #         self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
         if self._n_folders_fs is None:
-            n_fold_dc = {"sv": 100000, "sj": 10000, "vc": 10000, "mi": 10000}
-            return n_fold_dc[self.type] if self.type in n_fold_dc else 100000
-        else:
-            return self._n_folders_fs
+            ps = glob.glob(
+                "%s/%s*/" % (self.segds_dir, self.so_storage_path_base))
+            if len(ps) == 0:
+                raise Exception("No storage folder found and no number of "
+                                "subfolders specified (n_folders_fs))")
+
+            bp = os.path.basename(ps[0].strip('/'))
+            for p in ps:
+                bp = os.path.basename(p.strip('/'))
+                if bp == self.so_storage_path_base:
+                    bp = os.path.basename(p.strip('/'))
+                    break
+
+            if bp == self.so_storage_path_base:
+                self._n_folders_fs = 100000
+            else:
+                self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
+
+        return self._n_folders_fs
 
     @property
     def id(self):
@@ -440,9 +438,9 @@ class SegmentationObject(object):
 
     @property
     def so_storage_path(self):
-        if self.n_folders_fs is None:
+        if self._n_folders_fs is None and os.path.exists("%s/%s/" % (self.segds_dir, self.so_storage_path_base)):
             return "%s/%s/" % (self.segds_dir, self.so_storage_path_base)
-        elif self.n_folders_fs == 100000 and os.path.exists("%s/%s/" % (self.segds_dir, self.so_storage_path_base)):
+        elif self._n_folders_fs == 100000 and os.path.exists("%s/%s/" % (self.segds_dir, self.so_storage_path_base)):
             return "%s/%s/" % (self.segds_dir, self.so_storage_path_base)
         else:
             return "%s/%s_%d/" % (self.segds_dir, self.so_storage_path_base,
@@ -543,7 +541,7 @@ class SegmentationObject(object):
     @property
     def voxels_exist(self):
         voxel_dc = VoxelDict(self.voxel_path, read_only=True,
-                             disable_locking=not self.enable_locking)
+                             disable_locking=True)
         return self.id in voxel_dc
 
 

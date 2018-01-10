@@ -1,29 +1,15 @@
 from collections import defaultdict
 import networkx as nx
 import numpy as np
-import os
-import scipy.spatial
-import time
 import glob
+import os
+from scipy import spatial
 
-from ..reps import super_segmentation_object as ss, segmentation, \
-    connectivity_helper as ch
-from ..handler.compression import VoxelDict, AttributeDict
-
-from syconnmp import qsub_utils as qu
-from syconnmp import shared_mem as sm
+from ..mp import qsub_utils as qu
+from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
-from collections import defaultdict
-import networkx as nx
-import numpy as np
-import os
-import scipy.spatial
-import time
-import glob
-
-from ..reps import super_segmentation_object as ss, segmentation, \
-    connectivity_helper as ch
+from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..handler.compression import VoxelDict, AttributeDict
 
 
@@ -58,7 +44,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
                              stride=1000, qsub_pe=None, qsub_queue=None,
                              nb_cpus=None, n_max_co_processes=None):
 
-    ssd = ss.SuperSegmentationDataset(wd, version=ssd_version)
+    ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     cs_agg = segmentation.SegmentationDataset("cs_agg", working_dir=wd,
                                               version=cs_agg_version)
 
@@ -81,7 +67,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
     i_block = 0
     multi_params = []
     for block in [rel_cs_to_cs_agg_ids_items[i:i + stride]
-                  for i in xrange(0, len(rel_cs_to_cs_agg_ids_items), stride)]:
+                  for i in range(0, len(rel_cs_to_cs_agg_ids_items), stride)]:
         multi_params.append([wd, block,
                              voxel_rel_paths[block_steps[i_block]: block_steps[i_block+1]],
                              cs_agg.version, cs.version, ssd.scaling, cs_gap_nm])
@@ -110,7 +96,7 @@ def map_objects_to_cs(wd, cs_version=None, ssd_version=None, max_map_dist_nm=200
 
     multi_params = []
     for path_block in [paths[i:i + stride]
-                       for i in xrange(0, len(paths), stride)]:
+                       for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, obj_types, cs_version, ssd_version,
                              wd, max_map_dist_nm])
 
@@ -168,8 +154,8 @@ def _combine_and_split_cs_agg_helper(args):
             cs_agg_object = cs_agg.get_segmentation_object(cs_agg_id)
             np.concatenate([voxel_list, cs_agg_object.voxel_list])
 
-        distances = scipy.spatial.distance.cdist(voxel_list * scaling,
-                                                 voxel_list * scaling)
+        distances = spatial.distance.cdist(voxel_list * scaling,
+                                           voxel_list * scaling)
         distances[np.triu_indices_from(distances)] = cs_gap_nm
         edges = np.array(np.where(distances < cs_gap_nm)).T
 
@@ -178,7 +164,7 @@ def _combine_and_split_cs_agg_helper(args):
 
         i_cc = 0
         for this_cc in cc:
-            print i_cc, next_id
+            print(i_cc, next_id)
             i_cc += 1
             this_vx = voxel_list[np.array(list(this_cc))]
             abs_offset = np.min(this_vx, axis=0)
@@ -217,7 +203,7 @@ def _combine_and_split_cs_agg_helper(args):
         attr_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                          "/attr_dict.pkl")
 
-    print "done"
+    print("done")
 
 
 def _map_objects_to_cs_thread(args):
@@ -231,8 +217,8 @@ def _map_objects_to_cs_thread(args):
     cs_dataset = segmentation.SegmentationDataset("cs", version=cs_version,
                                                   working_dir=working_dir)
 
-    ssd = ss.SuperSegmentationDataset(version=ssd_version,
-                                      working_dir=working_dir)
+    ssd = super_segmentation.SuperSegmentationDataset(version=ssd_version,
+                                                      working_dir=working_dir)
 
     bbs_dict = {}
     ids_dict = {}
@@ -250,7 +236,7 @@ def _map_objects_to_cs_thread(args):
                                timeout=3600)
 
         for cs_id in this_vx_dc.keys():
-            print cs_id
+            print(cs_id)
             cs_obj = cs_dataset.get_segmentation_object(cs_id)
             cs_obj.attr_dict = this_attr_dc[cs_id]
 
@@ -284,8 +270,9 @@ def map_objects_to_single_cs(cs_obj, ssd_version=None, max_map_dist_nm=2000,
         neuron_partners = cs_obj.attr_dict["neuron_partners"]
 
     for partner_id in neuron_partners:
-        ssv = ss.SuperSegmentationObject(partner_id, version=ssd_version,
-                                         working_dir=cs_obj.working_dir)
+        ssv = super_segmentation.SuperSegmentationObject(partner_id,
+                                                         version=ssd_version,
+                                                         working_dir=cs_obj.working_dir)
         ssv.load_attr_dict()
         version_dict = ssv.version_dict
 
@@ -296,7 +283,7 @@ def map_objects_to_single_cs(cs_obj, ssd_version=None, max_map_dist_nm=2000,
     cs_obj_vxl_scaled = cs_obj.voxel_list * cs_obj.scaling
 
     try:
-        cs_area = scipy.spatial.ConvexHull(cs_obj_vxl_scaled).area / 2.e6
+        cs_area = spatial.ConvexHull(cs_obj_vxl_scaled).area / 2.e6
         mapping_feats["cs_area"] = cs_area
     except:
         mapping_feats["cs_area"] = 0
@@ -335,8 +322,8 @@ def map_objects_to_single_cs(cs_obj, ssd_version=None, max_map_dist_nm=2000,
 
             n_vxs_per_sj = np.array(n_vxs_per_sj)
             if len(sj_voxels) > 0:
-                dists = scipy.spatial.distance.cdist(cs_obj.voxel_list,
-                                                     sj_voxels)
+                dists = spatial.distance.cdist(cs_obj.voxel_list,
+                                               sj_voxels)
                 dist_mask = dists == 0
 
                 vx_hits = np.any(dist_mask, axis=0)
@@ -353,7 +340,7 @@ def map_objects_to_single_cs(cs_obj, ssd_version=None, max_map_dist_nm=2000,
 
                 if len(cs_overlapping_vx) > 0:
                     try:
-                        overlap_area = scipy.spatial.ConvexHull(
+                        overlap_area = spatial.ConvexHull(
                             cs_overlapping_vx * cs_obj.scaling).area / 2.e6
                     except:
                         overlap_area = 0
@@ -398,8 +385,8 @@ def map_objects_to_single_cs(cs_obj, ssd_version=None, max_map_dist_nm=2000,
                 obj_voxels = np.array(obj_voxels)
                 n_vxs_per_obj = np.array(n_vxs_per_obj)
                 if len(obj_voxels) > 0:
-                    dists = scipy.spatial.distance.cdist(cs_obj_vxl_scaled,
-                                                         obj_voxels * cs_obj.scaling)
+                    dists = spatial.distance.cdist(cs_obj_vxl_scaled,
+                                                   obj_voxels * cs_obj.scaling)
                     dist_mask = dists < max_map_dist_nm
 
                     vx_hits = np.any(dist_mask, axis=0)

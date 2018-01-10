@@ -7,7 +7,7 @@
 
 import sys
 import cPickle as pkl
-from syconn.extraction import object_extraction_steps as oes
+from syconn.proc import ssd_proc
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -20,7 +20,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = oes._aggregate_segmentation_object_mappings_thread(args)
+out = ssd_proc._aggregate_segmentation_object_mappings_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

@@ -8,7 +8,7 @@
 import sys
 
 import cPickle as pkl
-from syconn.reps import super_segmentation_dataset
+from syconn.proc import ssd_proc
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -21,7 +21,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = super_segmentation_dataset._write_super_segmentation_dataset_thread(args)
+out = ssd_proc._write_super_segmentation_dataset_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

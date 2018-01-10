@@ -6,9 +6,8 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-
 import cPickle as pkl
-from syconnfs.representations import super_segmentation_helper as ssh
+from syconn.proc import ssd_proc
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -21,7 +20,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = ssh.apply_mapping_decisions_thread(args)
+out = ssd_proc._apply_mapping_decisions_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

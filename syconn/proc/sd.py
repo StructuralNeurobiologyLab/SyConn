@@ -139,6 +139,17 @@ def _dataset_analysis_thread(args):
     return global_attr_dict
 
 
+def map_objects_to_sv_multiple(sd, obj_types, kd_path, readonly=False, 
+                               stride=50, qsub_pe=None, qsub_queue=None,
+                               nb_cpus=1, n_max_co_processes=None):
+    assert isinstance(obj_types, list)
+    
+    for obj_type in obj_types:
+        map_objects_to_sv(sd, obj_type, kd_path, readonly=readonly, stride=stride,
+                          qsub_pe=qsub_pe, qsub_queue=qsub_queue, nb_cpus=nb_cpus,
+                          n_max_co_processes=n_max_co_processes)
+        
+
 def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
                       qsub_pe=None, qsub_queue=None, nb_cpus=1,
                       n_max_co_processes=None):
@@ -171,8 +182,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
     assert obj_type in sd.version_dict
 
     seg_dataset = sd.get_segmentationdataset(obj_type)
-
-    paths = sd.so_dir_paths
+    paths = seg_dataset.so_dir_paths
 
     # Partitioning the work
 
@@ -290,6 +300,7 @@ def _map_objects_thread(args):
                                                            datatype=datatype)
                 except:
                     continue
+
                 ids, id_counts = np.unique(id_list, return_counts=True)
                 id_ratios = id_counts / float(np.sum(id_counts))
 
