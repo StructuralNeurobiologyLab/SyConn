@@ -252,10 +252,6 @@ class SuperSegmentationObject(object):
         return self.ssv_dir + "attr_dict.pkl"
 
     @property
-    def skeleton_nml_path(self):
-        return self.ssv_dir + "skeleton.nml"
-
-    @property
     def skeleton_kzip_path(self):
         return self.ssv_dir + "skeleton.k.zip"
 
@@ -1440,7 +1436,9 @@ class SuperSegmentationObject(object):
         self.save_attributes(["glia_model"], [model._fname])
 
     # ------------------------------------------------------------------ AXONESS
-    def write_axpred_rfc(self):
+    def write_axpred_rfc(self, dest_path=None, k=1):
+        if dest_path is None:
+            dest_path = self.skeleton_kzip_path
         if self.load_skeleton():
             if not "axoness" in self.skeleton:
                 return False
@@ -1448,8 +1446,8 @@ class SuperSegmentationObject(object):
             axoness[self.skeleton["axoness"] == 1] = 0
             axoness[self.skeleton["axoness"] == 0] = 1
             print np.unique(axoness, return_counts=True)
-            self._axonesspred2mesh(self.skeleton["nodes"] * self.scaling,
-                                   axoness)
+            self._pred2mesh(self.skeleton["nodes"] * self.scaling, axoness,
+                            k=k, dest_path=dest_path)
 
     def write_axpred_cnn(self, dest_path=None, k=1, pred_key_appendix=""):
         if dest_path is None:
