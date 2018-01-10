@@ -5,10 +5,8 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-from collections import defaultdict
 import glob
 import numpy as np
-import os
 
 from ..reps import segmentation, connectivity_helper as ch, \
     super_segmentation as ss, rep_helper

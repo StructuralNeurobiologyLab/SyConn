@@ -821,7 +821,7 @@ class SuperSegmentationObject(object):
                                sizethreshold=None, save=True):
         assert obj_type in self.version_dict
 
-        # self.load_attr_dict()
+        self.load_attr_dict()
         if not "mapping_%s_ratios" % obj_type in self.attr_dict:
             print "No mapping ratios found"
             return

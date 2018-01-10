@@ -483,7 +483,8 @@ class SuperSegmentationDataset(object):
 
 
 # UTILITIES
-
+# TODO: Refactoring needed, move as much utilities to proc module
+#  exists partially in ssd_proc, whats the difference of ssd_assembly, ssd_proc?
 def aggregate_segmentation_object_mappings(ssd, obj_types,
                                            stride=1000, qsub_pe=None,
                                            qsub_queue=None, nb_cpus=1):
