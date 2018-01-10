@@ -165,8 +165,8 @@ def triangulation(pts, resolution=256, scaling=(10, 10, 20)):
     else:
         volume = pts
         vecs = np.argwhere(pts != 0)
-        extent_orig = np.max(vecs, axis=0)
-        offset = np.zeros((3, ))
+        offset = np.min(vecs, axis=0)
+        extent_orig = np.max(vecs, axis=0) - offset
     # volume = multiBinaryErosion(volume, 1).astype(np.float32)
     # TODO: Take anisotropy into account when calculating distances...
     # TODO: try to correct with anistropic smoothing and dimension independent rescaling to match bounding box

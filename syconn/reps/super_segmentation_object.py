@@ -786,16 +786,16 @@ class SuperSegmentationObject(object):
                 so_obj.save_kzip(path=self.objects_dense_kzip_path,
                                  write_id=self.dense_kzip_ids[obj_type])
 
-    def save_skeleton(self, to_kzip=True, to_object=True):
+    def save_skeleton(self, to_kzip=False, to_object=True):
         if to_object:
-            write_obj2pkl(self.skeleton, self.skeleton_path_views)
+            write_obj2pkl(self.skeleton, self.skeleton_path)
 
         if to_kzip:
             self.save_skeleton_to_kzip()
 
     def load_skeleton(self):
         try:
-            self.skeleton = load_pkl2obj(self.skeleton_path_views)
+            self.skeleton = load_pkl2obj(self.skeleton_path)
             return True
         except:
             return False
@@ -1181,15 +1181,36 @@ class SuperSegmentationObject(object):
                                     comments=sv_comments)
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def _pred2mesh(self, pred_coords, preds, ply_fname, dest_path=None,
+    def _pred2mesh(self, pred_coords, preds, ply_fname=None, dest_path=None,
                    colors=None, k=1):
+        """
+        If dest_path or ply_fname is None then indices, vertices, colors are
+        returned. Else Mesh is written ti k.zip file as specified.
+
+        Parameters
+        ----------
+        pred_coords : np.array
+            N x 3
+        preds : np.array
+            N x 1
+        ply_fname : str
+        dest_path : str
+        colors : np.array
+            Color for each possible prediction value (range(np.max(preds))
+        k : int
+            Number of nearest neighbors (average prediction)
+        Returns
+        -------
+        None or [np.array, np.array, np.array]
+        """
         mesh = self.mesh
-        if dest_path is None:
-            dest_path = self.skeleton_kzip_path_views
         col = colorcode_vertices(mesh[1].reshape((-1, 3)), pred_coords,
                                  preds, colors=colors, k=k)
-        write_mesh2kzip(dest_path, mesh[0], mesh[1], col,
-                        ply_fname=ply_fname)
+        if dest_path is None or ply_fname is None:
+            return mesh[0], mesh[1], col
+        else:
+            write_mesh2kzip(dest_path, mesh[0], mesh[1], col,
+                            ply_fname=ply_fname)
 
     # --------------------------------------------------------------------- GLIA
     def gliaprobas2mesh(self, dest_path=None, pred_key_appendix=""):

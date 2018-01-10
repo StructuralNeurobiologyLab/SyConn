@@ -940,7 +940,7 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
                     # collected on our way to the branch point
                     for prune_node in prune_nodes:
                         new_nx_g.remove_node(prune_node)
-                        print('this got removed', prune_node, len(prune_nodes))
+                        # print('this got removed', prune_node, len(prune_nodes))
                     break
                 else:
                     break
@@ -969,14 +969,14 @@ def create_sso_skeleton(sso,pruning_thresh=700):
 
     for sv_id in sso.sv_ids:
         nodes, diameters, edges = create_new_skeleton(sv_id, sso)
-        print('LENGTH', len(ssv_skel['nodes']) / 3, len(nodes) / 3, len(ssv_skel['edges']))
+        # print('LENGTH', len(ssv_skel['nodes']) / 3, len(nodes) / 3, len(ssv_skel['edges']))
 
         ssv_skel['edges'] = np.concatenate(
             (ssv_skel['edges'], [(ix + (len(ssv_skel['nodes'])) / 3) for ix in edges]), axis=0)
         ssv_skel['nodes'] = np.concatenate((ssv_skel['nodes'], nodes), axis=0)
 
         ssv_skel['diameters'] = np.concatenate((ssv_skel['diameters'], diameters), axis=0)
-        print('LENGTH', len(ssv_skel['nodes']) / 3, len(nodes) / 3, len(ssv_skel['edges']))
+        # print('LENGTH', len(ssv_skel['nodes']) / 3, len(nodes) / 3, len(ssv_skel['edges']))
 
     skel_G = nx.Graph()
     new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
@@ -1000,13 +1000,13 @@ def create_sso_skeleton(sso,pruning_thresh=700):
 
         list_of_comp = [c for c in sorted(nx.connected_components(skel_G), key=len, reverse=True)]
 
-        print(list(list_of_comp[1])[:10])
+        # print(list(list_of_comp[1])[:10])
 
         for single_rest_graph in list_of_comp[len(list(nx.connected_components(skel_G))) - no_of_seg + 1:]:
-            rest_nodes = rest_nodes + [list(skel_G.nodes[ix]['position']) for ix in single_rest_graph]
+            rest_nodes = rest_nodes + [list(skel_G.node[int(ix)]['position']) for ix in single_rest_graph]
 
         for single_rest_graph in list_of_comp[:len(list(nx.connected_components(skel_G))) - no_of_seg + 1]:
-            current_set_of_nodes = current_set_of_nodes + [list(skel_G.nodes[ix]['position']) for ix in
+            current_set_of_nodes = current_set_of_nodes + [list(skel_G.node[int(ix)]['position']) for ix in
                                                            single_rest_graph]
 
         tree = spatial.cKDTree(rest_nodes, 1)
@@ -1019,8 +1019,8 @@ def create_sso_skeleton(sso,pruning_thresh=700):
         stop_thread_node = new_nodes.tolist().index(rest_nodes[stop_thread_index])
 
         skel_G.add_edge(start_thread_node, stop_thread_node)
-        print('added thread', start_thread_index, stop_thread_index, thread_lengths[start_thread_index],
-              len(list_of_comp[1:]))
+        # print('added thread', start_thread_index, stop_thread_index, thread_lengths[start_thread_index],
+        #       len(list_of_comp[1:]))
         no_of_seg -= 1
 
     # Pruning the stitched Super Super Voxel Skeletons
@@ -1028,11 +1028,11 @@ def create_sso_skeleton(sso,pruning_thresh=700):
         skel_G = prune_stub_branches(skel_G, len_thres=pruning_thresh)
 
     sso.skeleton = {}
-    sso.skeleton['nodes'] = np.array([skel_G.nodes[ix]['position'] for ix in skel_G.nodes], dtype=np.uint32)
+    sso.skeleton['nodes'] = np.array([skel_G.node[ix]['position'] for ix in skel_G.nodes()], dtype=np.uint32)
     sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
 
     # Important bit, please don't remove (needed after pruning)
-    temp_edges = np.array(skel_G.edges).reshape(-1)
+    temp_edges = np.array(skel_G.edges()).reshape(-1)
     temp_edges_sorted = np.unique(np.sort(temp_edges))
     temp_edges_dict = {}
 

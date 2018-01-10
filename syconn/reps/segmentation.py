@@ -148,7 +148,8 @@ class SegmentationDataset(object):
         #     else:
         #         self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
         if self._n_folders_fs is None:
-            return 100000
+            n_fold_dc = {"sv": 100000, "sj": 10000, "vc": 10000, "mi": 10000}
+            return n_fold_dc[self.type] if self.type in n_fold_dc else 100000
         else:
              return self._n_folders_fs
 
@@ -369,7 +370,8 @@ class SegmentationObject(object):
         #     else:
         #         self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
         if self._n_folders_fs is None:
-            return 100000
+            n_fold_dc = {"sv": 100000, "sj": 10000, "vc": 10000, "mi": 10000}
+            return n_fold_dc[self.type] if self.type in n_fold_dc else 100000
         else:
             return self._n_folders_fs
 
@@ -438,9 +440,9 @@ class SegmentationObject(object):
 
     @property
     def so_storage_path(self):
-        if self._n_folders_fs is None:
+        if self.n_folders_fs is None:
             return "%s/%s/" % (self.segds_dir, self.so_storage_path_base)
-        elif self._n_folders_fs == 100000 and os.path.exists("%s/%s/" % (self.segds_dir, self.so_storage_path_base)):
+        elif self.n_folders_fs == 100000 and os.path.exists("%s/%s/" % (self.segds_dir, self.so_storage_path_base)):
             return "%s/%s/" % (self.segds_dir, self.so_storage_path_base)
         else:
             return "%s/%s_%d/" % (self.segds_dir, self.so_storage_path_base,
@@ -915,15 +917,6 @@ class SegmentationObject(object):
         print(self.segobj_dir)
         return self.segobj_dir + "/skeletons.pkl"
 
-    def save_skeleton(self):
-
-        skeleton_dc = AttributeDict(self.skeleton_dict_path, read_only=False)
-        skeleton_dc[self.id] = self.skeleton
-        skeleton_dc.save2pkl()
-
-    def load_skeleton(self):
-        skeleton_dc = AttributeDict(self.skeleton_dict_path, read_only=True)
-        self.skeleton = skeleton_dc[self.id]
 
     def copy2dir(self, dest_dir, safe=True):
         # get all files in home directory

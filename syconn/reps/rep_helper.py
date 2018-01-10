@@ -333,7 +333,10 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     dists, ixs = hull_tree.query(vertices, n_jobs=nb_cpus, k=k)
     hull_ax = np.zeros((len(vertices)), dtype=np.int)
     for i in range(len(ixs)):
-        curr_ax = Counter(np.array(rep_values)[ixs[i]]).most_common(1)[0][0]
+        curr_reps = np.array(rep_values)[ixs[i]]
+        if np.isscalar(curr_reps):
+            curr_reps = np.array([curr_reps])
+        curr_ax = Counter(curr_reps).most_common(1)[0][0]
         hull_ax[i] = curr_ax
     vert_col = colors[hull_ax]
     return vert_col
