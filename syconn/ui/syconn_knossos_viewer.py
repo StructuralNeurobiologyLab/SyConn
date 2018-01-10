@@ -115,7 +115,7 @@ class main_class(QtGui.QDialog):
 
         self.ssv_selected1 = 0
         self.obj_tree_ids = set()
-        self.obj_id_offs = 1000000000
+        self.obj_id_offs = 2000000000
 
         self.init_syconn()
         self.build_gui()
@@ -201,7 +201,7 @@ class main_class(QtGui.QDialog):
         self.direct_ssv_id_input.setMaxLength(16)
 
         self.exploration_mode_chk_box = QtGui.QCheckBox('Exploration mode')
-        self.exploration_mode_chk_box.setChecked(False)
+        self.exploration_mode_chk_box.setChecked(True)
         #self.ssv_selection_model =
         # QtGui.QItemSelectionModel(self.ssv_select_model)
 
@@ -290,12 +290,12 @@ class main_class(QtGui.QDialog):
             #print('ssv_ids_selected {0}'.format(ssv_ids_selected))
 
             trees = KnossosModule.skeleton.trees()
-            ids_in_k = set([tree.tree_id() for tree in trees])
+            ids_in_k = set([tree.tree_id() for tree in trees if
+                            tree.tree_id() < self.obj_id_offs])
 
             #print('self.obj_tree_ids {0}'.format(self.obj_tree_ids))
             #print('ids_in_k 1 {0}'.format(ids_in_k))
 
-            ids_in_k = ids_in_k - self.obj_tree_ids
             #print('ids_in_k 2 {0}'.format(ids_in_k))
 
             # compare with the selected segmentation objects
@@ -314,10 +314,10 @@ class main_class(QtGui.QDialog):
 
             #print('ids to del {0} ids to add {1}'.format(ids_to_del, ids_to_add))
 
-            print('ids_selected {0}'.format(ids_selected))
+            #print('ids_selected {0}'.format(ids_selected))
             self.ids_selected = ids_selected
 
-            [KnossosModule.skeleton.delete_tree(sv_id) for sv_id in ids_to_del]
+            [self.remove_ssv_from_knossos(ssv_id) for ssv_id in ids_to_del]
             [self.ssv_to_knossos(ssv_id) for ssv_id in ids_to_add]
 
             if len(ids_in_k) != 1 or len(ids_to_del) > 0:
@@ -326,6 +326,17 @@ class main_class(QtGui.QDialog):
                 self.obj_tree_ids = set()
 
         return
+
+    def remove_ssv_from_knossos(self, ssv_id):
+        KnossosModule.skeleton.delete_tree(ssv_id)
+        # check whether there are object meshes that need to be deleted as well
+        trees = KnossosModule.skeleton.trees()
+        obj_mesh_ids = set([tree.tree_id() for tree in trees if
+                        tree.tree_id() > self.obj_id_offs])
+        for i in range(1, 4):
+            obj_id_to_test = ssv_id + self.obj_id_offs + i
+            if obj_id_to_test in obj_mesh_ids:
+                KnossosModule.skeleton.delete_tree(obj_id_to_test)
 
 
     def show_button_clicked(self):
@@ -376,19 +387,15 @@ class main_class(QtGui.QDialog):
 
         KnossosModule.segmentation.setRenderOnlySelectedObjs(True)
 
-        print('self.ids_selected {0}'.format(self.ids_selected))
+        #print('self.ids_selected {0}'.format(self.ids_selected))
 
-        if len(self.ids_selected) == 1:
+        if len(self.ids_selected) < 3:
 
             # create a 'fake' knossos tree for each obj mesh category;
             # this is very hacky since it can generate nasty ID collisions.
             mi_id = self.obj_id_offs + ssv_id + 1
             sj_id = self.obj_id_offs + ssv_id + 2
             vc_id = self.obj_id_offs + ssv_id + 3
-
-            self.obj_tree_ids.add(mi_id)
-            self.obj_tree_ids.add(sj_id)
-            self.obj_tree_ids.add(vc_id)
 
             mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
             KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh['indices'], [],
@@ -408,15 +415,15 @@ class main_class(QtGui.QDialog):
             KnossosModule.skeleton.set_tree_color(sj_id,
                                                   QtGui.QColor(0, 0, 0, 255))
 
-            vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
+            #vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
 
-            KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh['indices'], [],
-                                                 vc_mesh['vertices'],
-                                                 [],
-                                                 KnossosModule.GL_TRIANGLES,
-                                                 False)
-            KnossosModule.skeleton.set_tree_color(vc_id,
-                                                  QtGui.QColor(0, 255, 0, 255))
+            #KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh['indices'], [],
+            #                                     vc_mesh['vertices'],
+             #                                    [],
+             #                                    KnossosModule.GL_TRIANGLES,
+            #                                     False)
+            #KnossosModule.skeleton.set_tree_color(vc_id,
+            #                                      QtGui.QColor(0, 255, 0, 255))
 
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
             KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['indices'], [],
