@@ -284,7 +284,8 @@ class SegmentationObject(object):
     def __init__(self, obj_id, obj_type="sv", version=None, working_dir=None,
                  rep_coord=None, size=None, scaling=(10, 10, 20), create=False,
                  voxel_caching=True, mesh_cashing=False, view_caching=False,
-                 config=None, n_folders_fs=None, enable_locking=True):
+                 config=None, n_folders_fs=None, enable_locking=True,
+                 skeleton_caching=True):
         self._id = int(obj_id)
         self._type = obj_type
         self._rep_coord = rep_coord
@@ -306,6 +307,7 @@ class SegmentationObject(object):
         self._config = config
         self._views = None
         self._skeleton = None
+        self._skeleton_caching = skeleton_caching
 
         if working_dir is None:
             if default_wd_available:
@@ -783,9 +785,8 @@ class SegmentationObject(object):
 
         Parameters
         ----------
-        sv_ix : int
-        label : tuple of str
-        label_values : tuple of items
+        attr_keys : tuple of str
+        attr_values : tuple of items
         """
 
         if not hasattr(attr_keys, "__len__"):

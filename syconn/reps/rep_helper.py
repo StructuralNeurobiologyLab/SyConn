@@ -5,13 +5,10 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-import h5py
-from shutil import copytree
 import numpy as np
 import re
 from ..handler.basics import read_txt_from_zip
 from scipy import spatial
-import warnings
 from collections import Counter
 
 
@@ -340,36 +337,6 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
         hull_ax[i] = curr_ax
     vert_col = colors[hull_ax]
     return vert_col
-
-
-def colorcode_vertices_color(vertices, rep_coords, colors,
-                       nb_cpus=-1):
-    """
-    Colorcodes the vertices given a set of coordinates with corresponding
-    colors. Separates space in Voronoi-fashion.
-    
-    Parameters
-    ----------
-    vertices : np.array
-        [N, 3]
-    rep_coords : np.array
-        [M ,3]
-    colors : np.array
-        color for each rep_coord
-    nb_cpus : int
-    k : int
-        Number of nearest neighbors (average prediction)
-
-    Returns
-    -------
-    np. array [N, 4]
-        color values for every vertex
-    """
-    hull_tree = spatial.cKDTree(rep_coords)
-    _, ixs = hull_tree.query(vertices, n_jobs=nb_cpus)
-    vert_col = colors[ixs]
-    return vert_col
-
 
 
 def surface_samples(coords, bin_sizes=(2000, 2000, 2000), max_nb_samples=5000,

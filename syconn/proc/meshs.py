@@ -475,7 +475,7 @@ def merge_someshs(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     color_vals : iterable of float
         color values for every mesh, N x 4 (rgba). No normalization!
     nb_cpus : int
-    cmpt : matplotlib colormap
+    cmap : matplotlib colormap
     alpha : float
 
     Returns

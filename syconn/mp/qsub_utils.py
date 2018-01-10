@@ -210,7 +210,7 @@ def show_progress(job_name, n_jobs_total, time_diff):
     ----------
     job_name: str
         job_name as shown in qstats
-    n_jobs_submitted: int
+    n_jobs_total: int
         number of submitted jobs
     time_diff: float
         time since starting the job

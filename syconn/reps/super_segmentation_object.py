@@ -5,7 +5,6 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-import cPickle as pkl
 import glob
 import networkx as nx
 import numpy as np
@@ -34,7 +33,6 @@ import super_segmentation_helper as ssh
 from .segmentation import SegmentationObject
 from ..proc.sd import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
-    colorcode_vertices_color, \
     knossos_ml_from_svixs, subfold_from_ix, subfold_from_ix_SSO
 from ..config import parser
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
@@ -574,9 +572,8 @@ class SuperSegmentationObject(object):
 
         Parameters
         ----------
-        sv_ix : int
-        label : tuple of str
-        label_values : tuple of items
+        attr_keys : tuple of str
+        attr_values : tuple of items
         """
         if not hasattr(attr_keys, "__len__"):
             attr_keys = [attr_keys]
@@ -941,7 +938,6 @@ class SuperSegmentationObject(object):
 
         Parameters
         ----------
-        sso : SuperSegmentationObject
         max_nb : int
             Number of SV per CC
 
@@ -1321,12 +1317,7 @@ class SuperSegmentationObject(object):
 
         Parameters
         ----------
-        dest_path : 
-        recompute : 
-        thresh : 
-        write_shortest_paths : bool
-            Write shortest paths between neuron type leaf nodes in SV graph
-            as k.zip's to dest_path.
+        dest_path :
 
         Returns
         -------
@@ -1369,7 +1360,7 @@ class SuperSegmentationObject(object):
         #     ex_views = self.view_existence()
         #     if not np.all(ex_views):
         #         self.render_views(add_cellobjects=False)
-        existing_preds = sm.start_multiprocess(glia_pred_exists, self.svs,
+        existing_preds = sm.start_multiprocess(ssh.glia_pred_exists, self.svs,
                                                nb_cpus=self.nb_cpus)
         if overwrite:
             missing_sos = self.svs
@@ -1716,58 +1707,6 @@ class SuperSegmentationObject(object):
         self.attr_dict["cell_type_ratios"] = ratios
         self.save_attr_dict()
 
-    def get_pca_view_hists(self, t_net, pca):
-        views = np.concatenate(self.load_views())
-        latent = t_net.predict_proba(views2tripletinput(views))
-        latent = pca.transform(latent)
-        hist0 = np.histogram(latent[:, 0], bins=50, range=[-2, 2], normed=True)
-        hist1 = np.histogram(latent[:, 1], bins=50, range=[-3.2, 3], normed=True)
-        hist2 = np.histogram(latent[:, 2], bins=50, range=[-3.5, 3.5], normed=True)
-        return np.array([hist0, hist1, hist2])
-
-    def save_view_pca_proj(self, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(),
-                           special_markers=(), special_kwargs=()):
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        import matplotlib.ticker as ticker
-        views = np.concatenate(self.load_views())
-        latent = t_net.predict_proba(views2tripletinput(views))
-        latent = pca.transform(latent)
-        col = (np.array(latent) - latent.min(axis=0)) / (latent.max(axis=0)-latent.min(axis=0))
-        col = np.concatenate([col, np.ones_like(col)[:, :1]], axis=1)
-        for ii, (a, b) in enumerate([[0, 1], [0, 2], [1, 2]]):
-            fig, ax = plt.subplots()
-            plt.scatter(latent[:, a], latent[:, b], c=col, s=s, lw=0.5, marker="o",
-                        edgecolors=col)
-            if len(special_points) >= 0:
-                for kk, sp in enumerate(special_points):
-                    if len(special_markers) == 0:
-                        sm = "x"
-                    else:
-                        sm = special_markers[kk]
-                    if len(special_kwargs) == 0:
-                        plt.scatter(sp[None, a], sp[None, b], s=75.0, lw=2.3,
-                                    marker=sm, edgecolor="0.3", facecolor="none")
-                    else:
-                        plt.scatter(sp[None, a], sp[None, b], **special_kwargs)
-            fig.patch.set_facecolor('white')
-            ax.tick_params(axis='x', which='major', labelsize=ls, direction='out',
-                           length=4, width=3, right="off", top="off", pad=10)
-            ax.tick_params(axis='y', which='major', labelsize=ls, direction='out',
-                           length=4, width=3, right="off", top="off", pad=10)
-
-            ax.tick_params(axis='x', which='minor', labelsize=ls, direction='out',
-                           length=4, width=3, right="off", top="off", pad=10)
-            ax.tick_params(axis='y', which='minor', labelsize=ls, direction='out',
-                           length=4, width=3, right="off", top="off", pad=10)
-            plt.xlabel(r"$Z_%d$" % (a+1), fontsize=ls)
-            plt.ylabel(r"$Z_%d$" % (b+1), fontsize=ls)
-            ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
-            ax.yaxis.set_major_locator(ticker.MultipleLocator(2))
-            plt.tight_layout()
-            plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (self.id, a+1, b+1), dpi=400)
-            plt.close()
 
     def gen_skel_from_sample_locs(self, dest_path=None, pred_key_appendix=""):
         try:
@@ -1886,7 +1825,7 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
                 return
     sso = SuperSegmentationObject(np.random.randint(0, sys.maxint),
                                   create=False,
-                                  working_dir="/wholebrain/scratch/areaxfs/",
+                                  working_dir=sos[0].working_dir,
                                   version="tmp", scaling=(10, 10, 20))
     sso._objects["sv"] = sos
     if render_first_only:
@@ -1917,8 +1856,6 @@ def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
     ----------
     so : SegmentationObject
         super voxel ID
-    coords : np.array
-        Rendering locations
     ws : tuple of int
         Rendering windows size
     add_cellobjects : bool
@@ -1943,14 +1880,3 @@ def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
     return views
 
 
-def glia_pred_exists(so):
-    so.load_attr_dict()
-    return "glia_probas" in so.attr_dict
-
-
-def views2tripletinput(views):
-    views = views[:, :, :1] # use first view only
-    out_d = np.concatenate([views,
-                            np.ones_like(views),
-                            np.ones_like(views)], axis=2)
-    return out_d.astype(np.float32)
