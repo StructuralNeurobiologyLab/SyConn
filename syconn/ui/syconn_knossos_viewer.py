@@ -29,6 +29,23 @@ class SyConnGateInteraction(object):
         r = self.session.get(self.server + '/ssv_mesh/{0}'.format(ssv_id))
         return json.loads(r.content)
 
+    def get_ssv_obj_mesh(self, ssv_id, obj_type):
+        """
+        Returns a mesh for a given ssv_id and a specified obj_type.
+        obj_type can be sj, vc, mi ATM.
+        Parameters
+        ----------
+        ssv_id
+        obj_type
+
+        Returns
+        -------
+
+        """
+        r = self.session.get(self.server + '/ssv_obj_mesh/{0}/{1}'.format(ssv_id,
+                                                                          obj_type))
+        return json.loads(r.content)
+
     def get_list_of_all_ssv_ids(self):
         """
         Returns a list of all ssvs in the dataset
@@ -97,6 +114,8 @@ class main_class(QtGui.QDialog):
         #self.start_logging()
 
         self.ssv_selected1 = 0
+        self.obj_tree_ids = set()
+        self.obj_id_offs = 1000000000
 
         self.init_syconn()
         self.build_gui()
@@ -273,6 +292,12 @@ class main_class(QtGui.QDialog):
             trees = KnossosModule.skeleton.trees()
             ids_in_k = set([tree.tree_id() for tree in trees])
 
+            #print('self.obj_tree_ids {0}'.format(self.obj_tree_ids))
+            #print('ids_in_k 1 {0}'.format(ids_in_k))
+
+            ids_in_k = ids_in_k - self.obj_tree_ids
+            #print('ids_in_k 2 {0}'.format(ids_in_k))
+
             # compare with the selected segmentation objects
             ids_selected = set(ssv_ids_selected)
 
@@ -289,8 +314,16 @@ class main_class(QtGui.QDialog):
 
             #print('ids to del {0} ids to add {1}'.format(ids_to_del, ids_to_add))
 
+            print('ids_selected {0}'.format(ids_selected))
+            self.ids_selected = ids_selected
+
             [KnossosModule.skeleton.delete_tree(sv_id) for sv_id in ids_to_del]
             [self.ssv_to_knossos(ssv_id) for ssv_id in ids_to_add]
+
+            if len(ids_in_k) != 1 or len(ids_to_del) > 0:
+                [KnossosModule.skeleton.delete_tree(sv_id) for sv_id in
+                 self.obj_tree_ids]
+                self.obj_tree_ids = set()
 
         return
 
@@ -343,18 +376,64 @@ class main_class(QtGui.QDialog):
 
         KnossosModule.segmentation.setRenderOnlySelectedObjs(True)
 
-        mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
-        KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['indices'], [], mesh['vertices'],
-                                             [],
-                                             KnossosModule.GL_TRIANGLES,
-                                             False)
-        KnossosModule.skeleton.set_tree_color(ssv_id, QtGui.QColor(255, 0, 0, 128))
+        print('self.ids_selected {0}'.format(self.ids_selected))
 
-        #KnossosModule.skeleton.add_tree_mesh(2, ssv.mi_mesh[1], [],
-        #                                     ssv.mi_mesh[0], [],
-        #                                     KnossosModule.GL_TRIANGLES,
-        #                                     False)
-        #KnossosModule.skeleton.set_tree_color(2, QtGui.QColor(0, 0, 255, 255))
+        if len(self.ids_selected) == 1:
+
+            # create a 'fake' knossos tree for each obj mesh category;
+            # this is very hacky since it can generate nasty ID collisions.
+            mi_id = self.obj_id_offs + ssv_id + 1
+            sj_id = self.obj_id_offs + ssv_id + 2
+            vc_id = self.obj_id_offs + ssv_id + 3
+
+            self.obj_tree_ids.add(mi_id)
+            self.obj_tree_ids.add(sj_id)
+            self.obj_tree_ids.add(vc_id)
+
+            mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
+            KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh['indices'], [],
+                                                 mi_mesh['vertices'],
+                                                 [],
+                                                 KnossosModule.GL_TRIANGLES,
+                                                 False)
+            KnossosModule.skeleton.set_tree_color(mi_id,
+                                                  QtGui.QColor(0, 0, 255, 255))
+
+            sj_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'sj')
+            KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh['indices'], [],
+                                                 sj_mesh['vertices'],
+                                                 [],
+                                                 KnossosModule.GL_TRIANGLES,
+                                                 False)
+            KnossosModule.skeleton.set_tree_color(sj_id,
+                                                  QtGui.QColor(0, 0, 0, 255))
+
+            vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
+
+            KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh['indices'], [],
+                                                 vc_mesh['vertices'],
+                                                 [],
+                                                 KnossosModule.GL_TRIANGLES,
+                                                 False)
+            KnossosModule.skeleton.set_tree_color(vc_id,
+                                                  QtGui.QColor(0, 255, 0, 255))
+
+            mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
+            KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['indices'], [],
+                                                 mesh['vertices'],
+                                                 [],
+                                                 KnossosModule.GL_TRIANGLES,
+                                                 False)
+            KnossosModule.skeleton.set_tree_color(ssv_id,
+                                                  QtGui.QColor(255, 0, 0, 128))
+        else:
+            mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
+            KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['indices'], [],
+                                                 mesh['vertices'],
+                                                 [],
+                                                 KnossosModule.GL_TRIANGLES,
+                                                 False)
+
 
         return
 
