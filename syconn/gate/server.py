@@ -10,13 +10,18 @@ import sys
 import copy
 
 # temporary for easier development
-sys.path.append('/u/jkor/repos/SyConnFS/')
-sys.path.append('/u/jkor/repos/SyConnMP/')
+sys.path.append('/u/jkor/repos/SyConn/')
 sys.path.append('/u/jkor/repos/knossos_utils')
+#sys.path.append('..')
 
-from syconnfs.representations import super_segmentation as ss
-from syconnfs.representations import segmentation as sd
-from syconnfs.representations import connectivity as conn
+#from syconnfs.representations import super_segmentation as ss
+#from ..reps import super_segmentation as ss
+import syconn.reps.super_segmentation as ss
+import syconn.reps.connectivity_helper as conn
+
+#from ..reps import connectivity_helper as conn
+#from syconnfs.representations import segmentation as sd
+#from syconnfs.representations import connectivity as conn
 
 from flask import Flask
 from flask import request
@@ -30,6 +35,9 @@ app = Flask(__name__)
 def route_ssv_mesh(ssv_id):
     return json.dumps(state.backend.ssv_mesh(ssv_id))
 
+@app.route('/ssv_obj_mesh/<ssv_id>/<obj_type>', methods=['GET'])
+def ssv_obj_mesh(ssv_id, obj_type):
+    return json.dumps(state.backend.ssv_obj_mesh(ssv_id, obj_type))
 
 @app.route('/ssv_list', methods=['GET'])
 def route_ssv_list():
@@ -102,6 +110,28 @@ class SyConnFS_backend(object):
         ssv.load_attr_dict()
         return {'vertices': ssv.mesh[0].tolist(),
                 'indices': ssv.mesh[1].tolist()}
+
+    def ssv_obj_mesh(self, ssv_id, obj_type):
+        """
+        Get mesh of a specific obj type for ssv_id.
+        :param ssv_id: int
+        :param obj_type: str
+        :return: dict
+        """
+        ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.load_attr_dict()
+
+        if obj_type == 'mi':
+            return {'vertices': ssv.mi_mesh[0].tolist(),
+                    'indices': ssv.mi_mesh[1].tolist()}
+        elif obj_type == 'sj':
+            return {'vertices': ssv.sj_mesh[0].tolist(),
+                    'indices': ssv.sj_mesh[1].tolist()}
+        elif obj_type == 'vc':
+            return {'vertices': ssv.vc_mesh[0].tolist(),
+                    'indices': ssv.vc_mesh[1].tolist()}
+        else:
+            return None
 
     def ssv_list(self):
         """
@@ -185,17 +215,24 @@ class SyConnFS_backend(object):
 
 class ServerState(object):
     def __init__(self):
-        self.backend = SyConnFS_backend('/wholebrain/scratch/areaxfs/')
+        self.backend = SyConnFS_backend('/wholebrain/scratch/areaxfs3/')
 
         return
 
+#print('This is the name')
+#print(__name__)
+#if __name__ == "__main__":
+"""
+Alternative way of running the server is currently:
+export FLASK_APP=server.py
+flask run --host=0.0.0.0 --port=8080 --debugger
 
-if __name__ == "__main__":
-    state = ServerState()
+"""
+state = ServerState()
 
     # context = ('cert.crt', 'key.key') enable later
-    app.run(host='0.0.0.0',  # do not run this on a non-firewalled machine!
-            port=8080,
-            # ssl_context=context,
-            threaded=True,
-            debug=True)
+    #app.run(host='0.0.0.0',  # do not run this on a non-firewalled machine!
+    #        port=8080,
+    #        # ssl_context=context,
+    #        threaded=True,
+    #        debug=True)
