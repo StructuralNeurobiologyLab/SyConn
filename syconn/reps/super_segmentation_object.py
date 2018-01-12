@@ -110,7 +110,7 @@ class SuperSegmentationObject(object):
         try:
             self._scaling = np.array(scaling)
         except:
-            print "Currently, scaling has to be set in the config"
+            print("Currently, scaling has to be set in the config")
             self._scaling = np.array([1, 1, 1])
 
         if working_dir is None:
@@ -445,7 +445,7 @@ class SuperSegmentationObject(object):
             for sv in self.svs:
                 sv._voxel_caching = False
                 if sv.voxels_exist:
-                    print np.sum(sv.voxels), sv.size
+                    print(np.sum(sv.voxels), sv.size)
                     box = [sv.bounding_box[0] - self.bounding_box[0],
                            sv.bounding_box[1] - self.bounding_box[0]]
 
@@ -453,7 +453,7 @@ class SuperSegmentationObject(object):
                            box[0][1]: box[1][1],
                            box[0][2]: box[1][2]][sv.voxels] = True
                 else:
-                    print "missing voxels from %d" % sv.id
+                    print("missing voxels from %d" % sv.id)
 
             if self.voxel_caching:
                 self._voxels = voxels
@@ -726,7 +726,7 @@ class SuperSegmentationObject(object):
                 dest_path = self.skeleton_kzip_path
             write_skeleton(dest_path, [a])
         except Exception, e:
-            print "[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, e)
+            print("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, e))
 
     def save_objects_to_kzip_sparse(self, obj_types=("sj", "mi", "vc"),
                                     dest_path=None):
@@ -823,11 +823,11 @@ class SuperSegmentationObject(object):
 
         self.load_attr_dict()
         if not "mapping_%s_ratios" % obj_type in self.attr_dict:
-            print "No mapping ratios found"
+            print("No mapping ratios found")
             return
 
         if not "mapping_%s_ids" % obj_type in self.attr_dict:
-            print "no mapping ids found"
+            print("no mapping ids found")
             return
 
         if lower_ratio is None:
@@ -842,7 +842,7 @@ class SuperSegmentationObject(object):
                 upper_ratio = self.config.entries["UpperMappingRatios"][
                     obj_type]
             except:
-                print "Upper ratio undefined - 1. assumed"
+                print("Upper ratio undefined - 1. assumed")
                 upper_ratio = 1.
 
         if sizethreshold is None:
@@ -921,7 +921,7 @@ class SuperSegmentationObject(object):
             try:
                 safe_copy(src_filename, dest_filename, safe=safe)
             except Exception:
-                print "Skipped", fnames[i]
+                print("Skipped", fnames[i])
                 pass
         self.load_attr_dict()
         if os.path.isfile(dest_dir + "/atrr_dict.pkl"):
@@ -982,8 +982,8 @@ class SuperSegmentationObject(object):
             part = self.partition_cc()
             if 0:#not overwrite: # check existence of glia preds
                 views_exist = np.array(self.view_existence(), dtype=np.int)
-                print "Rendering huge SSO. %d/%d views left to process." \
-                      % (np.sum(~views_exist), len(self.svs))
+                print("Rendering huge SSO. %d/%d views left to process." \
+                      % (np.sum(~views_exist), len(self.svs)))
                 ex_dc = {}
                 for ii, k in enumerate(self.svs):
                     ex_dc[k] = views_exist[ii]
@@ -993,8 +993,8 @@ class SuperSegmentationObject(object):
                         continue
                 del ex_dc
             else:
-                print "Rendering huge SSO. %d views left to process." \
-                      % len(self.svs)
+                print("Rendering huge SSO. %d views left to process." \
+                      % len(self.svs))
             for k in part.keys():
                 val = part[k]
                 part[k] = [so.id for so in val]
@@ -1050,8 +1050,8 @@ class SuperSegmentationObject(object):
             self.save_attributes(["sample_locations"], [locs])
         if verbose:
             dur = time.time() - start
-            print "Sampling locations from %d SVs took %0.2fs. %0.4fs/SV (in" \
-                  "cl. read/write)" % (len(self.svs), dur, dur / len(self.svs))
+            print("Sampling locations from %d SVs took %0.2fs. %0.4fs/SV (in" \
+                  "cl. read/write)" % (len(self.svs), dur, dur / len(self.svs)))
         return locs
 
     # ------------------------------------------------------------------ EXPORTS

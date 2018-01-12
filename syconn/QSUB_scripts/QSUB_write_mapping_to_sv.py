@@ -8,7 +8,7 @@
 import sys
 
 import cPickle as pkl
-from syconn.proc import sd as sd_proc
+from syconn.proc import sd_proc
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]

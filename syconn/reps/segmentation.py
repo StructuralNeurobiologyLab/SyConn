@@ -198,8 +198,7 @@ class SegmentationDataset(object):
 
     @property
     def so_dir_paths(self):
-        depth = int(np.log10(self.n_folders_fs) // 2 +
-                    np.log10(self.n_folders_fs) % 2)
+        depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
 
         return glob.glob(p)
