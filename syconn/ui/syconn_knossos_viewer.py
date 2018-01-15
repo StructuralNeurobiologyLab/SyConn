@@ -415,15 +415,15 @@ class main_class(QtGui.QDialog):
             KnossosModule.skeleton.set_tree_color(sj_id,
                                                   QtGui.QColor(0, 0, 0, 255))
 
-            #vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
+            vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
 
-            #KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh['indices'], [],
-            #                                     vc_mesh['vertices'],
-             #                                    [],
-             #                                    KnossosModule.GL_TRIANGLES,
-            #                                     False)
-            #KnossosModule.skeleton.set_tree_color(vc_id,
-            #                                      QtGui.QColor(0, 255, 0, 255))
+            KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh['indices'], [],
+                                                 vc_mesh['vertices'],
+                                                 [],
+                                                 KnossosModule.GL_TRIANGLES,
+                                                 False)
+            KnossosModule.skeleton.set_tree_color(vc_id,
+                                                  QtGui.QColor(0, 255, 0, 255))
 
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
             KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['indices'], [],
@@ -443,7 +443,6 @@ class main_class(QtGui.QDialog):
 
 
         return
-
 
 if __name__=='__main__':
     A = main_class()
