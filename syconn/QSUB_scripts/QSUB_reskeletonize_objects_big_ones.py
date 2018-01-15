@@ -8,7 +8,7 @@
 import sys
 
 import cPickle as pkl
-from syconnproc.ssd_processing import dataset_proc as dp
+from syconn.ssd_processing import dataset_proc as dp
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]

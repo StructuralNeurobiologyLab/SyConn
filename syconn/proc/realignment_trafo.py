@@ -6,7 +6,6 @@ import os
 from knossos_utils import KnossosDataset
 
 from ..reps import segmentation, rep_helper as rh
-from..handler.compression import VoxelDict
 
 
 def source_to_target(orig_coord, realign_map):

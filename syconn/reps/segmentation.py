@@ -198,8 +198,7 @@ class SegmentationDataset(object):
 
     @property
     def so_dir_paths(self):
-        depth = int(np.log10(self.n_folders_fs) // 2 +
-                    np.log10(self.n_folders_fs) % 2)
+        depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
 
         return glob.glob(p)
@@ -284,7 +283,8 @@ class SegmentationObject(object):
     def __init__(self, obj_id, obj_type="sv", version=None, working_dir=None,
                  rep_coord=None, size=None, scaling=(10, 10, 20), create=False,
                  voxel_caching=True, mesh_cashing=False, view_caching=False,
-                 config=None, n_folders_fs=None, enable_locking=True):
+                 config=None, n_folders_fs=None, enable_locking=True,
+                 skeleton_caching=True):
         self._id = int(obj_id)
         self._type = obj_type
         self._rep_coord = rep_coord
@@ -306,6 +306,7 @@ class SegmentationObject(object):
         self._config = config
         self._views = None
         self._skeleton = None
+        self._skeleton_caching = skeleton_caching
 
         if working_dir is None:
             if default_wd_available:
@@ -783,9 +784,8 @@ class SegmentationObject(object):
 
         Parameters
         ----------
-        sv_ix : int
-        label : tuple of str
-        label_values : tuple of items
+        attr_keys : tuple of str
+        attr_values : tuple of items
         """
 
         if not hasattr(attr_keys, "__len__"):
@@ -915,15 +915,6 @@ class SegmentationObject(object):
         print(self.segobj_dir)
         return self.segobj_dir + "/skeletons.pkl"
 
-    def save_skeleton(self):
-
-        skeleton_dc = AttributeDict(self.skeleton_dict_path, read_only=False)
-        skeleton_dc[self.id] = self.skeleton
-        skeleton_dc.save2pkl()
-
-    def load_skeleton(self):
-        skeleton_dc = AttributeDict(self.skeleton_dict_path, read_only=True)
-        self.skeleton = skeleton_dc[self.id]
 
     def copy2dir(self, dest_dir, safe=True):
         # get all files in home directory

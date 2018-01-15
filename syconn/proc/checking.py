@@ -3,6 +3,7 @@ import glob
 import os
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
+from.checking_helper import find_missing_overlaycubes_thread
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../multi_proc/")
 
 
@@ -19,7 +20,7 @@ def find_missing_overlaycubes(path, stride=100, qsub_pe=None, qsub_queue=None,
         multi_params.append([path_block])
 
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(cv.find_missing_overlaycubes_thread,
+        results = sm.start_multiprocess(find_missing_overlaycubes_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
     elif qu.__QSUB__:

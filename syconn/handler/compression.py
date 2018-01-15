@@ -22,7 +22,6 @@ import numpy as np
 import h5py
 import os
 import shutil
-from ..mp.shared_mem import start_multiprocess
 import warnings
 __all__ = ["arrtolz4string", "lz4stringtoarr", "load_lz4_meshdict_items",
            "load_lz4_compressed", "add_lz4_meshdict_items", "init_lz4_meshdict",
@@ -256,8 +255,6 @@ class VoxelDictL(LZ4DictBase):
             E.g. SO ID.
         values : list of np.array
             E.g. voxel masks
-        offsets : list of np.array
-            offset for each voxel mask
         """
         voxel_masks, offsets = values
         assert np.all([voxel_masks[0].dtype == v.dtype for v in voxel_masks])
@@ -331,7 +328,7 @@ class MeshDict(LZ4DictBase):
         Parameters
         ----------
         key : int/str
-        value : list of np.array
+        mesh : list of np.array
             [indices, vertices]
         """
         if self._cache_decomp:
@@ -397,7 +394,7 @@ class SkeletonDict(LZ4DictBase):
         Parameters
         ----------
         key : int/str
-        value : list of np.array
+        skeleton : list of np.array
             [indices, vertices]
         """
         if self._cache_decomp:

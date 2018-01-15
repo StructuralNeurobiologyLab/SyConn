@@ -112,11 +112,8 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
         path to predictive model
     clf_thresh : float
         classification threshold, if None, no thresholding
-    overwrite : bool
     mfp_active : False
     imposed_patch_size : tuple
-    dest_path : str
-        path to destination folder, if None predicitons are written to h5 file
     gpu_ix : int
     hdf5_data_key: str
         if None, it uses the first entry in the list returned by

@@ -201,8 +201,8 @@ def load_skeleton(so, recompute=False):
     else:
         if so.type == "sv":
             print("\n-----------------------\n" \
-                  "Skeleton of SV %d not found.\n" \
-                  "-------------------------\n" % so.id)
+                  "Skeleton of SV %d (size: %d)not found.\n" \
+                  "-------------------------\n" % (so.id, so.size))
             return np.zeros((0,)).astype(np.int), np.zeros((0,)),np.zeros((0,)).astype(np.int)
 
     nodes = np.array(nodes, dtype=np.int)

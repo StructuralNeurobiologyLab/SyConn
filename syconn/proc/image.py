@@ -13,6 +13,8 @@ try:
 except ImportError as e:
     print("Could not import cv2.", e)
     __cv2__ = False
+    createCLAHE = None
+    equalizeHist = None
 import warnings
 
 from scipy import spatial, sparse, ndimage

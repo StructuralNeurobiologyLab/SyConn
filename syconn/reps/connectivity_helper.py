@@ -6,9 +6,10 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 import time
 import numpy as np
-import super_segmentation_object as ss
+import super_segmentation as ss
 import segmentation
 import connectivity
+import networkx as nx
 from ..reps import segmentation as sd
 
 
