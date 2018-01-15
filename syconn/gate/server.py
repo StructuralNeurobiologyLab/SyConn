@@ -8,6 +8,7 @@
 
 import sys
 import copy
+import logging
 
 # temporary for easier development
 sys.path.append('/u/jkor/repos/SyConn/')
@@ -31,32 +32,35 @@ import json
 app = Flask(__name__)
 
 
+global sg_state
+
+
 @app.route('/ssv_mesh/<ssv_id>', methods=['GET'])
 def route_ssv_mesh(ssv_id):
-    return json.dumps(state.backend.ssv_mesh(ssv_id))
+    return json.dumps(sg_state.backend.ssv_mesh(ssv_id))
 
 @app.route('/ssv_obj_mesh/<ssv_id>/<obj_type>', methods=['GET'])
 def ssv_obj_mesh(ssv_id, obj_type):
-    return json.dumps(state.backend.ssv_obj_mesh(ssv_id, obj_type))
+    return json.dumps(sg_state.backend.ssv_obj_mesh(ssv_id, obj_type))
 
 @app.route('/ssv_list', methods=['GET'])
 def route_ssv_list():
-    return json.dumps(state.backend.ssv_list())
+    return json.dumps(sg_state.backend.ssv_list())
 
 
 @app.route('/svs_of_ssv/<ssv_id>', methods=['GET'])
 def route_svs_of_ssv(ssv_id):
-    return json.dumps(state.backend.svs_of_ssv(ssv_id))
+    return json.dumps(sg_state.backend.svs_of_ssv(ssv_id))
 
 
 @app.route('/ssv_of_sv/<sv_id>', methods=['GET'])
 def route_ssv_of_sv(sv_id):
-    return json.dumps(state.backend.ssv_of_sv(sv_id))
+    return json.dumps(sg_state.backend.ssv_of_sv(sv_id))
 
 
 @app.route('/all_syn_meta', methods=['GET'])
 def route_all_syn_meta():
-    return json.dumps(state.backend.all_syn_meta_data())
+    return json.dumps(sg_state.backend.all_syn_meta_data())
 
 
 @app.route("/", methods=['GET'])
@@ -65,7 +69,7 @@ def route_hello():
 
 
 class SyConnFS_backend(object):
-    def __init__(self, syconnfs_path=''):
+    def __init__(self, syconnfs_path='', logger=None):
         """
         Initializes a SyConnFS backend for operation.
         This includes in-memory initialization of the
@@ -78,13 +82,20 @@ class SyConnFS_backend(object):
 
         :param syconnfs_path: str 
         """
+
+        self.logger = logger
+        self.logger.info('Initializing SyConn backend')
+
         self.ssd = ss.SuperSegmentationDataset(syconnfs_path)
+
+        self.logger.info('SuperSegmentation dataset initialized.')
 
         # directed networkx graph of connectivity
         self.conn_graph = conn.connectivity_to_nx_graph()
-
+        self.logger.info('Connectivity graph initialized.')
         # flat array representation of all synapses
         self.conn_dict = conn.load_cached_data_dict()
+
 
         idx_filter = self.conn_dict['synaptivity_proba'] > 0.5
         #  & (df_dict['syn_size'] < 5.)
@@ -97,6 +108,8 @@ class SyConnFS_backend(object):
 
         for k, v in self.conn_dict.iteritems():
             self.conn_dict[k] = v[idx_filter]
+        self.logger.info('In memory cache of synapses initialized.')
+
 
         return
 
@@ -106,10 +119,14 @@ class SyConnFS_backend(object):
         :param ssv_id: int
         :return: dict
         """
+        self.logger.info('Loading ssv mesh {0}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
-        return {'vertices': ssv.mesh[0].tolist(),
+        mesh = {'vertices': ssv.mesh[0].tolist(),
                 'indices': ssv.mesh[1].tolist()}
+        self.logger.info('Got ssv mesh {0}'.format(ssv_id))
+
+        return mesh
 
     def ssv_obj_mesh(self, ssv_id, obj_type):
         """
@@ -214,10 +231,40 @@ class SyConnFS_backend(object):
 
 
 class ServerState(object):
-    def __init__(self):
-        self.backend = SyConnFS_backend('/wholebrain/scratch/areaxfs3/')
+    def __init__(self, log_file='/wholebrain/scratch/areaxfs3/gate/server_log'):
 
+        self.logger = initialize_logging(log_file)
+
+        self.logger.info('SyConn gate server starting up.')
+        self.backend = SyConnFS_backend('/wholebrain/scratch/areaxfs3/',
+                                        logger=self.logger)
+        self.logger.info('SyConn gate server running.')
         return
+
+
+def initialize_logging(log_file):
+    logger = logging.getLogger('gate_logger')
+
+    logger.setLevel(logging.INFO)
+
+    # create file handler which logs even debug messages
+    fh = logging.FileHandler(log_file)
+    fh.setLevel(logging.INFO)
+
+    # create console handler with a higher log level
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.INFO)
+
+    # create formatter and add it to the handlers
+    formatter = logging.Formatter('%(asctime)s %(message)s')
+
+    ch.setFormatter(formatter)
+    fh.setFormatter(formatter)
+    # add the handlers to logger
+    logger.addHandler(ch)
+    logger.addHandler(fh)
+
+    return logger
 
 #print('This is the name')
 #print(__name__)
@@ -228,7 +275,7 @@ export FLASK_APP=server.py
 flask run --host=0.0.0.0 --port=8080 --debugger
 
 """
-state = ServerState()
+sg_state = ServerState()
 
     # context = ('cert.crt', 'key.key') enable later
     #app.run(host='0.0.0.0',  # do not run this on a non-firewalled machine!
