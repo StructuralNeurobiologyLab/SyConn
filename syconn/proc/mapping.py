@@ -7,7 +7,7 @@ from scipy import spatial
 from knossos_utils.knossosdataset import KnossosDataset
 from skimage.segmentation import find_boundaries
 
-from syconn.reps.super_segmentation_helper import get_sso_axoness_from_coord
+from ..reps.super_segmentation_helper import get_sso_axoness_from_coord
 from ..reps.segmentation import SegmentationDataset, SegmentationObject
 from ..reps.super_segmentation import SuperSegmentationObject
 

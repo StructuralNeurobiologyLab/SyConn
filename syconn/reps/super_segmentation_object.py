@@ -5,7 +5,6 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-import cPickle as pkl
 import glob
 import networkx as nx
 import numpy as np
@@ -34,7 +33,6 @@ import super_segmentation_helper as ssh
 from .segmentation import SegmentationObject
 from ..proc.sd import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
-    colorcode_vertices_color, \
     knossos_ml_from_svixs, subfold_from_ix, subfold_from_ix_SSO
 from ..config import parser
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
@@ -112,7 +110,7 @@ class SuperSegmentationObject(object):
         try:
             self._scaling = np.array(scaling)
         except:
-            print "Currently, scaling has to be set in the config"
+            print("Currently, scaling has to be set in the config")
             self._scaling = np.array([1, 1, 1])
 
         if working_dir is None:
@@ -250,10 +248,6 @@ class SuperSegmentationObject(object):
     @property
     def attr_dict_path_new(self):
         return self.ssv_dir + "attr_dict.pkl"
-
-    @property
-    def skeleton_nml_path(self):
-        return self.ssv_dir + "skeleton.nml"
 
     @property
     def skeleton_kzip_path(self):
@@ -451,7 +445,7 @@ class SuperSegmentationObject(object):
             for sv in self.svs:
                 sv._voxel_caching = False
                 if sv.voxels_exist:
-                    print np.sum(sv.voxels), sv.size
+                    print(np.sum(sv.voxels), sv.size)
                     box = [sv.bounding_box[0] - self.bounding_box[0],
                            sv.bounding_box[1] - self.bounding_box[0]]
 
@@ -459,7 +453,7 @@ class SuperSegmentationObject(object):
                            box[0][1]: box[1][1],
                            box[0][2]: box[1][2]][sv.voxels] = True
                 else:
-                    print "missing voxels from %d" % sv.id
+                    print("missing voxels from %d" % sv.id)
 
             if self.voxel_caching:
                 self._voxels = voxels
@@ -578,9 +572,8 @@ class SuperSegmentationObject(object):
 
         Parameters
         ----------
-        sv_ix : int
-        label : tuple of str
-        label_values : tuple of items
+        attr_keys : tuple of str
+        attr_values : tuple of items
         """
         if not hasattr(attr_keys, "__len__"):
             attr_keys = [attr_keys]
@@ -733,7 +726,7 @@ class SuperSegmentationObject(object):
                 dest_path = self.skeleton_kzip_path
             write_skeleton(dest_path, [a])
         except Exception, e:
-            print "[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, e)
+            print("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, e))
 
     def save_objects_to_kzip_sparse(self, obj_types=("sj", "mi", "vc"),
                                     dest_path=None):
@@ -786,16 +779,16 @@ class SuperSegmentationObject(object):
                 so_obj.save_kzip(path=self.objects_dense_kzip_path,
                                  write_id=self.dense_kzip_ids[obj_type])
 
-    def save_skeleton(self, to_kzip=True, to_object=True):
+    def save_skeleton(self, to_kzip=False, to_object=True):
         if to_object:
-            write_obj2pkl(self.skeleton, self.skeleton_path_views)
+            write_obj2pkl(self.skeleton, self.skeleton_path)
 
         if to_kzip:
             self.save_skeleton_to_kzip()
 
     def load_skeleton(self):
         try:
-            self.skeleton = load_pkl2obj(self.skeleton_path_views)
+            self.skeleton = load_pkl2obj(self.skeleton_path)
             return True
         except:
             return False
@@ -828,13 +821,13 @@ class SuperSegmentationObject(object):
                                sizethreshold=None, save=True):
         assert obj_type in self.version_dict
 
-        # self.load_attr_dict()
+        self.load_attr_dict()
         if not "mapping_%s_ratios" % obj_type in self.attr_dict:
-            print "No mapping ratios found"
+            print("No mapping ratios found")
             return
 
         if not "mapping_%s_ids" % obj_type in self.attr_dict:
-            print "no mapping ids found"
+            print("no mapping ids found")
             return
 
         if lower_ratio is None:
@@ -849,7 +842,7 @@ class SuperSegmentationObject(object):
                 upper_ratio = self.config.entries["UpperMappingRatios"][
                     obj_type]
             except:
-                print "Upper ratio undefined - 1. assumed"
+                print("Upper ratio undefined - 1. assumed")
                 upper_ratio = 1.
 
         if sizethreshold is None:
@@ -928,7 +921,7 @@ class SuperSegmentationObject(object):
             try:
                 safe_copy(src_filename, dest_filename, safe=safe)
             except Exception:
-                print "Skipped", fnames[i]
+                print("Skipped", fnames[i])
                 pass
         self.load_attr_dict()
         if os.path.isfile(dest_dir + "/atrr_dict.pkl"):
@@ -945,7 +938,6 @@ class SuperSegmentationObject(object):
 
         Parameters
         ----------
-        sso : SuperSegmentationObject
         max_nb : int
             Number of SV per CC
 
@@ -990,8 +982,8 @@ class SuperSegmentationObject(object):
             part = self.partition_cc()
             if 0:#not overwrite: # check existence of glia preds
                 views_exist = np.array(self.view_existence(), dtype=np.int)
-                print "Rendering huge SSO. %d/%d views left to process." \
-                      % (np.sum(~views_exist), len(self.svs))
+                print("Rendering huge SSO. %d/%d views left to process." \
+                      % (np.sum(~views_exist), len(self.svs)))
                 ex_dc = {}
                 for ii, k in enumerate(self.svs):
                     ex_dc[k] = views_exist[ii]
@@ -1001,8 +993,8 @@ class SuperSegmentationObject(object):
                         continue
                 del ex_dc
             else:
-                print "Rendering huge SSO. %d views left to process." \
-                      % len(self.svs)
+                print("Rendering huge SSO. %d views left to process." \
+                      % len(self.svs))
             for k in part.keys():
                 val = part[k]
                 part[k] = [so.id for so in val]
@@ -1058,8 +1050,8 @@ class SuperSegmentationObject(object):
             self.save_attributes(["sample_locations"], [locs])
         if verbose:
             dur = time.time() - start
-            print "Sampling locations from %d SVs took %0.2fs. %0.4fs/SV (in" \
-                  "cl. read/write)" % (len(self.svs), dur, dur / len(self.svs))
+            print("Sampling locations from %d SVs took %0.2fs. %0.4fs/SV (in" \
+                  "cl. read/write)" % (len(self.svs), dur, dur / len(self.svs)))
         return locs
 
     # ------------------------------------------------------------------ EXPORTS
@@ -1181,15 +1173,36 @@ class SuperSegmentationObject(object):
                                     comments=sv_comments)
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def _pred2mesh(self, pred_coords, preds, ply_fname, dest_path=None,
+    def _pred2mesh(self, pred_coords, preds, ply_fname=None, dest_path=None,
                    colors=None, k=1):
+        """
+        If dest_path or ply_fname is None then indices, vertices, colors are
+        returned. Else Mesh is written ti k.zip file as specified.
+
+        Parameters
+        ----------
+        pred_coords : np.array
+            N x 3
+        preds : np.array
+            N x 1
+        ply_fname : str
+        dest_path : str
+        colors : np.array
+            Color for each possible prediction value (range(np.max(preds))
+        k : int
+            Number of nearest neighbors (average prediction)
+        Returns
+        -------
+        None or [np.array, np.array, np.array]
+        """
         mesh = self.mesh
-        if dest_path is None:
-            dest_path = self.skeleton_kzip_path_views
         col = colorcode_vertices(mesh[1].reshape((-1, 3)), pred_coords,
                                  preds, colors=colors, k=k)
-        write_mesh2kzip(dest_path, mesh[0], mesh[1], col,
-                        ply_fname=ply_fname)
+        if dest_path is None or ply_fname is None:
+            return mesh[0], mesh[1], col
+        else:
+            write_mesh2kzip(dest_path, mesh[0], mesh[1], col,
+                            ply_fname=ply_fname)
 
     # --------------------------------------------------------------------- GLIA
     def gliaprobas2mesh(self, dest_path=None, pred_key_appendix=""):
@@ -1304,12 +1317,7 @@ class SuperSegmentationObject(object):
 
         Parameters
         ----------
-        dest_path : 
-        recompute : 
-        thresh : 
-        write_shortest_paths : bool
-            Write shortest paths between neuron type leaf nodes in SV graph
-            as k.zip's to dest_path.
+        dest_path :
 
         Returns
         -------
@@ -1352,7 +1360,7 @@ class SuperSegmentationObject(object):
         #     ex_views = self.view_existence()
         #     if not np.all(ex_views):
         #         self.render_views(add_cellobjects=False)
-        existing_preds = sm.start_multiprocess(glia_pred_exists, self.svs,
+        existing_preds = sm.start_multiprocess(ssh.glia_pred_exists, self.svs,
                                                nb_cpus=self.nb_cpus)
         if overwrite:
             missing_sos = self.svs
@@ -1419,7 +1427,9 @@ class SuperSegmentationObject(object):
         self.save_attributes(["glia_model"], [model._fname])
 
     # ------------------------------------------------------------------ AXONESS
-    def write_axpred_rfc(self):
+    def write_axpred_rfc(self, dest_path=None, k=1):
+        if dest_path is None:
+            dest_path = self.skeleton_kzip_path
         if self.load_skeleton():
             if not "axoness" in self.skeleton:
                 return False
@@ -1427,8 +1437,8 @@ class SuperSegmentationObject(object):
             axoness[self.skeleton["axoness"] == 1] = 0
             axoness[self.skeleton["axoness"] == 0] = 1
             print np.unique(axoness, return_counts=True)
-            self._axonesspred2mesh(self.skeleton["nodes"] * self.scaling,
-                                   axoness)
+            self._pred2mesh(self.skeleton["nodes"] * self.scaling, axoness,
+                            k=k, dest_path=dest_path)
 
     def write_axpred_cnn(self, dest_path=None, k=1, pred_key_appendix=""):
         if dest_path is None:
@@ -1697,58 +1707,6 @@ class SuperSegmentationObject(object):
         self.attr_dict["cell_type_ratios"] = ratios
         self.save_attr_dict()
 
-    def get_pca_view_hists(self, t_net, pca):
-        views = np.concatenate(self.load_views())
-        latent = t_net.predict_proba(views2tripletinput(views))
-        latent = pca.transform(latent)
-        hist0 = np.histogram(latent[:, 0], bins=50, range=[-2, 2], normed=True)
-        hist1 = np.histogram(latent[:, 1], bins=50, range=[-3.2, 3], normed=True)
-        hist2 = np.histogram(latent[:, 2], bins=50, range=[-3.5, 3.5], normed=True)
-        return np.array([hist0, hist1, hist2])
-
-    def save_view_pca_proj(self, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(),
-                           special_markers=(), special_kwargs=()):
-        import matplotlib
-        matplotlib.use("Agg")
-        import matplotlib.pyplot as plt
-        import matplotlib.ticker as ticker
-        views = np.concatenate(self.load_views())
-        latent = t_net.predict_proba(views2tripletinput(views))
-        latent = pca.transform(latent)
-        col = (np.array(latent) - latent.min(axis=0)) / (latent.max(axis=0)-latent.min(axis=0))
-        col = np.concatenate([col, np.ones_like(col)[:, :1]], axis=1)
-        for ii, (a, b) in enumerate([[0, 1], [0, 2], [1, 2]]):
-            fig, ax = plt.subplots()
-            plt.scatter(latent[:, a], latent[:, b], c=col, s=s, lw=0.5, marker="o",
-                        edgecolors=col)
-            if len(special_points) >= 0:
-                for kk, sp in enumerate(special_points):
-                    if len(special_markers) == 0:
-                        sm = "x"
-                    else:
-                        sm = special_markers[kk]
-                    if len(special_kwargs) == 0:
-                        plt.scatter(sp[None, a], sp[None, b], s=75.0, lw=2.3,
-                                    marker=sm, edgecolor="0.3", facecolor="none")
-                    else:
-                        plt.scatter(sp[None, a], sp[None, b], **special_kwargs)
-            fig.patch.set_facecolor('white')
-            ax.tick_params(axis='x', which='major', labelsize=ls, direction='out',
-                           length=4, width=3, right="off", top="off", pad=10)
-            ax.tick_params(axis='y', which='major', labelsize=ls, direction='out',
-                           length=4, width=3, right="off", top="off", pad=10)
-
-            ax.tick_params(axis='x', which='minor', labelsize=ls, direction='out',
-                           length=4, width=3, right="off", top="off", pad=10)
-            ax.tick_params(axis='y', which='minor', labelsize=ls, direction='out',
-                           length=4, width=3, right="off", top="off", pad=10)
-            plt.xlabel(r"$Z_%d$" % (a+1), fontsize=ls)
-            plt.ylabel(r"$Z_%d$" % (b+1), fontsize=ls)
-            ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
-            ax.yaxis.set_major_locator(ticker.MultipleLocator(2))
-            plt.tight_layout()
-            plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (self.id, a+1, b+1), dpi=400)
-            plt.close()
 
     def gen_skel_from_sample_locs(self, dest_path=None, pred_key_appendix=""):
         try:
@@ -1867,7 +1825,7 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
                 return
     sso = SuperSegmentationObject(np.random.randint(0, sys.maxint),
                                   create=False,
-                                  working_dir="/wholebrain/scratch/areaxfs/",
+                                  working_dir=sos[0].working_dir,
                                   version="tmp", scaling=(10, 10, 20))
     sso._objects["sv"] = sos
     if render_first_only:
@@ -1898,8 +1856,6 @@ def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
     ----------
     so : SegmentationObject
         super voxel ID
-    coords : np.array
-        Rendering locations
     ws : tuple of int
         Rendering windows size
     add_cellobjects : bool
@@ -1924,14 +1880,3 @@ def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
     return views
 
 
-def glia_pred_exists(so):
-    so.load_attr_dict()
-    return "glia_probas" in so.attr_dict
-
-
-def views2tripletinput(views):
-    views = views[:, :, :1] # use first view only
-    out_d = np.concatenate([views,
-                            np.ones_like(views),
-                            np.ones_like(views)], axis=2)
-    return out_d.astype(np.float32)

@@ -98,7 +98,6 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
     ----------
     sso : SuperSegmentationObject
     thresh : float
-    single : bool
     clahe : bool
     shortest_paths_dest_dir : str
         None (default), else path to directory to write shortest paths

@@ -10,6 +10,7 @@ from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
+from ..reps.rep_helper import subfold_from_ix
 from ..handler.compression import VoxelDict, AttributeDict
 
 
@@ -50,10 +51,10 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
 
     rel_cs_to_cs_agg_ids = filter_relevant_cs_agg(cs_agg, ssd)
 
-    voxel_rel_paths_2stage = np.unique([utils.subfold_from_ix(ix)[:-2]
+    voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix)[:-2]
                                         for ix in range(100000)])
 
-    voxel_rel_paths = [utils.subfold_from_ix(ix) for ix in range(100000)]
+    voxel_rel_paths = [subfold_from_ix(ix) for ix in range(100000)]
     block_steps = np.linspace(0, len(voxel_rel_paths),
                               int(np.ceil(float(len(rel_cs_to_cs_agg_ids)) / stride)) + 1).astype(np.int)
 

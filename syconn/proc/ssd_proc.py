@@ -2,16 +2,12 @@ import cPickle as pkl
 import glob
 import numpy as np
 import os
-from collections import defaultdict, Counter
-from .image import single_conn_comp_img
-from knossos_utils import knossosdataset
+from collections import Counter
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-from ..handler.compression import VoxelDict, AttributeDict
 from ..reps import segmentation, super_segmentation
-from ..handler import basics
 
 
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
