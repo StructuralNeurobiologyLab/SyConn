@@ -540,6 +540,11 @@ class SuperSegmentationObject(object):
                 mesh_dc.save2pkl()
         return np.array(ind, dtype=np.int), np.array(vert, dtype=np.int)
 
+    def _load_obj_mesh_compr(self, obj_type="sv"):
+        mesh_dc = MeshDict(self.mesh_dc_path,
+                           disable_locking=not self.enable_locking)
+        return mesh_dc._dc_intern[obj_type]
+
     def load_svixs(self):
         if not os.path.isfile(self.edgelist_path):
             warnings.warn("Edge list of SSO %d does not exist. Return empty "
