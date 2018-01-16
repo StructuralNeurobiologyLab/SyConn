@@ -56,7 +56,7 @@ def mesh_creator_sso(sso_ix):
         sso.load_attr_dict()
         _ = sso.mi_mesh
         _ = sso.sj_mesh
-        _ = sso.vc_mesh
+        _ = sso._load_obj_mesh(obj_type="vc", rewrite=True)
         _ = sso.mesh
     except Exception, e:
         print "Error occurred:", e, sso_ix
@@ -204,11 +204,11 @@ def copy_axoness_single(dirs):
 
 
 if __name__ == "__main__":
-    copy_sv_skeletons()
+    # copy_sv_skeletons()
     # copy_axoness()
-    # ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/",
-    #                                 version="0")
-    # start_multiprocess(mesh_creator_sso, ssds.ssv_ids, nb_cpus=20, debug=False)
+    ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/",
+                                    version="0")
+    start_multiprocess(mesh_creator_sso, ssds.ssv_ids, nb_cpus=20, debug=False)
     # start_multiprocess(write_meshs_helper, list(ssds.ssvs), nb_cpus=20)
     # start_multiprocess(write_meshs_helper, list(ssds.ssvs), nb_cpus=20)
 

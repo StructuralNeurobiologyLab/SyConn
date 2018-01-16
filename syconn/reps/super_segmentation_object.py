@@ -71,7 +71,7 @@ except:
 class SuperSegmentationObject(object):
     def __init__(self, ssv_id, version=None, version_dict=None,
                  working_dir=None, create=True, sv_ids=None, scaling=None,
-                 object_caching=True, voxel_caching=True, mesh_cashing=False,
+                 object_caching=True, voxel_caching=True, mesh_caching=True,
                  view_caching=False, config=None, nb_cpus=1,
                  enable_locking=True):
         self.nb_cpus = nb_cpus
@@ -86,7 +86,7 @@ class SuperSegmentationObject(object):
 
         self._object_caching = object_caching
         self._voxel_caching = voxel_caching
-        self._mesh_caching = mesh_cashing
+        self._mesh_caching = mesh_caching
         self._view_caching = view_caching
         self._objects = {}
         self.skeleton = None
@@ -97,9 +97,8 @@ class SuperSegmentationObject(object):
         self._edge_graph = None
         # init mesh dicts
         self._mesh = None
-        self._mi_mesh = None
-        self._sj_mesh = None
-        self._vc_mesh = None
+        self._meshes = {"sv": None, "sj": None,
+                        "vc": None, "mi": None}
         self._views = None
         self._dataset = None
         self._weighted_graph = None
@@ -331,30 +330,26 @@ class SuperSegmentationObject(object):
             self._mesh = self._load_obj_mesh("sv")
         return self._mesh
 
-    @property
-    def sj_mesh(self):
-        if self._sj_mesh is None:
+    def load_mesh(self, mesh_type):
+        if not mesh_type in self._meshes:
+            return None
+        if self._meshes[mesh_type] is None:
             if not self.mesh_caching:
                 return self._load_obj_mesh("sj")
-            self._sj_mesh = self._load_obj_mesh("sj")
-        return self._sj_mesh
+            self._meshes[mesh_type] = self._load_obj_mesh("sj")
+        return self._meshes[mesh_type]
+
+    @property
+    def sj_mesh(self):
+        return self.load_mesh("sj")
 
     @property
     def vc_mesh(self):
-        if self._vc_mesh is None:
-            if not self.mesh_caching:
-                return self._load_obj_mesh("vc")
-            self._vc_mesh = self._load_obj_mesh("vc")
-        return self._vc_mesh
+        return self.load_mesh("vc")
 
     @property
     def mi_mesh(self):
-        if self._mi_mesh is None:
-            if not self.mesh_caching:
-                return self._load_obj_mesh("mi")
-            self._mi_mesh = self._load_obj_mesh("mi")
-        return self._mi_mesh
-
+        return self.load_mesh("mi")
     #                                                                 PROPERTIES
 
     @property

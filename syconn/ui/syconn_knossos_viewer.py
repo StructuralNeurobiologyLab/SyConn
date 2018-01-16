@@ -400,18 +400,14 @@ class main_class(QtGui.QDialog):
             mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
             KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh['indices'], [],
                                                  mi_mesh['vertices'],
-                                                 [],
-                                                 KnossosModule.GL_TRIANGLES,
-                                                 False)
+                                                 [], KnossosModule.GL_TRIANGLES, False)
             KnossosModule.skeleton.set_tree_color(mi_id,
                                                   QtGui.QColor(0, 0, 255, 255))
 
             sj_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'sj')
             KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh['indices'], [],
                                                  sj_mesh['vertices'],
-                                                 [],
-                                                 KnossosModule.GL_TRIANGLES,
-                                                 False)
+                                                 [], KnossosModule.GL_TRIANGLES, False)
             KnossosModule.skeleton.set_tree_color(sj_id,
                                                   QtGui.QColor(0, 0, 0, 255))
 
@@ -419,27 +415,21 @@ class main_class(QtGui.QDialog):
 
             KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh['indices'], [],
                                                  vc_mesh['vertices'],
-                                                 [],
-                                                 KnossosModule.GL_TRIANGLES,
-                                                 False)
+                                                 [], KnossosModule.GL_TRIANGLES, False)
             KnossosModule.skeleton.set_tree_color(vc_id,
                                                   QtGui.QColor(0, 255, 0, 255))
 
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
             KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['indices'], [],
                                                  mesh['vertices'],
-                                                 [],
-                                                 KnossosModule.GL_TRIANGLES,
-                                                 False)
+                                                 [], KnossosModule.GL_TRIANGLES, False)
             KnossosModule.skeleton.set_tree_color(ssv_id,
                                                   QtGui.QColor(255, 0, 0, 128))
         else:
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
             KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['indices'], [],
                                                  mesh['vertices'],
-                                                 [],
-                                                 KnossosModule.GL_TRIANGLES,
-                                                 False)
+                                                 [], KnossosModule.GL_TRIANGLES, False)
 
 
         return
