@@ -123,8 +123,8 @@ class SyConnFS_backend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv.load_mesh("sv")
-        mesh = {'vertices': mesh[0].tolist(),
-                'indices': mesh[1].tolist()}
+        mesh = {'vertices': mesh[1].tolist(),
+                'indices': mesh[0].tolist()}
         self.logger.info('Got ssv mesh {0}'.format(ssv_id))
 
         return mesh
@@ -141,8 +141,8 @@ class SyConnFS_backend(object):
         mesh = ssv.load_mesh(obj_type)
         if mesh is None:
             return None
-        return {'vertices': mesh[0].tolist(),
-                'indices': mesh[1].tolist()}
+        return {'vertices': mesh[1].tolist(),
+                'indices': mesh[0].tolist()}
 
     def ssv_list(self):
         """

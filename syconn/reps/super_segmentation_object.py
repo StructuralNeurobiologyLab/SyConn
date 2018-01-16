@@ -324,19 +324,15 @@ class SuperSegmentationObject(object):
 
     @property
     def mesh(self):
-        if self._mesh is None:
-            if not self.mesh_caching:
-                return self._load_obj_mesh("sv")
-            self._mesh = self._load_obj_mesh("sv")
-        return self._mesh
+        return self.load_mesh("sv")
 
     def load_mesh(self, mesh_type):
         if not mesh_type in self._meshes:
             return None
         if self._meshes[mesh_type] is None:
             if not self.mesh_caching:
-                return self._load_obj_mesh("sj")
-            self._meshes[mesh_type] = self._load_obj_mesh("sj")
+                return self._load_obj_mesh(mesh_type)
+            self._meshes[mesh_type] = self._load_obj_mesh(mesh_type)
         return self._meshes[mesh_type]
 
     @property
@@ -1030,12 +1026,8 @@ class SuperSegmentationObject(object):
         """
         if verbose:
             start = time.time()
-        if not force and cache:
-            if not self.attr_exists("sample_locations"):
-                self.load_attr_dict()
-                if self.attr_exists("sample_locations"):
-                    return self.attr_dict["sample_locations"]
-            else:
+        if not force:
+            if self.attr_exists("sample_locations"):
                 return self.attr_dict["sample_locations"]
         params = [[sv, {"force": force}] for sv in self.svs]
         # list of arrays
@@ -1198,6 +1190,23 @@ class SuperSegmentationObject(object):
         else:
             write_mesh2kzip(dest_path, mesh[0], mesh[1], col,
                             ply_fname=ply_fname)
+
+    def single_compartment_mesh(self, comp_type):
+        """
+
+        Parameters
+        ----------
+        comp_type : int
+            0: dendrite
+            1: axon
+            2: soma
+
+        Returns
+        -------
+        np.array, np.array
+            Mesh (indices, vertices)
+        """
+
 
     # --------------------------------------------------------------------- GLIA
     def gliaprobas2mesh(self, dest_path=None, pred_key_appendix=""):
@@ -1443,8 +1452,7 @@ class SuperSegmentationObject(object):
                  for sv in self.svs], nb_cpus=self.nb_cpus))
         preds = np.concatenate(preds)
         print "Collected axoness:", Counter(preds).most_common()
-        locs = np.array(sm.start_multiprocess_obj("sample_locations",
-                                  [[sv, ] for sv in self.svs], nb_cpus=self.nb_cpus))
+        locs = self.sample_locations()
         print "Collected locations."
         pred_coords = np.concatenate(locs)
         assert pred_coords.ndim == 2

@@ -398,37 +398,40 @@ class main_class(QtGui.QDialog):
             vc_id = self.obj_id_offs + ssv_id + 3
 
             mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
-            KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh['indices'], [],
-                                                 mi_mesh['vertices'],
-                                                 [], KnossosModule.GL_TRIANGLES, False)
-            KnossosModule.skeleton.set_tree_color(mi_id,
-                                                  QtGui.QColor(0, 0, 255, 255))
+            if len(mi_mesh['indices']) > 0:
+                KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh['vertices'], [],
+                                                     mi_mesh['indices'],
+                                                     [], KnossosModule.GL_TRIANGLES, False)
+                KnossosModule.skeleton.set_tree_color(mi_id,
+                                                      QtGui.QColor(0, 0, 255, 255))
 
             sj_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'sj')
-            KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh['indices'], [],
-                                                 sj_mesh['vertices'],
-                                                 [], KnossosModule.GL_TRIANGLES, False)
-            KnossosModule.skeleton.set_tree_color(sj_id,
-                                                  QtGui.QColor(0, 0, 0, 255))
+            if len(sj_mesh['indices']) > 0:
+                KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh['vertices'], [],
+                                                     sj_mesh['indices'],
+                                                     [], KnossosModule.GL_TRIANGLES, False)
+                KnossosModule.skeleton.set_tree_color(sj_id,
+                                                      QtGui.QColor(0, 0, 0, 255))
 
             vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
-
-            KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh['indices'], [],
-                                                 vc_mesh['vertices'],
-                                                 [], KnossosModule.GL_TRIANGLES, False)
-            KnossosModule.skeleton.set_tree_color(vc_id,
-                                                  QtGui.QColor(0, 255, 0, 255))
+            if len(vc_mesh['indices']) > 0:
+                KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh['vertices'], [],
+                                                     vc_mesh['indices'],
+                                                     [], KnossosModule.GL_TRIANGLES, False)
+                KnossosModule.skeleton.set_tree_color(vc_id,
+                                                      QtGui.QColor(0, 255, 0, 255))
 
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
-            KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['indices'], [],
-                                                 mesh['vertices'],
-                                                 [], KnossosModule.GL_TRIANGLES, False)
-            KnossosModule.skeleton.set_tree_color(ssv_id,
-                                                  QtGui.QColor(255, 0, 0, 128))
+            if len(mesh['indices']) > 0:
+                KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['vertices'], [],
+                                                     mesh['indices'],
+                                                     [], KnossosModule.GL_TRIANGLES, False)
+                KnossosModule.skeleton.set_tree_color(ssv_id,
+                                                      QtGui.QColor(255, 0, 0, 128))
         else:
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
-            KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['indices'], [],
-                                                 mesh['vertices'],
+            KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['vertices'], [],
+                                                 mesh['indices'],
                                                  [], KnossosModule.GL_TRIANGLES, False)
 
 

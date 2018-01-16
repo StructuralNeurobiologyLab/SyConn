@@ -287,7 +287,7 @@ from super_segmentation_object import *
 #                                           scaling=self.scaling,
 #                                           object_caching=caching,
 #                                           voxel_caching=caching,
-#                                           mesh_cashing=caching,
+#                                           mesh_caching=caching,
 #                                           view_caching=caching)
 #         else:
 #             sso = SuperSegmentationObject(obj_id,
@@ -298,7 +298,7 @@ from super_segmentation_object import *
 #                                           scaling=self.scaling,
 #                                           object_caching=caching,
 #                                           voxel_caching=caching,
-#                                           mesh_cashing=caching,
+#                                           mesh_caching=caching,
 #                                           view_caching=caching)
 #         return sso
 #
@@ -526,7 +526,7 @@ from super_segmentation_object import *
 # class SuperSegmentationObject(object):
 #       def __init__(self, ssv_id, version=None, version_dict=None,
 #                    working_dir=None, create=True, sv_ids=None, scaling=None,
-#                    object_caching=True, voxel_caching=True, mesh_cashing=False,
+#                    object_caching=True, voxel_caching=True, mesh_caching=False,
 #                    view_caching=False, config=None, nb_cpus=1,
 #                    enable_locking=True):
 #             self.nb_cpus = nb_cpus
@@ -541,7 +541,7 @@ from super_segmentation_object import *
 #
 #             self._object_caching = object_caching
 #             self._voxel_caching = voxel_caching
-#             self._mesh_caching = mesh_cashing
+#             self._mesh_caching = mesh_caching
 #             self._view_caching = view_caching
 #             self._objects = {}
 #             self.skeleton = None
