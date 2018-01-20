@@ -71,7 +71,7 @@ except:
 class SuperSegmentationObject(object):
     def __init__(self, ssv_id, version=None, version_dict=None,
                  working_dir=None, create=True, sv_ids=None, scaling=None,
-                 object_caching=True, voxel_caching=True, mesh_cashing=False,
+                 object_caching=True, voxel_caching=True, mesh_caching=True,
                  view_caching=False, config=None, nb_cpus=1,
                  enable_locking=True):
         self.nb_cpus = nb_cpus
@@ -86,7 +86,7 @@ class SuperSegmentationObject(object):
 
         self._object_caching = object_caching
         self._voxel_caching = voxel_caching
-        self._mesh_caching = mesh_cashing
+        self._mesh_caching = mesh_caching
         self._view_caching = view_caching
         self._objects = {}
         self.skeleton = None
@@ -97,9 +97,8 @@ class SuperSegmentationObject(object):
         self._edge_graph = None
         # init mesh dicts
         self._mesh = None
-        self._mi_mesh = None
-        self._sj_mesh = None
-        self._vc_mesh = None
+        self._meshes = {"sv": None, "sj": None,
+                        "vc": None, "mi": None}
         self._views = None
         self._dataset = None
         self._weighted_graph = None
@@ -325,36 +324,28 @@ class SuperSegmentationObject(object):
 
     @property
     def mesh(self):
-        if self._mesh is None:
+        return self.load_mesh("sv")
+
+    def load_mesh(self, mesh_type):
+        if not mesh_type in self._meshes:
+            return None
+        if self._meshes[mesh_type] is None:
             if not self.mesh_caching:
-                return self._load_obj_mesh("sv")
-            self._mesh = self._load_obj_mesh("sv")
-        return self._mesh
+                return self._load_obj_mesh(mesh_type)
+            self._meshes[mesh_type] = self._load_obj_mesh(mesh_type)
+        return self._meshes[mesh_type]
 
     @property
     def sj_mesh(self):
-        if self._sj_mesh is None:
-            if not self.mesh_caching:
-                return self._load_obj_mesh("sj")
-            self._sj_mesh = self._load_obj_mesh("sj")
-        return self._sj_mesh
+        return self.load_mesh("sj")
 
     @property
     def vc_mesh(self):
-        if self._vc_mesh is None:
-            if not self.mesh_caching:
-                return self._load_obj_mesh("vc")
-            self._vc_mesh = self._load_obj_mesh("vc")
-        return self._vc_mesh
+        return self.load_mesh("vc")
 
     @property
     def mi_mesh(self):
-        if self._mi_mesh is None:
-            if not self.mesh_caching:
-                return self._load_obj_mesh("mi")
-            self._mi_mesh = self._load_obj_mesh("mi")
-        return self._mi_mesh
-
+        return self.load_mesh("mi")
     #                                                                 PROPERTIES
 
     @property
@@ -548,6 +539,11 @@ class SuperSegmentationObject(object):
                 mesh_dc[obj_type] = [ind, vert]
                 mesh_dc.save2pkl()
         return np.array(ind, dtype=np.int), np.array(vert, dtype=np.int)
+
+    def _load_obj_mesh_compr(self, obj_type="sv"):
+        mesh_dc = MeshDict(self.mesh_dc_path,
+                           disable_locking=not self.enable_locking)
+        return mesh_dc._dc_intern[obj_type]
 
     def load_svixs(self):
         if not os.path.isfile(self.edgelist_path):
@@ -1035,12 +1031,8 @@ class SuperSegmentationObject(object):
         """
         if verbose:
             start = time.time()
-        if not force and cache:
-            if not self.attr_exists("sample_locations"):
-                self.load_attr_dict()
-                if self.attr_exists("sample_locations"):
-                    return self.attr_dict["sample_locations"]
-            else:
+        if not force:
+            if self.attr_exists("sample_locations"):
                 return self.attr_dict["sample_locations"]
         params = [[sv, {"force": force}] for sv in self.svs]
         # list of arrays
@@ -1203,6 +1195,23 @@ class SuperSegmentationObject(object):
         else:
             write_mesh2kzip(dest_path, mesh[0], mesh[1], col,
                             ply_fname=ply_fname)
+
+    def single_compartment_mesh(self, comp_type):
+        """
+
+        Parameters
+        ----------
+        comp_type : int
+            0: dendrite
+            1: axon
+            2: soma
+
+        Returns
+        -------
+        np.array, np.array
+            Mesh (indices, vertices)
+        """
+
 
     # --------------------------------------------------------------------- GLIA
     def gliaprobas2mesh(self, dest_path=None, pred_key_appendix=""):
@@ -1448,8 +1457,7 @@ class SuperSegmentationObject(object):
                  for sv in self.svs], nb_cpus=self.nb_cpus))
         preds = np.concatenate(preds)
         print "Collected axoness:", Counter(preds).most_common()
-        locs = np.array(sm.start_multiprocess_obj("sample_locations",
-                                  [[sv, ] for sv in self.svs], nb_cpus=self.nb_cpus))
+        locs = self.sample_locations()
         print "Collected locations."
         pred_coords = np.concatenate(locs)
         assert pred_coords.ndim == 2

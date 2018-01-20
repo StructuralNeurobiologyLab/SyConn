@@ -4,6 +4,18 @@ import sys
 import requests
 import json
 sys.dont_write_bytecode = True
+import time
+import lz4
+import numpy as np
+try:
+    try:
+        from lz4.block import compress, decompress
+    except ImportError:
+        from lz4 import compress, decompress
+except ImportError:
+    print("lz4 could not be imported. Locking will be disabled by default."
+          "Please install lz4 to enable locking (pip install lz4).")
+
 
 class SyConnGateInteraction(object):
     """
@@ -26,8 +38,11 @@ class SyConnGateInteraction(object):
         -------
 
         """
-        r = self.session.get(self.server + '/ssv_mesh/{0}'.format(ssv_id))
-        return json.loads(r.content)
+        r1 = self.session.get(self.server + '/ssv_ind/{0}'.format(ssv_id))
+        r2 = self.session.get(self.server + '/ssv_vert/{0}'.format(ssv_id))
+        ind = lz4stringtoarr(r1.content, dtype=np.uint32)
+        vert = lz4stringtoarr(r2.content, dtype=np.float32)
+        return ind, vert
 
     def get_ssv_obj_mesh(self, ssv_id, obj_type):
         """
@@ -42,9 +57,13 @@ class SyConnGateInteraction(object):
         -------
 
         """
-        r = self.session.get(self.server + '/ssv_obj_mesh/{0}/{1}'.format(ssv_id,
+        r1 = self.session.get(self.server + '/ssv_obj_ind/{0}/{1}'.format(ssv_id,
                                                                           obj_type))
-        return json.loads(r.content)
+        r2 = self.session.get(self.server + '/ssv_obj_vert/{0}/{1}'.format(ssv_id,
+                                                                          obj_type))
+        ind = lz4stringtoarr(r1.content, dtype=np.uint32)
+        vert = lz4stringtoarr(r2.content, dtype=np.float32)
+        return ind, vert
 
     def get_list_of_all_ssv_ids(self):
         """
@@ -364,7 +383,7 @@ class main_class(QtGui.QDialog):
         return
 
     def ssv_to_knossos(self, ssv_id):
-
+        start = time.time()
         #self.clear_knossos_view_button_clicked()
 
         # to mergelist
@@ -397,53 +416,85 @@ class main_class(QtGui.QDialog):
             sj_id = self.obj_id_offs + ssv_id + 2
             vc_id = self.obj_id_offs + ssv_id + 3
 
+            mi_start = time.time()
             mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
-            KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh['indices'], [],
-                                                 mi_mesh['vertices'],
-                                                 [],
-                                                 KnossosModule.GL_TRIANGLES,
-                                                 False)
-            KnossosModule.skeleton.set_tree_color(mi_id,
-                                                  QtGui.QColor(0, 0, 255, 255))
+            print "Mi time:", time.time() - mi_start
+            if len(mi_mesh[0]) > 0:
+                KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh[1], [],
+                                                     mi_mesh[0],
+                                                     [], 4, False)
+                KnossosModule.skeleton.set_tree_color(mi_id,
+                                                      QtGui.QColor(0, 0, 255, 255))
+            print "Mi time (Knossos):", time.time() - mi_start
 
+            sj_start = time.time()
             sj_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'sj')
-            KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh['indices'], [],
-                                                 sj_mesh['vertices'],
-                                                 [],
-                                                 KnossosModule.GL_TRIANGLES,
-                                                 False)
-            KnossosModule.skeleton.set_tree_color(sj_id,
-                                                  QtGui.QColor(0, 0, 0, 255))
+            print "SJ time:", time.time() - sj_start
+            if len(sj_mesh[0]) > 0:
+                KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh[1], [],
+                                                     sj_mesh[0],
+                                                     [], 4, False)
+                KnossosModule.skeleton.set_tree_color(sj_id,
+                                                      QtGui.QColor(0, 0, 0, 255))
+            print "SJ time (Knossos):", time.time() - sj_start
 
-            #vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
+            vc_start = time.time()
+            vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
+            print "VC time:", time.time() - vc_start
+            if len(vc_mesh[0]) > 0:
+                KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh[1], [],
+                                                     vc_mesh[0],
+                                                     [], 4, False)
+                KnossosModule.skeleton.set_tree_color(vc_id,
+                                                      QtGui.QColor(0, 255, 0, 255))
+            print "VC time (Knossos):", time.time() - vc_start
 
-            #KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh['indices'], [],
-            #                                     vc_mesh['vertices'],
-             #                                    [],
-             #                                    KnossosModule.GL_TRIANGLES,
-            #                                     False)
-            #KnossosModule.skeleton.set_tree_color(vc_id,
-            #                                      QtGui.QColor(0, 255, 0, 255))
-
+            sv_start = time.time()
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
-            KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['indices'], [],
-                                                 mesh['vertices'],
-                                                 [],
-                                                 KnossosModule.GL_TRIANGLES,
-                                                 False)
-            KnossosModule.skeleton.set_tree_color(ssv_id,
-                                                  QtGui.QColor(255, 0, 0, 128))
+            print "SV time:", time.time() - sv_start
+            if len(mesh[0]) > 0:
+                KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh[1], [],
+                                                     mesh[0],
+                                                     [], 4, False)
+                KnossosModule.skeleton.set_tree_color(ssv_id,
+                                                      QtGui.QColor(255, 0, 0, 128))
+            print "SV time (Knossos):", time.time() - sv_start
         else:
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
-            KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh['indices'], [],
-                                                 mesh['vertices'],
-                                                 [],
-                                                 KnossosModule.GL_TRIANGLES,
-                                                 False)
+            KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh[1], [],
+                                                 mesh[0],
+                                                 [], 4, False)
 
-
+        print "Total time:", time.time() - start
         return
 
+
+def lz4stringtoarr(string, dtype=np.float32, shape=None):
+    """
+    Converts lz4 compressed string to 1d array.
+
+    Parameters
+    ----------
+    string : str
+    dtype : np.dtype
+    shape : tuple
+
+    Returns
+    -------
+    np.array
+        1d array
+    """
+    if string == "":
+        return np.zeros((0, ), dtype=dtype)
+    try:
+        arr_1d = np.frombuffer(decompress(string), dtype=dtype)
+    except Exception as e:
+        print e
+        print "String length:", len(string)
+        return np.zeros((0,), dtype=dtype)
+    if shape is not None:
+        arr_1d = arr_1d.reshape(shape)
+    return arr_1d
 
 if __name__=='__main__':
     A = main_class()
