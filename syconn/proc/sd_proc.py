@@ -129,7 +129,7 @@ def _dataset_analysis_thread(args):
                     if attribute not in global_attr_dict:
                         global_attr_dict[attribute] = []
 
-                        global_attr_dict[attribute].append(so.attr_dict[attribute])
+                    global_attr_dict[attribute].append(so.attr_dict[attribute])
 
                 this_attr_dc[so_id] = so.attr_dict
 
@@ -291,7 +291,7 @@ def _map_objects_thread(args):
                         else:
                             sv_id_dict[ids[i_id]] = {so_id: id_ratios[i_id]}
             else:
-                if np.product(so.shape) > 1e8:
+                if np.product(so.shape) > 1e12:
                     continue
 
                 vx_list = np.argwhere(so.voxels) + so.bounding_box[0]
