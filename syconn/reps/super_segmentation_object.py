@@ -76,7 +76,7 @@ class SuperSegmentationObject(object):
                  enable_locking=True):
         self.nb_cpus = nb_cpus
         self._id = ssv_id
-        self.attr_dict = dict(mi=[], sj=[], vc=[], sv=[])
+        self.attr_dict = {} # dict(mi=[], sj=[], vc=[], sv=[])
         self.enable_locking = enable_locking
 
         self._rep_coord = None

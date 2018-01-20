@@ -714,20 +714,23 @@ class SegmentationObject(object):
         mesh = self.mesh
         if self.type == "sv":
             color = (130, 130, 130, 160)
+        elif self.type == "cs":
+            color = (100, 200, 30, 255)
         elif self.type == "sj":
             color = (int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255)
         elif self.type == "vc":
             color = (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)
         elif self.type == "mi":
             color = (0, 153, 255, 255)
-        else:
-            raise ("Given object type '%s' does not exist." % self.type,
-                   TypeError)
-        if ext_color is not None:
+        elif ext_color is not None:
             if ext_color == 0:
                 color = None
             else:
                 color = ext_color
+        else:
+            raise ("Given object type '%s' does not exist." % self.type,
+                   TypeError)
+
         if ply_name == "":
             ply_name = str(self.id)
         meshs.write_mesh2kzip(dest_path, mesh[0], mesh[1], color,
