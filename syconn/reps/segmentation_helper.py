@@ -1,5 +1,6 @@
 import glob
 import numpy as np
+from scipy import ndimage
 import os
 from ..handler.compression import MeshDict, VoxelDict, AttributeDict, SkeletonDict
 
@@ -110,18 +111,23 @@ def load_voxels_downsampled(so, downsampling=(2, 2, 1)):
 def load_voxel_list(so):
     voxel_list = np.array([], dtype=np.int32)
 
-    voxel_dc = VoxelDict(so.voxel_path, read_only=True)
-    bin_arrs, block_offsets = voxel_dc[so.id]
+    if so._voxels is not None:
+        print("Voxels used")
+        voxel_list = np.array(zip(*np.nonzero(so.voxels)), dtype=np.int32) + \
+                     so.bounding_box[0]
+    else:
+        voxel_dc = VoxelDict(so.voxel_path, read_only=True)
+        bin_arrs, block_offsets = voxel_dc[so.id]
 
-    for i_bin_arr in range(len(bin_arrs)):
-        block_voxels = np.array(zip(*np.nonzero(bin_arrs[i_bin_arr])),
-                                dtype=np.int32)
-        block_voxels += np.array(block_offsets[i_bin_arr])
+        for i_bin_arr in range(len(bin_arrs)):
+            block_voxels = np.array(zip(*np.nonzero(bin_arrs[i_bin_arr])),
+                                    dtype=np.int32)
+            block_voxels += np.array(block_offsets[i_bin_arr])
 
-        if len(voxel_list) == 0:
-            voxel_list = block_voxels
-        else:
-            voxel_list = np.concatenate([voxel_list, block_voxels])
+            if len(voxel_list) == 0:
+                voxel_list = block_voxels
+            else:
+                voxel_list = np.concatenate([voxel_list, block_voxels])
 
     return voxel_list
 
@@ -210,3 +216,19 @@ def load_skeleton(so, recompute=False):
     edges = np.array(edges, dtype=np.int)
 
     return nodes, diameters, edges
+
+
+def binary_closing(so, n_iterations=13):
+    n_iterations = int(n_iterations)
+    assert n_iterations > 0
+
+    vx = so.voxels.copy()
+    vx = np.pad(vx, [[n_iterations]*2]*3, mode='constant')
+
+    vx = ndimage.morphology.binary_closing(vx, iterations=n_iterations)
+
+    vx = vx[n_iterations: -n_iterations,
+            n_iterations: -n_iterations,
+            n_iterations: -n_iterations]
+
+    so._voxels = vx
