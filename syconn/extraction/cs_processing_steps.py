@@ -51,15 +51,15 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
 
     rel_cs_to_cs_agg_ids = filter_relevant_cs_agg(cs_agg, ssd)
 
-    voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix)[:-2]
+    voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, 100000)[:-2]
                                         for ix in range(100000)])
 
-    voxel_rel_paths = [subfold_from_ix(ix) for ix in range(100000)]
+    voxel_rel_paths = [subfold_from_ix(ix, 100000) for ix in range(100000)]
     block_steps = np.linspace(0, len(voxel_rel_paths),
                               int(np.ceil(float(len(rel_cs_to_cs_agg_ids)) / stride)) + 1).astype(np.int)
 
     cs = segmentation.SegmentationDataset("cs", working_dir=wd, version="new",
-                                          create=True)
+                                          create=True, n_folders_fs=100000)
 
     for p in voxel_rel_paths_2stage:
         os.makedirs(cs.so_storage_path + p)
@@ -75,7 +75,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
         i_block += 1
 
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_combine_and_split_cs_agg_helper,
+        results = sm.start_multiprocess(_combine_and_split_cs_agg_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
     elif qu.__QSUB__:
@@ -115,7 +115,7 @@ def map_objects_to_cs(wd, cs_version=None, ssd_version=None, max_map_dist_nm=200
         raise Exception("QSUB not available")
 
 
-def _combine_and_split_cs_agg_helper(args):
+def _combine_and_split_cs_agg_thread(args):
     wd = args[0]
     rel_cs_to_cs_agg_ids_items = args[1]
     voxel_rel_paths = args[2]
@@ -155,16 +155,16 @@ def _combine_and_split_cs_agg_helper(args):
             cs_agg_object = cs_agg.get_segmentation_object(cs_agg_id)
             np.concatenate([voxel_list, cs_agg_object.voxel_list])
 
-        distances = spatial.distance.cdist(voxel_list * scaling,
-                                           voxel_list * scaling)
-        distances[np.triu_indices_from(distances)] = cs_gap_nm
-        edges = np.array(np.where(distances < cs_gap_nm)).T
-
-        graph = nx.from_edgelist(edges)
-        cc = nx.connected_components(graph)
+        if len(voxel_list) < 1e4:
+            kdtree = spatial.cKDTree(voxel_list * scaling)
+            pairs = kdtree.query_pairs(r=cs_gap_nm)
+            graph = nx.from_edgelist(pairs)
+            ccs = list(nx.connected_components(graph))
+        else:
+            ccs = cc_large_voxel_lists(voxel_list * scaling, cs_gap_nm)
 
         i_cc = 0
-        for this_cc in cc:
+        for this_cc in ccs:
             print(i_cc, next_id)
             i_cc += 1
             this_vx = voxel_list[np.array(list(this_cc))]
@@ -205,6 +205,42 @@ def _combine_and_split_cs_agg_helper(args):
                          "/attr_dict.pkl")
 
     print("done")
+
+
+def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000):
+    kdtree = spatial.cKDTree(voxel_list)
+
+    checked_ids = np.array([], dtype=np.int)
+    next_ids = np.array([0])
+    ccs = [set(next_ids)]
+
+    current_ccs = 0
+    vx_ids = np.arange(len(voxel_list), dtype=np.int)
+
+    while True:
+        print("NEXT - %d - %d" % (len(next_ids), len(checked_ids)))
+        for cc in ccs:
+            print("N voxels in cc: %d" % (len(cc)))
+
+        if len(next_ids) == 0:
+            p_ids = vx_ids[~np.in1d(vx_ids, checked_ids)]
+            if len(p_ids) == 0:
+                break
+            else:
+                current_ccs += 1
+                ccs.append(set([p_ids[0]]))
+                next_ids = p_ids[:1]
+
+        q_ids = kdtree.query_ball_point(voxel_list[next_ids], r=cs_gap_nm, )
+        checked_ids = np.concatenate([checked_ids, next_ids])
+
+        for q_id in q_ids:
+            ccs[current_ccs].update(q_id)
+
+        cc_ids = np.array(list(ccs[current_ccs]))
+        next_ids = vx_ids[cc_ids[~np.in1d(cc_ids, checked_ids)][:max_concurrent_nodes]]
+
+    return ccs
 
 
 def _map_objects_to_cs_thread(args):
