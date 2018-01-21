@@ -231,4 +231,4 @@ def binary_closing(so, n_iterations=13):
             n_iterations: -n_iterations,
             n_iterations: -n_iterations]
 
-    so._voxels = vx
+    return vx

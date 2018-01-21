@@ -9,7 +9,7 @@ from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 from ..handler.compression import VoxelDict, AttributeDict
-from ..reps import segmentation
+from ..reps import segmentation, segmentation_helper
 from ..handler import basics
 
 
@@ -343,113 +343,59 @@ def _write_mapping_to_sv_thread(args):
         this_attr_dc.save2pkl()
 
 
-# def split_cs(sd, new_obj_type, dist=None, stride=5000,
-#             qsub_pe=None, qsub_queue=None, nb_cpus=None):
-#     """ Splits contact sites
-#
-#     :param sd:
-#     :param new_obj_type:
-#     :param dist:
-#     :param stride:
-#     :param qsub_pe:
-#     :param qsub_queue:
-#     :param nb_cpus:
-#     :return:
-#     """
-#     if dist is None:
-#         dist = (7**2 * 2 + 3**2)**(1./2)
-#
-#     new_sd = segmentation.SegmentationDataset(obj_type=new_obj_type,
-#                                               version="new",
-#                                               working_dir=sd.working_dir,
-#                                               version_dict=sd.version_dict)
-#
-#     # Partitioning the work
-#
-#     multi_params = []
-#     start_id_indices = [i_id for i_id in range(0, len(sd.ids), stride)]
-#     start_new_ids = [i * int(2e9 / len(start_id_indices)) for i in range(len(start_id_indices))]
-#
-#     for i_start_id in range(len(start_id_indices)):
-#         multi_params.append([start_id_indices[i_start_id],
-#                              stride, sd.type, new_obj_type,
-#                              sd.version, new_sd.version,
-#                              sd.version_dict, sd.working_dir,
-#                              dist, start_new_ids[i_start_id]])
-#
-#     # Running workers
-#
-#     if qsub_pe is None and qsub_queue is None:
-#         sm.start_multiprocess(_split_cs_thread, multi_params,
-#                               nb_cpus=nb_cpus)
-#
-#     elif qu.__QSUB__:
-#         path_to_out = qu.QSUB_script(multi_params,
-#                                      "split_cs",
-#                                      pe=qsub_pe, queue=qsub_queue,
-#                                      script_folder=script_folder)
-#
-#         out_files = glob.glob(path_to_out + "/*")
-#
-#     else:
-#         raise Exception("QSUB not available")
-#
-#
-# def _split_cs_thread(args):
-#     """ Worker of split_cs """
-#     i_id = args[0]
-#     stride = args[1]
-#     obj_type = args[2]
-#     new_obj_type = args[3]
-#     version = args[4]
-#     new_version = args[5]
-#     version_dict = args[6]
-#     working_dir = args[7]
-#     dist = args[8]
-#     new_id = args[9]
-#
-#     sd = segmentation.SegmentationDataset(obj_type=obj_type, version=version,
-#                                           working_dir=working_dir,
-#                                           version_dict=version_dict)
-#     ids = sd.ids[i_id * stride: (i_id + 1) * stride]
-#
-#     new_sd = segmentation.SegmentationDataset(obj_type=new_obj_type,
-#                                               version=new_version,
-#                                               working_dir=working_dir,
-#                                               version_dict=version_dict)
-#
-#     for i_id in range(len(ids)):
-#         so_obj = sd.get_segmentationdataset(ids[i_id])
-#         kdtree = scipy.spatial.cKDTree(so_obj.voxel_list)
-#
-#         graph = nx.from_edgelist(kdtree.query_pairs(dist))
-#         ccs = list(nx.connected_components(graph))
-#
-#         if len(ccs) == 1:
-#             new_so_obj = new_sd.get_segmentationdataset(new_id)
-#             new_id += 1
-#
-#             new_so_obj.attr_dict["paths_to_voxels"] = so_obj.paths_to_voxels
-#             new_so_obj.save_attr_dict()
-#         else:
-#             for cc in ccs:
-#                 new_so_obj = new_sd.get_segmentationdataset(new_id)
-#                 new_id += 1
-#
-#                 voxel_ids = np.array(list(cc), dtype=np.int32)
-#                 this_voxel_list = so_obj.voxel_list[voxel_ids]
-#
-#                 bb = [np.min(this_voxel_list, axis=1),
-#                       np.max(this_voxel_list, axis=1)]
-#
-#                 this_voxel_list -= bb[0]
-#
-#                 this_voxels = np.zeros(bb[1]-bb[0], dtype=np.bool)
-#                 this_voxels[this_voxel_list[:, 0],
-#                             this_voxel_list[:, 1],
-#                             this_voxel_list[:, 2]] = True
-#
-#                 new_so_obj.save_voxels(this_voxels)
+def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
+                      qsub_pe=None, qsub_queue=None, nb_cpus=1,
+                      n_max_co_processes=None):
+    paths = cs_sd.so_dir_paths
+
+    # Partitioning the work
+
+    multi_params = []
+    for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
+        multi_params.append([path_block, cs_sd.version, cs_sd.working_dir,
+                             n_iterations])
+
+    # Running workers
+
+    if qsub_pe is None and qsub_queue is None:
+        results = sm.start_multiprocess(_binary_filling_cs_thread,
+                                        multi_params, nb_cpus=nb_cpus)
+
+    elif qu.__QSUB__:
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "binary_filling_cs",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_cores=nb_cpus,
+                                     n_max_co_processes=n_max_co_processes)
+    else:
+        raise Exception("QSUB not available")
+
+
+def _binary_filling_cs_thread(args):
+    paths = args[0]
+    obj_version = args[1]
+    working_dir = args[2]
+    n_iterations = args[3]
+
+    cs_sd = segmentation.SegmentationDataset('cs',
+                                             version=obj_version,
+                                             working_dir=working_dir)
+
+    for p in paths:
+        this_vx_dc = VoxelDict(p + "/voxel.pkl", read_only=False,
+                               timeout=3600)
+
+        for so_id in this_vx_dc.keys():
+            so = cs_sd.get_segmentation_object(so_id)
+            # so.attr_dict = this_attr_dc[so_id]
+            so.load_voxels(voxel_dc=this_vx_dc)
+            filled_voxels = segmentation_helper.binary_closing(so.voxels,
+                                                               n_iterations=n_iterations)
+
+            this_vx_dc[so_id] = [filled_voxels], this_vx_dc[so_id][1]
+
+        this_vx_dc.save2pkl()
 
 
 def init_sos(sos_dict):
