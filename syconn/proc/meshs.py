@@ -185,7 +185,7 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20)):
     return np.array(ind, dtype=np.int), np.array(verts) * new_fact + offset, norm
 
 
-def get_object_mesh(obj, downsampling=(8, 8, 4)):
+def get_object_mesh(obj, downsampling):
     """
     Get object mesh from object voxels using marching cubes.
 

@@ -40,9 +40,11 @@ class SyConnGateInteraction(object):
         """
         r1 = self.session.get(self.server + '/ssv_ind/{0}'.format(ssv_id))
         r2 = self.session.get(self.server + '/ssv_vert/{0}'.format(ssv_id))
+        r3 = self.session.get(self.server + '/ssv_norm/{0}'.format(ssv_id))
         ind = lz4stringtoarr(r1.content, dtype=np.uint32)
         vert = lz4stringtoarr(r2.content, dtype=np.float32)
-        return ind, vert
+        norm = lz4stringtoarr(r3.content, dtype=np.float32)
+        return ind, vert, norm
 
     def get_ssv_obj_mesh(self, ssv_id, obj_type):
         """
@@ -61,9 +63,12 @@ class SyConnGateInteraction(object):
                                                                           obj_type))
         r2 = self.session.get(self.server + '/ssv_obj_vert/{0}/{1}'.format(ssv_id,
                                                                           obj_type))
+        r3 = self.session.get(self.server + '/ssv_obj_norm/{0}/{1}'.format(ssv_id,
+                                                                          obj_type))
         ind = lz4stringtoarr(r1.content, dtype=np.uint32)
         vert = lz4stringtoarr(r2.content, dtype=np.float32)
-        return ind, vert
+        norm = lz4stringtoarr(r3.content, dtype=np.float32)
+        return ind, vert, norm
 
     def get_list_of_all_ssv_ids(self):
         """
@@ -420,7 +425,7 @@ class main_class(QtGui.QDialog):
             mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
             print "Mi time:", time.time() - mi_start
             if len(mi_mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh[1], [],
+                KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh[1], mi_mesh[2],
                                                      mi_mesh[0],
                                                      [], 4, False)
                 KnossosModule.skeleton.set_tree_color(mi_id,
@@ -431,7 +436,7 @@ class main_class(QtGui.QDialog):
             sj_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'sj')
             print "SJ time:", time.time() - sj_start
             if len(sj_mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh[1], [],
+                KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh[1], sj_mesh[2],
                                                      sj_mesh[0],
                                                      [], 4, False)
                 KnossosModule.skeleton.set_tree_color(sj_id,
@@ -442,7 +447,7 @@ class main_class(QtGui.QDialog):
             vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
             print "VC time:", time.time() - vc_start
             if len(vc_mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh[1], [],
+                KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh[1], vc_mesh[2],
                                                      vc_mesh[0],
                                                      [], 4, False)
                 KnossosModule.skeleton.set_tree_color(vc_id,
@@ -453,7 +458,7 @@ class main_class(QtGui.QDialog):
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
             print "SV time:", time.time() - sv_start
             if len(mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh[1], [],
+                KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh[1], mesh[2],
                                                      mesh[0],
                                                      [], 4, False)
                 KnossosModule.skeleton.set_tree_color(ssv_id,
@@ -461,7 +466,7 @@ class main_class(QtGui.QDialog):
             print "SV time (Knossos):", time.time() - sv_start
         else:
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
-            KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh[1], [],
+            KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh[1], mesh[2],
                                                  mesh[0],
                                                  [], 4, False)
 
