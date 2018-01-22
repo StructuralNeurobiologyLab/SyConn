@@ -15,4 +15,4 @@ min_cc_size_glia = 8e3 # in nm; L1-norm on vertex bounding box
 min_cc_size_neuron = 8e3 # in nm; L1-norm on vertex bounding box
 
 MESH_DOWNSAMPLING = {"sv": (8, 8, 4), "sj": (2, 2, 1), "vc": (4, 4, 2),
-                     "mi": (8, 8, 4)}
+                     "mi": (8, 8, 4), "cs": (2, 2, 1)}
