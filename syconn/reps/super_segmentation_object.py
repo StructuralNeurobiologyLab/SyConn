@@ -40,7 +40,7 @@ from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, 
 from ..handler.compression import AttributeDict, MeshDict
 from ..proc.image import single_conn_comp_img
 from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
-from ..proc.mesh import write_mesh2kzip, merge_someshs, compartmentalize_mesh
+from ..proc.meshes import write_mesh2kzip, merge_someshs, compartmentalize_mesh
 from ..proc.rendering import render_sampled_sso, comp_window, \
     multi_render_sampled_svidlist, render_sso_coords
 try:

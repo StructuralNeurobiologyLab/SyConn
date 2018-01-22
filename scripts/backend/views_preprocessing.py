@@ -3,9 +3,9 @@ from syconn.reps.segmentation import SegmentationDataset, SegmentationObject
 from syconn.reps.rep_helper import subfold_from_ix
 from syconn.handler.basics import chunkify
 from syconn.handler.compression import AttributeDict, MeshDict, VoxelDict
-from syconn.proc.mesh import write_mesh2kzip
+from syconn.proc.meshes import write_mesh2kzip
 from syconn.mp.shared_mem import start_multiprocess
-from syconn.proc.mesh import triangulation
+from syconn.proc.meshes import triangulation
 from syconn.config.global_params import MESH_DOWNSAMPLING
 import shutil
 import sys

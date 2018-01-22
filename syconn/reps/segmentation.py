@@ -26,7 +26,7 @@ from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
 from ..handler.basics import get_filepaths_from_dir, safe_copy, write_txt2kzip
 import warnings
 from .segmentation_helper import *
-from ..proc import mesh
+from ..proc import meshes
 from skimage.measure import mesh_surface_area
 
 
@@ -712,7 +712,7 @@ class SegmentationObject(object):
         return np.linalg.norm(self.shape * self.scaling)
 
     def _mesh_from_scratch(self):
-        return mesh.get_object_mesh(self, MESH_DOWNSAMPLING[self.type])
+        return meshes.get_object_mesh(self, MESH_DOWNSAMPLING[self.type])
 
     def _save_mesh(self, ind, vert, normals):
         mesh_dc = MeshDict(self.mesh_path, read_only=False,
@@ -743,7 +743,7 @@ class SegmentationObject(object):
 
         if ply_name == "":
             ply_name = str(self.id)
-        mesh.write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
+        meshes.write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
                              ply_fname=ply_name + ".ply")
 
     def mergelist2kzip(self, dest_path):
