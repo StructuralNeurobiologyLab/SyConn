@@ -3,9 +3,9 @@ from syconn.reps.segmentation import SegmentationDataset, SegmentationObject
 from syconn.reps.rep_helper import subfold_from_ix
 from syconn.handler.basics import chunkify
 from syconn.handler.compression import AttributeDict, MeshDict, VoxelDict
-from syconn.proc.meshs import write_mesh2kzip
+from syconn.proc.mesh import write_mesh2kzip
 from syconn.mp.shared_mem import start_multiprocess
-from syconn.proc.meshs import triangulation
+from syconn.proc.mesh import triangulation
 from syconn.config.global_params import MESH_DOWNSAMPLING
 import shutil
 import sys
@@ -89,6 +89,7 @@ def mesh_chunck(attr_dir):
     ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
     obj_ixs = ad.keys()
     if len(obj_ixs) == 0:
+        print "EMPTY MESH DICT", attr_dir
         return
     voxel_dc = VoxelDict(attr_dir + "/voxel.pkl", disable_locking=True)
     md = MeshDict(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)
@@ -128,11 +129,13 @@ def mesh_proc_chunked(obj_type):
     sds = SegmentationDataset(obj_type, working_dir="/wholebrain/scratch/areaxfs3/",
                               n_folders_fs=10000)
     fold = sds.so_storage_path
-    f1 = np.arange(0, 100)
+    f1 = np.arange(0, 10)
     f2 = np.arange(0, 100)
     all_poss_attr_dicts = list(itertools.product(f1, f2))
-    assert len(all_poss_attr_dicts) == 100*100
-    multi_params = ["%s/%d/%d/" % (fold, par[0], par[1]) for par in all_poss_attr_dicts]
+    all_poss_attr_dicts += list(itertools.product(f2, f1))
+    assert len(all_poss_attr_dicts) == 2000
+    print "Processing %d mesh dicts of %s." % (len(all_poss_attr_dicts), obj_type)
+    multi_params = ["%s/%02d/%02d/" % (fold, par[0], par[1]) for par in all_poss_attr_dicts]
     start_multiprocess(mesh_chunck, multi_params, nb_cpus=20, debug=False)
 #
 # def preproc_meshs(ssd):

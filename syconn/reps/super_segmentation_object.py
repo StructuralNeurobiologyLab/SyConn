@@ -31,7 +31,7 @@ import segmentation
 import super_segmentation_helper as ssh
 # from syconn_deprecated import skel_based_classifier as sbc
 from .segmentation import SegmentationObject
-from ..proc.sd import predict_sos_views
+from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     knossos_ml_from_svixs, subfold_from_ix, subfold_from_ix_SSO
 from ..config import parser
@@ -40,7 +40,7 @@ from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, 
 from ..handler.compression import AttributeDict, MeshDict
 from ..proc.image import single_conn_comp_img
 from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
-from ..proc.meshs import write_mesh2kzip, merge_someshs
+from ..proc.mesh import write_mesh2kzip, merge_someshs, compartmentalize_mesh
 from ..proc.rendering import render_sampled_sso, comp_window, \
     multi_render_sampled_svidlist, render_sso_coords
 try:
@@ -93,15 +93,17 @@ class SuperSegmentationObject(object):
         self._voxels = None
         self._voxels_xy_downsampled = None
         self._voxels_downsampled = None
-        self._mesh = None
         self._edge_graph = None
+
         # init mesh dicts
-        self._mesh = None
         self._meshes = {"sv": None, "sj": None,
                         "vc": None, "mi": None}
+        self._mesh_compartments = None
+
         self._views = None
         self._dataset = None
         self._weighted_graph = None
+        self._sample_locations = None
 
         if sv_ids is not None:
             self.attr_dict["sv"] = sv_ids
@@ -904,8 +906,10 @@ class SuperSegmentationObject(object):
         self._objects = {}
         self._voxels = None
         self._voxels_xy_downsampled = None
-        self._mesh = None
         self._views = None
+        self._sample_locations = None
+        self._mesh_compartments = None
+        self._meshes = None
         self.skeleton = None
 
     def copy2dir(self, dest_dir, safe=True):
@@ -1034,6 +1038,8 @@ class SuperSegmentationObject(object):
         list of array
             Sample coordinates for each SV in self.svs.
         """
+        if not force and self._sample_locations:
+            return self._sample_locations
         if verbose:
             start = time.time()
         if not force:
@@ -1174,7 +1180,7 @@ class SuperSegmentationObject(object):
                    colors=None, k=1):
         """
         If dest_path or ply_fname is None then indices, vertices, colors are
-        returned. Else Mesh is written ti k.zip file as specified.
+        returned. Else Mesh is written to k.zip file as specified.
 
         Parameters
         ----------
@@ -1201,21 +1207,22 @@ class SuperSegmentationObject(object):
             write_mesh2kzip(dest_path, mesh[0], mesh[1], col,
                             ply_fname=ply_fname)
 
-    def single_compartment_mesh(self, comp_type):
+    def single_compartment_meshs(self, comp_type):
         """
 
         Parameters
         ----------
-        comp_type : int
-            0: dendrite
-            1: axon
-            2: soma
-
-        Returns
-        -------
-        np.array, np.array
-            Mesh (indices, vertices)
+        comp_type : int or str
+            0 /  "dendrite"
+            1 / "axon"
+            2 "soma"
         """
+        if not self._mesh_compartments:
+            compartmentalize_mesh(self)
+        if type(comp_type) == int:
+            comp_type = {0: "dendrite", 1: "axon", 2: "soma"}[comp_type]
+        return self._mesh_compartments[comp_type]
+
 
 
     # --------------------------------------------------------------------- GLIA

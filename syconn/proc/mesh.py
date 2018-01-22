@@ -7,6 +7,7 @@
 
 import itertools
 import numpy as np
+from collections import Counter
 from numba import jit
 from scipy import spatial
 from skimage import measure
@@ -20,7 +21,8 @@ except ImportError:
 
 from ..mp.shared_mem import start_multiprocess_obj
 __all__ = ["MeshObject", "get_object_mesh", "merge_meshs", "triangulation",
-           "get_random_centered_coords", "write_sso2kzip", "write_mesh2kzip"]
+           "get_random_centered_coords", "write_sso2kzip", "write_mesh2kzip",
+           "compartmentalize_mesh"]
 
 
 class MeshObject(object):
@@ -205,6 +207,7 @@ def get_object_mesh(obj, downsampling):
     indices, vertices, normals = triangulation(np.array(obj.voxel_list),
                                       downsampling=downsampling)
     vertices *= obj.scaling
+    assert len(vertices) == len(normals)
     return indices.flatten(), vertices.flatten(), normals.flatten()
 
 
@@ -485,24 +488,20 @@ def merge_someshs(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     all_vert = np.zeros((0, ))
     all_norm = np.zeros((0, ))
     colors = np.zeros((0, ))
-    meshs = start_multiprocess_obj("mesh", [[so,] for so in sos],
+    meshes = start_multiprocess_obj("mesh", [[so,] for so in sos],
                                    nb_cpus=nb_cpus)
     if color_vals is not None:
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
-    for i in range(len(meshs)):
-        ind, vert = meshs[i][:2]
-        if len(meshs[i]) == 2:
-            norm = np.zeros((0, ), np.float32)
-        elif len(meshs[i]) == 3:
-            norm = meshs[i][-1]
-        else:
-            raise ValueError("Mesh needs to be list of length 2 or 3.")
+    for i in range(len(meshes)):
+        ind, vert, norm = meshes[i]
+        assert len(vert) == len(norm)
         all_ind = np.concatenate([all_ind, ind + len(all_vert)/nb_simplices])
         all_vert = np.concatenate([all_vert, vert])
         all_norm = np.concatenate([all_norm, norm])
         if color_vals is not None:
             curr_color = [color_vals[i]]*len(vert)
             colors = np.concatenate([colors, curr_color])
+    assert len(all_vert) == len(all_norm)
     if color_vals is not None:
         return all_ind, all_vert, all_norm, colors
     return all_ind, all_vert, all_norm
@@ -631,3 +630,60 @@ def color_factory(c_values, mcmap, alpha=1.0):
         curr_color[-1] = alpha
         colors.append(curr_color)
     return colors
+
+
+def compartmentalize_mesh(ssv, pred_key_appendix=""):
+    """
+    Splits SuperSegmentationObject mesh into axon, dendrite and soma. Based
+    on axoness prediction of SV's contained in SuperSuperVoxel ssv.
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    pred_key_appendix : str
+        Specific version of axoness prediction
+
+    Returns
+    -------
+    np.array
+        Majority label of each face / triangle in mesh indices;
+        triangulation is assumed. If majority class has n=1, majority label is
+        set to -1.
+    """
+    preds = np.array(start_multiprocess_obj("axoness_preds",
+                                             [[sv, {"pred_key_appendix": pred_key_appendix}]
+                                                for sv in ssv.svs],
+                                               nb_cpus=ssv.nb_cpus))
+    preds = np.concatenate(preds)
+    print "Collected axoness:", Counter(preds).most_common()
+    locs = ssv.sample_locations()
+    print "Collected locations."
+    pred_coords = np.concatenate(locs)
+    assert pred_coords.ndim == 2
+    assert pred_coords.shape[1] == 3
+    ind, vert, axoness = ssv._pred2mesh(pred_coords, preds, k=3, colors=(0, 1, 2))
+    # get axoness of each vertex where indices are pointing to
+    ind_comp = axoness[ind]
+    ind = ind.reshape(-1, 3)
+    vert = vert.reshape(-1, 3)
+    norm = ssv.mesh[2].reshape(-1, 3)
+    ind_comp = ind_comp.reshape(-1, 3)
+    ind_comp_maj = np.zeros((len(ind)), dtype=np.uint8)
+    for ii in range(len(ind)):
+        triangle = ind_comp[ii]
+        cnt = Counter(triangle)
+        ax, n = cnt.most_common(1)[0]
+        if n == 1:
+            ax = -1
+        ind_comp_maj[ii] = ax
+    comp_meshes = {}
+    for ii, comp_type in enumerate(["axon", "dendrite", "soma"]):
+        comp_ind = ind[ind_comp_maj==ii].flatten()
+        unique_comp_ind = np.unique(comp_ind)
+        comp_vert = vert[unique_comp_ind].flatten()
+        if len(ssv.mesh[2]) != 0:
+            comp_norm = norm[unique_comp_ind].flatten()
+        else:
+            comp_norm = ssv.mesh[2]
+        comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
+    ssv._mesh_compartments = comp_meshes
