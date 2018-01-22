@@ -15,9 +15,6 @@ TODO: Fix double declaration of SSO and SSD classes.
 Problem: missing imports in this script. missing changes from classes which were
 introduced in the scipry super_segmentation_object.py super_segmentation_dataset.py
 """
-print("DEPRECATION WARNING:"
-      "syconn.reps.super_segmentation is deprecated and now split into"
-      "super_segmentation_dataset and super_segmentation_object module.")
 from .super_segmentation_dataset import *
 from super_segmentation_object import *
 

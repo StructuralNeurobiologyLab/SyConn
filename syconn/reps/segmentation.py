@@ -19,6 +19,7 @@ try:
 except:
     default_wd_available = False
 from ..config import parser
+from ..config.global_params import MESH_DOWNSAMPLING
 from ..handler.compression import LZ4Dict
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
@@ -26,6 +27,7 @@ from ..handler.basics import get_filepaths_from_dir, safe_copy, write_txt2kzip
 import warnings
 from .segmentation_helper import *
 from ..proc import meshs
+from skimage.measure import mesh_surface_area
 
 
 class SegmentationDataset(object):
@@ -614,6 +616,18 @@ class SegmentationObject(object):
         return np.linalg.norm(self.mesh_bb[1] - self.mesh_bb[0], ord=2)
 
     @property
+    def mesh_area(self):
+        """
+
+        Returns
+        -------
+        float
+            Mesh area in um^2
+        """
+        return mesh_surface_area(self.mesh[1].reshape(-1, 3),
+                                 self.mesh[0].reshape(-1, 3)) / 1e6
+
+    @property
     def sample_locations_exist(self):
         location_dc = LZ4Dict(self.locations_path,
                               disable_locking=not self.enable_locking)
@@ -698,16 +712,12 @@ class SegmentationObject(object):
         return np.linalg.norm(self.shape * self.scaling)
 
     def _mesh_from_scratch(self):
-        if self.type == "sv" and np.linalg.norm(self.shape*self.scaling) > 17e3:
-            warnings.warn("Creating mesh from SV (%d) with max-length of "
-                          "%0.0fum. This can lead to precision loss." %
-                          (self.id, np.linalg.norm(self.shape*self.scaling)/1e3))
-        return meshs.get_object_mesh(self)
+        return meshs.get_object_mesh(self, MESH_DOWNSAMPLING[self.type])
 
-    def _save_mesh(self, ind, vert):
+    def _save_mesh(self, ind, vert, normals):
         mesh_dc = MeshDict(self.mesh_path, read_only=False,
                            disable_locking=not self.enable_locking)
-        mesh_dc[self.id] = [ind, vert]
+        mesh_dc[self.id] = [ind, vert, normals]
         mesh_dc.save2pkl()
 
     def mesh2kzip(self, dest_path, ext_color=None, ply_name=""):
@@ -733,7 +743,7 @@ class SegmentationObject(object):
 
         if ply_name == "":
             ply_name = str(self.id)
-        meshs.write_mesh2kzip(dest_path, mesh[0], mesh[1], color,
+        meshs.write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
                               ply_fname=ply_name + ".ply")
 
     def mergelist2kzip(self, dest_path):

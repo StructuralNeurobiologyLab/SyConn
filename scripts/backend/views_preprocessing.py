@@ -6,6 +6,7 @@ from syconn.handler.compression import AttributeDict, MeshDict, VoxelDict
 from syconn.proc.meshs import write_mesh2kzip
 from syconn.mp.shared_mem import start_multiprocess
 from syconn.proc.meshs import triangulation
+from syconn.config.global_params import MESH_DOWNSAMPLING
 import shutil
 import sys
 import os
@@ -54,10 +55,10 @@ def mesh_creator_sso(sso_ix):
     try:
         sso = SuperSegmentationObject(sso_ix, working_dir="/wholebrain/scratch/areaxfs3/", nb_cpus=1, version="0")
         sso.load_attr_dict()
-        _ = sso.mi_mesh
-        _ = sso.sj_mesh
+        _ = sso._load_obj_mesh(obj_type="mi", rewrite=True)
+        _ = sso._load_obj_mesh(obj_type="sj", rewrite=True)
         _ = sso._load_obj_mesh(obj_type="vc", rewrite=True)
-        _ = sso.mesh
+        # _ = sso.mesh
     except Exception, e:
         print "Error occurred:", e, sso_ix
 
@@ -113,13 +114,12 @@ def mesh_chunck(attr_dir):
             else:
                 voxel_list = np.concatenate([voxel_list, block_voxels])
     # create mesh
-        res = {"sv": 256, "sj": 100, "vc": 100, "mi": 150}
-        resolution = res[obj_type]
 
-        indices, vertices = triangulation(np.array(voxel_list),
-                                          resolution=resolution)
+        indices, vertices, normals = triangulation(np.array(voxel_list),
+                                          downsampling=MESH_DOWNSAMPLING[obj_type],
+                                          scaling=SCALING)
         vertices *= SCALING
-        md[ix] = [indices.flatten(), vertices.flatten()]
+        md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
     md.save2pkl()
     print attr_dir
 
@@ -132,7 +132,7 @@ def mesh_proc_chunked(obj_type):
     f2 = np.arange(0, 100)
     all_poss_attr_dicts = list(itertools.product(f1, f2))
     assert len(all_poss_attr_dicts) == 100*100
-    multi_params = ["%s/%d/%d/" % (fold, par[0], par[1]) for par in all_poss_attr_dicts][:9000]
+    multi_params = ["%s/%d/%d/" % (fold, par[0], par[1]) for par in all_poss_attr_dicts]
     start_multiprocess(mesh_chunck, multi_params, nb_cpus=20, debug=False)
 #
 # def preproc_meshs(ssd):
@@ -208,6 +208,11 @@ if __name__ == "__main__":
     # copy_axoness()
     ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/",
                                     version="0")
+    global SCALING
+    SCALING = ssds.scaling
+    mesh_proc_chunked("sj")
+    mesh_proc_chunked("vc")
+    mesh_proc_chunked("mi")
     start_multiprocess(mesh_creator_sso, ssds.ssv_ids, nb_cpus=20, debug=False)
     # start_multiprocess(write_meshs_helper, list(ssds.ssvs), nb_cpus=20)
     # start_multiprocess(write_meshs_helper, list(ssds.ssvs), nb_cpus=20)
@@ -218,9 +223,7 @@ if __name__ == "__main__":
     # SCALING = sds.scaling.astype(np.float32)
     # print SCALING
 
-    # mesh_proc_chunked("sj")
-    # mesh_proc_chunked("vc")
-    # mesh_proc_chunked("mi")
+
 
 
 

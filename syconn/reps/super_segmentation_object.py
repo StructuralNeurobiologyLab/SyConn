@@ -529,16 +529,21 @@ class SuperSegmentationObject(object):
                         self.version == "tmp":
             mesh_dc = MeshDict(self.mesh_dc_path,
                                disable_locking=not self.enable_locking)
-            ind, vert = mesh_dc[obj_type]
+            if len(mesh_dc[obj_type]) == 3:
+                ind, vert, normals = mesh_dc[obj_type]
+            else:
+                ind, vert = mesh_dc[obj_type]
+                normals = np.zeros((0, ), dtype=np.float32)
         else:
-            ind, vert = merge_someshs(self.get_seg_objects(obj_type),
+            ind, vert, normals = merge_someshs(self.get_seg_objects(obj_type),
                                       nb_cpus=self.nb_cpus)
             if not self.version == "tmp":
                 mesh_dc = MeshDict(self.mesh_dc_path, read_only=False,
                                    disable_locking=not self.enable_locking)
-                mesh_dc[obj_type] = [ind, vert]
+                mesh_dc[obj_type] = [ind, vert, normals]
                 mesh_dc.save2pkl()
-        return np.array(ind, dtype=np.int), np.array(vert, dtype=np.int)
+        return np.array(ind, dtype=np.int), np.array(vert, dtype=np.int),\
+               np.array(normals, dtype=np.float32)
 
     def _load_obj_mesh_compr(self, obj_type="sv"):
         mesh_dc = MeshDict(self.mesh_dc_path,
@@ -1103,7 +1108,7 @@ class SuperSegmentationObject(object):
                 color = None
             else:
                 color = ext_color
-        write_mesh2kzip(dest_path, mesh[0], mesh[1], color,
+        write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
                         ply_fname=obj_type + ".ply")
 
     def meshs2kzip(self, dest_path=None, sv_color=None):

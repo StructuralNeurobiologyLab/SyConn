@@ -132,7 +132,7 @@ class MeshObject(object):
         self.vertices = vert_resh.reshape(len(self.vertices))
 
 
-def triangulation(pts, resolution=256, scaling=(10, 10, 20)):
+def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20)):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
     by building dense matrix (in case of a point cloud) and applying marching
@@ -141,29 +141,32 @@ def triangulation(pts, resolution=256, scaling=(10, 10, 20)):
     Parameters
     ----------
     pts : numpy.array [N, 3] or [N, M, O]
-    resolution : int
+    downsampling : tuple of int
+        Magnitude of downsampling, e.g. 1, 2, (..) which is applied to pts
+        for each axis
+    scaling : tuple
 
     Returns
     -------
-    array, array
-        indices [N, 3], vertices [N, 3]
-    scaling : tuple
+    array, array, array
+        indices [M, 3], vertices [N, 3], normals [N, 3]
+
     """
     #  TODO: check offset again!
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3
+    downsampling = np.array(downsampling, dtype=np.uint8)
     if pts.ndim == 2:
         offset = np.min(pts, axis=0)
         pts -= offset
         extent_orig = np.max(pts, axis=0)
-        shrink_fct = extent_orig.max() / float(resolution)
-        if shrink_fct > 1:
-            pts = (pts / shrink_fct).astype(np.uint16)
+        pts = (pts / downsampling).astype(np.uint16)
+        # add zero boundary around object
         pts += 5
         bb = np.max(pts, axis=0) + 5
         volume = np.zeros(bb, dtype=np.float32)
         volume[pts[:, 0], pts[:, 1], pts[:, 2]] = 1
     else:
-        volume = pts
+        volume = measure.block_reduce(pts, downsampling, np.max)
         vecs = np.argwhere(pts != 0)
         offset = np.min(vecs, axis=0)
         extent_orig = np.max(vecs, axis=0) - offset
@@ -175,39 +178,34 @@ def triangulation(pts, resolution=256, scaling=(10, 10, 20)):
     volume = gaussianSmoothing(dt, scaling[0], step_size=scaling) # this works because only the relative step_size between the dimensions is interesting, therefore we can neglect shrink_fct
     if np.sum(volume<0) == 0: # less smoothing
         volume = gaussianSmoothing(dt, scaling[0]/2, step_size=scaling)
-    verts, ind, _, _ = measure.marching_cubes(volume, 0, gradient_direction="descent") # also calculates normals!
+    verts, ind, norm, _ = measure.marching_cubes(volume, 0, gradient_direction="descent") # also calculates normals!
     verts -= np.min(verts, axis=0)
     extent_post = np.max(verts, axis=0)
     new_fact = extent_orig / extent_post # scale independent for each dimension, s.t. the bounding box coords are the same
-    return np.array(ind, dtype=np.int), np.array(verts) * new_fact + offset
+    return np.array(ind, dtype=np.int), np.array(verts) * new_fact + offset, norm
 
 
-def get_object_mesh(obj, res=None):
+def get_object_mesh(obj, downsampling=(8, 8, 4)):
     """
     Get object mesh from object voxels using marching cubes.
 
     Parameters
     ----------
     obj : SegmentationObject
-    res : int
-        mesh resolution in vx (default: sv: 256, sj: 100, vc: 100, mi: 150)
+    downsampling : tuple of int
+        Magnitude of downsampling for each axis
     Returns
     -------
-    array [N, 1], array [M, 1]
+    array [N, 1], array [M, 1], array
         vertices, indices
     """
-    if res is None:
-        res = {"sv": 256, "sj": 100, "vc": 100, "mi": 150}
-        resolution = res[obj.type]
-    else:
-        resolution = res
     if np.isscalar(obj.voxels):
         return np.zeros((0, )), np.zeros((0, ))
 
-    indices, vertices = triangulation(np.array(obj.voxel_list),
-                                      resolution=resolution)
+    indices, vertices, normals = triangulation(np.array(obj.voxel_list),
+                                      downsampling=downsampling)
     vertices *= obj.scaling
-    return indices.flatten(), vertices.flatten()
+    return indices.flatten(), vertices.flatten(), normals.flatten()
 
 
 def normalize_vertices(vertices):
@@ -485,24 +483,32 @@ def merge_someshs(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     """
     all_ind = np.zeros((0, ), dtype=np.uint)
     all_vert = np.zeros((0, ))
+    all_norm = np.zeros((0, ))
     colors = np.zeros((0, ))
     meshs = start_multiprocess_obj("mesh", [[so,] for so in sos],
                                    nb_cpus=nb_cpus)
     if color_vals is not None:
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
     for i in range(len(meshs)):
-        ind, vert = meshs[i]
+        ind, vert = meshs[i][:2]
+        if len(meshs[i]) == 2:
+            norm = np.zeros((0, ), np.float32)
+        elif len(meshs[i]) == 3:
+            norm = meshs[i][-1]
+        else:
+            raise ValueError("Mesh needs to be list of length 2 or 3.")
         all_ind = np.concatenate([all_ind, ind + len(all_vert)/nb_simplices])
         all_vert = np.concatenate([all_vert, vert])
+        all_norm = np.concatenate([all_norm, norm])
         if color_vals is not None:
             curr_color = [color_vals[i]]*len(vert)
             colors = np.concatenate([colors, curr_color])
     if color_vals is not None:
-        return all_ind, all_vert, colors
-    return all_ind, all_vert
+        return all_ind, all_vert, all_norm, colors
+    return all_ind, all_vert, all_norm
 
 
-def make_ply_string(indices, vertices, rgba_color):
+def make_ply_string(indices, vertices, normals, rgba_color):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -511,6 +517,7 @@ def make_ply_string(indices, vertices, rgba_color):
     ----------
     indices : iterable of indices (int)
     vertices : iterable of vertices (int)
+    normals : iterable of normals (float)
     rgba_color : 4-tuple (uint8)
 
     Returns
@@ -539,7 +546,7 @@ def make_ply_string(indices, vertices, rgba_color):
     return ply_str
 
 
-def make_ply_string_wocolor(indices, vertices):
+def make_ply_string_wocolor(indices, vertices, normals):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -548,6 +555,7 @@ def make_ply_string_wocolor(indices, vertices):
     ----------
     indices : iterable of indices (int)
     vertices : iterable of vertices (int)
+    normals : iterable of normals (float)
 
     Returns
     -------
@@ -587,7 +595,7 @@ def write_ssomesh2kzip(k_path, sso, color=(255, 0, 0, 255), ply_fname="0.ply"):
     write_mesh2kzip(k_path, ind, vert, color, ply_fname)
 
 
-def write_mesh2kzip(k_path, ind, vert, color, ply_fname):
+def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
     """
     Writes mesh as .ply's to k.zip file.
 
@@ -597,6 +605,7 @@ def write_mesh2kzip(k_path, ind, vert, color, ply_fname):
         path to zip
     ind : np.array
     vert : np.array
+    norm : np.array
     color : tuple or np.array
         rgba between 0 and 255
     ply_fname : str
@@ -604,9 +613,9 @@ def write_mesh2kzip(k_path, ind, vert, color, ply_fname):
     if len(vert) == 0:
         return
     if color is not None:
-        ply_str = make_ply_string(ind, vert.astype(np.float32), color)
+        ply_str = make_ply_string(ind, vert.astype(np.float32), norm, color)
     else:
-        ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32))
+        ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm)
     write_txt2kzip(k_path, ply_str, ply_fname)
 
 
