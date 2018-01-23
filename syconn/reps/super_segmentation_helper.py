@@ -746,7 +746,7 @@ def radius_correction_found_vertices(sso, plump_factor=1):
     vert_sparse = sso.mesh[1].reshape((-1, 3))
     tree = spatial.cKDTree(vert_sparse)
 
-    dists, all_found_vertices_ixs = tree.query(skel_node * np.array([10, 10, 20]), 2)
+    dists, all_found_vertices_ixs = tree.query(skel_node * sso.scaling, 2)
 
     for ii, el in enumerate(skel_node):
         diameters[ii] = np.median(dists[ii]) *2/10
@@ -1122,10 +1122,11 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
         plt.close()
 
-def sparse_sso(sso, dot_prod_thresh = 0.99, dist_thresh = 700):
+
+def sparsify_skeleton(sso, dot_prod_thresh=0.7, dist_thresh=1000):
 
     """
-    Sparses the skeleton of the sso
+    Reduces nodes based o
     :param sso: Super Segmentation Object
     :param dot_prod_thresh: the 'straightness' of the edges
     :param dist_thresh: minimum distance desired between every node
@@ -1134,7 +1135,7 @@ def sparse_sso(sso, dot_prod_thresh = 0.99, dist_thresh = 700):
 
     sso.load_skeleton()
     ssv_skel = sso.skeleton
-    scal = [10,10,20]
+    scal = sso.scaling
 
     skel_G = nx.Graph()
     new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
@@ -1145,51 +1146,53 @@ def sparse_sso(sso, dot_prod_thresh = 0.99, dist_thresh = 700):
     new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
     new_edges = [tuple(ix) for ix in new_edges]
     skel_G.add_edges_from(new_edges)
-
-    change = 0
-    while change >= 0:
-
+    change = 1
+    run_cnt = 0
+    # orig_node_cnt = len(new_nodes)
+    while change > 0:
+        # run_cnt += 1
         change = 0
         visiting_nodes = list({k for k, v in dict(skel_G.degree()).iteritems() if v == 2})
-
         for visiting_node in visiting_nodes:
             neighbours = [n for n in skel_G.neighbors(visiting_node)]
             if skel_G.degree(visiting_node) == 2:
                 left_node = neighbours[0]
                 right_node = neighbours[1]
-                vector_left_node = [int(skel_G.nodes[left_node]['position'][ix]) - int(skel_G.nodes[visiting_node]['position'][ix]) for ix in range(3)]
-                vector_right_node =[int(skel_G.nodes[right_node]['position'][ix]) - int(skel_G.nodes[visiting_node]['position'][ix]) for ix in range(3)]
+                vector_left_node = np.array([int(skel_G.node[left_node]['position'][ix]) - int(skel_G.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+                vector_right_node =np.array([int(skel_G.node[right_node]['position'][ix]) - int(skel_G.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
 
                 dot_prod = np.dot(vector_left_node/ np.linalg.norm(vector_left_node),vector_right_node/ np.linalg.norm(vector_right_node))
-                dist = np.linalg.norm([int(skel_G.nodes[right_node]['position'][ix]*scal[ix]) - int(skel_G.nodes[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
+                dist = np.linalg.norm([int(skel_G.node[right_node]['position'][ix]*scal[ix]) - int(skel_G.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
+
                 # print('dots', dot_prod, 'dist', dist)
 
-                if abs(dot_prod) > dot_prod_thresh and dist < dist_thresh:
+                if (abs(dot_prod) > dot_prod_thresh and dist < dist_thresh) or dist <= 30:
                     skel_G.remove_node(visiting_node)
                     skel_G.add_edge(left_node,right_node)
-                    change = 1
+                    change += 1
                     # print('this got removed', visiting_node)
-                if change == 0:
-                    change = -1
+                # if change == 0:
+                #     change = -1
+    # print("Removed %d nodes after %d iterations." %
+    #       (orig_node_cnt-len(skel_G.nodes()), run_cnt))
 
-    sso.skeleton['nodes'] = np.array([skel_G.nodes[ix]['position'] for ix in skel_G.nodes], dtype=np.uint32)
+    sso.skeleton['nodes'] = np.array([skel_G.node[ix]['position'] for ix in skel_G.nodes()], dtype=np.uint32)
     sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
 
-    temp_edges = np.array(skel_G.edges).reshape(-1)
+    temp_edges = np.array(skel_G.edges()).reshape(-1)
     temp_edges_sorted = np.unique(np.sort(temp_edges))
     temp_edges_dict = {}
 
     for ii, ix in enumerate(temp_edges_sorted):
         temp_edges_dict[ix] = ii
-
     temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
 
     temp_edges = np.array(temp_edges).reshape([-1, 2])
+
     sso.skeleton['edges'] = temp_edges
 
-    # Estimating the radii, plump factor 1.3 recommended
-    sso.skeleton = radius_correction_found_vertices(sso, plump_factor=1.3)
-
-    sso.export_kzip("/wholebrain/scratch/areaxfs/sparsed_skeletons/skelG_sparsed_exp_3_%d.k.zip" % sso.id)
-
-    return sso
+    # Estimating the radii
+    # print("Starting radius correction.")
+    sso.skeleton = radius_correction_found_vertices(sso)
+    # print("Exporting kzip")
+    # sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v5.k.zip" % sso.id)
