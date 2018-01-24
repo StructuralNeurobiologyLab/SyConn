@@ -29,7 +29,6 @@ except:
 from scipy import spatial
 import segmentation
 import super_segmentation_helper as ssh
-# from syconn_deprecated import skel_based_classifier as sbc
 from .segmentation import SegmentationObject
 from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
@@ -47,16 +46,7 @@ try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
-skeletopyze_available = False
-attempted_skeletopyze_import = False
 
-try:
-    import skeletopyze
-    skeletopyze_available = True
-except:
-    skeletopyze_available = False
-    # print "skeletopyze not found - you won't be able to compute skeletons. " \
-    #       "Install skeletopyze from https://github.com/funkey/skeletopyze"
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
@@ -1476,147 +1466,51 @@ class SuperSegmentationObject(object):
         assert pred_coords.shape[1] == 3
         self._pred2mesh(pred_coords, preds, "axoness.ply", dest_path=dest_path,
                         k=k)
-
-    def associate_objs_with_skel_nodes(self, obj_types=("sj", "vc", "mi"),
-                                       downsampling=(8, 8, 4)):
-        self.load_skeleton()
-
-        for obj_type in obj_types:
-            voxels = []
-            voxel_ids = [0]
-            for obj in self.get_seg_objects(obj_type):
-                vl = obj.load_voxel_list_downsampled_adapt(downsampling)
-
-                if len(vl) == 0:
-                    continue
-
-                if len(voxels) == 0:
-                    voxels = vl
-                else:
-                    voxels = np.concatenate((voxels, vl))
-
-                voxel_ids.append(voxel_ids[-1] + len(vl))
-
-            if len(voxels) == 0:
-                self.skeleton["assoc_%s" % obj_type] = [[]] * len(
-                    self.skeleton["nodes"])
-                continue
-
-            voxel_ids = np.array(voxel_ids)
-
-            kdtree = scipy.spatial.cKDTree(voxels * self.scaling)
-            balls = kdtree.query_ball_point(self.skeleton["nodes"] *
-                                            self.scaling, 500)
-            nodes_objs = []
-            for i_node in range(len(self.skeleton["nodes"])):
-                nodes_objs.append(list(np.unique(
-                    np.sum(voxel_ids[:, None] <= np.array(balls[i_node]),
-                           axis=0) - 1)))
-
-            self.skeleton["assoc_%s" % obj_type] = nodes_objs
-
-        self.save_skeleton(to_kzip=False, to_object=True)
         # self.save_objects_to_kzip_sparse(obj_types=obj_types)
 
-    def extract_ax_features(self, feature_context_nm=8000, max_diameter=250,
-                            obj_types=("sj", "mi", "vc"), downsample_to=None):
-        node_degrees = np.array(self.weighted_graph.degree().values(),
-                                dtype=np.int)
-
-        sizes = {}
-        for obj_type in obj_types:
-            objs = self.get_seg_objects(obj_type)
-            sizes[obj_type] = np.array([obj.size for obj in objs],
-                                       dtype=np.int)
-
-        if downsample_to is not None:
-            if downsample_to > len(self.skeleton["nodes"]):
-                downsample_by = 1
-            else:
-                downsample_by = int(len(self.skeleton["nodes"]) /
-                                    float(downsample_to))
-        else:
-            downsample_by = 1
-
-        features = []
-        for i_node in range(len(self.skeleton["nodes"][::downsample_by])):
-            this_i_node = i_node * downsample_by
-            this_features = []
-
-            paths = nx.single_source_dijkstra_path(self.weighted_graph,
-                                                   this_i_node,
-                                                   feature_context_nm)
-            neighs = np.array(paths.keys(), dtype=np.int)
-
-            neigh_diameters = self.skeleton["diameters"][neighs]
-            this_features.append(np.mean(neigh_diameters))
-            this_features.append(np.std(neigh_diameters))
-            this_features += list(np.histogram(neigh_diameters,
-                                               bins=10,
-                                               range=(0, max_diameter),
-                                               normed=True)[0])
-            this_features.append(np.mean(node_degrees[neighs]))
-
-            for obj_type in obj_types:
-                neigh_objs = np.array(self.skeleton["assoc_%s" % obj_type])[
-                    neighs]
-                neigh_objs = [item for sublist in neigh_objs for item in
-                              sublist]
-                neigh_objs = np.unique(np.array(neigh_objs))
-                if len(neigh_objs) == 0:
-                    this_features += [0, 0, 0]
-                    continue
-
-                this_features.append(len(neigh_objs))
-                obj_sizes = sizes[obj_type][neigh_objs]
-                this_features.append(np.mean(obj_sizes))
-                this_features.append(np.std(obj_sizes))
-
-            features.append(np.array(this_features))
-        return features
-
-    def predict_axoness(self, ssd_version="axgt", clf_name="rfc",
-                        feature_context_nm=5000):
-        sc = sbc.SkelClassifier(working_dir=self.working_dir,
-                                ssd_version=ssd_version,
-                                create=False)
-
-        # if feature_context_nm is None:
-        #     if np.linalg.norm(self.shape * self.scaling) > 24000:
-        #         radius = 12000
-        #     else:
-        #         radius = nx.diameter(self.weighted_graph) / 2
-        #
-        #     if radius > 12000:
-        #         radius = 12000
-        #     elif radius < 2000:
-        #         radius = 2000
-        #
-        #     avail_fc = sc.avail_feature_contexts(clf_name)
-        #     feature_context_nm = avail_fc[np.argmin(np.abs(avail_fc - radius))]
-
-        features = self.extract_ax_features(feature_context_nm=
-                                            feature_context_nm)
-        clf = sc.load_classifier(clf_name, feature_context_nm)
-
-        probas = clf.predict_proba(features)
-
-        pred = []
-        class_weights = np.array([1, 1, 1])
-        for i_node in range(len(self.skeleton["nodes"])):
-            paths = nx.single_source_dijkstra_path(self.weighted_graph, i_node,
-                                                   10000)
-            neighs = np.array(paths.keys(), dtype=np.int)
-            pred.append(
-                np.argmax(np.sum(probas[neighs], axis=0) * class_weights))
-
-        # pred = np.argmax(probas, axis=1)
-        self.skeleton["axoness"] = np.array(pred, dtype=np.int)
-        self.save_skeleton(to_object=True, to_kzip=True)
-        try:
-            self.save_objects_to_kzip_sparse()
-        except:
-            pass
+    # def predict_axoness(self, ssd_version="axgt", clf_name="rfc",
+    #                     feature_context_nm=5000):
+    # TODO: outsource to sbc module
+    #     sc = sbc.SkelClassifier(working_dir=self.working_dir,
+    #                             ssd_version=ssd_version,
+    #                             create=False)
+    #
+    #     # if feature_context_nm is None:
+    #     #     if np.linalg.norm(self.shape * self.scaling) > 24000:
+    #     #         radius = 12000
+    #     #     else:
+    #     #         radius = nx.diameter(self.weighted_graph) / 2
+    #     #
+    #     #     if radius > 12000:
+    #     #         radius = 12000
+    #     #     elif radius < 2000:
+    #     #         radius = 2000
+    #     #
+    #     #     avail_fc = sc.avail_feature_contexts(clf_name)
+    #     #     feature_context_nm = avail_fc[np.argmin(np.abs(avail_fc - radius))]
+    #
+    #     features = ssh.extract_ax_features(self, feature_context_nm=
+    #                                        feature_context_nm)
+    #     clf = sc.load_classifier(clf_name, feature_context_nm)
+    #
+    #     probas = clf.predict_proba(features)
+    #
+    #     pred = []
+    #     class_weights = np.array([1, 1, 1])
+    #     for i_node in range(len(self.skeleton["nodes"])):
+    #         paths = nx.single_source_dijkstra_path(self.weighted_graph, i_node,
+    #                                                10000)
+    #         neighs = np.array(paths.keys(), dtype=np.int)
+    #         pred.append(
+    #             np.argmax(np.sum(probas[neighs], axis=0) * class_weights))
+    #
+    #     # pred = np.argmax(probas, axis=1)
+    #     self.skeleton["axoness"] = np.array(pred, dtype=np.int)
+    #     self.save_skeleton(to_object=True, to_kzip=False)
+    #     # try:
+    #     #     self.save_objects_to_kzip_sparse()
+    #     # except:
+    #     #     pass
 
     def axoness_for_coords(self, coords, radius_nm=4000):
         coords = np.array(coords)
@@ -1694,38 +1588,39 @@ class SuperSegmentationObject(object):
 
     # --------------------------------------------------------------- CELL TYPES
 
-    def predict_cell_type(self, ssd_version="ctgt", clf_name="rfc",
-                          feature_context_nm=25000):
-        sc = sbc.SkelClassifier(working_dir=self.working_dir,
-                                ssd_version=ssd_version,
-                                create=False)
-
-        # if feature_context_nm is None:
-        #     if np.linalg.norm(self.shape * self.scaling) > 24000:
-        #         radius = 12000
-        #     else:
-        #         radius = nx.diameter(self.weighted_graph) / 2
-        #
-        #     if radius > 12000:
-        #         radius = 12000
-        #     elif radius < 2000:
-        #         radius = 2000
-        #
-        #     avail_fc = sc.avail_feature_contexts(clf_name)
-        #     feature_context_nm = avail_fc[np.argmin(np.abs(avail_fc - radius))]
-
-        features = self.extract_ax_features(feature_context_nm=
-                                            feature_context_nm,
-                                            downsample_to=200)
-        clf = sc.load_classifier(clf_name, feature_context_nm)
-
-        probs = clf.predict_proba(features)
-
-        ratios = np.sum(probs, axis=0)
-        ratios /= np.sum(ratios)
-
-        self.attr_dict["cell_type_ratios"] = ratios
-        self.save_attr_dict()
+    # def predict_cell_type(self, ssd_version="ctgt", clf_name="rfc",
+    #                       feature_context_nm=25000):
+    #     # TODO: outsource to sbc module
+    #     sc = sbc.SkelClassifier(working_dir=self.working_dir,
+    #                             ssd_version=ssd_version,
+    #                             create=False)
+    #
+    #     # if feature_context_nm is None:
+    #     #     if np.linalg.norm(self.shape * self.scaling) > 24000:
+    #     #         radius = 12000
+    #     #     else:
+    #     #         radius = nx.diameter(self.weighted_graph) / 2
+    #     #
+    #     #     if radius > 12000:
+    #     #         radius = 12000
+    #     #     elif radius < 2000:
+    #     #         radius = 2000
+    #     #
+    #     #     avail_fc = sc.avail_feature_contexts(clf_name)
+    #     #     feature_context_nm = avail_fc[np.argmin(np.abs(avail_fc - radius))]
+    #
+    #     features = ssh.extract_ax_features(feature_context_nm=
+    #                                         feature_context_nm,
+    #                                         downsample_to=200)
+    #     clf = sc.load_classifier(clf_name, feature_context_nm)
+    #
+    #     probs = clf.predict_proba(features)
+    #
+    #     ratios = np.sum(probs, axis=0)
+    #     ratios /= np.sum(ratios)
+    #
+    #     self.attr_dict["cell_type_ratios"] = ratios
+    #     self.save_attr_dict()
 
 
     def gen_skel_from_sample_locs(self, dest_path=None, pred_key_appendix=""):

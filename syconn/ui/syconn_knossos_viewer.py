@@ -46,6 +46,30 @@ class SyConnGateInteraction(object):
         norm = lz4stringtoarr(r3.content, dtype=np.float32)
         return ind, vert, norm
 
+    def get_ssv_skel(self, ssv_id):
+        """
+        Returns a skeleton for a given ssv_id.
+
+        Parameters
+        ----------
+        ssv_id : int
+
+        Returns
+        -------
+        dict
+            Keys: "nodes", "edges", "diameters"
+        """
+        r = self.session.get(self.server + '/ssv_skeleton/{0}'.format(ssv_id))
+        skel = json.loads(r.content)
+        skel["nodes"] = np.array(skel["nodes"], dtype=np.uint32).reshape(-1, 3)
+        skel_nodes = np.array(skel["nodes"])
+        skel["nodes"][:, 0] = skel_nodes[:, 1]
+        skel["nodes"][:, 1] = skel_nodes[:, 0]
+        skel["edges"] = np.array(skel["edges"], dtype=np.uint32).reshape(-1, 2)
+        skel["diameters"] = np.array(skel["diameters"], dtype=np.float32)
+        return skel if len(skel) > 0 else None
+
+
     def get_ssv_obj_mesh(self, ssv_id, obj_type):
         """
         Returns a mesh for a given ssv_id and a specified obj_type.
@@ -343,6 +367,7 @@ class main_class(QtGui.QDialog):
 
             [self.remove_ssv_from_knossos(ssv_id) for ssv_id in ids_to_del]
             [self.ssv_to_knossos(ssv_id) for ssv_id in ids_to_add]
+            [self.ssv_skel_to_knossos_tree(ssv_id) for ssv_id in ids_to_add]
 
             if len(ids_in_k) != 1 or len(ids_to_del) > 0:
                 [KnossosModule.skeleton.delete_tree(sv_id) for sv_id in
@@ -371,6 +396,7 @@ class main_class(QtGui.QDialog):
 
         if self.ssv_selected1:
             self.ssv_to_knossos(self.ssv_selected1)
+            self.ssv_skel_to_knossos_tree(self.ssv_selected1)
 
         return
 
@@ -471,6 +497,40 @@ class main_class(QtGui.QDialog):
                                                  [], 4, False)
 
         print "Total time:", time.time() - start
+        return
+
+    def ssv_skel_to_knossos_tree(self, ssv_id, signal_block=True):
+        # disable knossos signal emission first - O(n^2) otherwise
+        if signal_block:
+            signalsBlocked = KnossosModule.knossos_global_skeletonizer.blockSignals(
+                True)
+        k_tree = KnossosModule.skeleton.find_tree_by_id(ssv_id)
+        if k_tree is None:
+            k_tree = KnossosModule.skeleton.add_tree(ssv_id)
+        skel = self.syconn_gate.get_ssv_skel(ssv_id)
+        if skel is None:
+            print "Loaded skeleton is None."
+            return
+        # add nodes
+        nx_knossos_id_map = dict()
+        for ii, n_coord in enumerate(skel["nodes"]):
+            # newsk_node.from_scratch(newsk_anno, nx_coord[1]+1, nx_coord[0]+1, nx_coord[2]+1, ID=nx_node)
+            k_node = KnossosModule.skeleton.add_node(
+                [n_coord[1] + 1, n_coord[0] + 1, n_coord[2] + 1], k_tree)
+            nx_knossos_id_map[ii] = k_node.node_id()
+
+        # add edges
+        for nx_src, nx_tgt in skel["edges"]:
+            KnossosModule.skeleton.add_segment(nx_knossos_id_map[nx_src],
+                                               nx_knossos_id_map[nx_tgt])
+
+        # TODO: add radius "diameters"
+
+        # enable signals again
+        if signal_block:
+            KnossosModule.knossos_global_skeletonizer.blockSignals(
+                signalsBlocked)
+            KnossosModule.knossos_global_skeletonizer.resetData()
         return
 
 

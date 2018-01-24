@@ -26,15 +26,7 @@ try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
-skeletopyze_available = False
-attempted_skeletopyze_import = False
-try:
-    import skeletopyze
-    skeletopyze_available = True
-except:
-    skeletopyze_available = False
-    # print "skeletopyze not found - you won't be able to compute skeletons. " \
-    #       "Install skeletopyze from https://github.com/funkey/skeletopyze"
+
 from ..proc.ssd_assembly import assemble_from_mergelist
 from ..mp import qsub_utils as qu
 from .super_segmentation_object import SuperSegmentationObject

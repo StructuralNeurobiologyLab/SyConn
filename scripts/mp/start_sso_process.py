@@ -13,6 +13,6 @@ if __name__ == "__main__":
     ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/", version="0")
     multi_params = ssds.ssv_ids
     multi_params = chunkify(multi_params, 3000)
-    path_to_out = qu.QSUB_script(multi_params, "export_skeletons_new",
-                                 n_max_co_processes=70, pe="openmp", queue=None,
+    path_to_out = qu.QSUB_script(multi_params, "sparsify_skeletons",
+                                 n_max_co_processes=150, pe="openmp", queue=None,
                                  script_folder=script_folder, suffix="")

@@ -36,6 +36,15 @@ app = Flask(__name__)
 global sg_state
 
 
+@app.route('/ssv_skeleton/<ssv_id>', methods=['GET'])
+def route_ssv_skeleton(ssv_id):
+    d = sg_state.backend.ssv_skeleton(ssv_id)
+    start = time.time()
+    ret = json.dumps(d)
+    print "JSON dump:", time.time() - start
+    return ret
+
+
 @app.route('/ssv_mesh/<ssv_id>', methods=['GET'])
 def route_ssv_mesh(ssv_id):
     d = sg_state.backend.ssv_mesh(ssv_id)
@@ -199,6 +208,21 @@ class SyConnFS_backend(object):
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         return "".join(mesh[1])
+
+    def ssv_skeleton(self, ssv_id):
+        """
+        Get mesh vertices for ssv_id.
+        :param ssv_id: int
+        :return: dict
+        """
+        self.logger.info('Loading ssv skeleton {0}'.format(ssv_id))
+        ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.load_skeleton()
+        skeleton = ssv.skeleton
+        if skeleton is None:
+            return {}
+        return {k: skeleton[k].flatten().tolist() for k in
+                ["nodes", "edges", "diameters"]}
 
     def ssv_norm(self, ssv_id):
         """

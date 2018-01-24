@@ -19,18 +19,20 @@ from knossos_utils.skeleton_utils import annotation_to_nx_graph
 from . import segmentation
 from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton
-try:
-    import skeletopyze
-    skeletopyze_available = True
-except:
-    print("skeletopyze not found - you won't be able to compute skeletons. "
-          "Install skeletopyze from https://github.com/funkey/skeletopyze")
+skeletopyze_available = False
+# try:
+#     import skeletopyze
+#     skeletopyze_available = True
+# except:
+#     print("skeletopyze not found - you won't be able to compute skeletons. "
+#           "Install skeletopyze from https://github.com/funkey/skeletopyze")
 from scipy import spatial
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def reskeletonize_plain(volume, coord_scaling=(2, 2, 1), node_offset=0):
+    assert skeletopyze_available
     params = skeletopyze.Parameters()
     params.min_segment_length_ratio = .01
     params.min_segment_length = 10
@@ -1195,4 +1197,104 @@ def sparsify_skeleton(sso, dot_prod_thresh=0.7, max_dist_thresh=1000, min_dist_t
     # print("Starting radius correction.")
     sso.skeleton = radius_correction_found_vertices(sso)
     # print("Exporting kzip")
-    sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v6.k.zip" % sso.id)
+    # sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v6.k.zip" % sso.id)
+
+
+def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
+                          obj_types=("sj", "mi", "vc"), downsample_to=None):
+    node_degrees = np.array(ssv.weighted_graph.degree().values(),
+                            dtype=np.int)
+
+    sizes = {}
+    for obj_type in obj_types:
+        objs = ssv.get_seg_objects(obj_type)
+        sizes[obj_type] = np.array([obj.size for obj in objs],
+                                   dtype=np.int)
+
+    if downsample_to is not None:
+        if downsample_to > len(ssv.skeleton["nodes"]):
+            downsample_by = 1
+        else:
+            downsample_by = int(len(ssv.skeleton["nodes"]) /
+                                float(downsample_to))
+    else:
+        downsample_by = 1
+
+    features = []
+    for i_node in range(len(ssv.skeleton["nodes"][::downsample_by])):
+        this_i_node = i_node * downsample_by
+        this_features = []
+
+        paths = nx.single_source_dijkstra_path(ssv.weighted_graph,
+                                               this_i_node,
+                                               feature_context_nm)
+        neighs = np.array(paths.keys(), dtype=np.int)
+
+        neigh_diameters = ssv.skeleton["diameters"][neighs]
+        this_features.append(np.mean(neigh_diameters))
+        this_features.append(np.std(neigh_diameters))
+        this_features += list(np.histogram(neigh_diameters,
+                                           bins=10,
+                                           range=(0, max_diameter),
+                                           normed=True)[0])
+        this_features.append(np.mean(node_degrees[neighs]))
+
+        for obj_type in obj_types:
+            neigh_objs = np.array(ssv.skeleton["assoc_%s" % obj_type])[
+                neighs]
+            neigh_objs = [item for sublist in neigh_objs for item in
+                          sublist]
+            neigh_objs = np.unique(np.array(neigh_objs))
+            if len(neigh_objs) == 0:
+                this_features += [0, 0, 0]
+                continue
+
+            this_features.append(len(neigh_objs))
+            obj_sizes = sizes[obj_type][neigh_objs]
+            this_features.append(np.mean(obj_sizes))
+            this_features.append(np.std(obj_sizes))
+
+        features.append(np.array(this_features))
+    return features
+
+
+def associate_objs_with_skel_nodes(ssv, obj_types=("sj", "vc", "mi"),
+                                   downsampling=(8, 8, 4)):
+    if ssv.skel is None:
+        ssv.load_skeleton()
+
+    for obj_type in obj_types:
+        voxels = []
+        voxel_ids = [0]
+        for obj in ssv.get_seg_objects(obj_type):
+            vl = obj.load_voxel_list_downsampled_adapt(downsampling)
+
+            if len(vl) == 0:
+                continue
+
+            if len(voxels) == 0:
+                voxels = vl
+            else:
+                voxels = np.concatenate((voxels, vl))
+
+            voxel_ids.append(voxel_ids[-1] + len(vl))
+
+        if len(voxels) == 0:
+            ssv.skeleton["assoc_%s" % obj_type] = [[]] * len(
+                ssv.skeleton["nodes"])
+            continue
+
+        voxel_ids = np.array(voxel_ids)
+
+        kdtree = scipy.spatial.cKDTree(voxels * ssv.scaling)
+        balls = kdtree.query_ball_point(ssv.skeleton["nodes"] *
+                                        ssv.scaling, 500)
+        nodes_objs = []
+        for i_node in range(len(ssv.skeleton["nodes"])):
+            nodes_objs.append(list(np.unique(
+                np.sum(voxel_ids[:, None] <= np.array(balls[i_node]),
+                       axis=0) - 1)))
+
+        ssv.skeleton["assoc_%s" % obj_type] = nodes_objs
+
+    ssv.save_skeleton(to_kzip=False, to_object=True)
