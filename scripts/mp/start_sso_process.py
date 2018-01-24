@@ -14,5 +14,5 @@ if __name__ == "__main__":
     multi_params = ssds.ssv_ids
     multi_params = chunkify(multi_params, 3000)
     path_to_out = qu.QSUB_script(multi_params, "sparsify_skeletons",
-                                 n_max_co_processes=150, pe="openmp", queue=None,
+                                 n_max_co_processes=240, pe="openmp", queue=None,
                                  script_folder=script_folder, suffix="")

@@ -1125,7 +1125,7 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.close()
 
 
-def sparsify_skeleton(sso, dot_prod_thresh=0.7, max_dist_thresh=1000, min_dist_thresh=50):
+def sparsify_skeleton(sso, dot_prod_thresh=0.7, max_dist_thresh=500, min_dist_thresh=50):
     """
     Reduces nodes based o
     :param sso: Super Segmentation Object

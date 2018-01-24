@@ -27,6 +27,7 @@ ssv_ixs = args
 print ssv_ixs
 for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, version="0", working_dir="/wholebrain/scratch/areaxfs3/")
+    sso.load_skeleton()
     if not sso.skeleton:
         sso = create_sso_skeleton(sso)
         print("Created skeleton for SSV", ix)
