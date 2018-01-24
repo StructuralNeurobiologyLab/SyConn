@@ -1123,13 +1123,13 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.close()
 
 
-def sparsify_skeleton(sso, dot_prod_thresh=0.7, dist_thresh=1000):
-
+def sparsify_skeleton(sso, dot_prod_thresh=0.7, max_dist_thresh=1000, min_dist_thresh=50):
     """
     Reduces nodes based o
     :param sso: Super Segmentation Object
     :param dot_prod_thresh: the 'straightness' of the edges
-    :param dist_thresh: minimum distance desired between every node
+    :param max_dist_thresh: maximum distance desired between every node
+    :param min_dist_thresh: minimum distance desired between every node
     :return: sso containing the sparsed skeleton
     """
 
@@ -1166,7 +1166,7 @@ def sparsify_skeleton(sso, dot_prod_thresh=0.7, dist_thresh=1000):
 
                 # print('dots', dot_prod, 'dist', dist)
 
-                if (abs(dot_prod) > dot_prod_thresh and dist < dist_thresh) or dist <= 30:
+                if (abs(dot_prod) > dot_prod_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
                     skel_G.remove_node(visiting_node)
                     skel_G.add_edge(left_node,right_node)
                     change += 1
@@ -1195,4 +1195,4 @@ def sparsify_skeleton(sso, dot_prod_thresh=0.7, dist_thresh=1000):
     # print("Starting radius correction.")
     sso.skeleton = radius_correction_found_vertices(sso)
     # print("Exporting kzip")
-    # sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v5.k.zip" % sso.id)
+    sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v6.k.zip" % sso.id)
