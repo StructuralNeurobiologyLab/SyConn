@@ -457,9 +457,9 @@ class SkelClassifier(object):
                     (name, feature_context_nm))
 
     def load_classifier(self, name, feature_context_nm):
-        clf = joblib.load(self.clf_path + '/clf_%s_%d.pkl' %
-                          (name, feature_context_nm))
-
+        clf_path = self.clf_path + '/clf_%s_%d.pkl' % (name, feature_context_nm)
+        assert os.path.isfile(clf_path), "Requested classifier does not exist."
+        clf = joblib.load(clf_path)
         return clf
 
     def plot_lines(self, data, x_label, y_label, path, legend_labels=None):

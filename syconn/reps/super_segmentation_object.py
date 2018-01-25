@@ -36,7 +36,7 @@ from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
 from ..config import parser
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
-from ..handler.compression import AttributeDict, MeshDict
+from ..handler.compression import AttributeDict, MeshDict, LZ4Dict
 from ..proc.image import single_conn_comp_img
 from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
 from ..proc.meshes import write_mesh2kzip, merge_someshs, compartmentalize_mesh
@@ -1214,7 +1214,6 @@ class SuperSegmentationObject(object):
         return self._mesh_compartments[comp_type]
 
 
-
     # --------------------------------------------------------------------- GLIA
     def gliaprobas2mesh(self, dest_path=None, pred_key_appendix=""):
         if dest_path is None:
@@ -1438,6 +1437,36 @@ class SuperSegmentationObject(object):
         self.save_attributes(["glia_model"], [model._fname])
 
     # ------------------------------------------------------------------ AXONESS
+    def _load_skelfeatures(self, key):
+        if not self.skeleton:
+            self.load_skeleton()
+        assert self.skeleton is not None, "Skeleton does not exist."
+        if key in self.skeleton:
+            assert len(self.skeleton["nodes"]) == len(self.skeleton[key]), \
+                "Length of skeleton features is not equal to number of nodes."
+            return self.skeleton[key]
+        else:
+            return None
+
+    def _save_skelfeatures(self, key, features, overwrite=False):
+        if not self.skeleton:
+            self.load_skeleton()
+        assert self.skeleton is not None, "Skeleton does not exist."
+        if key in self.skeleton and not overwrite:
+            raise ValueError("Key %s already exists in skeleton feature dict.")
+        self.skeleton[key] = features
+        assert len(self.skeleton["nodes"]) == len(self.skeleton[key]), \
+            "Length of skeleton features is not equal to number of nodes."
+        self.save_skeleton()
+
+    def skel_features(self, feature_context_nm=5000):
+        features = self._load_skelfeatures(feature_context_nm)
+        if not features:
+            features = ssh.extract_skel_features(self, feature_context_nm=
+            feature_context_nm)
+            self._save_skelfeatures(feature_context_nm, features)
+        return features
+
     def write_axpred_rfc(self, dest_path=None, k=1):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
@@ -1468,49 +1497,43 @@ class SuperSegmentationObject(object):
                         k=k)
         # self.save_objects_to_kzip_sparse(obj_types=obj_types)
 
-    # def predict_axoness(self, ssd_version="axgt", clf_name="rfc",
-    #                     feature_context_nm=5000):
-    # TODO: outsource to sbc module
-    #     sc = sbc.SkelClassifier(working_dir=self.working_dir,
-    #                             ssd_version=ssd_version,
-    #                             create=False)
-    #
-    #     # if feature_context_nm is None:
-    #     #     if np.linalg.norm(self.shape * self.scaling) > 24000:
-    #     #         radius = 12000
-    #     #     else:
-    #     #         radius = nx.diameter(self.weighted_graph) / 2
-    #     #
-    #     #     if radius > 12000:
-    #     #         radius = 12000
-    #     #     elif radius < 2000:
-    #     #         radius = 2000
-    #     #
-    #     #     avail_fc = sc.avail_feature_contexts(clf_name)
-    #     #     feature_context_nm = avail_fc[np.argmin(np.abs(avail_fc - radius))]
-    #
-    #     features = ssh.extract_ax_features(self, feature_context_nm=
-    #                                        feature_context_nm)
-    #     clf = sc.load_classifier(clf_name, feature_context_nm)
-    #
-    #     probas = clf.predict_proba(features)
-    #
-    #     pred = []
-    #     class_weights = np.array([1, 1, 1])
-    #     for i_node in range(len(self.skeleton["nodes"])):
-    #         paths = nx.single_source_dijkstra_path(self.weighted_graph, i_node,
-    #                                                10000)
-    #         neighs = np.array(paths.keys(), dtype=np.int)
-    #         pred.append(
-    #             np.argmax(np.sum(probas[neighs], axis=0) * class_weights))
-    #
-    #     # pred = np.argmax(probas, axis=1)
-    #     self.skeleton["axoness"] = np.array(pred, dtype=np.int)
-    #     self.save_skeleton(to_object=True, to_kzip=False)
-    #     # try:
-    #     #     self.save_objects_to_kzip_sparse()
-    #     # except:
-    #     #     pass
+    def predict_nodes(self, sc, clf_name="rfc", feature_context_nm=5000,
+                      avg_window=10000):
+        """
+        Predicting class c
+        Parameters
+        ----------
+        sc : SkelClassifier
+            Classifier to predict "axoness" or "spiness" for every node on
+            self.skeleton["nodes"]. Target type is defined in SkelClassifier
+
+        clf_name : str
+
+        feature_context_nm : int
+
+        avg_window : int
+            Defines the maximum path length from a source node for collecting
+            neighboring nodes to calculate an average prediction for
+            the source node.
+
+        Returns
+        -------
+
+        """
+        assert sc.target_type in ["axoness", "spiness"]
+        clf = sc.load_classifier(clf_name, feature_context_nm)
+        probas = clf.predict_proba(self.skel_features(feature_context_nm))
+        pred = []
+        class_weights = np.array([1, 1, 1])
+        for i_node in range(len(self.skeleton["nodes"])):
+            paths = nx.single_source_dijkstra_path(self.weighted_graph, i_node,
+                                                   avg_window)
+            neighs = np.array(paths.keys(), dtype=np.int)
+            c = np.argmax(np.sum(probas[neighs], axis=0) * class_weights)
+            pred.append(c)
+
+        self.skeleton[sc.target_type] = np.array(pred, dtype=np.int)
+        self.save_skeleton(to_object=True, to_kzip=False)
 
     def axoness_for_coords(self, coords, radius_nm=4000):
         coords = np.array(coords)
@@ -1532,62 +1555,25 @@ class SuperSegmentationObject(object):
 
         return np.array(axoness_pred)
 
-    def cnn_axoness_2_skel(self, dest_path=None, pred_key_appendix=""):
-        if dest_path is None:
-            dest_path = self.skeleton_kzip_path_views
-
-        probas = np.array(sm.start_multiprocess_obj("axoness_probas",
-                                  [[sv, {"pred_key_appendix": pred_key_appendix}] for sv in self.svs], nb_cpus=self.nb_cpus))
-        probas = np.concatenate(probas)
+    def cnn_axoness_2_skel(self, dest_path=None, pred_key_appendix="", k=10):
+        # probas = np.array(sm.start_multiprocess_obj("axoness_probas",
+        #                           [[sv, {"pred_key_appendix": pred_key_appendix}] for sv in self.svs], nb_cpus=self.nb_cpus))
+        preds = np.array(sm.start_multiprocess_obj("axoness_preds",
+                [[sv, {"pred_key_appendix": pred_key_appendix}]
+                 for sv in self.svs], nb_cpus=self.nb_cpus))
+        preds = np.concatenate(preds)
         loc_coords = np.array(sm.start_multiprocess_obj("sample_locations",
                                   [[sv, ] for sv in self.svs], nb_cpus=self.nb_cpus))
         loc_coords = np.concatenate(loc_coords)
-        assert len(loc_coords) == len(probas)
-
-        locs = skeleton.SkeletonAnnotation()
-        locs.scaling = self.scaling
-        locs.comment = "sample_locations"
-        for ii, c in enumerate(loc_coords):
-            n = skeleton.SkeletonNode().from_scratch(locs,
-                                                     c[0] / self.scaling[0],
-                                                     c[1] / self.scaling[1],
-                                                     c[2] / self.scaling[2])
-            n.data["den_proba"] = probas[ii][0]
-            n.data["ax_proba"] = probas[ii][1]
-            n.data["soma_proba"] = probas[ii][2]
-            n.data["axoness_pred"] = np.argmax(probas[ii])
-            n.setComment("axoness_pred: %d" % np.argmax(probas[ii]))
-            locs.addNode(n)
-        write_skeleton(dest_path, [locs])
-
-        try:
-            if not os.path.isfile(self.skeleton_kzip_path_views):
-                skel = load_skeleton(self.skeleton_kzip_path)["skeleton"]
-            else:
-                skel = load_skeleton(self.skeleton_kzip_path_views)["skeleton"]
-            skel_nodes = [n for n in skel.getNodes()]
-            skel_coords = [n.getCoordinate() * np.array(self.scaling) for n in
-                           skel_nodes]
-            tree = spatial.cKDTree(loc_coords)
-            dist, nn_ixs = tree.query(skel_coords, k=1)
-            for i in range(len(nn_ixs)):
-                skel_nodes[i].data["nearest_views"] = nn_ixs[i]
-                skel_nodes[i].data["nearest_views_dist"] = dist[i]
-                if np.max(dist[i]) > comp_window:
-                    warnings.warn("High distance between skeleton node and view:"
-                                  " %0.0f" % np.max(dist[i]), RuntimeWarning)
-
-            for n in skel.getNodes():
-                n_ixs = n.data["nearest_views"]
-                n.data["axoness_pred"] = np.argmax(probas[n_ixs])
-            ssh.majority_vote(skel, "axoness", 30000)
-            skel.comment = "majority_vote"
-            write_skeleton(dest_path, [skel])
-        except KeyError as e:
-            print e
+        assert len(loc_coords) == len(preds)
+        # find kNN in loc_coords for every skeleton node and use their majority
+        # prediction
+        node_preds = colorcode_vertices(self.skeleton["nodes"], loc_coords,
+                                        preds, colors=[0, 1, 2], k=k)
+        self.skeleton["axoness_cnn"] = node_preds
+        self.save_skeleton()
 
     # --------------------------------------------------------------- CELL TYPES
-
     # def predict_cell_type(self, ssd_version="ctgt", clf_name="rfc",
     #                       feature_context_nm=25000):
     #     # TODO: outsource to sbc module
@@ -1609,7 +1595,7 @@ class SuperSegmentationObject(object):
     #     #     avail_fc = sc.avail_feature_contexts(clf_name)
     #     #     feature_context_nm = avail_fc[np.argmin(np.abs(avail_fc - radius))]
     #
-    #     features = ssh.extract_ax_features(feature_context_nm=
+    #     features = ssh.extract_skel_features(feature_context_nm=
     #                                         feature_context_nm,
     #                                         downsample_to=200)
     #     clf = sc.load_classifier(clf_name, feature_context_nm)
@@ -1621,7 +1607,6 @@ class SuperSegmentationObject(object):
     #
     #     self.attr_dict["cell_type_ratios"] = ratios
     #     self.save_attr_dict()
-
 
     def gen_skel_from_sample_locs(self, dest_path=None, pred_key_appendix=""):
         try:

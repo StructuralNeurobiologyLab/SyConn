@@ -46,7 +46,12 @@ legend_labels = {"axgt": ("Axon", "Dendrite", "Soma"),
 
 
 class SkelClassifier(object):
-    def __init__(self, working_dir=None, ssd_version=None, create=False):
+    def __init__(self, target_type, working_dir=None, create=False):
+        assert target_type in ["axoness", "spiness"]
+        if target_type == "axoness":
+            ssd_version = "axgt"
+        elif target_type == "spiness":
+            ssd_version = "spgt"
         self._ssd_version = ssd_version
         self._working_dir = working_dir
         self._clf = None
@@ -114,12 +119,17 @@ class SkelClassifier(object):
                 with open(self.working_dir + "/axgt_labels.pkl", "r") as f:
                     self.label_dict = pkl.load(f)
             elif self.ssd_version == "ctgt":
+                raise(NotImplementedError)
                 with open(self.working_dir + "/ctgt_labels.pkl", "r") as f:
+                    self.label_dict = pkl.load(f)
+            elif self.ssd_version == "spgt":
+                with open(self.working_dir + "/spgt_labels.pkl", "r") as f:
                     self.label_dict = pkl.load(f)
             else:
                 raise()
 
-    def generate_data(self, feature_contexts_nm=[8000], stride=10,
+
+    def generate_data(self, feature_contexts_nm=[2000, 5000, 8000], stride=10,
                       qsub_pe=None, qsub_queue=None, nb_cpus=1):
         self.load_label_dict()
 
@@ -146,8 +156,8 @@ class SkelClassifier(object):
         else:
             raise Exception("QSUB not available")
 
-    def classifier_production(self, clf_name="ext", n_estimators=200,
-                              feature_contexts_nm=[4000], qsub_pe=None,
+    def classifier_production(self, clf_name="ext", n_estimators=2000,
+                              feature_contexts_nm=[2000, 5000, 8000], qsub_pe=None,
                               qsub_queue=None, nb_cpus=1):
         self.load_label_dict()
         multi_params = []
@@ -171,6 +181,8 @@ class SkelClassifier(object):
             raise Exception("QSUB not available")
 
     def create_splitting(self, ratios=(.6, .2, .2)):
+        assert not os.path.isfile(self.path + "/%s_splitting.pkl"
+                                  % self.ssd_version), "Splitting file exists."
         self.load_label_dict()
         classes = np.array(self.label_dict.values(), dtype=np.int)
         unique_classes = np.unique(classes)
@@ -213,7 +225,7 @@ class SkelClassifier(object):
                 id_bin_dict[sso_id] = key
         return id_bin_dict
 
-    def load_data(self, feature_context_nm=8000, ratio=(0.7, .15, .15)):
+    def load_data(self, feature_context_nm, ratio=(0.7, .15, .15)):
         self.load_label_dict()
 
         id_bin_dict = self.id_bins()
@@ -286,7 +298,7 @@ class SkelClassifier(object):
                   (this_class, precision, recall, f_score)
         return score_dict, label_weights
 
-    def train_clf(self, name, n_estimators=2000, feature_context_nm=8000,
+    def train_clf(self, name, n_estimators=2000, feature_context_nm=5000,
                   balanced=True, production=False, performance=False,
                   save=False, fast=False):
         if name == "rfc":
@@ -379,7 +391,7 @@ class SkelClassifier(object):
                               clf.predict_proba(te_feats), te_labels,
                               [name, str(n_estimators), str(feature_context_nm)])
 
-    def create_rfc(self, n_estimators=20):
+    def create_rfc(self, n_estimators=2000):
         rfc = RandomForestClassifier(warm_start=False, oob_score=True,
                                      max_features="auto",
                                      # max_depth=4,
@@ -388,7 +400,7 @@ class SkelClassifier(object):
                                      n_jobs=-1)
         return rfc
 
-    def create_ext(self, n_estimators=20):
+    def create_ext(self, n_estimators=2000):
         ext = ExtraTreesClassifier(warm_start=False, oob_score=True,
                                    max_features="sqrt",
                                    n_estimators=n_estimators,
@@ -397,7 +409,7 @@ class SkelClassifier(object):
                                    n_jobs=-1)
         return ext
 
-    def train_mlp(self, feature_context_nm=8000):
+    def train_mlp(self, feature_context_nm=5000):
         raise(NotImplementedError)
         print "\n --- MLP ---\n"
         tr_feats, tr_labels, v_feats, v_labels, te_feats, te_labels = \
