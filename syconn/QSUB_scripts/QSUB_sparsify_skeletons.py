@@ -24,12 +24,12 @@ with open(path_storage_file) as f:
 
 
 ssv_ixs = args
-print ssv_ixs
 for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, version="0", working_dir="/wholebrain/scratch/areaxfs3/")
-    sso.load_skeleton()
-    if not sso.skeleton:
-        sso = create_sso_skeleton(sso)
-        print("Created skeleton for SSV", ix)
+    create_sso_skeleton(sso)
+    if len(sso.skeleton["nodes"]) == 0:
+        print "Skeleton of SSV %d has zero nodes." % ix
+        continue
     sparsify_skeleton(sso)
     sso.save_skeleton()
+    print("Created stitched, pruned and sparsed skeleton for SSV", ix)

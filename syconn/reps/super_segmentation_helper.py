@@ -957,13 +957,12 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
     return new_nx_g
 
 
-def create_sso_skeleton(sso,pruning_thresh=700):
+def create_sso_skeleton(sso, pruning_thresh=700):
 
     """
     Creates the super super voxel skeleton
     :param sso: Super Segmentation Object
     :param pruning_thresh: threshold for pruning.
-    :return: sso with the skeleton dict updated/created
     """
 
     # Fetching Super voxel Skeletons
@@ -983,6 +982,9 @@ def create_sso_skeleton(sso,pruning_thresh=700):
 
     skel_G = nx.Graph()
     new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
+    if len(new_nodes) == 0:
+        sso.skeleton = ssv_skel
+        return
 
     for inx, single_node in enumerate(new_nodes):
         skel_G.add_node(inx, position=single_node)
@@ -1049,12 +1051,12 @@ def create_sso_skeleton(sso,pruning_thresh=700):
 
     # Estimating the radii
     sso.skeleton = radius_correction_found_vertices(sso)
-    sso.enable_locking = True
+    # sso.enable_locking = True
     #
     # sso.export_kzip(
     #     "/wholebrain/scratch/areaxfs/pruned_radius_etmtd_skeletons/skelG_pruned_test_ignore_%d.k.zip" % sso.id)
 
-    return sso
+    # return sso
 
 
 def glia_pred_exists(so):
@@ -1125,7 +1127,7 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.close()
 
 
-def sparsify_skeleton(sso, dot_prod_thresh=0.7, max_dist_thresh=500, min_dist_thresh=50):
+def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_thresh=50):
     """
     Reduces nodes based o
     :param sso: Super Segmentation Object

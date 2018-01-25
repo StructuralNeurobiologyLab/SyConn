@@ -12,7 +12,7 @@ if __name__ == "__main__":
     script_folder = os.path.abspath(os.path.dirname(__file__) + "/../../syconn/QSUB_scripts/")
     ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/", version="0")
     multi_params = ssds.ssv_ids
-    multi_params = chunkify(multi_params, 3000)
+    multi_params = chunkify(multi_params, 3400)
     path_to_out = qu.QSUB_script(multi_params, "sparsify_skeletons",
-                                 n_max_co_processes=240, pe="openmp", queue=None,
+                                 n_max_co_processes=280, pe="openmp", queue=None,
                                  script_folder=script_folder, suffix="")
