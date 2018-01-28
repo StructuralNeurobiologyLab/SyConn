@@ -123,6 +123,9 @@ class SegmentationDataset(object):
         if create and not os.path.exists(self.path):
             os.makedirs(self.path)
 
+        if create and not os.path.exists(self.so_storage_path):
+            os.makedirs(self.so_storage_path)
+
     @property
     def type(self):
         return self._type
@@ -653,8 +656,8 @@ class SegmentationObject(object):
             loc_dc.save2pkl()
             return coords.astype(np.float32)
 
-    def save_voxels(self, bin_arr, offset):
-        save_voxels(self, bin_arr, offset)
+    def save_voxels(self, bin_arr, offset, overwrite=False):
+        save_voxels(self, bin_arr, offset, overwrite=overwrite)
 
     def load_voxels(self, voxel_dc=None):
         return load_voxels(self, voxel_dc=voxel_dc)
@@ -716,6 +719,8 @@ class SegmentationObject(object):
             color = (130, 130, 130, 160)
         elif self.type == "cs":
             color = (100, 200, 30, 255)
+        elif self.type == "conn":
+            color = (150, 50, 200, 255)
         elif self.type == "sj":
             color = (int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255)
         elif self.type == "vc":
@@ -903,6 +908,7 @@ class SegmentationObject(object):
                                 data=self.voxels.astype(np.uint64) * write_id,
                                 datatype=np.uint64,
                                 kzip_path=path,
+                                overwrite_kzip=False,
                                 overwrite=False)
 
     def clear_cache(self):

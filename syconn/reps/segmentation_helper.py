@@ -4,6 +4,11 @@ from scipy import ndimage
 import os
 from ..handler.compression import MeshDict, VoxelDict, AttributeDict, SkeletonDict
 
+from ..mp import qsub_utils as qu
+from ..mp import shared_mem as sm
+
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
+
 
 def glia_pred_so(so, thresh, pred_key_appendix):
     assert so.type == "sv"
@@ -50,13 +55,13 @@ def acquire_obj_ids(sd):
         np.save(sd.path_ids, sd._ids)
 
 
-def save_voxels(so, bin_arr, offset):
+def save_voxels(so, bin_arr, offset, overwrite=False):
     assert bin_arr.dtype == bool
 
     voxel_dc = VoxelDict(so.voxel_path, read_only=False, timeout=3600,
                          disable_locking=True)
 
-    if so.id in voxel_dc:
+    if so.id in voxel_dc and not overwrite:
         voxel_dc.append(so.id, bin_arr, offset)
     else:
         voxel_dc[so.id] = [bin_arr], [offset]
@@ -84,7 +89,7 @@ def load_voxels(so, voxel_dc=None):
     block_extents = np.array(block_extents)
 
     so._bounding_box = np.array([block_offsets.min(axis=0),
-                                   block_extents.max(axis=0)])
+                                 block_extents.max(axis=0)])
     voxels = np.zeros(so.bounding_box[1] - so.bounding_box[0],
                       dtype=np.bool)
 
@@ -218,11 +223,10 @@ def load_skeleton(so, recompute=False):
     return nodes, diameters, edges
 
 
-def binary_closing(so, n_iterations=13):
+def binary_closing(vx, n_iterations=13):
     n_iterations = int(n_iterations)
     assert n_iterations > 0
 
-    vx = so.voxels.copy()
     vx = np.pad(vx, [[n_iterations]*2]*3, mode='constant')
 
     vx = ndimage.morphology.binary_closing(vx, iterations=n_iterations)
