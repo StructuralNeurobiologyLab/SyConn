@@ -19,18 +19,20 @@ from knossos_utils.skeleton_utils import annotation_to_nx_graph
 from . import segmentation
 from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton
-try:
-    import skeletopyze
-    skeletopyze_available = True
-except:
-    print("skeletopyze not found - you won't be able to compute skeletons. "
-          "Install skeletopyze from https://github.com/funkey/skeletopyze")
+skeletopyze_available = False
+# try:
+#     import skeletopyze
+#     skeletopyze_available = True
+# except:
+#     print("skeletopyze not found - you won't be able to compute skeletons. "
+#           "Install skeletopyze from https://github.com/funkey/skeletopyze")
 from scipy import spatial
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def reskeletonize_plain(volume, coord_scaling=(2, 2, 1), node_offset=0):
+    assert skeletopyze_available
     params = skeletopyze.Parameters()
     params.min_segment_length_ratio = .01
     params.min_segment_length = 10
@@ -732,7 +734,7 @@ def radius_correction(sso):
     return sso.skeleton
 
 
-def radius_correction_found_vertices(sso):
+def radius_correction_found_vertices(sso, plump_factor=1):
     """
     Algorithm finds two nearest two nearest vertices and takes the median of the distances for every node
     (gives better result than radius_correction)
@@ -746,12 +748,12 @@ def radius_correction_found_vertices(sso):
     vert_sparse = sso.mesh[1].reshape((-1, 3))
     tree = spatial.cKDTree(vert_sparse)
 
-    dists, all_found_vertices_ixs = tree.query(skel_node * np.array([10, 10, 20]), 2)
+    dists, all_found_vertices_ixs = tree.query(skel_node * sso.scaling, 2)
 
     for ii, el in enumerate(skel_node):
         diameters[ii] = np.median(dists[ii]) *2/10
 
-    sso.skeleton['diameters'] = diameters
+    sso.skeleton['diameters'] = diameters*plump_factor
     return sso.skeleton
 
 
@@ -955,13 +957,12 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
     return new_nx_g
 
 
-def create_sso_skeleton(sso,pruning_thresh=700):
+def create_sso_skeleton(sso, pruning_thresh=700):
 
     """
     Creates the super super voxel skeleton
     :param sso: Super Segmentation Object
     :param pruning_thresh: threshold for pruning.
-    :return: sso with the skeleton dict updated/created
     """
 
     # Fetching Super voxel Skeletons
@@ -981,6 +982,9 @@ def create_sso_skeleton(sso,pruning_thresh=700):
 
     skel_G = nx.Graph()
     new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
+    if len(new_nodes) == 0:
+        sso.skeleton = ssv_skel
+        return
 
     for inx, single_node in enumerate(new_nodes):
         skel_G.add_node(inx, position=single_node)
@@ -1047,12 +1051,12 @@ def create_sso_skeleton(sso,pruning_thresh=700):
 
     # Estimating the radii
     sso.skeleton = radius_correction_found_vertices(sso)
-    sso.enable_locking = True
+    # sso.enable_locking = True
     #
     # sso.export_kzip(
     #     "/wholebrain/scratch/areaxfs/pruned_radius_etmtd_skeletons/skelG_pruned_test_ignore_%d.k.zip" % sso.id)
 
-    return sso
+    # return sso
 
 
 def glia_pred_exists(so):
@@ -1121,3 +1125,178 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.tight_layout()
         plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
         plt.close()
+
+
+def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_thresh=50):
+    """
+    Reduces nodes based o
+    :param sso: Super Segmentation Object
+    :param dot_prod_thresh: the 'straightness' of the edges
+    :param max_dist_thresh: maximum distance desired between every node
+    :param min_dist_thresh: minimum distance desired between every node
+    :return: sso containing the sparsed skeleton
+    """
+
+    sso.load_skeleton()
+    ssv_skel = sso.skeleton
+    scal = sso.scaling
+
+    skel_G = nx.Graph()
+    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
+
+    for inx, single_node in enumerate(new_nodes):
+        skel_G.add_node(inx, position=single_node)
+
+    new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
+    new_edges = [tuple(ix) for ix in new_edges]
+    skel_G.add_edges_from(new_edges)
+    change = 1
+    run_cnt = 0
+    # orig_node_cnt = len(new_nodes)
+    while change > 0:
+        # run_cnt += 1
+        change = 0
+        visiting_nodes = list({k for k, v in dict(skel_G.degree()).iteritems() if v == 2})
+        for visiting_node in visiting_nodes:
+            neighbours = [n for n in skel_G.neighbors(visiting_node)]
+            if skel_G.degree(visiting_node) == 2:
+                left_node = neighbours[0]
+                right_node = neighbours[1]
+                vector_left_node = np.array([int(skel_G.node[left_node]['position'][ix]) - int(skel_G.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+                vector_right_node =np.array([int(skel_G.node[right_node]['position'][ix]) - int(skel_G.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+
+                dot_prod = np.dot(vector_left_node/ np.linalg.norm(vector_left_node),vector_right_node/ np.linalg.norm(vector_right_node))
+                dist = np.linalg.norm([int(skel_G.node[right_node]['position'][ix]*scal[ix]) - int(skel_G.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
+
+                # print('dots', dot_prod, 'dist', dist)
+
+                if (abs(dot_prod) > dot_prod_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
+                    skel_G.remove_node(visiting_node)
+                    skel_G.add_edge(left_node,right_node)
+                    change += 1
+                    # print('this got removed', visiting_node)
+                # if change == 0:
+                #     change = -1
+    # print("Removed %d nodes after %d iterations." %
+    #       (orig_node_cnt-len(skel_G.nodes()), run_cnt))
+
+    sso.skeleton['nodes'] = np.array([skel_G.node[ix]['position'] for ix in skel_G.nodes()], dtype=np.uint32)
+    sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
+
+    temp_edges = np.array(skel_G.edges()).reshape(-1)
+    temp_edges_sorted = np.unique(np.sort(temp_edges))
+    temp_edges_dict = {}
+
+    for ii, ix in enumerate(temp_edges_sorted):
+        temp_edges_dict[ix] = ii
+    temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
+
+    temp_edges = np.array(temp_edges).reshape([-1, 2])
+
+    sso.skeleton['edges'] = temp_edges
+
+    # Estimating the radii
+    # print("Starting radius correction.")
+    sso.skeleton = radius_correction_found_vertices(sso)
+    # print("Exporting kzip")
+    # sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v6.k.zip" % sso.id)
+
+
+def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
+                          obj_types=("sj", "mi", "vc"), downsample_to=None):
+    node_degrees = np.array(ssv.weighted_graph.degree().values(),
+                            dtype=np.int)
+
+    sizes = {}
+    for obj_type in obj_types:
+        objs = ssv.get_seg_objects(obj_type)
+        sizes[obj_type] = np.array([obj.size for obj in objs],
+                                   dtype=np.int)
+
+    if downsample_to is not None:
+        if downsample_to > len(ssv.skeleton["nodes"]):
+            downsample_by = 1
+        else:
+            downsample_by = int(len(ssv.skeleton["nodes"]) /
+                                float(downsample_to))
+    else:
+        downsample_by = 1
+
+    features = []
+    for i_node in range(len(ssv.skeleton["nodes"][::downsample_by])):
+        this_i_node = i_node * downsample_by
+        this_features = []
+
+        paths = nx.single_source_dijkstra_path(ssv.weighted_graph,
+                                               this_i_node,
+                                               feature_context_nm)
+        neighs = np.array(paths.keys(), dtype=np.int)
+
+        neigh_diameters = ssv.skeleton["diameters"][neighs]
+        this_features.append(np.mean(neigh_diameters))
+        this_features.append(np.std(neigh_diameters))
+        this_features += list(np.histogram(neigh_diameters,
+                                           bins=10,
+                                           range=(0, max_diameter),
+                                           normed=True)[0])
+        this_features.append(np.mean(node_degrees[neighs]))
+
+        for obj_type in obj_types:
+            neigh_objs = np.array(ssv.skeleton["assoc_%s" % obj_type])[
+                neighs]
+            neigh_objs = [item for sublist in neigh_objs for item in
+                          sublist]
+            neigh_objs = np.unique(np.array(neigh_objs))
+            if len(neigh_objs) == 0:
+                this_features += [0, 0, 0]
+                continue
+
+            this_features.append(len(neigh_objs))
+            obj_sizes = sizes[obj_type][neigh_objs]
+            this_features.append(np.mean(obj_sizes))
+            this_features.append(np.std(obj_sizes))
+
+        features.append(np.array(this_features))
+    return features
+
+
+def associate_objs_with_skel_nodes(ssv, obj_types=("sj", "vc", "mi"),
+                                   downsampling=(8, 8, 4)):
+    if ssv.skel is None:
+        ssv.load_skeleton()
+
+    for obj_type in obj_types:
+        voxels = []
+        voxel_ids = [0]
+        for obj in ssv.get_seg_objects(obj_type):
+            vl = obj.load_voxel_list_downsampled_adapt(downsampling)
+
+            if len(vl) == 0:
+                continue
+
+            if len(voxels) == 0:
+                voxels = vl
+            else:
+                voxels = np.concatenate((voxels, vl))
+
+            voxel_ids.append(voxel_ids[-1] + len(vl))
+
+        if len(voxels) == 0:
+            ssv.skeleton["assoc_%s" % obj_type] = [[]] * len(
+                ssv.skeleton["nodes"])
+            continue
+
+        voxel_ids = np.array(voxel_ids)
+
+        kdtree = scipy.spatial.cKDTree(voxels * ssv.scaling)
+        balls = kdtree.query_ball_point(ssv.skeleton["nodes"] *
+                                        ssv.scaling, 500)
+        nodes_objs = []
+        for i_node in range(len(ssv.skeleton["nodes"])):
+            nodes_objs.append(list(np.unique(
+                np.sum(voxel_ids[:, None] <= np.array(balls[i_node]),
+                       axis=0) - 1)))
+
+        ssv.skeleton["assoc_%s" % obj_type] = nodes_objs
+
+    ssv.save_skeleton(to_kzip=False, to_object=True)

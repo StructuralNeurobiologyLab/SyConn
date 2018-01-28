@@ -117,7 +117,6 @@ def load_voxel_list(so):
     voxel_list = np.array([], dtype=np.int32)
 
     if so._voxels is not None:
-        print("Voxels used")
         voxel_list = np.array(zip(*np.nonzero(so.voxels)), dtype=np.int32) + \
                      so.bounding_box[0]
     else:
@@ -170,31 +169,36 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
 def load_mesh(so, recompute=False):
     if not recompute and so.mesh_exists:
         try:
-            mesh_dc = MeshDict(so.mesh_path)
-            indices, vertices = mesh_dc[so.id][0], mesh_dc[so.id][1]
+            mesh = MeshDict(so.mesh_path)[so.id]
+            if len(mesh) == 2:
+                indices, vertices = mesh
+                normals = np.zeros((0, ), dtype=np.float32)
+            else:
+                indices, vertices, normals = mesh
         except Exception as e:
             print("\n---------------------------------------------------\n" \
                   "\n%s\nException occured when loading mesh.pkl of SO (%s)" \
                   "with id %d." \
                   "\n---------------------------------------------------\n"\
                   % (e, so.type, so.id))
-            return np.zeros((0, )).astype(np.int), np.zeros((0, ))
+            return np.zeros((0, )).astype(np.int), np.zeros((0, )), np.zeros((0, ))
     else:
         if so.type == "sv":
             print("\n-----------------------\n" \
                   "Mesh of SV %d not found.\n" \
                   "-------------------------\n" % so.id)
-            return np.zeros((0,)).astype(np.int), np.zeros((0,))
-        indices, vertices = so._mesh_from_scratch()
+            return np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))
+        indices, vertices, normals = so._mesh_from_scratch()
         try:
-            so._save_mesh(indices, vertices)
+            so._save_mesh(indices, vertices, normals)
         except Exception as e:
             print("\n-----------------------\n" \
                   "Mesh of %s %d could not be saved:\n%s\n" \
                   "-------------------------\n" % (so.type, so.id, e))
     vertices = np.array(vertices, dtype=np.int)
     indices = np.array(indices, dtype=np.int)
-    return indices, vertices
+    normals = np.array(normals, dtype=np.float32)
+    return indices, vertices, normals
 
 
 def load_skeleton(so, recompute=False):

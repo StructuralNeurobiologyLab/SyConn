@@ -15,7 +15,7 @@ import sys
 import warnings
 from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
-from .meshs import merge_meshs, get_random_centered_coords, \
+from .meshes import merge_meshs, get_random_centered_coords, \
     MeshObject, calc_rot_matrices, flag_empty_spaces
 
 try:

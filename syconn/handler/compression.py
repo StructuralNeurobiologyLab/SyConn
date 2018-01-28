@@ -316,8 +316,12 @@ class MeshDict(LZ4DictBase):
         except KeyError:
             pass
         mesh = self._dc_intern[item]
+        # if no normals were given in file / cache append empty array
+        if len(mesh) == 2:
+            mesh.append([""])
         decomp_arrs = [lz4string_listtoarr(mesh[0], dtype=np.uint32),
-                       lz4string_listtoarr(mesh[1], dtype=np.float32)]
+                       lz4string_listtoarr(mesh[1], dtype=np.float32),
+                       lz4string_listtoarr(mesh[2], dtype=np.float32)]
         if self._cache_decomp:
             self._cache_dc[item] = decomp_arrs
         return decomp_arrs
@@ -329,13 +333,16 @@ class MeshDict(LZ4DictBase):
         ----------
         key : int/str
         mesh : list of np.array
-            [indices, vertices]
+            [indices, vertices, optional: normals]
         """
+        if len(mesh) == 2:
+            mesh.append(np.zeros((0, ), dtype=np.float32))
         if self._cache_decomp:
             self._cache_dc[key] = mesh
         comp_ind = arrtolz4string_list(mesh[0].astype(dtype=np.uint32))
         comp_vert = arrtolz4string_list(mesh[1].astype(dtype=np.float32))
-        self._dc_intern[key] = [comp_ind, comp_vert]
+        comp_norm = arrtolz4string_list(mesh[2].astype(dtype=np.float32))
+        self._dc_intern[key] = [comp_ind, comp_vert, comp_norm]
 
 
 class VoxelDict(VoxelDictL):

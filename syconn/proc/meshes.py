@@ -7,6 +7,7 @@
 
 import itertools
 import numpy as np
+from collections import Counter
 from numba import jit
 from scipy import spatial
 from skimage import measure
@@ -20,7 +21,8 @@ except ImportError:
 
 from ..mp.shared_mem import start_multiprocess_obj
 __all__ = ["MeshObject", "get_object_mesh", "merge_meshs", "triangulation",
-           "get_random_centered_coords", "write_sso2kzip", "write_mesh2kzip"]
+           "get_random_centered_coords", "write_sso2kzip", "write_mesh2kzip",
+           "compartmentalize_mesh"]
 
 
 class MeshObject(object):
@@ -132,7 +134,7 @@ class MeshObject(object):
         self.vertices = vert_resh.reshape(len(self.vertices))
 
 
-def triangulation(pts, resolution=256, scaling=(10, 10, 20)):
+def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20)):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
     by building dense matrix (in case of a point cloud) and applying marching
@@ -141,29 +143,32 @@ def triangulation(pts, resolution=256, scaling=(10, 10, 20)):
     Parameters
     ----------
     pts : numpy.array [N, 3] or [N, M, O]
-    resolution : int
+    downsampling : tuple of int
+        Magnitude of downsampling, e.g. 1, 2, (..) which is applied to pts
+        for each axis
+    scaling : tuple
 
     Returns
     -------
-    array, array
-        indices [N, 3], vertices [N, 3]
-    scaling : tuple
+    array, array, array
+        indices [M, 3], vertices [N, 3], normals [N, 3]
+
     """
     #  TODO: check offset again!
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3
+    downsampling = np.array(downsampling, dtype=np.uint8)
     if pts.ndim == 2:
         offset = np.min(pts, axis=0)
         pts -= offset
         extent_orig = np.max(pts, axis=0)
-        shrink_fct = extent_orig.max() / float(resolution)
-        if shrink_fct > 1:
-            pts = (pts / shrink_fct).astype(np.uint16)
+        pts = (pts / downsampling).astype(np.uint16)
+        # add zero boundary around object
         pts += 5
         bb = np.max(pts, axis=0) + 5
         volume = np.zeros(bb, dtype=np.float32)
         volume[pts[:, 0], pts[:, 1], pts[:, 2]] = 1
     else:
-        volume = pts
+        volume = measure.block_reduce(pts, downsampling, np.max)
         vecs = np.argwhere(pts != 0)
         offset = np.min(vecs, axis=0)
         extent_orig = np.max(vecs, axis=0) - offset
@@ -175,39 +180,35 @@ def triangulation(pts, resolution=256, scaling=(10, 10, 20)):
     volume = gaussianSmoothing(dt, scaling[0], step_size=scaling) # this works because only the relative step_size between the dimensions is interesting, therefore we can neglect shrink_fct
     if np.sum(volume<0) == 0: # less smoothing
         volume = gaussianSmoothing(dt, scaling[0]/2, step_size=scaling)
-    verts, ind, _, _ = measure.marching_cubes(volume, 0, gradient_direction="descent") # also calculates normals!
+    verts, ind, norm, _ = measure.marching_cubes(volume, 0, gradient_direction="descent") # also calculates normals!
     verts -= np.min(verts, axis=0)
     extent_post = np.max(verts, axis=0)
     new_fact = extent_orig / extent_post # scale independent for each dimension, s.t. the bounding box coords are the same
-    return np.array(ind, dtype=np.int), np.array(verts) * new_fact + offset
+    return np.array(ind, dtype=np.int), np.array(verts) * new_fact + offset, norm
 
 
-def get_object_mesh(obj, res=None):
+def get_object_mesh(obj, downsampling):
     """
     Get object mesh from object voxels using marching cubes.
 
     Parameters
     ----------
     obj : SegmentationObject
-    res : int
-        mesh resolution in vx (default: sv: 256, sj: 100, vc: 100, mi: 150)
+    downsampling : tuple of int
+        Magnitude of downsampling for each axis
     Returns
     -------
-    array [N, 1], array [M, 1]
+    array [N, 1], array [M, 1], array
         vertices, indices
     """
-    if res is None:
-        res = {"conn": 100, "sv": 256, "cs": 100, "sj": 100, "vc": 100, "mi": 150}
-        resolution = res[obj.type]
-    else:
-        resolution = res
     if np.isscalar(obj.voxels):
         return np.zeros((0, )), np.zeros((0, ))
 
-    indices, vertices = triangulation(np.array(obj.voxel_list),
-                                      resolution=resolution)
+    indices, vertices, normals = triangulation(np.array(obj.voxel_list),
+                                      downsampling=downsampling)
     vertices *= obj.scaling
-    return indices.flatten(), vertices.flatten()
+    assert len(vertices) == len(normals)
+    return indices.flatten(), vertices.flatten(), normals.flatten()
 
 
 def normalize_vertices(vertices):
@@ -485,24 +486,28 @@ def merge_someshs(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     """
     all_ind = np.zeros((0, ), dtype=np.uint)
     all_vert = np.zeros((0, ))
+    all_norm = np.zeros((0, ))
     colors = np.zeros((0, ))
-    meshs = start_multiprocess_obj("mesh", [[so,] for so in sos],
+    meshes = start_multiprocess_obj("mesh", [[so,] for so in sos],
                                    nb_cpus=nb_cpus)
     if color_vals is not None:
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
-    for i in range(len(meshs)):
-        ind, vert = meshs[i]
+    for i in range(len(meshes)):
+        ind, vert, norm = meshes[i]
+        assert len(vert) == len(norm)
         all_ind = np.concatenate([all_ind, ind + len(all_vert)/nb_simplices])
         all_vert = np.concatenate([all_vert, vert])
+        all_norm = np.concatenate([all_norm, norm])
         if color_vals is not None:
             curr_color = [color_vals[i]]*len(vert)
             colors = np.concatenate([colors, curr_color])
+    assert len(all_vert) == len(all_norm)
     if color_vals is not None:
-        return all_ind, all_vert, colors
-    return all_ind, all_vert
+        return all_ind, all_vert, all_norm, colors
+    return all_ind, all_vert, all_norm
 
 
-def make_ply_string(indices, vertices, rgba_color):
+def make_ply_string(indices, vertices, normals, rgba_color):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -511,6 +516,7 @@ def make_ply_string(indices, vertices, rgba_color):
     ----------
     indices : iterable of indices (int)
     vertices : iterable of vertices (int)
+    normals : iterable of normals (float)
     rgba_color : 4-tuple (uint8)
 
     Returns
@@ -539,7 +545,7 @@ def make_ply_string(indices, vertices, rgba_color):
     return ply_str
 
 
-def make_ply_string_wocolor(indices, vertices):
+def make_ply_string_wocolor(indices, vertices, normals):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -548,6 +554,7 @@ def make_ply_string_wocolor(indices, vertices):
     ----------
     indices : iterable of indices (int)
     vertices : iterable of vertices (int)
+    normals : iterable of normals (float)
 
     Returns
     -------
@@ -587,7 +594,7 @@ def write_ssomesh2kzip(k_path, sso, color=(255, 0, 0, 255), ply_fname="0.ply"):
     write_mesh2kzip(k_path, ind, vert, color, ply_fname)
 
 
-def write_mesh2kzip(k_path, ind, vert, color, ply_fname):
+def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
     """
     Writes mesh as .ply's to k.zip file.
 
@@ -597,6 +604,7 @@ def write_mesh2kzip(k_path, ind, vert, color, ply_fname):
         path to zip
     ind : np.array
     vert : np.array
+    norm : np.array
     color : tuple or np.array
         rgba between 0 and 255
     ply_fname : str
@@ -604,9 +612,9 @@ def write_mesh2kzip(k_path, ind, vert, color, ply_fname):
     if len(vert) == 0:
         return
     if color is not None:
-        ply_str = make_ply_string(ind, vert.astype(np.float32), color)
+        ply_str = make_ply_string(ind, vert.astype(np.float32), norm, color)
     else:
-        ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32))
+        ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm)
     write_txt2kzip(k_path, ply_str, ply_fname)
 
 
@@ -622,3 +630,60 @@ def color_factory(c_values, mcmap, alpha=1.0):
         curr_color[-1] = alpha
         colors.append(curr_color)
     return colors
+
+
+def compartmentalize_mesh(ssv, pred_key_appendix=""):
+    """
+    Splits SuperSegmentationObject mesh into axon, dendrite and soma. Based
+    on axoness prediction of SV's contained in SuperSuperVoxel ssv.
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    pred_key_appendix : str
+        Specific version of axoness prediction
+
+    Returns
+    -------
+    np.array
+        Majority label of each face / triangle in mesh indices;
+        triangulation is assumed. If majority class has n=1, majority label is
+        set to -1.
+    """
+    preds = np.array(start_multiprocess_obj("axoness_preds",
+                                             [[sv, {"pred_key_appendix": pred_key_appendix}]
+                                                for sv in ssv.svs],
+                                               nb_cpus=ssv.nb_cpus))
+    preds = np.concatenate(preds)
+    print "Collected axoness:", Counter(preds).most_common()
+    locs = ssv.sample_locations()
+    print "Collected locations."
+    pred_coords = np.concatenate(locs)
+    assert pred_coords.ndim == 2
+    assert pred_coords.shape[1] == 3
+    ind, vert, axoness = ssv._pred2mesh(pred_coords, preds, k=3, colors=(0, 1, 2))
+    # get axoness of each vertex where indices are pointing to
+    ind_comp = axoness[ind]
+    ind = ind.reshape(-1, 3)
+    vert = vert.reshape(-1, 3)
+    norm = ssv.mesh[2].reshape(-1, 3)
+    ind_comp = ind_comp.reshape(-1, 3)
+    ind_comp_maj = np.zeros((len(ind)), dtype=np.uint8)
+    for ii in range(len(ind)):
+        triangle = ind_comp[ii]
+        cnt = Counter(triangle)
+        ax, n = cnt.most_common(1)[0]
+        if n == 1:
+            ax = -1
+        ind_comp_maj[ii] = ax
+    comp_meshes = {}
+    for ii, comp_type in enumerate(["axon", "dendrite", "soma"]):
+        comp_ind = ind[ind_comp_maj==ii].flatten()
+        unique_comp_ind = np.unique(comp_ind)
+        comp_vert = vert[unique_comp_ind].flatten()
+        if len(ssv.mesh[2]) != 0:
+            comp_norm = norm[unique_comp_ind].flatten()
+        else:
+            comp_norm = ssv.mesh[2]
+        comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
+    ssv._mesh_compartments = comp_meshes

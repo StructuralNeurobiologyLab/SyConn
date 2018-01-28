@@ -36,6 +36,15 @@ app = Flask(__name__)
 global sg_state
 
 
+@app.route('/ssv_skeleton/<ssv_id>', methods=['GET'])
+def route_ssv_skeleton(ssv_id):
+    d = sg_state.backend.ssv_skeleton(ssv_id)
+    start = time.time()
+    ret = json.dumps(d)
+    print "JSON dump:", time.time() - start
+    return ret
+
+
 @app.route('/ssv_mesh/<ssv_id>', methods=['GET'])
 def route_ssv_mesh(ssv_id):
     d = sg_state.backend.ssv_mesh(ssv_id)
@@ -57,6 +66,12 @@ def route_ssv_vert(ssv_id):
     return d
 
 
+@app.route('/ssv_norm/<ssv_id>', methods=['GET'])
+def route_ssv_norm(ssv_id):
+    d = sg_state.backend.ssv_norm(ssv_id)
+    return d
+
+
 @app.route('/ssv_obj_mesh/<ssv_id>/<obj_type>', methods=['GET'])
 def ssv_obj_mesh(ssv_id, obj_type):
     d = sg_state.backend.ssv_obj_mesh(ssv_id, obj_type)
@@ -75,6 +90,12 @@ def ssv_obj_vert(ssv_id, obj_type):
 @app.route('/ssv_obj_ind/<ssv_id>/<obj_type>', methods=['GET'])
 def ssv_obj_ind(ssv_id, obj_type):
     d = sg_state.backend.ssv_obj_ind(ssv_id, obj_type)
+    return d
+
+
+@app.route('/ssv_obj_norm/<ssv_id>/<obj_type>', methods=['GET'])
+def ssv_obj_norm(ssv_id, obj_type):
+    d = sg_state.backend.ssv_obj_norm(ssv_id, obj_type)
     return d
 
 
@@ -154,44 +175,68 @@ class SyConnFS_backend(object):
         :param ssv_id: int
         :return: dict
         """
-        start = time.time()
         self.logger.info('Loading ssv mesh {0}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         mesh = {'vertices': mesh[1],
-                'indices': mesh[0]}
+                'indices': mesh[0],
+                'normals': mesh[2] if len(mesh) == 2 else []}
         self.logger.info('Got ssv mesh {0}'.format(ssv_id))
-        print "Time to load mesh of type", "sv", ":", time.time() - start
         return mesh
-
 
     def ssv_ind(self, ssv_id):
         """
-        Get mesh for ssv_id.
+        Get mesh indices for ssv_id.
         :param ssv_id: int
         :return: dict
         """
-        self.logger.info('Loading ssv mesh {0}'.format(ssv_id))
+        self.logger.info('Loading ssv mesh indices {0}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         return "".join(mesh[0])
 
-
     def ssv_vert(self, ssv_id):
         """
-        Get mesh for ssv_id.
+        Get mesh vertices for ssv_id.
         :param ssv_id: int
         :return: dict
         """
-        start = time.time()
-        self.logger.info('Loading ssv mesh {0}'.format(ssv_id))
+        self.logger.info('Loading ssv mesh vertices {0}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         return "".join(mesh[1])
 
+    def ssv_skeleton(self, ssv_id):
+        """
+        Get mesh vertices for ssv_id.
+        :param ssv_id: int
+        :return: dict
+        """
+        self.logger.info('Loading ssv skeleton {0}'.format(ssv_id))
+        ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.load_skeleton()
+        skeleton = ssv.skeleton
+        if skeleton is None:
+            return {}
+        return {k: skeleton[k].flatten().tolist() for k in
+                ["nodes", "edges", "diameters"]}
+
+    def ssv_norm(self, ssv_id):
+        """
+        Get mesh normals for ssv_id.
+        :param ssv_id: int
+        :return: dict
+        """
+        self.logger.info('Loading ssv mesh normals {0}'.format(ssv_id))
+        ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.load_attr_dict()
+        mesh = ssv._load_obj_mesh_compr("sv")
+        if len(mesh) == 2:
+            return ""
+        return "".join(mesh[2])
 
     def ssv_obj_mesh(self, ssv_id, obj_type):
         """
@@ -200,25 +245,23 @@ class SyConnFS_backend(object):
         :param obj_type: str
         :return: dict
         """
-        start = time.time()
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr(obj_type)
         if mesh is None:
             return None
         ret = {'vertices': mesh[1],
-               'indices': mesh[0]}
-        print "Time to load mesh of type", obj_type, ":", time.time() - start
+               'indices': mesh[0],
+               'normals': mesh[2] if len(mesh) == 2 else []}
         return ret
 
     def ssv_obj_ind(self, ssv_id, obj_type):
         """
-        Get mesh of a specific obj type for ssv_id.
+        Get mesh indices of a specific obj type for ssv_id.
         :param ssv_id: int
         :param obj_type: str
         :return: dict
         """
-        start = time.time()
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr(obj_type)
@@ -226,16 +269,30 @@ class SyConnFS_backend(object):
 
     def ssv_obj_vert(self, ssv_id, obj_type):
         """
-        Get mesh of a specific obj type for ssv_id.
+        Get mesh vertices  of a specific obj type for ssv_id.
         :param ssv_id: int
         :param obj_type: str
         :return: dict
         """
-        start = time.time()
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr(obj_type)
         return "".join(mesh[1])
+
+    def ssv_obj_norm(self, ssv_id, obj_type):
+        """
+        Get mesh normals of a specific obj type for ssv_id.
+        :param ssv_id: int
+        :param obj_type: str
+        :return: dict
+        """
+        ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.load_attr_dict()
+        mesh = ssv._load_obj_mesh_compr(obj_type)
+        if len(mesh) == 2:
+            print len(mesh), obj_type, ssv_id
+            return ""
+        return "".join(mesh[2])
 
     def ssv_list(self):
         """
