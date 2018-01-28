@@ -264,7 +264,7 @@ def subfold_from_ix_2nd_stage(ix):
     return "/%d/%d/" % (int(id_str[-4:-2]), int(id_str[-2:]))
 
 
-def ix_from_subfold(subfold):
+def ix_from_subfold(subfold, n_folders):
     """
 
     Parameters
@@ -277,7 +277,13 @@ def ix_from_subfold(subfold):
     """
 
     parts = subfold.strip("/").split("/")
-    return int("".join("%.2d" % part for part in parts))
+
+    order = int(np.log10(n_folders))
+
+    if order % 2 == 0:
+        return int("".join("%.2d" % int(part) for part in parts))
+    else:
+        return int("".join("%.2d" % int(part) for part in parts[:-1]) + parts[-1])
 
 
 def subfold_from_ix_SSO(ix):
