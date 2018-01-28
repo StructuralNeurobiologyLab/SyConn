@@ -83,14 +83,12 @@ def trafo_object(voxels, realign_map):
     try:
         realigned_voxels = np.array([source_to_target_single(vx, realign_map) for vx in voxels])
     except:
-        return None
+        return None, None
 
     voxels = voxels[:, [1, 0, 2]]
     mean_shift = np.round(np.median(realigned_voxels - voxels, axis=0)).astype(np.int)
 
-    # print(mean_shift)
-    # print(np.std(realigned_voxels - voxels, axis=0))
-    return voxels + mean_shift
+    return voxels + mean_shift, mean_shift
 
 
 def trafo_objects_to_kd(realign_map, obj_ids=None, label_id=3,
@@ -113,12 +111,12 @@ def trafo_objects_to_kd(realign_map, obj_ids=None, label_id=3,
             voxels = np.concatenate([voxels, np.load(path_folder + '/voxels/%d_%d.npz' %
                                              (voxel_file[0], voxel_file[1]))["%d" % obj_id]])
 
-        voxels_t = trafo_object(voxels, realign_map)
+        voxels_t, mean_shift = trafo_object(voxels, realign_map)
 
         bb = np.array([np.min(voxels_t, axis=0), np.max(voxels_t, axis=0)],
                       dtype=np.int)
 
-        if np.product(bb.shape) > 1e8:
+        if np.product(bb.shape) > 1e10:
             print("Obj %d too large" % obj_id)
             continue
 
@@ -138,8 +136,8 @@ def trafo_objects_to_kd(realign_map, obj_ids=None, label_id=3,
         #     break
 
 
-def trafo_objects_to_sd(realign_map, sd_obj_type, working_dir, sd_version,
-                        sd_n_folders_fs, obj_ids=None,
+def trafo_objects_to_sd(realign_map, sd_obj_type, working_dir,
+                        sd_n_folders_fs, sd_version='new', obj_ids=None,
                         path_folder='/wholebrain/scratch/areaxfs3/j0126_cset_paper/obj_mito_1037_3d_8'):
     with open(path_folder + '/direct_map.pkl', 'rb') as f:
         obj_map = pkl.load(f)
@@ -151,12 +149,11 @@ def trafo_objects_to_sd(realign_map, sd_obj_type, working_dir, sd_version,
                                                   create=True)
 
     if obj_ids is None:
-        obj_ids = obj_map.keys()
+        obj_ids = np.array(obj_map.keys())
 
     sub_fold_ids = np.array([int(rh.subfold_from_ix(obj_id, 10000).replace('/', '')) for obj_id in obj_ids])
     obj_id_order = np.argsort(sub_fold_ids)
     obj_ids = np.array(obj_ids)[obj_id_order]
-    sub_fold_ids = sub_fold_ids[obj_id_order]
 
     oobs = []
     otls = []
@@ -172,6 +169,7 @@ def trafo_objects_to_sd(realign_map, sd_obj_type, working_dir, sd_version,
     # voxel_dc = VoxelDict(segdataset.so_storage_path + voxel_rel_path +
     #                      "/voxel.pkl")
 
+    mean_shift_dict = {}
     time_start = time.time()
     for i_obj_id, obj_id in enumerate(obj_ids):
         voxels = np.array([], dtype=np.int32).reshape(0, 3)
@@ -180,16 +178,18 @@ def trafo_objects_to_sd(realign_map, sd_obj_type, working_dir, sd_version,
             voxels = np.concatenate([voxels, np.load(path_folder + '/voxels/%d_%d.npz' %
                                              (voxel_file[0], voxel_file[1]))["%d" % obj_id]])
 
-        voxels_t = trafo_object(voxels, realign_map)
+        voxels_t, mean_shift = trafo_object(voxels, realign_map)
 
         if voxels_t is None:
             oobs.append(obj_id)
             continue
 
+        mean_shift_dict[obj_id] = mean_shift
+
         bb = np.array([np.min(voxels_t, axis=0), np.max(voxels_t, axis=0)],
                       dtype=np.int)
 
-        if np.product(bb.shape) > 1e8:
+        if np.product(bb.shape) > 1e11:
             print("Obj %d too large" % obj_id)
             otls.append(obj_id)
             continue
@@ -202,23 +202,6 @@ def trafo_objects_to_sd(realign_map, sd_obj_type, working_dir, sd_version,
         obj = segdataset.get_segmentation_object(obj_id, create=True)
         obj.save_voxels(vx_cube, bb[0])
 
-        # if i_obj_id > 0 and sub_fold_ids[i_obj_id - 1] != sub_fold_ids[i_obj_id]:
-        #     voxel_dc.save2pkl(segdataset.so_storage_path + voxel_rel_path +
-        #                       "/voxel.pkl")
-        #
-        #     voxel_rel_path = rh.subfold_from_ix(obj_id, sd_n_folders_fs)
-        #
-        #     if not os.path.exists(segdataset.so_storage_path + voxel_rel_path):
-        #         try:
-        #             os.makedirs(segdataset.so_storage_path + voxel_rel_path)
-        #         except:
-        #             pass
-        #
-        #     voxel_dc = VoxelDict(segdataset.so_storage_path + voxel_rel_path +
-        #                          "/voxel.pkl")
-        #
-        # voxel_dc[obj_id] = [vx_cube], [bb[0]]
-
         if i_obj_id % 100 == 0:
             dt = time.time() - time_start
             print("Written obj %d - time / object: %.3fs - eta: %.3fh - "
@@ -226,6 +209,13 @@ def trafo_objects_to_sd(realign_map, sd_obj_type, working_dir, sd_version,
                   (obj_id, dt / (i_obj_id + 1),
                    dt / (i_obj_id + 1) * len(obj_ids) / 3600,
                    len(oobs), len(otls)))
+
+        if i_obj_id % 10000 == 0:
+            with open(segdataset.path + '/trafo_mean_shift_dict.pkl', 'wb') as f:
+                pkl.dump(mean_shift_dict, f)
+
+    with open(segdataset.path + '/trafo_mean_shift_dict.pkl', 'wb') as f:
+        pkl.dump(mean_shift_dict, f)
 
     print(oobs)
     print("%d out of bounds objects" % len(oobs))
