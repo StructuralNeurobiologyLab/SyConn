@@ -8,7 +8,7 @@
 import sys
 
 import cPickle as pkl
-from syconnproc.cs_extraction import extraction_steps as es
+from syconn.extraction import cs_extraction_steps as ces
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -21,7 +21,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = es._extract_pre_cs_thread(args)
+out = ces._extract_agg_cs_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)
