@@ -21,7 +21,8 @@ import fasteners
 import signal
 import logging
 
-__all__ = ["get_filepaths_from_dir", "write_obj2pkl", "load_pkl2obj",
+__all__ = ["load_from_h5py", "save_to_h5py", "crop_bool_array",
+           "get_filepaths_from_dir", "write_obj2pkl", "load_pkl2obj",
            "write_data2kzip", "remove_from_zip", "chunkify", "flatten_list",
            "get_skelID_from_path", "write_txt2kzip"]
 
