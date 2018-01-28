@@ -227,8 +227,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     all_times.append(time.time() - time_start)
     step_names.append("merge list")
     print "\nTime needed for merge list: %.3fs" % all_times[-1]
-    # if all_times[-1] < 0.01:
-    #     raise Exception("That was too fast!")
+    if all_times[-1] < 0.01:
+        raise Exception("That was too fast!")
 
     # -------------------------------------------------------------------------
 

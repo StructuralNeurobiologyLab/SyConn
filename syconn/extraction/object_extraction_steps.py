@@ -648,8 +648,10 @@ def _apply_merge_list_thread(args):
                         hdf5names)
 
 
-def extract_voxels(cset, filename, hdf5names=None, n_folders_fs=10000,
-                   overlaydataset_path=None, chunk_list=None, suffix="",
+def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
+                   n_folders_fs=10000,
+                   workfolder=None, overlaydataset_path=None,
+                   chunk_list=None, suffix="", n_chunk_jobs=500,
                    use_work_dir=True, qsub_pe=None, qsub_queue=None,
                    n_max_co_processes=None):
     """
@@ -682,32 +684,51 @@ def extract_voxels(cset, filename, hdf5names=None, n_folders_fs=10000,
         chunk_list = [ii for ii in range(len(cset.chunk_dict))]
 
     if use_work_dir:
-        workfolder = os.path.dirname(cset.path_head_folder.rstrip("/"))
+        if workfolder is None:
+            workfolder = os.path.dirname(cset.path_head_folder.rstrip("/"))
     else:
         workfolder = cset.path_head_folder
 
     voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
 
-    voxel_rel_paths_2stage = np.unique([rh.subfold_from_ix(ix, n_folders_fs)[:-2]
-                                        for ix in range(n_folders_fs)])
+    voxel_rel_paths_2stage = np.unique(["".join(rh.subfold_from_ix(ix, n_folders_fs).strip('/').split('/')[:-1]) for ix in range(n_folders_fs)])
 
-    for hdf5_name in hdf5names:
-        dataset_path = workfolder + "/%s_temp" % hdf5_name
-        if os.path.exists(dataset_path):
-            shutil.rmtree(dataset_path)
+    if dataset_names is not None:
+        for dataset_name in dataset_names:
+            dataset_path = workfolder + "/%s_temp/" % dataset_name
+            if os.path.exists(dataset_path):
+                shutil.rmtree(dataset_path)
 
-        for p in voxel_rel_paths_2stage:
-            os.makedirs(dataset_path + p)
+            for p in voxel_rel_paths_2stage:
+                os.makedirs(dataset_path + p)
+    else:
+        dataset_names = hdf5names
+
+        for hdf5_name in hdf5names:
+            dataset_path = workfolder + "/%s_temp/" % hdf5_name
+            if os.path.exists(dataset_path):
+                shutil.rmtree(dataset_path)
+
+            for p in voxel_rel_paths_2stage:
+                os.makedirs(dataset_path + p)
 
     multi_params = []
-    block_steps = np.linspace(0, len(voxel_rel_paths), len(chunk_list)+1).astype(np.int)
 
-    for nb_chunk in chunk_list:
-        multi_params.append([cset.chunk_dict[nb_chunk], workfolder,
-                             filename, hdf5names, overlaydataset_path,
+    if n_chunk_jobs > len(chunk_list):
+        n_chunk_jobs = len(chunk_list)
+
+    if n_chunk_jobs > len(voxel_rel_paths):
+        n_chunk_jobs = len(voxel_rel_paths)
+
+    chunk_blocks = np.array_split(np.array(chunk_list), n_chunk_jobs)
+    path_blocks = np.array_split(np.array(voxel_rel_paths), n_chunk_jobs)
+
+    for i_job in range(n_chunk_jobs):
+        multi_params.append([[cset.chunk_dict[nb_chunk] for nb_chunk in chunk_blocks[i_job]], workfolder,
+                             filename, hdf5names, dataset_names,
+                             overlaydataset_path,
                              suffix,
-                             voxel_rel_paths[block_steps[nb_chunk]:
-                                             block_steps[nb_chunk+1]],
+                             path_blocks[i_job],
                              n_folders_fs])
 
     if qsub_pe is None and qsub_queue is None:
@@ -742,85 +763,108 @@ def extract_voxels(cset, filename, hdf5names=None, n_folders_fs=10000,
 
 
 def _extract_voxels_thread(args):
-    chunk = args[0]
+    chunks = args[0]
     workfolder = args[1]
     filename = args[2]
     hdf5names = args[3]
-    overlaydataset_path = args[4]
-    suffix = args[5]
-    voxel_paths = args[6]
-    n_folders_fs = args[7]
+    dataset_names = args[4]
+    overlaydataset_path = args[5]
+    suffix = args[6]
+    voxel_paths = args[7]
+    n_folders_fs = args[8]
 
     map_dict = {}
-    for nb_hdf5_name in range(len(hdf5names)):
-        hdf5_name = hdf5names[nb_hdf5_name]
-        dataset_path = workfolder + "/%s_temp/" % hdf5_name
-
+    for hdf5_name in hdf5names:
         map_dict[hdf5_name] = {}
 
-        if overlaydataset_path is None:
-            path = chunk.folder + filename + "_stitched_components%s.h5" % suffix
-
-            if not os.path.exists(path):
-                path = chunk.folder + filename + ".h5"
-            this_segmentation = basics.load_from_h5py(path, [hdf5_name])[0]
-        else:
-            kd = knossosdataset.KnossosDataset()
-            kd.initialize_from_knossos_path(overlaydataset_path)
-
-            try:
-                this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
-                                                                   chunk.coordinates)
-            except:
-                this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
-                                                                   chunk.coordinates,
-                                                                   datatype=np.uint32)
-
-        unique_ids = np.unique(this_segmentation)
-        n_per_voxel_path = np.ceil(float(len(unique_ids)) / len(voxel_paths))
+    for nb_hdf5_name in range(len(hdf5names)):
+        hdf5_name = hdf5names[nb_hdf5_name]
+        dataset_name = dataset_names[nb_hdf5_name]
+        dataset_path = workfolder + "/%s_temp/" % dataset_name
 
         cur_path_id = 0
+        voxel_dc = VoxelDict(
+            dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl",
+            read_only=False,
+            timeout=3600,
+            disable_locking=True)
 
-        os.makedirs(dataset_path + voxel_paths[cur_path_id])
-
-        voxel_dc = VoxelDict(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl",
-                             read_only=False,
-                             timeout=3600)
+        # os.makedirs(dataset_path + voxel_paths[cur_path_id])
 
         p_parts = voxel_paths[cur_path_id].strip("/").split("/")
         next_id = int("".join("%.2d" % int(part) for part in p_parts))
 
-        for i_unique_id in range(len(unique_ids)):
-            unique_id = unique_ids[i_unique_id]
+        id_count = 0
 
-            if unique_id == 0:
-                continue
+        for i_chunk, chunk in enumerate(chunks):
 
-            unique_id = unique_ids[i_unique_id]
-            id_mask = this_segmentation == unique_id
-            id_mask, in_chunk_offset = basics.crop_bool_array(id_mask)
-            abs_offset = chunk.coordinates + np.array(in_chunk_offset)
-            abs_offset = abs_offset.astype(np.int)
-            voxel_dc[next_id] = [id_mask], [abs_offset]
-            map_dict[hdf5_name][unique_id] = next_id
+            if overlaydataset_path is None:
+                path = chunk.folder + filename + "_stitched_components%s.h5" % suffix
 
-            if i_unique_id > (cur_path_id + 1) * n_per_voxel_path:
-                voxel_dc.save2pkl(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl")
-                cur_path_id += 1
-                voxel_dc = VoxelDict(dataset_path + voxel_paths[cur_path_id],
-                                     read_only=False,
-                                     timeout=3600)
-                p_parts = voxel_paths[cur_path_id].strip("/").split("/")
-                next_id = int("".join("%.2d" % int(part) for part in p_parts))
+                if not os.path.exists(path):
+                    path = chunk.folder + filename + ".h5"
+                this_segmentation = basics.load_from_h5py(path, [hdf5_name])[0]
             else:
-                next_id += n_folders_fs
+                kd = knossosdataset.KnossosDataset()
+                kd.initialize_from_knossos_path(overlaydataset_path)
 
-        voxel_dc.save2pkl(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl")
+                try:
+                    this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
+                                                                       chunk.coordinates)
+                except:
+                    this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
+                                                                       chunk.coordinates,
+                                                                       datatype=np.uint32)
+
+            unique_ids = np.unique(this_segmentation)
+            if i_chunk == 0:
+                n_per_voxel_path = np.ceil(float(len(unique_ids) * len(chunks)) / len(voxel_paths))
+
+            for i_unique_id in range(len(unique_ids)):
+                unique_id = unique_ids[i_unique_id]
+
+                if unique_id == 0:
+                    continue
+
+                unique_id = unique_ids[i_unique_id]
+                id_mask = this_segmentation == unique_id
+                id_mask, in_chunk_offset = basics.crop_bool_array(id_mask)
+                abs_offset = chunk.coordinates + np.array(in_chunk_offset)
+                abs_offset = abs_offset.astype(np.int)
+
+                if next_id in voxel_dc:
+                    voxel_dc.append(next_id, id_mask, abs_offset)
+                else:
+                    voxel_dc[next_id] = [id_mask], [abs_offset]
+
+                if not unique_id in map_dict[hdf5_name]:
+                    map_dict[hdf5_name][unique_id] = [next_id]
+                else:
+                    map_dict[hdf5_name][unique_id].append(next_id)
+
+                id_count += 1
+
+                if id_count > (cur_path_id + 1) * n_per_voxel_path and \
+                                        cur_path_id + 1 < len(voxel_paths):
+                    voxel_dc.save2pkl(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl")
+                    cur_path_id += 1
+                    voxel_dc = VoxelDict(dataset_path + voxel_paths[cur_path_id],
+                                         read_only=False,
+                                         timeout=3600,
+                                         disable_locking=True)
+                    # os.makedirs(dataset_path + voxel_paths[cur_path_id])
+                    p_parts = voxel_paths[cur_path_id].strip("/").split("/")
+                    next_id = int("".join("%.2d" % int(part) for part in p_parts))
+                else:
+                    next_id += n_folders_fs
+
+            voxel_dc.save2pkl(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl")
 
     return map_dict
 
 
-def combine_voxels(workfolder, hdf5names=None, n_folders_fs=100000, stride=100,
+def combine_voxels(workfolder, hdf5names,
+                   n_folders_fs=10000, stride=10,
                    qsub_pe=None, qsub_queue=None, n_max_co_processes=None):
     """
     Extracts voxels for each component id
@@ -847,8 +891,9 @@ def combine_voxels(workfolder, hdf5names=None, n_folders_fs=100000, stride=100,
         qsub queue
 
     """
-    voxel_rel_paths_2stage = np.unique([rh.subfold_from_ix(ix, n_folders_fs)[:-2]
-                                        for ix in range(n_folders_fs)])
+    voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in
+                       range(n_folders_fs)]
+    voxel_rel_paths_2stage = np.unique(["".join(rh.subfold_from_ix(ix, n_folders_fs).strip('/').split('/')[:-1]) for ix in range(n_folders_fs)])
 
     dataset_versions = {}
     for hdf5_name in hdf5names:
@@ -863,22 +908,12 @@ def combine_voxels(workfolder, hdf5names=None, n_folders_fs=100000, stride=100,
             os.makedirs(segdataset.so_storage_path + p)
 
     multi_params = []
+    path_blocks = np.array_split(np.array(voxel_rel_paths),
+                                 int(len(voxel_rel_paths) / stride))
 
     for hdf5_name in hdf5names:
-        with open(workfolder + "/%s_temp/remapping_dict.pkl" % hdf5_name, "r") as f:
-            remap_dict = pkl.load(f)
-
-        so_ids = remap_dict.keys()
-
-        so_id_dict = defaultdict(list)
-        for so_id in so_ids:
-            so_id_str = "%.5d" % so_id
-            so_id_dict[so_id_str[-5:]].append(so_id)
-
-        for so_id_block in [so_id_dict.values()[i:i + stride]
-                            for i in range(0, len(so_id_dict), stride)]:
-
-            multi_params.append([workfolder, hdf5_name, so_id_block,
+        for path_block in path_blocks:
+            multi_params.append([workfolder, hdf5_name, path_block,
                                  dataset_versions[hdf5_name], n_folders_fs])
 
     if qsub_pe is None and qsub_queue is None:
@@ -899,7 +934,7 @@ def combine_voxels(workfolder, hdf5names=None, n_folders_fs=100000, stride=100,
 def _combine_voxels_thread(args):
     workfolder = args[0]
     hdf5_name = args[1]
-    so_id_lists = args[2]
+    voxel_rel_paths = args[2]
     dataset_version = args[3]
     n_folders_fs = args[4]
 
@@ -911,32 +946,29 @@ def _combine_voxels_thread(args):
         obj_type=hdf5_name, working_dir=workfolder, version=dataset_version,
         n_folders_fs=n_folders_fs)
 
-    for so_ids in so_id_lists:
-        voxel_rel_path = rh.subfold_from_ix(so_ids[0], n_folders_fs)
-
-        if not os.path.exists(segdataset.so_storage_path + voxel_rel_path):
-            try:
-                os.makedirs(segdataset.so_storage_path + voxel_rel_path)
-            except:
-                pass
+    for voxel_rel_path in voxel_rel_paths:
+        end_id = "%.4d" % (int("".join(voxel_rel_path.strip('/').split('/'))))
 
         voxel_dc = VoxelDict(segdataset.so_storage_path + voxel_rel_path +
-                             "/voxel.pkl")
+                             "/voxel.pkl", read_only=False,
+                             disable_locking=True)
 
-        for so_id in so_ids:
-            for i_fragment_id in range(len(mapping_dict[so_id])):
-                fragment_id = mapping_dict[so_id][i_fragment_id]
-                voxel_dc_read = VoxelDict(dataset_temp_path +
-                                          rh.subfold_from_ix(fragment_id,
-                                                             n_folders_fs) +
-                                          "/voxel.pkl")
+        for so_id in list(mapping_dict.keys):
+            if str(so_id).endswith(end_id):
+                for i_fragment_id in range(len(mapping_dict[so_id])):
+                    fragment_id = mapping_dict[so_id][i_fragment_id]
+                    voxel_dc_read = VoxelDict(dataset_temp_path +
+                                              rh.subfold_from_ix(fragment_id,
+                                                                 n_folders_fs) +
+                                              "/voxel.pkl", read_only=True,
+                                              disable_locking=True)
 
-                bin_arrs, block_offsets = voxel_dc_read[fragment_id]
+                    bin_arrs, block_offsets = voxel_dc_read[fragment_id]
 
-                if i_fragment_id == 0:
-                    voxel_dc[so_id] = bin_arrs, block_offsets
-                else:
-                    voxel_dc.append(so_id, bin_arrs[0], block_offsets[0])
+                    if i_fragment_id == 0:
+                        voxel_dc[so_id] = bin_arrs, block_offsets
+                    else:
+                        voxel_dc.append(so_id, bin_arrs[0], block_offsets[0])
 
         voxel_dc.save2pkl(segdataset.so_storage_path + voxel_rel_path +
                           "/voxel.pkl")
