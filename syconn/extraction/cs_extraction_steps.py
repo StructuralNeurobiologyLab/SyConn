@@ -3,6 +3,7 @@ import glob
 import numpy as np
 import os
 import scipy.ndimage
+import time
 from knossos_utils import chunky, knossosdataset
 from ..reps import segmentation
 from ..mp import qsub_utils as qu
@@ -10,8 +11,9 @@ from ..mp import shared_mem as sm
 
 from ..handler import compression
 from ..proc.general import crop_bool_array
+from . import object_extraction_steps as oes
 
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/QSUB_scripts/")
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def find_contact_sites(cset, knossos_path, filename, n_max_co_processes=None,
@@ -39,31 +41,70 @@ def find_contact_sites(cset, knossos_path, filename, n_max_co_processes=None,
         raise Exception("QSUB not available")
 
 
-def extract_contact_sites(cset, filename, working_dir, stride=10,
-                          n_max_co_processes=None, qsub_pe=None, qsub_queue=None):
-    segdataset = segmentation.SegmentationDataset("cs_pre",
-                                                  version="new",
-                                                  working_dir=working_dir,
-                                                  create=True)
+# def extract_contact_sites(cset, filename, working_dir, n_folders_fs=10000, stride=10,
+#                           n_max_co_processes=None, qsub_pe=None, qsub_queue=None):
+#
+#     segdataset = segmentation.SegmentationDataset("cs_agg",
+#                                                   version="new",
+#                                                   working_dir=working_dir,
+#                                                   create=True,
+#                                                   n_folders_fs=n_folders_fs)
+#
+#     multi_params = []
+#     chunks = list(cset.chunk_dict.values())
+#     for chunk_block in [chunks[i: i + stride]
+#                         for i in range(0, len(chunks), stride)]:
+#         multi_params.append([chunk_block, working_dir, filename,
+#                              segdataset.version])
+#
+#     if qsub_pe is None and qsub_queue is None:
+#         results = sm.start_multiprocess(_extract_agg_cs_thread,
+#                                         multi_params, debug=False)
+#     elif qu.__QSUB__:
+#         path_to_out = qu.QSUB_script(multi_params,
+#                                      "extract_agg_cs",
+#                                      script_folder=script_folder,
+#                                      n_max_co_processes=n_max_co_processes,
+#                                      pe=qsub_pe, queue=qsub_queue)
+#     else:
+#         raise Exception("QSUB not available")
 
-    multi_params = []
-    chunks = cset.chunk_dict.values()
-    for chunk_block in [chunks[i: i + stride]
-                        for i in range(0, len(chunks), stride)]:
-        multi_params.append([chunk_block, working_dir, filename,
-                             segdataset.version])
 
-    if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_extract_pre_cs_thread,
-                                        multi_params, debug=False)
-    elif qu.__QSUB__:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "extract_pre_cs",
-                                     script_folder=script_folder,
-                                     n_max_co_processes=n_max_co_processes,
-                                     pe=qsub_pe, queue=qsub_queue)
-    else:
-        raise Exception("QSUB not available")
+def extract_agg_contact_sites(cset, filename, hdf5name, working_dir,
+                              n_folders_fs=10000, suffix="",
+                              n_max_co_processes=None, qsub_pe=None,
+                              qsub_queue=None):
+
+    all_times = []
+    step_names = []
+    time_start = time.time()
+    oes.extract_voxels(cset, filename, [hdf5name], dataset_names=['cs_agg'],
+                       n_folders_fs=n_folders_fs,
+                       chunk_list=None, suffix=suffix, workfolder=working_dir,
+                       use_work_dir=True, qsub_pe=qsub_pe,
+                       qsub_queue=qsub_queue,
+                       n_max_co_processes=n_max_co_processes)
+    all_times.append(time.time() - time_start)
+    step_names.append("voxel extraction")
+    print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
+
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    oes.combine_voxels(working_dir, ['cs_agg'],
+                       n_folders_fs=n_folders_fs, qsub_pe=qsub_pe,
+                       qsub_queue=qsub_queue,
+                       n_max_co_processes=n_max_co_processes)
+    all_times.append(time.time() - time_start)
+    step_names.append("combine voxels")
+    print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
+
+    print("\nTime overview:")
+    for ii in range(len(all_times)):
+        print("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    print("--------------------------")
+    print("Total Time: %.1f min" % (np.sum(all_times) / 60.))
+    print("--------------------------\n\n")
 
 
 def _contact_site_detection_thread(args):
@@ -158,13 +199,13 @@ def process_block_nonzero(edges, arr, stencil=(7, 7, 3)):
     return out
 
 
-def _extract_pre_cs_thread(args):
+def _extract_agg_cs_thread(args):
     chunk_block = args[0]
     working_dir = args[1]
     filename = args[2]
     version = args[3]
 
-    segdataset = segmentation.SegmentationDataset("cs_pre",
+    segdataset = segmentation.SegmentationDataset("cs_agg",
                                                   version=version,
                                                   working_dir=working_dir)
     for chunk in chunk_block:
@@ -181,9 +222,7 @@ def _extract_pre_cs_thread(args):
             id_mask, in_chunk_offset = crop_bool_array(id_mask)
             abs_offset = chunk.coordinates + np.array(in_chunk_offset)
             abs_offset = abs_offset.astype(np.int)
-            segobj = segmentation.SegmentationObject(unique_id, "cs_pre",
-                                                     version=segdataset.version,
-                                                     working_dir=segdataset.working_dir,
-                                                     create=True)
+            segobj = segdataset.get_segmentation_object(unique_id,
+                                                        create=True)
             segobj.save_voxels(id_mask, abs_offset)
             print(unique_id)
