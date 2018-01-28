@@ -197,7 +197,7 @@ def get_object_mesh(obj, res=None):
         vertices, indices
     """
     if res is None:
-        res = {"sv": 256, "sj": 100, "vc": 100, "mi": 150}
+        res = {"conn": 100, "sv": 256, "cs": 100, "sj": 100, "vc": 100, "mi": 150}
         resolution = res[obj.type]
     else:
         resolution = res
