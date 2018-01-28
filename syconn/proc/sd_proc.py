@@ -2,6 +2,7 @@ import cPickle as pkl
 import glob
 import numpy as np
 import os
+from scipy import spatial
 from collections import defaultdict
 from .image import single_conn_comp_img
 from knossos_utils import knossosdataset
@@ -389,11 +390,11 @@ def _binary_filling_cs_thread(args):
         for so_id in this_vx_dc.keys():
             so = cs_sd.get_segmentation_object(so_id)
             # so.attr_dict = this_attr_dc[so_id]
-            so.load_voxels(voxel_dc=this_vx_dc)
-            filled_voxels = segmentation_helper.binary_closing(so.voxels,
+            so.load_voxels(voxel_dc=this_vx_dc, overwrite=True)
+            filled_voxels = segmentation_helper.binary_closing(so.voxels.copy(),
                                                                n_iterations=n_iterations)
 
-            this_vx_dc[so_id] = [filled_voxels], this_vx_dc[so_id][1]
+            this_vx_dc[so_id] = [filled_voxels], [so.bounding_box[0]]
 
         this_vx_dc.save2pkl()
 
@@ -446,3 +447,50 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
 def multi_probas_saver(args):
     so, probas, key = args
     so.save_attributes([key], [probas])
+
+
+def export_sd_to_knossosdataset(sd, kd, n_jobs=100, qsub_pe=None,
+                                qsub_queue=None, nb_cpus=10,
+                                n_max_co_processes=100):
+    multi_params = []
+
+    id_blocks = np.array_split(np.array(sd.ids), n_jobs)
+
+    for id_block in id_blocks:
+        multi_params.append([id_block, sd.working_dir, kd.knossos_path])
+
+    if qsub_pe is None and qsub_queue is None:
+        results = sm.start_multiprocess(_export_sd_to_knossosdataset_thread,
+                                        multi_params, nb_cpus=nb_cpus)
+
+    elif qu.__QSUB__:
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "export_sd_to_knossosdataset",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_max_co_processes=n_max_co_processes)
+    else:
+        raise Exception("QSUB not available")
+
+
+def _export_sd_to_knossosdataset_thread(args):
+    so_ids = args[0]
+    version = args[1]
+    working_dir = args[2]
+    kd_path = args[3]
+
+    kd = knossosdataset.KnossosDataset().initialize_from_knossos_path(kd_path)
+
+    sd = segmentation.SegmentationDataset(working_dir, version)
+
+    for so_id in so_ids:
+        print(so_id)
+
+        so = sd.get_segmentation_object(so_id, False)
+
+        offset = so.bounding_box[0]
+        if not 0 in offset:
+            kd.from_matrix_to_cubes(offset,
+                                    data=so.voxels.astype(np.uint64) * so_id,
+                                    overwrite=False,
+                                    nb_threads=1)
