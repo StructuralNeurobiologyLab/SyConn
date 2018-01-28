@@ -48,8 +48,8 @@ except:
 
 
 class SuperSegmentationDataset(object):
-    def __init__(self, working_dir=None, version=None, version_dict=None,
-                 sv_mapping=None, scaling=None, config=None):
+    def __init__(self, working_dir=None, version=None, ssd_type='ssv',
+                 version_dict=None, sv_mapping=None, scaling=None, config=None):
         """
 
         Parameters
@@ -64,6 +64,7 @@ class SuperSegmentationDataset(object):
         self.mapping_dict = {}
         self.reversed_mapping_dict = {}
 
+        self._type = ssd_type
         self._id_changer = []
         self._ssv_ids = None
         self._config = config
@@ -126,7 +127,7 @@ class SuperSegmentationDataset(object):
 
     @property
     def type(self):
-        return "ssv"
+        return str(self._type)
 
     @property
     def scaling(self):
@@ -144,7 +145,7 @@ class SuperSegmentationDataset(object):
 
     @property
     def path(self):
-        return "%s/ssv_%s/" % (self._working_dir, self.version)
+        return "%s/%s_%s/" % (self._working_dir, self.type, self.version)
 
     @property
     def version(self):
@@ -738,12 +739,12 @@ def export_to_knossosdataset(ssd, kd, stride=1000, qsub_pe=None,
                              ssd.working_dir, kd.knossos_path, nb_cpus])
 
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_export_to_knossosdataset_thread,
+        results = sm.start_multiprocess(_export_ssv_to_knossosdataset_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
     elif qu.__QSUB__:
         path_to_out = qu.QSUB_script(multi_params,
-                                     "export_to_knossosdataset",
+                                     "export_ssv_to_knossosdataset",
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=script_folder)
 
@@ -751,7 +752,7 @@ def export_to_knossosdataset(ssd, kd, stride=1000, qsub_pe=None,
         raise Exception("QSUB not available")
 
 
-def _export_to_knossosdataset_thread(args):
+def _export_ssv_to_knossosdataset_thread(args):
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -771,8 +772,8 @@ def _export_to_knossosdataset_thread(args):
 
         offset = ssv_obj.bounding_box[0]
         if not 0 in offset:
-            kd.from_matrix_to_cubes(ssv_obj.bounding_booffset,
-                                    data=ssv_obj.voxels.astype(np.uint32) *
+            kd.from_matrix_to_cubes(offset,
+                                    data=ssv_obj.voxels.astype(np.uint64) *
                                          ssv_obj_id,
                                     overwrite=False,
                                     nb_threads=nb_threads)

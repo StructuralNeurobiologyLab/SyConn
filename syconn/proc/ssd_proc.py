@@ -19,7 +19,8 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
                          for i in range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, extract_only, attr_keys])
+                             ssd.working_dir, extract_only, attr_keys,
+                             ssd.type])
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(
@@ -70,9 +71,11 @@ def _write_super_segmentation_dataset_thread(args):
     working_dir = args[3]
     extract_only = args[4]
     attr_keys = args[5]
+    ssd_type = args[6]
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir, version,
-                                                      version_dict)
+                                                      ssd_type=ssd_type,
+                                                      version_dict=version_dict)
 
     try:
         ssd.load_mapping_dict()
@@ -157,7 +160,7 @@ def aggregate_segmentation_object_mappings(ssd, obj_types,
                          for i in
                          range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, obj_types])
+                             ssd.working_dir, obj_types, ssd.type])
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(
@@ -180,9 +183,11 @@ def _aggregate_segmentation_object_mappings_thread(args):
     version_dict = args[2]
     working_dir = args[3]
     obj_types = args[4]
+    ssd_type = args[5]
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir, version,
-                                                      version_dict)
+                                                      ssd_type=ssd_type,
+                                                      version_dict=version_dict)
     ssd.load_mapping_dict()
 
     for ssv_id in ssv_obj_ids:
@@ -218,7 +223,7 @@ def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
                          for i in
                          range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, obj_types])
+                             ssd.working_dir, obj_types, ssd.type])
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_apply_mapping_decisions_thread,
@@ -240,9 +245,11 @@ def _apply_mapping_decisions_thread(args):
     version_dict = args[2]
     working_dir = args[3]
     obj_types = args[4]
+    ssd_type = args[5]
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir, version,
-                                                      version_dict)
+                                                      ssd_type=ssd_type,
+                                                      version_dict=version_dict)
     ssd.load_mapping_dict()
 
     for ssv_id in ssv_obj_ids:
