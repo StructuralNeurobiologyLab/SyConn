@@ -10,7 +10,7 @@ from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
-from ..reps.rep_helper import subfold_from_ix
+from ..reps.rep_helper import subfold_from_ix, ix_from_subfold
 from ..handler.compression import VoxelDict, AttributeDict
 
 
@@ -439,12 +439,139 @@ def map_objects_to_single_cs(cs_obj, ssd_version=None, max_map_dist_nm=2000,
     return mapping_feats
 
 
+def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
+                             n_folders_fs=10000,
+                             stride=20, qsub_pe=None, qsub_queue=None,
+                             nb_cpus=None, n_max_co_processes=None):
+    assert n_folders_fs % stride == 0
+
+    wd = cs_sd.working_dir
+
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
+    conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd, version="new",
+                                               create=True, n_folders_fs=n_folders_fs)
+
+    for p in voxel_rel_paths:
+        os.makedirs(conn_sd.so_storage_path + p)
+
+    multi_params = []
+    for block_bs in [[i, i+stride] for i in range(0, n_folders_fs, stride)]:
+        multi_params.append([wd, block_bs[0], block_bs[1], conn_sd.version,
+                             sj_sd.version, cs_sd.version,
+                             rep_coord_dist_nm])
+
+    if qsub_pe is None and qsub_queue is None:
+        results = sm.start_multiprocess(_overlap_mapping_sj_to_cs_thread,
+                                        multi_params, nb_cpus=nb_cpus)
+
+    elif qu.__QSUB__:
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "overlap_mapping_sj_to_cs",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_max_co_processes=n_max_co_processes)
+    else:
+        raise Exception("QSUB not available")
 
 
+def _overlap_mapping_sj_to_cs_thread(args):
+    wd, block_start, block_end, conn_sd_version, sj_sd_version, cs_sd_version, \
+        rep_coord_dist_nm = args
+
+    conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd,
+                                               version=conn_sd_version,
+                                               create=False)
+    sj_sd = segmentation.SegmentationDataset("sj", working_dir=wd,
+                                             version=sj_sd_version,
+                                             create=False)
+    cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd,
+                                             version=cs_sd_version,
+                                             create=False)
+
+    cs_id_assignment = np.linspace(0, len(cs_sd.ids), conn_sd.n_folders_fs+1).astype(np.int)
+
+    sj_kdtree = spatial.cKDTree(sj_sd.rep_coords[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']] * sj_sd.scaling)
+
+    for i_cs_start_id, cs_start_id in enumerate(cs_id_assignment[block_start: block_end]):
+
+        rel_path = subfold_from_ix(i_cs_start_id + block_start, conn_sd.n_folders_fs)
+
+        voxel_dc = VoxelDict(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
+                             read_only=False,
+                             timeout=3600)
+        attr_dc = AttributeDict(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl",
+                                read_only=False,
+                                timeout=3600)
+
+        next_conn_id = i_cs_start_id + block_start
+        n_items_for_path = 0
+        for cs_list_id in range(cs_start_id, cs_id_assignment[block_start + i_cs_start_id + 1]):
+            cs_id = cs_sd.ids[cs_list_id]
+
+            print('CS ID: %d' % cs_id)
+
+            cs = cs_sd.get_segmentation_object(cs_id)
+
+            overlap_vx_l = overlap_mapping_sj_to_cs_single(cs, sj_sd,
+                                                           sj_kdtree=sj_kdtree,
+                                                           rep_coord_dist_nm=rep_coord_dist_nm)
+
+            for l in overlap_vx_l:
+                sj_id, overlap_vx = l
+
+                bounding_box = [np.min(overlap_vx, axis=0),
+                                np.max(overlap_vx, axis=0) + 1]
+
+                vx = np.zeros(bounding_box[1] - bounding_box[0], dtype=np.bool)
+                overlap_vx -= bounding_box[0]
+                vx[overlap_vx[:, 0], overlap_vx[:, 1], overlap_vx[:, 2]] = True
+
+                voxel_dc[next_conn_id] = [vx], [bounding_box[0]]
+
+                attr_dc[next_conn_id] = {'sj_id': sj_id,
+                                         'cs_id': cs_id,
+                                         'ssv_partners': cs.lookup_in_attribute_dict('neuron_partners')}
+
+                next_conn_id += conn_sd.n_folders_fs
+                n_items_for_path += 1
+
+        if n_items_for_path > 0:
+            voxel_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/voxel.pkl")
+            attr_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
 
 
+def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm=2000):
+    cs_kdtree = spatial.cKDTree(cs.voxel_list * cs.scaling)
 
+    if sj_kdtree is None:
+        sj_kdtree = spatial.cKDTree(sj_sd.rep_coords[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']] * sj_sd.scaling)
 
+    cand_sj_ids_l = sj_kdtree.query_ball_point(cs.voxel_list * cs.scaling,
+                                               r=rep_coord_dist_nm)
+    u_cand_sj_ids = set()
+    for l in cand_sj_ids_l:
+        u_cand_sj_ids.update(l)
+
+    if len(u_cand_sj_ids) == 0:
+        return []
+
+    u_cand_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']][np.array(list(u_cand_sj_ids))]
+
+    print("%d candidate sjs" % len(u_cand_sj_ids))
+
+    overlap_vx_l = []
+    for sj_id in u_cand_sj_ids:
+        sj = sj_sd.get_segmentation_object(sj_id, create=False)
+        dists, _ = cs_kdtree.query(sj.voxel_list * sj.scaling,
+                                   distance_upper_bound=1)
+
+        overlap_vx = sj.voxel_list[dists == 0]
+        if len(overlap_vx) > 0:
+            overlap_vx_l.append([sj_id, overlap_vx])
+
+    print("%d candidate sjs overlap" % len(overlap_vx_l))
+
+    return overlap_vx_l
 
 
 
