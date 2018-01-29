@@ -283,7 +283,7 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
     return np.concatenate(c_views)
 
 
-def multi_view_sso(sso, colors=None,
+def multi_view_sso(sso, colors=None, obj_to_render=(),
                    ws=(2048, 2048), physical_scale=None,
                    enable_lightning=True, depth_map=False,
                    nb_views=3, background=1):
@@ -329,6 +329,8 @@ def multi_view_sso(sso, colors=None,
     norm, col = np.zeros(0, ), np.zeros(0, )
     ind, vert = [], []
     for m in [vc_mesh, mi_mesh, sj_mesh, sv_mesh]:
+        if not m.object_type in obj_to_render:
+            continue
         if len(m.vertices) == 0:
             continue
         norm = np.concatenate([norm, m.normals])

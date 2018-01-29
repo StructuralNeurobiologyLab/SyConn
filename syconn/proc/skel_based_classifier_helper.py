@@ -11,12 +11,12 @@ from syconn.reps import super_segmentation as ss
 
 def generate_clf_data_thread(args):
     this_id = args[0]
-    version = args[1]
+    ssd_type = args[1]
     working_dir = args[2]
     feature_contexts_nm = args[3]
     save_path = args[4]
 
-    ssd = ss.SuperSegmentationDataset(working_dir, version)
+    ssd = ss.SuperSegmentationDataset(working_dir, ssd_type=ssd_type)
     sso = ssd.get_super_segmentation_object(this_id)
 
     for feature_context_nm in feature_contexts_nm:

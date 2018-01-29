@@ -1490,6 +1490,8 @@ class SuperSegmentationObject(object):
 
     def skel_features(self, feature_context_nm):
         features = self._load_skelfeatures(feature_context_nm)
+        if not "assoc_sj" in self.skeleton:
+            ssh.associate_objs_with_skel_nodes(self)
         if not features:
             features = ssh.extract_skel_features(self, feature_context_nm=
             feature_context_nm)
@@ -1717,11 +1719,12 @@ class SuperSegmentationObject(object):
     def predict_celltype_cnn(self, model):
         ssh.predict_sso_celltype(self, model)
 
-    def render_ortho_views(self, dest_folder=None, colors=None, ws=(2048, 2048)):
+    def render_ortho_views(self, dest_folder=None, colors=None, ws=(2048, 2048),
+                           obj_to_render=("sv")):
         if colors is None:
             colors = {"sv": (0.5, 0.5, 0.5, 0.5), "mi": (0, 0, 1, 1),
                       "vc": (0, 1, 0, 1), "sj": (1, 0, 0, 1)}
-        views = multi_view_sso(self, colors, ws=ws)
+        views = multi_view_sso(self, colors, ws=ws, obj_to_render=obj_to_render)
         if dest_folder:
             for ii, v in enumerate(views):
                 imsave("%s/SSV_%d_%d.png" % (dest_folder, self.id, ii), v)
