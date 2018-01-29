@@ -51,17 +51,17 @@ def mesh_creator(so, force=True):
                   "-------------------------\n" % (so.type, so.id, e)
 
 
-def mesh_creator_sso(sso_ix):
-    try:
-        sso = SuperSegmentationObject(sso_ix, working_dir="/wholebrain/scratch/areaxfs3/", nb_cpus=1, version="0")
-        sso.load_attr_dict()
-        _ = sso._load_obj_mesh(obj_type="mi", rewrite=True)
-        _ = sso._load_obj_mesh(obj_type="sj", rewrite=True)
-        _ = sso._load_obj_mesh(obj_type="vc", rewrite=True)
-        # _ = sso.mesh
-    except Exception, e:
-        print "Error occurred:", e, sso_ix
-
+def mesh_creator_sso(ssv):
+    # try:
+    ssv.load_attr_dict()
+    _ = ssv._load_obj_mesh(obj_type="mi", rewrite=False)
+    _ = ssv._load_obj_mesh(obj_type="sj", rewrite=False)
+    _ = ssv._load_obj_mesh(obj_type="vc", rewrite=False)
+    _ = ssv._load_obj_mesh(obj_type="sv", rewrite=False)
+    ssv.calculate_skeleton()
+    ssv.clear_cache()
+    # except Exception, e:
+    #     print "Error occurred:", e, ssv.id
 
 
 def mesh_creator_mi(ixs):
@@ -210,13 +210,13 @@ if __name__ == "__main__":
     # copy_sv_skeletons()
     # copy_axoness()
     ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/",
-                                    version="0")
+                                    version="0", ssd_type="ax_gt")
     global SCALING
     SCALING = ssds.scaling
-    mesh_proc_chunked("sj")
-    mesh_proc_chunked("vc")
-    mesh_proc_chunked("mi")
-    start_multiprocess(mesh_creator_sso, ssds.ssv_ids, nb_cpus=20, debug=False)
+    # mesh_proc_chunked("sj")
+    # mesh_proc_chunked("vc")
+    # mesh_proc_chunked("mi")
+    start_multiprocess(mesh_creator_sso, list(ssds.ssvs), nb_cpus=20, debug=False)
     # start_multiprocess(write_meshs_helper, list(ssds.ssvs), nb_cpus=20)
     # start_multiprocess(write_meshs_helper, list(ssds.ssvs), nb_cpus=20)
 

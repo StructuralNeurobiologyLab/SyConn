@@ -6,9 +6,7 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import numpy as np
-
-from ..reps import super_segmentation as ss
-import skel_based_classifier as sbc
+from syconn.reps import super_segmentation as ss
 
 
 def generate_clf_data_thread(args):
@@ -23,21 +21,5 @@ def generate_clf_data_thread(args):
 
     for feature_context_nm in feature_contexts_nm:
         print "---", this_id, feature_context_nm
-        feats = sso.extract_ax_features(feature_context_nm=feature_context_nm)
+        feats = sso.skel_features(feature_context_nm=feature_context_nm)
         np.save(save_path % (feature_context_nm, this_id), feats)
-
-
-def classifier_production_thread(args):
-    working_dir = args[0]
-    ssd_version = args[1]
-    clf_name = args[2]
-    n_estimators = args[3]
-    feature_context_nm = args[4]
-
-    sc = sbc.SkelClassifier(working_dir=working_dir,
-                            ssd_version=ssd_version,
-                            create=False)
-
-    sc.train_clf(name=clf_name, n_estimators=n_estimators,
-                 feature_context_nm=feature_context_nm, production=True,
-                 save=True)

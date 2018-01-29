@@ -17,7 +17,7 @@ import sys
 import time
 import warnings
 from collections import Counter
-
+from scipy.misc import imsave
 import syconn.reps.super_segmentation_helper
 from knossos_utils import skeleton, knossosdataset
 
@@ -41,7 +41,7 @@ from ..proc.image import single_conn_comp_img
 from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
 from ..proc.meshes import write_mesh2kzip, merge_someshs, compartmentalize_mesh
 from ..proc.rendering import render_sampled_sso, comp_window, \
-    multi_render_sampled_svidlist, render_sso_coords
+    multi_render_sampled_svidlist, render_sso_coords, multi_view_sso
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
@@ -462,6 +462,24 @@ class SuperSegmentationObject(object):
             self._edge_graph = self.load_graph()
         return self._edge_graph
 
+    @property
+    def compartment_meshes(self):
+        if not "axon" in self._meshes:
+            self._load_mesh_compartments()
+        return {k: self._meshes[k] for k in ["axon", "dendrite", "soma"]}
+
+    def _load_mesh_compartments(self, rewrite=False):
+        mesh_dc = MeshDict(self.mesh_dc_path,
+                           disable_locking=not self.enable_locking)
+        if not "axon" in mesh_dc or rewrite:
+            mesh_compartments = compartmentalize_mesh(self)
+            mesh_dc["axon"] = mesh_compartments["axon"]
+            mesh_dc["dendrite"] = mesh_compartments["dendrite"]
+            mesh_dc["soma"] = mesh_compartments["soma"]
+            mesh_dc.save2pkl()
+        comp_meshes = {k: mesh_dc[k] for k in ["axon", "dendrite", "soma"]}
+        self._meshes.update(comp_meshes)
+
     def load_voxels_downsampled(self, downsampling=(2, 2, 1), nb_threads=10):
         syconn.reps.super_segmentation_helper.load_voxels_downsampled(self, downsampling=downsampling,
                                                                       nb_threads=nb_threads)
@@ -637,55 +655,66 @@ class SuperSegmentationObject(object):
         else:
             self._bounding_box = np.zeros((2, 3), dtype=np.int)
 
-    def calculate_skeleton(self, size_threshold=1e20, kd=None,
-                           coord_scaling=(8, 8, 4), plain=False, cleanup=True,
-                           nb_threads=1):
-        if np.product(self.shape) < size_threshold:
-            # vx = self.load_voxels_downsampled(coord_scaling)
-            # vx = self.voxels[::coord_scaling[0],
-            #                  ::coord_scaling[1],
-            #                  ::coord_scaling[2]]
-            vx = self.load_voxels_downsampled(downsampling=coord_scaling)
-            vx = scipy.ndimage.morphology.binary_closing(
-                np.pad(vx, 3, mode="constant", constant_values=0), iterations=3)
-            vx = vx[3: -3, 3: -3, 3:-3]
-
-            if plain:
-                nodes, edges, diameters = \
-                    ssh.reskeletonize_plain(vx, coord_scaling=coord_scaling)
-                nodes = np.array(nodes, dtype=np.int) + self.bounding_box[0]
-            else:
-                nodes, edges, diameters = \
-                    ssh.reskeletonize_chunked(self.id, self.shape,
-                                              self.bounding_box[0],
-                                              self.scaling,
-                                              voxels=vx,
-                                              coord_scaling=coord_scaling,
-                                              nb_threads=nb_threads)
-
-        elif kd is not None:
-            nodes, edges, diameters = \
-                ssh.reskeletonize_chunked(self.id, self.shape,
-                                          self.bounding_box[0], self.scaling,
-                                          kd=kd, coord_scaling=coord_scaling,
-                                          nb_threads=nb_threads)
-        else:
+    # def calculate_skeleton(self, size_threshold=1e20, kd=None,
+    #                        coord_scaling=(8, 8, 4), plain=False, cleanup=True,
+    #                        nb_threads=1):
+    #     if np.product(self.shape) < size_threshold:
+    #         # vx = self.load_voxels_downsampled(coord_scaling)
+    #         # vx = self.voxels[::coord_scaling[0],
+    #         #                  ::coord_scaling[1],
+    #         #                  ::coord_scaling[2]]
+    #         vx = self.load_voxels_downsampled(downsampling=coord_scaling)
+    #         vx = scipy.ndimage.morphology.binary_closing(
+    #             np.pad(vx, 3, mode="constant", constant_values=0), iterations=3)
+    #         vx = vx[3: -3, 3: -3, 3:-3]
+    #
+    #         if plain:
+    #             nodes, edges, diameters = \
+    #                 ssh.reskeletonize_plain(vx, coord_scaling=coord_scaling)
+    #             nodes = np.array(nodes, dtype=np.int) + self.bounding_box[0]
+    #         else:
+    #             nodes, edges, diameters = \
+    #                 ssh.reskeletonize_chunked(self.id, self.shape,
+    #                                           self.bounding_box[0],
+    #                                           self.scaling,
+    #                                           voxels=vx,
+    #                                           coord_scaling=coord_scaling,
+    #                                           nb_threads=nb_threads)
+    #
+    #     elif kd is not None:
+    #         nodes, edges, diameters = \
+    #             ssh.reskeletonize_chunked(self.id, self.shape,
+    #                                       self.bounding_box[0], self.scaling,
+    #                                       kd=kd, coord_scaling=coord_scaling,
+    #                                       nb_threads=nb_threads)
+    #     else:
+    #         return
+    #
+    #     nodes = np.array(nodes, dtype=np.int)
+    #     edges = np.array(edges, dtype=np.int)
+    #     diameters = np.array(diameters, dtype=np.float)
+    #
+    #     self.skeleton = {}
+    #     self.skeleton["edges"] = edges
+    #     self.skeleton["nodes"] = nodes
+    #     self.skeleton["diameters"] = diameters
+    #
+    #     if cleanup:
+    #         for i in range(2):
+    #             if len(self.skeleton["edges"]) > 2:
+    #                 self.skeleton = ssh.cleanup_skeleton(self.skeleton,
+    #                                                      coord_scaling)
+    def calculate_skeleton(self, force=False):
+        self.load_skeleton()
+        if self.skeleton is not None and len(self.skeleton["nodes"]) != 0\
+                and not force:
             return
-
-        nodes = np.array(nodes, dtype=np.int)
-        edges = np.array(edges, dtype=np.int)
-        diameters = np.array(diameters, dtype=np.float)
-
-        self.skeleton = {}
-        self.skeleton["edges"] = edges
-        self.skeleton["nodes"] = nodes
-        self.skeleton["diameters"] = diameters
-
-        if cleanup:
-            for i in range(2):
-                if len(self.skeleton["edges"]) > 2:
-                    self.skeleton = ssh.cleanup_skeleton(self.skeleton,
-                                                         coord_scaling)
+        ssh.create_sso_skeleton(self)
+        if len(self.skeleton["nodes"]) != 0:
+            ssh.sparsify_skeleton(self)
+        else:
+            print "%s has zero nodes." % repr(self)
+        self.save_skeleton()
 
     def save_skeleton_to_kzip(self, dest_path=None):
         try:
@@ -1097,8 +1126,8 @@ class SuperSegmentationObject(object):
             mesh = self.mi_mesh
             color = (0, 153, 255, 255)
         else:
-            raise ("Given object type '%s' does not exist." % obj_type,
-                   TypeError)
+            mesh = self._meshes[obj_type]
+            color =None
         if ext_color is not None:
             if ext_color == 0:
                 color = None
@@ -1207,11 +1236,11 @@ class SuperSegmentationObject(object):
             1 / "axon"
             2 "soma"
         """
-        if not self._mesh_compartments:
+        if not self.mesh_compartments:
             compartmentalize_mesh(self)
         if type(comp_type) == int:
             comp_type = {0: "dendrite", 1: "axon", 2: "soma"}[comp_type]
-        return self._mesh_compartments[comp_type]
+        return self.mesh_compartments[comp_type]
 
 
     # --------------------------------------------------------------------- GLIA
@@ -1459,7 +1488,7 @@ class SuperSegmentationObject(object):
             "Length of skeleton features is not equal to number of nodes."
         self.save_skeleton()
 
-    def skel_features(self, feature_context_nm=5000):
+    def skel_features(self, feature_context_nm):
         features = self._load_skelfeatures(feature_context_nm)
         if not features:
             features = ssh.extract_skel_features(self, feature_context_nm=
@@ -1687,6 +1716,14 @@ class SuperSegmentationObject(object):
 
     def predict_celltype_cnn(self, model):
         ssh.predict_sso_celltype(self, model)
+
+    def render_ortho_views(self, dest_folder=None, colors=None, ws=(2048, 2048)):
+        views = multi_view_sso(self, colors, ws=ws)
+        if dest_folder:
+            for ii, v in enumerate(views):
+                imsave("%s/SSV_%d_%d.png" % (dest_folder, self.id, ii), v)
+        else:
+            return views
 
 
 # ------------------------------------------------------------------------------

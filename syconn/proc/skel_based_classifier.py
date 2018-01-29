@@ -38,11 +38,13 @@ colorVals = [[0.841, 0.138, 0.133, 1.],
              [0.25, 0.25, 0.25, 1.]] + [[0.45, 0.45, 0.45, 1.]]*20
 
 colors = {"axgt": [colorVals[0], ".7", ".3"],
+          "spgt": [".7", "r", "k"],
           "ctgt": np.array([[127, 98, 170], [239, 102, 142], [177, 181, 53],
                             [92, 181, 170]]) / 255.}
 
 legend_labels = {"axgt": ("Axon", "Dendrite", "Soma"),
-                 "ctgt": ("EA", "MSN", "GP", "INT")}
+                 "ctgt": ("EA", "MSN", "GP", "INT"),
+                 "spgt": {"Shaft", "Head", "Neck"}}
 
 
 class SkelClassifier(object):
@@ -52,6 +54,9 @@ class SkelClassifier(object):
             ssd_version = "axgt"
         elif target_type == "spiness":
             ssd_version = "spgt"
+        else:
+            raise NotImplementedError
+        self._target_type = target_type
         self._ssd_version = ssd_version
         self._working_dir = working_dir
         self._clf = None
@@ -68,6 +73,10 @@ class SkelClassifier(object):
             os.makedirs(self.clf_path)
         if create and not os.path.exists(self.plots_path):
             os.makedirs(self.plots_path)
+
+    @property
+    def target_type(self):
+        return self._target_type
 
     @property
     def working_dir(self):
@@ -119,7 +128,7 @@ class SkelClassifier(object):
                 with open(self.working_dir + "/axgt_labels.pkl", "r") as f:
                     self.label_dict = pkl.load(f)
             elif self.ssd_version == "ctgt":
-                raise(NotImplementedError)
+                raise NotImplementedError
                 with open(self.working_dir + "/ctgt_labels.pkl", "r") as f:
                     self.label_dict = pkl.load(f)
             elif self.ssd_version == "spgt":
@@ -128,8 +137,7 @@ class SkelClassifier(object):
             else:
                 raise()
 
-
-    def generate_data(self, feature_contexts_nm=[2000, 5000, 8000], stride=10,
+    def generate_data(self, feature_contexts_nm=(2000, 4000, 8000), stride=10,
                       qsub_pe=None, qsub_queue=None, nb_cpus=1):
         self.load_label_dict()
 
@@ -143,8 +151,7 @@ class SkelClassifier(object):
                                      self.feat_path + "/features_%d_%d.npy"])
 
         if qsub_pe is None and qsub_queue is None:
-            results = sm.start_multiprocess(
-                sbch.generate_clf_data_thread,
+            results = sm.start_multiprocess(sbch.generate_clf_data_thread,
                 multi_params, nb_cpus=nb_cpus)
 
         elif qu.__QSUB__:
@@ -152,22 +159,20 @@ class SkelClassifier(object):
                                          "generate_clf_data",
                                          pe=qsub_pe, queue=qsub_queue,
                                          script_folder=script_folder)
-
         else:
             raise Exception("QSUB not available")
 
     def classifier_production(self, clf_name="ext", n_estimators=2000,
-                              feature_contexts_nm=[2000, 5000, 8000], qsub_pe=None,
+                              feature_contexts_nm=(2000, 4000, 8000), qsub_pe=None,
                               qsub_queue=None, nb_cpus=1):
         self.load_label_dict()
         multi_params = []
         for feature_context_nm in feature_contexts_nm:
-            multi_params.append([self.working_dir, self.ssd_version,
+            multi_params.append([self.working_dir, self.target_type,
                                  clf_name, n_estimators,
                                  feature_context_nm])
         if qsub_pe is None and qsub_queue is None:
-            results = sm.classifier_production_thread(
-                sbch.generate_clf_data_thread,
+            results = sm.start_multiprocess(classifier_production_thread,
                 multi_params, nb_cpus=nb_cpus)
 
         elif qu.__QSUB__:
@@ -580,3 +585,17 @@ class SkelClassifier(object):
             # print "valid:", np.max(ov_fs_valid)
             print "test:", np.max(ov_fs_test)
 
+
+def classifier_production_thread(args):
+    working_dir = args[0]
+    target_type = args[1]
+    clf_name = args[2]
+    n_estimators = args[3]
+    feature_context_nm = args[4]
+
+    sc = SkelClassifier(target_type, working_dir=working_dir,
+                        create=False)
+
+    sc.train_clf(name=clf_name, n_estimators=n_estimators,
+                 feature_context_nm=feature_context_nm, production=True,
+                 save=True)
