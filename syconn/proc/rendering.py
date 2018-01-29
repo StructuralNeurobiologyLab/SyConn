@@ -207,6 +207,7 @@ def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False):
         glClearColor(0., 0., 0., 0.)
     else:
         glClearColor(clear_value, clear_value, clear_value, 0.)
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
 
 def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
@@ -285,7 +286,7 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
 def multi_view_sso(sso, colors=None,
                    ws=(2048, 2048), physical_scale=None,
                    enable_lightning=True, depth_map=False,
-                   nb_views=3):
+                   nb_views=3, background=1):
     """
     Render mesh from 3 (default) equidistant perspectives.
 
@@ -301,6 +302,9 @@ def multi_view_sso(sso, colors=None,
     nb_views : int
         two views parallel to main component, and N-2 views (evenly spaced in
         angle space) perpendicular to it.
+    background : int
+        float value for background (clear value) between 0 and 1 (used as RGB
+        values)
 
     Returns
     -------
@@ -311,7 +315,8 @@ def multi_view_sso(sso, colors=None,
     else:
         colors = {"sv": None, "mi": None, "vc": None, "sj": None}
     ctx = init_ctx(ws)
-    init_opengl(ws, enable_lightning, depth_map=depth_map)
+    init_opengl(ws, enable_lightning, depth_map=depth_map,
+                clear_value=background)
     sv_mesh = MeshObject("sv", sso.mesh[0], sso.mesh[1], sso.mesh[2],
                          colors["sv"])
     sj_mesh = MeshObject("sj", sso.sj_mesh[0], sso.sj_mesh[1], sso.sj_mesh[2],
@@ -323,7 +328,7 @@ def multi_view_sso(sso, colors=None,
     c_views = []
     norm, col = np.zeros(0, ), np.zeros(0, )
     ind, vert = [], []
-    for m in [sv_mesh, sj_mesh, vc_mesh, mi_mesh]:
+    for m in [vc_mesh, mi_mesh, sj_mesh, sv_mesh]:
         if len(m.vertices) == 0:
             continue
         norm = np.concatenate([norm, m.normals])

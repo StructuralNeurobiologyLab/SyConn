@@ -1718,6 +1718,9 @@ class SuperSegmentationObject(object):
         ssh.predict_sso_celltype(self, model)
 
     def render_ortho_views(self, dest_folder=None, colors=None, ws=(2048, 2048)):
+        if colors is None:
+            colors = {"sv": (0.5, 0.5, 0.5, 0.5), "mi": (0, 0, 1, 1),
+                      "vc": (0, 1, 0, 1), "sj": (1, 0, 0, 1)}
         views = multi_view_sso(self, colors, ws=ws)
         if dest_folder:
             for ii, v in enumerate(views):

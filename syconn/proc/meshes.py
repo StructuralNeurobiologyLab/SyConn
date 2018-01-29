@@ -62,10 +62,10 @@ class MeshObject(object):
 
     @property
     def colors(self):
-        if self._colors is None:
-            self._colors = np.ones(len(self.vertices) / 3 * 4) * 0.2
+        if self._ext_color is None:
+            self._colors = np.ones(len(self.vertices) / 3 * 4) * 0.5
         else:
-            self._colors = len(self.vertices) / 3 * [self._ext_color]
+            self._colors = np.array(len(self.vertices) / 3 * [self._ext_color]).flatten()
         return self._colors
 
     @property
