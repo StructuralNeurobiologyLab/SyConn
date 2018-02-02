@@ -44,6 +44,8 @@ class SyConnGateInteraction(object):
         ind = lz4stringtoarr(r1.content, dtype=np.uint32)
         vert = lz4stringtoarr(r2.content, dtype=np.float32)
         norm = lz4stringtoarr(r3.content, dtype=np.float32)
+        if len(norm) == 0:
+            norm = None
         return ind, vert, norm
 
     def get_ssv_skel(self, ssv_id):

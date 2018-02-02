@@ -37,22 +37,28 @@ colorVals = [[0.841, 0.138, 0.133, 1.],
              [0.05, 0.05, 0.05, 1.],
              [0.25, 0.25, 0.25, 1.]] + [[0.45, 0.45, 0.45, 1.]]*20
 
-colors = {"axgt": [colorVals[0], ".7", ".3"],
-          "ctgt": np.array([[127, 98, 170], [239, 102, 142], [177, 181, 53],
+colors = {"ax_gt": [colorVals[0], ".7", ".3"],
+          "sp_gt": [".7", "r", "k"],
+          "ct_gt": np.array([[127, 98, 170], [239, 102, 142], [177, 181, 53],
                             [92, 181, 170]]) / 255.}
 
-legend_labels = {"axgt": ("Axon", "Dendrite", "Soma"),
-                 "ctgt": ("EA", "MSN", "GP", "INT")}
+legend_labels = {"ax_gt": ("Axon", "Dendrite", "Soma"),
+                 "ct_gt": ("EA", "MSN", "GP", "INT"),
+                 "sp_gt": {"Shaft", "Head", "Neck"}}
 
 
 class SkelClassifier(object):
     def __init__(self, target_type, working_dir=None, create=False):
         assert target_type in ["axoness", "spiness"]
         if target_type == "axoness":
-            ssd_version = "axgt"
+            ssd_type = "ax_gt"
         elif target_type == "spiness":
-            ssd_version = "spgt"
-        self._ssd_version = ssd_version
+            ssd_type = "sp_gt"
+        else:
+            raise NotImplementedError
+        self._target_type = target_type
+        self._ssd_version = 0 # currently only one version is supported..
+        self._ssd_type = ssd_type
         self._working_dir = working_dir
         self._clf = None
         self._ssd = None
@@ -68,6 +74,14 @@ class SkelClassifier(object):
             os.makedirs(self.clf_path)
         if create and not os.path.exists(self.plots_path):
             os.makedirs(self.plots_path)
+
+    @property
+    def target_type(self):
+        return self._target_type
+
+    @property
+    def ssd_type(self):
+        return self._ssd_type
 
     @property
     def working_dir(self):
@@ -100,7 +114,7 @@ class SkelClassifier(object):
     @property
     def ss_dataset(self):
         if self._ssd is None:
-            self._ssd = ss.SuperSegmentationDataset(
+            self._ssd = ss.SuperSegmentationDataset(ssd_type=self.ssd_type,
                 working_dir=self.working_dir, version=self.ssd_version)
         return self._ssd
 
@@ -115,21 +129,20 @@ class SkelClassifier(object):
 
     def load_label_dict(self):
         if self.label_dict is None:
-            if self.ssd_version == "axgt":
+            if self.ssd_type == "ax_gt":
                 with open(self.working_dir + "/axgt_labels.pkl", "r") as f:
                     self.label_dict = pkl.load(f)
-            elif self.ssd_version == "ctgt":
-                raise(NotImplementedError)
+            elif self.ssd_type == "ct_gt":
+                raise NotImplementedError
                 with open(self.working_dir + "/ctgt_labels.pkl", "r") as f:
                     self.label_dict = pkl.load(f)
-            elif self.ssd_version == "spgt":
+            elif self.ssd_type == "sp_gt":
                 with open(self.working_dir + "/spgt_labels.pkl", "r") as f:
                     self.label_dict = pkl.load(f)
             else:
                 raise()
 
-
-    def generate_data(self, feature_contexts_nm=[2000, 5000, 8000], stride=10,
+    def generate_data(self, feature_contexts_nm=(2000, 4000, 8000), stride=10,
                       qsub_pe=None, qsub_queue=None, nb_cpus=1):
         self.load_label_dict()
 
@@ -137,14 +150,13 @@ class SkelClassifier(object):
         for fc_block in [feature_contexts_nm[i:i + stride]
                          for i in xrange(0, len(feature_contexts_nm), stride)]:
             for this_id in self.label_dict.keys():
-                multi_params.append([this_id, self.ssd_version,
+                multi_params.append([this_id, self.ssd_type,
                                      self.working_dir,
                                      fc_block,
                                      self.feat_path + "/features_%d_%d.npy"])
 
         if qsub_pe is None and qsub_queue is None:
-            results = sm.start_multiprocess(
-                sbch.generate_clf_data_thread,
+            results = sm.start_multiprocess(sbch.generate_clf_data_thread,
                 multi_params, nb_cpus=nb_cpus)
 
         elif qu.__QSUB__:
@@ -152,22 +164,20 @@ class SkelClassifier(object):
                                          "generate_clf_data",
                                          pe=qsub_pe, queue=qsub_queue,
                                          script_folder=script_folder)
-
         else:
             raise Exception("QSUB not available")
 
     def classifier_production(self, clf_name="ext", n_estimators=2000,
-                              feature_contexts_nm=[2000, 5000, 8000], qsub_pe=None,
+                              feature_contexts_nm=(2000, 4000, 8000), qsub_pe=None,
                               qsub_queue=None, nb_cpus=1):
         self.load_label_dict()
         multi_params = []
         for feature_context_nm in feature_contexts_nm:
-            multi_params.append([self.working_dir, self.ssd_version,
+            multi_params.append([self.working_dir, self.target_type,
                                  clf_name, n_estimators,
                                  feature_context_nm])
         if qsub_pe is None and qsub_queue is None:
-            results = sm.classifier_production_thread(
-                sbch.generate_clf_data_thread,
+            results = sm.start_multiprocess(classifier_production_thread,
                 multi_params, nb_cpus=nb_cpus)
 
         elif qu.__QSUB__:
@@ -182,7 +192,7 @@ class SkelClassifier(object):
 
     def create_splitting(self, ratios=(.6, .2, .2)):
         assert not os.path.isfile(self.path + "/%s_splitting.pkl"
-                                  % self.ssd_version), "Splitting file exists."
+                                  % self.ssd_type), "Splitting file exists."
         self.load_label_dict()
         classes = np.array(self.label_dict.values(), dtype=np.int)
         unique_classes = np.unique(classes)
@@ -209,14 +219,14 @@ class SkelClassifier(object):
             id_bin_dict["valid"] += list(sso_ids[valid_mask])
             id_bin_dict["test"] += list(sso_ids[test_mask])
 
-        with open(self.path + "/%s_splitting.pkl" % self.ssd_version, "w") as f:
+        with open(self.path + "/%s_splitting.pkl" % self.ssd_type, "w") as f:
             pkl.dump(id_bin_dict, f)
 
     def id_bins(self):
-        if not os.path.exists(self.path + "/%s_splitting.pkl" % self.ssd_version):
+        if not os.path.exists(self.path + "/%s_splitting.pkl" % self.ssd_type):
             self.create_splitting()
 
-        with open(self.path + "/%s_splitting.pkl" % self.ssd_version, "r") as f:
+        with open(self.path + "/%s_splitting.pkl" % self.ssd_type, "r") as f:
             part_dict = pkl.load(f)
 
         id_bin_dict = {}
@@ -497,9 +507,9 @@ class SkelClassifier(object):
         for i_line in range(len(data)):
             if legend_labels is None:
                 plt.plot(data[i_line][0], data[i_line][1],
-                         c=colors[self.ssd_version][i_line], lw=3, alpha=0.8)
+                         c=colors[self.ssd_type][i_line], lw=3, alpha=0.8)
             else:
-                plt.plot(data[i_line][0], data[i_line][1], c=colors[self.ssd_version][i_line],
+                plt.plot(data[i_line][0], data[i_line][1], c=colors[self.ssd_type][i_line],
                          label=legend_labels[i_line], lw=3, alpha=0.8)
 
         legend = plt.legend(loc="best", frameon=False, prop={'size': 23})
@@ -564,9 +574,9 @@ class SkelClassifier(object):
             path += "_%s" % ident
 
         self.plot_lines(curves_valid, "Recall", "Precision", path + "_valid.pdf",
-                        legend_labels=legend_labels[self.ssd_version])
+                        legend_labels=legend_labels[self.ssd_type])
         self.plot_lines(curves_test, "Recall", "Precision", path + "_test.pdf",
-                        legend_labels=legend_labels[self.ssd_version])
+                        legend_labels=legend_labels[self.ssd_type])
 
         print "Best F-Score:"
         print "Class-wise"
@@ -580,3 +590,17 @@ class SkelClassifier(object):
             # print "valid:", np.max(ov_fs_valid)
             print "test:", np.max(ov_fs_test)
 
+
+def classifier_production_thread(args):
+    working_dir = args[0]
+    target_type = args[1]
+    clf_name = args[2]
+    n_estimators = args[3]
+    feature_context_nm = args[4]
+
+    sc = SkelClassifier(target_type, working_dir=working_dir,
+                        create=False)
+
+    sc.train_clf(name=clf_name, n_estimators=n_estimators,
+                 feature_context_nm=feature_context_nm, production=True,
+                 save=True)

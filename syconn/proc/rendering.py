@@ -148,13 +148,13 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False):
                             GL_RGB, GL_UNSIGNED_BYTE)
         data = Image.frombuffer(mode="RGB", size=(ws[0], ws[1]),
                                data=data)
-        data = np.asarray(data.buf(Image.FLIP_TOP_BOTTOM))
+        data = np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM)).astype(np.float32)
     else:
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_RGB, GL_UNSIGNED_BYTE)
         data = Image.frombuffer(mode="RGB", size=(ws[0], ws[1]),
                                data=data)
-        data = rgb2gray(np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM)))
+        data = rgb2gray(np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM))).astype(np.float32)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     return data
 
@@ -207,6 +207,7 @@ def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False):
         glClearColor(0., 0., 0., 0.)
     else:
         glClearColor(clear_value, clear_value, clear_value, 0.)
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
 
 def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
@@ -276,6 +277,94 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
             glLightfv(GL_LIGHT0, GL_DIFFUSE, [.7, .7, .7, 1.0])
             glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
         c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None, ])
+        glPopMatrix()
+    # glFinish()
+    OSMesaDestroyContext(ctx)
+    return np.concatenate(c_views)
+
+
+def multi_view_sso(sso, colors=None, obj_to_render=(),
+                   ws=(2048, 2048), physical_scale=None,
+                   enable_lightning=True, depth_map=False,
+                   nb_views=3, background=1):
+    """
+    Render mesh from 3 (default) equidistant perspectives.
+
+    Parameters
+    ----------
+    colors: dict
+    alpha :
+    ws : tuple
+        window size of output images (width, height)
+    physical_scale :
+    enable_lightning :
+    depth_map :
+    nb_views : int
+        two views parallel to main component, and N-2 views (evenly spaced in
+        angle space) perpendicular to it.
+    background : int
+        float value for background (clear value) between 0 and 1 (used as RGB
+        values)
+
+    Returns
+    -------
+
+    """
+    if colors is not None:
+        assert type(colors) == dict
+    else:
+        colors = {"sv": None, "mi": None, "vc": None, "sj": None}
+    ctx = init_ctx(ws)
+    init_opengl(ws, enable_lightning, depth_map=depth_map,
+                clear_value=background)
+    sv_mesh = MeshObject("sv", sso.mesh[0], sso.mesh[1], sso.mesh[2],
+                         colors["sv"])
+    sj_mesh = MeshObject("sj", sso.sj_mesh[0], sso.sj_mesh[1], sso.sj_mesh[2],
+                         colors["sj"], sv_mesh.bounding_box)
+    vc_mesh = MeshObject("vc", sso.vc_mesh[0], sso.vc_mesh[1], sso.vc_mesh[2],
+                         colors["vc"], sv_mesh.bounding_box)
+    mi_mesh = MeshObject("mi", sso.mi_mesh[0], sso.mi_mesh[1], sso.mi_mesh[2],
+                         colors["mi"], sv_mesh.bounding_box)
+    c_views = []
+    norm, col = np.zeros(0, ), np.zeros(0, )
+    ind, vert = [], []
+    for m in [vc_mesh, mi_mesh, sj_mesh, sv_mesh]:
+        if not m.object_type in obj_to_render:
+            continue
+        if len(m.vertices) == 0:
+            continue
+        norm = np.concatenate([norm, m.normals])
+        col = np.concatenate([col, m.colors])
+        ind.append(m.indices)
+        vert.append(m.vertices)
+    ind, vert = merge_meshs(ind, vert)
+    init_object(ind, vert, norm, col, ws)
+
+    glMatrixMode(GL_MODELVIEW)
+    glLoadIdentity()
+
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
+    glOrtho(-1, 1, 1, -1, -1, 1)
+    glMatrixMode(GL_MODELVIEW)
+    glPushMatrix()
+    if enable_lightning:
+        glLightfv(GL_LIGHT0, GL_DIFFUSE, [.7, .7, .7, 1.0])
+        glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
+    if physical_scale is not None:
+        draw_scale(physical_scale)
+    c_views.append(screen_shot(ws, True, depth_map=depth_map)[None, ])
+    glPopMatrix()
+    glMatrixMode(GL_MODELVIEW)
+    for m in range(1, nb_views):
+        if physical_scale is not None:
+            draw_scale(physical_scale)
+        glPushMatrix()
+        glRotate(360. / nb_views * m, 1, 0, 0)
+        if enable_lightning:
+            glLightfv(GL_LIGHT0, GL_DIFFUSE, [.7, .7, .7, 1.0])
+            glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
+        c_views.append(screen_shot(ws, True, depth_map=depth_map)[None, ])
         glPopMatrix()
     # glFinish()
     OSMesaDestroyContext(ctx)
@@ -646,14 +735,14 @@ def multi_render_sampled_svidlist(svixs):
         SegmentationObject ID's
     """
     fpath = os.path.dirname(os.path.abspath(__file__))
-    cmd = "python %s/../examples/render_helper_svidlist.py" % fpath
+    cmd = "python %s/../../scripts/backend/render_helper_svidlist.py" % fpath
     for ix in svixs:
         cmd += " %d" % ix
 
 
 def multi_render_sampled_sso(sso_ix):
     """
-    Render SSO with ID sso_ix using helper script in syconnfs.examples.
+    Render SSO with ID sso_ix using helper script in syconn.examples.
     OS rendering requires individual creation of OSMesaContext.
     Change kwargs for SSO in syconnfs.examples.render_helper_svidlist.
 
@@ -662,7 +751,7 @@ def multi_render_sampled_sso(sso_ix):
     sso_ix : int
     """
     fpath = os.path.dirname(os.path.abspath(__file__))
-    cmd = "python %s/../examples/render_helper_sso.py" % fpath
+    cmd = "python %s/../../scripts/backend//render_helper_sso.py" % fpath
     cmd += " %d" % sso_ix
 
 

@@ -176,24 +176,24 @@ def load_mesh(so, recompute=False):
             else:
                 indices, vertices, normals = mesh
         except Exception as e:
-            print("\n---------------------------------------------------\n" \
-                  "\n%s\nException occured when loading mesh.pkl of SO (%s)" \
-                  "with id %d." \
-                  "\n---------------------------------------------------\n"\
+            print("\n---------------------------------------------------\n"
+                  "\n%s\nException occured when loading mesh.pkl of SO (%s)"
+                  "with id %d."
+                  "\n---------------------------------------------------\n"
                   % (e, so.type, so.id))
             return np.zeros((0, )).astype(np.int), np.zeros((0, )), np.zeros((0, ))
     else:
         if so.type == "sv":
-            print("\n-----------------------\n" \
-                  "Mesh of SV %d not found.\n" \
+            print("\n-----------------------\n"
+                  "Mesh of SV %d not found.\n"
                   "-------------------------\n" % so.id)
             return np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))
         indices, vertices, normals = so._mesh_from_scratch()
         try:
             so._save_mesh(indices, vertices, normals)
         except Exception as e:
-            print("\n-----------------------\n" \
-                  "Mesh of %s %d could not be saved:\n%s\n" \
+            print("\n-----------------------\n"
+                  "Mesh of %s %d could not be saved:\n%s\n"
                   "-------------------------\n" % (so.type, so.id, e))
     vertices = np.array(vertices, dtype=np.int)
     indices = np.array(indices, dtype=np.int)
@@ -207,16 +207,16 @@ def load_skeleton(so, recompute=False):
             skeleton_dc = SkeletonDict(so.skeleton_path)
             nodes, diameters, edges = skeleton_dc[so.id]['nodes'], skeleton_dc[so.id]['diameters'], skeleton_dc[so.id]['edges']
         except Exception as e:
-            print("\n---------------------------------------------------\n" \
-                  "\n%s\nException occured when loading skeletons.pkl of SO (%s)" \
-                  "with id %d." \
-                  "\n---------------------------------------------------\n"\
+            print("\n---------------------------------------------------\n"
+                  "\n%s\nException occured when loading skeletons.pkl of SO (%s)"
+                  "with id %d."
+                  "\n---------------------------------------------------\n"
                   % (e, so.type, so.id))
             return np.zeros((0, )).astype(np.int), np.zeros((0, )),np.zeros((0,)).astype(np.int)
     else:
         if so.type == "sv":
-            print("\n-----------------------\n" \
-                  "Skeleton of SV %d (size: %d)not found.\n" \
+            print("\n-----------------------\n"
+                  "Skeleton of SV %d (size: %d) not found.\n"
                   "-------------------------\n" % (so.id, so.size))
             return np.zeros((0,)).astype(np.int), np.zeros((0,)),np.zeros((0,)).astype(np.int)
 

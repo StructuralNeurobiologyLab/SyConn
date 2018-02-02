@@ -8,7 +8,7 @@
 import cPickle as pkl
 import sys
 
-from syconnfs.representations import skel_based_classifier_helper as sbch
+from syconn.proc.skel_based_classifier import classifier_production_thread
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -21,7 +21,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = sbch.classifier_production_thread(args)
+out = classifier_production_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

@@ -27,7 +27,7 @@ __all__ = ["MeshObject", "get_object_mesh", "merge_meshs", "triangulation",
 
 class MeshObject(object):
     def __init__(self, object_type, indices, vertices, normals=None,
-                 colors=None, bounding_box=None):
+                 color=None, bounding_box=None):
         self.object_type = object_type
         self.indices = indices.astype(np.uint)
         if vertices.ndim == 2 and vertices.shape[1] == 3:
@@ -51,11 +51,22 @@ class MeshObject(object):
         vert_resh -= self.center
         vert_resh /= self.max_dist
         self.vertices = vert_resh.reshape(len(self.vertices))
+        if len(normals) == 0:
+            normals = None
         if normals is not None and normals.ndim == 2:
             normals = normals.reshape(len(normals)*3)
         self._normals = normals
-        self.colors = colors
+        self._ext_color = color
+        self._colors = None
         self.pca = None
+
+    @property
+    def colors(self):
+        if self._ext_color is None:
+            self._colors = np.ones(len(self.vertices) / 3 * 4) * 0.5
+        else:
+            self._colors = np.array(len(self.vertices) / 3 * [self._ext_color]).flatten()
+        return self._colors
 
     @property
     def vert_resh(self):
@@ -155,7 +166,8 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20)):
 
     """
     #  TODO: check offset again!
-    assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3
+    assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
+        "Point cloud used for mesh generation has wrong shape."
     downsampling = np.array(downsampling, dtype=np.uint8)
     if pts.ndim == 2:
         offset = np.min(pts, axis=0)
@@ -207,7 +219,8 @@ def get_object_mesh(obj, downsampling):
     indices, vertices, normals = triangulation(np.array(obj.voxel_list),
                                       downsampling=downsampling)
     vertices *= obj.scaling
-    assert len(vertices) == len(normals)
+    assert len(vertices) == len(normals) or len(normals) == 0, \
+        "Length of normals does not correspond to length of vertices."
     return indices.flatten(), vertices.flatten(), normals.flatten()
 
 
@@ -250,7 +263,8 @@ def calc_rot_matrices(coords, vertices, edge_lengths):
     np.array [M x 16]
         Fortran flattened OpenGL rotation matrix
     """
-    assert isinstance(edge_lengths, np.ndarray)
+    if not isinstance(edge_lengths, np.ndarray):
+        raise TypeError
     if len(vertices) > 1e5:
         vertices = vertices[::8]
     rot_matrices = np.zeros((len(coords), 16))
@@ -407,7 +421,7 @@ def unit_normal(vertices, indices):
     normals = np.array(list(itertools.chain.from_iterable(itertools.repeat(x, 3) for x in normals)))
     # average normal for every vertex
     normals_avg = get_avg_normal(normals, indices, nbvert)
-    return normals_avg.astype(np.float32).reshape(nbvert*3)
+    return -normals_avg.astype(np.float32).reshape(nbvert*3)
 
 
 def get_random_centered_coords(pts, nb, r):
@@ -452,7 +466,8 @@ def merge_meshs(ind_lst, vert_lst, nb_simplices=3):
     -------
     np.array, np.array
     """
-    assert len(vert_lst) == len(ind_lst)
+    assert len(vert_lst) == len(ind_lst), "Length of indices list differs" \
+                                          "from vertices list."
     all_ind = np.zeros((0, ), dtype=np.uint)
     all_vert = np.zeros((0, ))
     for i in range(len(vert_lst)):
@@ -494,14 +509,16 @@ def merge_someshs(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
     for i in range(len(meshes)):
         ind, vert, norm = meshes[i]
-        assert len(vert) == len(norm)
+        assert len(vert) == len(norm) or len(norm) == 0, "Length of normals " \
+                                                         "and vertices differ."
         all_ind = np.concatenate([all_ind, ind + len(all_vert)/nb_simplices])
         all_vert = np.concatenate([all_vert, vert])
         all_norm = np.concatenate([all_norm, norm])
         if color_vals is not None:
             curr_color = [color_vals[i]]*len(vert)
             colors = np.concatenate([colors, curr_color])
-    assert len(all_vert) == len(all_norm)
+    assert len(all_vert) == len(all_norm) or len(all_norm) == 0, \
+        "Length of combined normals and vertices differ."
     if color_vals is not None:
         return all_ind, all_vert, all_norm, colors
     return all_ind, all_vert, all_norm
@@ -659,8 +676,8 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
     locs = ssv.sample_locations()
     print "Collected locations."
     pred_coords = np.concatenate(locs)
-    assert pred_coords.ndim == 2
-    assert pred_coords.shape[1] == 3
+    assert pred_coords.ndim == 2, "Sample locations of ssv have wrong shape."
+    assert pred_coords.shape[1] == 3, "Sample locations of ssv have wrong shape."
     ind, vert, axoness = ssv._pred2mesh(pred_coords, preds, k=3, colors=(0, 1, 2))
     # get axoness of each vertex where indices are pointing to
     ind_comp = axoness[ind]
@@ -678,12 +695,16 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
         ind_comp_maj[ii] = ax
     comp_meshes = {}
     for ii, comp_type in enumerate(["axon", "dendrite", "soma"]):
-        comp_ind = ind[ind_comp_maj==ii].flatten()
+        comp_ind = ind[ind_comp_maj == ii].flatten()
         unique_comp_ind = np.unique(comp_ind)
         comp_vert = vert[unique_comp_ind].flatten()
         if len(ssv.mesh[2]) != 0:
             comp_norm = norm[unique_comp_ind].flatten()
         else:
             comp_norm = ssv.mesh[2]
+        remap_dict = {}
+        for i in range(len(unique_comp_ind)):
+            remap_dict[unique_comp_ind[i]] = i
+        comp_ind = np.array([remap_dict[i] for i in comp_ind], dtype=np.uint)
         comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
-    ssv._mesh_compartments = comp_meshes
+    return comp_meshes
