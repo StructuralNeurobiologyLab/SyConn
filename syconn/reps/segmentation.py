@@ -547,7 +547,7 @@ class SegmentationObject(object):
     @property
     def voxels_exist(self):
         voxel_dc = VoxelDict(self.voxel_path, read_only=True,
-                             disable_locking=not self.enable_locking)
+                             disable_locking=True)
         return self.id in voxel_dc
 
 
@@ -842,7 +842,7 @@ class SegmentationObject(object):
     def calculate_rep_coord(self, voxel_dc=None, fast=False):
         if voxel_dc is None:
            voxel_dc = VoxelDict(self.voxel_path, read_only=True,
-                                disable_locking=not self.enable_locking)
+                                disable_locking=True)
 
         if not self.id in voxel_dc:
             self._bounding_box = np.array([[-1, -1, -1], [-1, -1, -1]])

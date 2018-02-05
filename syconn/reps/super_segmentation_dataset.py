@@ -670,8 +670,6 @@ def _write_super_segmentation_dataset_thread(args):
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
                                                     new_mapping=True,
                                                     create=True)
-        raise()
-
         if ssv_obj.attr_dict_exists:
             ssv_obj.load_attr_dict()
 
@@ -695,6 +693,7 @@ def _write_super_segmentation_dataset_thread(args):
 
         ssv_obj.attr_dict["sv"] = np.array(ssv_obj.attr_dict["sv"],
                                            dtype=np.int)
+        raise ()
 
         if extract_only:
             ignore = False
@@ -724,7 +723,6 @@ def _write_super_segmentation_dataset_thread(args):
                 attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
 
                 ssv_obj.save_attr_dict()
-
     return attr_dict
 
 

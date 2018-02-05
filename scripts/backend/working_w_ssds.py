@@ -44,6 +44,6 @@ if __name__ == "__main__":
     # generell dann
     # ssd.save_dataset_deep(qsub_pe="openmp", n_max_co_processes=100)
     # da das aber overkill ist (und der stride bei default auch zu gross ist fuer das mini dataset), reicht
-    ssd.save_dataset_deep(ssd, nb_cpus=1, stride=5)
+    ssd.save_dataset_deep(nb_cpus=20, stride=5)
 
-    # start_multiprocess(mesh_creator_sso, list(ssd.ssvs), nb_cpus=20, debug=True)
+    start_multiprocess(mesh_creator_sso, list(ssd.ssvs), nb_cpus=20, debug=False)
