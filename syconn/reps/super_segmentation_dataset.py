@@ -693,8 +693,6 @@ def _write_super_segmentation_dataset_thread(args):
 
         ssv_obj.attr_dict["sv"] = np.array(ssv_obj.attr_dict["sv"],
                                            dtype=np.int)
-        raise ()
-
         if extract_only:
             ignore = False
             for attribute in attr_keys:
