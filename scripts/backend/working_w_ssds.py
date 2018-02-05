@@ -7,8 +7,8 @@ from syconnfs.representations.utils import parse_cc_dict_from_kzip, read_txt_fro
 my_mergelist = "/wholebrain/u/pschuber/NeuroPatch/datasets/rag_recon_pruned_glia_ml_v3.k/mergelist.txt"
 
 # INITIALIZATION
-# with mergelist
-ssd = ss.SuperSegmentationDataset("/wholebrain/scratch/areaxfs/", version="6",
+# new dataset with mergelist
+ssd = ss.SuperSegmentationDataset("/wholebrain/scratch/areaxfs/", version="new",
                                   sv_mapping=my_mergelist)
 ssd.save_dataset_shallow()
 

@@ -2,6 +2,8 @@ import cPickle as pkl
 import glob
 import numpy as np
 import os
+from collections import defaultdict
+import time
 from scipy import spatial
 from collections import defaultdict
 from .image import single_conn_comp_img
@@ -179,7 +181,9 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
         max number of workers running at the same time when using qsub
     :return:
     """
-    assert sd.type == "sv"
+    if sd.version != "sv":
+        print("WARNING: You are mapping to a non-sv dataset")
+
     assert obj_type in sd.version_dict
 
     seg_dataset = sd.get_segmentationdataset(obj_type)
@@ -449,15 +453,175 @@ def multi_probas_saver(args):
     so.save_attributes([key], [probas])
 
 
-def export_sd_to_knossosdataset(sd, kd, n_jobs=100, qsub_pe=None,
-                                qsub_queue=None, nb_cpus=10,
+# def export_sd_to_knossosdataset(sd, kd, n_jobs=100, qsub_pe=None,
+#                                 qsub_queue=None, nb_cpus=10,
+#                                 n_max_co_processes=100):
+#     multi_params = []
+#
+#     id_blocks = np.array_split(np.array(sd.ids), n_jobs)
+#
+#     for id_block in id_blocks:
+#         multi_params.append([id_block, sd.type, sd.version, sd.working_dir,
+#                              kd.knossos_path])
+#
+#     if qsub_pe is None and qsub_queue is None:
+#         results = sm.start_multiprocess(_export_sd_to_knossosdataset_thread,
+#                                         multi_params, nb_cpus=nb_cpus)
+#
+#     elif qu.__QSUB__:
+#         path_to_out = qu.QSUB_script(multi_params,
+#                                      "export_sd_to_knossosdataset",
+#                                      pe=qsub_pe, queue=qsub_queue,
+#                                      script_folder=script_folder,
+#                                      n_max_co_processes=n_max_co_processes)
+#     else:
+#         raise Exception("QSUB not available")
+#
+#
+# def _export_sd_to_knossosdataset_thread(args):
+#     so_ids = args[0]
+#     obj_type = args[1]
+#     version = args[2]
+#     working_dir = args[3]
+#     kd_path = args[4]
+#
+#     kd = knossosdataset.KnossosDataset()
+#     kd.initialize_from_knossos_path(kd_path)
+#
+#     sd = segmentation.SegmentationDataset(obj_type=obj_type,
+#                                           working_dir=working_dir,
+#                                           version=version)
+#
+#     for so_id in so_ids:
+#         print(so_id)
+#         so = sd.get_segmentation_object(so_id, False)
+#
+#         offset = so.bounding_box[0]
+#         if not 0 in offset:
+#             kd.from_matrix_to_cubes(offset,
+#                                     data=so.voxels.astype(np.uint64) * so_id,
+#                                     overwrite=False,
+#                                     nb_threads=1)
+
+#
+# def export_sd_to_knossosdataset(sd, kd, block_size=(512, 512, 512),
+#                                 qsub_pe=None, qsub_queue=None, nb_cpus=10,
+#                                 n_max_co_processes=100):
+#
+#     grid_c = []
+#     for i_dim in range(3):
+#         grid_c.append(np.arange(block_size[i_dim] / 2,
+#                                 kd.boundary[i_dim] - block_size[i_dim] / 2,
+#                                 block_size[i_dim]))
+#
+#     grid_points = np.array(np.meshgrid(grid_c[0], grid_c[1], grid_c[2])).reshape(3, -1).T
+#     grid_kdtree = spatial.cKDTree(grid_points)
+#
+#     _, so_to_grid = grid_kdtree.query(sd.rep_coords)
+#
+#
+#     multi_params = []
+#
+#     for i_grid in range(len(grid_points)):
+#         so_ids = sd.ids[so_to_grid == i_grid]
+#
+#         multi_params.append([so_ids, sd.type, sd.version, sd.working_dir, kd.knossos_path])
+#
+#     if qsub_pe is None and qsub_queue is None:
+#         results = sm.start_multiprocess(_export_sd_to_knossosdataset_thread,
+#                                         multi_params, nb_cpus=nb_cpus)
+#
+#     elif qu.__QSUB__:
+#         path_to_out = qu.QSUB_script(multi_params,
+#                                      "export_sd_to_knossosdataset",
+#                                      pe=qsub_pe, queue=qsub_queue,
+#                                      script_folder=script_folder,
+#                                      n_max_co_processes=n_max_co_processes)
+#     else:
+#         raise Exception("QSUB not available")
+#
+#
+# def _export_sd_to_knossosdataset_thread(args):
+#     so_ids = args[0]
+#     obj_type = args[1]
+#     version = args[2]
+#     working_dir = args[3]
+#     kd_path = args[4]
+#
+#     kd = knossosdataset.KnossosDataset()
+#     kd.initialize_from_knossos_path(kd_path)
+#
+#     sd = segmentation.SegmentationDataset(obj_type=obj_type,
+#                                           working_dir=working_dir,
+#                                           version=version)
+#
+#     bbs = sd.load_cached_data("bounding_box")[np.in1d(sd.ids, so_ids)]
+#
+#     bb = [np.max(np.vstack([np.array([0, 0, 0]), np.min(bbs[:, 0], axis=0)]), axis=0),
+#           np.min(np.vstack([kd.boundary, np.max(bbs[:, 1], axis=0)]), axis=0)]
+#     overlay_block = np.zeros(bb[1] - bb[0] + 1, dtype=np.uint64)
+#
+#     for so_id in so_ids:
+#         print(so_id)
+#
+#         so = sd.get_segmentation_object(so_id, False)
+#         vx = so.voxel_list - bb[0]
+#
+#         if np.any(so.bounding_box[0] < 0):
+#             print(so_id, "Failed - low")
+#             continue
+#
+#         if np.any(so.bounding_box[1] - kd.boundary[1] > 0):
+#             print(so_id, "Failed - high")
+#             continue
+#
+#         overlay_block[vx[:, 0], vx[:, 1], vx[:, 2]] = so_id
+#
+#     kd.from_matrix_to_cubes(bb[0],
+#                             data=overlay_block,
+#                             overwrite=False,
+#                             nb_threads=1)
+
+def export_sd_to_knossosdataset(sd, kd, block_edge_length=512,
+                                qsub_pe=None, qsub_queue=None, nb_cpus=10,
                                 n_max_co_processes=100):
+
+    block_size = np.array([block_edge_length] * 3)
+
+    grid_c = []
+    for i_dim in range(3):
+        grid_c.append(np.arange(0, kd.boundary[i_dim], block_size[i_dim]))
+
+    bbs_block_range = sd.load_cached_data("bounding_box") / np.array(block_size)
+    bbs_block_range = bbs_block_range.astype(np.int)
+
+    kd_block_range = kd.boundary / block_size + 1
+
+    bbs_job_dict = defaultdict(list)
+
+    for i_so_id, so_id in enumerate(sd.ids):
+        for i_b in range(bbs_block_range[i_so_id, 0, 0],
+                         bbs_block_range[i_so_id, 1, 0] + 1):
+            if i_b < 0 or i_b > kd_block_range[0]:
+                continue
+
+            for j_b in range(bbs_block_range[i_so_id, 0, 1],
+                             bbs_block_range[i_so_id, 1, 1] + 1):
+                if j_b < 0 or j_b > kd_block_range[1]:
+                    continue
+
+                for k_b in range(bbs_block_range[i_so_id, 0, 2],
+                                 bbs_block_range[i_so_id, 1, 2] + 1):
+                    if k_b < 0 or k_b > kd_block_range[2]:
+                        continue
+
+                    bbs_job_dict[(i_b, j_b, k_b)].append(so_id)
+
     multi_params = []
 
-    id_blocks = np.array_split(np.array(sd.ids), n_jobs)
-
-    for id_block in id_blocks:
-        multi_params.append([id_block, sd.working_dir, kd.knossos_path])
+    for grid_loc in bbs_job_dict.keys():
+        multi_params.append([np.array(grid_loc), bbs_job_dict[grid_loc], sd.type, sd.version,
+                             sd.working_dir, kd.knossos_path, block_edge_length])
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_export_sd_to_knossosdataset_thread,
@@ -474,23 +638,156 @@ def export_sd_to_knossosdataset(sd, kd, n_jobs=100, qsub_pe=None,
 
 
 def _export_sd_to_knossosdataset_thread(args):
-    so_ids = args[0]
-    version = args[1]
-    working_dir = args[2]
-    kd_path = args[3]
+    block_loc = args[0]
+    so_ids = args[1]
+    obj_type = args[2]
+    version = args[3]
+    working_dir = args[4]
+    kd_path = args[5]
+    block_edge_length = args[6]
 
-    kd = knossosdataset.KnossosDataset().initialize_from_knossos_path(kd_path)
+    block_size = np.array([block_edge_length] * 3, dtype=np.int)
 
-    sd = segmentation.SegmentationDataset(working_dir, version)
+    kd = knossosdataset.KnossosDataset()
+    kd.initialize_from_knossos_path(kd_path)
+
+    sd = segmentation.SegmentationDataset(obj_type=obj_type,
+                                          working_dir=working_dir,
+                                          version=version)
+
+    overlay_block = np.zeros(block_size, dtype=np.uint64)
+    block_start = (block_loc * block_size).astype(np.int)
 
     for so_id in so_ids:
-        print(so_id)
-
         so = sd.get_segmentation_object(so_id, False)
+        vx = so.voxel_list - block_start
 
-        offset = so.bounding_box[0]
-        if not 0 in offset:
-            kd.from_matrix_to_cubes(offset,
-                                    data=so.voxels.astype(np.uint64) * so_id,
-                                    overwrite=False,
-                                    nb_threads=1)
+        vx = vx[~np.any(vx < 0, axis=1)]
+        vx = vx[~np.any(vx >= block_edge_length, axis=1)]
+
+        overlay_block[vx[:, 0], vx[:, 1], vx[:, 2]] = so_id
+
+    kd.from_matrix_to_cubes(block_start,
+                            data=overlay_block,
+                            overwrite=True,
+                            nb_threads=1,
+                            verbose=True)
+
+
+def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
+                         trafo_dict_path=None, stride=1000,
+                         qsub_pe=None, qsub_queue=None, nb_cpus=1,
+                         n_max_co_processes=None):
+    """ Maps objects to SVs
+
+    The segmentation needs to be written to a KnossosDataset before running this
+
+    :param sd: SegmentationDataset
+    :param kd_path: str
+        path to knossos dataset containing the segmentation
+    :param readonly: bool
+        if True the mapping is only read from the segmentation objects and not
+        computed. This requires the previous computation of the mapping for the
+        mapped segmentation objects.
+    :param stride: int
+        number of voxel / attribute dicts per thread
+    :param qsub_pe: str
+        qsub parallel environment
+    :param qsub_queue: str
+        qsub queue
+    :param nb_cpus: int
+        number of cores used for multithreading
+        number of cores per worker for qsub jobs
+    :param n_max_co_processes: int
+        max number of workers running at the same time when using qsub
+    :return:
+    """
+    assert "sj" in sj_sd.version_dict
+    paths = sj_sd.so_dir_paths
+
+    # Partitioning the work
+
+    multi_params = []
+    for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
+        multi_params.append([path_block, sj_sd.version, sj_sd.working_dir,
+                             kd_asym_path, kd_sym_path, trafo_dict_path])
+
+    # Running workers - Extracting mapping
+
+    if qsub_pe is None and qsub_queue is None:
+        results = sm.start_multiprocess(_extract_synapse_type_thread,
+                                        multi_params, nb_cpus=nb_cpus)
+
+    elif qu.__QSUB__:
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "extract_synapse_type",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_cores=nb_cpus,
+                                     n_max_co_processes=n_max_co_processes)
+    else:
+        raise Exception("QSUB not available")
+
+
+def _extract_synapse_type_thread(args):
+
+    paths = args[0]
+    obj_version = args[1]
+    working_dir = args[2]
+    kd_asym_path = args[3]
+    kd_sym_path = args[4]
+    trafo_dict_path = args[5]
+
+    if trafo_dict_path is not None:
+        with open(trafo_dict_path, "rb") as f:
+            trafo_dict = pkl.load(f)
+    else:
+        trafo_dict = None
+
+    kd_asym = knossosdataset.KnossosDataset()
+    kd_asym.initialize_from_knossos_path(kd_asym_path)
+
+    kd_sym = knossosdataset.KnossosDataset()
+    kd_sym.initialize_from_knossos_path(kd_sym_path)
+
+    seg_dataset = segmentation.SegmentationDataset("sj",
+                                                   version=obj_version,
+                                                   working_dir=working_dir)
+
+    for p in paths:
+        this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
+                                     read_only=False, timeout=3600,
+                                     disable_locking=True)
+
+        for so_id in this_attr_dc.keys():
+            so = seg_dataset.get_segmentation_object(so_id)
+            so.attr_dict = this_attr_dc[so_id]
+            so.load_voxel_list()
+
+            vxl = so.voxel_list
+
+            if trafo_dict is not None:
+                vxl -= trafo_dict[so_id]
+                vxl = vxl[:, [1, 0, 2]]
+
+            try:
+                asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl))
+                sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl))
+            except:
+                print("Fail")
+                sym_prop = 0
+                asym_prop = 0
+
+            if sym_prop + asym_prop == 0:
+                sym_ratio = -1
+                print(so.rep_coord, so.size)
+            else:
+                sym_ratio = sym_prop / float(asym_prop + sym_prop)
+
+            print(sym_ratio, asym_prop, sym_prop)
+
+            so.attr_dict["syn_type_sym_ratio"] = sym_ratio
+            this_attr_dc[so_id] = so.attr_dict
+
+        this_attr_dc.save2pkl()
+

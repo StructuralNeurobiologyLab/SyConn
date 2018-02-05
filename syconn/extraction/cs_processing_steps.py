@@ -5,6 +5,8 @@ import glob
 import os
 from scipy import spatial
 
+from knossos_utils import knossosdataset
+
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
@@ -574,10 +576,115 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
     return overlap_vx_l
 
 
+def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
+                                    n_folders_fs=10000, n_job_chunks=1000,
+                                    qsub_pe=None, qsub_queue=None,
+                                    nb_cpus=None, n_max_co_processes=None):
+
+    wd = cs_sd.working_dir
+
+    rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']]
+
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
+    conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd, version="new",
+                                               create=True, n_folders_fs=n_folders_fs)
+
+    for p in voxel_rel_paths:
+        os.makedirs(conn_sd.so_storage_path + p)
+
+    sj_id_blocks = np.array_split(rel_sj_ids, n_job_chunks)
+    voxel_rel_path_blocks = np.array_split(voxel_rel_paths, n_job_chunks)
+
+    multi_params = []
+    for i_block in range(n_job_chunks):
+        multi_params.append([wd, sj_id_blocks[i_block],
+                             voxel_rel_path_blocks[i_block], conn_sd.version,
+                             sj_sd.version, cs_sd.version, cs_kd.knossos_path])
+
+    if qsub_pe is None and qsub_queue is None:
+        results = sm.start_multiprocess(_overlap_mapping_sj_to_cs_via_kd_thread,
+                                        multi_params, nb_cpus=nb_cpus)
+
+    elif qu.__QSUB__:
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "overlap_mapping_sj_to_cs_via_kd",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_max_co_processes=n_max_co_processes)
+    else:
+        raise Exception("QSUB not available")
 
 
+def _overlap_mapping_sj_to_cs_via_kd_thread(args):
+    wd, sj_ids, voxel_rel_paths, cs_kd_path, conn_sd_version, sj_sd_version, \
+        cs_sd_version = args
 
+    conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd,
+                                               version=conn_sd_version,
+                                               create=False)
+    sj_sd = segmentation.SegmentationDataset("sj", working_dir=wd,
+                                             version=sj_sd_version,
+                                             create=False)
+    cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd,
+                                             version=cs_sd_version,
+                                             create=False)
 
+    cs_kd = knossosdataset.KnossosDataset()
+    cs_kd.initialize_from_knossos_path(cs_kd_path)
+
+    sj_id_blocks = np.array_split(sj_ids, len(voxel_rel_paths))
+
+    for i_sj_id_block, sj_id_block in enumerate(sj_id_blocks):
+        rel_path = voxel_rel_paths[i_sj_id_block]
+
+        voxel_dc = VoxelDict(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
+                             read_only=False,
+                             timeout=3600)
+        attr_dc = AttributeDict(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl",
+                                read_only=False,
+                                timeout=3600)
+
+        next_conn_id = ix_from_subfold(rel_path,
+                                       conn_sd.n_folders_fs)
+
+        for sj_id in sj_ids:
+            sj = sj_sd.get_segmentation_object(sj_id)
+            vxl = sj.voxel_list
+
+            cs_ids = cs_kd.from_overlaycubes_to_list(vxl, datatype=np.uint64)
+            u_cs_ids, c_cs_ids = np.unique(cs_ids, return_counts=True)
+
+            zero_ratio = c_cs_ids[u_cs_ids == 0] / np.sum(c_cs_ids)
+
+            for cs_id in u_cs_ids:
+                cs = cs_sd.get_segmentation_object(cs_id)
+
+                id_ratio = c_cs_ids[u_cs_ids == cs_id] / np.sum(c_cs_ids)
+                overlap_vx = vxl[cs_ids == cs_id]
+                cs_ratio = float(len(overlap_vx)) / cs.size
+
+                bounding_box = [np.min(overlap_vx, axis=0),
+                                np.max(overlap_vx, axis=0) + 1]
+
+                vx_block = np.zeros(bounding_box[1] - bounding_box[0], dtype=np.bool)
+                overlap_vx -= bounding_box[0]
+                vx_block[overlap_vx[:, 0], overlap_vx[:, 1], overlap_vx[:, 2]] = True
+
+                voxel_dc[next_conn_id] = [vx_block], [bounding_box[0]]
+
+                attr_dc[next_conn_id] = {'sj_id': sj_id,
+                                         'cs_id': cs_id,
+                                         'id_sj_ratio': id_ratio,
+                                         'id_cs_ratio': cs_ratio,
+                                         'background_overlap_ratio': zero_ratio,
+                                         'ssv_partners':
+                                             cs.lookup_in_attribute_dict(
+                                                 'neuron_partners')}
+
+                next_conn_id += conn_sd.n_folders_fs
+
+        voxel_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/voxel.pkl")
+        attr_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
 
 
 

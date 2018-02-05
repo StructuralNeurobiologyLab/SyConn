@@ -160,14 +160,8 @@ def trafo_objects_to_sd(realign_map, sd_obj_type, working_dir,
 
     voxel_rel_path = rh.subfold_from_ix(obj_ids[0], sd_n_folders_fs)
 
-    if not os.path.exists(segdataset.so_storage_path + voxel_rel_path):
-        try:
-            os.makedirs(segdataset.so_storage_path + voxel_rel_path)
-        except:
-            pass
 
-    # voxel_dc = VoxelDict(segdataset.so_storage_path + voxel_rel_path +
-    #                      "/voxel.pkl")
+    return obj_ids
 
     mean_shift_dict = {}
     time_start = time.time()
@@ -204,13 +198,12 @@ def trafo_objects_to_sd(realign_map, sd_obj_type, working_dir,
 
         if i_obj_id % 100 == 0:
             dt = time.time() - time_start
+            eta = (dt / (i_obj_id + 1) * len(obj_ids) - dt) / 3600,
             print("Written obj %d - time / object: %.3fs - eta: %.3fh - "
                   "oob %d - otl %d" %
-                  (obj_id, dt / (i_obj_id + 1),
-                   dt / (i_obj_id + 1) * len(obj_ids) / 3600,
-                   len(oobs), len(otls)))
+                  (obj_id, dt / (i_obj_id + 1), eta, len(oobs), len(otls)))
 
-        if i_obj_id % 10000 == 0:
+        if i_obj_id % 1000 == 0:
             with open(segdataset.path + '/trafo_mean_shift_dict.pkl', 'wb') as f:
                 pkl.dump(mean_shift_dict, f)
 

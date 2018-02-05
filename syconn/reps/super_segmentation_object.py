@@ -63,12 +63,13 @@ class SuperSegmentationObject(object):
                  working_dir=None, create=True, sv_ids=None, scaling=None,
                  object_caching=True, voxel_caching=True, mesh_caching=True,
                  view_caching=False, config=None, nb_cpus=1,
-                 enable_locking=True):
+                 enable_locking=True, ssd_type="ssv"):
         self.nb_cpus = nb_cpus
         self._id = ssv_id
         self.attr_dict = {} # dict(mi=[], sj=[], vc=[], sv=[])
         self.enable_locking = enable_locking
 
+        self._type = ssd_type
         self._rep_coord = None
         self._size = None
         self._bounding_box = None
@@ -174,7 +175,7 @@ class SuperSegmentationObject(object):
 
     @property
     def type(self):
-        return "ssv"
+        return self._type
 
     @property
     def id(self):
@@ -222,7 +223,7 @@ class SuperSegmentationObject(object):
 
     @property
     def identifier(self):
-        return "ssv_%s" % (self.version.lstrip("_"))
+        return "%s_%s" % (self.type, self.version.lstrip("_"))
 
     @property
     def ssds_dir(self):
