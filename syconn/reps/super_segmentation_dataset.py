@@ -261,14 +261,14 @@ class SuperSegmentationDataset(object):
         self.save_mapping_dict()
         self.save_id_changer()
 
-    # def save_dataset_deep(self, extract_only=False, attr_keys=(), stride=1000,
-    #                       qsub_pe=None, qsub_queue=None, nb_cpus=1,
-    #                       n_max_co_processes=None):
-    #     ssd.save_dataset_deep(self, extract_only=extract_only,
-    #                                       attr_keys=attr_keys, stride=stride,
-    #                                       qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-    #                                       nb_cpus=nb_cpus,
-    #                                       n_max_co_processes=n_max_co_processes)
+    def save_dataset_deep(self, extract_only=False, attr_keys=(), stride=1000,
+                          qsub_pe=None, qsub_queue=None, nb_cpus=1,
+                          n_max_co_processes=None):
+        save_dataset_deep(self, extract_only=extract_only,
+                          attr_keys=attr_keys, stride=stride,
+                          qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+                          nb_cpus=nb_cpus,
+                          n_max_co_processes=n_max_co_processes)
 
     # def export_to_knossosdataset(self, kd, stride=1000, qsub_pe=None,
     #                              qsub_queue=None, nb_cpus=10):
@@ -591,137 +591,141 @@ class SuperSegmentationDataset(object):
 #                                        save=True)
 #
 #
-# def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
-#                       qsub_pe=None, qsub_queue=None, nb_cpus=1,
-#                       n_max_co_processes=None):
-#     ssd.save_dataset_shallow()
+def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
+                      qsub_pe=None, qsub_queue=None, nb_cpus=1,
+                      n_max_co_processes=None):
+    ssd.save_dataset_shallow()
+
+    multi_params = []
+    for ssv_id_block in [ssd.ssv_ids[i:i + stride]
+                         for i in range(0, len(ssd.ssv_ids), stride)]:
+        multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
+                             ssd.working_dir, extract_only, attr_keys,
+                             ssd._type])
+
+    if qsub_pe is None and qsub_queue is None:
+        results = sm.start_multiprocess(
+            _write_super_segmentation_dataset_thread,
+            multi_params, nb_cpus=nb_cpus)
+
+    elif qu.__QSUB__:
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "write_super_segmentation_dataset",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_cores=nb_cpus,
+                                     n_max_co_processes=n_max_co_processes)
+
+        out_files = glob.glob(path_to_out + "/*")
+        results = []
+        for out_file in out_files:
+            with open(out_file) as f:
+                results.append(pkl.load(f))
+    else:
+        raise Exception("QSUB not available")
+
+    attr_dict = {}
+    for this_attr_dict in results:
+        for attribute in this_attr_dict.keys():
+            if not attribute in attr_dict:
+                attr_dict[attribute] = []
+
+            attr_dict[attribute] += this_attr_dict[attribute]
+
+    if not ssd.mapping_dict_exists:
+        ssd.mapping_dict = dict(zip(attr_dict["id"], attr_dict["sv"]))
+        ssd.save_dataset_shallow()
+
+    for attribute in attr_dict.keys():
+        if extract_only:
+            np.save(ssd.path + "/%ss_sel.npy" % attribute,
+                    attr_dict[attribute])
+        else:
+            np.save(ssd.path + "/%ss.npy" % attribute,
+                    attr_dict[attribute])
 #
-#     multi_params = []
-#     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-#                          for i in range(0, len(ssd.ssv_ids), stride)]:
-#         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-#                              ssd.working_dir, extract_only, attr_keys])
 #
-#     if qsub_pe is None and qsub_queue is None:
-#         results = sm.start_multiprocess(
-#             _write_super_segmentation_dataset_thread,
-#             multi_params, nb_cpus=nb_cpus)
-#
-#     elif qu.__QSUB__:
-#         path_to_out = qu.QSUB_script(multi_params,
-#                                      "write_super_segmentation_dataset",
-#                                      pe=qsub_pe, queue=qsub_queue,
-#                                      script_folder=script_folder,
-#                                      n_cores=nb_cpus,
-#                                      n_max_co_processes=n_max_co_processes)
-#
-#         out_files = glob.glob(path_to_out + "/*")
-#         results = []
-#         for out_file in out_files:
-#             with open(out_file) as f:
-#                 results.append(pkl.load(f))
-#     else:
-#         raise Exception("QSUB not available")
-#
-#     attr_dict = {}
-#     for this_attr_dict in results:
-#         for attribute in this_attr_dict.keys():
-#             if not attribute in attr_dict:
-#                 attr_dict[attribute] = []
-#
-#             attr_dict[attribute] += this_attr_dict[attribute]
-#
-#     if not ssd.mapping_dict_exists:
-#         ssd.mapping_dict = dict(zip(attr_dict["id"], attr_dict["sv"]))
-#         ssd.save_dataset_shallow()
-#
-#     for attribute in attr_dict.keys():
-#         if extract_only:
-#             np.save(ssd.path + "/%ss_sel.npy" % attribute,
-#                     attr_dict[attribute])
-#         else:
-#             np.save(ssd.path + "/%ss.npy" % attribute,
-#                     attr_dict[attribute])
-#
-#
-# def _write_super_segmentation_dataset_thread(args):
-#     ssv_obj_ids = args[0]
-#     version = args[1]
-#     version_dict = args[2]
-#     working_dir = args[3]
-#     extract_only = args[4]
-#     attr_keys = args[5]
-#
-#     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-#
-#     try:
-#         ssd.load_mapping_dict()
-#         mapping_dict_avail = True
-#     except:
-#         mapping_dict_avail = False
-#
-#     attr_dict = dict(id=[])
-#
-#     for ssv_obj_id in ssv_obj_ids:
-#         print(ssv_obj_id)
-#         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
-#                                                     new_mapping=True,
-#                                                     create=True)
-#
-#         if ssv_obj.attr_dict_exists:
-#             ssv_obj.load_attr_dict()
-#
-#         if not extract_only:
-#
-#             if len(ssv_obj.attr_dict["sv"]) == 0:
-#                 if mapping_dict_avail:
-#                     ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
-#
-#                     if ssv_obj.attr_dict_exists:
-#                         ssv_obj.load_attr_dict()
-#                 else:
-#                     raise Exception("No mapping information found")
-#         if not extract_only:
-#             if "rep_coord" not in ssv_obj.attr_dict:
-#                 ssv_obj.attr_dict["rep_coord"] = ssv_obj.rep_coord
-#             if "bounding_box" not in ssv_obj.attr_dict:
-#                 ssv_obj.attr_dict["bounding_box"] = ssv_obj.bounding_box
-#             if "size" not in ssv_obj.attr_dict:
-#                 ssv_obj.attr_dict["size"] = ssv_obj.size
-#
-#         ssv_obj.attr_dict["sv"] = np.array(ssv_obj.attr_dict["sv"],
-#                                            dtype=np.int)
-#
-#         if extract_only:
-#             ignore = False
-#             for attribute in attr_keys:
-#                 if not attribute in ssv_obj.attr_dict:
-#                     ignore = True
-#                     break
-#             if ignore:
-#                 continue
-#
-#             attr_dict["id"].append(ssv_obj_id)
-#
-#             for attribute in attr_keys:
-#                 if attribute not in attr_dict:
-#                     attr_dict[attribute] = []
-#
-#                 if attribute in ssv_obj.attr_dict:
-#                     attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
-#                 else:
-#                     attr_dict[attribute].append(None)
-#         else:
-#             attr_dict["id"].append(ssv_obj_id)
-#             for attribute in ssv_obj.attr_dict.keys():
-#                 if attribute not in attr_dict:
-#                     attr_dict[attribute] = []
-#
-#                 attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
-#
-#                 ssv_obj.save_attr_dict()
-#
-#     return attr_dict
+def _write_super_segmentation_dataset_thread(args):
+    ssv_obj_ids = args[0]
+    version = args[1]
+    version_dict = args[2]
+    working_dir = args[3]
+    extract_only = args[4]
+    attr_keys = args[5]
+    ssd_type = args[6]
+
+    ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
+                                   ssd_type=ssd_type, version_dict=version_dict)
+
+    try:
+        ssd.load_mapping_dict()
+        mapping_dict_avail = True
+    except:
+        mapping_dict_avail = False
+
+    attr_dict = dict(id=[])
+
+    for ssv_obj_id in ssv_obj_ids:
+        print(ssv_obj_id)
+        ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
+                                                    new_mapping=True,
+                                                    create=True)
+        raise()
+
+        if ssv_obj.attr_dict_exists:
+            ssv_obj.load_attr_dict()
+
+        if not extract_only:
+
+            if len(ssv_obj.attr_dict["sv"]) == 0:
+                if mapping_dict_avail:
+                    ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
+
+                    if ssv_obj.attr_dict_exists:
+                        ssv_obj.load_attr_dict()
+                else:
+                    raise Exception("No mapping information found")
+        if not extract_only:
+            if "rep_coord" not in ssv_obj.attr_dict:
+                ssv_obj.attr_dict["rep_coord"] = ssv_obj.rep_coord
+            if "bounding_box" not in ssv_obj.attr_dict:
+                ssv_obj.attr_dict["bounding_box"] = ssv_obj.bounding_box
+            if "size" not in ssv_obj.attr_dict:
+                ssv_obj.attr_dict["size"] = ssv_obj.size
+
+        ssv_obj.attr_dict["sv"] = np.array(ssv_obj.attr_dict["sv"],
+                                           dtype=np.int)
+
+        if extract_only:
+            ignore = False
+            for attribute in attr_keys:
+                if not attribute in ssv_obj.attr_dict:
+                    ignore = True
+                    break
+            if ignore:
+                continue
+
+            attr_dict["id"].append(ssv_obj_id)
+
+            for attribute in attr_keys:
+                if attribute not in attr_dict:
+                    attr_dict[attribute] = []
+
+                if attribute in ssv_obj.attr_dict:
+                    attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
+                else:
+                    attr_dict[attribute].append(None)
+        else:
+            attr_dict["id"].append(ssv_obj_id)
+            for attribute in ssv_obj.attr_dict.keys():
+                if attribute not in attr_dict:
+                    attr_dict[attribute] = []
+
+                attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
+
+                ssv_obj.save_attr_dict()
+
+    return attr_dict
 
 
 def export_to_knossosdataset(ssd, kd, stride=1000, qsub_pe=None,
