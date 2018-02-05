@@ -547,7 +547,7 @@ class SegmentationObject(object):
     @property
     def voxels_exist(self):
         voxel_dc = VoxelDict(self.voxel_path, read_only=True,
-                             disable_locking=True)
+                             disable_locking=not self.enable_locking)
         return self.id in voxel_dc
 
 
@@ -684,6 +684,9 @@ class SegmentationObject(object):
 
     def load_voxel_list_downsampled(self, downsampling=(2, 2, 1)):
         return load_voxel_list_downsampled(self, downsampling=downsampling)
+
+    def load_voxel_list_downsampled_adapt(self, downsampling=(2, 2, 1)):
+        return load_voxel_list_downsampled_adapt(self, downsampling=downsampling)
 
     def load_mesh(self, recompute=False):
         return load_mesh(self, recompute=recompute)

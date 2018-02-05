@@ -22,7 +22,7 @@ import syconn.reps.super_segmentation_helper
 from knossos_utils import skeleton, knossosdataset
 
 try:
-    from knossos_utils.skeleton_utils import load_skeleton, write_skeleton
+    from knossos_utils.skeleton_utils import load_skeleton_kzip, write_skeleton_kzip
 except:
     pass
 
@@ -458,8 +458,9 @@ class SuperSegmentationObject(object):
 
     @property
     def edge_graph(self):
+        raise NotImplementedError
         if self._edge_graph is None:
-            self._edge_graph = self.load_graph()
+            self._edge_graph = self.load_sv_graph()
         return self._edge_graph
 
     @property
@@ -505,7 +506,8 @@ class SuperSegmentationObject(object):
                                                    obj_type],
                                                working_dir=self.working_dir,
                                                create=False,
-                                               scaling=self.scaling)
+                                               scaling=self.scaling,
+                                               enable_locking=self.enable_locking)
 
     def get_seg_dataset(self, obj_type):
         return segmentation.SegmentationDataset(obj_type,
@@ -522,7 +524,9 @@ class SuperSegmentationObject(object):
         except (IOError, EOFError):
             return -1
 
-    def load_graph(self):
+    def load_sv_graph(self):
+        # TODO store edgelist as attribute during ssv SSD generation
+        raise NotImplementedError
         G = nx.read_edgelist(self.edgelist_path, nodetype=int)
         new_G = nx.Graph()
         for e in G.edges_iter():
@@ -531,7 +535,8 @@ class SuperSegmentationObject(object):
         return new_G
 
     def load_edgelist(self):
-        g = self.load_graph()
+        raise NotImplementedError
+        g = self.load_sv_graph()
         return g.edges()
 
     def _load_obj_mesh(self, obj_type="sv", rewrite=False):
@@ -746,7 +751,7 @@ class SuperSegmentationObject(object):
 
             if dest_path is None:
                 dest_path = self.skeleton_kzip_path
-            write_skeleton(dest_path, [a])
+            write_skeleton_kzip(dest_path, [a])
         except Exception, e:
             print("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, e))
 
@@ -786,7 +791,7 @@ class SuperSegmentationObject(object):
 
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
-        write_skeleton(dest_path, annotations)
+        write_skeleton_kzip(dest_path, annotations)
 
     def save_objects_to_kzip_dense(self, obj_types):
         if os.path.exists(self.objects_dense_kzip_path[:-6]):
@@ -1093,7 +1098,7 @@ class SuperSegmentationObject(object):
             a.addNode(n0)
             a.addNode(n1)
             a.addEdge(n0, n1)
-        write_skeleton(self.skeleton_kzip_path_views, a)
+        write_skeleton_kzip(self.skeleton_kzip_path_views, a)
 
     def write_locations2kzip(self, dest_path=None):
         if dest_path is None:
@@ -1101,7 +1106,7 @@ class SuperSegmentationObject(object):
         loc = np.concatenate(self.sample_locations())
         new_anno = coordpath2anno(loc, add_edges=False)
         new_anno.setComment("sample_locations")
-        write_skeleton(dest_path, [new_anno])
+        write_skeleton_kzip(dest_path, [new_anno])
 
     def mergelist2kzip(self, dest_path=None):
         self.load_attr_dict()
@@ -1382,7 +1387,7 @@ class SuperSegmentationObject(object):
     def write_gliapred_cnn(self, dest_path=None):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
-        skel = load_skeleton(self.skeleton_kzip_path_views)[
+        skel = load_skeleton_kzip(self.skeleton_kzip_path_views)[
             "sample_locations"]
         n_nodes = [n for n in skel.getNodes()]
         pred_coords = [n.getCoordinate() * np.array(self.scaling) for n in
@@ -1462,7 +1467,7 @@ class SuperSegmentationObject(object):
             n.data["glia_proba"] = probas[ii][1]
             n.data["glia_pred"] = int(probas[ii][1] > thresh)
             locs.addNode(n)
-        write_skeleton(dest_path, [locs])
+        write_skeleton_kzip(dest_path, [locs])
         self.save_attributes(["glia_model"], [model._fname])
 
     # ------------------------------------------------------------------ AXONESS
@@ -1528,8 +1533,8 @@ class SuperSegmentationObject(object):
                         k=k)
         # self.save_objects_to_kzip_sparse(obj_types=obj_types)
 
-    def predict_nodes(self, sc, clf_name="rfc", feature_context_nm=5000,
-                      avg_window=10000):
+    def predict_nodes(self, sc, clf_name="rfc", feature_context_nm=4000,
+                      avg_window=0):
         """
         Predicting class c
         Parameters
@@ -1563,7 +1568,9 @@ class SuperSegmentationObject(object):
             c = np.argmax(np.sum(probas[neighs], axis=0) * class_weights)
             pred.append(c)
 
-        self.skeleton[sc.target_type] = np.array(pred, dtype=np.int)
+        pred_key = "%s_fc%d_avgwind%d" % (sc.target_type, feature_context_nm,
+                                          avg_window)
+        self.skeleton[pred_key] = np.array(pred, dtype=np.int)
         self.save_skeleton(to_object=True, to_kzip=False)
 
     def axoness_for_coords(self, coords, radius_nm=4000):
@@ -1586,22 +1593,20 @@ class SuperSegmentationObject(object):
 
         return np.array(axoness_pred)
 
-    def cnn_axoness_2_skel(self, dest_path=None, pred_key_appendix="", k=10):
+    def cnn_axoness_2_skel(self, pred_key_appendix="", k=5):
         # probas = np.array(sm.start_multiprocess_obj("axoness_probas",
         #                           [[sv, {"pred_key_appendix": pred_key_appendix}] for sv in self.svs], nb_cpus=self.nb_cpus))
         preds = np.array(sm.start_multiprocess_obj("axoness_preds",
                 [[sv, {"pred_key_appendix": pred_key_appendix}]
                  for sv in self.svs], nb_cpus=self.nb_cpus))
         preds = np.concatenate(preds)
-        loc_coords = np.array(sm.start_multiprocess_obj("sample_locations",
-                                  [[sv, ] for sv in self.svs], nb_cpus=self.nb_cpus))
-        loc_coords = np.concatenate(loc_coords)
+        loc_coords = np.concatenate(self.sample_locations())
         assert len(loc_coords) == len(preds)
         # find kNN in loc_coords for every skeleton node and use their majority
         # prediction
         node_preds = colorcode_vertices(self.skeleton["nodes"], loc_coords,
                                         preds, colors=[0, 1, 2], k=k)
-        self.skeleton["axoness_cnn"] = node_preds
+        self.skeleton["axoness_cnn_k%d" % k] = node_preds
         self.save_skeleton()
 
     # --------------------------------------------------------------- CELL TYPES
@@ -1730,7 +1735,6 @@ class SuperSegmentationObject(object):
                 imsave("%s/SSV_%d_%d.png" % (dest_folder, self.id, ii), v)
         else:
             return views
-
 
 # ------------------------------------------------------------------------------
 # SO rendering code

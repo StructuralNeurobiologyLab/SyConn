@@ -210,7 +210,7 @@ if __name__ == "__main__":
     # copy_sv_skeletons()
     # copy_axoness()
     ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/",
-                                    version="0", ssd_type="ax_gt")
+                                    version="axgt", ssd_type="ssv")
     global SCALING
     SCALING = ssds.scaling
     # mesh_proc_chunked("sj")

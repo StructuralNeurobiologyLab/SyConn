@@ -4,9 +4,6 @@ from scipy import ndimage
 import os
 from ..handler.compression import MeshDict, VoxelDict, AttributeDict, SkeletonDict
 
-from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
-
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
@@ -71,7 +68,8 @@ def save_voxels(so, bin_arr, offset, overwrite=False):
 
 def load_voxels(so, voxel_dc=None):
     if voxel_dc is None:
-        voxel_dc = VoxelDict(so.voxel_path, read_only=True)
+        voxel_dc = VoxelDict(so.voxel_path, read_only=True,
+                                   disable_locking=not so.enable_locking)
 
     so._size = 0
     if so.id not in voxel_dc:
@@ -169,7 +167,8 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
 def load_mesh(so, recompute=False):
     if not recompute and so.mesh_exists:
         try:
-            mesh = MeshDict(so.mesh_path)[so.id]
+            mesh = MeshDict(so.mesh_path,
+                            disable_locking=not so.enable_locking)[so.id]
             if len(mesh) == 2:
                 indices, vertices = mesh
                 normals = np.zeros((0, ), dtype=np.float32)
@@ -204,7 +203,8 @@ def load_mesh(so, recompute=False):
 def load_skeleton(so, recompute=False):
     if not recompute and so.skeleton_exists:
         try:
-            skeleton_dc = SkeletonDict(so.skeleton_path)
+            skeleton_dc = SkeletonDict(so.skeleton_path,
+                                       disable_locking=not so.enable_locking)
             nodes, diameters, edges = skeleton_dc[so.id]['nodes'], skeleton_dc[so.id]['diameters'], skeleton_dc[so.id]['edges']
         except Exception as e:
             print("\n---------------------------------------------------\n"
