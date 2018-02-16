@@ -25,7 +25,12 @@ from ..handler import basics
 from..handler.compression import VoxelDict
 
 
-def gauss_threshold_connected_components(cset, filename, hdf5names,
+def gauss_threshold_connected_components(*args, **kwargs):
+    # alias
+    return object_segmentation(*args, **kwargs)
+
+
+def object_segmentation(cset, filename, hdf5names,
                                          overlap="auto", sigmas=None,
                                          thresholds=None,
                                          chunk_list=None,
@@ -40,7 +45,9 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
                                          qsub_pe=None,
                                          qsub_queue=None,
                                          nb_cpus=1,
-                                         n_max_co_processes=100):
+                                         n_max_co_processes=100,
+                                         transform_func=None,
+                                         func_kwargs=None):
     """
     Extracts connected component from probability maps
     1. Gaussian filter (defined by sigma)
@@ -100,6 +107,10 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
         qsub parallel environment
     qsub_queue: str or None
         qsub queue
+    transform_func: callable
+        Segmentation method which is applied
+    func_kwargs : dict
+        key word arguments for transform_func
 
     Returns
     -------
@@ -109,6 +120,8 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
     overlap: np.array
     stitch overlap: np.array
     """
+    if transform_func is None:
+        transform_func = _gauss_threshold_connected_components_thread
 
     if thresholds is None:
         thresholds = np.zeros(len(hdf5names))
@@ -140,10 +153,10 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
              hdf5names, overlap,
              sigmas, thresholds, swapdata, prob_kd_path_dict,
              membrane_filename, membrane_kd_path,
-             hdf5_name_membrane, fast_load, suffix])
+             hdf5_name_membrane, fast_load, suffix, func_kwargs])
 
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_gauss_threshold_connected_components_thread,
+        results = sm.start_multiprocess(transform_func,
                                         multi_params, debug=debug)
 
         results_as_list = []
@@ -152,8 +165,10 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
                 results_as_list.append(entry)
 
     elif qu.__QSUB__:
+        assert transform_func == _gauss_threshold_connected_components_thread,\
+            "QSUB currently only supported for gaussian threshold CC."
         path_to_out = qu.QSUB_script(multi_params,
-                                     "gauss_threshold_connected_components",
+                                     "_gauss_threshold_connected_components",
                                      pe=qsub_pe, queue=qsub_queue,
                                      n_cores=nb_cpus,
                                      script_folder=script_folder,
@@ -172,7 +187,7 @@ def gauss_threshold_connected_components(cset, filename, hdf5names,
 
 
 def _gauss_threshold_connected_components_thread(args):
-    """ Worker of gauss_threshold_connected_components """
+    """ Default worker of object_segmentation """
 
     chunk = args[0]
     path_head_folder = args[1]

@@ -369,8 +369,8 @@ def pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     save_dataset(cd)
     kd_pred = KnossosDataset()
     kd_pred.initialize_without_conf(kd_pred_p, kd.boundary, kd.scale,
-                                    kd.experiment_name, mags=[1])
-    cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [2, 2], as_raw=True,
+                                    kd.experiment_name, mags=[1, 2, 4, 8])
+    cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True,
                          stride=[150, 150, 150])
 
 

@@ -20,6 +20,7 @@ import warnings
 from scipy import spatial, sparse, ndimage
 from sklearn.decomposition import PCA
 
+
 def find_contactsite(coords_a, coords_b, max_hull_dist=1):
     """
     Computes contact sites between supver voxels and returns contact site voxel

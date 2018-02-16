@@ -9,6 +9,9 @@ from ..handler.compression import load_lz4_compressed, save_lz4_compressed
 import numpy as np
 import os
 import warnings
+if "matplotlib" not in globals():
+    import matplotlib
+    matplotlib.use("agg")
 
 
 class ViewContainer(object):
@@ -66,8 +69,6 @@ class ViewContainer(object):
         return views
 
     def plot(self, fig=None, view_nb=0):
-        import matplotlib
-        matplotlib.use("Agg")
         import matplotlib.pyplot as plt
         import matplotlib.ticker as ticker
         tick_spacing = 40
@@ -113,6 +114,7 @@ class ViewContainer(object):
             return True
         else:
             return False
+
 
 def plot_n_views(view_array):
     """
