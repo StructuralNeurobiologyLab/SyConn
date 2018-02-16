@@ -15,7 +15,7 @@ import numpy as np
 import os
 import scipy
 import scipy.ndimage
-from knossos_utils.skeleton_utils import annotation_to_nx_graph
+from knossos_utils.skeleton_utils import annotation_to_nx_graph, load_skeleton as load_skeleton_kzip
 from . import segmentation
 from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton
@@ -1262,7 +1262,7 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
 
 def associate_objs_with_skel_nodes(ssv, obj_types=("sj", "vc", "mi"),
                                    downsampling=(8, 8, 4)):
-    if ssv.skel is None:
+    if ssv.skeleton is None:
         ssv.load_skeleton()
 
     for obj_type in obj_types:
@@ -1300,3 +1300,42 @@ def associate_objs_with_skel_nodes(ssv, obj_types=("sj", "vc", "mi"),
         ssv.skeleton["assoc_%s" % obj_type] = nodes_objs
 
     ssv.save_skeleton(to_kzip=False, to_object=True)
+
+
+def skelnode_comment_dict(sso):
+    comment_dict = {}
+    skel = load_skeleton_kzip(sso.skeleton_kzip_path)
+    for n in skel.getNodes():
+        c = frozenset(n.getCoordinate())
+        comment_dict[c] = n.getComment()
+    return comment_dict
+
+
+def label_array_for_sso_skel(sso, comment_converter):
+    """
+    Converts skeleton node comments from annotation.xml in
+    sso.skeleton_kzip_path (see SkeletonAnnotation class from knossos utils)
+    to a label array of length (and same ordering) as sso.skeleton["nodes"].
+    If comment was unspecified, it will get label -1
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    comment_converter : dict
+        Key: Comment, Value: integer label
+
+    Returns
+    -------
+    np.array
+        Label array of len(sso.skeleton["nodes"])
+    """
+    cd = skelnode_comment_dict(sso)
+    label_array = np.ones(len(sso.skeleton["nodes"]), dtype=np.int) * -1
+    for ii, n in enumerate(sso.skeleton["nodes"]):
+        comment = cd[frozenset(n)].lower()
+        try:
+            label_array[ii] = comment_converter[comment]
+        except KeyError:
+            pass
+    return label_array
+

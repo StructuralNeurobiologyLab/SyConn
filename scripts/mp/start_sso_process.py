@@ -9,10 +9,11 @@ import itertools
 
 
 if __name__ == "__main__":
-    script_folder = os.path.abspath(os.path.dirname(__file__) + "/../../syconn/QSUB_scripts/")
+    script_folder = os.path.dirname(os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
+    print(script_folder)
     ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/", version="0")
     multi_params = ssds.ssv_ids
     multi_params = chunkify(multi_params, 3400)
-    path_to_out = qu.QSUB_script(multi_params, "sparsify_skeletons",
-                                 n_max_co_processes=280, pe="openmp", queue=None,
+    path_to_out = qu.QSUB_script(multi_params, "render_sso_ortho",
+                                 n_max_co_processes=10, pe="openmp", queue=None,
                                  script_folder=script_folder, suffix="")

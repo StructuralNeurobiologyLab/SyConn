@@ -10,17 +10,17 @@ import glob
 import numpy as np
 import os
 import re
+from collections import Counter
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, AdaBoostClassifier
 from sklearn.externals import joblib
 from sklearn.metrics import precision_recall_fscore_support, precision_recall_curve
-
 import matplotlib
 matplotlib.use("Agg")
 from matplotlib import pyplot as plt
 
 import skel_based_classifier_helper as sbch
 from ..reps import super_segmentation as ss
-
+from ..proc.stats import model_performance
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
@@ -37,28 +37,31 @@ colorVals = [[0.841, 0.138, 0.133, 1.],
              [0.05, 0.05, 0.05, 1.],
              [0.25, 0.25, 0.25, 1.]] + [[0.45, 0.45, 0.45, 1.]]*20
 
-colors = {"ax_gt": [colorVals[0], ".7", ".3"],
-          "sp_gt": [".7", "r", "k"],
-          "ct_gt": np.array([[127, 98, 170], [239, 102, 142], [177, 181, 53],
+colors = {"axgt": [colorVals[0], ".7", ".3"],
+          "spgt": [".7", "r", "k"],
+          "ctgt": np.array([[127, 98, 170], [239, 102, 142], [177, 181, 53],
                             [92, 181, 170]]) / 255.}
 
-legend_labels = {"ax_gt": ("Axon", "Dendrite", "Soma"),
-                 "ct_gt": ("EA", "MSN", "GP", "INT"),
-                 "sp_gt": {"Shaft", "Head", "Neck"}}
+legend_labels = {"axgt": ("Axon", "Dendrite", "Soma"),
+                 "ctgt": ("EA", "MSN", "GP", "INT"),
+                 "spgt": {"Shaft", "Head", "Neck"}}
+
+comment_converter = {"axgt": {"soma": 2, "axon": 1, "dendrite": 0},
+                     "spgt": {"shaft": 0, "head": 1, "neck":2},
+                     "ctgt": {}}
 
 
 class SkelClassifier(object):
     def __init__(self, target_type, working_dir=None, create=False):
         assert target_type in ["axoness", "spiness"]
         if target_type == "axoness":
-            ssd_type = "ax_gt"
+            ssd_version = "axgt"
         elif target_type == "spiness":
-            ssd_type = "sp_gt"
+            ssd_version = "spgt"
         else:
             raise NotImplementedError
         self._target_type = target_type
-        self._ssd_version = 0 # currently only one version is supported..
-        self._ssd_type = ssd_type
+        self._ssd_version = ssd_version
         self._working_dir = working_dir
         self._clf = None
         self._ssd = None
@@ -80,10 +83,6 @@ class SkelClassifier(object):
         return self._target_type
 
     @property
-    def ssd_type(self):
-        return self._ssd_type
-
-    @property
     def working_dir(self):
         return self._working_dir
 
@@ -93,7 +92,8 @@ class SkelClassifier(object):
 
     @property
     def path(self):
-        return self.working_dir + "/skel_clf_%s" % self.ssd_version
+        return self.working_dir + "/skel_clf_%s_%s" % \
+              (self.target_type, self.ssd_version)
 
     @property
     def labels_path(self):
@@ -114,8 +114,9 @@ class SkelClassifier(object):
     @property
     def ss_dataset(self):
         if self._ssd is None:
-            self._ssd = ss.SuperSegmentationDataset(ssd_type=self.ssd_type,
-                working_dir=self.working_dir, version=self.ssd_version)
+            self._ssd = ss.SuperSegmentationDataset(ssd_type='ssv',
+                                                    working_dir=self.working_dir,
+                                                    version=self.ssd_version)
         return self._ssd
 
     def avail_feature_contexts(self, clf_name):
@@ -129,14 +130,14 @@ class SkelClassifier(object):
 
     def load_label_dict(self):
         if self.label_dict is None:
-            if self.ssd_type == "ax_gt":
+            if self.ssd_version == "axgt":
                 with open(self.working_dir + "/axgt_labels.pkl", "r") as f:
                     self.label_dict = pkl.load(f)
-            elif self.ssd_type == "ct_gt":
+            elif self.ssd_version == "ctgt":
                 raise NotImplementedError
                 with open(self.working_dir + "/ctgt_labels.pkl", "r") as f:
                     self.label_dict = pkl.load(f)
-            elif self.ssd_type == "sp_gt":
+            elif self.ssd_version == "spgt":
                 with open(self.working_dir + "/spgt_labels.pkl", "r") as f:
                     self.label_dict = pkl.load(f)
             else:
@@ -150,10 +151,11 @@ class SkelClassifier(object):
         for fc_block in [feature_contexts_nm[i:i + stride]
                          for i in xrange(0, len(feature_contexts_nm), stride)]:
             for this_id in self.label_dict.keys():
-                multi_params.append([this_id, self.ssd_type,
+                multi_params.append([this_id, self.ssd_version,
                                      self.working_dir,
                                      fc_block,
-                                     self.feat_path + "/features_%d_%d.npy"])
+                                     self.feat_path + "/features_%d_%d.npy",
+                                    comment_converter[self.ssd_version]])
 
         if qsub_pe is None and qsub_queue is None:
             results = sm.start_multiprocess(sbch.generate_clf_data_thread,
@@ -167,7 +169,7 @@ class SkelClassifier(object):
         else:
             raise Exception("QSUB not available")
 
-    def classifier_production(self, clf_name="ext", n_estimators=2000,
+    def classifier_production(self, clf_name="rfc", n_estimators=2000,
                               feature_contexts_nm=(2000, 4000, 8000), qsub_pe=None,
                               qsub_queue=None, nb_cpus=1):
         self.load_label_dict()
@@ -192,7 +194,8 @@ class SkelClassifier(object):
 
     def create_splitting(self, ratios=(.6, .2, .2)):
         assert not os.path.isfile(self.path + "/%s_splitting.pkl"
-                                  % self.ssd_type), "Splitting file exists."
+                                  % self.ssd_version), "Splitting file exists."
+        print("Creating dataset splits.")
         self.load_label_dict()
         classes = np.array(self.label_dict.values(), dtype=np.int)
         unique_classes = np.unique(classes)
@@ -207,7 +210,7 @@ class SkelClassifier(object):
                 sso.load_skeleton()
                 weights.append(len(sso.skeleton["nodes"]))
 
-            print this_class, np.sum(weights)
+            print("Class weight:", this_class, np.sum(weights))
 
             cum_weights = np.cumsum(np.array(weights) / float(np.sum(weights)))
             train_mask = cum_weights < ratios[0]
@@ -219,14 +222,14 @@ class SkelClassifier(object):
             id_bin_dict["valid"] += list(sso_ids[valid_mask])
             id_bin_dict["test"] += list(sso_ids[test_mask])
 
-        with open(self.path + "/%s_splitting.pkl" % self.ssd_type, "w") as f:
+        with open(self.path + "/%s_splitting.pkl" % self.ssd_version, "w") as f:
             pkl.dump(id_bin_dict, f)
 
     def id_bins(self):
-        if not os.path.exists(self.path + "/%s_splitting.pkl" % self.ssd_type):
+        if not os.path.exists(self.path + "/%s_splitting.pkl" % self.ssd_version):
             self.create_splitting()
 
-        with open(self.path + "/%s_splitting.pkl" % self.ssd_type, "r") as f:
+        with open(self.path + "/%s_splitting.pkl" % self.ssd_version, "r") as f:
             part_dict = pkl.load(f)
 
         id_bin_dict = {}
@@ -248,7 +251,19 @@ class SkelClassifier(object):
 
             this_feats = np.load(self.feat_path +
                                  "/features_%d_%d.npy" % (feature_context_nm, sso_id))
-
+            labels_fname = self.feat_path +\
+                            "/labels_%d_%d.npy" % (feature_context_nm, sso_id)
+            if not os.path.isfile(labels_fname):
+                this_labels = [self.label_dict[sso_id]] * len(this_feats)
+            else:
+                # if file exists, then current SSO contains multiple classes
+                # only use features where we have specified labels
+                this_labels = np.load(labels_fname)
+                this_feats = this_feats[this_labels != -1]
+                this_labels = this_labels[this_labels == -1]
+                cnt = Counter(this_labels)
+                print("Found node specific labels in SSV %d. %s" %
+                      (sso_id, cnt))
             if id_bin_dict[sso_id] in feature_dict:
                 feature_dict[id_bin_dict[sso_id]] = \
                     np.concatenate([feature_dict[id_bin_dict[sso_id]],
@@ -257,15 +272,20 @@ class SkelClassifier(object):
                 feature_dict[id_bin_dict[sso_id]] = this_feats
 
             if id_bin_dict[sso_id] in labels_dict:
-                labels_dict[id_bin_dict[sso_id]] += \
-                    [self.label_dict[sso_id]] * len(this_feats)
+                labels_dict[id_bin_dict[sso_id]] += this_labels
             else:
-                labels_dict[id_bin_dict[sso_id]] = \
-                    [self.label_dict[sso_id]] * len(this_feats)
-
-        feature_dict["test"] = feature_dict["valid"]
-        labels_dict["test"] = labels_dict["valid"]
-
+                labels_dict[id_bin_dict[sso_id]] = this_labels
+        labels_dict["train"] = np.array(labels_dict["train"], dtype=np.int)
+        labels_dict["valid"] = np.array(labels_dict["valid"], dtype=np.int)
+        if "test" not in labels_dict:
+            labels_dict["test"] = []
+        if "test" not in feature_dict:
+            feature_dict["test"] = np.zeros((0, ), np.float)
+        labels_dict["test"] = np.array(labels_dict["test"], dtype=np.int)
+        print("--------DATASET SUMMARY--------\n\n"
+              "train\n%s\n\nvalid\n%s\n\ntest\n%s\n" %
+              (Counter(labels_dict["train"]), Counter(labels_dict["valid"]),
+               Counter(labels_dict["test"])))
         return feature_dict["train"], labels_dict["train"], \
                feature_dict["valid"], labels_dict["valid"], \
                feature_dict["test"], labels_dict["test"]
@@ -391,14 +411,18 @@ class SkelClassifier(object):
 
         print "\nFEATURE IMPORTANCES"
         print "--------------------\n"
-        for i_feat in range(len(feat_imps)):
+        for i_feat in range(np.min([5, len(feat_imps)])):#len(feat_imps)):
             print "%s: %.5f" % (feat_set[i_feat], feat_imps[i_feat])
 
         if save:
             self.save_classifier(clf, name, feature_context_nm)
 
-        self.eval_performance(clf.predict_proba(v_feats), v_labels,
-                              clf.predict_proba(te_feats), te_labels,
+        v_proba = clf.predict_proba(v_feats)
+        if len(te_feats) > 0:
+            te_proba = clf.predict_proba(te_feats)
+        else:
+            te_proba = np.zeros((0, v_proba.shape[-1]))
+        self.eval_performance(v_proba, v_labels, te_proba, te_labels,
                               [name, str(n_estimators), str(feature_context_nm)])
 
     def create_rfc(self, n_estimators=2000):
@@ -507,9 +531,9 @@ class SkelClassifier(object):
         for i_line in range(len(data)):
             if legend_labels is None:
                 plt.plot(data[i_line][0], data[i_line][1],
-                         c=colors[self.ssd_type][i_line], lw=3, alpha=0.8)
+                         c=colors[self.ssd_version][i_line], lw=3, alpha=0.8)
             else:
-                plt.plot(data[i_line][0], data[i_line][1], c=colors[self.ssd_type][i_line],
+                plt.plot(data[i_line][0], data[i_line][1], c=colors[self.ssd_version][i_line],
                          label=legend_labels[i_line], lw=3, alpha=0.8)
 
         legend = plt.legend(loc="best", frameon=False, prop={'size': 23})
@@ -551,44 +575,29 @@ class SkelClassifier(object):
                 else:
                     f_score.append(2 * precision[-1] * recall[-1] / (recall[-1] + precision[-1]))
 
-                print precision[-1], recall[-1]
+                # print precision[-1], recall[-1]
             curves.append([precision, recall, f_score, np.arange(0.0, 1.01, 0.01)])
         return curves
 
     def eval_performance(self, probs_valid, labels_valid, probs_test,
                          labels_test, identifiers=()):
-        curves_valid = self.get_curves(probs_valid, labels_valid)
-        curves_test = self.get_curves(probs_test, labels_test)
-
-        # ov_prec_valid, ov_rec_valid, ov_fs_valid, _ = \
-        #     precision_recall_fscore_support(labels_valid,
-        #                                     np.argmax(probs_valid, axis=1),
-        #                                     average="weighted")
-
-        ov_prec_test, ov_rec_test, ov_fs_test, _ = \
-            precision_recall_fscore_support(labels_test,
-                                            np.argmax(probs_test, axis=1),
-                                            average="weighted")
-        path = self.plots_path + "prc"
+        prefix = ""
         for ident in identifiers:
-            path += "_%s" % ident
-
-        self.plot_lines(curves_valid, "Recall", "Precision", path + "_valid.pdf",
-                        legend_labels=legend_labels[self.ssd_type])
-        self.plot_lines(curves_test, "Recall", "Precision", path + "_test.pdf",
-                        legend_labels=legend_labels[self.ssd_type])
-
-        print "Best F-Score:"
-        print "Class-wise"
-        # for i_class in range(probs_valid.shape[1]):
-            # print "valid:", legend_labels[self.ssd_version][i_class], np.max(curves_valid[i_class][2])
-            # print "same params in test:", legend_labels[self.ssd_version][i_class], curves_test[i_class][2][np.argmax(curves_valid[i_class][2])]
-            # print "same params in test:", legend_labels[self.ssd_version][i_class], np.max(curves_test[i_class][2])
-
-        print "\nOverall"
-        for i_class in range(probs_valid.shape[1]):
-            # print "valid:", np.max(ov_fs_valid)
-            print "test:", np.max(ov_fs_test)
+            prefix += str(ident) + "_"
+        prefix += "valid"
+        model_performance(probs_valid, labels_valid, model_dir=self.plots_path,
+                          n_labels=len(legend_labels[self.ssd_version]),
+                          target_names=legend_labels[self.ssd_version],
+                          prefix=prefix)
+        if len(probs_test) > 0:
+            prefix = ""
+            for ident in identifiers:
+                prefix += str(ident) + "_"
+            prefix += "test"
+            model_performance(probs_test, labels_test, model_dir=self.plots_path,
+                              n_labels=len(legend_labels[self.ssd_version]),
+                              target_names=legend_labels[self.ssd_version],
+                              prefix=prefix)
 
 
 def classifier_production_thread(args):
@@ -602,5 +611,6 @@ def classifier_production_thread(args):
                         create=False)
 
     sc.train_clf(name=clf_name, n_estimators=n_estimators,
-                 feature_context_nm=feature_context_nm, production=True,
+                 feature_context_nm=feature_context_nm, production=False,
                  save=True)
+

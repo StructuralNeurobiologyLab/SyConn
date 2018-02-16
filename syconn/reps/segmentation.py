@@ -685,6 +685,9 @@ class SegmentationObject(object):
     def load_voxel_list_downsampled(self, downsampling=(2, 2, 1)):
         return load_voxel_list_downsampled(self, downsampling=downsampling)
 
+    def load_voxel_list_downsampled_adapt(self, downsampling=(2, 2, 1)):
+        return load_voxel_list_downsampled_adapt(self, downsampling=downsampling)
+
     def load_mesh(self, recompute=False):
         return load_mesh(self, recompute=recompute)
 
@@ -839,7 +842,7 @@ class SegmentationObject(object):
     def calculate_rep_coord(self, voxel_dc=None, fast=False):
         if voxel_dc is None:
            voxel_dc = VoxelDict(self.voxel_path, read_only=True,
-                                disable_locking=not self.enable_locking)
+                                disable_locking=True)
 
         if not self.id in voxel_dc:
             self._bounding_box = np.array([[-1, -1, -1], [-1, -1, -1]])

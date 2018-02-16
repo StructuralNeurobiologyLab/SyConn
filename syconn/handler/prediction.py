@@ -222,7 +222,9 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None):
 def create_h5_gt_file(fname, raw, label, foreground_ids=None):
     """
     Create .h5 files for ELEKTRONN input from two arrays.
-    Only supports binary labels (0=background, 1=foreground).
+    Only supports binary labels (0=background, 1=foreground). E.g. for creating
+    true negative cubes set foreground_ids=[] to be an empty list. If set to
+    None, everything except 0 is treated as foreground.
 
     Parameters
     ----------
