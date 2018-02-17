@@ -19,6 +19,7 @@ from knossos_utils.skeleton_utils import annotation_to_nx_graph, load_skeleton a
 from . import segmentation
 from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton
+from ..mp.shared_mem import start_multiprocess, start_multiprocess_obj
 skeletopyze_available = False
 # try:
 #     import skeletopyze
@@ -1304,7 +1305,7 @@ def associate_objs_with_skel_nodes(ssv, obj_types=("sj", "vc", "mi"),
 
 def skelnode_comment_dict(sso):
     comment_dict = {}
-    skel = load_skeleton_kzip(sso.skeleton_kzip_path)
+    skel = load_skeleton_kzip(sso.skeleton_kzip_path)["skeleton"]
     for n in skel.getNodes():
         c = frozenset(n.getCoordinate())
         comment_dict[c] = n.getComment()
@@ -1329,6 +1330,8 @@ def label_array_for_sso_skel(sso, comment_converter):
     np.array
         Label array of len(sso.skeleton["nodes"])
     """
+    if sso.skeleton is None:
+        sso.load_skeleton()
     cd = skelnode_comment_dict(sso)
     label_array = np.ones(len(sso.skeleton["nodes"]), dtype=np.int) * -1
     for ii, n in enumerate(sso.skeleton["nodes"]):
@@ -1339,3 +1342,28 @@ def label_array_for_sso_skel(sso, comment_converter):
             pass
     return label_array
 
+
+def write_axpred(ssv, pred_key_appendix, dest_path=None, k=1):
+    if dest_path is None:
+        dest_path = ssv.skeleton_kzip_path_views
+    pred_key = "axoness_preds%s" % pred_key_appendix
+    if not ssv.attr_exists(pred_key):
+        print "Couldn't find specified axoness prediction. Falling back to " \
+              "default."
+        raise ValueError
+        preds = np.array(start_multiprocess_obj("axoness_preds",
+                                                   [[sv, {
+                                                       "pred_key_appendix": pred_key_appendix}]
+                                                    for sv in ssv.svs],
+                                                   nb_cpus=ssv.nb_cpus))
+        preds = np.concatenate(preds)
+    else:
+        preds = ssv.lookup_in_attribute_dict(pred_key)
+    print "Collected axoness:", Counter(preds).most_common()
+    locs = ssv.sample_locations()
+    print "Collected locations."
+    pred_coords = np.concatenate(locs)
+    assert pred_coords.ndim == 2
+    assert pred_coords.shape[1] == 3
+    ssv._pred2mesh(pred_coords, preds, "axoness.ply", dest_path=dest_path,
+                    k=k)

@@ -51,7 +51,7 @@ class MeshObject(object):
         vert_resh -= self.center
         vert_resh /= self.max_dist
         self.vertices = vert_resh.reshape(len(self.vertices))
-        if len(normals) == 0:
+        if normals is not None and len(normals) == 0:
             normals = None
         if normals is not None and normals.ndim == 2:
             normals = normals.reshape(len(normals)*3)

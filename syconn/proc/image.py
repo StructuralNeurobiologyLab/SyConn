@@ -69,7 +69,7 @@ def fast_check_sing_comp(sv, max_dist=5):
     -------
     bool
         True if single connected component
-    """
+    """, predict_sos_views
     if len(sv) == 0:
         return True
     pdists = spatial.distance.pdist(sv[::4])

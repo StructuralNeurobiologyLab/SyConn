@@ -768,7 +768,8 @@ class SegmentationObject(object):
         return np.array(views, dtype=np.float32)
 
     def save_views(self, views, woglia=True, cellobjects_only=False):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia), read_only=False,
+        view_dc = LZ4Dict(self.view_path(woglia=woglia),
+                          read_only=False,
                           disable_locking=not self.enable_locking)
         if cellobjects_only:
             assert self.id in view_dc, "SV must already contain raw views " \
