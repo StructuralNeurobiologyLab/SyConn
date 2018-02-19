@@ -240,6 +240,7 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None):
     """
     label = binarize_labels(label, foreground_ids)
     label = xyz2zxy(label)
+    raw = xyz2zxy(raw)
     print("Raw:", raw.shape, raw.dtype, raw.min(), raw.max())
     print("Label:", label.shape, label.dtype, label.min(), label.max())
     print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
