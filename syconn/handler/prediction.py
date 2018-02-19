@@ -42,8 +42,9 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75):
         label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
                                        verbose=False)
         label = label.astype(np.uint16)
-    except:
-        label = None
+    except KeyError as e:
+        print ("\n" + repr(e) + "\nLabels are set to zeros (background).")
+        label = np.zeros(size).astype(np.uint16)
     return raw.astype(np.float32) / 255., label
 
 
