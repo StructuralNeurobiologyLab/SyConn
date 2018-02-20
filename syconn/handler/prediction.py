@@ -308,8 +308,9 @@ def parse_movement_area_from_zip(zip_fname):
     return np.concatenate([bb_min, bb_max])
 
 
-def pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
-                 mfp_active=False, gpu_ix=0,overwrite=True):
+def pred_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
+                 imposed_patch_size=None, mfp_active=False, gpu_ix=0,
+                 overwrite=True):
     """
     Runs prediction on whole knossos dataset.
     Imposed patch size has to be given in Z, X, Y!
@@ -317,21 +318,24 @@ def pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     Parameters
     ----------
     kd_p : str
-        path to knossos dataset .conf file
-    kd_pred_p : str
-        path to the knossos dataset head folder which will contain the prediction
-    cd_p : str
-        destination folder for chunk dataset containing prediction
+        path to knossos.conf file corresponding to raw dataset
+    kd_pred_folder : str
+        path to the knossos dataset head folder which will contain the
+        prediction
+    cd_folder : str
+        destination folder for ChunkDataset which contains prediction
+        (intermediate step)
     model_p : str
         path tho ELEKTRONN2 model
     imposed_patch_size : tuple or None
         patch size (Z, X, Y) of the model
     mfp_active : bool
-        activate max-fragment pooling (might be necessary to change patch_size)
+        activate max-fragment pooling (it might be necessary to change
+        patch_size if enabled)
     gpu_ix : int
-    |   the GPU to be used
+        the GPU to be used (index as given by 'nvidi-smi')
     overwrite : bool
-    |   True: fresh predictions ; False: earlier prediction continues
+        True: fresh predictions ; False: earlier prediction continues
         
 
     Returns
@@ -350,14 +354,15 @@ def pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     offset = m.target_node.shape.offsets
     offset = np.array([offset[1], offset[2], offset[0]], dtype=np.int)
     cd = ChunkDataset()
-    cd.initialize(kd, kd.boundary, [512, 512, 256], cd_p, overlap=offset, box_coords=np.zeros(3), fit_box_size=True)
+    cd.initialize(kd, kd.boundary, [512, 512, 256], cd_folder,
+                  overlap=offset, box_coords=np.zeros(3), fit_box_size=True)
     nb_ch = len(cd.chunk_dict.keys())
     print("Starting prediction of %d chunks.\n" % nb_ch)
     cnt = 0
     if not overwrite:
         ch_dc = cd.chunk_dict
         for chunk in cd.chunk_dict.values():
-            sys.stdout.write("%d/%d" % (cnt, nb_ch))
+            sys.stdout.write("[%d/%d]" % (cnt, nb_ch))
             try:
                 ch = ch_dc[cnt]
                 _ = ch.load_chunk("pred")[0]
@@ -367,15 +372,14 @@ def pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
                 cnt += 1
     else:
         for chunk in cd.chunk_dict.values():
-            sys.stdout.write("%d/%d" % (cnt, nb_ch))
+            sys.stdout.write("[%d/%d]" % (cnt, nb_ch))
             chunk_pred(chunk, m)
             cnt += 1
     save_dataset(cd)
     kd_pred = KnossosDataset()
-    kd_pred.initialize_without_conf(kd_pred_p, kd.boundary, kd.scale,
-                                    kd.experiment_name, mags=[1])
-    cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [2, 2], as_raw=True,
-                         stride=[150, 150, 150])
+    kd_pred.initialize_without_conf(kd_pred_folder, kd.boundary, kd.scale,
+                                    kd.experiment_name, mags=[1, 2])
+    cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True)
 
 
 def prediction_helper(raw, model, override_mfp=True,
@@ -433,4 +437,5 @@ def chunk_pred(ch, model):
     pred = prediction_helper(raw, model) * 255
     pred = pred.astype(np.uint8)
     ch.save_chunk(pred, "pred", "pred", overwrite=True)
+    ch.save_chunk(raw, "raw", "raw", overwrite=True)
 
