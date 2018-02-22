@@ -151,7 +151,7 @@ def rgb2gray(rgb):
 
 def apply_equalhist(arr):
     """
-    If cv2 is available applies clahe filter on array.
+    If cv2 is available applies histogram normalization on array.
 
     Parameters
     ----------

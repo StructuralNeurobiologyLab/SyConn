@@ -5,6 +5,7 @@ from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils.knossosdataset import KnossosDataset
 from elektronn2.neuromancer.model import modelload
 from elektronn2.utils.gpu import initgpu
+from elektronn2.training.parallelisation import BackgroundProc
 from .compression import load_from_h5py, save_to_h5py
 import numpy as np
 import os
@@ -310,7 +311,7 @@ def parse_movement_area_from_zip(zip_fname):
 
 def pred_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
                  imposed_patch_size=None, mfp_active=False, gpu_ix=0,
-                 overwrite=True):
+                 overwrite=True, debug=False):
     """
     Runs prediction on whole knossos dataset.
     Imposed patch size has to be given in Z, X, Y!
@@ -333,9 +334,11 @@ def pred_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
         activate max-fragment pooling (it might be necessary to change
         patch_size if enabled)
     gpu_ix : int
-        the GPU to be used (index as given by 'nvidi-smi')
+        the GPU to be used (index as given by 'nvidia-smi')
     overwrite : bool
         True: fresh predictions ; False: earlier prediction continues
+    debug : bool
+        writes out raw data to chunk .h5 files
         
 
     Returns
@@ -352,28 +355,26 @@ def pred_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
     m.dropout_rates = ([0.0, ] * len(original_do_rates))
     # print kd.boundary
     offset = m.target_node.shape.offsets
-    offset = np.array([offset[1], offset[2], offset[0]], dtype=np.int)
+    overlap = np.array([offset[1], offset[2], offset[0]]) * 1.5  # add some safety margin
     cd = ChunkDataset()
     cd.initialize(kd, kd.boundary, [512, 512, 256], cd_folder,
-                  overlap=offset, box_coords=np.zeros(3), fit_box_size=True)
+                  overlap=overlap.astype(np.int), box_coords=np.zeros(3), fit_box_size=True)
     nb_ch = len(cd.chunk_dict.keys())
     print("Starting prediction of %d chunks.\n" % nb_ch)
     cnt = 0
     if not overwrite:
-        ch_dc = cd.chunk_dict
-        for chunk in cd.chunk_dict.values():
+        for k, chunk in cd.chunk_dict.iteritems():
             sys.stdout.write("[%d/%d]" % (cnt, nb_ch))
             try:
-                ch = ch_dc[cnt]
-                _ = ch.load_chunk("pred")[0]
+                _ = chunk.load_chunk("pred")[0]
                 cnt += 1
             except Exception as e:
-                chunk_pred(chunk, m)
+                chunk_pred(chunk, m, debug=debug)
                 cnt += 1
     else:
         for chunk in cd.chunk_dict.values():
             sys.stdout.write("[%d/%d]" % (cnt, nb_ch))
-            chunk_pred(chunk, m)
+            chunk_pred(chunk, m, debug=debug)
             cnt += 1
     save_dataset(cd)
     kd_pred = KnossosDataset()
@@ -424,7 +425,7 @@ def prediction_helper(raw, model, override_mfp=True,
     return zxy2xyz(pred)
 
 
-def chunk_pred(ch, model):
+def chunk_pred(ch, model, debug=False):
     """
     Helper function to write chunks.
 
@@ -437,5 +438,6 @@ def chunk_pred(ch, model):
     pred = prediction_helper(raw, model) * 255
     pred = pred.astype(np.uint8)
     ch.save_chunk(pred, "pred", "pred", overwrite=True)
-    ch.save_chunk(raw, "raw", "raw", overwrite=True)
+    if debug:
+        ch.save_chunk(raw, "pred", "raw", overwrite=False)
 

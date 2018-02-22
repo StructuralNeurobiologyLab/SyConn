@@ -166,6 +166,7 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20)):
 
     """
     #  TODO: check offset again!
+    assert type(downsampling) == tuple, "Downsampling has to be of type 'tuple'"
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
         "Point cloud used for mesh generation has wrong shape."
     downsampling = np.array(downsampling, dtype=np.uint8)
