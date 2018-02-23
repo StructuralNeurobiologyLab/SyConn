@@ -238,28 +238,24 @@ def get_filepaths_from_dir(directory, ending=('k.zip'), recursively=False,
     """
     # make it backwards compatible
     if type(ending) is str:
-        endings = [ending]
+        ending = [ending]
     files = []
     if recursively:
         for r, s, fs in os.walk(directory):
             for f in fs:
+                corr_end = np.any(
+                    [f[-len(end):] == end for end in ending])
                 if exclude_endings:
-                    corr_end = np.all(
-                        [f[-len(ending):] != ending for ending in endings])
-                else:
-                    corr_end = np.any(
-                        [f[-len(ending):] == ending for ending in endings])
+                    corr_end = not corr_end
                 if corr_end:
                     files.append(os.path.join(r, f))
 
     else:
         for f in next(os.walk(directory))[2]:
+            corr_end = np.any(
+                [f[-len(end):] == end for end in ending])
             if exclude_endings:
-                corr_end = np.all(
-                    [f[-len(ending):] != ending for ending in endings])
-            else:
-                corr_end = np.any(
-                    [f[-len(ending):] == ending for ending in endings])
+                corr_end = not corr_end
             if corr_end:
                 files.append(os.path.join(directory, f))
     return files

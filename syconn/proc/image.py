@@ -69,7 +69,7 @@ def fast_check_sing_comp(sv, max_dist=5):
     -------
     bool
         True if single connected component
-    """, predict_sos_views
+    """
     if len(sv) == 0:
         return True
     pdists = spatial.distance.pdist(sv[::4])
@@ -174,7 +174,7 @@ def apply_equalhist(arr):
     return normalize_img(equalizeHist(arr), max_val=1)
 
 
-def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
+def apply_clahe(arr, clipLimit=4.0, tileGridSize=None, ret_normalized=True):
     """
     If cv2 is available applies clahe filter on array.
 
@@ -182,6 +182,7 @@ def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
     ----------
     arr : np.array
     clipLimit : float
+    tileGridSize : float
     ret_normalized : bool
 
     Returns
@@ -197,7 +198,7 @@ def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
         arr = arr[..., None]
     if arr.dtype != np.uint8:
         arr = normalize_img(arr, max_val=255).astype(np.uint8)
-    clahe = createCLAHE(clipLimit=clipLimit)
+    clahe = createCLAHE(clipLimit=clipLimit, tileGridSize=tileGridSize)
     if ret_normalized:
         return normalize_img(clahe.apply(arr), max_val=1)
     return clahe.apply(arr)
