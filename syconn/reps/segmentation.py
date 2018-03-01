@@ -19,7 +19,7 @@ try:
 except:
     default_wd_available = False
 from ..config import parser
-from ..config.global_params import MESH_DOWNSAMPLING
+from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.compression import LZ4Dict
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
@@ -717,8 +717,12 @@ class SegmentationObject(object):
     def extent(self):
         return np.linalg.norm(self.shape * self.scaling)
 
-    def _mesh_from_scratch(self):
-        return meshes.get_object_mesh(self, MESH_DOWNSAMPLING[self.type])
+    def _mesh_from_scratch(self, downsampling=None, n_closings=None):
+        if n_closings is None:
+            n_closings = MESH_CLOSING[self.type]
+        if downsampling is None:
+            downsampling = MESH_DOWNSAMPLING[self.type]
+        return meshes.get_object_mesh(self, downsampling, n_closings=n_closings)
 
     def _save_mesh(self, ind, vert, normals):
         mesh_dc = MeshDict(self.mesh_path, read_only=False,

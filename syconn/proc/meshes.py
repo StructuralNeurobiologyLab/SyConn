@@ -14,10 +14,9 @@ from skimage import measure
 from sklearn.decomposition import PCA
 from ..handler.basics import write_txt2kzip
 from .image import apply_pca
-try:
-    from vigra.filters import boundaryDistanceTransform, gaussianSmoothing, multiBinaryErosion
-except ImportError:
-    print('Vigra not available')
+from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
+from scipy.ndimage.morphology import binary_closing
+
 
 from ..mp.shared_mem import start_multiprocess_obj
 __all__ = ["MeshObject", "get_object_mesh", "merge_meshs", "triangulation",
@@ -145,7 +144,7 @@ class MeshObject(object):
         self.vertices = vert_resh.reshape(len(self.vertices))
 
 
-def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20)):
+def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=0):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
     by building dense matrix (in case of a point cloud) and applying marching
@@ -153,12 +152,13 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20)):
 
     Parameters
     ----------
-    pts : numpy.array [N, 3] or [N, M, O]
+    pts : numpy.array [N, 3] or [N, M, O] (dtype: uint8, bool)
     downsampling : tuple of int
         Magnitude of downsampling, e.g. 1, 2, (..) which is applied to pts
         for each axis
     scaling : tuple
-
+    n_closings : int
+        Number of closings applied before mesh generation
     Returns
     -------
     array, array, array
@@ -180,17 +180,21 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20)):
         volume = np.zeros(bb, dtype=np.float32)
         volume[pts[:, 0], pts[:, 1], pts[:, 2]] = 1
     else:
-        volume = measure.block_reduce(pts, downsampling, np.max)
-        vecs = np.argwhere(pts != 0)
+        volume = pts
+        if np.any(np.array(downsampling) != 1):
+            volume = measure.block_reduce(volume, downsampling, np.max)
+        vecs = np.argwhere(volume != 0)
         offset = np.min(vecs, axis=0)
         extent_orig = np.max(vecs, axis=0) - offset
     # volume = multiBinaryErosion(volume, 1).astype(np.float32)
     # TODO: Take anisotropy into account when calculating distances...
     # TODO: try to correct with anistropic smoothing and dimension independent rescaling to match bounding box
+    if n_closings > 0:
+        volume = binary_closing(volume, iterations=n_closings).astype(np.float32)
     dt = boundaryDistanceTransform(volume, boundary="InterpixelBoundary") #InterpixelBoundary, OuterBoundary, InnerBoundary
     dt[volume == 1] *= -1
     volume = gaussianSmoothing(dt, scaling[0], step_size=scaling) # this works because only the relative step_size between the dimensions is interesting, therefore we can neglect shrink_fct
-    if np.sum(volume<0) == 0: # less smoothing
+    if np.sum(volume < 0) == 0: # less smoothing
         volume = gaussianSmoothing(dt, scaling[0]/2, step_size=scaling)
     verts, ind, norm, _ = measure.marching_cubes_lewiner(volume, 0, gradient_direction="descent") # also calculates normals!
     verts -= np.min(verts, axis=0)
@@ -199,7 +203,7 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20)):
     return np.array(ind, dtype=np.int), np.array(verts) * new_fact + offset, norm
 
 
-def get_object_mesh(obj, downsampling):
+def get_object_mesh(obj, downsampling, n_closings):
     """
     Get object mesh from object voxels using marching cubes.
 
@@ -208,6 +212,9 @@ def get_object_mesh(obj, downsampling):
     obj : SegmentationObject
     downsampling : tuple of int
         Magnitude of downsampling for each axis
+    n_closings : int
+        Number of closings before mesh generation
+
     Returns
     -------
     array [N, 1], array [M, 1], array
@@ -217,7 +224,8 @@ def get_object_mesh(obj, downsampling):
         return np.zeros((0, )), np.zeros((0, ))
 
     indices, vertices, normals = triangulation(np.array(obj.voxel_list),
-                                      downsampling=downsampling)
+                                      downsampling=downsampling,
+                                               n_closings=n_closings)
     vertices *= obj.scaling
     assert len(vertices) == len(normals) or len(normals) == 0, \
         "Length of normals does not correspond to length of vertices."

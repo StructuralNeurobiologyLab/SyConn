@@ -102,7 +102,8 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5, mfp_active=False,
 
 def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
                gpu_ix=0, imposed_patch_size=None, hdf5_data_key=None,
-               data_is_zxy=True):
+               data_is_zxy=True, dest_p=None, dest_hdf5_data_key="pred",
+               as_uint8=True):
     """
     Predicts data from h5 file. Assumes raw data is already float32.
 
@@ -122,6 +123,8 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
         'load_from_h5py'
     data_is_zxy : bool
         if False, it will assumes data is [X, Y, Z]
+    as_uint8: bool
+    dest_p : str
     """
     raw = load_from_h5py(h5_path, hdf5_names=[hdf5_data_key] if hdf5_data_key else
                          None)[0]
@@ -137,9 +140,13 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     if not data_is_zxy:
         pred = zxy2xyz(pred)
         raw = zxy2xyz(raw)
+    if as_uint8:
+        pred = (pred * 255).astype(np.uint8)
     if clf_thresh:
         pred = (pred >= clf_thresh).astype(np.float32)
-    save_to_h5py([raw, pred], h5_path, [hdf5_data_key, "pred"])
+    if dest_p is None:
+        dest_p = h5_path
+    save_to_h5py([raw, pred], dest_p, [hdf5_data_key, dest_hdf5_data_key])
 
 
 def overlaycubes2kzip(dest_p, vol, offset, kd_path):
@@ -311,7 +318,7 @@ def parse_movement_area_from_zip(zip_fname):
 
 def pred_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
                  imposed_patch_size=None, mfp_active=False, gpu_ix=0,
-                 overwrite=True, debug=False):
+                 overwrite=True, debug=False, chunk_size=(512, 512, 256)):
     """
     Runs prediction on whole knossos dataset.
     Imposed patch size has to be given in Z, X, Y!
@@ -339,6 +346,8 @@ def pred_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
         True: fresh predictions ; False: earlier prediction continues
     debug : bool
         writes out raw data to chunk .h5 files
+    chunk_size : tuple
+        chunk size for ChunkDataset (x, y, z)
         
 
     Returns
@@ -357,7 +366,8 @@ def pred_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
     offset = m.target_node.shape.offsets
     overlap = np.array([offset[1], offset[2], offset[0]]) * 1.5  # add some safety margin
     cd = ChunkDataset()
-    cd.initialize(kd, kd.boundary, [512, 512, 256], cd_folder,
+    chunk_size = np.min([kd.boundary, chunk_size], axis=0)
+    cd.initialize(kd, kd.boundary, chunk_size, cd_folder,
                   overlap=overlap.astype(np.int), box_coords=np.zeros(3), fit_box_size=True)
     nb_ch = len(cd.chunk_dict.keys())
     print("Starting prediction of %d chunks.\n" % nb_ch)
