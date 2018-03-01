@@ -720,13 +720,16 @@ class SuperSegmentationObject(object):
         self.save_skeleton()
 
     def save_skeleton_to_kzip(self, dest_path=None, additional_keys=None):
+        if type(additional_keys) == str:
+            additional_keys = [additional_keys]
         try:
             if self.skeleton is None:
                 self.load_skeleton()
             if additional_keys is not None:
                 for k in additional_keys:
-                    assert k in self.skeleton, "Additional key %s is not" \
-                                               "part of self.skeleton." % k
+                    assert k in self.skeleton, "Additional key %s is not " \
+                    "part of SSV %d self.skeleton.\nAvailable keys: %s" % \
+                    (k, self.id, repr(self.skeleton.keys()))
             a = skeleton.SkeletonAnnotation()
             a.scaling = self.scaling
             a.comment = "skeleton"
@@ -1627,14 +1630,14 @@ class SuperSegmentationObject(object):
 
         return np.array(axoness_pred)
 
-    def cnn_axoness_2_skel(self, pred_key_appendix="", k=5):
+    def cnn_axoness_2_skel(self, pred_key_appendix="", k=1):
         if self.skeleton is None:
             self.load_skeleton()
         proba_key = "axoness_probas_cnn%s" % pred_key_appendix
         pred_key = "axoness_preds_cnn%s" % pred_key_appendix
         if not self.attr_exists(pred_key) or not self.attr_exists(proba_key):
             print "Couldn't find specified axoness prediction. Falling back to " \
-                  "default."
+                  "default (-> per SV stored multi-view prediction including SSV context; RAG: 4b_fix)."
             preds = np.array(sm.start_multiprocess_obj("axoness_preds",
                     [[sv, {"pred_key_appendix": pred_key_appendix}]
                      for sv in self.svs], nb_cpus=self.nb_cpus))
@@ -1643,11 +1646,15 @@ class SuperSegmentationObject(object):
                      for sv in self.svs], nb_cpus=self.nb_cpus))
             preds = np.concatenate(preds)
             probas = np.concatenate(probas)
+            self.attr_dict[proba_key] = probas
+            self.attr_dict[pred_key] = preds
         else:
             preds = self.lookup_in_attribute_dict(pred_key)
             probas = self.lookup_in_attribute_dict(proba_key)
         loc_coords = np.concatenate(self.sample_locations())
-        assert len(loc_coords) == len(preds)
+        assert len(loc_coords) == len(preds), "Number of view coordinates is" \
+                                              "different from number of view" \
+                                              "predictions. SSO %d" % self.id
         # find kNN in loc_coords for every skeleton node and use their majority
         # prediction
         node_preds = colorcode_vertices(self.skeleton["nodes"]*self.scaling,
@@ -1655,8 +1662,14 @@ class SuperSegmentationObject(object):
 
         node_probas = assign_rep_values(self.skeleton["nodes"]*self.scaling,
                                         loc_coords, probas, colors=[0, 1, 2], k=k)
-        self.skeleton["axoness_cnn_k%d%s" % (k, pred_key_appendix)] = node_preds
-        self.skeleton["axoness_cnn_k%d%s_probas" % (k, pred_key_appendix)] = node_probas
+        if k != 1:
+            self.skeleton["axoness_cnn_k%d%s" % (k, pred_key_appendix)] = node_preds
+            self.skeleton["axoness_cnn_k%d%s_probas" % (
+            k, pred_key_appendix)] = node_probas
+        else:
+            self.skeleton["axoness"] = node_preds
+            self.skeleton["axoness_probas"] = node_probas
+
         self.save_skeleton()
 
     # --------------------------------------------------------------- CELL TYPES
