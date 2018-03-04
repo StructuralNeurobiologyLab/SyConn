@@ -24,7 +24,7 @@ possible within these steps. `from_ids_to_objects` starts at step 4.
 2. `make_unique_labels` reassignes globally **unique labels** to all segments
 3. `make_stitch_list` collects information of which segments in different chunks are in fact the same and `make_merge_list` resolves this to a global **mergelist** that is then applied by `apply_merge_list`.
 4. `extract_voxels` writes the voxels of each object to a **temporary voxel storage** (similar to the voxel store of a `SegmentationDataset`) and guarantees no write conflicts.
-5. In 'combine_voxels' each worker then reads the voxels belonging to each object from the temporary voxel storage and writes them to their final location, essentially creating a `SegmentationDataset`.
+5. In `combine_voxels` each worker then reads the voxels belonging to each object from the temporary voxel storage and writes them to their final location, essentially **creating a `SegmentationDataset`**.
 
 Steps 4 and 5 are necessary to prevent two workers to write to the same `VoxelDict` (hence, to avoid having locks) . This would happen because an object extends 
 over multiple chunks or because the ids of two different objects are assigned to the same `VoxelDict`. it also allows to balancing the 
