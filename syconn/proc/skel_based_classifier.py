@@ -143,7 +143,7 @@ class SkelClassifier(object):
             else:
                 raise()
 
-    def generate_data(self, feature_contexts_nm=(2000, 4000, 8000), stride=10,
+    def generate_data(self, feature_contexts_nm=(500, 1000, 2000, 4000, 8000), stride=10,
                       qsub_pe=None, qsub_queue=None, nb_cpus=1):
         self.load_label_dict()
 
@@ -170,14 +170,14 @@ class SkelClassifier(object):
             raise Exception("QSUB not available")
 
     def classifier_production(self, clf_name="rfc", n_estimators=2000,
-                              feature_contexts_nm=(2000, 4000, 8000), qsub_pe=None,
-                              qsub_queue=None, nb_cpus=1):
+                              feature_contexts_nm=(500, 1000, 2000, 4000, 8000), qsub_pe=None,
+                              qsub_queue=None, nb_cpus=1, production=False):
         self.load_label_dict()
         multi_params = []
         for feature_context_nm in feature_contexts_nm:
             multi_params.append([self.working_dir, self.target_type,
                                  clf_name, n_estimators,
-                                 feature_context_nm])
+                                 feature_context_nm, production])
         if qsub_pe is None and qsub_queue is None:
             results = sm.start_multiprocess(classifier_production_thread,
                 multi_params, nb_cpus=nb_cpus)
@@ -264,7 +264,6 @@ class SkelClassifier(object):
                 if self.target_type == "spiness":
                     # set neck labels to shaft labels, and then as a postporcessing assign skeleton ndoes between branch point and spine head as neck
                     this_labels[this_labels == 2] = 0
-                this_feats = this_feats.tolist()
                 this_labels = this_labels.tolist()
                 cnt = Counter(this_labels)
                 print("Found node specific labels in SSV %d. %s" %
@@ -285,7 +284,7 @@ class SkelClassifier(object):
         if "test" not in labels_dict:
             labels_dict["test"] = []
         if "test" not in feature_dict:
-            feature_dict["test"] = np.zeros((0, ), np.float)
+            feature_dict["test"] = np.zeros((0, feature_dict["train"].shape[1]), np.float)
         labels_dict["test"] = np.array(labels_dict["test"], dtype=np.int)
         print("--------DATASET SUMMARY--------\n\n"
               "train\n%s\n\nvalid\n%s\n\ntest\n%s\n" %
@@ -333,9 +332,9 @@ class SkelClassifier(object):
                   (this_class, precision, recall, f_score)
         return score_dict, label_weights
 
-    def train_clf(self, name, n_estimators=2000, feature_context_nm=5000,
+    def train_clf(self, name, n_estimators=2000, feature_context_nm=4000,
                   balanced=True, production=False, performance=False,
-                  save=False, fast=False):
+                  save=False, fast=False, leave_out_classes=()):
         if name == "rfc":
             clf = self.create_rfc(n_estimators=n_estimators)
         elif name == "ext":
@@ -346,6 +345,16 @@ class SkelClassifier(object):
         print "\n --- %s ---\n" % name
         tr_feats, tr_labels, v_feats, v_labels, te_feats, te_labels = \
             self.load_data(feature_context_nm=feature_context_nm)
+
+        for c in leave_out_classes:
+            tr_feats = tr_feats[tr_labels != c]
+            tr_labels = tr_labels[tr_labels != c]
+            if len(v_feats) > 0:
+                v_feats = v_feats[v_labels != c]
+                v_labels = v_labels[v_labels != c]
+            if len(te_feats) > 0:
+                te_feats = te_feats[te_labels != c]
+                te_labels = te_labels[te_labels != c]
 
         if fast:
             classes = np.unique(tr_labels)
@@ -420,14 +429,17 @@ class SkelClassifier(object):
             print "%s: %.5f" % (feat_set[i_feat], feat_imps[i_feat])
 
         if save:
-            self.save_classifier(clf, name, feature_context_nm)
+            prefix = "%s" % repr(leave_out_classes) if \
+                len(leave_out_classes) > 0 else ""
+            self.save_classifier(clf, name, feature_context_nm,
+                                 production=production, prefix=prefix)
 
         v_proba = clf.predict_proba(v_feats)
         if len(te_feats) > 0:
             te_proba = clf.predict_proba(te_feats)
         else:
             te_proba = np.zeros((0, v_proba.shape[-1]))
-        self.eval_performance(v_proba, v_labels, te_proba, te_labels,
+        self.eval_performance(v_proba, v_labels, te_proba, te_labels, leave_out_classes,
                               [name, str(n_estimators), str(feature_context_nm)])
 
     def create_rfc(self, n_estimators=2000):
@@ -494,14 +506,16 @@ class SkelClassifier(object):
         print('Test loss:', score[0])
         print('Test accuracy:', score[1])
 
-    def save_classifier(self, clf, name, feature_context_nm):
-        joblib.dump(clf, self.clf_path + '/clf_%s_%d.pkl' %
-                    (name, feature_context_nm))
+    def save_classifier(self, clf, name, feature_context_nm, production=False,
+                        prefix=""):
+        save_p = self.clf_path + '/clf_%s_%d%s%s.pkl' % (name, feature_context_nm, "_prod" if production else "", prefix)
+        joblib.dump(clf, save_p)
 
-    def load_classifier(self, name, feature_context_nm):
-        clf = joblib.load(self.clf_path + '/clf_%s_%d.pkl' %
-                          (name, feature_context_nm))
-
+    def load_classifier(self, name, feature_context_nm, production=False,
+                        prefix=""):
+        save_p = self.clf_path + '/clf_%s_%d%s%s.pkl' % (
+        name, feature_context_nm, "_prod" if production else "", prefix)
+        clf = joblib.load(save_p)
         return clf
 
     def plot_lines(self, data, x_label, y_label, path, legend_labels=None):
@@ -585,14 +599,19 @@ class SkelClassifier(object):
         return curves
 
     def eval_performance(self, probs_valid, labels_valid, probs_test,
-                         labels_test, identifiers=()):
+                         labels_test, leave_out_classes=(), identifiers=()):
         prefix = ""
         for ident in identifiers:
             prefix += str(ident) + "_"
         prefix += "valid"
+        tgt_names = list(legend_labels[self.ssd_version])
+        if len(leave_out_classes) > 0:
+            for c in leave_out_classes:
+                tgt_names[c] = None
+            tgt_names = [el for el in tgt_names if el is not None]
         model_performance(probs_valid, labels_valid, model_dir=self.plots_path,
-                          n_labels=len(legend_labels[self.ssd_version]),
-                          target_names=legend_labels[self.ssd_version],
+                          n_labels=len(legend_labels[self.ssd_version]) - len(leave_out_classes),
+                          target_names=tgt_names,
                           prefix=prefix)
         if len(probs_test) > 0:
             prefix = ""
@@ -611,11 +630,12 @@ def classifier_production_thread(args):
     clf_name = args[2]
     n_estimators = args[3]
     feature_context_nm = args[4]
+    production = args[5]
 
     sc = SkelClassifier(target_type, working_dir=working_dir,
                         create=False)
 
     sc.train_clf(name=clf_name, n_estimators=n_estimators,
-                 feature_context_nm=feature_context_nm, production=False,
+                 feature_context_nm=feature_context_nm, production=production,
                  save=True)
 

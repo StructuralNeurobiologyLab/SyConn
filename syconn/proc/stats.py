@@ -44,7 +44,25 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
         text_file.close()
         prec, rec, fs, supp = precision_recall_fscore_support(labels, np.argmax(proba, axis=1))
         np.save(model_dir + '/prec_rec_%s.npy' % prefix, [prec, rec, fs])
-        plt.savefig(model_dir + '/prec_rec_%s.png' % prefix)
+        # plt.savefig(model_dir + '/prec_rec_%s.png' % prefix)
+    plt.close()
+
+
+def model_performance_predonly(pred, labels, model_dir=None, prefix="", target_names=None):
+    header = "-------------------------------\n\t\t%s\n" % prefix
+    if target_names is None:
+        target_names = ["Dendrite", "Axon", "Soma"]
+    header += classification_report(labels, pred, digits=4,
+                                target_names=target_names)
+    header += "acc.: %0.4f" % accuracy_score(labels, pred)
+    header += "\n-------------------------------\n"
+    print header
+    if model_dir is not None:
+        text_file = open(model_dir + '/prec_rec_%s.txt' % prefix, "w")
+        text_file.write(header)
+        text_file.close()
+        prec, rec, fs, supp = precision_recall_fscore_support(labels, pred)
+        np.save(model_dir + '/prec_rec_%s.npy' % prefix, [prec, rec, fs])
     plt.close()
 
 
@@ -200,7 +218,7 @@ def plot_pr(precision, recall, title='', r=[0.67, 1.01], legend_labels=None,
             plt.legend(handles=handles, loc=l_pos, frameon=False, prop={'size': ls})
     else:
         plt.plot(recall, precision, "--o", lw=3, ms=8, c="0.35")
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+    # ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
     if len(xtick_labels) > 0:
         plt.xticks(recall, xtick_labels, rotation="vertical")
     plt.tight_layout()

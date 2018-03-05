@@ -54,6 +54,7 @@ try:
     from ..config.global_params import wd
 except:
     default_wd_available = False
+from ..config.global_params import SKEL_FEATURE_CONTEXT
 
 
 class SuperSegmentationObject(object):
@@ -1566,8 +1567,8 @@ class SuperSegmentationObject(object):
             self._pred2mesh(self.skeleton["nodes"] * self.scaling, axoness,
                             k=k, dest_path=dest_path)
 
-    def predict_nodes(self, sc, clf_name="rfc", feature_context_nm=4000,
-                      avg_window=0):
+    def predict_nodes(self, sc, clf_name="rfc", feature_context_nm=None,
+                      avg_window=0, leave_out_classes=()):
         """
         Predicting class c
         Parameters
@@ -1589,11 +1590,13 @@ class SuperSegmentationObject(object):
         -------
 
         """
+        if feature_context_nm is None:
+            feature_context_nm = SKEL_FEATURE_CONTEXT[sc.target_type]
         assert sc.target_type in ["axoness", "spiness"]
-        clf = sc.load_classifier(clf_name, feature_context_nm)
+        clf = sc.load_classifier(clf_name, feature_context_nm, production=True,
+                                 leave_out_classes=leave_out_classes)
         probas = clf.predict_proba(self.skel_features(feature_context_nm))
         pred = []
-        class_weights = np.array([1, 1, 1])
         if avg_window == 0:
             pred = np.argmax(probas, axis=1)
         else:
@@ -1601,7 +1604,7 @@ class SuperSegmentationObject(object):
                 paths = nx.single_source_dijkstra_path(self.weighted_graph, i_node,
                                                        avg_window)
                 neighs = np.array(paths.keys(), dtype=np.int)
-                c = np.argmax(np.sum(probas[neighs], axis=0) * class_weights)
+                c = np.argmax(np.sum(probas[neighs], axis=0))
                 pred.append(c)
 
         pred_key = "%s_fc%d_avgwind%d" % (sc.target_type, feature_context_nm,
@@ -1609,6 +1612,22 @@ class SuperSegmentationObject(object):
         self.skeleton[pred_key] = np.array(pred, dtype=np.int)
         self.skeleton[pred_key+"_proba"] = np.array(probas, dtype=np.float32)
         self.save_skeleton(to_object=True, to_kzip=False)
+
+    def average_node_axoness(self, axoness_pred_key="axoness",
+                             avg_window=10000):
+        if self.skeleton is None:
+            self.load_skeleton()
+        preds = np.array(self.skeleton[axoness_pred_key])
+        avg_pred = []
+        g = self.weighted_graph
+        for n in g.nodes():
+            paths = nx.single_source_dijkstra_path(g, n, avg_window)
+            neighs = np.array(paths.keys(), dtype=np.int)
+            cls, cnts = np.unique(preds[neighs], return_counts=True)
+            c = cls[np.argmax(cnts)]
+            avg_pred.append(c)
+        self.skeleton["axoness_pred_avg%d" % avg_window] = avg_pred
+        self.save_skeleton()
 
     def axoness_for_coords(self, coords, radius_nm=4000):
         coords = np.array(coords)

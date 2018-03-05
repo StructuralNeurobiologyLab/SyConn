@@ -6,8 +6,8 @@ matplotlib.use("Agg")
 import sys
 import time
 import numpy as np
-from syconn.handler.basics import chunkify, load_pkl2obj, write_obj2pkl, write_txt2kzip
-from syconn.proc.stats import model_performance
+from syconn.handler.basics import chunkify, load_pkl2obj, write_obj2pkl, write_txt2kzip, get_filepaths_from_dir
+from syconn.proc.stats import model_performance, model_performance_predonly
 from syconn.reps.super_segmentation_object import predict_sos_views, render_sso_coords
 from syconn.reps.super_segmentation_helper import write_axpred
 from syconn.reps.rep_helper import knossos_ml_from_ccs
@@ -23,6 +23,8 @@ import os
 import tqdm
 from syconn.proc.skel_based_classifier import SkelClassifier
 import shutil
+from knossos_utils.skeleton_utils import load_skeleton
+import re
 
 
 class NeuralNetworkInterface(object):
@@ -140,6 +142,71 @@ def get_test_candidates():
     write_txt2kzip(dest_folder + "test_set.k.zip", kml, "mergelist.txt")
 
 
+def eval_test_candidates():
+    dest_folder = "/wholebrain/scratch/pschuber/cmn_paper/data/axoness_comparison/test_ssv/"
+    ssd_all = SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/")
+    sc = SkelClassifier(target_type="axoness", working_dir="/wholebrain/scratch/areaxfs3/")
+    rfc_4000_wo2 = sc.load_classifier("rfc", feature_context_nm=4000,
+                                      prefix="(2,)")
+    rfc_8000_wo2 = sc.load_classifier("rfc", feature_context_nm=8000,
+                                      prefix="(2,)")
+    kzip_ps = get_filepaths_from_dir(dest_folder)
+    cnv_dict = {"gt_axon": 1, "gt_soma": 2, "gt_dendrite": 0}
+    all_labels = []
+    all_preds_skel_4000 = []
+    all_preds_skel_8000 = []
+    all_preds_skel_4000_wo2 = []
+    all_preds_skel_8000_wo2 = []
+    all_preds_cnn = []
+    currently_annotated = ["34299393.001.k", "8733319.001.k", "30030341.001.k", "28985344.001.k", "12474080.001.k"]
+    for fname in kzip_ps:
+        if not np.any([ca in fname for ca in currently_annotated]):
+            continue
+        sso_id = int(re.findall("(\d+).\d+.k.zip", fname)[0])
+        sso = ssd_all.get_super_segmentation_object(sso_id)
+        sso.load_skeleton()
+        skel_nodes = sso.skeleton["nodes"]
+        feats_4000 = sso.skel_features(feature_context_nm=4000)
+        preds_4000_wo2 = np.argmax(rfc_4000_wo2.predict_proba(feats_4000), axis=1)
+        feats_8000 = sso.skel_features(feature_context_nm=8000)
+        preds_8000_wo2 = np.argmax(rfc_8000_wo2.predict_proba(feats_8000), axis=1)
+        preds_4000wo2_dc = {}
+        preds_8000wo2_dc = {}
+        for i in range(len(skel_nodes)):
+            preds_4000wo2_dc[frozenset(skel_nodes[i])] = preds_4000_wo2[i]
+            preds_8000wo2_dc[frozenset(skel_nodes[i])] = preds_8000_wo2[i]
+        try:
+            skel = load_skeleton(fname)["skeleton"]
+        except KeyError:
+            continue
+        for n in skel.getNodes():
+            c = n.getComment()
+            try:
+                label = cnv_dict[c]
+            except KeyError:
+                continue
+            all_labels.append(label)
+            all_preds_skel_4000.append(int(n.data["axoness_fc4000_avgwind0"]))
+            all_preds_skel_8000.append(int(n.data["axoness_fc8000_avgwind0"]))
+            all_preds_skel_4000_wo2.append(preds_4000wo2_dc[frozenset(n.getCoordinate())])
+            all_preds_skel_8000_wo2.append(preds_8000wo2_dc[frozenset(n.getCoordinate())])
+            all_preds_cnn.append(int(n.data["axoness_cnn_k1_gt"]))
+    print "Collected %d labeled nodes." % len(all_labels)
+    model_performance_predonly(all_preds_skel_4000, all_labels, model_dir=dest_folder, prefix="skel_4000")
+    model_performance_predonly(all_preds_skel_8000, all_labels, model_dir=dest_folder, prefix="skel_8000")
+    model_performance_predonly(all_preds_cnn, all_labels, model_dir=dest_folder, prefix="cnn_k1")
+
+    all_labels = np.array(all_labels)
+    all_preds_skel_4000_wo2 = np.array(all_preds_skel_4000_wo2)
+    all_preds_skel_8000_wo2 = np.array(all_preds_skel_8000_wo2)
+    all_preds_skel_4000_wo2 = all_preds_skel_4000_wo2[all_labels != 2]
+    all_preds_skel_8000_wo2 = all_preds_skel_8000_wo2[all_labels != 2]
+    all_labels = all_labels[all_labels != 2]
+    # and without soma
+    model_performance_predonly(all_preds_skel_4000_wo2, all_labels, model_dir=dest_folder, prefix="skel_4000_wo2")
+    model_performance_predonly(all_preds_skel_8000_wo2, all_labels, model_dir=dest_folder, prefix="skel_8000_wo2")
+
+
 # model which is NOT trained on all samples, but on training samples
 # as defined in axgt_splitting_v3.pkl
 model_p = "/wholebrain/u/pschuber/CNN_Training/nupa_cnn/axoness_old/" \
@@ -160,8 +227,12 @@ if __name__ == "__main__":
     sbc = SkelClassifier("axoness", working_dir="/wholebrain/scratch/areaxfs3/", create=False)
 
     # create test set candidates
-    if 1:
+    if 0:
         get_test_candidates()
+
+    # eval test set
+    if 1:
+        eval_test_candidates()
 
     # evaluate cnn on "pseude" train/valid set (views are different form actual views used during training)
     # evaluate rfc on train and valid dataset
