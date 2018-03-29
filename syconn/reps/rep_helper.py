@@ -334,15 +334,54 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     assert len(colors) >= np.max(rep_values) + 1
     hull_tree = spatial.cKDTree(rep_coords)
     dists, ixs = hull_tree.query(vertices, n_jobs=nb_cpus, k=k)
-    hull_ax = np.zeros((len(vertices)), dtype=np.int)
+    hull_rep = np.zeros((len(vertices)), dtype=np.int)
     for i in range(len(ixs)):
         curr_reps = np.array(rep_values)[ixs[i]]
         if np.isscalar(curr_reps):
             curr_reps = np.array([curr_reps])
-        curr_ax = Counter(curr_reps).most_common(1)[0][0]
-        hull_ax[i] = curr_ax
-    vert_col = colors[hull_ax]
+        curr_maj = Counter(curr_reps).most_common(1)[0][0]
+        hull_rep[i] = curr_maj
+    vert_col = colors[hull_rep]
     return vert_col
+
+
+def assign_rep_values(target_coords, rep_coords, rep_values, colors=None,
+                       nb_cpus=-1, k=1):
+    """
+
+    Parameters
+    ----------
+    target_coords : np.array
+        [N, 3]
+    rep_coords : np.array
+        [M ,3]
+    rep_values : np.array
+        [M, 1] int values to be color coded for each vertex; used as indices
+        for colors
+    colors : list
+        color for each rep_value
+    nb_cpus : int
+    k : int
+        Number of nearest neighbors (average prediction)
+
+    Returns
+    -------
+    np. array [N, 4]
+        rgba values for every vertex from 0 to 255
+    """
+    if colors is None:
+        colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
+                           [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
+    else:
+        colors = np.array(colors, dtype=np.uint)
+    assert len(colors) >= np.max(rep_values) + 1
+    hull_tree = spatial.cKDTree(rep_coords)
+    dists, ixs = hull_tree.query(target_coords, n_jobs=nb_cpus, k=k)
+    hull_rep = [None] * len(target_coords)
+    for i in range(len(ixs)):
+        curr_reps = np.array(rep_values)[ixs[i]]
+        hull_rep[i] = curr_reps
+    return hull_rep
 
 
 def surface_samples(coords, bin_sizes=(2000, 2000, 2000), max_nb_samples=5000,

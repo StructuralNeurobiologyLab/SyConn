@@ -152,7 +152,7 @@ def rgb2gray(rgb):
 
 def apply_equalhist(arr):
     """
-    If cv2 is available applies clahe filter on array.
+    If cv2 is available applies histogram normalization on array.
 
     Parameters
     ----------
@@ -175,7 +175,7 @@ def apply_equalhist(arr):
     return normalize_img(equalizeHist(arr), max_val=1)
 
 
-def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
+def apply_clahe(arr, clipLimit=4.0, tileGridSize=None, ret_normalized=True):
     """
     If cv2 is available applies clahe filter on array.
 
@@ -183,6 +183,7 @@ def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
     ----------
     arr : np.array
     clipLimit : float
+    tileGridSize : float
     ret_normalized : bool
 
     Returns
@@ -198,7 +199,7 @@ def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
         arr = arr[..., None]
     if arr.dtype != np.uint8:
         arr = normalize_img(arr, max_val=255).astype(np.uint8)
-    clahe = createCLAHE(clipLimit=clipLimit)
+    clahe = createCLAHE(clipLimit=clipLimit, tileGridSize=tileGridSize)
     if ret_normalized:
         return normalize_img(clahe.apply(arr), max_val=1)
     return clahe.apply(arr)

@@ -13,7 +13,7 @@ if __name__ == "__main__":
     print(script_folder)
     ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/", version="0")
     multi_params = ssds.ssv_ids
-    multi_params = chunkify(multi_params, 3400)
-    path_to_out = qu.QSUB_script(multi_params, "render_sso_ortho",
-                                 n_max_co_processes=10, pe="openmp", queue=None,
+    multi_params = chunkify(multi_params, 2000)
+    path_to_out = qu.QSUB_script(multi_params, "map_viewaxoness2skel",
+                                 n_max_co_processes=120, pe="openmp", queue=None,
                                  script_folder=script_folder, suffix="")

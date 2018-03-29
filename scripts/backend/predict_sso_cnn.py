@@ -1,0 +1,229 @@
+# SyConn
+# Copyright (c) 2016 Philipp J. Schubert
+# All rights reserved
+import matplotlib
+matplotlib.use("Agg")
+import sys
+import time
+import numpy as np
+from syconn.handler.basics import chunkify, load_pkl2obj, write_obj2pkl, write_txt2kzip
+from syconn.proc.stats import model_performance
+from syconn.reps.super_segmentation_object import predict_sos_views, render_sso_coords
+from syconn.reps.super_segmentation_helper import write_axpred
+from syconn.reps.rep_helper import knossos_ml_from_ccs
+from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
+from syconn.reps.segmentation import SegmentationDataset
+if 1:
+    from elektronn2.neuromancer.model import modelload
+    from elektronn2.config import config
+else:
+    from numa.neuromancer.model import modelload
+    from numa.config import config
+import os
+import tqdm
+from syconn.proc.skel_based_classifier import SkelClassifier
+import shutil
+
+
+class NeuralNetworkInterface(object):
+    def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
+                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2):
+        self.imposed_batch_size = imposed_batch_size
+        self.channels_to_load = channels_to_load
+        self.arch = arch
+        self._path = model_path
+        self._fname = os.path.split(model_path)[1]
+        self.nb_labels = nb_labels
+        self.normal = normal
+        if config.device is None:
+            from elektronn2.utils.gpu import initgpu
+            initgpu(0)
+        self.model = modelload(model_path, replace_bn='const',
+                               imposed_batch_size=imposed_batch_size)
+        self.original_do_rates = self.model.dropout_rates
+        self.model.dropout_rates = ([0.0, ] * len(self.original_do_rates))
+
+    def predict_proba(self, x, verbose=False):
+        x = x.astype(np.float32)
+        bs = self.model.batch_size
+        if self.arch == "rec_view":
+            batches = [np.arange(i * bs, (i + 1) * bs) for i in
+                       range(x.shape[1] / bs)]
+            proba = np.ones((x.shape[1], 4, self.nb_labels))
+        else:
+            batches = [np.arange(i * bs, (i + 1) * bs) for i in
+                       range(len(x) / bs)]
+            proba = np.ones((len(x), self.nb_labels))
+        if verbose:
+            cnt = 0
+            start = time.time()
+        pbar = tqdm.tqdm(total=len(batches), ncols=80, leave=False,
+                         unit='it', unit_scale=True, dynamic_ncols=False)
+        for b in batches:
+            if verbose:
+                sys.stdout.write("\r%0.2f" % (float(cnt) / len(batches)))
+                sys.stdout.flush()
+                cnt += 1
+            x_b = x[b]
+            proba[b] = self.model.predict(x_b)[None, ]
+            pbar.update()
+        overhead = len(x) % bs
+        # TODO: add proper axis handling, maybe introduce axistags
+        if overhead != 0:
+            new_x_b = x[-overhead:]
+            if len(new_x_b) < bs:
+                add_shape = list(new_x_b.shape)
+                add_shape[0] = bs - len(new_x_b)
+                new_x_b = np.concatenate((np.zeros((add_shape), dtype=np.float32), new_x_b))
+            proba[-overhead:] = self.model.predict(new_x_b)[-overhead:]
+        if verbose:
+            end = time.time()
+            sys.stdout.write("\r%0.2f\n" % 1.0)
+            sys.stdout.flush()
+            print "Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
+                  (len(x), end-start, (end-start)/len(x))
+        return proba
+
+
+def get_test_candidates():
+    ssd = SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/",
+                                   version="axgt")
+    sv_ixs_gt = set(np.concatenate([ssv.sv_ids for ssv in ssd.ssvs]))
+    old_sd = SegmentationDataset("sv", working_dir="/wholebrain/scratch/areaxfs/")
+    ssd_all = SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/")
+    ssv_bb = ssd_all.load_cached_data("bounding_box")
+    ssv_bb_size = np.linalg.norm((ssv_bb[:, 1] - ssv_bb[:,0])*ssd.scaling, axis=1)
+    p60, p90 = np.percentile(ssv_bb_size, [85, 98])
+    ssv_ids = np.array(ssd_all.ssv_ids)[(ssv_bb_size > p60) & (ssv_bb_size < p90)]
+    np.random.seed(0)
+    np.random.shuffle(ssv_ids)
+    gt_candidates = []
+    dest_folder = "/wholebrain/scratch/pschuber/cmn_paper/data/axoness_comparison/test_ssv/"
+    if not os.path.isdir(dest_folder):
+        os.makedirs(dest_folder)
+    for ssv_ix in ssv_ids:
+        ssv = ssd_all.get_super_segmentation_object(ssv_ix)
+        inter_set = set(ssv.sv_ids).intersection(sv_ixs_gt)
+        if len(inter_set) == 0:
+            gt_candidates.append(ssv_ix)
+            kzip_p = dest_folder + "%d.k.zip" % ssv_ix
+            ssv.load_skeleton()
+            if os.path.isfile(kzip_p) or ssv.skeleton is None:
+                continue
+            for sv in ssv.svs:
+                new_view_path = sv.view_path(woglia=True)
+                old_view_path = old_sd.get_segmentation_object(sv.id).view_path(woglia=True)
+                if not os.path.isfile(new_view_path):
+                    print old_view_path, new_view_path
+                    # copy views to new SSD in areaxfs3
+                    shutil.copy(old_view_path, new_view_path)
+            # save kzip
+            ssv.load_attr_dict()
+            ssv.predict_nodes(sbc, feature_context_nm=4000)
+            ssv.predict_nodes(sbc, feature_context_nm=8000)
+            views = ssv.load_views()
+            assert len(views) == len(ssv.sample_locations())
+            probas = m.predict_proba(np.concatenate(views))
+            ssv.attr_dict["axoness_probas_cnn_gt"] = probas
+            ssv.attr_dict["axoness_preds_cnn_gt"] = np.argmax(probas, axis=1)
+            ssv.save_attr_dict()
+            ssv.cnn_axoness_2_skel(pred_key_appendix="_gt", k=1)
+            ssv.save_skeleton_to_kzip(kzip_p, additional_keys=["axoness_cnn_k1_gt",
+                                                               "axoness_fc4000_avgwind0",
+                                                               "axoness_fc8000_avgwind0"])
+            write_axpred(ssv, pred_key_appendix="_cnn_gt", k=1,
+                         dest_path=kzip_p)
+        if len(gt_candidates) == 100:
+            break
+    write_obj2pkl(dest_folder + "test_set.pkl", gt_candidates)
+    kml = knossos_ml_from_ccs(gt_candidates, [ssd_all.get_super_segmentation_object(ssv_ix).sv_ids for ssv_ix in gt_candidates])
+    write_txt2kzip(dest_folder + "test_set.k.zip", kml, "mergelist.txt")
+
+
+# model which is NOT trained on all samples, but on training samples
+# as defined in axgt_splitting_v3.pkl
+model_p = "/wholebrain/u/pschuber/CNN_Training/nupa_cnn/axoness_old/" \
+          "g4_axoness_v0_run3/g4_axoness_v0_run3-FINAL.mdl"
+def get_axoness_model():
+    m = NeuralNetworkInterface(model_p, imposed_batch_size=200, nb_labels=3)
+    _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
+    return m
+
+
+if __name__ == "__main__":
+    m = get_axoness_model()
+    # ssd_old = SuperSegmentationDataset("/wholebrain/scratch/areaxfs/",
+    #                                version="axgt_phil")
+    eval_valid = False
+    ssd = SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/",
+                                   version="axgt")
+    sbc = SkelClassifier("axoness", working_dir="/wholebrain/scratch/areaxfs3/", create=False)
+
+    # create test set candidates
+    if 1:
+        get_test_candidates()
+
+    # evaluate cnn on "pseude" train/valid set (views are different form actual views used during training)
+    # evaluate rfc on train and valid dataset
+    if 0:
+        working_dir = "/wholebrain/scratch/pschuber/cmn_paper/data/axoness_comparison/"
+        axgt_labels = load_pkl2obj("%s/ssv_axgt.pkl" % working_dir)
+        splitting = load_pkl2obj("%s/axgt_splitting_v3.pkl" % working_dir)
+        total_cnt = 0
+        total_proba_view = []
+        total_proba_node = []
+        total_proba_rfc = []
+        total_proba_rfc_large = []
+        total_labels_view = []
+        total_labels_node = []
+        total_labels_rfc = []
+        total_labels_rfc_large = []
+        for ssv in ssd.ssvs:
+            if not ssv.id in axgt_labels:
+                print "Skipping", ssv.id
+                continue
+            if eval_valid and not ssv.id in splitting["valid"]:
+                continue
+            if not eval_valid and not ssv.id in splitting["train"]:
+                continue
+            print "\n-------------------------"
+            print "[%d] Label: %d" % (ssv.id, axgt_labels[ssv.id])
+            if eval_valid:
+                assert ssv.id in splitting["valid"]
+            else:
+                assert ssv.id in splitting["train"]
+            ssv.load_attr_dict()
+            ssv.load_skeleton()
+            # ssv.predict_nodes(sbc, feature_context_nm=4000)
+            # ssv.predict_nodes(sbc, feature_context_nm=8000)
+            views = ssv.load_views()
+            assert len(views) == len(ssv.sample_locations())
+            # probas = m.predict_proba(np.concatenate(views))
+            # ssv.attr_dict["axoness_probas_cnn_gt"] = probas
+            # ssv.attr_dict["axoness_preds_cnn_gt"] = np.argmax(probas, axis=1)
+            # ssv.save_attr_dict()
+            # view performance
+            total_proba_view.append(ssv.attr_dict["axoness_probas_cnn_gt"])
+            total_labels_view.append([axgt_labels[ssv.id]]*len(ssv.attr_dict["axoness_preds_cnn_gt"]))
+            # transform to nodes
+            # ssv.cnn_axoness_2_skel(pred_key_appendix="_gt", k=1)
+            # node performance
+            total_proba_node.append(ssv.skeleton["axoness_cnn_k1_gt_probas"])
+            total_labels_node.append([axgt_labels[ssv.id]]*len(ssv.skeleton["axoness_cnn_k1_gt"]))
+            total_proba_rfc.append(ssv.skeleton["axoness_fc4000_avgwind0_proba"])
+            total_proba_rfc_large.append(ssv.skeleton["axoness_fc8000_avgwind0_proba"])
+            total_labels_rfc.append([axgt_labels[ssv.id]]*len(ssv.skeleton["axoness_fc4000_avgwind0"]))
+            total_labels_rfc_large.append([axgt_labels[ssv.id]]*len(ssv.skeleton["axoness_fc8000_avgwind0"]))
+            kzip_p = "%s/%d_%d_%s.k.zip" % (working_dir, axgt_labels[ssv.id], ssv.id, "train" if ssv.id in splitting["train"] else "valid")
+            ssv.save_skeleton_to_kzip(kzip_p, additional_keys=["axoness_cnn_k1", "axoness_fc4000_avgwind0", "axoness_fc8000_avgwind0"])
+            write_axpred(ssv, pred_key_appendix="_cnn_gt", k=1,
+                         dest_path=kzip_p)
+            print "-------------------------\n"
+        model_performance(np.concatenate(total_proba_view), np.concatenate(total_labels_view),
+                          model_dir=working_dir, prefix="cnn_views_%s" % ("vaild" if eval_valid else "train"))
+        model_performance(np.concatenate(total_proba_node), np.concatenate(total_labels_node),
+                          model_dir=working_dir, prefix="cnn_node-wise%s" % ("vaild" if eval_valid else "train"))
+        model_performance(np.concatenate(total_proba_rfc), np.concatenate(total_labels_rfc),
+                          model_dir=working_dir, prefix="rfc%s" % ("vaild" if eval_valid else "train"))
+        model_performance(np.concatenate(total_proba_rfc_large), np.concatenate(total_labels_rfc_large),
+                          model_dir=working_dir, prefix="rfc_large%s" % ("vaild" if eval_valid else "train"))

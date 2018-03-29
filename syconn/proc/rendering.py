@@ -543,7 +543,7 @@ def render_mesh_coords(coords, ind, vert, clahe=False, verbose=False, ws=(256, 1
         views at each coordinate
     """
     mesh = MeshObject(views_key, ind, vert)
-    mesh.colors = None
+    mesh._colors = None
     edge_lengths = np.array([comp_window, comp_window / 2, comp_window / 2])
     if verbose:
         start = time.time()
