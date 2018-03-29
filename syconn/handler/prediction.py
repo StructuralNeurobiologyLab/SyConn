@@ -42,9 +42,9 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75):
         label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
                                        verbose=False)
         label = label.astype(np.uint16)
-    except KeyError as e:
+    except Exception as e:
         print ("\n" + repr(e) + "\nLabels are set to zeros (background).")
-        label = np.zeros(size).astype(np.uint16)
+        label = np.zeros_like(raw).astype(np.uint16)
     return raw.astype(np.float32) / 255., label
 
 
@@ -251,7 +251,7 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None):
     print("Raw:", raw.shape, raw.dtype, raw.min(), raw.max())
     print("Label:", label.shape, label.dtype, label.min(), label.max())
     print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
-    if not fname[:-2] == "h5":
+    if not fname[-2:] == "h5":
         fname = fname + ".h5"
     save_to_h5py([raw, label], fname, hdf5_names=["raw", "label"])
 

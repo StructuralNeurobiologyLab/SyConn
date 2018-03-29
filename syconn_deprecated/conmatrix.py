@@ -5,8 +5,9 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-import matplotlib
-matplotlib.use('Agg')
+if "matplotlib" not in globals():
+    import matplotlib
+    matplotlib.use("agg")
 import matplotlib.colors as mcolors
 import matplotlib.pyplot as plt
 import numpy as np

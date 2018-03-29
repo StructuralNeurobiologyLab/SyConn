@@ -175,7 +175,7 @@ def apply_equalhist(arr):
     return normalize_img(equalizeHist(arr), max_val=1)
 
 
-def apply_clahe(arr, clipLimit=4.0, tileGridSize=None, ret_normalized=True):
+def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
     """
     If cv2 is available applies clahe filter on array.
 
@@ -183,7 +183,6 @@ def apply_clahe(arr, clipLimit=4.0, tileGridSize=None, ret_normalized=True):
     ----------
     arr : np.array
     clipLimit : float
-    tileGridSize : float
     ret_normalized : bool
 
     Returns
@@ -197,11 +196,18 @@ def apply_clahe(arr, clipLimit=4.0, tileGridSize=None, ret_normalized=True):
             raise ImportError("cv2 not properly installed:\n %s" % str(e))
     if arr.ndim == 2:
         arr = arr[..., None]
-    if arr.dtype != np.uint8:
-        arr = normalize_img(arr, max_val=255).astype(np.uint8)
-    clahe = createCLAHE(clipLimit=clipLimit, tileGridSize=tileGridSize)
+    if 0 < np.max(arr) <= 1:
+        arr = normalize_img(arr, max_val=255)
+    if arr.dtype.kind not in ('u', 'i'):
+        arr = arr.astype(np.uint8)
+    arr = apply_clahe_plain(arr, clipLimit)
     if ret_normalized:
-        return normalize_img(clahe.apply(arr), max_val=1)
+        return normalize_img(arr, max_val=1)
+    return arr
+
+
+def apply_clahe_plain(arr, clipLimit):
+    clahe = createCLAHE(clipLimit=clipLimit)
     return clahe.apply(arr)
 
 

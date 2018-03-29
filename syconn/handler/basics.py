@@ -400,7 +400,6 @@ def write_obj2pkl(path, objects):
                 pickle.dump(path, output, -1)
 
 
-
 def load_pkl2obj(path):
     """Loads pickle file of object
 

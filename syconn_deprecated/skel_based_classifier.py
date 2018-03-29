@@ -14,8 +14,9 @@ from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, AdaBo
 from sklearn.externals import joblib
 from sklearn.metrics import precision_recall_fscore_support, precision_recall_curve
 
-import matplotlib
-matplotlib.use("Agg")
+if "matplotlib" not in globals():
+    import matplotlib
+    matplotlib.use("agg")
 from matplotlib import pyplot as plt
 
 try:

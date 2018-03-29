@@ -540,7 +540,9 @@ class ConnectivityMatrix(object):
             artificially increase pixel size from 1 to 3 for better visualization
         """
         from matplotlib import gridspec
-        import matplotlib.pyplot as plt
+        if "matplotlib" not in globals():
+            import matplotlib
+            matplotlib.use("agg")
         if cum:
             entry_width = 1
 

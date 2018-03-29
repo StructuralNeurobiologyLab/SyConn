@@ -170,10 +170,12 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
         "Point cloud used for mesh generation has wrong shape."
     if pts.ndim == 2:
+        if np.max(pts) <= 1:
+            raise ValueError("Currently this function only supports point clouds with coordinates >> 1.")
         offset = np.min(pts, axis=0)
         pts -= offset
         extent_orig = np.max(pts, axis=0)
-        pts = (pts / downsampling).astype(np.uint16)
+        pts = (pts / downsampling).astype(np.uint32)
         # add zero boundary around object
         pts += 5
         bb = np.max(pts, axis=0) + 5
