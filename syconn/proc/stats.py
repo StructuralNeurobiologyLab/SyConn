@@ -4,6 +4,9 @@
 import numpy as np
 import os
 import seaborn as sns
+if "matplotlib" not in globals():
+    import matplotlib
+    matplotlib.use("agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.ticker as ticker

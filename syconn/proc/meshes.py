@@ -168,12 +168,13 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20)):
     #  TODO: check offset again!
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
         "Point cloud used for mesh generation has wrong shape."
-    downsampling = np.array(downsampling, dtype=np.uint8)
     if pts.ndim == 2:
+        if np.max(pts) <= 1:
+            raise ValueError("Currently this function only supports point clouds with coordinates >> 1.")
         offset = np.min(pts, axis=0)
         pts -= offset
         extent_orig = np.max(pts, axis=0)
-        pts = (pts / downsampling).astype(np.uint16)
+        pts = (pts / downsampling).astype(np.uint32)
         # add zero boundary around object
         pts += 5
         bb = np.max(pts, axis=0) + 5
@@ -192,7 +193,7 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20)):
     volume = gaussianSmoothing(dt, scaling[0], step_size=scaling) # this works because only the relative step_size between the dimensions is interesting, therefore we can neglect shrink_fct
     if np.sum(volume<0) == 0: # less smoothing
         volume = gaussianSmoothing(dt, scaling[0]/2, step_size=scaling)
-    verts, ind, norm, _ = measure.marching_cubes(volume, 0, gradient_direction="descent") # also calculates normals!
+    verts, ind, norm, _ = measure.marching_cubes_lewiner(volume, 0, gradient_direction="descent") # also calculates normals!
     verts -= np.min(verts, axis=0)
     extent_post = np.max(verts, axis=0)
     new_fact = extent_orig / extent_post # scale independent for each dimension, s.t. the bounding box coords are the same

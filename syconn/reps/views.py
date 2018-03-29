@@ -69,6 +69,9 @@ class ViewContainer(object):
         return views
 
     def plot(self, fig=None, view_nb=0):
+        if "matplotlib" not in globals():
+            import matplotlib
+            matplotlib.use("agg")
         import matplotlib.pyplot as plt
         import matplotlib.ticker as ticker
         tick_spacing = 40

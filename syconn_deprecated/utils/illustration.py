@@ -5,7 +5,9 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-
+if "matplotlib" not in globals():
+    import matplotlib
+    matplotlib.use("agg")
 import matplotlib.cm as cmx
 import matplotlib.colors as colors
 from ..processing.synapticity import syn_sign_prediction

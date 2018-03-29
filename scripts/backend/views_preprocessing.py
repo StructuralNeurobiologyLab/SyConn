@@ -38,7 +38,7 @@ from shutil import copyfile
 #         sys.stdout.flush()
 
 
-def mesh_creator(so, force=True):
+def mesh_creator(so, force=False):
     if not force:
         _ = so.mesh
     else:
@@ -217,6 +217,14 @@ if __name__ == "__main__":
     # mesh_proc_chunked("vc")
     # mesh_proc_chunked("mi")
     start_multiprocess(mesh_creator_sso, list(ssds.ssvs), nb_cpus=20, debug=False)
+
+
+    sds = SegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/", ssd_type="conn")
+    # mesh_proc_chunked("sj")
+    # mesh_proc_chunked("vc")
+    # mesh_proc_chunked("mi")
+    start_multiprocess(mesh_creator, list(sds.sos), nb_cpus=20, debug=False)
+
     # start_multiprocess(write_meshs_helper, list(ssds.ssvs), nb_cpus=20)
     # start_multiprocess(write_meshs_helper, list(ssds.ssvs), nb_cpus=20)
 
