@@ -1085,8 +1085,9 @@ def get_pca_view_hists(sso, t_net, pca):
 
 def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(),
                        special_markers=(), special_kwargs=()):
-    import matplotlib
-    matplotlib.use("Agg")
+    if "matplotlib" not in globals():
+        import matplotlib
+        matplotlib.use("agg")
     import matplotlib.pyplot as plt
     import matplotlib.ticker as ticker
     views = np.concatenate(sso.load_views())

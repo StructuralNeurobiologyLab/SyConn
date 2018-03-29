@@ -39,12 +39,23 @@ from ..proc.image import single_conn_comp_img
 from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
 from ..proc.meshes import write_mesh2kzip, merge_someshs, compartmentalize_mesh
 from ..proc.rendering import render_sampled_sso, comp_window, \
-    multi_render_sampled_svidlist, render_sso_coords, multi_view_sso
+    multi_render_sampled_svidlist, render_sso_coords
+if "matplotlib" not in globals():
+    import matplotlib
+    matplotlib.use("agg")
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
-
+skeletopyze_available = False
+attempted_skeletopyze_import = False
+try:
+    import skeletopyze
+    skeletopyze_available = True
+except:
+    skeletopyze_available = False
+    # print "skeletopyze not found - you won't be able to compute skeletons. " \
+    #       "Install skeletopyze from https://github.com/funkey/skeletopyze"
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
