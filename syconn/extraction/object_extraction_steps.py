@@ -142,9 +142,9 @@ def object_segmentation(cset, filename, hdf5names,
 
         overlap = np.ceil(max_sigma * 4) + stitch_overlap
 
-    print("overlap:", overlap)
+    # print("overlap:", overlap)
 
-    print("thresholds:", thresholds)
+    # print("thresholds:", thresholds)
 
     multi_params = []
     for nb_chunk in chunk_list:
@@ -1007,7 +1007,7 @@ def _combine_voxels_thread(args):
                              disable_locking=True)
 
         for so_id in path_block_dicts[i_voxel_rel_path]:
-            print(so_id)
+            # print(so_id)
             fragments = path_block_dicts[i_voxel_rel_path][so_id]
             for i_fragment_id in range(len(fragments)):
                 fragment_id = fragments[i_fragment_id][0]
