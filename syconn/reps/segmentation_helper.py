@@ -68,8 +68,9 @@ def save_voxels(so, bin_arr, offset, overwrite=False):
 
 def load_voxels(so, voxel_dc=None):
     if voxel_dc is None:
-        voxel_dc = VoxelDict(so.voxel_path, read_only=True,
-                                   disable_locking=not so.enable_locking)
+        voxel_dc = VoxelDict(so.voxel_path,
+                             read_only=True,
+                             disable_locking=True)
 
     so._size = 0
     if so.id not in voxel_dc:

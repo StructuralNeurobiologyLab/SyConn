@@ -160,9 +160,6 @@ def trafo_objects_to_sd(realign_map, sd_obj_type, working_dir,
 
     voxel_rel_path = rh.subfold_from_ix(obj_ids[0], sd_n_folders_fs)
 
-
-    return obj_ids
-
     mean_shift_dict = {}
     time_start = time.time()
     for i_obj_id, obj_id in enumerate(obj_ids):

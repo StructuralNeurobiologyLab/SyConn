@@ -7,6 +7,7 @@
 
 import cPickle as pkl
 import getpass
+import glob
 import numpy as np
 import os
 import re
@@ -23,7 +24,7 @@ try:
         subprocess.check_call('qstat', shell=True,
                                 stdout=devnull, stderr=devnull)
 except subprocess.CalledProcessError:
-    print "QSUB not found, switching to single node multiprocessing."
+    print("QSUB not found, switching to single node multiprocessing.")
     __QSUB__ = False
 
 home_dir = os.environ['HOME'] + "/"
@@ -81,14 +82,14 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         letters = string.ascii_lowercase
         job_name = "".join([letters[l] for l in
                             np.random.randint(0, len(letters), 10)])
-        print "Random job_name created: %s" % job_name
+        print("Random job_name created: %s" % job_name)
     else:
-        print "WARNING: running multiple jobs via qsub is only supported " \
-              "with non-default job_names"
+        print("WARNING: running multiple jobs via qsub is only supported " \
+              "with non-default job_names")
 
     if len(job_name) > 10:
-        print "WARNING: Your job_name is longer than 10. job_names have " \
-              "to be distinguishable with only using their first 10 characters."
+        print("WARNING: Your job_name is longer than 10. job_names have " \
+              "to be distinguishable with only using their first 10 characters.")
 
     if script_folder is not None:
         path_to_scripts = script_folder
@@ -123,9 +124,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if not os.path.exists(path_to_out):
         os.makedirs(path_to_out)
 
-    print "Number of jobs:", len(params)
+    print("Number of jobs:", len(params))
 
     time_start = time.time()
+    sleep_time = 1
     last_diff_rp = 0
     for i_job in range(len(params)):
         if n_max_co_processes is not None:
@@ -135,11 +137,13 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
                 if last_diff_rp == 0:
                     progress = float(i_job - n_max_co_processes) / len(params) * 100
-                    print 'Progress: %.2f%% in %.2fs' % \
-                          (progress, time.time() - time_start)
-                    time.sleep(5.)
+                    print('Progress: %.2f%% in %.2fs' % \
+                          (progress, time.time() - time_start))
+                    time.sleep(sleep_time)
+                    sleep_time = 5
 
             last_diff_rp -= 1
+            sleep_time = 1
 
         this_storage_path = path_to_storage+"job_%d.pkl" % i_job
         this_sh_path = path_to_sh+"job_%d.sh" % i_job
@@ -169,11 +173,24 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             sge_additional_flags,
             this_sh_path), shell=True)
 
-    print "All jobs are submitted: %s" % name
+    print("All jobs are submitted: %s" % name)
     while True:
         if show_progress(job_name, len(params), time.time() - time_start):
             break
         time.sleep(5.)
+
+    out_files = glob.glob(path_to_out + "*.pkl")
+    if len(out_files) < len(params):
+        print("%d jobs appear to have failed" % (len(params) - len(out_files)))
+        checklist = np.zeros(len(params), dtype=np.bool)
+
+        for p in out_files:
+            checklist[int(re.findall("[\d]+", p)[-1])] = True
+
+        print("Missing:")
+        print(np.where(~checklist)[0])
+
+        raise Exception("No success")
 
     return path_to_out
 
