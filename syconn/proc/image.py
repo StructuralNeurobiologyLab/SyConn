@@ -20,6 +20,7 @@ import warnings
 from scipy import spatial, sparse, ndimage
 from sklearn.decomposition import PCA
 
+
 def find_contactsite(coords_a, coords_b, max_hull_dist=1):
     """
     Computes contact sites between supver voxels and returns contact site voxel
@@ -151,7 +152,7 @@ def rgb2gray(rgb):
 
 def apply_equalhist(arr):
     """
-    If cv2 is available applies clahe filter on array.
+    If cv2 is available applies histogram normalization on array.
 
     Parameters
     ----------
@@ -195,11 +196,18 @@ def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
             raise ImportError("cv2 not properly installed:\n %s" % str(e))
     if arr.ndim == 2:
         arr = arr[..., None]
-    if arr.dtype != np.uint8:
-        arr = normalize_img(arr, max_val=255).astype(np.uint8)
-    clahe = createCLAHE(clipLimit=clipLimit)
+    if 0 < np.max(arr) <= 1:
+        arr = normalize_img(arr, max_val=255)
+    if arr.dtype.kind not in ('u', 'i'):
+        arr = arr.astype(np.uint8)
+    arr = apply_clahe_plain(arr, clipLimit)
     if ret_normalized:
-        return normalize_img(clahe.apply(arr), max_val=1)
+        return normalize_img(arr, max_val=1)
+    return arr
+
+
+def apply_clahe_plain(arr, clipLimit):
+    clahe = createCLAHE(clipLimit=clipLimit)
     return clahe.apply(arr)
 
 

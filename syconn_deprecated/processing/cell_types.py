@@ -4,7 +4,9 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
-
+if "matplotlib" not in globals():
+    import matplotlib
+    matplotlib.use("agg")
 import matplotlib.pyplot as plt
 
 from learning_rfc import *

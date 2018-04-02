@@ -28,6 +28,7 @@ from syconn.mp.shared_mem import start_multiprocess
 def mesh_creator_sso(ssv):
     # try:
     ssv.load_attr_dict()
+    ssv._map_cellobjects()
     _ = ssv._load_obj_mesh(obj_type="mi", rewrite=False)
     _ = ssv._load_obj_mesh(obj_type="sj", rewrite=False)
     _ = ssv._load_obj_mesh(obj_type="vc", rewrite=False)
@@ -46,4 +47,4 @@ if __name__ == "__main__":
     # da das aber overkill ist (und der stride bei default auch zu gross ist fuer das mini dataset), reicht
     ssd.save_dataset_deep(nb_cpus=20, stride=5)
 
-    start_multiprocess(mesh_creator_sso, list(ssd.ssvs), nb_cpus=20, debug=False)
+    # start_multiprocess(mesh_creator_sso, list(ssd.ssvs), nb_cpus=20, debug=False)

@@ -217,7 +217,8 @@ def coordpath2anno(coords, scaling=(10, 10, 20), add_edges=True):
     return anno
 
 
-def get_filepaths_from_dir(directory, ending='k.zip', recursively=False):
+def get_filepaths_from_dir(directory, ending=('k.zip'), recursively=False,
+                           exclude_endings=False):
     """
     Collect all files with certain ending from directory.
 
@@ -225,8 +226,8 @@ def get_filepaths_from_dir(directory, ending='k.zip', recursively=False):
     ----------
     directory: str
         path to lookup directory
-    ending: str
-        ending of files
+    ending: tuple/list/str
+        ending(s) of files
     recursively: boolean
         add files from subdirectories
 
@@ -235,12 +236,28 @@ def get_filepaths_from_dir(directory, ending='k.zip', recursively=False):
     list of str
         paths to files
     """
+    # make it backwards compatible
+    if type(ending) is str:
+        ending = [ending]
+    files = []
     if recursively:
-        files = [os.path.join(r, f) for r,s ,fs in
-                 os.walk(directory) for f in fs if ending in f[-len(ending):]]
+        for r, s, fs in os.walk(directory):
+            for f in fs:
+                corr_end = np.any(
+                    [f[-len(end):] == end for end in ending])
+                if exclude_endings:
+                    corr_end = not corr_end
+                if corr_end:
+                    files.append(os.path.join(r, f))
+
     else:
-        files = [os.path.join(directory, f) for f in next(os.walk(directory))[2]
-                 if ending in f[-len(ending):]]
+        for f in next(os.walk(directory))[2]:
+            corr_end = np.any(
+                [f[-len(end):] == end for end in ending])
+            if exclude_endings:
+                corr_end = not corr_end
+            if corr_end:
+                files.append(os.path.join(directory, f))
     return files
 
 
@@ -381,7 +398,6 @@ def write_obj2pkl(path, objects):
                           "'objects' (python object).", DeprecationWarning)
             with open(objects, 'wb') as output:
                 pickle.dump(path, output, -1)
-
 
 
 def load_pkl2obj(path):

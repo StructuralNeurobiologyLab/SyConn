@@ -420,7 +420,8 @@ def sos_dict_fact(svixs, version="0", scaling=(10, 10, 20), obj_type="sv",
 
 
 def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
-                      verbose=False, raw_only=False):
+                      verbose=False, raw_only=False, single_cc_only=False,
+                      return_proba=False):
     nb_chunks = np.max([1, len(sos) / 50])
     so_chs = basics.chunkify(sos, nb_chunks)
     for ch in so_chs:
@@ -430,10 +431,10 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
         for kk in range(len(views)):
             data = views[kk]
             for i in range(len(data)):
-                sing_cc = np.concatenate([
-                                             single_conn_comp_img(data[i, 0, :1]),
-                                             single_conn_comp_img(data[i, 0, 1:])])
-                data[i, 0] = sing_cc
+                if single_cc_only:
+                    sing_cc = np.concatenate([single_conn_comp_img(data[i, 0, :1]),
+                                              single_conn_comp_img(data[i, 0, 1:])])
+                    data[i, 0] = sing_cc
             views[kk] = data
         part_views = np.cumsum([0] + [len(v) for v in views])
         views = np.concatenate(views)
@@ -444,6 +445,8 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
             so_probas.append(sv_probas)
             # so.attr_dict[key] = sv_probas
         assert len(so_probas) == len(ch)
+        if return_proba:
+            return so_probas
         params = [[so, prob, pred_key] for so, prob in zip(ch, so_probas)]
         sm.start_multiprocess(multi_probas_saver, params, nb_cpus=nb_cpus)
 

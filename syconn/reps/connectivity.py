@@ -5,6 +5,10 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
+if not "matplotlib" not in globals():
+    import matplotlib
+    matplotlib.use("agg")
+
 import glob
 import os
 import re
@@ -535,10 +539,10 @@ class ConnectivityMatrix(object):
         big_entries : bool
             artificially increase pixel size from 1 to 3 for better visualization
         """
-        import matplotlib
-        matplotlib.use("agg")
         from matplotlib import gridspec
-        import matplotlib.pyplot as plt
+        if "matplotlib" not in globals():
+            import matplotlib
+            matplotlib.use("agg")
         if cum:
             entry_width = 1
 

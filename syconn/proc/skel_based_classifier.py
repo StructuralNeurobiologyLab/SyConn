@@ -14,8 +14,9 @@ from collections import Counter
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, AdaBoostClassifier
 from sklearn.externals import joblib
 from sklearn.metrics import precision_recall_fscore_support, precision_recall_curve
-import matplotlib
-matplotlib.use("Agg")
+if "matplotlib" not in globals():
+    import matplotlib
+    matplotlib.use("agg")
 from matplotlib import pyplot as plt
 
 import skel_based_classifier_helper as sbch
@@ -44,7 +45,7 @@ colors = {"axgt": [colorVals[0], ".7", ".3"],
 
 legend_labels = {"axgt": ("Axon", "Dendrite", "Soma"),
                  "ctgt": ("EA", "MSN", "GP", "INT"),
-                 "spgt": {"Shaft", "Head", "Neck"}}
+                 "spgt": ("Shaft", "Head")}#, "Neck")}
 
 comment_converter = {"axgt": {"soma": 2, "axon": 1, "dendrite": 0},
                      "spgt": {"shaft": 0, "head": 1, "neck":2},
@@ -260,7 +261,12 @@ class SkelClassifier(object):
                 # only use features where we have specified labels
                 this_labels = np.load(labels_fname)
                 this_feats = this_feats[this_labels != -1]
-                this_labels = this_labels[this_labels == -1]
+                this_labels = this_labels[this_labels != -1]
+                if self.target_type == "spiness":
+                    # set neck labels to shaft labels, and then as a postporcessing assign skeleton ndoes between branch point and spine head as neck
+                    this_labels[this_labels == 2] = 0
+                this_feats = this_feats.tolist()
+                this_labels = this_labels.tolist()
                 cnt = Counter(this_labels)
                 print("Found node specific labels in SSV %d. %s" %
                       (sso_id, cnt))

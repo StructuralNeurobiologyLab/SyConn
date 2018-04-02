@@ -42,8 +42,9 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75):
         label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
                                        verbose=False)
         label = label.astype(np.uint16)
-    except:
-        label = None
+    except Exception as e:
+        print ("\n" + repr(e) + "\nLabels are set to zeros (background).")
+        label = np.zeros_like(raw).astype(np.uint16)
     return raw.astype(np.float32) / 255., label
 
 
@@ -100,7 +101,8 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5, mfp_active=False,
 
 def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
                gpu_ix=0, imposed_patch_size=None, hdf5_data_key=None,
-               data_is_zxy=True):
+               data_is_zxy=True, dest_p=None, dest_hdf5_data_key="pred",
+               as_uint8=True):
     """
     Predicts data from h5 file. Assumes raw data is already float32.
 
@@ -120,6 +122,8 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
         'load_from_h5py'
     data_is_zxy : bool
         if False, it will assumes data is [X, Y, Z]
+    as_uint8: bool
+    dest_p : str
     """
     raw = load_from_h5py(h5_path, hdf5_names=[hdf5_data_key] if hdf5_data_key else
                          None)[0]
@@ -135,9 +139,15 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     if not data_is_zxy:
         pred = zxy2xyz(pred)
         raw = zxy2xyz(raw)
+    if as_uint8:
+        pred = (pred * 255).astype(np.uint8)
     if clf_thresh:
         pred = (pred >= clf_thresh).astype(np.float32)
-    save_to_h5py([raw, pred], h5_path, [hdf5_data_key, "pred"])
+    if dest_p is None:
+        dest_p = h5_path
+    if hdf5_data_key is None:
+        hdf5_data_key = "raw"
+    save_to_h5py([raw, pred], dest_p, [hdf5_data_key, dest_hdf5_data_key])
 
 
 def overlaycubes2kzip(dest_p, vol, offset, kd_path):
@@ -239,10 +249,11 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None):
     """
     label = binarize_labels(label, foreground_ids)
     label = xyz2zxy(label)
+    raw = xyz2zxy(raw)
     print("Raw:", raw.shape, raw.dtype, raw.min(), raw.max())
     print("Label:", label.shape, label.dtype, label.min(), label.max())
     print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
-    if not fname[:-2] == "h5":
+    if not fname[-2:] == "h5":
         fname = fname + ".h5"
     save_to_h5py([raw, label], fname, hdf5_names=["raw", "label"])
 
@@ -306,8 +317,9 @@ def parse_movement_area_from_zip(zip_fname):
     return np.concatenate([bb_min, bb_max])
 
 
-def pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
-                 mfp_active=False, gpu_ix=0,overwrite=True):
+def pred_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
+                 imposed_patch_size=None, mfp_active=False, gpu_ix=0,
+                 overwrite=True, debug=False, chunk_size=(512, 512, 256)):
     """
     Runs prediction on whole knossos dataset.
     Imposed patch size has to be given in Z, X, Y!
@@ -315,21 +327,28 @@ def pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     Parameters
     ----------
     kd_p : str
-        path to knossos dataset .conf file
-    kd_pred_p : str
-        path to the knossos dataset head folder which will contain the prediction
-    cd_p : str
-        destination folder for chunk dataset containing prediction
+        path to knossos.conf file corresponding to raw dataset
+    kd_pred_folder : str
+        path to the knossos dataset head folder which will contain the
+        prediction
+    cd_folder : str
+        destination folder for ChunkDataset which contains prediction
+        (intermediate step)
     model_p : str
         path tho ELEKTRONN2 model
     imposed_patch_size : tuple or None
         patch size (Z, X, Y) of the model
     mfp_active : bool
-        activate max-fragment pooling (might be necessary to change patch_size)
+        activate max-fragment pooling (it might be necessary to change
+        patch_size if enabled)
     gpu_ix : int
-    |   the GPU to be used
+        the GPU to be used (index as given by 'nvidia-smi')
     overwrite : bool
-    |   True: fresh predictions ; False: earlier prediction continues
+        True: fresh predictions ; False: earlier prediction continues
+    debug : bool
+        writes out raw data to chunk .h5 files
+    chunk_size : tuple
+        chunk size for ChunkDataset (x, y, z)
         
 
     Returns
@@ -346,34 +365,33 @@ def pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     m.dropout_rates = ([0.0, ] * len(original_do_rates))
     # print kd.boundary
     offset = m.target_node.shape.offsets
-    offset = np.array([offset[1], offset[2], offset[0]], dtype=np.int)
+    overlap = np.array([offset[1], offset[2], offset[0]]) * 1.5  # add some safety margin
     cd = ChunkDataset()
-    cd.initialize(kd, kd.boundary, [512, 512, 256], cd_p, overlap=offset, box_coords=np.zeros(3), fit_box_size=True)
+    chunk_size = np.min([kd.boundary, chunk_size], axis=0)
+    cd.initialize(kd, kd.boundary, chunk_size, cd_folder,
+                  overlap=overlap.astype(np.int), box_coords=np.zeros(3), fit_box_size=True)
     nb_ch = len(cd.chunk_dict.keys())
     print("Starting prediction of %d chunks.\n" % nb_ch)
     cnt = 0
     if not overwrite:
-        ch_dc = cd.chunk_dict
-        for chunk in cd.chunk_dict.values():
-            sys.stdout.write("%d/%d" % (cnt, nb_ch))
+        for k, chunk in cd.chunk_dict.iteritems():
+            sys.stdout.write("[%d/%d]" % (cnt, nb_ch))
             try:
-                ch = ch_dc[cnt]
-                _ = ch.load_chunk("pred")[0]
+                _ = chunk.load_chunk("pred")[0]
                 cnt += 1
             except Exception as e:
-                chunk_pred(chunk, m)
+                chunk_pred(chunk, m, debug=debug)
                 cnt += 1
     else:
         for chunk in cd.chunk_dict.values():
-            sys.stdout.write("%d/%d" % (cnt, nb_ch))
-            chunk_pred(chunk, m)
+            sys.stdout.write("[%d/%d]" % (cnt, nb_ch))
+            chunk_pred(chunk, m, debug=debug)
             cnt += 1
     save_dataset(cd)
     kd_pred = KnossosDataset()
-    kd_pred.initialize_without_conf(kd_pred_p, kd.boundary, kd.scale,
-                                    kd.experiment_name, mags=[1])
-    cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [2, 2], as_raw=True,
-                         stride=[150, 150, 150])
+    kd_pred.initialize_without_conf(kd_pred_folder, kd.boundary, kd.scale,
+                                    kd.experiment_name, mags=[1, 2, 4, 8])
+    cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True)
 
 
 def prediction_helper(raw, model, override_mfp=True,
@@ -418,7 +436,7 @@ def prediction_helper(raw, model, override_mfp=True,
     return zxy2xyz(pred)
 
 
-def chunk_pred(ch, model):
+def chunk_pred(ch, model, debug=False):
     """
     Helper function to write chunks.
 
@@ -431,4 +449,6 @@ def chunk_pred(ch, model):
     pred = prediction_helper(raw, model) * 255
     pred = pred.astype(np.uint8)
     ch.save_chunk(pred, "pred", "pred", overwrite=True)
+    if debug:
+        ch.save_chunk(raw, "pred", "raw", overwrite=False)
 

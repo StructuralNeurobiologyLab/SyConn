@@ -40,7 +40,7 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
             for z in range(offset[2], offset[2]+size[2], cset.chunk_size[2]):
                 chunk_list.append(cset.coord_dict[tuple([x, y, z])])
                 translator[chunk_list[-1]] = len(chunk_list)-1
-    print "Chunk List contains %d elements." % len(chunk_list)
+    print("Chunk List contains %d elements." % len(chunk_list))
     return chunk_list, translator
 
 
@@ -60,7 +60,9 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                                   suffix="",
                                   qsub_pe=None,
                                   qsub_queue=None,
-                                  n_max_co_processes=None):
+                                  n_max_co_processes=None,
+                                  transform_func=None,
+                                  func_kwargs=None):
     """
     Main function for the object extraction step; combines all needed steps
     Parameters
@@ -116,6 +118,10 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
         qsub parallel environment
     qsub_queue: str or None
         qsub queue
+    transform_func: callable
+        Segmentation method which is applied
+    func_kwargs : dict
+        key word arguments for transform_func
     """
     all_times = []
     step_names = []
@@ -152,17 +158,16 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     # --------------------------------------------------------------------------
 
     time_start = time.time()
-    cc_info_list, overlap_info = oes.gauss_threshold_connected_components(
-        cset, filename,
-        hdf5names, overlap, sigmas, thresholds,
-        chunk_list, debug,
-        swapdata,
+    cc_info_list, overlap_info = oes.object_segmentation(
+        cset, filename, hdf5names, overlap=overlap, sigmas=sigmas,
+        thresholds=thresholds, chunk_list=chunk_list, debug=debug,
+        swapdata=swapdata,
         prob_kd_path_dict=prob_kd_path_dict,
         membrane_filename=membrane_filename,
         membrane_kd_path=membrane_kd_path,
         hdf5_name_membrane=hdf5_name_membrane,
         fast_load=True, suffix=suffix,
-        qsub_pe=qsub_pe,
+        qsub_pe=qsub_pe, transform_func=transform_func, func_kwargs=func_kwargs,
         qsub_queue=qsub_queue,
         n_max_co_processes=n_max_co_processes)
 
@@ -170,7 +175,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     overlap = overlap_info[0]
     all_times.append(time.time() - time_start)
     step_names.append("conneceted components")
-    print "\nTime needed for connected components: %.3fs" % all_times[-1]
+    print("\nTime needed for connected components: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
@@ -193,8 +198,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                                     nb_cc_dict[hdf5_name][-1])
     all_times.append(time.time() - time_start)
     step_names.append("extracting max labels")
-    print "\nTime needed for extracting max labels: %.6fs" % all_times[-1]
-    print "Max labels: ", max_labels
+    print("\nTime needed for extracting max labels: %.6fs" % all_times[-1])
+    print("Max labels: ", max_labels)
 
     # --------------------------------------------------------------------------
 
@@ -205,7 +210,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                            n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
-    print "\nTime needed for unique labels: %.3fs" % all_times[-1]
+    print("\nTime needed for unique labels: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
@@ -217,7 +222,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                                        n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
-    print "\nTime needed for stitch list: %.3fs" % all_times[-1]
+    print("\nTime needed for stitch list: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
@@ -226,9 +231,9 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                                                       max_labels)
     all_times.append(time.time() - time_start)
     step_names.append("merge list")
-    print "\nTime needed for merge list: %.3fs" % all_times[-1]
-    if all_times[-1] < 0.01:
-        raise Exception("That was too fast!")
+    print("\nTime needed for merge list: %.3fs" % all_times[-1])
+    # if all_times[-1] < 0.01:
+    #     raise Exception("That was too fast!")
 
     # -------------------------------------------------------------------------
 
@@ -238,7 +243,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                          qsub_queue=qsub_queue, n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
-    print "\nTime needed for applying merge list: %.3fs" % all_times[-1]
+    print("\nTime needed for applying merge list: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
@@ -250,7 +255,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                        n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
-    print "\nTime needed for extracting voxels: %.3fs" % all_times[-1]
+    print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
@@ -264,12 +269,12 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
-    print "\nTime overview:"
+    print("\nTime overview:")
     for ii in range(len(all_times)):
-        print "%s: %.3fs" % (step_names[ii], all_times[ii])
-    print "--------------------------"
-    print "Total Time: %.1f min" % (np.sum(all_times) / 60)
-    print "--------------------------\n\n"
+        print("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    print("--------------------------")
+    print("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    print("--------------------------\n\n")
 
 
 def from_probabilities_to_objects_parameter_sweeping(cset,
@@ -349,7 +354,7 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
 
     all_times = []
     for nb, t in enumerate(thresholds):
-        print "\n\n ======= t = %.2f =======" % t
+        print("\n\n ======= t = %.2f =======" % t)
         time_start = time.time()
         from_probabilities_to_objects(cset, filename, hdf5names,
                                       overlap=overlap, sigmas=sigmas,
@@ -368,12 +373,12 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
                                       debug=False)
         all_times.append(time.time() - time_start)
 
-    print "\n\nTime overview:"
+    print("\n\nTime overview:")
     for ii in range(len(all_times)):
-        print "t = %.2f: %.1f min" % (thresholds[ii], all_times[ii] / 60)
-    print "--------------------------"
-    print "Total Time: %.1f min" % (np.sum(all_times) / 60)
-    print "--------------------------\n"
+        print("t = %.2f: %.1f min" % (thresholds[ii], all_times[ii] / 60))
+    print("--------------------------")
+    print("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    print("--------------------------\n")
 
 
 def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
