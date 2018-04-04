@@ -63,8 +63,14 @@ class MeshObject(object):
     def colors(self):
         if self._ext_color is None:
             self._colors = np.ones(len(self.vertices) / 3 * 4) * 0.5
-        else:
+        elif np.isscalar(self._ext_color):
             self._colors = np.array(len(self.vertices) / 3 * [self._ext_color]).flatten()
+        else:
+            if np.ndim(self._ext_color) == 2:
+                self._ext_color = self._ext_color.flatten()
+            assert len(self._ext_color) == len(self.vertices), "len(ext_color)/4 must " \
+                                                 "be equal to len(vertices)/3."
+            self._colors = self._ext_color
         return self._colors
 
     @property

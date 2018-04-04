@@ -235,7 +235,8 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
 
     Returns
     -------
-
+    np.array
+        shape: (nb_views, ws[0], ws[1]
     """
     ctx = init_ctx(ws)
     init_opengl(ws, enable_lightning, depth_map=depth_map)
