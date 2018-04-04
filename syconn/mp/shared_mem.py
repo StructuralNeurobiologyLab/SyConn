@@ -5,7 +5,11 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
-import cPickle as pkl
+try:
+    import cPickle as pkl
+# TODO: switch to Python3 at some point and remove above
+except Exception:
+    import pickle as pkl
 import getpass
 from multiprocessing import cpu_count, Process
 import multiprocessing.pool

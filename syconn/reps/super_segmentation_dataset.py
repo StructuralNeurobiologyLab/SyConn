@@ -7,8 +7,9 @@
 
 try:
     import cPickle as pkl
-except:
-    import Pickle as pkl
+# TODO: switch to Python3 at some point and remove above
+except Exception:
+    import pickle as pkl
 
 import numpy as np
 import re

@@ -2,7 +2,13 @@
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 import matplotlib
+
 matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import matplotlib.ticker as ticker
+import seaborn as sns
+sns.reset_orig()
 import sys
 import time
 import numpy as np
@@ -217,6 +223,105 @@ def get_axoness_model():
     return m
 
 
+def plot_bars(ind, values, title='', legend_labels=None,
+            save_path=None, colorVals=None, r_x=None, xtick_rotation=0,
+            xlabel='', ylabel='', l_pos="upper right",
+            legend=True, ls=22, xtick_labels=(), width=None):
+
+    if width == None:
+        width = 0.35
+
+    def array2_xls(dest_p, arr):
+        import xlsxwriter
+
+        workbook = xlsxwriter.Workbook(dest_p)
+        worksheet = workbook.add_worksheet()
+        col = 0
+
+        for row, data in enumerate(arr):
+            worksheet.write_row(row, col, data)
+
+        workbook.close()
+
+    fig, ax = plt.subplots()
+    fig.patch.set_facecolor('white')
+    ax.tick_params(axis='x', which='major', labelsize=ls, direction='out',
+                   length=4, width=3, right="off", top="off", pad=10)
+    ax.tick_params(axis='y', which='major', labelsize=ls, direction='out',
+                   length=4, width=3, right="off", top="off", pad=10)
+
+    ax.tick_params(axis='x', which='minor', labelsize=ls, direction='out',
+                   length=4, width=3, right="off", top="off", pad=10)
+    ax.tick_params(axis='y', which='minor', labelsize=ls, direction='out',
+                   length=4, width=3, right="off", top="off", pad=10)
+
+    ax.spines['left'].set_linewidth(3)
+    ax.spines['bottom'].set_linewidth(3)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
+    plt.title(title)
+
+    plt.xlabel(xlabel, fontsize=ls)
+    plt.ylabel(ylabel, fontsize=ls)
+
+    if save_path is not None:
+        dest_dir, fname = os.path.split(save_path)
+        if legend_labels is not None:
+            ll = [["legend labels"] + list(legend_labels)]
+        else:
+            ll = [[]]
+        array2_xls(dest_dir + "/" + os.path.splitext(fname)[0] + ".xlsx", ll + [["labels", xlabel, ylabel]] + [xtick_labels] + [ind] + [list(arr) for arr in values])
+
+    handles = []
+    for ii in range(len(values)):
+        rects = ax.bar(ind+width/len(values)*(ii-len(values)//2), values[ii], width/len(values), color=colorVals[ii])
+    for ii in range(len(values)):
+        handles.append(patches.Patch(color=colorVals[ii],
+                                     label=legend_labels[ii]))
+
+    if legend:
+        ax.legend(handles=handles, frameon=False,
+                   prop={'size': ls}, loc='upper right')
+    if plt.xlim(r_x) is not None:
+        plt.xlim(r_x)
+    ax.set_xticks(ind)
+    if len(xtick_labels) > 0:
+        # ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+        ax.set_xticklabels(xtick_labels, rotation=xtick_rotation)
+    plt.tight_layout()
+    if save_path is None:
+        plt.show(block=False)
+    else:
+        plt.savefig(save_path, dpi=400)
+
+
+def plot_axoness_comparison():
+    name = ["skel_4000", "skel_8000", "cnn_k1", "skel_4000_wo2", "skel_8000_wo2"]
+    xtick_labels = ["RFC-4", "RFC-8", "CNN", "RFC*-4", "RFC*-8"]
+    # the f-score value is the weighted f-score average of the three classes
+    fscore_den = np.array([0.8429, 0.8860, 0.9460, 0.8809, 0.9341])
+    fscore_ax = np.array([0.3814, 0.4141, 0.8999, 0.7968, 0.8716])
+    fscore_so = np.array([0.2728, 0.3219, 0.9960, 0, 0])
+    fscore_overall_unweighted = np.mean(np.array([fscore_den[:], fscore_ax, fscore_so]), axis=0)
+    fscore_overall_unweighted[-2] = np.mean([fscore_den[-2], fscore_ax[-2]])
+    fscore_overall_unweighted[-1] = np.mean([fscore_den[-1], fscore_ax[-1]])
+    fscore_overall_weighted = [0.4851, 0.5295, 0.9635, 0.8542, 0.9142]
+
+
+    plot_bars(np.arange(len(xtick_labels))+0.8, [fscore_so, fscore_den, fscore_ax, fscore_overall_unweighted], legend=False, xtick_labels=xtick_labels, width=0.8, xtick_rotation=90,
+            xlabel="model", ylabel="F-Score", legend_labels=["soma", "dendrite", "axon", "avg."], r_x=[0, 6], colorVals=[[0.32, 0.32, 0.32, 1.], [0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
+                           np.array([11, 129, 220, 255]) / 255.],
+            save_path="/wholebrain/scratch/pschuber/cmn_paper/figures/axoness_comparison/FINAL_PLOT.png",)# colorVals=['0.32', '0.66'])
+    # plot_pr(fscore, np.arange(1, len(fscore)+1), xtick_labels=xtick_labels, legend=False,
+    #         xlabel="", ylabel="F-Score", r=[0.8, 1.01], r_x=[0, len(fscore) + 1],
+    #             save_path="/wholebrain/scratch/pschuber/cmn_paper/figures//glia_performances.png")
+    # plot_pr_stacked([fscore_neg, fscore], np.arange(1, len(fscore) + 1), xtick_labels=xtick_labels,
+    #         legend=True, legend_labels=["non-glia", "glia", "avg"], colorVals=["0.3", "0.6"],
+    #         xlabel="", ylabel="F-Score", r=[0.8, 1.01], r_x=[0, len(fscore) + 1],
+    #         save_path="/wholebrain/scratch/pschuber/cmn_paper/figures//glia_performances_stacked.png")
+
+
 if __name__ == "__main__":
     m = get_axoness_model()
     # ssd_old = SuperSegmentationDataset("/wholebrain/scratch/areaxfs/",
@@ -231,8 +336,10 @@ if __name__ == "__main__":
         get_test_candidates()
 
     # eval test set
-    if 1:
+    if 0:
         eval_test_candidates()
+    if 1:
+        plot_axoness_comparison()
 
     # evaluate cnn on "pseude" train/valid set (views are different form actual views used during training)
     # evaluate rfc on train and valid dataset

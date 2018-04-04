@@ -6,7 +6,11 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-import cPickle as pkl
+try:
+    import cPickle as pkl
+# TODO: switch to Python3 at some point and remove above
+except Exception:
+    import pickle as pkl
 from syconn.proc import ssd_proc
 
 path_storage_file = sys.argv[1]

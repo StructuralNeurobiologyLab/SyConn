@@ -5,7 +5,11 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-import cPickle as pkl
+try:
+    import cPickle as pkl
+# TODO: switch to Python3 at some point and remove above
+except Exception:
+    import Pickle as pkl
 import glob
 import numpy as np
 import os
