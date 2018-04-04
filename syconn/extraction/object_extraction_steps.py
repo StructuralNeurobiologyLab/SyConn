@@ -142,9 +142,9 @@ def object_segmentation(cset, filename, hdf5names,
 
         overlap = np.ceil(max_sigma * 4) + stitch_overlap
 
-    print("overlap:", overlap)
+    # print("overlap:", overlap)
 
-    print("thresholds:", thresholds)
+    # print("thresholds:", thresholds)
 
     multi_params = []
     for nb_chunk in chunk_list:
@@ -765,7 +765,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                                      n_max_co_processes=n_max_co_processes,
                                      n_cores=nb_cpus)
 
-        path_to_out = "/u/sdorkenw/QSUB/extract_voxels_folder/out/"
+        # path_to_out = "/u/sdorkenw/QSUB/extract_voxels_folder/out/"
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -1007,11 +1007,13 @@ def _combine_voxels_thread(args):
                              disable_locking=True)
 
         for so_id in path_block_dicts[i_voxel_rel_path]:
-            print(so_id)
+            # print(so_id)
             fragments = path_block_dicts[i_voxel_rel_path][so_id]
-            for i_fragment_id in range(len(fragments)):
-                fragment_id = fragments[i_fragment_id][0]
-                voxel_dc_read = VoxelDict(dataset_temp_path + rh.subfold_from_ix(fragment_id, n_folders_fs) + "/voxel.pkl", read_only=True, disable_locking=True)
+            fragments = [item for sublist in fragments for item in sublist]
+            for i_fragment_id, fragment_id in enumerate(fragments):
+                voxel_dc_read = VoxelDict(dataset_temp_path +
+                                          rh.subfold_from_ix(fragment_id, n_folders_fs) + "/voxel.pkl",
+                                          read_only=True, disable_locking=True)
 
                 bin_arrs, block_offsets = voxel_dc_read[fragment_id]
 

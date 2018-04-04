@@ -81,17 +81,17 @@ def extract_agg_contact_sites(cset, filename, hdf5name, working_dir,
 
     all_times = []
     step_names = []
-    # time_start = time.time()
-    # oes.extract_voxels(cset, filename, [hdf5name], dataset_names=['cs_agg'],
-    #                    n_folders_fs=n_folders_fs,
-    #                    chunk_list=None, suffix=suffix, workfolder=working_dir,
-    #                    use_work_dir=True, qsub_pe=qsub_pe,
-    #                    qsub_queue=qsub_queue,
-    #                    n_max_co_processes=n_max_co_processes,
-    #                    nb_cpus=nb_cpus)
-    # all_times.append(time.time() - time_start)
-    # step_names.append("voxel extraction")
-    # print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
+    time_start = time.time()
+    oes.extract_voxels(cset, filename, [hdf5name], dataset_names=['cs_agg'],
+                       n_folders_fs=n_folders_fs,
+                       chunk_list=None, suffix=suffix, workfolder=working_dir,
+                       use_work_dir=True, qsub_pe=qsub_pe,
+                       qsub_queue=qsub_queue,
+                       n_max_co_processes=n_max_co_processes,
+                       nb_cpus=nb_cpus)
+    all_times.append(time.time() - time_start)
+    step_names.append("voxel extraction")
+    print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 

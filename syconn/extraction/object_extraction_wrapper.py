@@ -158,7 +158,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     # --------------------------------------------------------------------------
 
     time_start = time.time()
-    cc_info_list, overlap_info = oes.object_segmentaiton(
+    cc_info_list, overlap_info = oes.object_segmentation(
         cset, filename, hdf5names, overlap=overlap, sigmas=sigmas,
         thresholds=thresholds, chunk_list=chunk_list, debug=debug,
         swapdata=swapdata,
