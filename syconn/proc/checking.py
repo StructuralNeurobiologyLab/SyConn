@@ -47,5 +47,5 @@ def find_missing_overlaycubes(path, stride=100, qsub_pe=None, qsub_queue=None,
     for result in results:
         m_paths += result
 
-    print m_paths
+    print(m_paths)
     return m_paths

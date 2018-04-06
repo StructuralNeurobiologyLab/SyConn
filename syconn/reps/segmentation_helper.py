@@ -209,7 +209,7 @@ def load_skeleton(so, recompute=False):
         except Exception as e:
             print("\n---------------------------------------------------\n"
                   "\n%s\nException occured when loading skeletons.pkl of SO (%s)"
-                  "with id %d."
+                  " with id %d."
                   "\n---------------------------------------------------\n"
                   % (e, so.type, so.id))
             return np.zeros((0, )).astype(np.int), np.zeros((0, )),np.zeros((0,)).astype(np.int)

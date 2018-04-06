@@ -66,7 +66,7 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
         nb_cpus = 1
 
     if verbose:
-        print "Computing %d parameters with %d cpus." % (len(params), nb_cpus)
+        print("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
 
     start = time.time()
     if nb_cpus > 1:
@@ -78,7 +78,7 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
         result = map(func, params)
 
     if verbose:
-        print "\nTime to compute:", time.time() - start
+        print("\nTime to compute:", time.time() - start)
 
     return result
 
@@ -125,7 +125,7 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
         nb_cpus = 1
 
     if verbose:
-        print "Computing %d parameters with %d cpus." % (len(params), nb_cpus)
+        print("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
     for el in params:
         el.insert(0, func_name)
     start = time.time()
@@ -138,7 +138,7 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
         result = map(multi_helper_obj, params)
 
     if verbose:
-        print "\nTime to compute:", time.time() - start
+        print("\nTime to compute:", time.time() - start)
 
     return result
 

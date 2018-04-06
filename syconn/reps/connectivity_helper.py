@@ -117,7 +117,7 @@ def get_sso_specific_info_thread(args):
     blacklist = []
     shapes = {}
     for sso_id in sso_ids:
-        print sso_id
+        print(sso_id)
         sso = ssd.get_super_segmentation_object(sso_id)
 
         if not sso.load_skeleton():

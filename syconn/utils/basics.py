@@ -95,7 +95,7 @@ def get_orth_plane(node_com):
                     orth_plane[i, :] = arr([-1.0*(y[i]**2+z[i]**2)/x[i],
                                             y[i], z[i]])
                 else:
-                    print "WARNING: Problem finding orth. plane. ", i, lin_interp[i]
+                    print("WARNING: Problem finding orth. plane. ", i, lin_interp[i])
         inner_prod[i] = np.inner(orth_plane[i], lin_interp[i])
         n = np.linalg.norm(orth_plane[i])
         if n != 0:
@@ -227,7 +227,7 @@ def cell_object_coord_parser(voxel_tree):
         elif 'sj' in comment:
             sj_coords.append(node.getCoordinate())
         else:
-            print "Couldn't understand comment:", comment
+            print("Couldn't understand comment:", comment)
     return arr(mito_coords), arr(vc_coords), arr(sj_coords)
 
 

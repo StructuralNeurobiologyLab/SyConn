@@ -39,7 +39,7 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
                                 target_names=target_names)
     header += "acc.: %0.4f" % accuracy_score(labels, np.argmax(proba, axis=1))
     header += "\n-------------------------------\n"
-    print header
+    print(header)
     plot_pr(all_prec, all_rec, r=[0.6, 1.01], legend_labels=target_names)
     if model_dir is not None:
         text_file = open(model_dir + '/prec_rec_%s.txt' % prefix, "w")
@@ -59,7 +59,7 @@ def model_performance_predonly(pred, labels, model_dir=None, prefix="", target_n
                                 target_names=target_names)
     header += "acc.: %0.4f" % accuracy_score(labels, pred)
     header += "\n-------------------------------\n"
-    print header
+    print(header)
     if model_dir is not None:
         text_file = open(model_dir + '/prec_rec_%s.txt' % prefix, "w")
         text_file.write(header)

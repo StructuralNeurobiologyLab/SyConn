@@ -28,9 +28,9 @@ with open(path_storage_file) as f:
 
 
 ssv_ixs = args
-print ssv_ixs
+print(ssv_ixs)
 for ix in ssv_ixs:
-    print ix
+    print(ix)
     sso = SuperSegmentationObject(ix, version="0", working_dir="/wholebrain/scratch/areaxfs3/")
     sso = create_sso_skeleton(sso)
     sso.save_skeleton()

@@ -315,7 +315,7 @@ class SkelClassifier(object):
 
         overall_score = np.sum((pred == labels) * label_weights) / \
                         float(np.sum(label_weights))
-        print "Overall acc: %.5f\n" % overall_score
+        print("Overall acc: %.5f\n" % overall_score)
 
         score_dict = {}
         for i_class in range(len(classes)):
@@ -333,8 +333,8 @@ class SkelClassifier(object):
                 f_score = 2 * precision * recall / (recall + precision)
             score_dict[this_class] = [precision, recall, f_score]
 
-            print "class: %d: p: %.4f, r: %.4f, f: %.4f" % \
-                  (this_class, precision, recall, f_score)
+            print("class: %d: p: %.4f, r: %.4f, f: %.4f" % \
+                  (this_class, precision, recall, f_score))
         return score_dict, label_weights
 
     def train_clf(self, name, n_estimators=2000, feature_context_nm=4000,
@@ -347,7 +347,7 @@ class SkelClassifier(object):
         else:
             raise()
 
-        print "\n --- %s ---\n" % name
+        print("\n --- %s ---\n" % name)
         tr_feats, tr_labels, v_feats, v_labels, te_feats, te_labels = \
             self.load_data(feature_context_nm=feature_context_nm)
 
@@ -406,7 +406,7 @@ class SkelClassifier(object):
         clf.fit(tr_feats, tr_labels, sample_weight=sample_weights)
 
         if name in ["rfc", "ext"]:
-            print "OOB score (train set): %.10f" % clf.oob_score_
+            print("OOB score (train set): %.10f" % clf.oob_score_)
         #
         # print "Label occ.:", np.unique(v_labels, return_counts=True)
         #
@@ -428,10 +428,10 @@ class SkelClassifier(object):
         feat_set = np.array(feature_set)[sorting]
         feat_imps = feat_imps[sorting]
 
-        print "\nFEATURE IMPORTANCES"
-        print "--------------------\n"
+        print("\nFEATURE IMPORTANCES" +
+              "--------------------\n")
         for i_feat in range(np.min([5, len(feat_imps)])):#len(feat_imps)):
-            print "%s: %.5f" % (feat_set[i_feat], feat_imps[i_feat])
+            print("%s: %.5f" % (feat_set[i_feat], feat_imps[i_feat]))
 
         if save:
             prefix = "%s" % repr(leave_out_classes) if \
@@ -467,7 +467,7 @@ class SkelClassifier(object):
 
     def train_mlp(self, feature_context_nm=5000):
         raise(NotImplementedError)
-        print "\n --- MLP ---\n"
+        print("\n --- MLP ---\n")
         tr_feats, tr_labels, v_feats, v_labels, te_feats, te_labels = \
             self.load_data(feature_context_nm=feature_context_nm)
 
@@ -480,7 +480,7 @@ class SkelClassifier(object):
         print(v_feats.shape[0], 'test samples')
 
         num_classes = len(np.unique(tr_labels))
-        print "N classes", num_classes
+        print("N classes", num_classes)
 
         tr_labels = keras.utils.to_categorical(tr_labels, num_classes)
         v_labels = keras.utils.to_categorical(v_labels, num_classes)

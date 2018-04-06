@@ -81,7 +81,7 @@ class MeshObject(object):
     @property
     def normals(self):
         if self._normals is None:
-            print "Calculating normals."
+            print("Calculating normals.")
             self._normals = unit_normal(self.vertices, self.indices)
         return self._normals
 
@@ -688,9 +688,9 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
                                                 for sv in ssv.svs],
                                                nb_cpus=ssv.nb_cpus))
     preds = np.concatenate(preds)
-    print "Collected axoness:", Counter(preds).most_common()
+    print("Collected axoness:", Counter(preds).most_common())
     locs = ssv.sample_locations()
-    print "Collected locations."
+    print("Collected locations.")
     pred_coords = np.concatenate(locs)
     assert pred_coords.ndim == 2, "Sample locations of ssv have wrong shape."
     assert pred_coords.shape[1] == 3, "Sample locations of ssv have wrong shape."

@@ -32,7 +32,7 @@ for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, version="0", working_dir="/wholebrain/scratch/areaxfs3/")
     sso.load_skeleton()
     if sso.skeleton is None or len(sso.skeleton["nodes"]) <= 1:
-        print "Skeleton of SSV %d has zero nodes." % ix
+        print("Skeleton of SSV %d has zero nodes." % ix)
         continue
     for feat_ctx_nm in [500, 1000, 2000, 4000, 8000]:
         try:
