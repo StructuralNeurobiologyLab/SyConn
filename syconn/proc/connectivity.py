@@ -173,7 +173,7 @@ def combine_and_split_cs_agg_helper(args):
 
         i_cc = 0
         for this_cc in cc:
-            print i_cc, next_id
+            print(i_cc, next_id)
             i_cc += 1
             this_vx = voxel_list[np.array(list(this_cc))]
             abs_offset = np.min(this_vx, axis=0)
@@ -212,7 +212,7 @@ def combine_and_split_cs_agg_helper(args):
         attr_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                          "/attr_dict.pkl")
 
-    print "done"
+    print("done")
 
 
 def map_objects_to_cs_thread(args):
@@ -245,7 +245,7 @@ def map_objects_to_cs_thread(args):
                                timeout=3600)
 
         for cs_id in this_vx_dc.keys():
-            print cs_id
+            print(cs_id)
             cs_obj = cs_dataset.get_segmentation_object(cs_id)
             cs_obj.attr_dict = this_attr_dc[cs_id]
 

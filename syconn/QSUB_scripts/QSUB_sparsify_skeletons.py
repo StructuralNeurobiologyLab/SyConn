@@ -26,6 +26,8 @@ with open(path_storage_file) as f:
 ssv_ixs = args
 for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, version="0", working_dir="/wholebrain/scratch/areaxfs3/")
+    if sso.load_skeleton():
+        continue
     create_sso_skeleton(sso)
     if len(sso.skeleton["nodes"]) == 0:
         print "Skeleton of SSV %d has zero nodes." % ix

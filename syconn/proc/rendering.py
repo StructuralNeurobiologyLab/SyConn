@@ -235,7 +235,8 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
 
     Returns
     -------
-
+    np.array
+        shape: (nb_views, ws[0], ws[1]
     """
     ctx = init_ctx(ws)
     init_opengl(ws, enable_lightning, depth_map=depth_map)
@@ -475,10 +476,10 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                                   RuntimeWarning)
                     found_empty_view = True
             if found_empty_view:
-                print "View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n" \
+                print("View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n" \
                       "'%s'-mesh with %d vertices." %\
                       (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
-                       views_key, len(mesh.vertices))
+                       views_key, len(mesh.vertices)))
     return res
 
 
@@ -560,17 +561,17 @@ def render_mesh_coords(coords, ind, vert, clahe=False, verbose=False, ws=(256, 1
         # print "%d/%d spaces are empty while rendering '%s'." % \
         #       (np.sum(empty_locs), len(coords), views_key)
     if verbose:
-        print "Calculation of rotation matrices took", time.time() - start
-        print "Starting local rendering at %d locations (%s)." %\
-              (len(coords), views_key)
+        print("Calculation of rotation matrices took", time.time() - start)
+        print("Starting local rendering at %d locations (%s)." %\
+              (len(coords), views_key))
     ctx = init_ctx(ws)
     mviews = multi_view_mesh_coords(mesh, coords, local_rot_mat, edge_lengths,
                                     clahe=clahe, views_key=views_key, ws=ws,
                                     depth_map=depth_map)
     if verbose:
         end = time.time()
-        print "Finished rendering mesh of type %s at %d locations after" \
-              " %0.1fs" % (views_key,len(mviews), end - start)
+        print("Finished rendering mesh of type %s at %d locations after" \
+              " %0.1fs" % (views_key,len(mviews), end - start))
     OSMesaDestroyContext(ctx)
     if return_rot_matrices:
         return mviews, rot_matrices
@@ -614,7 +615,7 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
         coords = np.array(coords)[missing_sv_ixs]
     else:
         missing_svs = np.array(sso.svs)
-    print "Rendering %d missing SV's." % len(missing_svs)
+    print("Rendering %d missing SV's." % len(missing_svs))
     if len(missing_svs) == 0:
         if return_views:
             return np.concatenate(sso.load_views(woglia=woglia))
@@ -630,8 +631,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
         so.save_views(sv_views, woglia=woglia, cellobjects_only=cellobjects_only)
     if verbose:
         dur = time.time() - start
-        print "Rendering of %d views took %0.2fs (incl. read/write). " \
-              "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs))
+        print("Rendering of %d views took %0.2fs (incl. read/write). " \
+              "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
     if return_views:
         return np.concatenate(sso.load_views(woglia=woglia))
 
@@ -656,9 +657,9 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     """
     mesh = sso.mesh
     if len(mesh[1]) == 0:
-        print "----------------------------------------------\n" \
+        print("----------------------------------------------\n" \
               "No mesh for SSO %d found.\n"\
-              "----------------------------------------------\n"
+              "----------------------------------------------\n")
         return
     raw_views = np.ones((len(coords), 2, 128, 256))
     if cellobjects_only:

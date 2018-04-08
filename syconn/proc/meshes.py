@@ -63,8 +63,14 @@ class MeshObject(object):
     def colors(self):
         if self._ext_color is None:
             self._colors = np.ones(len(self.vertices) / 3 * 4) * 0.5
-        else:
+        elif np.isscalar(self._ext_color):
             self._colors = np.array(len(self.vertices) / 3 * [self._ext_color]).flatten()
+        else:
+            if np.ndim(self._ext_color) == 2:
+                self._ext_color = self._ext_color.flatten()
+            assert len(self._ext_color) == len(self.vertices), "len(ext_color)/4 must " \
+                                                 "be equal to len(vertices)/3."
+            self._colors = self._ext_color
         return self._colors
 
     @property
@@ -75,7 +81,7 @@ class MeshObject(object):
     @property
     def normals(self):
         if self._normals is None:
-            print "Calculating normals."
+            print("Calculating normals.")
             self._normals = unit_normal(self.vertices, self.indices)
         return self._normals
 
@@ -682,9 +688,9 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
                                                 for sv in ssv.svs],
                                                nb_cpus=ssv.nb_cpus))
     preds = np.concatenate(preds)
-    print "Collected axoness:", Counter(preds).most_common()
+    print("Collected axoness:", Counter(preds).most_common())
     locs = ssv.sample_locations()
-    print "Collected locations."
+    print("Collected locations.")
     pred_coords = np.concatenate(locs)
     assert pred_coords.ndim == 2, "Sample locations of ssv have wrong shape."
     assert pred_coords.shape[1] == 3, "Sample locations of ssv have wrong shape."

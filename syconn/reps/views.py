@@ -52,7 +52,7 @@ class ViewContainer(object):
     def delete_files(self):
         if os.path.isfile(self.view_path):
             os.remove(self.view_path)
-            print "Removed view %s." % self.view_path
+            print("Removed view %s." % self.view_path)
 
     def view_is_existent(self):
         return os.path.isfile(self.view_path)

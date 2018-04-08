@@ -43,7 +43,7 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75):
                                        verbose=False)
         label = label.astype(np.uint16)
     except Exception as e:
-        print ("\n" + repr(e) + "\nLabels are set to zeros (background).")
+        print("\n" + repr(e) + "\nLabels are set to zeros (background).")
         label = np.zeros_like(raw).astype(np.uint16)
     return raw.astype(np.float32) / 255., label
 

@@ -6,7 +6,11 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-import cPickle as pkl
+try:
+    import cPickle as pkl
+# TODO: switch to Python3 at some point and remove above
+except Exception:
+    import pickle as pkl
 from syconnfs.representations import super_segmentation_helper as ssh
 
 path_storage_file = sys.argv[1]
@@ -25,7 +29,7 @@ for cs in cs_list:
     try:
         ssh.map_cs_properties(cs)
     except KeyError as e:
-        print "Error %s during cs property mapping with key %d." % (e, cs.id)
+        print("Error %s during cs property mapping with key %d." % (e, cs.id))
         pass
-print "Finished mapping of %d CS." % len(cs_list)
+print("Finished mapping of %d CS." % len(cs_list))
 

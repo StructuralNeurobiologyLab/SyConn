@@ -4,8 +4,10 @@ import numpy as np
 import glob
 import os
 from scipy import spatial
+from sklearn import ensemble, cross_validation, externals
 
-from knossos_utils import knossosdataset
+
+from knossos_utils import knossosdataset, skeleton_utils, skeleton
 
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
@@ -89,32 +91,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
     else:
         raise Exception("QSUB not available")
 
-
-def map_objects_to_cs(wd, cs_version=None, ssd_version=None, max_map_dist_nm=2000,
-                      obj_types=("sj", "mi", "vc"), stride=1000, qsub_pe=None,
-                      qsub_queue=None, nb_cpus=1, n_max_co_processes=100):
-    cs_dataset = segmentation.SegmentationDataset("cs", version=cs_version,
-                                                  working_dir=wd)
-    paths = glob.glob(cs_dataset.so_storage_path + "/*/*/*")
-
-    multi_params = []
-    for path_block in [paths[i:i + stride]
-                       for i in range(0, len(paths), stride)]:
-        multi_params.append([path_block, obj_types, cs_version, ssd_version,
-                             wd, max_map_dist_nm])
-
-    if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_map_objects_to_cs_thread,
-                                        multi_params, nb_cpus=nb_cpus)
-
-    elif qu.__QSUB__:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "map_objects_to_cs",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
-                                     n_max_co_processes=n_max_co_processes)
-    else:
-        raise Exception("QSUB not available")
+    return cs
 
 
 def _combine_and_split_cs_agg_thread(args):
@@ -137,7 +114,10 @@ def _combine_and_split_cs_agg_thread(args):
     n_items_for_path = 0
     cur_path_id = 0
 
-    os.makedirs(cs.so_storage_path + voxel_rel_paths[cur_path_id])
+    try:
+        os.makedirs(cs.so_storage_path + voxel_rel_paths[cur_path_id])
+    except:
+        pass
     voxel_dc = VoxelDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                          "/voxel.pkl", read_only=False, timeout=3600)
     attr_dc = AttributeDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
@@ -155,27 +135,33 @@ def _combine_and_split_cs_agg_thread(args):
         voxel_list = cs_agg.get_segmentation_object(item[1][0]).voxel_list
         for cs_agg_id in item[1][1:]:
             cs_agg_object = cs_agg.get_segmentation_object(cs_agg_id)
-            np.concatenate([voxel_list, cs_agg_object.voxel_list])
+            voxel_list = np.concatenate([voxel_list, cs_agg_object.voxel_list])
 
-        if len(voxel_list) < 1e4:
-            kdtree = spatial.cKDTree(voxel_list * scaling)
-            pairs = kdtree.query_pairs(r=cs_gap_nm)
-            graph = nx.from_edgelist(pairs)
-            ccs = list(nx.connected_components(graph))
-        else:
-            ccs = cc_large_voxel_lists(voxel_list * scaling, cs_gap_nm)
+        # if len(voxel_list) < 1e4:
+        #     kdtree = spatial.cKDTree(voxel_list * scaling)
+        #     pairs = kdtree.query_pairs(r=cs_gap_nm)
+        #     graph = nx.from_edgelist(pairs)
+        #     ccs = list(nx.connected_components(graph))
+        # else:
+        ccs = cc_large_voxel_lists(voxel_list * scaling, cs_gap_nm)
 
         i_cc = 0
         for this_cc in ccs:
-            print(i_cc, next_id)
-            i_cc += 1
             this_vx = voxel_list[np.array(list(this_cc))]
             abs_offset = np.min(this_vx, axis=0)
             this_vx -= abs_offset
 
             id_mask = np.zeros(np.max(this_vx, axis=0) + 1, dtype=np.bool)
             id_mask[this_vx[:, 0], this_vx[:, 1], this_vx[:, 2]] = True
-            voxel_dc[next_id] = [id_mask], [abs_offset]
+
+            print(i_cc, next_id, len(this_vx), id_mask.shape)
+            try:
+                voxel_dc[next_id] = [id_mask], [abs_offset]
+            except:
+                print("failed", item)
+                np.save(cs.so_storage_path + "/%d_%d_%d_%d.npy" %
+                        (next_id, abs_offset[0], abs_offset[1], abs_offset[2]), this_vx)
+
             attr_dc[next_id] = dict(neuron_partners=ssv_ids)
             next_id += 100000
 
@@ -192,7 +178,10 @@ def _combine_and_split_cs_agg_thread(args):
             next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]),
                                           int(p_parts[2])))
 
-            os.makedirs(cs.so_storage_path + voxel_rel_paths[cur_path_id])
+            try:
+                os.makedirs(cs.so_storage_path + voxel_rel_paths[cur_path_id])
+            except:
+                pass
 
             voxel_dc = VoxelDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                                  "voxel.pkl", read_only=False, timeout=3600)
@@ -243,6 +232,33 @@ def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000):
         next_ids = vx_ids[cc_ids[~np.in1d(cc_ids, checked_ids)][:max_concurrent_nodes]]
 
     return ccs
+
+
+def map_objects_to_cs(wd, cs_version=None, ssd_version=None, max_map_dist_nm=2000,
+                      obj_types=("sj", "mi", "vc"), stride=1000, qsub_pe=None,
+                      qsub_queue=None, nb_cpus=1, n_max_co_processes=100):
+    cs_dataset = segmentation.SegmentationDataset("cs", version=cs_version,
+                                                  working_dir=wd)
+    paths = glob.glob(cs_dataset.so_storage_path + "/*/*/*")
+
+    multi_params = []
+    for path_block in [paths[i:i + stride]
+                       for i in range(0, len(paths), stride)]:
+        multi_params.append([path_block, obj_types, cs_version, ssd_version,
+                             wd, max_map_dist_nm])
+
+    if qsub_pe is None and qsub_queue is None:
+        results = sm.start_multiprocess(_map_objects_to_cs_thread,
+                                        multi_params, nb_cpus=nb_cpus)
+
+    elif qu.__QSUB__:
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "map_objects_to_cs",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_max_co_processes=n_max_co_processes)
+    else:
+        raise Exception("QSUB not available")
 
 
 def _map_objects_to_cs_thread(args):
@@ -613,11 +629,12 @@ def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
                                      n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
+    return conn_sd
 
 
 def _overlap_mapping_sj_to_cs_via_kd_thread(args):
-    wd, sj_ids, voxel_rel_paths, cs_kd_path, conn_sd_version, sj_sd_version, \
-        cs_sd_version = args
+    wd, sj_ids, voxel_rel_paths, conn_sd_version, sj_sd_version, \
+        cs_sd_version, cs_kd_path = args
 
     conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd,
                                                version=conn_sd_version,
@@ -647,7 +664,7 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
         next_conn_id = ix_from_subfold(rel_path,
                                        conn_sd.n_folders_fs)
 
-        for sj_id in sj_ids:
+        for sj_id in sj_id_block:
             sj = sj_sd.get_segmentation_object(sj_id)
             vxl = sj.voxel_list
 
@@ -657,9 +674,12 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
             zero_ratio = c_cs_ids[u_cs_ids == 0] / np.sum(c_cs_ids)
 
             for cs_id in u_cs_ids:
+                if cs_id == 0:
+                    continue
+
                 cs = cs_sd.get_segmentation_object(cs_id)
 
-                id_ratio = c_cs_ids[u_cs_ids == cs_id] / np.sum(c_cs_ids)
+                id_ratio = c_cs_ids[u_cs_ids == cs_id] / float(np.sum(c_cs_ids))
                 overlap_vx = vxl[cs_ids == cs_id]
                 cs_ratio = float(len(overlap_vx)) / cs.size
 
@@ -687,4 +707,288 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
         attr_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
 
 
+def write_conn_gt_kzips(conn, n_objects, folder):
+    if not os.path.exists(folder):
+        os.makedirs(folder)
 
+    conn_ids = conn.ids[np.random.choice(len(conn.ids), n_objects, replace=False)]
+
+    for conn_id in conn_ids:
+        obj = conn.get_segmentation_object(conn_id)
+        p = folder + "/obj_%d.k.zip" % conn_id
+
+        obj.save_kzip(p)
+        obj.mesh2kzip(p)
+
+        a = skeleton.SkeletonAnnotation()
+        a.scaling = obj.scaling
+        a.comment = "rep coord - %d" % obj.size
+
+        a.addNode(skeleton.SkeletonNode().from_scratch(a, obj.rep_coord[0],
+                                                       obj.rep_coord[1],
+                                                       obj.rep_coord[2],
+                                                       radius=1))
+        skeleton_utils.write_skeleton(folder + "/obj_%d.k.zip" % conn_id, [a])
+
+
+def create_conn_syn_gt(conn, path_kzip):
+    annos = skeleton_utils.loadj0126NML(path_kzip)
+
+    label_coords = []
+    labels = []
+    for anno in annos:
+        node = list(anno.getNodes())[0]
+        labels.append(node.getComment())
+        label_coords.append(np.array(node.getCoordinate()))
+
+    labels = np.array(labels)
+    label_coords = np.array(label_coords)
+
+    conn_kdtree = spatial.cKDTree(conn.rep_coords * conn.scaling)
+    ds, list_ids = conn_kdtree.query(label_coords * conn.scaling)
+
+    conn_ids = conn.ids[list_ids]
+    for label_id in np.where(ds > 0)[0]:
+        _, close_ids = conn_kdtree.query(label_coords[label_id] * conn.scaling, k=100)
+
+        # print("\n-------------")
+        for close_id in close_ids:
+            # print(close_id)
+            conn_o = conn.get_segmentation_object(conn.ids[close_id])
+
+            vx_ds = np.sum(np.abs(conn_o.voxel_list - label_coords[label_id]), axis=-1)
+
+            if np.min(vx_ds) == 0:
+                conn_ids[label_id] = conn.ids[close_id]
+                break
+
+        assert 0 in vx_ds
+
+    features = []
+
+    for conn_id in conn_ids:
+        conn_o = conn.get_segmentation_object(conn_id)
+
+        features.append(conn_o_features(conn_o))
+
+    features = np.array(features)
+
+    rfc = ensemble.RandomForestClassifier(n_estimators=200,
+                                          max_features='sqrt',
+                                          n_jobs=-1)
+
+    v_features = features[labels != "ambiguous"]
+    v_labels = labels[labels != "ambiguous"]
+    v_labels = v_labels == "synaptic"
+    v_labels = v_labels.astype(np.int)
+
+    score = cross_validation.cross_val_score(rfc, v_features,
+                                             v_labels, cv=10)
+    print(np.mean(score), np.std(score))
+
+    rfc.fit(v_features, v_labels)
+    print(rfc.feature_importances_)
+
+    if not os.path.exists(conn.path + "/conn_syn_rfc/"):
+        os.makedirs(conn.path + "/conn_syn_rfc/")
+
+    externals.joblib.dump(rfc, conn.path + "/conn_syn_rfc/rfc")
+
+    return rfc, v_features, v_labels
+
+
+def conn_o_features(conn_o):
+    conn_o.load_attr_dict()
+
+    features = [conn_o.size,
+                conn_o.attr_dict["id_sj_ratio"][0],
+                conn_o.attr_dict["id_cs_ratio"]]
+
+    partner_ids = conn_o.lookup_in_attribute_dict("ssv_partners")
+    for i_partner_id, partner_id in enumerate(partner_ids):
+        features.append(conn_o.attr_dict["n_mi_objs_%d" % i_partner_id])
+        features.append(conn_o.attr_dict["n_mi_vxs_%d" % i_partner_id])
+        features.append(conn_o.attr_dict["n_vc_objs_%d" % i_partner_id])
+        features.append(conn_o.attr_dict["n_vc_vxs_%d" % i_partner_id])
+
+    return features
+
+
+def map_objects_to_conn(wd, conn_version=None, ssd_version=None, mi_version=None,
+                        vc_version=None, max_vx_dist_nm=2000,
+                        max_rep_coord_dist_nm=4000, qsub_pe=None,
+                        qsub_queue=None, nb_cpus=1, n_max_co_processes=100):
+
+    conn_sd = segmentation.SegmentationDataset("conn", version=conn_version,
+                                               working_dir=wd)
+
+    multi_params = []
+    for so_dir_path in conn_sd.so_dir_paths:
+        multi_params.append([so_dir_path, wd, conn_version,
+                             mi_version, vc_version, ssd_version,
+                             max_vx_dist_nm, max_rep_coord_dist_nm])
+
+    if qsub_pe is None and qsub_queue is None:
+        results = sm.start_multiprocess(_map_objects_to_conn_thread,
+                                        multi_params, nb_cpus=nb_cpus)
+
+    elif qu.__QSUB__:
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "map_objects_to_conn",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_max_co_processes=n_max_co_processes)
+    else:
+        raise Exception("QSUB not available")
+
+
+def _map_objects_to_conn_thread(args):
+    so_dir_path, wd, conn_version, mi_version, vc_version, ssd_version, \
+        max_vx_dist_nm, max_rep_coord_dist_nm = args
+
+    ssv = super_segmentation.SuperSegmentationDataset(working_dir=wd,
+                                                      version=ssd_version)
+    conn_sd = segmentation.SegmentationDataset(obj_type="conn",
+                                               working_dir=wd,
+                                               version=conn_version)
+    mi_sd = segmentation.SegmentationDataset(obj_type="mi",
+                                             working_dir=wd,
+                                             version=mi_version)
+    vc_sd = segmentation.SegmentationDataset(obj_type="vc",
+                                             working_dir=wd,
+                                             version=vc_version)
+
+    this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
+                                 read_only=False, timeout=3600)
+
+    for conn_id in this_attr_dc.keys():
+        conn_o = conn_sd.get_segmentation_object(conn_id)
+        conn_o.load_attr_dict()
+
+        for k in list(conn_o.attr_dict.keys()):
+            if k.startswith("n_mi_"):
+                del(conn_o.attr_dict[k])
+            if k.startswith("n_vc_"):
+                del(conn_o.attr_dict[k])
+
+        conn_feats = map_objects_to_single_conn(conn_o, ssv, mi_sd, vc_sd,
+                                                max_vx_dist_nm=max_vx_dist_nm,
+                                                max_rep_coord_dist_nm=max_rep_coord_dist_nm)
+
+        conn_o.attr_dict.update(conn_feats)
+        this_attr_dc[conn_id] = conn_o.attr_dict
+
+    this_attr_dc.save2pkl()
+
+
+def map_objects_to_single_conn(conn_o, ssv, mi_sd, vc_sd,
+                               max_vx_dist_nm=2000,
+                               max_rep_coord_dist_nm=4000):
+    feats = {}
+
+    partner_ids = conn_o.lookup_in_attribute_dict("ssv_partners")
+    for i_partner_id, partner_id in enumerate(partner_ids):
+        ssv_o = ssv.get_super_segmentation_object(partner_id)
+
+        print(len(ssv_o.mi_ids))
+        n_mi_objs, n_mi_vxs = map_objects_from_ssv(conn_o, mi_sd, ssv_o.mi_ids,
+                                                   max_vx_dist_nm,
+                                                   max_rep_coord_dist_nm)
+
+        print(len(ssv_o.vc_ids))
+        n_vc_objs, n_vc_vxs = map_objects_from_ssv(conn_o, vc_sd, ssv_o.vc_ids,
+                                                   max_vx_dist_nm,
+                                                   max_rep_coord_dist_nm)
+
+        feats["n_mi_objs_%d" % i_partner_id] = n_mi_objs
+        feats["n_mi_vxs_%d" % i_partner_id] = n_mi_vxs
+        feats["n_vc_objs_%d" % i_partner_id] = n_vc_objs
+        feats["n_vc_vxs_%d" % i_partner_id] = n_vc_vxs
+
+    return feats
+
+
+def map_objects_from_ssv(conn_o, obj_sd, obj_ids, max_vx_dist_nm,
+                         max_rep_coord_dist_nm):
+    obj_mask = np.in1d(obj_sd.ids, obj_ids)
+
+    if np.sum(obj_mask) == 0:
+        return 0, 0
+
+    obj_rep_coords = obj_sd.load_cached_data("rep_coord")[obj_mask] * obj_sd.scaling
+
+    obj_kdtree = spatial.cKDTree(obj_rep_coords)
+
+    close_obj_ids = obj_sd.ids[obj_mask][obj_kdtree.query_ball_point(conn_o.rep_coord *
+                                                                  conn_o.scaling,
+                                                                  r=max_rep_coord_dist_nm)]
+
+    conn_o_vx_kdtree = spatial.cKDTree(conn_o.voxel_list * conn_o.scaling)
+
+    print(len(close_obj_ids))
+
+    n_obj_vxs = []
+    for close_obj_id in close_obj_ids:
+        obj = obj_sd.get_segmentation_object(close_obj_id)
+        obj_vxs = obj.voxel_list * obj.scaling
+
+        ds, _ = conn_o_vx_kdtree.query(obj_vxs,
+                                       distance_upper_bound=max_vx_dist_nm)
+
+        n_obj_vxs.append(np.sum(ds < np.inf))
+
+    n_obj_vxs = np.array(n_obj_vxs)
+
+    print(n_obj_vxs)
+    n_objects = np.sum(n_obj_vxs > 0)
+    n_vxs = np.sum(n_obj_vxs)
+
+    return n_objects, n_vxs
+
+
+def classify_conn_objects(wd, conn_version=None, qsub_pe=None,
+                          qsub_queue=None, nb_cpus=1, n_max_co_processes=100):
+
+    conn_sd = segmentation.SegmentationDataset("conn", version=conn_version,
+                                               working_dir=wd)
+
+    multi_params = []
+    for so_dir_path in conn_sd.so_dir_paths:
+        multi_params.append([so_dir_path, wd, conn_version])
+
+    if qsub_pe is None and qsub_queue is None:
+        results = sm.start_multiprocess(_classify_conn_objects_thread,
+                                        multi_params, nb_cpus=nb_cpus)
+
+    elif qu.__QSUB__:
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "classify_conn_objects",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_max_co_processes=n_max_co_processes)
+    else:
+        raise Exception("QSUB not available")
+
+
+def _classify_conn_objects_thread(args):
+    so_dir_path, wd, conn_version = args
+
+    conn_sd = segmentation.SegmentationDataset(obj_type="conn",
+                                               working_dir=wd,
+                                               version=conn_version)
+    rfc = externals.joblib.load(conn_sd.path + "/conn_syn_rfc/rfc")
+
+    this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
+                                 read_only=False, timeout=3600)
+
+    for conn_id in this_attr_dc.keys():
+        conn_o = conn_sd.get_segmentation_object(conn_id)
+        conn_o.load_attr_dict()
+
+        feats = conn_o_features(conn_o)
+        syn_prob = rfc.predict_proba([feats])[0][1]
+
+        conn_o.attr_dict.update({"syn_prob": syn_prob})
+        this_attr_dc[conn_id] = conn_o.attr_dict
+
+    this_attr_dc.save2pkl()

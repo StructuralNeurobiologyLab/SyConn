@@ -15,5 +15,5 @@ if __name__ == "__main__":
     multi_params = ssds.ssv_ids
     multi_params = chunkify(multi_params, 2000)
     path_to_out = qu.QSUB_script(multi_params, "map_viewaxoness2skel",
-                                 n_max_co_processes=120, pe="openmp", queue=None,
+                                 n_max_co_processes=200, pe="openmp", queue=None,
                                  script_folder=script_folder, suffix="")

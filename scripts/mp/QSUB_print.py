@@ -3,7 +3,11 @@
 
 import sys
 import numpy as np
-import cPickle as pkl
+try:
+    import cPickle as pkl
+# TODO: switch to Python3 at some point and remove above
+except Exception:
+    import pickle as pkl
 import time
 # get paths to job handling directories
 path_storage_file = sys.argv[1]

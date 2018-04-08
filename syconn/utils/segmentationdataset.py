@@ -96,7 +96,7 @@ def extract_and_save_all_hull_voxels(object_dataset_path, overwrite=False,
         if objs_p_job >= 4000:
             break
 
-    print "%d objects per jobs" % objs_p_job
+    print("%d objects per jobs" % objs_p_job)
 
     set_cnt = 0
     multi_params = []
@@ -180,11 +180,9 @@ def check_all_hulls_loop(object_dataset_paths, nb_processes=1, use_qsub=False, q
     for object_dataset_path in object_dataset_paths:
         misses[object_dataset_path] = check_all_hulls(object_dataset_path, nb_processes=nb_processes,
                                                       use_qsub=use_qsub, queue=queue)
-        print "%s: %d" % (object_dataset_path, len(misses[object_dataset_path]))
-        print misses[object_dataset_path]
-        print
-        print "---------------------------------------------------------"
-        print
+        print("%s: %d" % (object_dataset_path, len(misses[object_dataset_path]))+
+              misses[object_dataset_path]+
+              "\n---------------------------------------------------------\n")
     return misses
 
 

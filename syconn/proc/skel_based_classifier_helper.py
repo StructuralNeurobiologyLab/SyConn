@@ -24,7 +24,7 @@ def generate_clf_data_thread(args):
     sso.enable_locking = False
 
     for feature_context_nm in feature_contexts_nm:
-        print "---", this_id, feature_context_nm
+        print("---", this_id, feature_context_nm)
         if os.path.isfile(sso.skeleton_kzip_path):
             label_array = ssh.label_array_for_sso_skel(sso, comment_converter)
             if not np.all(label_array == -1):

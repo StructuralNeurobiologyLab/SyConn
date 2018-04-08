@@ -2,12 +2,18 @@
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 import matplotlib
+
 matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+import matplotlib.ticker as ticker
+import seaborn as sns
+sns.reset_orig()
 import sys
 import time
 import numpy as np
-from syconn.handler.basics import chunkify, load_pkl2obj, write_obj2pkl, write_txt2kzip
-from syconn.proc.stats import model_performance
+from syconn.handler.basics import chunkify, load_pkl2obj, write_obj2pkl, write_txt2kzip, get_filepaths_from_dir
+from syconn.proc.stats import model_performance, model_performance_predonly
 from syconn.reps.super_segmentation_object import predict_sos_views, render_sso_coords
 from syconn.reps.super_segmentation_helper import write_axpred
 from syconn.reps.rep_helper import knossos_ml_from_ccs
@@ -23,6 +29,8 @@ import os
 import tqdm
 from syconn.proc.skel_based_classifier import SkelClassifier
 import shutil
+from knossos_utils.skeleton_utils import load_skeleton
+import re
 
 
 class NeuralNetworkInterface(object):
@@ -140,6 +148,71 @@ def get_test_candidates():
     write_txt2kzip(dest_folder + "test_set.k.zip", kml, "mergelist.txt")
 
 
+def eval_test_candidates():
+    dest_folder = "/wholebrain/scratch/pschuber/cmn_paper/data/axoness_comparison/test_ssv/"
+    ssd_all = SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/")
+    sc = SkelClassifier(target_type="axoness", working_dir="/wholebrain/scratch/areaxfs3/")
+    rfc_4000_wo2 = sc.load_classifier("rfc", feature_context_nm=4000,
+                                      prefix="(2,)")
+    rfc_8000_wo2 = sc.load_classifier("rfc", feature_context_nm=8000,
+                                      prefix="(2,)")
+    kzip_ps = get_filepaths_from_dir(dest_folder)
+    cnv_dict = {"gt_axon": 1, "gt_soma": 2, "gt_dendrite": 0}
+    all_labels = []
+    all_preds_skel_4000 = []
+    all_preds_skel_8000 = []
+    all_preds_skel_4000_wo2 = []
+    all_preds_skel_8000_wo2 = []
+    all_preds_cnn = []
+    currently_annotated = ["34299393.001.k", "8733319.001.k", "30030341.001.k", "28985344.001.k", "12474080.001.k"]
+    for fname in kzip_ps:
+        if not np.any([ca in fname for ca in currently_annotated]):
+            continue
+        sso_id = int(re.findall("(\d+).\d+.k.zip", fname)[0])
+        sso = ssd_all.get_super_segmentation_object(sso_id)
+        sso.load_skeleton()
+        skel_nodes = sso.skeleton["nodes"]
+        feats_4000 = sso.skel_features(feature_context_nm=4000)
+        preds_4000_wo2 = np.argmax(rfc_4000_wo2.predict_proba(feats_4000), axis=1)
+        feats_8000 = sso.skel_features(feature_context_nm=8000)
+        preds_8000_wo2 = np.argmax(rfc_8000_wo2.predict_proba(feats_8000), axis=1)
+        preds_4000wo2_dc = {}
+        preds_8000wo2_dc = {}
+        for i in range(len(skel_nodes)):
+            preds_4000wo2_dc[frozenset(skel_nodes[i])] = preds_4000_wo2[i]
+            preds_8000wo2_dc[frozenset(skel_nodes[i])] = preds_8000_wo2[i]
+        try:
+            skel = load_skeleton(fname)["skeleton"]
+        except KeyError:
+            continue
+        for n in skel.getNodes():
+            c = n.getComment()
+            try:
+                label = cnv_dict[c]
+            except KeyError:
+                continue
+            all_labels.append(label)
+            all_preds_skel_4000.append(int(n.data["axoness_fc4000_avgwind0"]))
+            all_preds_skel_8000.append(int(n.data["axoness_fc8000_avgwind0"]))
+            all_preds_skel_4000_wo2.append(preds_4000wo2_dc[frozenset(n.getCoordinate())])
+            all_preds_skel_8000_wo2.append(preds_8000wo2_dc[frozenset(n.getCoordinate())])
+            all_preds_cnn.append(int(n.data["axoness_cnn_k1_gt"]))
+    print "Collected %d labeled nodes." % len(all_labels)
+    model_performance_predonly(all_preds_skel_4000, all_labels, model_dir=dest_folder, prefix="skel_4000")
+    model_performance_predonly(all_preds_skel_8000, all_labels, model_dir=dest_folder, prefix="skel_8000")
+    model_performance_predonly(all_preds_cnn, all_labels, model_dir=dest_folder, prefix="cnn_k1")
+
+    all_labels = np.array(all_labels)
+    all_preds_skel_4000_wo2 = np.array(all_preds_skel_4000_wo2)
+    all_preds_skel_8000_wo2 = np.array(all_preds_skel_8000_wo2)
+    all_preds_skel_4000_wo2 = all_preds_skel_4000_wo2[all_labels != 2]
+    all_preds_skel_8000_wo2 = all_preds_skel_8000_wo2[all_labels != 2]
+    all_labels = all_labels[all_labels != 2]
+    # and without soma
+    model_performance_predonly(all_preds_skel_4000_wo2, all_labels, model_dir=dest_folder, prefix="skel_4000_wo2")
+    model_performance_predonly(all_preds_skel_8000_wo2, all_labels, model_dir=dest_folder, prefix="skel_8000_wo2")
+
+
 # model which is NOT trained on all samples, but on training samples
 # as defined in axgt_splitting_v3.pkl
 model_p = "/wholebrain/u/pschuber/CNN_Training/nupa_cnn/axoness_old/" \
@@ -148,6 +221,105 @@ def get_axoness_model():
     m = NeuralNetworkInterface(model_p, imposed_batch_size=200, nb_labels=3)
     _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
     return m
+
+
+def plot_bars(ind, values, title='', legend_labels=None,
+            save_path=None, colorVals=None, r_x=None, xtick_rotation=0,
+            xlabel='', ylabel='', l_pos="upper right",
+            legend=True, ls=22, xtick_labels=(), width=None):
+
+    if width == None:
+        width = 0.35
+
+    def array2_xls(dest_p, arr):
+        import xlsxwriter
+
+        workbook = xlsxwriter.Workbook(dest_p)
+        worksheet = workbook.add_worksheet()
+        col = 0
+
+        for row, data in enumerate(arr):
+            worksheet.write_row(row, col, data)
+
+        workbook.close()
+
+    fig, ax = plt.subplots()
+    fig.patch.set_facecolor('white')
+    ax.tick_params(axis='x', which='major', labelsize=ls, direction='out',
+                   length=4, width=3, right="off", top="off", pad=10)
+    ax.tick_params(axis='y', which='major', labelsize=ls, direction='out',
+                   length=4, width=3, right="off", top="off", pad=10)
+
+    ax.tick_params(axis='x', which='minor', labelsize=ls, direction='out',
+                   length=4, width=3, right="off", top="off", pad=10)
+    ax.tick_params(axis='y', which='minor', labelsize=ls, direction='out',
+                   length=4, width=3, right="off", top="off", pad=10)
+
+    ax.spines['left'].set_linewidth(3)
+    ax.spines['bottom'].set_linewidth(3)
+    ax.spines['right'].set_visible(False)
+    ax.spines['top'].set_visible(False)
+
+    plt.title(title)
+
+    plt.xlabel(xlabel, fontsize=ls)
+    plt.ylabel(ylabel, fontsize=ls)
+
+    if save_path is not None:
+        dest_dir, fname = os.path.split(save_path)
+        if legend_labels is not None:
+            ll = [["legend labels"] + list(legend_labels)]
+        else:
+            ll = [[]]
+        array2_xls(dest_dir + "/" + os.path.splitext(fname)[0] + ".xlsx", ll + [["labels", xlabel, ylabel]] + [xtick_labels] + [ind] + [list(arr) for arr in values])
+
+    handles = []
+    for ii in range(len(values)):
+        rects = ax.bar(ind+width/len(values)*(ii-len(values)//2), values[ii], width/len(values), color=colorVals[ii])
+    for ii in range(len(values)):
+        handles.append(patches.Patch(color=colorVals[ii],
+                                     label=legend_labels[ii]))
+
+    if legend:
+        ax.legend(handles=handles, frameon=False,
+                   prop={'size': ls}, loc='upper right')
+    if plt.xlim(r_x) is not None:
+        plt.xlim(r_x)
+    ax.set_xticks(ind)
+    if len(xtick_labels) > 0:
+        # ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
+        ax.set_xticklabels(xtick_labels, rotation=xtick_rotation)
+    plt.tight_layout()
+    if save_path is None:
+        plt.show(block=False)
+    else:
+        plt.savefig(save_path, dpi=400)
+
+
+def plot_axoness_comparison():
+    name = ["skel_4000", "skel_8000", "cnn_k1", "skel_4000_wo2", "skel_8000_wo2"]
+    xtick_labels = ["RFC-4", "RFC-8", "CNN", "RFC*-4", "RFC*-8"]
+    # the f-score value is the weighted f-score average of the three classes
+    fscore_den = np.array([0.8429, 0.8860, 0.9460, 0.8809, 0.9341])
+    fscore_ax = np.array([0.3814, 0.4141, 0.8999, 0.7968, 0.8716])
+    fscore_so = np.array([0.2728, 0.3219, 0.9960, 0, 0])
+    fscore_overall_unweighted = np.mean(np.array([fscore_den[:], fscore_ax, fscore_so]), axis=0)
+    fscore_overall_unweighted[-2] = np.mean([fscore_den[-2], fscore_ax[-2]])
+    fscore_overall_unweighted[-1] = np.mean([fscore_den[-1], fscore_ax[-1]])
+    fscore_overall_weighted = [0.4851, 0.5295, 0.9635, 0.8542, 0.9142]
+
+
+    plot_bars(np.arange(len(xtick_labels))+0.8, [fscore_so, fscore_den, fscore_ax, fscore_overall_unweighted], legend=False, xtick_labels=xtick_labels, width=0.8, xtick_rotation=90,
+            xlabel="model", ylabel="F-Score", legend_labels=["soma", "dendrite", "axon", "avg."], r_x=[0, 6], colorVals=[[0.32, 0.32, 0.32, 1.], [0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
+                           np.array([11, 129, 220, 255]) / 255.],
+            save_path="/wholebrain/scratch/pschuber/cmn_paper/figures/axoness_comparison/FINAL_PLOT.png",)# colorVals=['0.32', '0.66'])
+    # plot_pr(fscore, np.arange(1, len(fscore)+1), xtick_labels=xtick_labels, legend=False,
+    #         xlabel="", ylabel="F-Score", r=[0.8, 1.01], r_x=[0, len(fscore) + 1],
+    #             save_path="/wholebrain/scratch/pschuber/cmn_paper/figures//glia_performances.png")
+    # plot_pr_stacked([fscore_neg, fscore], np.arange(1, len(fscore) + 1), xtick_labels=xtick_labels,
+    #         legend=True, legend_labels=["non-glia", "glia", "avg"], colorVals=["0.3", "0.6"],
+    #         xlabel="", ylabel="F-Score", r=[0.8, 1.01], r_x=[0, len(fscore) + 1],
+    #         save_path="/wholebrain/scratch/pschuber/cmn_paper/figures//glia_performances_stacked.png")
 
 
 if __name__ == "__main__":
@@ -160,8 +332,14 @@ if __name__ == "__main__":
     sbc = SkelClassifier("axoness", working_dir="/wholebrain/scratch/areaxfs3/", create=False)
 
     # create test set candidates
-    if 1:
+    if 0:
         get_test_candidates()
+
+    # eval test set
+    if 0:
+        eval_test_candidates()
+    if 1:
+        plot_axoness_comparison()
 
     # evaluate cnn on "pseude" train/valid set (views are different form actual views used during training)
     # evaluate rfc on train and valid dataset

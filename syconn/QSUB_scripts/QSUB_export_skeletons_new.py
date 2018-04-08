@@ -7,7 +7,11 @@
 
 import sys
 
-import cPickle as pkl
+try:
+    import cPickle as pkl
+# TODO: switch to Python3 at some point and remove above
+except Exception:
+    import pickle as pkl
 from syconn.reps.super_segmentation_helper import create_sso_skeleton
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
 
@@ -24,9 +28,9 @@ with open(path_storage_file) as f:
 
 
 ssv_ixs = args
-print ssv_ixs
+print(ssv_ixs)
 for ix in ssv_ixs:
-    print ix
+    print(ix)
     sso = SuperSegmentationObject(ix, version="0", working_dir="/wholebrain/scratch/areaxfs3/")
     sso = create_sso_skeleton(sso)
     sso.save_skeleton()

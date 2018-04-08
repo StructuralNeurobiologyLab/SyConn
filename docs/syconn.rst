@@ -1,33 +1,26 @@
-**********
-SyConn API
-**********
+syconn package
+==============
+
+Subpackages
+-----------
 
 .. toctree::
 
-    syconn.processing
-    syconn.multi_proc
+    syconn.QSUB_scripts
+    syconn.config
+    syconn.extraction
+    syconn.gate
+    syconn.handler
+    syconn.mp
+    syconn.proc
+    syconn.reps
+    syconn.ui
     syconn.utils
 
-syconn.brainqueries
--------------------
+Module contents
+---------------
 
-.. automodule:: syconn.brainqueries
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-syconn.conmatrix
-----------------
-
-.. automodule:: syconn.conmatrix
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-syconn.contactsites
--------------------
-
-.. automodule:: syconn.contactsites
+.. automodule:: syconn
     :members:
     :undoc-members:
     :show-inheritance:

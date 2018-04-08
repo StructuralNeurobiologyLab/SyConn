@@ -1,4 +1,8 @@
-import cPickle as pkl
+try:
+    import cPickle as pkl
+# TODO: switch to Python3 at some point and remove above
+except Exception:
+    import Pickle as pkl
 import glob
 import os
 from ..mp import qsub_utils as qu
@@ -43,5 +47,5 @@ def find_missing_overlaycubes(path, stride=100, qsub_pe=None, qsub_queue=None,
     for result in results:
         m_paths += result
 
-    print m_paths
+    print(m_paths)
     return m_paths

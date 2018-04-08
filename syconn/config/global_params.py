@@ -17,3 +17,5 @@ min_cc_size_neuron = 8e3 # in nm; L1-norm on vertex bounding box
 MESH_DOWNSAMPLING = {"sv": (8, 8, 4), "sj": (2, 2, 1), "vc": (4, 4, 2),
                      "mi": (8, 8, 4), "cs": (2, 2, 1), "conn": (2, 2, 1)}
 MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0, "conn": 4}
+
+SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000} # in nm

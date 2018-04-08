@@ -7,10 +7,11 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 # adjusted neuro3d.py
-
-import cPickle as pkl
-from elektronn2 import neuromancer
-import numpy as np
+try:
+    import cPickle as pkl
+# TODO: switch to Python3 at some point and remove above
+except Exception:
+    import Pickle as pkl
 import os
 
 home = os.path.expanduser("~/")

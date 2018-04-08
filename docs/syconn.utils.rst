@@ -1,43 +1,30 @@
-syconn.utils
-============
+syconn.utils package
+====================
 
-syconn.utils.basics
--------------------
+Submodules
+----------
+
+syconn.utils.basics module
+--------------------------
 
 .. automodule:: syconn.utils.basics
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.utils.datahandler
-------------------------
-
-.. automodule:: syconn.utils.datahandler
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-syconn.utils.segmentationdataset
---------------------------------
+syconn.utils.segmentationdataset module
+---------------------------------------
 
 .. automodule:: syconn.utils.segmentationdataset
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.utils.skeleton
----------------------
 
-.. automodule:: syconn.utils.skeleton
+Module contents
+---------------
+
+.. automodule:: syconn.utils
     :members:
     :undoc-members:
     :show-inheritance:
-
-syconn.utils.skeleton_utils
----------------------------
-
-.. automodule:: syconn.utils.skeleton_utils
-    :members:
-    :undoc-members:
-    :show-inheritance:
-

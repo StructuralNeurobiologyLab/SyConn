@@ -1,4 +1,8 @@
-import cPickle as pkl
+try:
+    import cPickle as pkl
+# TODO: switch to Python3 at some point and remove above
+except Exception:
+    import pickle as pkl
 import glob
 import numpy as np
 import os
@@ -394,7 +398,7 @@ def _binary_filling_cs_thread(args):
         for so_id in this_vx_dc.keys():
             so = cs_sd.get_segmentation_object(so_id)
             # so.attr_dict = this_attr_dc[so_id]
-            so.load_voxels(voxel_dc=this_vx_dc, overwrite=True)
+            so.load_voxels(voxel_dc=this_vx_dc)
             filled_voxels = segmentation_helper.binary_closing(so.voxels.copy(),
                                                                n_iterations=n_iterations)
 
@@ -598,7 +602,7 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512,
     bbs_block_range = sd.load_cached_data("bounding_box") / np.array(block_size)
     bbs_block_range = bbs_block_range.astype(np.int)
 
-    kd_block_range = kd.boundary / block_size + 1
+    kd_block_range = np.array(kd.boundary / block_size + 1, dtype=np.int)
 
     bbs_job_dict = defaultdict(list)
 
@@ -670,6 +674,7 @@ def _export_sd_to_knossosdataset_thread(args):
 
         overlay_block[vx[:, 0], vx[:, 1], vx[:, 2]] = so_id
 
+    print(np.array(np.where(overlay_block == 1127314)).T + block_start)
     kd.from_matrix_to_cubes(block_start,
                             data=overlay_block,
                             overwrite=True,
@@ -678,33 +683,9 @@ def _export_sd_to_knossosdataset_thread(args):
 
 
 def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
-                         trafo_dict_path=None, stride=1000,
+                         trafo_dict_path=None, stride=10,
                          qsub_pe=None, qsub_queue=None, nb_cpus=1,
                          n_max_co_processes=None):
-    """ Maps objects to SVs
-
-    The segmentation needs to be written to a KnossosDataset before running this
-
-    :param sd: SegmentationDataset
-    :param kd_path: str
-        path to knossos dataset containing the segmentation
-    :param readonly: bool
-        if True the mapping is only read from the segmentation objects and not
-        computed. This requires the previous computation of the mapping for the
-        mapped segmentation objects.
-    :param stride: int
-        number of voxel / attribute dicts per thread
-    :param qsub_pe: str
-        qsub parallel environment
-    :param qsub_queue: str
-        qsub queue
-    :param nb_cpus: int
-        number of cores used for multithreading
-        number of cores per worker for qsub jobs
-    :param n_max_co_processes: int
-        max number of workers running at the same time when using qsub
-    :return:
-    """
     assert "sj" in sj_sd.version_dict
     paths = sj_sd.so_dir_paths
 
@@ -777,17 +758,17 @@ def _extract_synapse_type_thread(args):
                 asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl))
                 sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl))
             except:
-                print("Fail")
+                # print("Fail")
                 sym_prop = 0
                 asym_prop = 0
 
             if sym_prop + asym_prop == 0:
                 sym_ratio = -1
-                print(so.rep_coord, so.size)
+                # print(so.rep_coord, so.size)
             else:
                 sym_ratio = sym_prop / float(asym_prop + sym_prop)
 
-            print(sym_ratio, asym_prop, sym_prop)
+            # print(sym_ratio, asym_prop, sym_prop, so.size, so.rep_coord, np.mean(vxl, axis=0).astype(np.int))
 
             so.attr_dict["syn_type_sym_ratio"] = sym_ratio
             this_attr_dc[so_id] = so.attr_dict
