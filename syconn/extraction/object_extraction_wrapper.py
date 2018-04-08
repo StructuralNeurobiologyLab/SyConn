@@ -155,95 +155,95 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                 sigmas[nb_sigma] = \
                     basics.switch_array_entries(sigmas[nb_sigma], [0, 2])
 
-    # # --------------------------------------------------------------------------
-    #
-    # time_start = time.time()
-    # cc_info_list, overlap_info = oes.object_segmentation(
-    #     cset, filename, hdf5names, overlap=overlap, sigmas=sigmas,
-    #     thresholds=thresholds, chunk_list=chunk_list, debug=debug,
-    #     swapdata=swapdata,
-    #     prob_kd_path_dict=prob_kd_path_dict,
-    #     membrane_filename=membrane_filename,
-    #     membrane_kd_path=membrane_kd_path,
-    #     hdf5_name_membrane=hdf5_name_membrane,
-    #     fast_load=True, suffix=suffix,
-    #     qsub_pe=qsub_pe, transform_func=transform_func, func_kwargs=func_kwargs,
-    #     qsub_queue=qsub_queue,
-    #     n_max_co_processes=n_max_co_processes)
-    #
-    # stitch_overlap = overlap_info[1]
-    # overlap = overlap_info[0]
-    # all_times.append(time.time() - time_start)
-    # step_names.append("conneceted components")
-    # print("\nTime needed for connected components: %.3fs" % all_times[-1])
-    #
-    # # --------------------------------------------------------------------------
-    #
-    # time_start = time.time()
-    # nb_cc_dict = {}
-    # max_nb_dict = {}
-    # max_labels = {}
-    # for hdf5_name in hdf5names:
-    #     nb_cc_dict[hdf5_name] = np.zeros(len(chunk_list), dtype=np.int32)
-    #     max_nb_dict[hdf5_name] = np.zeros(len(chunk_list), dtype=np.int32)
-    # for cc_info in cc_info_list:
-    #     nb_cc_dict[cc_info[1]][chunk_translator[cc_info[0]]] = cc_info[2]
-    # for hdf5_name in hdf5names:
-    #     max_nb_dict[hdf5_name][0] = 0
-    #     for nb_chunk in range(1, len(chunk_list)):
-    #         max_nb_dict[hdf5_name][nb_chunk] = \
-    #             max_nb_dict[hdf5_name][nb_chunk - 1] + \
-    #             nb_cc_dict[hdf5_name][nb_chunk - 1]
-    #     max_labels[hdf5_name] = int(max_nb_dict[hdf5_name][-1] + \
-    #                                 nb_cc_dict[hdf5_name][-1])
-    # all_times.append(time.time() - time_start)
-    # step_names.append("extracting max labels")
-    # print("\nTime needed for extracting max labels: %.6fs" % all_times[-1])
-    # print("Max labels: ", max_labels)
-    #
-    # # --------------------------------------------------------------------------
-    #
-    # time_start = time.time()
-    # oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
-    #                        chunk_translator, debug, suffix=suffix,
-    #                        qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-    #                        n_max_co_processes=n_max_co_processes)
-    # all_times.append(time.time() - time_start)
-    # step_names.append("unique labels")
-    # print("\nTime needed for unique labels: %.3fs" % all_times[-1])
-    #
-    # # --------------------------------------------------------------------------
-    #
-    # time_start = time.time()
-    # stitch_list = oes.make_stitch_list(cset, filename, hdf5names, chunk_list,
-    #                                    stitch_overlap, overlap, debug,
-    #                                    suffix=suffix, qsub_pe=qsub_pe,
-    #                                    qsub_queue=qsub_queue,
-    #                                    n_max_co_processes=n_max_co_processes)
-    # all_times.append(time.time() - time_start)
-    # step_names.append("stitch list")
-    # print("\nTime needed for stitch list: %.3fs" % all_times[-1])
-    #
-    # # --------------------------------------------------------------------------
-    #
-    # time_start = time.time()
-    # merge_dict, merge_list_dict = oes.make_merge_list(hdf5names, stitch_list,
-    #                                                   max_labels)
-    # all_times.append(time.time() - time_start)
-    # step_names.append("merge list")
-    # print("\nTime needed for merge list: %.3fs" % all_times[-1])
-    # # if all_times[-1] < 0.01:
-    # #     raise Exception("That was too fast!")
-    #
-    # # -------------------------------------------------------------------------
-    #
-    # time_start = time.time()
-    # oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
-    #                      debug, suffix=suffix, qsub_pe=qsub_pe,
-    #                      qsub_queue=qsub_queue, n_max_co_processes=n_max_co_processes)
-    # all_times.append(time.time() - time_start)
-    # step_names.append("apply merge list")
-    # print("\nTime needed for applying merge list: %.3fs" % all_times[-1])
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    cc_info_list, overlap_info = oes.object_segmentation(
+        cset, filename, hdf5names, overlap=overlap, sigmas=sigmas,
+        thresholds=thresholds, chunk_list=chunk_list, debug=debug,
+        swapdata=swapdata,
+        prob_kd_path_dict=prob_kd_path_dict,
+        membrane_filename=membrane_filename,
+        membrane_kd_path=membrane_kd_path,
+        hdf5_name_membrane=hdf5_name_membrane,
+        fast_load=True, suffix=suffix,
+        qsub_pe=qsub_pe, transform_func=transform_func, func_kwargs=func_kwargs,
+        qsub_queue=qsub_queue,
+        n_max_co_processes=n_max_co_processes)
+
+    stitch_overlap = overlap_info[1]
+    overlap = overlap_info[0]
+    all_times.append(time.time() - time_start)
+    step_names.append("conneceted components")
+    print("\nTime needed for connected components: %.3fs" % all_times[-1])
+
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    nb_cc_dict = {}
+    max_nb_dict = {}
+    max_labels = {}
+    for hdf5_name in hdf5names:
+        nb_cc_dict[hdf5_name] = np.zeros(len(chunk_list), dtype=np.int32)
+        max_nb_dict[hdf5_name] = np.zeros(len(chunk_list), dtype=np.int32)
+    for cc_info in cc_info_list:
+        nb_cc_dict[cc_info[1]][chunk_translator[cc_info[0]]] = cc_info[2]
+    for hdf5_name in hdf5names:
+        max_nb_dict[hdf5_name][0] = 0
+        for nb_chunk in range(1, len(chunk_list)):
+            max_nb_dict[hdf5_name][nb_chunk] = \
+                max_nb_dict[hdf5_name][nb_chunk - 1] + \
+                nb_cc_dict[hdf5_name][nb_chunk - 1]
+        max_labels[hdf5_name] = int(max_nb_dict[hdf5_name][-1] + \
+                                    nb_cc_dict[hdf5_name][-1])
+    all_times.append(time.time() - time_start)
+    step_names.append("extracting max labels")
+    print("\nTime needed for extracting max labels: %.6fs" % all_times[-1])
+    print("Max labels: ", max_labels)
+
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
+                           chunk_translator, debug, suffix=suffix,
+                           qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+                           n_max_co_processes=n_max_co_processes)
+    all_times.append(time.time() - time_start)
+    step_names.append("unique labels")
+    print("\nTime needed for unique labels: %.3fs" % all_times[-1])
+
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    stitch_list = oes.make_stitch_list(cset, filename, hdf5names, chunk_list,
+                                       stitch_overlap, overlap, debug,
+                                       suffix=suffix, qsub_pe=qsub_pe,
+                                       qsub_queue=qsub_queue,
+                                       n_max_co_processes=n_max_co_processes)
+    all_times.append(time.time() - time_start)
+    step_names.append("stitch list")
+    print("\nTime needed for stitch list: %.3fs" % all_times[-1])
+
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    merge_dict, merge_list_dict = oes.make_merge_list(hdf5names, stitch_list,
+                                                      max_labels)
+    all_times.append(time.time() - time_start)
+    step_names.append("merge list")
+    print("\nTime needed for merge list: %.3fs" % all_times[-1])
+    # if all_times[-1] < 0.01:
+    #     raise Exception("That was too fast!")
+
+    # -------------------------------------------------------------------------
+
+    time_start = time.time()
+    oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
+                         debug, suffix=suffix, qsub_pe=qsub_pe,
+                         qsub_queue=qsub_queue, n_max_co_processes=n_max_co_processes)
+    all_times.append(time.time() - time_start)
+    step_names.append("apply merge list")
+    print("\nTime needed for applying merge list: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
