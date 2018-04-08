@@ -651,7 +651,7 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
     write_txt2kzip(k_path, ply_str, ply_fname)
 
 
-def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames):
+def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames, force_overwrite=False):
     """
     Writes meshes as .ply's to k.zip file.
 
@@ -665,6 +665,7 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames):
     color : list of tuple or np.array
         rgba between 0 and 255
     ply_fname : list of str
+    force_overwrite : bool
     """
     ply_strs = []
     for i in range(len(inds)):
@@ -679,7 +680,7 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames):
         else:
             ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm)
         ply_strs.append(ply_str)
-    texts2kzip(k_path, ply_strs, ply_fnames)
+    texts2kzip(k_path, ply_strs, ply_fnames, force_overwrite=force_overwrite)
 
 
 def get_bb_size(coords):
