@@ -138,16 +138,13 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     pred = m.predict_dense(raw[None, ], pad_raw=True)[1]
     if not data_is_zxy:
         pred = zxy2xyz(pred)
-        raw = zxy2xyz(raw)
     if as_uint8:
         pred = (pred * 255).astype(np.uint8)
     if clf_thresh:
         pred = (pred >= clf_thresh).astype(np.float32)
     if dest_p is None:
-        dest_p = h5_path
-    if hdf5_data_key is None:
-        hdf5_data_key = "raw"
-    save_to_h5py([raw, pred], dest_p, [hdf5_data_key, dest_hdf5_data_key])
+        dest_p = h5_path[:-3] + "_pred.h5"
+    save_to_h5py([pred], dest_p, [dest_hdf5_data_key])
 
 
 def overlaycubes2kzip(dest_p, vol, offset, kd_path):
