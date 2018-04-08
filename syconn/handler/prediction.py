@@ -126,7 +126,9 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     dest_p : str
     """
     raw = load_from_h5py(h5_path, hdf5_names=[hdf5_data_key] if hdf5_data_key else
-                         None)[0]
+                         None)
+    assert len(raw) == 1, "'hdf5_data_key' not given but multiple hdf5 elements found. Please define raw data key."
+    raw = raw[0]
     if not data_is_zxy:
         raw = xyz2zxy(raw)
     initgpu(gpu_ix)
@@ -144,7 +146,9 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
         pred = (pred >= clf_thresh).astype(np.float32)
     if dest_p is None:
         dest_p = h5_path[:-3] + "_pred.h5"
-    save_to_h5py([pred], dest_p, [dest_hdf5_data_key])
+    if hdf5_data_key is None:
+        hdf5_data_key = "raw"
+    save_to_h5py([raw, pred], dest_p, [hdf5_data_key, dest_hdf5_data_key])
 
 
 def overlaycubes2kzip(dest_p, vol, offset, kd_path):
