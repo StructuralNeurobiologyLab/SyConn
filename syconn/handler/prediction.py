@@ -125,10 +125,12 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     as_uint8: bool
     dest_p : str
     """
-    raw = load_from_h5py(h5_path, hdf5_names=[hdf5_data_key] if hdf5_data_key else
-                         None)
-    assert len(raw) == 1, "'hdf5_data_key' not given but multiple hdf5 elements found. Please define raw data key."
-    raw = raw[0]
+    if hdf5_data_key:
+        raw = load_from_h5py(h5_path, hdf5_names=[hdf5_data_key])[0]
+    else:
+        raw = load_from_h5py(h5_path, hdf5_names=None)
+        assert len(raw) == 1, "'hdf5_data_key' not given but multiple hdf5 elements found. Please define raw data key."
+        raw = raw[0]
     if not data_is_zxy:
         raw = xyz2zxy(raw)
     initgpu(gpu_ix)
