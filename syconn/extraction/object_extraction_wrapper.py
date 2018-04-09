@@ -62,7 +62,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                                   qsub_queue=None,
                                   n_max_co_processes=None,
                                   transform_func=None,
-                                  func_kwargs=None):
+                                  func_kwargs=None,
+                                  nb_cpus=1):
     """
     Main function for the object extraction step; combines all needed steps
     Parameters
@@ -122,6 +123,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
         Segmentation method which is applied
     func_kwargs : dict
         key word arguments for transform_func
+    nb_cpus : int
+        Number of cpus used if QSUB is disabled
     """
     all_times = []
     step_names = []
@@ -169,7 +172,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
         fast_load=True, suffix=suffix,
         qsub_pe=qsub_pe, transform_func=transform_func, func_kwargs=func_kwargs,
         qsub_queue=qsub_queue,
-        n_max_co_processes=n_max_co_processes)
+        n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
 
     stitch_overlap = overlap_info[1]
     overlap = overlap_info[0]
@@ -207,7 +210,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                            chunk_translator, debug, suffix=suffix,
                            qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-                           n_max_co_processes=n_max_co_processes)
+                           n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
     print("\nTime needed for unique labels: %.3fs" % all_times[-1])
@@ -239,7 +242,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
 
     time_start = time.time()
     oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
-                         debug, suffix=suffix, qsub_pe=qsub_pe,
+                         debug, suffix=suffix, qsub_pe=qsub_pe, nb_cpus=nb_cpus,
                          qsub_queue=qsub_queue, n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
@@ -252,7 +255,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
                        chunk_list=chunk_list, suffix=suffix,
                        use_work_dir=True, qsub_pe=qsub_pe,
                        qsub_queue=qsub_queue,
-                       n_max_co_processes=n_max_co_processes)
+                       n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
     print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
@@ -263,7 +266,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
                        hdf5names, n_folders_fs=n_folders_fs, qsub_pe=qsub_pe,
                        qsub_queue=qsub_queue,
-                       n_max_co_processes=n_max_co_processes)
+                       n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     all_times.append(time.time() - time_start)
     step_names.append("combine voxels")
     print("\nTime needed for combining voxels: %.3fs" % all_times[-1])

@@ -305,8 +305,8 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
     Parameters
     ----------
     kzip_path : str
-    text : list of str
-    fname_in_zip : list of str
+    texts : list of str
+    fnames_in_zip : list of str
         name of file when added to zip
     force_overwrite : bool
     """
@@ -319,7 +319,8 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
                         for i in range(len(texts)):
                             zf.writestr(fnames_in_zip[i], texts[i])
                 else:
-                    remove_from_zip(kzip_path, fname_in_zip)
+                    for i in range(len(texts)):
+                        remove_from_zip(kzip_path, fnames_in_zip[i])
                     with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED,
                                          allowZip64=True) as zf:
                         for i in range(len(texts)):
