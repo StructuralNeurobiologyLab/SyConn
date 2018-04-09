@@ -278,7 +278,7 @@ def _gauss_threshold_connected_components_thread(args):
 
 
 def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
-                       chunk_translator, debug, suffix="",
+                       chunk_translator, debug, suffix="", nb_cpus=1,
                        qsub_pe=None, qsub_queue=None, n_max_co_processes=100):
     """
     Makes labels unique across chunks
@@ -323,7 +323,7 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_make_unique_labels_thread,
-                                         multi_params, debug=debug)
+                                         multi_params, debug=debug, nb_cpus=nb_cpus)
 
     elif qu.__QSUB__:
         path_to_out = qu.QSUB_script(multi_params,
@@ -359,7 +359,7 @@ def _make_unique_labels_thread(args):
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                      overlap, debug, suffix="", qsub_pe=None, qsub_queue=None,
-                     n_max_co_processes=100):
+                     n_max_co_processes=100, nb_cpus=1):
     """
     Creates a stitch list for the overlap region between chunks
 
@@ -402,7 +402,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_make_stitch_list_thread,
-                                         multi_params, debug=debug)
+                                         multi_params, debug=debug, nb_cpus=nb_cpus)
 
         stitch_list = {}
         for hdf5_name in hdf5names:
@@ -578,7 +578,7 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
 
 def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                      debug, suffix="", qsub_pe=None, qsub_queue=None,
-                     n_max_co_processes=100):
+                     n_max_co_processes=100, nb_cpus=1):
     """
     Applies merge list to all chunks
 
@@ -619,7 +619,7 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_apply_merge_list_thread,
-                                         multi_params, debug=debug)
+                                         multi_params, debug=debug, nb_cpus=nb_cpus)
 
     elif qu.__QSUB__:
         path_to_out = qu.QSUB_script(multi_params,
