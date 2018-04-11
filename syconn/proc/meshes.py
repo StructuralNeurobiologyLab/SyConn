@@ -12,7 +12,7 @@ from numba import jit
 from scipy import spatial
 from skimage import measure
 from sklearn.decomposition import PCA
-from ..handler.basics import write_txt2kzip
+from ..handler.basics import write_txt2kzip, texts2kzip
 from .image import apply_pca
 from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 from scipy.ndimage.morphology import binary_closing
@@ -649,6 +649,38 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
     else:
         ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm)
     write_txt2kzip(k_path, ply_str, ply_fname)
+
+
+def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames, force_overwrite=False):
+    """
+    Writes meshes as .ply's to k.zip file.
+
+    Parameters
+    ----------
+    k_path : str
+        path to zip
+    ind : list of np.array
+    vert : list of np.array
+    norm : list of np.array
+    color : list of tuple or np.array
+        rgba between 0 and 255
+    ply_fname : list of str
+    force_overwrite : bool
+    """
+    ply_strs = []
+    for i in range(len(inds)):
+        vert = verts[i]
+        ind = inds[i]
+        norm = norms[i]
+        color = colors[i]
+        if len(vert) == 0:
+            raise ValueError("Mesh with zero-length vertex array.")
+        if color is not None:
+            ply_str = make_ply_string(ind, vert.astype(np.float32), norm, color)
+        else:
+            ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm)
+        ply_strs.append(ply_str)
+    texts2kzip(k_path, ply_strs, ply_fnames, force_overwrite=force_overwrite)
 
 
 def get_bb_size(coords):
