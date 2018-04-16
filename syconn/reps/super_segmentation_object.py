@@ -1640,7 +1640,7 @@ class SuperSegmentationObject(object):
         self.skeleton["axoness_pred_avg%d" % avg_window] = avg_pred
         self.save_skeleton()
 
-    def axoness_for_coords(self, coords, radius_nm=4000):
+    def axoness_for_coords(self, coords, radius_nm=4000, pred_type="axoness"):
         coords = np.array(coords)
 
         self.load_skeleton()
@@ -1651,7 +1651,7 @@ class SuperSegmentationObject(object):
         axoness_pred = []
         for i_coord in range(len(coords)):
             cls, cnts = np.unique(
-                self.skeleton["axoness"][close_node_ids[i_coord]],
+                np.array(self.skeleton[pred_type])[np.array(close_node_ids[i_coord])],
                 return_counts=True)
             if len(cls) > 0:
                 axoness_pred.append(cls[np.argmax(cnts)])
