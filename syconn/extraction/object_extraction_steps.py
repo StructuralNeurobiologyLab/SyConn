@@ -888,7 +888,7 @@ def _extract_voxels_thread(args):
     return map_dict
 
 
-def combine_voxels(workfolder, hdf5_name,
+def combine_voxels(workfolder, hdf5names,
                    n_folders_fs=10000, stride=10, nb_cpus=1,
                    qsub_pe=None, qsub_queue=None, n_max_co_processes=None):
     """
@@ -896,94 +896,88 @@ def combine_voxels(workfolder, hdf5_name,
 
     Parameters
     ----------
-    cset : chunkdataset instance
-    filename : str
-        Filename of the prediction in the chunkdataset
+    workfolder : str
     hdf5names: list of str
-        List of names/ labels to be extracted and processed from the prediction
+        Names/labels to be extracted and processed from the prediction
         file
-    chunk_list: list of int
-        Selective list of chunks for which this function should work on. If None
-        all chunks are used.
-    debug: boolean
-        If true multiprocessed steps only operate on one core using 'map' which
-        allows for better error messages
-    suffix: str
-        Suffix for the intermediate results
+    n_folders_fs : int
+    stride : int
+    nb_cpus : int
     qsub_pe: str or None
         qsub parallel environment
     qsub_queue: str or None
         qsub queue
 
     """
-    voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in
-                       range(n_folders_fs)]
+    for hdf5_name in hdf5names:
+        voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in
+                           range(n_folders_fs)]
 
-    voxel_rel_paths_2stage = []
-    for ix in range(n_folders_fs):
-        vp = ""
-        for p in rh.subfold_from_ix(ix, n_folders_fs).strip('/').split('/')[:-1]:
-            vp += p + "/"
-        voxel_rel_paths_2stage.append(vp)
+        voxel_rel_paths_2stage = []
+        for ix in range(n_folders_fs):
+            vp = ""
+            for p in rh.subfold_from_ix(ix, n_folders_fs).strip('/').split('/')[:-1]:
+                vp += p + "/"
+            voxel_rel_paths_2stage.append(vp)
 
-    voxel_rel_paths_2stage = np.unique(voxel_rel_paths_2stage)
+        voxel_rel_paths_2stage = np.unique(voxel_rel_paths_2stage)
 
-    segdataset = segmentation.SegmentationDataset(obj_type=hdf5_name,
-                                                  working_dir=workfolder,
-                                                  version="new",
-                                                  create=True,
-                                                  n_folders_fs=n_folders_fs)
+        segdataset = segmentation.SegmentationDataset(obj_type=hdf5_name,
+                                                      working_dir=workfolder,
+                                                      version="new",
+                                                      create=True,
+                                                      n_folders_fs=n_folders_fs)
 
-    for p in voxel_rel_paths_2stage:
-        os.makedirs(segdataset.so_storage_path + p)
+        for p in voxel_rel_paths_2stage:
+            os.makedirs(segdataset.so_storage_path + p)
 
-    multi_params = []
-    path_blocks = np.array_split(np.array(voxel_rel_paths),
-                                 int(len(voxel_rel_paths) / stride))
+        multi_params = []
+        path_blocks = np.array_split(np.array(voxel_rel_paths),
+                                     int(len(voxel_rel_paths) / stride))
 
-    dataset_temp_path = workfolder + "/%s_temp/" % hdf5_name
-    with open(dataset_temp_path + "/remapping_dict.pkl", "r") as f:
-        mapping_dict = pkl.load(f)
+        dataset_temp_path = workfolder + "/%s_temp/" % hdf5_name
+        with open(dataset_temp_path + "/remapping_dict.pkl", "r") as f:
+            mapping_dict = pkl.load(f)
 
-    voxel_rel_path_dict = {}
-    for voxel_rel_path in voxel_rel_paths:
+        voxel_rel_path_dict = {}
+        for voxel_rel_path in voxel_rel_paths:
 
-        end_id = "00000" + "".join(voxel_rel_path.strip('/').split('/'))
-        end_id = end_id[-int(np.log10(n_folders_fs)):]
-        voxel_rel_path_dict[end_id] = {}
-
-    for so_id in list(mapping_dict.keys()):
-        end_id = "00000%d" % so_id
-        end_id = end_id[-int(np.log10(n_folders_fs)):]
-
-        voxel_rel_path_dict[end_id][so_id] = mapping_dict[so_id]
-
-    for path_block in path_blocks:
-        path_block_dicts = []
-
-        for voxel_rel_path in path_block:
             end_id = "00000" + "".join(voxel_rel_path.strip('/').split('/'))
             end_id = end_id[-int(np.log10(n_folders_fs)):]
-            path_block_dicts.append(voxel_rel_path_dict[end_id])
+            voxel_rel_path_dict[end_id] = {}
 
-        multi_params.append([workfolder, hdf5_name, path_block,
-                             path_block_dicts, segdataset.version,
-                             n_folders_fs])
+        for so_id in list(mapping_dict.keys()):
+            end_id = "00000%d" % so_id
+            end_id = end_id[-int(np.log10(n_folders_fs)):]
 
-    if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_combine_voxels_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+            voxel_rel_path_dict[end_id][so_id] = mapping_dict[so_id]
 
-    elif qu.__QSUB__:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "combine_voxels",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
-                                     n_max_co_processes=n_max_co_processes,
-                                     n_cores=nb_cpus)
+        for path_block in path_blocks:
+            path_block_dicts = []
 
-    else:
-        raise Exception("QSUB not available")
+            for voxel_rel_path in path_block:
+                end_id = "00000" + "".join(voxel_rel_path.strip('/').split('/'))
+                end_id = end_id[-int(np.log10(n_folders_fs)):]
+                path_block_dicts.append(voxel_rel_path_dict[end_id])
+
+            multi_params.append([workfolder, hdf5_name, path_block,
+                                 path_block_dicts, segdataset.version,
+                                 n_folders_fs])
+
+        if qsub_pe is None and qsub_queue is None:
+            results = sm.start_multiprocess(_combine_voxels_thread,
+                                            multi_params, nb_cpus=nb_cpus)
+
+        elif qu.__QSUB__:
+            path_to_out = qu.QSUB_script(multi_params,
+                                         "combine_voxels",
+                                         pe=qsub_pe, queue=qsub_queue,
+                                         script_folder=script_folder,
+                                         n_max_co_processes=n_max_co_processes,
+                                         n_cores=nb_cpus)
+
+        else:
+            raise Exception("QSUB not available")
 
 
 def _combine_voxels_thread(args):
