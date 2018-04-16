@@ -16,7 +16,6 @@ except ImportError as e:
     createCLAHE = None
     equalizeHist = None
 import warnings
-
 from scipy import spatial, sparse, ndimage
 from sklearn.decomposition import PCA
 
@@ -175,7 +174,7 @@ def apply_equalhist(arr):
     return normalize_img(equalizeHist(arr), max_val=1)
 
 
-def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
+def apply_clahe(arr, clipLimit=4.0, tileGridSize=(8, 8), ret_normalized=True):
     """
     If cv2 is available applies clahe filter on array.
 
@@ -183,6 +182,7 @@ def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
     ----------
     arr : np.array
     clipLimit : float
+    tileGridSize : tuple of int
     ret_normalized : bool
 
     Returns
@@ -200,14 +200,15 @@ def apply_clahe(arr, clipLimit=4.0, ret_normalized=True):
         arr = normalize_img(arr, max_val=255)
     if arr.dtype.kind not in ('u', 'i'):
         arr = arr.astype(np.uint8)
-    arr = apply_clahe_plain(arr, clipLimit)
-    if ret_normalized:
-        return normalize_img(arr, max_val=1)
+    arr = apply_clahe_plain(arr, clipLimit, tileGridSize)
+    # arr = equalize_adapthist(arr, clip_limit=clipLimit)
+    if not ret_normalized:
+        return normalize_img(arr, max_val=255).astype(np.uint8)
     return arr
 
 
-def apply_clahe_plain(arr, clipLimit):
-    clahe = createCLAHE(clipLimit=clipLimit)
+def apply_clahe_plain(arr, clipLimit, tileGridSize):
+    clahe = createCLAHE(clipLimit=clipLimit, tileGridSize=tileGridSize)
     return clahe.apply(arr)
 
 
