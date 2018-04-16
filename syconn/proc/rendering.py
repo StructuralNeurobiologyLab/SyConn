@@ -617,9 +617,6 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
 
     Renders for each SV views at sampled locations (number is dependent on
     SV mesh size with scaling fact) from combined mesh of all SV.
-    ----------------------------------------------------------------------
-    USED FOR AXONESS CLASSIFICATION
-    ----------------------------------------------------------------------
 
     Parameters
     ----------
