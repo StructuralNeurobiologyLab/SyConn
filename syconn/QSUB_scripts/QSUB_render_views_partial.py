@@ -12,7 +12,9 @@ try:
 # TODO: switch to Python3 at some point and remove above
 except Exception:
     import pickle as pkl
-from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconnfs.representations import super_segmentation_helper as ssh
+from syconnfs.representations.super_segmentation import render_sampled_sos_cc
+from syconnfs.representations.segmentation_helper import sos_dict_fact, init_sos
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -26,9 +28,10 @@ with open(path_storage_file) as f:
             break
 
 
+so_kwargs = {}  # <-- change SO kwargs here
 ch = args[0]
-wd = args[1]
-version = args[2]
-for ssv_ix in ch:
-    sso = SuperSegmentationObject(ssv_ix, working_dir=wd, version=version)
-    sso.render_views(add_cellobjects=True, woglia=True, overwrite=True)
+kwargs = args[1]
+for svixs in ch:
+    sd = sos_dict_fact(svixs, **so_kwargs)
+    sos = init_sos(sd)
+    render_sampled_sos_cc(sos, **kwargs)

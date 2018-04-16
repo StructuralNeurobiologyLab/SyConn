@@ -346,7 +346,7 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
 
 
 def assign_rep_values(target_coords, rep_coords, rep_values, colors=None,
-                       nb_cpus=-1, k=1):
+                       nb_cpus=-1, k=1, return_ixs=False):
     """
 
     Parameters
@@ -363,6 +363,8 @@ def assign_rep_values(target_coords, rep_coords, rep_values, colors=None,
     nb_cpus : int
     k : int
         Number of nearest neighbors (average prediction)
+    return_ixs : bool
+        returns indices of k-closest rep_coord for every target coordinate
 
     Returns
     -------
@@ -381,6 +383,8 @@ def assign_rep_values(target_coords, rep_coords, rep_values, colors=None,
     for i in range(len(ixs)):
         curr_reps = np.array(rep_values)[ixs[i]]
         hull_rep[i] = curr_reps
+    if return_ixs:
+        return hull_rep, ixs
     return hull_rep
 
 

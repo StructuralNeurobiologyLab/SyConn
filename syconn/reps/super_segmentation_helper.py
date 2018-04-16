@@ -16,6 +16,7 @@ import os
 import scipy
 import scipy.ndimage
 from knossos_utils.skeleton_utils import annotation_to_nx_graph, load_skeleton as load_skeleton_kzip
+from .rep_helper import assign_rep_values, colorcode_vertices
 from . import segmentation
 from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton
@@ -1368,3 +1369,113 @@ def write_axpred(ssv, pred_key_appendix, dest_path=None, k=1):
     assert pred_coords.shape[1] == 3
     ssv._pred2mesh(pred_coords, preds, "axoness.ply", dest_path=dest_path,
                     k=k)
+
+
+def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
+    """
+    Averages the axoness prediction along skeleton with maximum path length
+    of 'avg_window'. Therefore, view indices were mapped to every skeleton
+    node and collected while traversing the skeleton. The majority of the
+    set of their predictions will be assigned to the source node.
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    axoness_pred_key : str
+    avg_window : int
+    """
+    if sso.skeleton is None:
+        sso.load_skeleton()
+    pred_key = "axoness_preds_cnn%s" % pred_key_appendix
+    if not sso.attr_exists(pred_key):
+        if len(pred_key_appendix) > 0:
+            print("Couldn't find specified axoness prediction. Falling back to " \
+                  "default (-> per SV stored multi-view prediction including SSV context; RAG: 4b_fix).")
+        preds = np.array(start_multiprocess_obj("axoness_preds",
+                                                   [[sv, {
+                                                       "pred_key_appendix": pred_key_appendix}]
+                                                    for sv in sso.svs],
+                                                   nb_cpus=sso.nb_cpus))
+        preds = np.concatenate(preds)
+        sso.attr_dict[pred_key] = preds
+    else:
+        preds = sso.lookup_in_attribute_dict(pred_key)
+    loc_coords = np.concatenate(sso.sample_locations())
+    assert len(loc_coords) == len(preds), "Number of view coordinates is" \
+                                          "different from number of view" \
+                                          "predictions. SSO %d" % sso.id
+    if "view_ixs" not in sso.skeleton.keys():
+        print("View indices were not yet assigned to skeleton nodes. "
+              "Running now '_cnn_axonness2skel(sso, "
+              "pred_key_appendix=pred_key_appendix, k=1)'")
+        _cnn_axonness2skel(sso, pred_key_appendix=pred_key_appendix, k=1)
+    view_ixs = np.array(sso.skeleton["view_ixs"])
+    avg_pred = []
+    g = sso.weighted_graph
+    for n in g.nodes():
+        paths = nx.single_source_dijkstra_path(g, n, avg_window)
+        neighs = np.array(paths.keys(), dtype=np.int)
+        unique_view_ixs = np.unique(view_ixs[neighs], return_counts=False)
+        cls, cnts = np.unique(preds[unique_view_ixs], return_counts=True)
+        c = cls[np.argmax(cnts)]
+        avg_pred.append(c)
+    sso.skeleton["%s_views_avg%d" % (pred_key, avg_window)] = avg_pred
+    sso.save_skeleton()
+
+
+def _cnn_axonness2skel(sso, pred_key_appendix="", k=1):
+    if k > 1:
+        print(DeprecationWarning("Using k>1 is deprecated. Use k=1 followed by"
+                                 "'_average_node_axoness_views'."))
+    if sso.skeleton is None:
+        sso.load_skeleton()
+    proba_key = "axoness_probas_cnn%s" % pred_key_appendix
+    pred_key = "axoness_preds_cnn%s" % pred_key_appendix
+    if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key):
+        if len(pred_key_appendix) > 0:
+            print("Couldn't find specified axoness prediction. Falling back to " \
+                  "default (-> per SV stored multi-view prediction including SSV context; RAG: 4b_fix).")
+        preds = np.array(start_multiprocess_obj("axoness_preds",
+                                                   [[sv, {
+                                                       "pred_key_appendix": pred_key_appendix}]
+                                                    for sv in sso.svs],
+                                                   nb_cpus=sso.nb_cpus))
+        probas = np.array(start_multiprocess_obj("axoness_probas",
+                                                    [[sv, {
+                                                        "pred_key_appendix": pred_key_appendix}]
+                                                     for sv in sso.svs],
+                                                    nb_cpus=sso.nb_cpus))
+        preds = np.concatenate(preds)
+        probas = np.concatenate(probas)
+        sso.attr_dict[proba_key] = probas
+        sso.attr_dict[pred_key] = preds
+    else:
+        preds = sso.lookup_in_attribute_dict(pred_key)
+        probas = sso.lookup_in_attribute_dict(proba_key)
+    loc_coords = np.concatenate(sso.sample_locations())
+    assert len(loc_coords) == len(preds), "Number of view coordinates is" \
+                                          "different from number of view" \
+                                          "predictions. SSO %d" % sso.id
+    # find kNN in loc_coords for every skeleton node and use their majority
+    # prediction
+    node_preds = colorcode_vertices(sso.skeleton["nodes"] * sso.scaling,
+                                    loc_coords, preds, colors=[0, 1, 2], k=k)
+
+    if k != 1:
+        node_probas = assign_rep_values(
+            sso.skeleton["nodes"] * sso.scaling,
+            loc_coords, probas, colors=[0, 1, 2], k=k)
+        sso.skeleton["axoness_cnn_k%d%s" % (k, pred_key_appendix)] = node_preds
+        sso.skeleton["axoness_cnn_k%d%s_probas" % (
+            k, pred_key_appendix)] = node_probas
+    else:
+        node_probas, ixs = assign_rep_values(
+            sso.skeleton["nodes"] * sso.scaling,
+            loc_coords, probas, colors=[0, 1, 2], k=k,
+            return_ixs=True)
+        assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
+                                               "coordinates is bigger than length of sample coordinates."
+        sso.skeleton["axoness"] = node_preds
+        sso.skeleton["axoness_probas"] = node_probas
+        sso.skeleton["view_ixs"] = ixs
+    sso.save_skeleton()

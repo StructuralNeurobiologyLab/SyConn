@@ -26,7 +26,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-
+axoness_pred_key = "axoness"
 ssv_ixs = args
 for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, version="0", working_dir="/wholebrain/scratch/areaxfs3/")
@@ -40,17 +40,15 @@ for ix in ssv_ixs:
         # print("Axoness of SSV %d already exists." % sso.id)
     else:
         try:
-            for k in [1, 20]:
+            for k in [1, 5, 10, 15]:
                 sso.cnn_axoness_2_skel(k=k)
         except Exception as e:
             print("\n------------------------\n" + str(e) +
                   "\nSSV: " + str(sso.id) +
                   "\n------------------------\n")
     try:
-        if not "axoness_pred_avg15000" in sso.skeleton:
-            sso.average_node_axoness(avg_window=5000)
-            sso.average_node_axoness(avg_window=10000)
-            sso.average_node_axoness(avg_window=15000)
+        if not "axoness_preds_cnn_views_avg10000" in sso.skeleton:
+            sso.average_node_axoness_views(avg_window=10000, axoness_pred_key=axoness_pred_key)
         # else:
         #     print("Smoothed axoness prediction already exists for SSV %d." % sso.id)
     except Exception as e:

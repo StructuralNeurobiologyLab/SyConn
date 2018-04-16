@@ -52,7 +52,7 @@ legend_labels = {"axgt": ("Axon", "Dendrite", "Soma"),
                  "spgt": ("Shaft", "Head")}#, "Neck")}
 
 comment_converter = {"axgt": {"soma": 2, "axon": 1, "dendrite": 0},
-                     "spgt": {"shaft": 0, "head": 1, "neck":2},
+                     "spgt": {"shaft": 0, "head": 1, "neck": 2},
                      "ctgt": {}}
 
 
@@ -139,7 +139,6 @@ class SkelClassifier(object):
                 with open(self.working_dir + "/axgt_labels.pkl", "r") as f:
                     self.label_dict = pkl.load(f)
             elif self.ssd_version == "ctgt":
-                raise NotImplementedError
                 with open(self.working_dir + "/ctgt_labels.pkl", "r") as f:
                     self.label_dict = pkl.load(f)
             elif self.ssd_version == "spgt":
@@ -438,14 +437,14 @@ class SkelClassifier(object):
                 len(leave_out_classes) > 0 else ""
             self.save_classifier(clf, name, feature_context_nm,
                                  production=production, prefix=prefix)
-
-        v_proba = clf.predict_proba(v_feats)
-        if len(te_feats) > 0:
-            te_proba = clf.predict_proba(te_feats)
-        else:
-            te_proba = np.zeros((0, v_proba.shape[-1]))
-        self.eval_performance(v_proba, v_labels, te_proba, te_labels, leave_out_classes,
-                              [name, str(n_estimators), str(feature_context_nm)])
+        if not production:
+            v_proba = clf.predict_proba(v_feats)
+            if len(te_feats) > 0:
+                te_proba = clf.predict_proba(te_feats)
+            else:
+                te_proba = np.zeros((0, v_proba.shape[-1]))
+            self.eval_performance(v_proba, v_labels, te_proba, te_labels, leave_out_classes,
+                                  [name, str(n_estimators), str(feature_context_nm)])
 
     def create_rfc(self, n_estimators=2000):
         rfc = RandomForestClassifier(warm_start=False, oob_score=True,

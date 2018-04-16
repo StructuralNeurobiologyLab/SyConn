@@ -18,7 +18,6 @@ import time
 import warnings
 from collections import Counter
 from scipy.misc import imsave
-import syconn.reps.super_segmentation_helper
 from knossos_utils import skeleton, knossosdataset
 
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
@@ -323,11 +322,6 @@ class SuperSegmentationObject(object):
         return self.get_seg_objects("vc")
 
     #                                                                     MESHES
-
-    @property
-    def mesh(self):
-        return self.load_mesh("sv")
-
     def load_mesh(self, mesh_type):
         if not mesh_type in self._meshes:
             return None
@@ -336,6 +330,10 @@ class SuperSegmentationObject(object):
                 return self._load_obj_mesh(mesh_type)
             self._meshes[mesh_type] = self._load_obj_mesh(mesh_type)
         return self._meshes[mesh_type]
+
+    @property
+    def mesh(self):
+        return self.load_mesh("sv")
 
     @property
     def sj_mesh(self):
@@ -492,7 +490,7 @@ class SuperSegmentationObject(object):
         self._meshes.update(comp_meshes)
 
     def load_voxels_downsampled(self, downsampling=(2, 2, 1), nb_threads=10):
-        syconn.reps.super_segmentation_helper.load_voxels_downsampled(self, downsampling=downsampling,
+        ssh.load_voxels_downsampled(self, downsampling=downsampling,
                                                                       nb_threads=nb_threads)
 
     def get_seg_objects(self, obj_type):
@@ -1086,7 +1084,7 @@ class SuperSegmentationObject(object):
         -------
 
         """
-        if len(self.sv_ids) > 5e3:
+        if 0:  # len(self.sv_ids) > 5e3:
             part = self.partition_cc()
             if 0:#not overwrite: # check existence of glia preds
                 views_exist = np.array(self.view_existence(), dtype=np.int)
@@ -1118,7 +1116,7 @@ class SuperSegmentationObject(object):
                 params = [[par, {"overwrite": overwrite,
                                  "render_first_only": True,
                                  "cellobjects_only": cellobjects_only}] for par in params]
-                qu.QSUB_script(params, "render_views", pe=qsub_pe, queue=None,
+                qu.QSUB_script(params, "render_views_partial", pe=qsub_pe, queue=None,
                                script_folder=script_folder, n_max_co_processes=100)
             else:
                 raise Exception("QSUB not available")
@@ -1194,7 +1192,7 @@ class SuperSegmentationObject(object):
             dest_path = self.skeleton_kzip_path
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def mesh2kzip(self, obj_type="sv", dest_path=None, ext_color=None):
+    def mesh2kzip(self, dest_path=None, obj_type="sv", ext_color=None):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         if obj_type == "sv":
@@ -1466,13 +1464,14 @@ class SuperSegmentationObject(object):
         #     ex_views = self.view_existence()
         #     if not np.all(ex_views):
         #         self.render_views(add_cellobjects=False)
-        existing_preds = sm.start_multiprocess(ssh.glia_pred_exists, self.svs,
-                                               nb_cpus=self.nb_cpus)
-        if overwrite:
-            missing_sos = self.svs
-        else:
-            missing_sos = np.array(self.svs)[~np.array(existing_preds,
-                                                       dtype=np.bool)]
+        # existing_preds = sm.start_multiprocess(ssh.glia_pred_exists, self.svs,
+        #                                        nb_cpus=self.nb_cpus)
+        # if overwrite:
+        #     missing_sos = self.svs
+        # else:
+        #     missing_sos = np.array(self.svs)[~np.array(existing_preds,
+        #                                                dtype=np.bool)]
+        missing_sos = self.svs
         if verbose:
             print("Predicting %d/%d SV's of SSV %d." % (len(missing_sos),
                                                         len(self.svs),
@@ -1495,7 +1494,7 @@ class SuperSegmentationObject(object):
                               woglia=woglia, raw_only=True)
         if verbose:
             end = time.time()
-            print("Prediction of %d SV's took %0.2fs (incl. read/write). " \
+            print("Prediction of %d SV's took %0.2fs (incl. read/write). "
                   "%0.4fs/SV" % (len(missing_sos), end - start,
                                  float(end - start) / len(missing_sos)))
             # self.save_attributes(["gliaSV_model"], [model._fname])
@@ -1624,21 +1623,6 @@ class SuperSegmentationObject(object):
         self.skeleton[pred_key+"_proba"] = np.array(probas, dtype=np.float32)
         self.save_skeleton(to_object=True, to_kzip=False)
 
-    def average_node_axoness(self, axoness_pred_key="axoness",
-                             avg_window=10000):
-        if self.skeleton is None:
-            self.load_skeleton()
-        preds = np.array(self.skeleton[axoness_pred_key])
-        avg_pred = []
-        g = self.weighted_graph
-        for n in g.nodes():
-            paths = nx.single_source_dijkstra_path(g, n, avg_window)
-            neighs = np.array(paths.keys(), dtype=np.int)
-            cls, cnts = np.unique(preds[neighs], return_counts=True)
-            c = cls[np.argmax(cnts)]
-            avg_pred.append(c)
-        self.skeleton["axoness_pred_avg%d" % avg_window] = avg_pred
-        self.save_skeleton()
 
     def axoness_for_coords(self, coords, radius_nm=4000, pred_type="axoness"):
         coords = np.array(coords)
@@ -1660,48 +1644,11 @@ class SuperSegmentationObject(object):
 
         return np.array(axoness_pred)
 
-    def cnn_axoness_2_skel(self, pred_key_appendix="", k=1):
-        if self.skeleton is None:
-            self.load_skeleton()
-        proba_key = "axoness_probas_cnn%s" % pred_key_appendix
-        pred_key = "axoness_preds_cnn%s" % pred_key_appendix
-        if not self.attr_exists(pred_key) or not self.attr_exists(proba_key):
-            if len(pred_key_appendix) > 0:
-                print("Couldn't find specified axoness prediction. Falling back to " \
-                      "default (-> per SV stored multi-view prediction including SSV context; RAG: 4b_fix).")
-            preds = np.array(sm.start_multiprocess_obj("axoness_preds",
-                    [[sv, {"pred_key_appendix": pred_key_appendix}]
-                     for sv in self.svs], nb_cpus=self.nb_cpus))
-            probas = np.array(sm.start_multiprocess_obj("axoness_probas",
-                    [[sv, {"pred_key_appendix": pred_key_appendix}]
-                     for sv in self.svs], nb_cpus=self.nb_cpus))
-            preds = np.concatenate(preds)
-            probas = np.concatenate(probas)
-            self.attr_dict[proba_key] = probas
-            self.attr_dict[pred_key] = preds
-        else:
-            preds = self.lookup_in_attribute_dict(pred_key)
-            probas = self.lookup_in_attribute_dict(proba_key)
-        loc_coords = np.concatenate(self.sample_locations())
-        assert len(loc_coords) == len(preds), "Number of view coordinates is" \
-                                              "different from number of view" \
-                                              "predictions. SSO %d" % self.id
-        # find kNN in loc_coords for every skeleton node and use their majority
-        # prediction
-        node_preds = colorcode_vertices(self.skeleton["nodes"]*self.scaling,
-                                        loc_coords, preds, colors=[0, 1, 2], k=k)
+    def cnn_axoness_2_skel(self, **kwargs):
+        return ssh._cnn_axonness2skel(self, **kwargs)
 
-        node_probas = assign_rep_values(self.skeleton["nodes"]*self.scaling,
-                                        loc_coords, probas, colors=[0, 1, 2], k=k)
-        if k != 1:
-            self.skeleton["axoness_cnn_k%d%s" % (k, pred_key_appendix)] = node_preds
-            self.skeleton["axoness_cnn_k%d%s_probas" % (
-            k, pred_key_appendix)] = node_probas
-        else:
-            self.skeleton["axoness"] = node_preds
-            self.skeleton["axoness_probas"] = node_probas
-
-        self.save_skeleton()
+    def average_node_axoness_views(self, **kwargs):
+        return ssh._average_node_axoness_views(self, **kwargs)
 
     # --------------------------------------------------------------- CELL TYPES
     # def predict_cell_type(self, ssd_version="ctgt", clf_name="rfc",
