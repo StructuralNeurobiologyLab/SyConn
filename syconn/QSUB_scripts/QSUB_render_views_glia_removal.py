@@ -6,13 +6,12 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-import numpy as np
 try:
     import cPickle as pkl
 # TODO: switch to Python3 at some point and remove above
 except Exception:
     import pickle as pkl
-from syconnfs.representations.super_segmentation import SuperSegmentationObject
+from syconn.reps.super_segmentation import SuperSegmentationObject
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -29,6 +28,7 @@ with open(path_storage_file) as f:
 ch = args[0]
 wd = args[1]
 version = args[2]
-for ssv_ix in ch:
-    sso = SuperSegmentationObject(ssv_ix, working_dir=wd, version=version)
+for sv_ixs in ch:
+    sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
+                                  create=False, sv_ids=sv_ixs)
     sso.render_views(add_cellobjects=False, woglia=False, overwrite=True)

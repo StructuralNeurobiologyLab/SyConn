@@ -12,9 +12,8 @@ try:
 # TODO: switch to Python3 at some point and remove above
 except Exception:
     import pickle as pkl
-from syconnfs.representations import super_segmentation_helper as ssh
-from syconnfs.representations.super_segmentation import render_sampled_sos_cc
-from syconnfs.representations.segmentation_helper import sos_dict_fact, init_sos
+from syconn.reps.super_segmentation import render_sampled_sos_cc
+from syconn.proc.sd_proc import sos_dict_fact, init_sos
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]

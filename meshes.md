@@ -15,7 +15,8 @@ SSO meshes can be called like `sso.load_mesh(obj_type)` where`obj_type` can be
  be computed and cached automatically.
 
 For caching all object meshes and of SSVs in a SuperSegmentationDataset (SSD)
-see `mesh_preprocessing.py` in `SyConn/scripts/backend`.
+see `mesh_preprocessing.py` in `SyConn/scripts/backend`. This is run on a
+single node with 20 cpus by default (sufficiently fast).
 
 
 

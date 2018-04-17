@@ -110,7 +110,7 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
     list, list (of SegmentationObject)
         Neuron, glia nodes
     """
-    nx_G = sso.edge_graph
+    nx_G = sso.rag
     nonglia_ccs, glia_ccs = split_glia_graph(nx_G, thresh=thresh, clahe=clahe,
                             nb_cpus=sso.nb_cpus, shortest_paths_dest_dir=
                             shortest_paths_dest_dir, pred_key_appendix=pred_key_appendix)
