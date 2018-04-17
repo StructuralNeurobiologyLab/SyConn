@@ -6,9 +6,7 @@ except Exception:
 import glob
 import numpy as np
 import os
-from collections import defaultdict
-import time
-from scipy import spatial
+from ..config.global_params import wd, get_dataset_scaling
 from collections import defaultdict
 from .image import single_conn_comp_img
 from knossos_utils import knossosdataset
@@ -415,8 +413,8 @@ def init_sos(sos_dict):
     return sos
 
 
-def sos_dict_fact(svixs, version="0", scaling=(10, 10, 20), obj_type="sv",
-                  working_dir="/wholebrain/scratch/areaxfs/", create=False):
+def sos_dict_fact(svixs, version=None, scaling=get_dataset_scaling(), obj_type="sv",
+                  working_dir=wd, create=False):
     sos_dict = {"svixs": svixs, "version": version,
                 "working_dir": working_dir, "scaling": scaling,
                 "create": create, "obj_type": obj_type}

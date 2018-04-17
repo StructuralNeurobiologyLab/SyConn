@@ -10,6 +10,8 @@ from syconn.proc.mapping import map_glia_fraction
 import numpy as np
 import itertools
 
+# outdated analysis script
+
 
 def get_glia_frac(cs):
     cs.load_attr_dict()

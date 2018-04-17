@@ -12,8 +12,31 @@ from scipy import spatial
 from collections import Counter
 
 
+def prase_cc_dict_from_txt(txt):
+    """
+    Parse connected components from knossos mergelist text file
+
+    Parameters
+    ----------
+    txt : str
+
+    Returns
+    -------
+    dict
+    """
+    cc_dict = {}
+    for line in txt.splitlines()[::4]:
+        line_nb = np.array(re.findall("(\d+)", line), dtype=np.uint)
+        curr_ixs = line_nb[3:]
+        cc_ix = line_nb[0]
+        curr_ixs = curr_ixs[curr_ixs != 0]
+        cc_dict[cc_ix] = curr_ixs
+    return cc_dict
+
+
 def parse_cc_dict_from_kml(kml_path):
     """
+    Parse connected components from knossos mergelist text file
 
     Parameters
     ----------
@@ -24,14 +47,7 @@ def parse_cc_dict_from_kml(kml_path):
     dict
     """
     txt = open(kml_path, "rb").read()
-    cc_dict = {}
-    for line in txt.splitlines()[::4]:
-        line_nb = np.array(re.findall("(\d+)", line), dtype=np.uint)
-        curr_ixs = line_nb[3:]
-        cc_ix = line_nb[0]
-        curr_ixs = curr_ixs[curr_ixs != 0]
-        cc_dict[cc_ix] = curr_ixs
-    return cc_dict
+    return prase_cc_dict_from_txt(txt)
 
 
 def parse_cc_dict_from_kzip(k_path):
@@ -46,14 +62,8 @@ def parse_cc_dict_from_kzip(k_path):
     dict
     """
     txt = read_txt_from_zip(k_path, "mergelist.txt")
-    cc_dict = {}
-    for line in txt.splitlines()[::4]:
-        line_nb = np.array(re.findall("(\d+)", line), dtype=np.uint)
-        curr_ixs = line_nb[3:]
-        cc_ix = line_nb[0]
-        curr_ixs = curr_ixs[curr_ixs != 0]
-        cc_dict[cc_ix] = curr_ixs
-    return cc_dict
+    return prase_cc_dict_from_txt(txt)
+
 
 
 def knossos_ml_from_svixs(sv_ixs, coords=None, comments=None):

@@ -11,10 +11,12 @@ try:
 # TODO: switch to Python3 at some point and remove above
 except Exception:
     import pickle as pkl
-from syconnfs.representations.super_segmentation import SuperSegmentationObject
-from syconnfs.representations.segmentation_helper import sos_dict_fact, init_sos
+from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn.proc.sd_proc import sos_dict_fact, init_sos
+from syconn.config.global_params import wd, get_dataset_scaling
 import networkx as nx
 import numpy as np
+import warnings
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -30,29 +32,23 @@ with open(path_storage_file) as f:
 for cc in args:
     svixs = cc.nodes()
     cc_ix = np.min(svixs)
-    # try:
-    sso = SuperSegmentationObject(cc_ix, version="tmp", nb_cpus=20,
-                                  working_dir="/wholebrain/scratch/areaxfs/",
-                                  create=False, scaling=(10, 10, 20))
-    sso.version_dict["sv"] = "0"
-    # if sso.load_attr_dict() == -1:
-    sso.attr_dict["sv"] = svixs
+    sso = SuperSegmentationObject(cc_ix, version="gliaremoval", nb_cpus=2,
+                                  working_dir=wd, create=True,
+                                  scaling=get_dataset_scaling(), sv_ids=svixs)
     so_cc = nx.Graph()
     for e in cc.edges_iter():
         so_cc.add_edge(sso.get_seg_obj("sv", e[0]),
                        sso.get_seg_obj("sv", e[1]))
-    sso._edge_graph = so_cc
-    # sso.save_attributes(["sv"], [svixs])
+    sso._rag = so_cc
     sd = sos_dict_fact(svixs)
     sos = init_sos(sd)
     sso._objects["sv"] = sos
-    if len(sso.svs) > 1e5:
-        print("Skipped huge SSV %d." % sso.id)
-        continue
+    if len(sso.svs) > 3e5:
+        warnings.warn("Skipped huge SSV %d." % sso.id)
     try:
-        sso.gliasplit(thresh=0.161489, verbose=False)
+        sso.gliasplit(verbose=False)
     except Exception, e:
-        print("\n--------------------------------------------------------\n" \
-              "Splitting of SSV %d failed with %s." \
+        print("\n--------------------------------------------------------\n"
+              "Splitting of SSV %d failed with %s."
               "\n--------------------------------------------------------\n" % (
               cc_ix, e))

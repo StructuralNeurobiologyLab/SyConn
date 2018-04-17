@@ -2,22 +2,17 @@
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 import time
-while True:
-    # import error might occur when saving project...
-    try:
-        import sys
-        from syconnfs.representations.segmentation_helper import init_sos, sos_dict_fact
-        from syconnfs.representations.super_segmentation import render_sampled_sos_cc
-        import numpy as np
-        import warnings
-        break
-    except ImportError:
-        time.sleep(0.2)
-
+import sys
+from syconn.proc.sd_proc import sos_dict_fact, init_sos
+from syconn.reps.super_segmentation import render_sampled_sos_cc
+import numpy as np
+import warnings
 ##########################################################################
 # Helper script for rendering views of SV mesh locations multiprocessed  #
 # Change SOs kwargs accordingly                                          #
 ##########################################################################
+raise DeprecationWarning("SSO parameters have to be set automatically. Use"
+                         " QSUB PE instead.")
 try:
     so_kwargs = {}  # <-- change SO kwargs here
     args = sys.argv

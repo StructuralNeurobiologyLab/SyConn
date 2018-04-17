@@ -3,8 +3,8 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.handler.compression import AttributeDict, MeshDict, VoxelDict
 from syconn.mp.shared_mem import start_multiprocess
 from syconn.proc.meshes import triangulation
-from syconn.config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING
-orig_mesh_dir = "/u/pschuber/areaxfs/sv_0/so_storage/"
+from syconn.config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, wd, \
+    get_dataset_scaling
 import itertools
 import numpy as np
 
@@ -19,6 +19,7 @@ def mesh_creator_sso(ssv):
 
 
 def mesh_chunk(args):
+    scaling = get_dataset_scaling()
     attr_dir, obj_type = args
     ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
     obj_ixs = ad.keys()
@@ -47,8 +48,8 @@ def mesh_chunk(args):
         # create mesh
         indices, vertices, normals = triangulation(np.array(voxel_list),
                                      downsampling=MESH_DOWNSAMPLING[obj_type],
-                                     scaling=SCALING, n_closings=MESH_CLOSING[obj_type])
-        vertices *= SCALING
+                                     scaling=scaling, n_closings=MESH_CLOSING[obj_type])
+        vertices *= scaling
         md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
     md.save2pkl()
     print attr_dir
@@ -68,14 +69,10 @@ def mesh_proc_chunked(obj_type, working_dir, n_folders_fs=10000):
 
 
 if __name__ == "__main__":
-    wd = "/wholebrain/scratch/areaxfs3/"
-    dummy_ssd = SuperSegmentationDataset(working_dir=wd)
-    # define SCALING variable for methods above
-    global SCALING
-    SCALING = dummy_ssd.scaling
-
     # preprocess meshes of all objects
-    # TODO: CHECK IF n_folders_fs MAKES SENSE (has to be read out from config or something @sven)
+    # TODO: check if n_folders_fs makes sense and is there a way
+    # TODO: to get the folder hirarchy (important for 'mesh_proc_chunked'?
+    # TODO: (has to be read out from config or something @sven)
     mesh_proc_chunked("conn", wd, n_folders_fs=10000)
     mesh_proc_chunked("sj", wd, n_folders_fs=10000)
     mesh_proc_chunked("vc", wd, n_folders_fs=10000)

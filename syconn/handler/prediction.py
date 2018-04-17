@@ -4,11 +4,14 @@ from collections import Counter
 from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils.knossosdataset import KnossosDataset
 from elektronn2.neuromancer.model import modelload
+from elektronn2.config import config as e2config
 from elektronn2.utils.gpu import initgpu
 from .compression import load_from_h5py, save_to_h5py
 import numpy as np
 import os
 import sys
+import time
+import tqdm
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75):
@@ -455,3 +458,94 @@ def chunk_pred(ch, model, debug=False):
     if debug:
         ch.save_chunk(raw, "pred", "raw", overwrite=False)
 
+
+# almost deprecated interface class
+class NeuralNetworkInterface(object):
+    def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
+                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2):
+        self.imposed_batch_size = imposed_batch_size
+        self.channels_to_load = channels_to_load
+        self.arch = arch
+        self._path = model_path
+        self._fname = os.path.split(model_path)[1]
+        self.nb_labels = nb_labels
+        self.normal = normal
+        if e2config.device is None:
+            from elektronn2.utils.gpu import initgpu
+            initgpu(0)
+        self.model = modelload(model_path, replace_bn='const',
+                               imposed_batch_size=imposed_batch_size)
+        self.original_do_rates = self.model.dropout_rates
+        self.model.dropout_rates = ([0.0, ] * len(self.original_do_rates))
+
+    def predict_proba(self, x, verbose=False):
+        x = x.astype(np.float32)
+        bs = self.model.batch_size
+        if self.arch == "rec_view":
+            batches = [np.arange(i * bs, (i + 1) * bs) for i in
+                       range(x.shape[1] / bs)]
+            proba = np.ones((x.shape[1], 4, self.nb_labels))
+        else:
+            batches = [np.arange(i * bs, (i + 1) * bs) for i in
+                       range(len(x) / bs)]
+            proba = np.ones((len(x), self.nb_labels))
+        if verbose:
+            cnt = 0
+            start = time.time()
+        pbar = tqdm.tqdm(total=len(batches), ncols=80, leave=False,
+                         unit='it', unit_scale=True, dynamic_ncols=False)
+        for b in batches:
+            if verbose:
+                sys.stdout.write("\r%0.2f" % (float(cnt) / len(batches)))
+                sys.stdout.flush()
+                cnt += 1
+            x_b = x[b]
+            proba[b] = self.model.predict(x_b)[None, ]
+            pbar.update()
+        overhead = len(x) % bs
+        # TODO: add proper axis handling, maybe introduce axistags
+        if overhead != 0:
+            new_x_b = x[-overhead:]
+            if len(new_x_b) < bs:
+                add_shape = list(new_x_b.shape)
+                add_shape[0] = bs - len(new_x_b)
+                new_x_b = np.concatenate((np.zeros((add_shape), dtype=np.float32), new_x_b))
+            proba[-overhead:] = self.model.predict(new_x_b)[-overhead:]
+        if verbose:
+            end = time.time()
+            sys.stdout.write("\r%0.2f\n" % 1.0)
+            sys.stdout.flush()
+            print "Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
+                  (len(x), end-start, (end-start)/len(x))
+        return proba
+
+
+def get_axoness_model_new():
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/axoness/g5_axoness_v0_all_run2/g5_axoness_v0_all_run2-FINAL.mdl",
+                                  imposed_batch_size=200,
+                                  nb_labels=3)
+    _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
+    return m
+
+
+def get_glia_model():
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/NeuroPatch/neurodock/g3_gliaviews_v5_novalidset-FINAL.mdl",
+                                  imposed_batch_size=300,
+                                  nb_labels=2)
+    _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
+    return m
+
+
+def get_tripletnet_model():
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/t_net/ssv6_tripletnet_v9/ssv6_tripletnet_v9-FINAL.mdl",
+                                  imposed_batch_size=12,
+                                  nb_labels=25, arch="triplet")
+    _ = m.predict_proba(np.zeros((1, 4, 3, 128, 256)))
+    return m
+
+
+def get_celltype_model():
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/celltypes/g1_20views_v3/g1_20views_v3-FINAL.mdl",
+                               imposed_batch_size=5, nb_labels=4)
+    _ = m.predict_proba(np.zeros((5, 4, 20, 128, 256)))
+    return m

@@ -582,7 +582,7 @@ def render_mesh_coords(coords, ind, vert, clahe=False, verbose=False, ws=(256, 1
 
 
 def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
-                       add_cellobjects=True, overwrite=False,
+                       add_cellobjects=True, overwrite=True,
                        return_views=False, cellobjects_only=False):
     """
     Renders for each SV views at sampled locations (number is dependent on
@@ -610,9 +610,9 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
         missing_sv_ixs = np.array([not so.views_exist for so in sso.svs], dtype=np.bool)
         missing_svs = np.array(sso.svs)[missing_sv_ixs]
         coords = np.array(coords)[missing_sv_ixs]
+        print("Rendering %d missing SV's." % len(missing_svs))
     else:
         missing_svs = np.array(sso.svs)
-    print("Rendering %d missing SV's." % len(missing_svs))
     if len(missing_svs) == 0:
         if return_views:
             return np.concatenate(sso.load_views(woglia=woglia))
@@ -628,7 +628,7 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
         so.save_views(sv_views, woglia=woglia, cellobjects_only=cellobjects_only)
     if verbose:
         dur = time.time() - start
-        print("Rendering of %d views took %0.2fs (incl. read/write). " \
+        print("Rendering of %d views took %0.2fs (incl. read/write). "
               "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
     if return_views:
         return np.concatenate(sso.load_views(woglia=woglia))

@@ -19,78 +19,12 @@ from syconn.reps.super_segmentation_helper import write_axpred
 from syconn.reps.rep_helper import knossos_ml_from_ccs
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
-if 1:
-    from elektronn2.neuromancer.model import modelload
-    from elektronn2.config import config
-else:
-    from numa.neuromancer.model import modelload
-    from numa.config import config
+from syconn.handler.prediction import NeuralNetworkInterface
 import os
-import tqdm
 from syconn.proc.skel_based_classifier import SkelClassifier
 import shutil
 from knossos_utils.skeleton_utils import load_skeleton
 import re
-
-
-class NeuralNetworkInterface(object):
-    def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
-                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2):
-        self.imposed_batch_size = imposed_batch_size
-        self.channels_to_load = channels_to_load
-        self.arch = arch
-        self._path = model_path
-        self._fname = os.path.split(model_path)[1]
-        self.nb_labels = nb_labels
-        self.normal = normal
-        if config.device is None:
-            from elektronn2.utils.gpu import initgpu
-            initgpu(0)
-        self.model = modelload(model_path, replace_bn='const',
-                               imposed_batch_size=imposed_batch_size)
-        self.original_do_rates = self.model.dropout_rates
-        self.model.dropout_rates = ([0.0, ] * len(self.original_do_rates))
-
-    def predict_proba(self, x, verbose=False):
-        x = x.astype(np.float32)
-        bs = self.model.batch_size
-        if self.arch == "rec_view":
-            batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(x.shape[1] / bs)]
-            proba = np.ones((x.shape[1], 4, self.nb_labels))
-        else:
-            batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(len(x) / bs)]
-            proba = np.ones((len(x), self.nb_labels))
-        if verbose:
-            cnt = 0
-            start = time.time()
-        pbar = tqdm.tqdm(total=len(batches), ncols=80, leave=False,
-                         unit='it', unit_scale=True, dynamic_ncols=False)
-        for b in batches:
-            if verbose:
-                sys.stdout.write("\r%0.2f" % (float(cnt) / len(batches)))
-                sys.stdout.flush()
-                cnt += 1
-            x_b = x[b]
-            proba[b] = self.model.predict(x_b)[None, ]
-            pbar.update()
-        overhead = len(x) % bs
-        # TODO: add proper axis handling, maybe introduce axistags
-        if overhead != 0:
-            new_x_b = x[-overhead:]
-            if len(new_x_b) < bs:
-                add_shape = list(new_x_b.shape)
-                add_shape[0] = bs - len(new_x_b)
-                new_x_b = np.concatenate((np.zeros((add_shape), dtype=np.float32), new_x_b))
-            proba[-overhead:] = self.model.predict(new_x_b)[-overhead:]
-        if verbose:
-            end = time.time()
-            sys.stdout.write("\r%0.2f\n" % 1.0)
-            sys.stdout.flush()
-            print "Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
-                  (len(x), end-start, (end-start)/len(x))
-        return proba
 
 
 def get_test_candidates():
