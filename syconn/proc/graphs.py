@@ -12,7 +12,8 @@ from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import itertools
 import sys
 from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess
-from ..config.global_params import min_cc_size_glia, min_cc_size_neuron
+from ..config.global_params import min_cc_size_glia, min_cc_size_neuron, glia_thresh
+
 
 def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     """
@@ -129,10 +130,10 @@ def create_ccsize_dict(g, sizes):
     return node2cssize_dict
 
 
-def get_glianess_dict(seg_objs, thresh, glia_key, nb_cpus=1):
+def get_glianess_dict(seg_objs, thresh, glia_key, nb_cpus=1, use_sv_volume=False):
     glianess = {}
     sizes = {}
-    params = [[so, glia_key, thresh] for so in seg_objs]
+    params = [[so, glia_key, thresh, use_sv_volume] for so in seg_objs]
     res = start_multiprocess(glia_loader_helper, params, nb_cpus=nb_cpus)
     for ii, el in enumerate(res):
         so = seg_objs[ii]
@@ -142,11 +143,14 @@ def get_glianess_dict(seg_objs, thresh, glia_key, nb_cpus=1):
 
 
 def glia_loader_helper(args):
-    so, glia_key, thresh = args
+    so, glia_key, thresh, use_sv_volume = args
     if not glia_key in so.attr_dict.keys():
         so.load_attr_dict()
     curr_glianess = so.glia_pred(thresh)
-    curr_size = so.mesh_bb
+    if not use_sv_volume:
+        curr_size = so.mesh_bb
+    else:
+        curr_size = so.size
     return curr_glianess, curr_size
 
 
@@ -200,17 +204,15 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
             return g.nodes(), []
         return []
 
-    support_glia_nodes = set()
-
     tiny_glia_fragments = []
     for n in g_glia.nodes_iter():
         if glia2ccsize_dict[n] < min_cc_size_glia:
             tiny_glia_fragments += [n]
 
-    # create new neuron graph
+    # create new neuron graph without sufficiently big glia connected components
     g_neuron = g.copy()
     for n in g.nodes_iter():
-        if glia_dict[n] != 0 and n not in tiny_glia_fragments and n not in support_glia_nodes:
+        if glia_dict[n] != 0 and n not in tiny_glia_fragments:
             g_neuron.remove_node(n)
 
     # find orphaned neuron SV's
@@ -220,11 +222,12 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
             g_neuron.remove_node(n)
 
     # create new glia graph with remaining nodes
+    # (as the complementary set of sufficiently big neuron connected components)
     g_glia = g.copy()
     for n in g_neuron.nodes_iter():
         g_glia.remove_node(n)
-    # remove unsupportive glia nodes and small neuron type fragments from neuron graph
 
+    # remove unsupportive glia nodes and small neuron type fragments from neuron graph
     neuron_ccs = list(nx.connected_components(g_neuron))
     if return_removed_nodes:
         glia_ccs = list(nx.connected_components(g_glia))
@@ -458,3 +461,50 @@ def create_mst_skeleton(coords, max_dist=6000, force_single_cc=True):
             [[int(pairs[i][0]), int(pairs[i][1]), weights[i]] for i in range(len(pairs))])
     g = nx.minimum_spanning_tree(g)
     return np.array(g.edges())
+
+
+def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None,
+                    glia_key="glia_probas", node_size_cap=np.inf, mcmp=None):
+    """
+    Draw graph with nodes colored in red (glia) and blue) depending on their
+    class. Writes drawing to dest_path.
+
+    Parameters
+    ----------
+    G : nx.Graph
+    dest_path : str
+    min_sv_size : int
+    ext_glia : dict
+        keys: node in G, values: number indicating class
+    glia_key : str
+    node_size_cap : int
+    mcmp : color palette
+    """
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    if mcmp is None:
+        mcmp = sns.diverging_palette(250, 15, s=99, l=60, center="dark",
+                                     as_cmap=True)
+    np.random.seed(0)
+    seg_objs = list(G.nodes())
+    glianess, size = get_glianess_dict(seg_objs, glia_thresh, glia_key, 5,
+                                       use_sv_volume=True)
+    if ext_glia is not None:
+        for n in G.nodes():
+            glianess[n] = ext_glia[n.id]
+    plt.figure()
+    n_size = np.array([size[n]**(1./3) for n in G.nodes()]).astype(np.float32)  # reduce cubic relation to a linear one
+    # n_size = np.array([np.linalg.norm(size[n][1]-size[n][0]) for n in G.nodes()])
+    if node_size_cap == "max":
+        node_size_cap = np.max(n_size)
+    n_size[n_size > node_size_cap] = node_size_cap
+    col = np.array([glianess[n] for n in G.nodes()])
+    col = col[n_size >= min_sv_size]
+    nodelist = list(np.array(G.nodes())[n_size > min_sv_size])
+    n_size = n_size[n_size >= min_sv_size]
+    n_size = n_size / np.max(n_size) * 25.
+    pos = nx.spring_layout(G, weight="weight", iterations=150)
+    nx.draw(G, nodelist=nodelist, node_color=col, node_size=n_size,
+            cmap=mcmp, width=0.15, pos=pos, linewidths=0)
+    plt.savefig(dest_path)
+    plt.close()

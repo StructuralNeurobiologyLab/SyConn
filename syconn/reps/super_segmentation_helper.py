@@ -1367,8 +1367,7 @@ def write_axpred(ssv, pred_key_appendix, dest_path=None, k=1):
     pred_coords = np.concatenate(locs)
     assert pred_coords.ndim == 2
     assert pred_coords.shape[1] == 3
-    ssv._pred2mesh(pred_coords, preds, "axoness.ply", dest_path=dest_path,
-                    k=k)
+    ssv._pred2mesh(pred_coords, preds, "axoness.ply", dest_path=dest_path, k=k)
 
 
 def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
@@ -1386,11 +1385,15 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
     """
     if sso.skeleton is None:
         sso.load_skeleton()
+    if len(sso.skeleton["edges"]) == 0:
+        print("Zero edges in skeleton of SSV %d. Skipping averaging." % sso.id)
+        return
     pred_key = "axoness_preds_cnn%s" % pred_key_appendix
     if not sso.attr_exists(pred_key):
         if len(pred_key_appendix) > 0:
-            print("Couldn't find specified axoness prediction. Falling back to " \
-                  "default (-> per SV stored multi-view prediction including SSV context; RAG: 4b_fix).")
+            print("Couldn't find specified axoness prediction. Falling back to "
+                  "default (-> per SV stored multi-view prediction "
+                  "including SSV context; RAG: 4b_fix).")
         preds = np.array(start_multiprocess_obj("axoness_preds",
                                                    [[sv, {
                                                        "pred_key_appendix": pred_key_appendix}]

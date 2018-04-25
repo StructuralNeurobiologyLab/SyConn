@@ -11,6 +11,7 @@ import numpy as np
 import os
 import sys
 import time
+import warnings
 import tqdm
 
 
@@ -132,7 +133,8 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
         raw = load_from_h5py(h5_path, hdf5_names=[hdf5_data_key])[0]
     else:
         raw = load_from_h5py(h5_path, hdf5_names=None)
-        assert len(raw) == 1, "'hdf5_data_key' not given but multiple hdf5 elements found. Please define raw data key."
+        assert len(raw) == 1, "'hdf5_data_key' not given but multiple hdf5 " \
+                              "elements found. Please define raw data key."
         raw = raw[0]
     if not data_is_zxy:
         raw = xyz2zxy(raw)
@@ -143,10 +145,11 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     original_do_rates = m.dropout_rates
     m.dropout_rates = ([0.0, ] * len(original_do_rates))
     pred = m.predict_dense(raw[None, ], pad_raw=True)[1]
-    if not data_is_zxy:
-        pred = zxy2xyz(pred)
+    pred = zxy2xyz(pred)
+    raw = zxy2xyz(raw)
     if as_uint8:
         pred = (pred * 255).astype(np.uint8)
+        raw = (raw * 255).astype(np.uint8)
     if clf_thresh:
         pred = (pred >= clf_thresh).astype(np.float32)
     if dest_p is None:
@@ -323,9 +326,15 @@ def parse_movement_area_from_zip(zip_fname):
     return np.concatenate([bb_min, bb_max])
 
 
-def pred_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
-                 imposed_patch_size=None, mfp_active=False, gpu_ix=0,
-                 overwrite=True, debug=False, chunk_size=(512, 512, 256)):
+def pred_dataset(*args, **kwargs):
+    warnings.warn("'pred_dataset' will be replaced by 'predict_dataset' in"
+                  " the near future.")
+    return predict_dataset(*args, **kwargs)
+
+
+def predict_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
+                    imposed_patch_size=None, mfp_active=False, gpu_ix=0,
+                    overwrite=True, debug=False, chunk_size=(512, 512, 256)):
     """
     Runs prediction on whole knossos dataset.
     Imposed patch size has to be given in Z, X, Y!
@@ -378,21 +387,19 @@ def pred_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
                   overlap=overlap.astype(np.int), box_coords=np.zeros(3), fit_box_size=True)
     nb_ch = len(cd.chunk_dict.keys())
     print("Starting prediction of %d chunks.\n" % nb_ch)
-    cnt = 0
+    pbar = tqdm.tqdm(size=nb_ch, ncols=80, leave=False,
+                     unit='chunks', unit_scale=True, dynamic_ncols=False)
     if not overwrite:
         for k, chunk in cd.chunk_dict.iteritems():
-            sys.stdout.write("[%d/%d]" % (cnt, nb_ch))
             try:
                 _ = chunk.load_chunk("pred")[0]
-                cnt += 1
-            except Exception as e:
+            except Exception:  # TODO: catch problem specific error
                 chunk_pred(chunk, m, debug=debug)
-                cnt += 1
+            pbar.update(1)
     else:
         for chunk in cd.chunk_dict.values():
-            sys.stdout.write("[%d/%d]" % (cnt, nb_ch))
             chunk_pred(chunk, m, debug=debug)
-            cnt += 1
+            pbar.update(1)
     save_dataset(cd)
     kd_pred = KnossosDataset()
     kd_pred.initialize_without_conf(kd_pred_folder, kd.boundary, kd.scale,
