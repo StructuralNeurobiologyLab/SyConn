@@ -18,6 +18,7 @@ import shutil
 import subprocess
 import sys
 import time
+import tqdm
 
 
 home_dir = os.environ['HOME'] + "/"
@@ -77,6 +78,70 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
     else:
         result = map(func, params)
 
+    if verbose:
+        print("\nTime to compute:", time.time() - start)
+
+    return result
+
+
+def start_multiprocess_imap(func, params, debug=False, verbose=False, nb_cpus=None):
+    """
+
+    Parameters
+    ----------
+    func : function
+    params : function parameters
+    debug : boolean
+    verbose : bool
+    nb_cpus : int
+    show_progress : bool
+
+    Returns
+    -------
+    result: list
+        list of function returns
+    """
+    # found NoDaemonProcess on stackexchange by Chris Arndt - enables
+    # hierarchical multiprocessing
+    class NoDaemonProcess(Process):
+        # make 'daemon' attribute always return False
+        def _get_daemon(self):
+            return False
+
+        def _set_daemon(self, value):
+            pass
+        daemon = property(_get_daemon, _set_daemon)
+
+    # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
+    # because the latter is only a wrapper function, not a proper class.
+    class MyPool(multiprocessing.pool.Pool):
+        Process = NoDaemonProcess
+
+    if nb_cpus is None:
+        nb_cpus = max(cpu_count(), 1)
+
+    if debug:
+        nb_cpus = 1
+
+
+    if verbose:
+        print("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
+
+    start = time.time()
+    if nb_cpus > 1:
+        pool = MyPool(nb_cpus)
+        result = list(tqdm.tqdm(pool.imap(func, params), total=len(params), ncols=80, leave=False,
+                         unit='jobs', unit_scale=True, dynamic_ncols=False))
+        pool.close()
+        pool.join()
+    else:
+        pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
+                                unit='jobs', unit_scale=True, dynamic_ncols=False)
+        result = []
+        for p in params:
+            result.append(func(p))
+            pbar.update(1)
+        pbar.close()
     if verbose:
         print("\nTime to compute:", time.time() - start)
 
