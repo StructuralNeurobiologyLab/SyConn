@@ -25,8 +25,8 @@ from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
 
 from scipy import spatial
-import segmentation
-import super_segmentation_helper as ssh
+from . import segmentation
+from . import super_segmentation_helper as ssh
 from .segmentation import SegmentationObject
 from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
@@ -607,7 +607,7 @@ class SuperSegmentationObject(object):
             attr_values = [attr_values]
         try:
             attr_dict = load_pkl2obj(self.attr_dict_path)
-        except IOError, e:
+        except IOError as e:
             if not "[Errno 13] Permission denied" in str(e):
                 pass
             else:
@@ -619,7 +619,7 @@ class SuperSegmentationObject(object):
             attr_dict[k] = v
         try:
             write_obj2pkl(self.attr_dict_path, attr_dict)
-        except IOError, e:
+        except IOError as e:
             if not "[Errno 13] Permission denied" in str(e):
                 raise (IOError, e)
             else:
@@ -728,7 +728,7 @@ class SuperSegmentationObject(object):
         if len(self.skeleton["nodes"]) != 0:
             ssh.sparsify_skeleton(self)
         else:
-            print "%s has zero nodes." % repr(self)
+            print("%s has zero nodes." % repr(self))
         self.save_skeleton()
 
     def save_skeleton_to_kzip(self, dest_path=None, additional_keys=None):
@@ -772,7 +772,7 @@ class SuperSegmentationObject(object):
             if dest_path is None:
                 dest_path = self.skeleton_kzip_path
             write_skeleton_kzip(dest_path, [a])
-        except Exception, e:
+        except Exception as e:
             print("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, e))
 
     def save_objects_to_kzip_sparse(self, obj_types=("sj", "mi", "vc"),
@@ -782,8 +782,8 @@ class SuperSegmentationObject(object):
             assert obj_type in self.attr_dict
             map_ratio_key = "mapping_%s_ratios" % obj_type
             if not map_ratio_key in self.attr_dict.keys():
-                print "%s not yet mapped. Object nodes are not written to " \
-                      "k.zip." % obj_type
+                print("%s not yet mapped. Object nodes are not written to " \
+                      "k.zip." % obj_type)
                 continue
             overlap_ratios = np.array(self.attr_dict[map_ratio_key])
             overlap_ids = np.array(self.attr_dict["mapping_%s_ids" % obj_type])
@@ -822,7 +822,7 @@ class SuperSegmentationObject(object):
         for obj_type in obj_types:
             so_objs = self.get_seg_objects(obj_type)
             for so_obj in so_objs:
-                print so_obj.id
+                print(so_obj.id)
                 so_obj.save_kzip(path=self.objects_dense_kzip_path,
                                  write_id=self.dense_kzip_ids[obj_type])
 
@@ -1375,8 +1375,8 @@ class SuperSegmentationObject(object):
             else:
                 shortest_paths_dir = None
             if verbose:
-                print "Splitting glia in SSV %d with %d SV's." % \
-                      (self.id, len(self.svs))
+                print("Splitting glia in SSV %d with %d SV's." % \
+                      (self.id, len(self.svs)))
                 start = time.time()
             nonglia_ccs, glia_ccs = split_glia(self, thresh=thresh,
                         pred_key_appendix=pred_key_appendix,
@@ -1389,8 +1389,8 @@ class SuperSegmentationObject(object):
             # nonglia_ccs, glia_ccs = split_glia(self, thresh=thresh,
             #                                    shortest_paths_dest_dir=shortest_paths_dir)
             if verbose:
-                print "Splitting glia in SSV %d with %d SV's finished after " \
-                      "%.4gs." % (self.id, len(self.svs), time.time() - start)
+                print("Splitting glia in SSV %d with %d SV's finished after " \
+                      "%.4gs." % (self.id, len(self.svs), time.time() - start))
             non_glia_ccs_ixs = [[so.id for so in nonglia] for nonglia in
                                 nonglia_ccs]
             glia_ccs_ixs = [[so.id for so in glia] for glia in
@@ -1474,9 +1474,9 @@ class SuperSegmentationObject(object):
             missing_sos = np.array(self.svs)[~np.array(existing_preds,
                                                        dtype=np.bool)]
         if verbose:
-            print "Predicting %d/%d SV's of SSV %d." % (len(missing_sos),
+            print("Predicting %d/%d SV's of SSV %d." % (len(missing_sos),
                                                         len(self.svs),
-                                                        self.id)
+                                                        self.id))
             start = time.time()
         if len(missing_sos) == 0:
             return
@@ -1495,9 +1495,9 @@ class SuperSegmentationObject(object):
                               woglia=woglia, raw_only=True)
         if verbose:
             end = time.time()
-            print "Prediction of %d SV's took %0.2fs (incl. read/write). " \
+            print("Prediction of %d SV's took %0.2fs (incl. read/write). " \
                   "%0.4fs/SV" % (len(missing_sos), end - start,
-                                 float(end - start) / len(missing_sos))
+                                 float(end - start) / len(missing_sos)))
             # self.save_attributes(["gliaSV_model"], [model._fname])
 
     def predict_views_glia(self, model, thresh=0.5, dest_path=None,
@@ -1574,7 +1574,7 @@ class SuperSegmentationObject(object):
             axoness = self.skeleton["axoness"].copy()
             axoness[self.skeleton["axoness"] == 1] = 0
             axoness[self.skeleton["axoness"] == 0] = 1
-            print np.unique(axoness, return_counts=True)
+            print(np.unique(axoness, return_counts=True))
             self._pred2mesh(self.skeleton["nodes"] * self.scaling, axoness,
                             k=k, dest_path=dest_path)
 
@@ -1666,8 +1666,9 @@ class SuperSegmentationObject(object):
         proba_key = "axoness_probas_cnn%s" % pred_key_appendix
         pred_key = "axoness_preds_cnn%s" % pred_key_appendix
         if not self.attr_exists(pred_key) or not self.attr_exists(proba_key):
-            print "Couldn't find specified axoness prediction. Falling back to " \
-                  "default (-> per SV stored multi-view prediction including SSV context; RAG: 4b_fix)."
+            if len(pred_key_appendix) > 0:
+                print("Couldn't find specified axoness prediction. Falling back to " \
+                      "default (-> per SV stored multi-view prediction including SSV context; RAG: 4b_fix).")
             preds = np.array(sm.start_multiprocess_obj("axoness_preds",
                     [[sv, {"pred_key_appendix": pred_key_appendix}]
                      for sv in self.svs], nb_cpus=self.nb_cpus))
@@ -1793,8 +1794,8 @@ class SuperSegmentationObject(object):
             write_obj2pkl(self.skeleton_path_views, self.skeleton)
         except Exception as e:
             if "null graph" in str(e) and len(self.sv_ids) == 2:
-                print "Null graph error with 2 nodes, falling back to " \
-                      "original classification and one edge."
+                print("Null graph error with 2 nodes, falling back to " \
+                      "original classification and one edge.")
                 locs = np.concatenate(self.sample_locations())
                 self.skeleton = {}
                 self.skeleton["nodes"] = locs / np.array(self.scaling)
@@ -1812,7 +1813,7 @@ class SuperSegmentationObject(object):
                 self.skeleton["axoness"] = curr_ax_preds
                 write_obj2pkl(self.skeleton_path_views, self.skeleton)
             else:
-                print "Error %s occured with SSO %d  (%d SVs)." % (e, self.id,  len(self.sv_ids))
+                print("Error %s occured with SSO %d  (%d SVs)." % (e, self.id,  len(self.sv_ids)))
 
     def predict_celltype_cnn(self, model):
         ssh.predict_sso_celltype(self, model)
@@ -1885,7 +1886,7 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
                           RuntimeWarning)
         sv_obj = sos[i]
         sv_obj.save_views(views=v, woglia=woglia, cellobjects_only=cellobjects_only)
-        print sv_obj.segobj_dir
+        print(sv_obj.segobj_dir)
 
 
 def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):

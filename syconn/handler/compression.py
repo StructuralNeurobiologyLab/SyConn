@@ -6,17 +6,17 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 try:
-    try:
-        from lz4.block import compress, decompress
-    except ImportError:
-        from lz4 import compress, decompress
+    from lz4.block import compress, decompress
+except ImportError:
+    from lz4 import compress, decompress
+import time
+try:
+    import fasteners
     LOCKING = True
 except ImportError:
-    print("lz4 could not be imported. Locking will be disabled by default."
-          "Please install lz4 to enable locking (pip install lz4).")
+    print("fasteners could not be imported. Locking will be disabled by default."
+          "Please install fasteners to enable locking (pip install fasteners).")
     LOCKING = False
-import time
-import fasteners
 from .basics import load_pkl2obj, write_obj2pkl
 import numpy as np
 import h5py
@@ -457,7 +457,10 @@ def lz4stringtoarr(string, dtype=np.float32, shape=None):
     """
     if string == "":
         return np.zeros((0, ), dtype=dtype)
-    arr_1d = np.frombuffer(decompress(string), dtype=dtype)
+    try:
+        arr_1d = np.frombuffer(decompress(string), dtype=dtype)
+    except TypeError: # python3 compatibility
+        arr_1d = np.frombuffer(decompress(str.encode(string)), dtype=dtype)
     if shape is not None:
         arr_1d = arr_1d.reshape(shape)
     return arr_1d

@@ -41,7 +41,7 @@ def route_ssv_skeleton(ssv_id):
     d = sg_state.backend.ssv_skeleton(ssv_id)
     start = time.time()
     ret = json.dumps(d)
-    print "JSON dump:", time.time() - start
+    print("JSON dump:", time.time() - start)
     return ret
 
 
@@ -50,7 +50,7 @@ def route_ssv_mesh(ssv_id):
     d = sg_state.backend.ssv_mesh(ssv_id)
     start = time.time()
     ret = json.dumps(d)
-    print "JSON dump:", time.time() - start
+    print("JSON dump:", time.time() - start)
     return ret
 
 
@@ -77,7 +77,7 @@ def ssv_obj_mesh(ssv_id, obj_type):
     d = sg_state.backend.ssv_obj_mesh(ssv_id, obj_type)
     start = time.time()
     ret = json.dumps(d)
-    print "JSON dump:", time.time() - start
+    print("JSON dump:", time.time() - start)
     return ret
 
 
@@ -290,7 +290,7 @@ class SyConnFS_backend(object):
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr(obj_type)
         if len(mesh) == 2:
-            print len(mesh), obj_type, ssv_id
+            print(len(mesh), obj_type, ssv_id)
             return ""
         return "".join(mesh[2])
 

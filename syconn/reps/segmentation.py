@@ -702,6 +702,10 @@ class SegmentationObject(object):
         pred_key = "axoness_proba" + pred_key_appendix
         if not pred_key in self.attr_dict:
             self.load_attr_dict()
+        if not pred_key in self.attr_dict:
+            print("WARNING: Requested axoness prediction for SV %d is "
+                  "not available." % self.id)
+            return np.array([1] * len(self.sample_locations()))
         pred = np.argmax(self.attr_dict[pred_key], axis=1)
         return pred
 
@@ -710,6 +714,10 @@ class SegmentationObject(object):
         pred_key = "axoness_proba" + pred_key_appendix
         if not pred_key in self.attr_dict:
             self.load_attr_dict()
+        if not pred_key in self.attr_dict:
+            print("WARNING: Requested axoness probability for SV %d is "
+                  "not available." % self.id)
+            return np.array([[0, 1, 0] * len(self.sample_locations())]).reshape((-1, 3))
         return self.attr_dict[pred_key]
 
     #                                                                  FUNCTIONS
@@ -942,7 +950,6 @@ class SegmentationObject(object):
         print(self.segobj_dir)
         return self.segobj_dir + "/skeletons.pkl"
 
-
     def copy2dir(self, dest_dir, safe=True):
         # get all files in home directory
         fps = get_filepaths_from_dir(self.segobj_dir, ending="")
@@ -954,7 +961,7 @@ class SegmentationObject(object):
             dest_filename = dest_dir + "/" + fnames[i]
             try:
                 safe_copy(src_filename, dest_filename, safe=safe)
-            except Exception, e:
+            except Exception as e:
                 print(e)
                 print("Skipped", fnames[i])
                 pass

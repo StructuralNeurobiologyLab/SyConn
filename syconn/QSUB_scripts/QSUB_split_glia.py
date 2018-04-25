@@ -47,12 +47,12 @@ for cc in args:
     sos = init_sos(sd)
     sso._objects["sv"] = sos
     if len(sso.svs) > 1e5:
-        print "Skipped huge SSV %d." % sso.id
+        print("Skipped huge SSV %d." % sso.id)
         continue
     try:
         sso.gliasplit(thresh=0.161489, verbose=False)
     except Exception, e:
-        print "\n--------------------------------------------------------\n" \
+        print("\n--------------------------------------------------------\n" \
               "Splitting of SSV %d failed with %s." \
               "\n--------------------------------------------------------\n" % (
-              cc_ix, e)
+              cc_ix, e))

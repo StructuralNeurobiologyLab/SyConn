@@ -5,7 +5,10 @@
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
-import cPickle as pkl
+try:
+    import cPickle as pkl
+except:
+    import pickle as pkl
 import getpass
 import glob
 import numpy as np
@@ -161,9 +164,11 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         with open(this_storage_path, "wb") as f:
             for param in params[i_job]:
                 pkl.dump(param, f)
-
-        os.chmod(this_sh_path, 0744)
-
+        # try:
+        #     os.chmod(this_sh_path, 0744)
+        # except SyntaxError:
+        # somehow the above does not work to catch the SyntaxError (python3 compatibility)
+        os.chmod(this_sh_path, 0o744)
         subprocess.call("qsub {0} -o {1} -e {2} -N {3} -p {4} {5} {6}".format(
             sge_queue_option,
             job_log_path,

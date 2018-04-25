@@ -33,14 +33,27 @@ for ix in ssv_ixs:
     sso.load_skeleton()
 
     if sso.skeleton is None or len(sso.skeleton["nodes"]) == 0:
-        print "Skeleton of SSV %d has zero nodes." % ix
+        print("Skeleton of SSV %d has zero nodes." % ix)
         continue
-    # currently uncommented to just do window averaging
-    # for k in [1, 20]:
-    #     try:
-    #         sso.cnn_axoness_2_skel(k=k)
-    #     except Exception as e:
-    #         print ("Couldn't map axoness (k=%d) for SSO %d.\n%s" % (k, ix, e))
-    sso.average_node_axoness(5000)
-    sso.average_node_axoness(10000)
-    sso.average_node_axoness(15000)
+    if "axoness" in sso.skeleton:
+        pass
+        # print("Axoness of SSV %d already exists." % sso.id)
+    else:
+        try:
+            for k in [1, 20]:
+                sso.cnn_axoness_2_skel(k=k)
+        except Exception as e:
+            print("\n------------------------\n" + str(e) +
+                  "\nSSV: " + str(sso.id) +
+                  "\n------------------------\n")
+    try:
+        if not "axoness_pred_avg15000" in sso.skeleton:
+            sso.average_node_axoness(avg_window=5000)
+            sso.average_node_axoness(avg_window=10000)
+            sso.average_node_axoness(avg_window=15000)
+        # else:
+        #     print("Smoothed axoness prediction already exists for SSV %d." % sso.id)
+    except Exception as e:
+        print("\n------------------------\n" + str(e) +
+              "\nSSV: " + str(sso.id) +
+              "\n------------------------\n")

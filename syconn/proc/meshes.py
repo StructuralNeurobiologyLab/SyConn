@@ -6,8 +6,6 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import itertools
-import pdb
-
 import numpy as np
 from collections import Counter
 from numba import jit
@@ -46,8 +44,6 @@ class MeshObject(object):
         else:
             self.center = bounding_box[0]
             self.max_dist = bounding_box[1]
-        # pdb.set_trace()
-
         self.center = self.center.astype(np.float)
         self.max_dist = self.max_dist.astype(np.float)
         vert_resh = np.array(self.vertices).reshape((len(self.vertices) // 3, 3))
@@ -85,7 +81,7 @@ class MeshObject(object):
     @property
     def normals(self):
         if self._normals is None:
-            print ("Calculating normals")
+            print("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         return self._normals
 

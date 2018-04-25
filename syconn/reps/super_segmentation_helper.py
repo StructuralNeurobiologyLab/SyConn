@@ -1349,8 +1349,8 @@ def write_axpred(ssv, pred_key_appendix, dest_path=None, k=1):
         dest_path = ssv.skeleton_kzip_path_views
     pred_key = "axoness_preds%s" % pred_key_appendix
     if not ssv.attr_exists(pred_key):
-        print "Couldn't find specified axoness prediction. Falling back to " \
-              "default."
+        print("Couldn't find specified axoness prediction. Falling back to "
+              "default.")
         raise ValueError
         preds = np.array(start_multiprocess_obj("axoness_preds",
                                                    [[sv, {
@@ -1360,9 +1360,9 @@ def write_axpred(ssv, pred_key_appendix, dest_path=None, k=1):
         preds = np.concatenate(preds)
     else:
         preds = ssv.lookup_in_attribute_dict(pred_key)
-    print "Collected axoness:", Counter(preds).most_common()
+    print("Collected axoness:", Counter(preds).most_common())
     locs = ssv.sample_locations()
-    print "Collected locations."
+    print("Collected locations.")
     pred_coords = np.concatenate(locs)
     assert pred_coords.ndim == 2
     assert pred_coords.shape[1] == 3

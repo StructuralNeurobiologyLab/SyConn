@@ -16,7 +16,7 @@ Problem: missing imports in this script. missing changes from classes which were
 introduced in the scipry super_segmentation_object.py super_segmentation_dataset.py
 """
 from .super_segmentation_dataset import *
-from super_segmentation_object import *
+from .super_segmentation_object import *
 
 #
 #

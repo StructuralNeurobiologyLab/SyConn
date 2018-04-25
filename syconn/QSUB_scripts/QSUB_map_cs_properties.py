@@ -29,7 +29,7 @@ for cs in cs_list:
     try:
         ssh.map_cs_properties(cs)
     except KeyError as e:
-        print "Error %s during cs property mapping with key %d." % (e, cs.id)
+        print("Error %s during cs property mapping with key %d." % (e, cs.id))
         pass
-print "Finished mapping of %d CS." % len(cs_list)
+print("Finished mapping of %d CS." % len(cs_list))
 

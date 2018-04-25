@@ -21,8 +21,8 @@ except Exception:
 from knossos_utils.skeleton_utils import loadj0126NML
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import re
-import fasteners
 import signal
+#from smart_open import smart_open
 import logging
 
 __all__ = ["load_from_h5py", "save_to_h5py", "crop_bool_array",
@@ -396,12 +396,12 @@ def write_obj2pkl(path, objects):
     with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
         if isinstance(path, str):
             with open(path, 'wb') as output:
-                pickle.dump(objects, output, -1)
+                pkl.dump(objects, output, -1)
         else:
             warnings.warn("Write_obj2pkl takes arguments 'path' (str) and "
                           "'objects' (python object).", DeprecationWarning)
             with open(objects, 'wb') as output:
-                pickle.dump(path, output, -1)
+                pkl.dump(path, output, -1)
 
 
 def load_pkl2obj(path):
@@ -416,8 +416,12 @@ def load_pkl2obj(path):
     -------
     SegmentationDatasetObject
     """
-    with open(path, 'rb') as inp:
-        objects = pickle.load(inp)
+    try:
+        with open(path, 'rb') as inp:
+            objects = pkl.load(inp)
+    except UnicodeDecodeError: # python3 compatibility
+        with open(path, 'rb') as inp:
+            objects = pkl.loads(inp.read(), encoding='latin1')
     return objects
 
 
