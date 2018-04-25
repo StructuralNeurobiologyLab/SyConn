@@ -36,7 +36,7 @@ from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, 
 from ..handler.compression import AttributeDict, MeshDict, LZ4Dict
 from ..proc.image import single_conn_comp_img
 from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
-from ..proc.meshes import write_mesh2kzip, merge_someshs, compartmentalize_mesh
+from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh
 from ..proc.rendering import render_sampled_sso, comp_window, \
     multi_render_sampled_svidlist, render_sso_coords, multi_view_sso
 if "matplotlib" not in globals():
@@ -563,7 +563,7 @@ class SuperSegmentationObject(object):
                 ind, vert = mesh_dc[obj_type]
                 normals = np.zeros((0, ), dtype=np.float32)
         else:
-            ind, vert, normals = merge_someshs(self.get_seg_objects(obj_type),
+            ind, vert, normals = merge_someshes(self.get_seg_objects(obj_type),
                                       nb_cpus=self.nb_cpus)
             if not self.version == "tmp":
                 mesh_dc = MeshDict(self.mesh_dc_path, read_only=False,
@@ -1270,13 +1270,13 @@ class SuperSegmentationObject(object):
                             ply_fname="sv%d.ply" % ii)
 
     def _svattr2mesh(self, dest_path, attr_key, cmap, normalize_vals=False):
-        sv_attrs = np.array([sv.lookup_in_attribute_dict(attr_key)
+        sv_attrs = np.array([sv.lookup_in_attribute_dict(attr_key).squeeze()
                              for sv in self.svs])
         if normalize_vals:
             min_val = sv_attrs.min()
             sv_attrs -= min_val
             sv_attrs /= sv_attrs.max()
-        ind, vert, norm, col = merge_someshs(self.svs, color_vals=sv_attrs,
+        ind, vert, norm, col = merge_someshes(self.svs, color_vals=sv_attrs,
                                              cmap=cmap)
         write_mesh2kzip(dest_path, ind, vert, norm, col, "%s.ply" % attr_key)
 
@@ -1341,10 +1341,10 @@ class SuperSegmentationObject(object):
                        sv.glia_pred(thresh, pred_key_appendix) == 0]
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
-        mesh = merge_someshs(glia_svs)
+        mesh = merge_someshes(glia_svs)
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                         ply_fname="glia_%0.2f.ply" % thresh)
-        mesh = merge_someshs(nonglia_svs)
+        mesh = merge_someshes(nonglia_svs)
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                         ply_fname="nonglia_%0.2f.ply" % thresh)
 
@@ -1410,13 +1410,13 @@ class SuperSegmentationObject(object):
         # write meshes of CC's
         glia_ccs = self.attr_dict["glia_svs"]
         for kk, glia in enumerate(glia_ccs):
-            mesh = merge_someshs([self.get_seg_obj("sv", ix) for ix in
+            mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
                                   glia])
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                             "glia_cc%d.ply" % kk)
         non_glia_ccs = self.attr_dict["nonglia_svs"]
         for kk, nonglia in enumerate(non_glia_ccs):
-            mesh = merge_someshs([self.get_seg_obj("sv", ix) for ix in
+            mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
                                   nonglia])
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                             "nonglia_cc%d.ply" % kk)

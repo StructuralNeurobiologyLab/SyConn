@@ -1041,7 +1041,7 @@ def _collect_axoness_from_ssv_partners_thread(args):
             ssv_o = ssv.get_super_segmentation_object(ssv_partner_id)
             try:
                 axoness.append(ssv_o.axoness_for_coords([conn_o.rep_coord],
-                                                        pred_type='axoness_pred_avg15000')[0])
+                                                        pred_type='axoness_preds_cnn_views_avg10000')[0])
             except:
                 axoness.append(-1)
 

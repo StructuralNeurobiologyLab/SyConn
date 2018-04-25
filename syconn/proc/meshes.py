@@ -20,8 +20,8 @@ from scipy.ndimage.morphology import binary_closing
 
 from ..mp.shared_mem import start_multiprocess_obj
 __all__ = ["MeshObject", "get_object_mesh", "merge_meshs", "triangulation",
-           "get_random_centered_coords", "write_sso2kzip", "write_mesh2kzip",
-           "compartmentalize_mesh"]
+           "get_random_centered_coords", "write_mesh2kzip", 'write_meshes2kzip',
+           "compartmentalize_mesh", 'write_ssomesh2kzip']
 
 
 class MeshObject(object):
@@ -493,8 +493,8 @@ def merge_meshs(ind_lst, vert_lst, nb_simplices=3):
     return all_ind, all_vert
 
 
-def merge_someshs(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
-                  cmap="Blues", alpha=1.0):
+def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
+                  cmap=None, alpha=1.0):
     """
     Merge meshes of SegmentationObjects.
 
@@ -521,7 +521,7 @@ def merge_someshs(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     colors = np.zeros((0, ))
     meshes = start_multiprocess_obj("mesh", [[so,] for so in sos],
                                    nb_cpus=nb_cpus)
-    if color_vals is not None:
+    if color_vals is not None and cmap is not None:
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
     for i in range(len(meshes)):
         ind, vert, norm = meshes[i]
@@ -531,7 +531,7 @@ def merge_someshs(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
         all_vert = np.concatenate([all_vert, vert])
         all_norm = np.concatenate([all_norm, norm])
         if color_vals is not None:
-            curr_color = [color_vals[i]]*len(vert)
+            curr_color = np.array([color_vals[i]]*len(vert))
             colors = np.concatenate([colors, curr_color])
     assert len(all_vert) == len(all_norm) or len(all_norm) == 0, \
         "Length of combined normals and vertices differ."
@@ -622,7 +622,7 @@ def write_ssomesh2kzip(k_path, sso, color=(255, 0, 0, 255), ply_fname="0.ply"):
         rgba between 0 and 255
     ply_fname : str
     """
-    ind, vert = merge_someshs(sso.svs)
+    ind, vert = merge_someshes(sso.svs)
     color = np.array(color, np.uint8)
     write_mesh2kzip(k_path, ind, vert, color, ply_fname)
 
@@ -694,7 +694,7 @@ def color_factory(c_values, mcmap, alpha=1.0):
         curr_color = list(mcmap(c_val))
         curr_color[-1] = alpha
         colors.append(curr_color)
-    return colors
+    return np.array(colors)
 
 
 def compartmentalize_mesh(ssv, pred_key_appendix=""):

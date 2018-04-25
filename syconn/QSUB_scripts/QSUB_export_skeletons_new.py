@@ -31,9 +31,12 @@ ssv_ixs = args
 print(ssv_ixs)
 for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, version="0", working_dir="/wholebrain/scratch/areaxfs3/")
+    sso.load_skeleton()
+    if sso.skeleton is not None:
+        continue
     create_sso_skeleton(sso)
     sso.save_skeleton()
-    print(ix)
     # generate and cache features at different contexts (e.g. spiness/axoness):
-    for ctx in [2000, 8000]:
-        _ = sso.skel_features(ctx)
+    if len(sso.skeleton["nodes"]) > 0:
+        for ctx in [2000, 8000]:
+            _ = sso.skel_features(ctx)

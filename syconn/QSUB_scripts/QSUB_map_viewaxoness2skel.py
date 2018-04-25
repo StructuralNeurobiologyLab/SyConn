@@ -35,20 +35,24 @@ for ix in ssv_ixs:
     if sso.skeleton is None or len(sso.skeleton["nodes"]) == 0:
         print("Skeleton of SSV %d has zero nodes." % ix)
         continue
-    if "axoness" in sso.skeleton:
-        pass
-        # print("Axoness of SSV %d already exists." % sso.id)
+    # if "axoness" in sso.skeleton:
+    #     pass
+    #     # print("Axoness of SSV %d already exists." % sso.id)
+    # else:
+    if "axoness_preds_cnn_views_avg10000" in sso.skeleton:
+        print("%d done." % sso.id)
+        continue
     else:
-        try:
-            for k in [1, 5, 10, 15]:
-                sso.cnn_axoness_2_skel(k=k)
-        except Exception as e:
-            print("\n------------------------\n" + str(e) +
-                  "\nSSV: " + str(sso.id) +
-                  "\n------------------------\n")
+        print("%d proc." % sso.id)
     try:
-        if not "axoness_preds_cnn_views_avg10000" in sso.skeleton:
-            sso.average_node_axoness_views(avg_window=10000, axoness_pred_key=axoness_pred_key)
+        for k in [1]:
+            sso.cnn_axoness_2_skel(k=k)
+    except Exception as e:
+        print("\n------------------------\n" + str(e) +
+              "\nSSV: " + str(sso.id) +
+              "\n------------------------\n")
+    try:
+        sso.average_node_axoness_views()
         # else:
         #     print("Smoothed axoness prediction already exists for SSV %d." % sso.id)
     except Exception as e:
