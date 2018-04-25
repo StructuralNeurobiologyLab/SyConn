@@ -15,7 +15,7 @@ import warnings
 import tqdm
 
 
-def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75):
+def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
     """
     Loads ground truth from zip file, generated with Knossos. Corresponding
     dataset config file is locatet at kd_p.
@@ -25,7 +25,8 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75):
     zip_fname : str
     kd_p : str
     raw_data_offset : int
-        additional offset for raw data to use full label volume
+        additional offset for raw data to use full label volume, i.e. raw cube shape will be the shape of the labels
+        plus 2 times raw_data_offset
 
     Returns
     -------
@@ -37,17 +38,22 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75):
     kd = KnossosDataset()
     kd.initialize_from_knossos_path(kd_p)
     scaling = np.array(kd.scale, dtype=np.int)
-    raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling)
-    print("Using scale adapted raw offset:", raw_data_offset)
+    if np.isscalar(raw_data_offset):
+        raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling)
+        if verbose:
+            print('Using scale adapted raw offset:', np.array([75, 75,  6]))
+    elif len(raw_data_offset) != 3:
+        raise ValueError("Offset for raw cubes has to have length 3.")
     raw = kd.from_raw_cubes_to_matrix(size + 2 * raw_data_offset,
                                       offset - raw_data_offset, nb_threads=2,
                                       mag=1, show_progress=False)
     try:
         label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
-                                       verbose=False)
+                                       verbose=False, show_progress=False)
         label = label.astype(np.uint16)
     except Exception as e:
-        print("\n" + repr(e) + "\nLabels are set to zeros (background).")
+        print("\nError occured for file " + zip_fname + repr(e) +
+              "\nLabels are set to zeros (background).")
         label = np.zeros_like(raw).astype(np.uint16)
     return raw.astype(np.float32) / 255., label
 
@@ -256,6 +262,7 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None):
         else is considered background (0). If None, everything except 0 is
         treated as foreground.
     """
+    print(os.path.split(fname)[1])
     label = binarize_labels(label, foreground_ids)
     label = xyz2zxy(label)
     raw = xyz2zxy(raw)
@@ -387,7 +394,7 @@ def predict_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
                   overlap=overlap.astype(np.int), box_coords=np.zeros(3), fit_box_size=True)
     nb_ch = len(cd.chunk_dict.keys())
     print("Starting prediction of %d chunks.\n" % nb_ch)
-    pbar = tqdm.tqdm(size=nb_ch, ncols=80, leave=False,
+    pbar = tqdm.tqdm(total=nb_ch, ncols=80, leave=False,
                      unit='chunks', unit_scale=True, dynamic_ncols=False)
     if not overwrite:
         for k, chunk in cd.chunk_dict.iteritems():
@@ -400,6 +407,7 @@ def predict_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
         for chunk in cd.chunk_dict.values():
             chunk_pred(chunk, m, debug=debug)
             pbar.update(1)
+    pbar.close()
     save_dataset(cd)
     kd_pred = KnossosDataset()
     kd_pred.initialize_without_conf(kd_pred_folder, kd.boundary, kd.scale,
