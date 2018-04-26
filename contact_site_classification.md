@@ -41,10 +41,27 @@ creates the ground truth for the RFC and also trains and stores the classifier. 
 cps.classify_conn_objects(working_dir, qsub_pe=my_qsub_pe, n_max_co_processes=100)
 ```
 
+## Collecting directionality information (axoness)
+
+`conn` `SegmentationObjects` can acquire information about the "axoness" of both partners around the synapse. This allows
+a judgement about the direction of the synapse. To collect this information from the `ssv` partners do
+
+```
+cps.collect_axoness_from_ssv_partners(wd, qsub_pe=my_qsub_pe, n_max_co_processes=100)
+```
+The axoness prediction version used her can currently only be changed in the code directly (see `cps._collect_axoness_from_ssv_partners_thread`).
+
+
 ## Writing the connectivity information to the SuperSegmentationDataset
 
 For convenience and efficiency, the connectivity information created in the last step can be written to the `SuperSegmentationDataset`.
 
 ```
 ssd_proc.map_synaptic_conn_objects(ssd, qsub_pe=my_qsub_pe, n_max_co_processes=100)
+```
+
+## Exporting the connectivity matrix
+
+```
+cps.export_matrix(wd) 
 ```
