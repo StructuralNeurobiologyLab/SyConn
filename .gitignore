@@ -60,3 +60,7 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
+/scripts/cmn_paper/predict_sso_cnn.py
+/scripts/cmn_paper/
+/scripts/cmn_paper/splitting_heuristic_plot.py
+/.gitignore

@@ -558,8 +558,8 @@ def render_mesh_coords(coords, ind, vert, clahe=False, verbose=False, ws=(256, 1
         local_rot_mat = np.array(rot_matrices)
         local_rot_mat[empty_locs] = 0
         # if views_key == "raw":
-        # print "%d/%d spaces are empty while rendering '%s'." % \
-        #       (np.sum(empty_locs), len(coords), views_key)
+        # print("%d/%d spaces are empty while rendering '%s'." % \
+        #       (np.sum(empty_locs), len(coords), views_key))
     if verbose:
         print("Calculation of rotation matrices took", time.time() - start)
         print("Starting local rendering at %d locations (%s)." %\
@@ -570,7 +570,7 @@ def render_mesh_coords(coords, ind, vert, clahe=False, verbose=False, ws=(256, 1
                                     depth_map=depth_map)
     if verbose:
         end = time.time()
-        print("Finished rendering mesh of type %s at %d locations after" \
+        print("Finished rendering mesh of type %s at %d locations after"
               " %0.1fs" % (views_key,len(mviews), end - start))
     OSMesaDestroyContext(ctx)
     if return_rot_matrices:
@@ -628,7 +628,7 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
         so.save_views(sv_views, woglia=woglia, cellobjects_only=cellobjects_only)
     if verbose:
         dur = time.time() - start
-        print("Rendering of %d views took %0.2fs (incl. read/write). "
+        print ("Rendering of %d views took %0.2fs (incl. read/write). "
               "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
     if return_views:
         return np.concatenate(sso.load_views(woglia=woglia))
@@ -654,8 +654,8 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     """
     mesh = sso.mesh
     if len(mesh[1]) == 0:
-        print("----------------------------------------------\n" \
-              "No mesh for SSO %d found.\n"\
+        print("----------------------------------------------\n"
+              "No mesh for SSO %d found.\n"
               "----------------------------------------------\n")
         return
     raw_views = np.ones((len(coords), 2, 128, 256))

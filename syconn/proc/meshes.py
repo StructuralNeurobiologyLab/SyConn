@@ -30,7 +30,7 @@ class MeshObject(object):
         self.object_type = object_type
         self.indices = indices.astype(np.uint)
         if vertices.ndim == 2 and vertices.shape[1] == 3:
-            self.vertices = vertices.reshape(len(vertices) * 3)
+            self.vertices = vertices.flatten()
         else:
             # assume flat array
             self.vertices = np.array(vertices, dtype=np.float)
@@ -46,9 +46,9 @@ class MeshObject(object):
             self.max_dist = bounding_box[1]
         self.center = self.center.astype(np.float)
         self.max_dist = self.max_dist.astype(np.float)
-        vert_resh = np.array(self.vertices).reshape(len(self.vertices) / 3, 3)
-        vert_resh -= self.center
-        vert_resh /= self.max_dist
+        vert_resh = np.array(self.vertices).reshape((len(self.vertices) // 3, 3))
+        vert_resh -= np.array(self.center, dtype=self.vertices.dtype)
+        vert_resh = vert_resh / np.array(self.max_dist)
         self.vertices = vert_resh.reshape(len(self.vertices))
         if normals is not None and len(normals) == 0:
             normals = None
@@ -75,19 +75,19 @@ class MeshObject(object):
 
     @property
     def vert_resh(self):
-        vert_resh = np.array(self.vertices).reshape(len(self.vertices) / 3, 3)
+        vert_resh = np.array(self.vertices).reshape(len(self.vertices) // 3, 3)
         return vert_resh
 
     @property
     def normals(self):
         if self._normals is None:
-            print("Calculating normals.")
+            print("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         return self._normals
 
     @property
     def normals_resh(self):
-        return self.normals.reshape(len(self.vertices) / 3, 3)
+        return self.normals.reshape(len(self.vertices) // 3, 3)
 
     def transform_external_coords(self, coords):
         """
@@ -362,7 +362,7 @@ def get_bounding_box(coordinates):
     if coordinates.ndim == 2 and coordinates.shape[1] == 3:
         coord_resh = coordinates
     else:
-        coord_resh = coordinates.reshape(len(coordinates) / 3, 3)
+        coord_resh = coordinates.reshape(len(coordinates) // 3, 3)
     mean = np.mean(coord_resh, axis=0)
     max_dist = np.max(np.abs(coord_resh - mean))
     return mean, max_dist
