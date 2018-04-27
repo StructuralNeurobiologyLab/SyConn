@@ -73,6 +73,26 @@ class SuperSegmentationObject(object):
                  object_caching=True, voxel_caching=True, mesh_caching=True,
                  view_caching=False, config=None, nb_cpus=1,
                  enable_locking=True, ssd_type="ssv"):
+        """
+
+        Parameters
+        ----------
+        ssv_id :
+        version :
+        version_dict :
+        working_dir :
+        create :
+        sv_ids :
+        scaling :
+        object_caching :
+        voxel_caching :
+        mesh_caching :
+        view_caching :
+        config :
+        nb_cpus :
+        enable_locking : bool
+        ssd_type :
+        """
         self.nb_cpus = nb_cpus
         self._id = ssv_id
         self.attr_dict = {} # dict(mi=[], sj=[], vc=[], sv=[])
@@ -1569,10 +1589,23 @@ class SuperSegmentationObject(object):
         return np.array(axoness_pred)
 
     def cnn_axoness_2_skel(self, **kwargs):
-        return ssh._cnn_axonness2skel(self, **kwargs)
+        locking_tmp = self.enable_locking
+        self.enable_locking = False  # all SV operations are read-only
+        # (enable_locking is inherited by sso.svs);
+        # SSV operations not, but SSO file structure is not chunked
+        res = ssh._cnn_axonness2skel(self, **kwargs)
+        self.enable_locking = locking_tmp
+        return res
+        return
 
     def average_node_axoness_views(self, **kwargs):
-        return ssh._average_node_axoness_views(self, **kwargs)
+        locking_tmp = self.enable_locking
+        self.enable_locking = False  # all SV operations are read-only
+        # (enable_locking is inherited by sso.svs);
+        # SSV operations not, but SSO file structure is not chunked
+        res = ssh._average_node_axoness_views(self, **kwargs)
+        self.enable_locking = locking_tmp
+        return res
 
     # --------------------------------------------------------------- CELL TYPES
     # def predict_cell_type(self, ssd_version="ctgt", clf_name="rfc",
