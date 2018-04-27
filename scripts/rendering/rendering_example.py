@@ -56,7 +56,7 @@ def map_rgb2label(rgb):
         return 0  # background
 
 
-def generate_label_views(kzip_path, gt_type="axgt"):
+def generate_GT_views(kzip_path, gt_type="axgt"):
     """
 
     :param kzip_path:
@@ -92,8 +92,8 @@ def generate_label_views(kzip_path, gt_type="axgt"):
         [n.getCoordinate_scaled() for n in skel_nodes])  # extracting node coordinates, rescalling from
     # voxel frame to physical frame with _scaled())
     node_labels = np.array([str2intconverter(n.getComment(), gt_type) for n in skel_nodes], dtype=np.int)
-    node_coords = node_coords[node_labels != -1]
-    node_labels = node_labels[node_labels != -1]
+    node_coords = node_coords[node_labels != -1][:10]
+    node_labels = node_labels[node_labels != -1][:10]
 
     # create KD tree from skeleton node coordinates
     tree = KDTree(node_coords)
@@ -127,8 +127,6 @@ def generate_label_views(kzip_path, gt_type="axgt"):
     raw_views = _render_mesh_coords(node_coords, mo, depth_map=True)
 
     # label_views = render_mesh(mo)
-    label_views = remap_rgb_view(label_views)
-    raw_views = render_sso_coords(raw_views)
     return label_views, raw_views
 
 
@@ -141,25 +139,19 @@ def remap_rgb_view(rgb_view):  # (3, 2048, 2048, 3)
         l = map_rgb2label(label_view_resh[ix])
         remappend_label_view[ix] = l
     return remappend_label_view.reshape(rgb_view.shape[:-1])  # (3, 2048, 2048, )
-#
-# def remap_rgb_view_raw_data(rgb_view):  # (3, 2048, 2048, 3)
-#     label_view_flat = rgb_view.flatten()
-#     label_view_resh = label_view_flat.reshape((-1, 3))
-#     remappend_label_view = np.zeros((len(label_view_resh), ))
-#     for ix in range(len(label_view_resh)):
-#         l = map_rgb2label(label_view_resh[ix])
-#         remappend_label_view[ix] = l
-#     return remappend_label_view.reshape(rgb_view.shape[:-1])  # (3, 2048, 2048, 4)
-
 
 if __name__ == "__main__":
     #print(generate_label_views)
     label_file_folder = "/u/shum/spine_label_files/"
     # kzip_path = label_file_folder + "/28985344.001.k.zip"
     kzip_path = label_file_folder + "/4741011.k.zip"
-    label_views, raw_views = generate_label_views(kzip_path, gt_type="spgt")
-    imsave("/u/shum/labels0.png", label_views[0])
-    imsave("/u/shum/raw0.png", raw_views[0, ..., 0])
+    label_views, raw_views = generate_GT_views(kzip_path, gt_type="spgt")
+    # label view shapes: (N, 2, 256, 128, 1), raw views:(N, 2, 256, 128, 4)
+    imsave("/u/shum/labels0.png", label_views[0, 0])
+    raise()
+    imsave("/u/shum/raw0.png", raw_views[0, 0, ..., ])
+    remapped_label_views = remap_rgb_view(label_views)
+    imsave ("/u/shum/rmlabels0.png", remapped_label_views[0, 0])
 
 #print(render.shape)
 

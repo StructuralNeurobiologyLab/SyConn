@@ -51,7 +51,7 @@ for cc in args:
         continue
     try:
         sso.gliasplit(thresh=0.161489, verbose=False)
-    except Exception, e:
+    except Exception as e:
         print("\n--------------------------------------------------------\n" \
               "Splitting of SSV %d failed with %s." \
               "\n--------------------------------------------------------\n" % (

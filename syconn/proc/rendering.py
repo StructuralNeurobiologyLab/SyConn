@@ -418,7 +418,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         normals = mesh.normals
     edge_lengths = edge_lengths / mesh.max_dist
     # default color
-    if colors is not None:
+    if colors is not None and not depth_map:
         colored = True
         colors = np.array(colors)
     else:
