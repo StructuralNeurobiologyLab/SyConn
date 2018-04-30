@@ -1414,9 +1414,8 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
         _cnn_axonness2skel(sso, pred_key_appendix=pred_key_appendix, k=1)
     view_ixs = np.array(sso.skeleton["view_ixs"])
     avg_pred = []
+
     g = sso.weighted_graph
-    import time
-    start2 = time.time()
     for n in g.nodes():
         paths = nx.single_source_dijkstra_path(g, n, avg_window)
         neighs = np.array(paths.keys(), dtype=np.int)
@@ -1424,18 +1423,7 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
         cls, cnts = np.unique(preds[unique_view_ixs], return_counts=True)
         c = cls[np.argmax(cnts)]
         avg_pred.append(c)
-    print("old appr. took:", time.time()-start2)
 
-    start = time.time()
-    paths = nx.all_pairs_dijkstra_path(g, avg_window)
-    for n in g.nodes():
-        # paths = nx.single_source_dijkstra_path(g, n, avg_window)
-        neighs = np.array(paths[n].keys(), dtype=np.int)
-        unique_view_ixs = np.unique(view_ixs[neighs], return_counts=False)
-        cls, cnts = np.unique(preds[unique_view_ixs], return_counts=True)
-        c = cls[np.argmax(cnts)]
-        avg_pred.append(c)
-    print("new appr. took:", time.time() - start)
     sso.skeleton["%s_views_avg%d" % (pred_key, avg_window)] = avg_pred
     sso.save_skeleton()
 

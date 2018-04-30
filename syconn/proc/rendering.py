@@ -18,7 +18,7 @@ from ..handler.compression import arrtolz4string
 from .meshes import merge_meshs, get_random_centered_coords, \
     MeshObject, calc_rot_matrices, flag_empty_spaces
 import os
-
+from .meshes import id2rgb_array_contiguous
 try:
     import os
     if not os.environ.get('PYOPENGL_PLATFORM'):
@@ -136,26 +136,23 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False):
     if depth_map:
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE)
-        data = Image.frombuffer(mode="L", size=(ws[0], ws[1]),
-                               data=data)
-        data = np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM)).astype(np.float32)
+        data = Image.frombuffer("L", (ws[0], ws[1]), data, 'raw', 'L', 0, 1) #(mode, size, data, 'raw', mode, 0, 1)
+        data = np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM)).astype(np.uint8)
         if clahe:
             data = apply_clahe(data)
-        data = normalize_img(gaussian_filter(data, .7), max_val=1.)
+        data = gaussian_filter(data, .7)
         if np.sum(data) == 0:
             data = np.ones_like(data)
     elif colored:
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_RGB, GL_UNSIGNED_BYTE)
-        data = Image.frombuffer(mode="RGB", size=(ws[0], ws[1]),
-                               data=data)
-        data = np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM)).astype(np.float32)
+        data = Image.frombuffer("RGB", (ws[0], ws[1]), data, 'raw', 'RGB', 0, 1) #Image.frombuffer(mode="RGB", size=(ws[0], ws[1]), data=data)
+        data = np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM))
     else:
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_RGB, GL_UNSIGNED_BYTE)
-        data = Image.frombuffer(mode="RGB", size=(ws[0], ws[1]),
-                               data=data)
-        data = rgb2gray(np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM))).astype(np.float32)
+        data = Image.frombuffer("RGB", (ws[0], ws[1]), data, 'raw', 'RGB', 0, 1) #Image.frombuffer(mode="RGB", size=(ws[0], ws[1]), data=data)
+        data = rgb2gray(np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM)))
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     return data
 
@@ -412,7 +409,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     vertices = mesh.vertices
     indices = mesh.indices
     colors = mesh.colors
-    if depth_map and mesh._normals is None:
+    if mesh._normals is None:
         normals = np.zeros(len(vertices))
     else:
         normals = mesh.normals
@@ -430,7 +427,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         view_sh = (comp_views, ws[1], ws[0])
     else:
         view_sh = (comp_views, ws[1], ws[0], 3)
-    res = np.ones([len(coords)] + list(view_sh))
+    res = np.ones([len(coords)] + list(view_sh), dtype=np.uint8)
     init_opengl(ws, depth_map=depth_map, clear_value=0.0)
     init_object(indices, vertices, normals, colors, ws)
     for ii, c in enumerate(coords):
@@ -439,8 +436,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         if np.sum(np.abs(rot_mat)) == 0 or np.sum(np.abs(mesh.vertices)) == 0:
             if views_key == "raw":
                 print("Rotation matrix or vertices of '%s' with %d "
-                              "vertices is zero during rendering. Skipping."
-                              % (views_key, len(mesh.vert_resh)), RuntimeWarning)
+                      "vertices is zero during rendering at %s. Skipping."
+                              % (views_key, len(mesh.vert_resh), str(c)))
             continue
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
@@ -528,7 +525,7 @@ def render_mesh(mo, **kwargs):
 def render_mesh_coords(coords, ind, vert, **kwargs):
     """
     Render raw views located at given coordinates in mesh
-     Returns ViewContainer list if dest_dir is None, else writes
+    Returns ViewContainer list if dest_dir is None, else writes
     views to dest_path.
 
     Parameters
@@ -543,7 +540,7 @@ def render_mesh_coords(coords, ind, vert, **kwargs):
         views at each coordinate
     """
     mesh = MeshObject("views", ind, vert)
-    mesh._colors = None
+    mesh._colors = None  # this enables backwards compatibility, check why this was used
     return _render_mesh_coords(coords, mesh, **kwargs)
 
 
@@ -558,8 +555,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
     Parameters
     ----------
     coords : np.array
-    ind : np.array [N, 1]
-    vert : np.array [N, 1]
+    mesh : MeshObject
     clahe : bool
     verbose : bool
     ws : tuple
@@ -582,7 +578,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                                          mesh.vert_resh, edge_lengths / mesh.max_dist)
         local_rot_mat = rot_matrices
     else:
-        empty_locs = flag_empty_spaces(coords, vert.reshape((-1, 3)),
+        empty_locs = flag_empty_spaces(coords, mesh.vertices_scaled.reshape((-1, 3)),
                                        edge_lengths)
         local_rot_mat = np.array(rot_matrices)
         local_rot_mat[empty_locs] = 0
@@ -682,19 +678,20 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     -------
     np.array
     """
+    # TODO: add index views
     mesh = sso.mesh
     if len(mesh[1]) == 0:
         print("----------------------------------------------\n"
               "No mesh for SSO %d found.\n"
               "----------------------------------------------\n")
         return
-    raw_views = np.ones((len(coords), 2, 128, 256))
+    raw_views = np.ones((len(coords), 2, 128, 256), dtype=np.uint8)
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
                                 "cellobjects only."
         edge_lengths = np.array([comp_window, comp_window / 2, comp_window / 2])
         mo = MeshObject("raw", mesh[0], mesh[1])
-        mo.colors = None
+        mo._colors = None
         rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
                                     mo.vert_resh, edge_lengths / mo.max_dist)
     else:
@@ -728,6 +725,40 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
         return np.concatenate([raw_views[:, None], mi_views[:, None],
                                vc_views[:, None], sj_views[:, None]], axis=1)
     return raw_views[:, None]
+
+
+def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
+                                  rot_matrices=None):
+    """
+
+    Parameters
+    ----------
+    sso :
+    coords :
+    verbose :
+    ws :
+    rot_mat :
+
+    Returns
+    -------
+
+    """
+    ind, vert, norm = sso.mesh
+    if len(vert) == 0:
+        print("----------------------------------------------\n"
+              "No mesh for SSO %d found.\n"
+              "----------------------------------------------\n")
+        return np.ones((len(coords), 2, 128, 256, 3), dtype=np.uint8)
+    color_array = id2rgb_array_contiguous(np.arange(len(vert) // 3))
+    color_array = np.concatenate([color_array, np.ones((len(color_array), 1), dtype=np.uint8)*255],
+                                 axis=-1).astype(np.float32) / 255. # in init it seems color values have to be normalized, check problems with uniqueness if
+    # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
+    # backwards compatibility with other color-dependent rendering methods
+    # Create mesh object
+    mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
+    index_views = _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
+                                      depth_map=False, rot_matrices=rot_matrices)
+    return (index_views * 255).astype(np.uint8)
 
 
 def get_sso_view_dc(sso, verbose=False):
