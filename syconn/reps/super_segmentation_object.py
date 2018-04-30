@@ -1337,6 +1337,9 @@ class SuperSegmentationObject(object):
         col = colorcode_vertices(mesh[1].reshape((-1, 3)), pred_coords,
                                  preds, colors=colors, k=k)
         if dest_path is None or ply_fname is None:
+            if not dest_path is None and ply_fname is None:
+                print("Specify 'ply_fanme' in order to save colored mesh"
+                      " to k.zip.")
             return mesh[0], mesh[1], col
         else:
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], col,
@@ -1521,6 +1524,15 @@ class SuperSegmentationObject(object):
             self._pred2mesh(self.skeleton["nodes"] * self.scaling, axoness,
                             k=k, dest_path=dest_path)
 
+    def skelproperty2mesh(self, key, dest_path=None, k=1):
+        if self.skeleton is None:
+            self.load_skeleton()
+        if dest_path is None:
+            dest_path = self.skeleton_kzip_path
+        self._pred2mesh(self.skeleton["nodes"] * self.scaling,
+                        self.skeleton[key], k=k, dest_path=dest_path,
+                        ply_fname=key+".ply")
+
     def predict_nodes(self, sc, clf_name="rfc", feature_context_nm=None,
                       avg_window=0, leave_out_classes=()):
         """
@@ -1596,7 +1608,6 @@ class SuperSegmentationObject(object):
         res = ssh._cnn_axonness2skel(self, **kwargs)
         self.enable_locking = locking_tmp
         return res
-        return
 
     def average_node_axoness_views(self, **kwargs):
         locking_tmp = self.enable_locking
