@@ -1,4 +1,4 @@
-
+import numpy as np
 palette = np.array( [ [1,0,0],              # red
                       [0,1,0],              # green
                       [0,0,1] ])            # blue

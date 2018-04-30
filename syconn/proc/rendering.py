@@ -17,6 +17,7 @@ from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
 from .meshes import merge_meshs, get_random_centered_coords, \
     MeshObject, calc_rot_matrices, flag_empty_spaces
+import os
 
 try:
     import os
@@ -213,7 +214,7 @@ def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False):
 def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
                     ws=(2048, 2048), physical_scale=None,
                     enable_lightning=False, depth_map=False,
-                    nb_views=3):
+                    nb_views=3, background=None):  # Mariana Sh added background function
     """
     Render mesh from 3 (default) equidistant perspectives.
 
@@ -232,6 +233,9 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
     nb_views : int
         two views parallel to main component, and N-2 views (evenly spaced in
         angle space) perpendicular to it.
+    background
+        float value for background (clear value) between 0 and 1 (used as RGB
+        values)
 
     Returns
     -------
@@ -239,7 +243,7 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
         shape: (nb_views, ws[0], ws[1]
     """
     ctx = init_ctx(ws)
-    init_opengl(ws, enable_lightning, depth_map=depth_map)
+    init_opengl(ws, enable_lightning, depth_map=depth_map, clear_value=background)
     vertices = np.array(vertices)
     indices = np.array(indices, dtype=np.uint)
     if colors is not None:
@@ -414,22 +418,27 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         normals = mesh.normals
     edge_lengths = edge_lengths / mesh.max_dist
     # default color
-    if colors is not None:
+    if colors is not None and not depth_map:
+        colored = True
         colors = np.array(colors)
     else:
+        colored = False
         colors = np.ones(len(vertices) / 3 * 4) * 0.8
     if alpha is not None:
         colors[::4] = alpha
-    res = np.ones((len(coords), comp_views, ws[1], ws[0]))
-    init_opengl(ws, depth_map=depth_map, clear_value=1.0)
+    if not colored:
+        view_sh = (comp_views, ws[1], ws[0])
+    else:
+        view_sh = (comp_views, ws[1], ws[0], 3)
+    res = np.ones([len(coords)] + list(view_sh))
+    init_opengl(ws, depth_map=depth_map, clear_value=0.0)
     init_object(indices, vertices, normals, colors, ws)
     for ii, c in enumerate(coords):
-        c_views = np.ones((comp_views, ws[1], ws[0]),
-                         dtype=np.float32)
+        c_views = np.ones(view_sh, dtype=np.float32)
         rot_mat = rot_matrices[ii]
         if np.sum(np.abs(rot_mat)) == 0 or np.sum(np.abs(mesh.vertices)) == 0:
             if views_key == "raw":
-                warnings.warn("Rotation matrix or vertices of '%s' with %d "
+                print("Rotation matrix or vertices of '%s' with %d "
                               "vertices is zero during rendering. Skipping."
                               % (views_key, len(mesh.vert_resh)), RuntimeWarning)
             continue
@@ -451,7 +460,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         # glLightfv(GL_LIGHT0, GL_POSITION, light_position)
         # glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
         # dummy rendering, somehow first screenshot is always black
-        _ = screen_shot(ws, depth_map=depth_map, clahe=clahe)
+        _ = screen_shot(ws, colored=colored, depth_map=depth_map, clahe=clahe)
         # glPopMatrix()
 
         glMatrixMode(GL_MODELVIEW)
@@ -463,7 +472,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
             light_position = [1., 1., 2., 0.]
             glLightfv(GL_LIGHT0, GL_POSITION, light_position)
             glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
-            c_views[m] = screen_shot(ws, depth_map=depth_map, clahe=clahe)
+            c_views[m] = screen_shot(ws, colored=colored, depth_map=depth_map, clahe=clahe)
             glPopMatrix()
         res[ii] = c_views
         found_empty_view = False
@@ -516,7 +525,29 @@ def render_mesh(mo, **kwargs):
     return mo_views
 
 
-def render_mesh_coords(coords, ind, vert, clahe=False, verbose=False, ws=(256, 128),
+def render_mesh_coords(coords, ind, vert, **kwargs):
+    """
+    Render raw views located at given coordinates in mesh
+     Returns ViewContainer list if dest_dir is None, else writes
+    views to dest_path.
+
+    Parameters
+    ----------
+    coords : np.array
+    ind : np.array [N, 1]
+    vert : np.array [N, 1]
+
+    Returns
+    -------
+    numpy.array
+        views at each coordinate
+    """
+    mesh = MeshObject("views", ind, vert)
+    mesh._colors = None
+    return _render_mesh_coords(coords, mesh, **kwargs)
+
+
+def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                        rot_matrices=None, views_key="raw", return_rot_matrices=False,
                        depth_map=True):
     """
@@ -543,8 +574,6 @@ def render_mesh_coords(coords, ind, vert, clahe=False, verbose=False, ws=(256, 1
     numpy.array
         views at each coordinate
     """
-    mesh = MeshObject(views_key, ind, vert)
-    mesh._colors = None
     edge_lengths = np.array([comp_window, comp_window / 2, comp_window / 2])
     if verbose:
         start = time.time()
@@ -562,7 +591,7 @@ def render_mesh_coords(coords, ind, vert, clahe=False, verbose=False, ws=(256, 1
         #       (np.sum(empty_locs), len(coords), views_key))
     if verbose:
         print("Calculation of rotation matrices took", time.time() - start)
-        print("Starting local rendering at %d locations (%s)." %\
+        print("Starting local rendering at %d locations (%s)." %
               (len(coords), views_key))
     ctx = init_ctx(ws)
     mviews = multi_view_mesh_coords(mesh, coords, local_rot_mat, edge_lengths,
@@ -585,6 +614,7 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
                        add_cellobjects=True, overwrite=True,
                        return_views=False, cellobjects_only=False):
     """
+
     Renders for each SV views at sampled locations (number is dependent on
     SV mesh size with scaling fact) from combined mesh of all SV.
 
