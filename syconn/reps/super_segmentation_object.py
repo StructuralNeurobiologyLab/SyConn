@@ -73,6 +73,26 @@ class SuperSegmentationObject(object):
                  object_caching=True, voxel_caching=True, mesh_caching=True,
                  view_caching=False, config=None, nb_cpus=1,
                  enable_locking=True, ssd_type="ssv"):
+        """
+
+        Parameters
+        ----------
+        ssv_id :
+        version :
+        version_dict :
+        working_dir :
+        create :
+        sv_ids :
+        scaling :
+        object_caching :
+        voxel_caching :
+        mesh_caching :
+        view_caching :
+        config :
+        nb_cpus :
+        enable_locking : bool
+        ssd_type :
+        """
         self.nb_cpus = nb_cpus
         self._id = ssv_id
         self.attr_dict = {} # dict(mi=[], sj=[], vc=[], sv=[])
@@ -1317,6 +1337,9 @@ class SuperSegmentationObject(object):
         col = colorcode_vertices(mesh[1].reshape((-1, 3)), pred_coords,
                                  preds, colors=colors, k=k)
         if dest_path is None or ply_fname is None:
+            if not dest_path is None and ply_fname is None:
+                print("Specify 'ply_fanme' in order to save colored mesh"
+                      " to k.zip.")
             return mesh[0], mesh[1], col
         else:
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], col,
@@ -1501,6 +1524,15 @@ class SuperSegmentationObject(object):
             self._pred2mesh(self.skeleton["nodes"] * self.scaling, axoness,
                             k=k, dest_path=dest_path)
 
+    def skelproperty2mesh(self, key, dest_path=None, k=1):
+        if self.skeleton is None:
+            self.load_skeleton()
+        if dest_path is None:
+            dest_path = self.skeleton_kzip_path
+        self._pred2mesh(self.skeleton["nodes"] * self.scaling,
+                        self.skeleton[key], k=k, dest_path=dest_path,
+                        ply_fname=key+".ply")
+
     def predict_nodes(self, sc, clf_name="rfc", feature_context_nm=None,
                       avg_window=0, leave_out_classes=()):
         """
@@ -1569,10 +1601,22 @@ class SuperSegmentationObject(object):
         return np.array(axoness_pred)
 
     def cnn_axoness_2_skel(self, **kwargs):
-        return ssh._cnn_axonness2skel(self, **kwargs)
+        locking_tmp = self.enable_locking
+        self.enable_locking = False  # all SV operations are read-only
+        # (enable_locking is inherited by sso.svs);
+        # SSV operations not, but SSO file structure is not chunked
+        res = ssh._cnn_axonness2skel(self, **kwargs)
+        self.enable_locking = locking_tmp
+        return res
 
     def average_node_axoness_views(self, **kwargs):
-        return ssh._average_node_axoness_views(self, **kwargs)
+        locking_tmp = self.enable_locking
+        self.enable_locking = False  # all SV operations are read-only
+        # (enable_locking is inherited by sso.svs);
+        # SSV operations not, but SSO file structure is not chunked
+        res = ssh._average_node_axoness_views(self, **kwargs)
+        self.enable_locking = locking_tmp
+        return res
 
     # --------------------------------------------------------------- CELL TYPES
     # def predict_cell_type(self, ssd_version="ctgt", clf_name="rfc",

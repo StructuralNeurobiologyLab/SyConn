@@ -1459,6 +1459,7 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
         _cnn_axonness2skel(sso, pred_key_appendix=pred_key_appendix, k=1)
     view_ixs = np.array(sso.skeleton["view_ixs"])
     avg_pred = []
+
     g = sso.weighted_graph
     for n in g.nodes():
         paths = nx.single_source_dijkstra_path(g, n, avg_window)
@@ -1467,6 +1468,7 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
         cls, cnts = np.unique(preds[unique_view_ixs], return_counts=True)
         c = cls[np.argmax(cnts)]
         avg_pred.append(c)
+
     sso.skeleton["%s_views_avg%d" % (pred_key, avg_window)] = avg_pred
     sso.save_skeleton()
 
@@ -1481,7 +1483,7 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1):
     pred_key = "axoness_preds_cnn%s" % pred_key_appendix
     if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key):
         if len(pred_key_appendix) > 0:
-            print("Couldn't find specified axoness prediction. Falling back to " \
+            print("Couldn't find specified axoness prediction. Falling back to "
                   "default (-> per SV stored multi-view prediction including SSV context; RAG: 4b_fix).")
         preds = np.array(start_multiprocess_obj("axoness_preds",
                                                    [[sv, {
@@ -1497,6 +1499,7 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1):
         probas = np.concatenate(probas)
         sso.attr_dict[proba_key] = probas
         sso.attr_dict[pred_key] = preds
+        sso.save_attributes([proba_key, pred_key], [probas, preds])
     else:
         preds = sso.lookup_in_attribute_dict(pred_key)
         probas = sso.lookup_in_attribute_dict(proba_key)

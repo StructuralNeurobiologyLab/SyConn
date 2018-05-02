@@ -161,6 +161,22 @@ def group_ids_to_so_storage(ids, params, significant_digits=5):
     return [id_dict] + param_dicts
 
 
+def majority_element_1d(arr):
+    """
+    Returns most frequent element in 'arr'.
+
+    Parameters
+    ----------
+    arr : np.array
+
+    Returns
+    -------
+    scalar
+    """
+    uni_el, cnts = np.unique(arr, return_counts=True)
+    return uni_el[np.argmax(cnts)]
+
+
 def get_paths_of_skelID(id_list, traced_skel_dir):
     """Gather paths to kzip of skeletons with ID in id_list
 
