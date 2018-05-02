@@ -736,12 +736,21 @@ def radius_correction(sso):
     return sso.skeleton
 
 
-def radius_correction_found_vertices(sso, plump_factor=1):
+def radius_correction_found_vertices(sso, plump_factor=1, num_found_vertices=10):
     """
-    Algorithm finds two nearest two nearest vertices and takes the median of the distances for every node
-    (gives better result than radius_correction)
-    :param sso: super segmentation object
-    :return: skeleton with diameters estimated
+    Algorithm finds two nearest vertices and takes the median of the distances for every node
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    plump_factor : int
+        multiplication factor for the radius
+    num_found_vertices : int
+        number of closest vertices queried for the node
+
+    Returns
+    -------
+    skeleton with diameters estimated
     """
 
     skel_node = sso.skeleton['nodes']
@@ -749,8 +758,7 @@ def radius_correction_found_vertices(sso, plump_factor=1):
 
     vert_sparse = sso.mesh[1].reshape((-1, 3))
     tree = spatial.cKDTree(vert_sparse)
-
-    dists, all_found_vertices_ixs = tree.query(skel_node * sso.scaling, 2)
+    dists, all_found_vertices_ixs = tree.query(skel_node * sso.scaling, num_found_vertices)
 
     for ii, el in enumerate(skel_node):
         diameters[ii] = np.median(dists[ii]) *2/10
@@ -917,11 +925,17 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
     Removes short stub branches, that are often added by annotators but
     hardly represent true morphology.
 
-    :nx_g: network kx graph
-    :scal:
-    :param len_thres:
-    :param preserve_annotations:
-    :return:
+    Parameters
+    ----------
+    nx_g : network kx graph
+    scal : array of size 3
+        the scaled up factor
+    len_thres : int
+        threshold of the length below which it will be pruned
+
+    Returns
+    -------
+    pruned network kx graph
     """
 
     if preserve_annotations:
@@ -959,28 +973,125 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
     return new_nx_g
 
 
-def create_sso_skeleton(sso, pruning_thresh=700):
+def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_thresh=50):
+    """
+    Reduces nodes in the skeleton. (from dense stacking to sparsed stacking)
 
+    Parameters
+    ----------
+    sso : Super Segmentation Object
+    dot_prod_thresh : float
+        the 'straightness' of the edges
+    max_dist_thresh : int
+        maximum distance desired between every node
+    min_dist_thresh : int
+        minimum distance desired between every node
+
+    Returns
+    -------
+    sso containing the sparsed skeleton
+    """
+
+    sso.load_skeleton()
+    ssv_skel = sso.skeleton
+    scal = sso.scaling
+
+    skel_G = nx.Graph()
+    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
+
+    for inx, single_node in enumerate(new_nodes):
+        skel_G.add_node(inx, position=single_node)
+
+    new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
+    new_edges = [tuple(ix) for ix in new_edges]
+    skel_G.add_edges_from(new_edges)
+    change = 1
+    run_cnt = 0
+    # orig_node_cnt = len(new_nodes)
+    while change > 0:
+        # run_cnt += 1
+        change = 0
+        visiting_nodes = list({k for k, v in dict(skel_G.degree()).iteritems() if v == 2})
+        for visiting_node in visiting_nodes:
+            neighbours = [n for n in skel_G.neighbors(visiting_node)]
+            if skel_G.degree(visiting_node) == 2:
+                left_node = neighbours[0]
+                right_node = neighbours[1]
+                vector_left_node = np.array([int(skel_G.node[left_node]['position'][ix]) - int(skel_G.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+                vector_right_node =np.array([int(skel_G.node[right_node]['position'][ix]) - int(skel_G.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+
+                dot_prod = np.dot(vector_left_node/ np.linalg.norm(vector_left_node),vector_right_node/ np.linalg.norm(vector_right_node))
+                dist = np.linalg.norm([int(skel_G.node[right_node]['position'][ix]*scal[ix]) - int(skel_G.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
+
+                # print('dots', dot_prod, 'dist', dist)
+
+                if (abs(dot_prod) > dot_prod_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
+                    skel_G.remove_node(visiting_node)
+                    skel_G.add_edge(left_node,right_node)
+                    change += 1
+                    # print('this got removed', visiting_node)
+                # if change == 0:
+                #     change = -1
+    # print("Removed %d nodes after %d iterations." %
+    #       (orig_node_cnt-len(skel_G.nodes()), run_cnt))
+
+    sso.skeleton['nodes'] = np.array([skel_G.node[ix]['position'] for ix in skel_G.nodes()], dtype=np.uint32)
+    sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
+
+    temp_edges = np.array(skel_G.edges()).reshape(-1)
+    temp_edges_sorted = np.unique(np.sort(temp_edges))
+    temp_edges_dict = {}
+
+    for ii, ix in enumerate(temp_edges_sorted):
+        temp_edges_dict[ix] = ii
+    temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
+
+    temp_edges = np.array(temp_edges).reshape([-1, 2])
+
+    sso.skeleton['edges'] = temp_edges
+
+    # Estimating the radii
+    # print("Starting radius correction.")
+    sso.skeleton = radius_correction_found_vertices(sso)
+
+    return sso
+    # print("Exporting kzip")
+    # sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v6.k.zip" % sso.id)
+
+
+import time
+
+def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     """
     Creates the super super voxel skeleton
-    :param sso: Super Segmentation Object
-    :param pruning_thresh: threshold for pruning.
+
+    Parameters
+    ----------
+    sso : Super Segmentation Object
+    pruning_thresh : int
+        threshold for pruning
+    sparsify : bool
+        will sparsify if True otherwise not
+
+    Returns
+    -------
+
     """
 
     # Fetching Super voxel Skeletons
+
+    # start = time.time()
     sso.load_attr_dict()
     ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
 
     for sv_id in sso.sv_ids:
         nodes, diameters, edges = create_new_skeleton(sv_id, sso)
-        # print('LENGTH', len(ssv_skel['nodes']) / 3, len(nodes) / 3, len(ssv_skel['edges']))
 
         ssv_skel['edges'] = np.concatenate(
             (ssv_skel['edges'], [(ix + (len(ssv_skel['nodes'])) / 3) for ix in edges]), axis=0)
         ssv_skel['nodes'] = np.concatenate((ssv_skel['nodes'], nodes), axis=0)
 
         ssv_skel['diameters'] = np.concatenate((ssv_skel['diameters'], diameters), axis=0)
-        # print('LENGTH', len(ssv_skel['nodes']) / 3, len(nodes) / 3, len(ssv_skel['edges']))
 
     skel_G = nx.Graph()
     new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
@@ -998,22 +1109,25 @@ def create_sso_skeleton(sso, pruning_thresh=700):
     new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
 
     # Stitching Super Voxel Skeletons
-    no_of_seg = len(list(nx.connected_components(skel_G)))
+    no_of_seg = nx.number_connected_components(skel_G)
+
+    skel_G_nodes = [ii['position'] for ix, ii in skel_G.node.iteritems()]
+
 
     while no_of_seg != 1:
 
         rest_nodes = []
         current_set_of_nodes = []
 
-        list_of_comp = [c for c in sorted(nx.connected_components(skel_G), key=len, reverse=True)]
+        list_of_comp = np.array([c for c in sorted(nx.connected_components(skel_G), key=len, reverse=True)])
 
-        # print(list(list_of_comp[1])[:10])
+        for single_rest_graph in list_of_comp[1:]:
 
-        for single_rest_graph in list_of_comp[len(list(nx.connected_components(skel_G))) - no_of_seg + 1:]:
-            rest_nodes = rest_nodes + [list(skel_G.node[int(ix)]['position']) for ix in single_rest_graph]
+            rest_nodes = rest_nodes + [skel_G_nodes[int(ix)] for ix in single_rest_graph]
 
-        for single_rest_graph in list_of_comp[:len(list(nx.connected_components(skel_G))) - no_of_seg + 1]:
-            current_set_of_nodes = current_set_of_nodes + [list(skel_G.node[int(ix)]['position']) for ix in
+        for single_rest_graph in list_of_comp[:1]:
+
+            current_set_of_nodes = current_set_of_nodes + [skel_G_nodes[int(ix)] for ix in
                                                            single_rest_graph]
 
         tree = spatial.cKDTree(rest_nodes, 1)
@@ -1022,13 +1136,13 @@ def create_sso_skeleton(sso, pruning_thresh=700):
         start_thread_index = np.argmin(thread_lengths)
         stop_thread_index = indices[start_thread_index]
 
-        start_thread_node = new_nodes.tolist().index(current_set_of_nodes[start_thread_index])
-        stop_thread_node = new_nodes.tolist().index(rest_nodes[stop_thread_index])
+
+        start_thread_node = np.where(np.sum(np.subtract(new_nodes, current_set_of_nodes[start_thread_index]), axis=1) == 0)[0][0]
+        stop_thread_node = np.where(np.sum(np.subtract(new_nodes, rest_nodes[stop_thread_index]), axis=1) == 0)[0][0]
 
         skel_G.add_edge(start_thread_node, stop_thread_node)
-        # print('added thread', start_thread_index, stop_thread_index, thread_lengths[start_thread_index],
-        #       len(list_of_comp[1:]))
         no_of_seg -= 1
+
 
     # Pruning the stitched Super Super Voxel Skeletons
     if pruning_thresh !=0:
@@ -1048,11 +1162,18 @@ def create_sso_skeleton(sso, pruning_thresh=700):
 
     temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
 
-    temp_edges = np.array(temp_edges).reshape([-1, 2])
+    temp_edges = np.array(temp_edges, dtype=np.uint).reshape([-1, 2])
     sso.skeleton['edges'] = temp_edges
+
+
+    #sparsifying the stacked nodes
+    if sparsify:
+        sso = sparsify_skeleton(sso)
 
     # Estimating the radii
     sso.skeleton = radius_correction_found_vertices(sso)
+
+    # print('END', time.time() - start)
     # sso.enable_locking = True
     #
     # sso.export_kzip(
@@ -1128,82 +1249,6 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.tight_layout()
         plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
         plt.close()
-
-
-def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_thresh=50):
-    """
-    Reduces nodes based o
-    :param sso: Super Segmentation Object
-    :param dot_prod_thresh: the 'straightness' of the edges
-    :param max_dist_thresh: maximum distance desired between every node
-    :param min_dist_thresh: minimum distance desired between every node
-    :return: sso containing the sparsed skeleton
-    """
-
-    sso.load_skeleton()
-    ssv_skel = sso.skeleton
-    scal = sso.scaling
-
-    skel_G = nx.Graph()
-    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
-
-    for inx, single_node in enumerate(new_nodes):
-        skel_G.add_node(inx, position=single_node)
-
-    new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
-    new_edges = [tuple(ix) for ix in new_edges]
-    skel_G.add_edges_from(new_edges)
-    change = 1
-    run_cnt = 0
-    # orig_node_cnt = len(new_nodes)
-    while change > 0:
-        # run_cnt += 1
-        change = 0
-        visiting_nodes = list({k for k, v in dict(skel_G.degree()).iteritems() if v == 2})
-        for visiting_node in visiting_nodes:
-            neighbours = [n for n in skel_G.neighbors(visiting_node)]
-            if skel_G.degree(visiting_node) == 2:
-                left_node = neighbours[0]
-                right_node = neighbours[1]
-                vector_left_node = np.array([int(skel_G.node[left_node]['position'][ix]) - int(skel_G.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
-                vector_right_node =np.array([int(skel_G.node[right_node]['position'][ix]) - int(skel_G.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
-
-                dot_prod = np.dot(vector_left_node/ np.linalg.norm(vector_left_node),vector_right_node/ np.linalg.norm(vector_right_node))
-                dist = np.linalg.norm([int(skel_G.node[right_node]['position'][ix]*scal[ix]) - int(skel_G.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
-
-                # print('dots', dot_prod, 'dist', dist)
-
-                if (abs(dot_prod) > dot_prod_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
-                    skel_G.remove_node(visiting_node)
-                    skel_G.add_edge(left_node,right_node)
-                    change += 1
-                    # print('this got removed', visiting_node)
-                # if change == 0:
-                #     change = -1
-    # print("Removed %d nodes after %d iterations." %
-    #       (orig_node_cnt-len(skel_G.nodes()), run_cnt))
-
-    sso.skeleton['nodes'] = np.array([skel_G.node[ix]['position'] for ix in skel_G.nodes()], dtype=np.uint32)
-    sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
-
-    temp_edges = np.array(skel_G.edges()).reshape(-1)
-    temp_edges_sorted = np.unique(np.sort(temp_edges))
-    temp_edges_dict = {}
-
-    for ii, ix in enumerate(temp_edges_sorted):
-        temp_edges_dict[ix] = ii
-    temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
-
-    temp_edges = np.array(temp_edges).reshape([-1, 2])
-
-    sso.skeleton['edges'] = temp_edges
-
-    # Estimating the radii
-    # print("Starting radius correction.")
-    sso.skeleton = radius_correction_found_vertices(sso)
-    # print("Exporting kzip")
-    # sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v6.k.zip" % sso.id)
-
 
 def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
