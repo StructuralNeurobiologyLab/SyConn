@@ -3,7 +3,6 @@ from .basics import read_txt_from_zip
 from collections import Counter
 from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils.knossosdataset import KnossosDataset
-from elektronn2.neuromancer.model import modelload
 from elektronn2.config import config as e2config
 from elektronn2.utils.gpu import initgpu
 from .compression import load_from_h5py, save_to_h5py
@@ -89,6 +88,7 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5, mfp_active=False,
                                         raw_data_offset=0)
         raw = xyz2zxy(raw)
         initgpu(gpu_ix)
+        from elektronn2.neuromancer.model import modelload
         m = modelload(m_path, imposed_patch_size=list(imposed_patch_size)
         if isinstance(imposed_patch_size, tuple) else imposed_patch_size,
                       override_mfp_to_active=mfp_active, imposed_batch_size=1)
@@ -145,6 +145,7 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     if not data_is_zxy:
         raw = xyz2zxy(raw)
     initgpu(gpu_ix)
+    from elektronn2.neuromancer.model import modelload
     m = modelload(m_path, imposed_patch_size=list(imposed_patch_size)
     if isinstance(imposed_patch_size, tuple) else imposed_patch_size,
                   override_mfp_to_active=mfp_active, imposed_batch_size=1)
@@ -333,86 +334,143 @@ def parse_movement_area_from_zip(zip_fname):
     return np.concatenate([bb_min, bb_max])
 
 
-def pred_dataset(*args, **kwargs):
-    warnings.warn("'pred_dataset' will be replaced by 'predict_dataset' in"
-                  " the near future.")
-    return predict_dataset(*args, **kwargs)
-
-
-def predict_dataset(kd_p, kd_pred_folder, cd_folder, model_p,
-                    imposed_patch_size=None, mfp_active=False, gpu_ix=0,
-                    overwrite=True, debug=False, chunk_size=(512, 512, 256)):
+def pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
+                 mfp_active=False, gpu_ids=(0, ), overwrite=True):
     """
-    Runs prediction on whole knossos dataset.
+    Runs prediction on the complete knossos dataset.
     Imposed patch size has to be given in Z, X, Y!
 
     Parameters
     ----------
     kd_p : str
-        path to knossos.conf file corresponding to raw dataset
-    kd_pred_folder : str
-        path to the knossos dataset head folder which will contain the
-        prediction
-    cd_folder : str
-        destination folder for ChunkDataset which contains prediction
-        (intermediate step)
+        path to knossos dataset .conf file
+    kd_pred_p : str
+        path to the knossos dataset head folder which will contain the prediction (will be created)
+    cd_p : str
+        destination folder for the chunk dataset containing prediction (will be created)
+    model_p : str
+        path to the ELEKTRONN2 model
+    imposed_patch_size : tuple or None
+        patch size (Z, X, Y) of the model
+    mfp_active : bool
+        activate max-fragment pooling (might be necessary to change patch_size)
+    gpu_ids : tuple of int
+    |   the GPU/GPUs to be used
+    overwrite : bool
+    |   True: fresh predictions ; False: earlier prediction continues
+
+
+    Returns
+    -------
+
+    """
+    if isinstance(gpu_ids, int) or len(gpu_ids) == 1:
+        _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size,
+                 mfp_active, gpu_ids, overwrite)
+    else:
+        print("Starting multi-gpu prediction with GPUs:", gpu_ids)
+
+        _multi_gpu_ds_pred(kd_p, kd_pred_p, cd_p, model_p,imposed_patch_size, gpu_ids)
+
+
+
+def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
+                 mfp_active=False, gpu_id=0,overwrite=False, i=None, n=None):
+    """
+    Helper function for dataset prediction. Runs prediction on whole or partial knossos dataset.
+    Imposed patch size has to be given in Z, X, Y!
+
+    Parameters
+    ----------
+    kd_p : str
+        path to knossos dataset .conf file
+    kd_pred_p : str
+        path to the knossos dataset head folder which will contain the prediction
+    cd_p : str
+        destination folder for chunk dataset containing prediction
     model_p : str
         path tho ELEKTRONN2 model
     imposed_patch_size : tuple or None
         patch size (Z, X, Y) of the model
     mfp_active : bool
-        activate max-fragment pooling (it might be necessary to change
-        patch_size if enabled)
+        activate max-fragment pooling (might be necessary to change patch_size)
     gpu_ix : int
-        the GPU to be used (index as given by 'nvidia-smi')
+    |   the GPU used
     overwrite : bool
-        True: fresh predictions ; False: earlier prediction continues
-    debug : bool
-        writes out raw data to chunk .h5 files
-    chunk_size : tuple
-        chunk size for ChunkDataset (x, y, z)
+    |   True: fresh predictions ; False: earlier prediction continues
         
 
     Returns
     -------
 
     """
+
+    initgpu(gpu_id)
+    from elektronn2.neuromancer.model import modelload
     kd = KnossosDataset()
     kd.initialize_from_knossos_path(kd_p, fixed_mag=1)
-    initgpu(gpu_ix)
+
     m = modelload(model_p, imposed_patch_size=list(imposed_patch_size)
     if isinstance(imposed_patch_size, tuple) else imposed_patch_size,
                   override_mfp_to_active=mfp_active, imposed_batch_size=1)
     original_do_rates = m.dropout_rates
     m.dropout_rates = ([0.0, ] * len(original_do_rates))
-    # print kd.boundary
     offset = m.target_node.shape.offsets
-    overlap = np.array([offset[1], offset[2], offset[0]]) * 1.5  # add some safety margin
+    offset = np.array([offset[1], offset[2], offset[0]], dtype=np.int)
     cd = ChunkDataset()
-    chunk_size = np.min([kd.boundary, chunk_size], axis=0)
-    cd.initialize(kd, kd.boundary, chunk_size, cd_folder,
-                  overlap=overlap.astype(np.int), box_coords=np.zeros(3), fit_box_size=True)
-    nb_ch = len(cd.chunk_dict.keys())
-    print("Starting prediction of %d chunks.\n" % nb_ch)
-    pbar = tqdm.tqdm(total=nb_ch, ncols=80, leave=False,
-                     unit='chunks', unit_scale=True, dynamic_ncols=False)
+    cd.initialize(kd, kd.boundary, [512, 512, 256], cd_p, overlap=offset, box_coords=np.zeros(3), fit_box_size=True)
+
+    ch_dc = cd.chunk_dict
+    print('Total number of chunks for GPU/GPUs:' , len(ch_dc.keys()))
+
+    if i is not None and n is not None:
+        chunks = ch_dc.values()[i::n]
+    else:
+        chunks = ch_dc.values()
+    print("Starting prediction of %d chunks in gpu %d\n" % (len(chunks), gpu_id))
+
     if not overwrite:
-        for k, chunk in cd.chunk_dict.iteritems():
+        for chunk in chunks:
             try:
                 _ = chunk.load_chunk("pred")[0]
-            except Exception:  # TODO: catch problem specific error
-                chunk_pred(chunk, m, debug=debug)
-            pbar.update(1)
+            except Exception as e:
+                chunk_pred(chunk, m)
     else:
-        for chunk in cd.chunk_dict.values():
-            chunk_pred(chunk, m, debug=debug)
-            pbar.update(1)
-    pbar.close()
+        for chunk in chunks:
+            try:
+                chunk_pred(chunk, m)
+            except KeyboardInterrupt as e:
+                print("Exiting out from chunk prediction: ", str(e))
+                return
     save_dataset(cd)
+
+    # single gpu processing also exports the cset to kd
+    if n is None:
+        kd_pred = KnossosDataset()
+        kd_pred.initialize_without_conf(kd_pred_p, kd.boundary, kd.scale,
+                                        kd.experiment_name, mags=[1,2,4,8])
+        cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True,
+                             stride=[256, 256, 256])
+
+
+def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size,mfp_active=False):
+
+    kd = KnossosDataset()
+    kd.initialize_from_knossos_path(kd_p, fixed_mag=1)
     kd_pred = KnossosDataset()
-    kd_pred.initialize_without_conf(kd_pred_folder, kd.boundary, kd.scale,
-                                    kd.experiment_name, mags=[1, 2, 4, 8])
-    cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True)
+    m = modelload(model_p, imposed_patch_size=list(imposed_patch_size)
+    if isinstance(imposed_patch_size, tuple) else imposed_patch_size,
+                  override_mfp_to_active=mfp_active, imposed_batch_size=1)
+    original_do_rates = m.dropout_rates
+    m.dropout_rates = ([0.0, ] * len(original_do_rates))
+    offset = m.target_node.shape.offsets
+    offset = np.array([offset[1], offset[2], offset[0]], dtype=np.int)
+    cd = ChunkDataset()
+    cd.initialize(kd, kd.boundary, [512, 512, 256], cd_p, overlap=offset, box_coords=np.zeros(3), fit_box_size=True)
+    kd_pred.initialize_without_conf(kd_pred_p, kd.boundary, kd.scale,
+                                    kd.experiment_name, mags=[1,2,4,8])
+    cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True,
+                         stride=[256, 256, 256])
 
 
 def prediction_helper(raw, model, override_mfp=True,
@@ -564,3 +622,19 @@ def get_celltype_model():
                                imposed_batch_size=5, nb_labels=4)
     _ = m.predict_proba(np.zeros((5, 4, 20, 128, 256)))
     return m
+
+def _multi_gpu_ds_pred(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size=None, gpu_ids=(0, 1)):
+
+    import threading
+
+    def start_partial_pred(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size, gpuid, i, n):
+
+        fpath = os.path.dirname(os.path.abspath(__file__))
+        path, file = os.path.split(os.path.dirname(fpath))
+        cmd = "python {0}/syconn/handler/partial_ds_pred.py {1} {2} {3} {4} {5} {6} {7} {8}".format(path,kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size, gpuid, i, n)
+        os.system(cmd)
+
+    for ii, gi in enumerate(gpu_ids):
+        t = threading.Thread(target=start_partial_pred, args=(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size,gi,ii, len(gpu_ids)))
+        t.daemon = True
+        t.start()
