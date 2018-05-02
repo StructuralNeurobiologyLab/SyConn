@@ -454,6 +454,7 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
 
 
 def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size,mfp_active=False):
+    from elektronn2.neuromancer.model import modelload
 
     kd = KnossosDataset()
     kd.initialize_from_knossos_path(kd_p, fixed_mag=1)
@@ -496,6 +497,7 @@ def prediction_helper(raw, model, override_mfp=True,
         prediction data [X, Y, Z]
     """
     if type(model) == str:
+        from elektronn2.neuromancer.model import modelload
         m = modelload(model, imposed_patch_size=list(imposed_patch_size)
         if isinstance(imposed_patch_size, tuple) else imposed_patch_size,
                       override_mfp_to_active=override_mfp, imposed_batch_size=1)
@@ -546,6 +548,7 @@ class NeuralNetworkInterface(object):
         if e2config.device is None:
             from elektronn2.utils.gpu import initgpu
             initgpu(0)
+        from elektronn2.neuromancer.model import modelload
         self.model = modelload(model_path, replace_bn='const',
                                imposed_batch_size=imposed_batch_size)
         self.original_do_rates = self.model.dropout_rates
