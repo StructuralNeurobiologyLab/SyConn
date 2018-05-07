@@ -67,11 +67,11 @@ class MeshObject(object):
         else:
             if np.ndim(self._ext_color) >= 2:
                 self._ext_color = self._ext_color.squeeze()
-                assert self._ext_color.shape[1] == 4,\
-                    "'color' parameter has wrong shape"
+                assert self._ext_color.shape[1] == 3,\
+                    "'color' parameter has wrong shape" # changed 4 to 3
                 self._ext_color = self._ext_color.flatten()
-            assert len(self._ext_color) / 4 == len(self.vertices) / 3\
-                , "len(ext_color)/4 must be equal to len(vertices)/3."
+            assert len(self._ext_color) / 3 == len(self.vertices) / 3\
+                , "len(ext_color)/3 must be equal to len(vertices)/3." #changed 4 rgba to 3 rgb
             self._colors = self._ext_color
         return self._colors
 
@@ -837,7 +837,7 @@ def id2rgb_array_contiguous(id_arr):
     x1 = np.arange(256).astype(np.uint8)
     x2 = np.arange(256).astype(np.uint8)
     x3 = np.arange(256).astype(np.uint8)
-    xx1, xx2, xx3 = np.meshgrid(x1, x2, x2, sparse=False, copy=False)
+    xx1, xx2, xx3 = np.meshgrid(x1, x2, x3, sparse=False, copy=False)
     rgb_arr = np.concatenate([xx3.flatten()[:, None], xx1.flatten()[:, None],
                               xx2.flatten()[:, None]], axis=-1)[:nb_ids]
     return rgb_arr
