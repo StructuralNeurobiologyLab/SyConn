@@ -70,8 +70,8 @@ class MeshObject(object):
                 assert self._ext_color.shape[1] == 3,\
                     "'color' parameter has wrong shape" # changed 4 to 3
                 self._ext_color = self._ext_color.flatten()
-            assert len(self._ext_color) / 3 == len(self.vertices) / 3\
-                , "len(ext_color)/3 must be equal to len(vertices)/3." #changed 4 rgba to 3 rgb
+            assert len(self._ext_color)/4 == len(self.vertices)/3, \
+                "len(ext_color)/4 must be equal to len(vertices)/3."
             self._colors = self._ext_color
         return self._colors
 

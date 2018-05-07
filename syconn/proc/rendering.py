@@ -68,7 +68,7 @@ def init_object(indices, vertices, normals, colors, ws):
     normals = normals.astype(np.float32)
     data = np.concatenate((vertices.reshape(len(vertices) / 3, 3),
                            normals.reshape(len(vertices) / 3, 3),
-                           colors.reshape((len(vertices) / 3, 3))), #changed from 3,4 to 3,3
+                           colors.reshape((len(vertices) / 3, 4))),
                            axis=1).reshape(len(vertices)*2 + len(colors))
     # enabling arrays
     glEnableClientState(GL_VERTEX_ARRAY)
