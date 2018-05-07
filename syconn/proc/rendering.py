@@ -285,16 +285,18 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
     return np.concatenate(c_views)
 
 
-def multi_view_sso(sso, colors=None, obj_to_render=(),
+def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
                    ws=(2048, 2048), physical_scale=None,
                    enable_lightning=True, depth_map=False,
-                   nb_views=3, background=1):
+                   nb_views=3, background=1, rot_mat=None):
     """
     Render mesh from 3 (default) equidistant perspectives.
 
     Parameters
     ----------
     colors: dict
+    save_skeleton : tuple of str
+        cell objects to render (e.g. 'mi', 'sj', 'vc', ..)
     alpha :
     ws : tuple
         window size of output images (width, height)
@@ -307,6 +309,8 @@ def multi_view_sso(sso, colors=None, obj_to_render=(),
     background : int
         float value for background (clear value) between 0 and 1 (used as RGB
         values)
+    rot_mat : np.array
+        4 x 4 rotation matrix
 
     Returns
     -------
@@ -319,22 +323,20 @@ def multi_view_sso(sso, colors=None, obj_to_render=(),
     ctx = init_ctx(ws)
     init_opengl(ws, enable_lightning, depth_map=depth_map,
                 clear_value=background)
+    # initially loading mesh is still needed to get bounding box...
     sv_mesh = MeshObject("sv", sso.mesh[0], sso.mesh[1], sso.mesh[2],
                          colors["sv"])
-    sj_mesh = MeshObject("sj", sso.sj_mesh[0], sso.sj_mesh[1], sso.sj_mesh[2],
-                         colors["sj"], sv_mesh.bounding_box)
-    vc_mesh = MeshObject("vc", sso.vc_mesh[0], sso.vc_mesh[1], sso.vc_mesh[2],
-                         colors["vc"], sv_mesh.bounding_box)
-    mi_mesh = MeshObject("mi", sso.mi_mesh[0], sso.mi_mesh[1], sso.mi_mesh[2],
-                         colors["mi"], sv_mesh.bounding_box)
     c_views = []
     norm, col = np.zeros(0, ), np.zeros(0, )
     ind, vert = [], []
-    for m in [vc_mesh, mi_mesh, sj_mesh, sv_mesh]:
-        if not m.object_type in obj_to_render:
+    for object_type in ['vc', 'mi', 'sj', 'sv']:
+        if not object_type in obj_to_render:
             continue
-        if len(m.vertices) == 0:
+        curr_ind, curr_vert, curr_norm = sso.load_mesh(object_type)
+        if len(curr_vert) == 0:
             continue
+        m = MeshObject(object_type, curr_ind, curr_vert, curr_norm,
+                             colors[object_type], sv_mesh.bounding_box)
         norm = np.concatenate([norm, m.normals])
         col = np.concatenate([col, m.colors])
         ind.append(m.indices)
@@ -363,6 +365,8 @@ def multi_view_sso(sso, colors=None, obj_to_render=(),
             draw_scale(physical_scale)
         glPushMatrix()
         glRotate(360. / nb_views * m, 1, 0, 0)
+        if rot_mat is not None:
+            glMultMatrixf(rot_mat)
         if enable_lightning:
             glLightfv(GL_LIGHT0, GL_DIFFUSE, [.7, .7, .7, 1.0])
             glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
@@ -641,7 +645,7 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
         missing_svs = np.array(sso.svs)
     if len(missing_svs) == 0:
         if return_views:
-            return np.concatenate(sso.load_views(woglia=woglia))
+            return sso.load_views(woglia=woglia)
         return
     # len(part_views) == N + 1
     part_views = np.cumsum([0] + [len(c) for c in coords])
@@ -657,7 +661,7 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
         print ("Rendering of %d views took %0.2fs (incl. read/write). "
               "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
     if return_views:
-        return np.concatenate(sso.load_views(woglia=woglia))
+        return sso.load_views(woglia=woglia)
 
 
 def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=False,
@@ -777,6 +781,24 @@ def get_sso_view_dc(sso, verbose=False):
     view_dc = {sso.id: arrtolz4string(views)}
     return view_dc
 
+
+def render_sso_ortho_views(sso):
+    views = np.zeros((3, 4, 1024, 1024))
+    # init MeshObject to calculate rotation into PCA frame
+    mesh = MeshObject("raw", sso.mesh[0], sso.mesh[1], sso.mesh[2])
+    coords = np.array([0, 0, 0])[None,]  # cell center as view location
+    rot_matrices = calc_rot_matrices(mesh.transform_external_coords(coords),
+                                     mesh.vert_resh, np.ones((3,)))[0]
+
+    views[:, 0] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
+                                 obj_to_render=('sv'), )
+    views[:, 1] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
+                                 obj_to_render=('mi'))
+    views[:, 2] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
+                                 obj_to_render=('vc'))
+    views[:, 3] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
+                                 obj_to_render=('sj'))
+    return views
 
 # ------------------------------------------------------------------------------
 # Multiprocessing rendering code

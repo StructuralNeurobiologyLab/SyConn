@@ -64,7 +64,7 @@ def get_test_candidates():
             ssv.predict_nodes(sbc, feature_context_nm=4000)
             ssv.predict_nodes(sbc, feature_context_nm=8000)
             views = ssv.load_views()
-            assert len(views) == len(ssv.sample_locations())
+            assert len(views) == len(np.concatenate(ssv.sample_locations()))
             probas = m.predict_proba(np.concatenate(views))
             ssv.attr_dict["axoness_probas_cnn_gt"] = probas
             ssv.attr_dict["axoness_preds_cnn_gt"] = np.argmax(probas, axis=1)
@@ -309,7 +309,7 @@ if __name__ == "__main__":
             # ssv.predict_nodes(sbc, feature_context_nm=4000)
             # ssv.predict_nodes(sbc, feature_context_nm=8000)
             views = ssv.load_views()
-            assert len(views) == len(ssv.sample_locations())
+            assert len(views) == len(np.concatenate(ssv.sample_locations()))
             # probas = m.predict_proba(np.concatenate(views))
             # ssv.attr_dict["axoness_probas_cnn_gt"] = probas
             # ssv.attr_dict["axoness_preds_cnn_gt"] = np.argmax(probas, axis=1)

@@ -334,7 +334,14 @@ def parse_movement_area_from_zip(zip_fname):
     return np.concatenate([bb_min, bb_max])
 
 
-def pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
+def pred_dataset(*args, **kwargs):
+    warnings.warn("'pred_dataset' will be replaced by 'predict_dataset' in"
+                  " the near future.")
+    return pred_dataset(*args, **kwargs)
+
+
+
+def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
                  mfp_active=False, gpu_ids=(0, ), overwrite=True):
     """
     Runs prediction on the complete knossos dataset.
@@ -534,8 +541,10 @@ def chunk_pred(ch, model, debug=False):
         ch.save_chunk(raw, "pred", "raw", overwrite=False)
 
 
-# almost deprecated interface class
 class NeuralNetworkInterface(object):
+    """
+    Experimental and almost deprecated interface class
+    """
     def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
                  channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2):
         self.imposed_batch_size = imposed_batch_size
