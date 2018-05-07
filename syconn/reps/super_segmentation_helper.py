@@ -664,7 +664,7 @@ def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
 def sso_views_to_modelinput(sso, nb_views):
     np.random.seed(0)
     assert len(sso.sv_ids) > 0
-    views = np.concatenate(sso.load_views())
+    views = sso.load_views()
     np.random.shuffle(views)
     # view shape: (#multi-views, 4 channels, 2 perspectives, 128, 256)
     views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
@@ -795,7 +795,7 @@ def get_sso_axoness_from_coord(sso, coord, k=5):
 def calculate_skeleton(sso, size_threshold=1e20, kd=None,
                        coord_scaling=(8, 8, 4), plain=False, cleanup=True,
                        nb_threads=1):
-
+    raise DeprecationWarning("Use 'create_sso_skeleton' instead.")
     if np.product(sso.shape) < size_threshold:
         # vx = self.load_voxels_downsampled(coord_scaling)
         # vx = self.voxels[::coord_scaling[0],
@@ -1059,8 +1059,6 @@ def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_th
     # sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v6.k.zip" % sso.id)
 
 
-import time
-
 def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     """
     Creates the super super voxel skeleton
@@ -1080,7 +1078,6 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
 
     # Fetching Super voxel Skeletons
 
-    # start = time.time()
     sso.load_attr_dict()
     ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
 
@@ -1173,14 +1170,6 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     # Estimating the radii
     sso.skeleton = radius_correction_found_vertices(sso)
 
-    # print('END', time.time() - start)
-    # sso.enable_locking = True
-    #
-    # sso.export_kzip(
-    #     "/wholebrain/scratch/areaxfs/pruned_radius_etmtd_skeletons/skelG_pruned_test_ignore_%d.k.zip" % sso.id)
-
-    # return sso
-
 
 def glia_pred_exists(so):
     so.load_attr_dict()
@@ -1196,7 +1185,7 @@ def views2tripletinput(views):
 
 
 def get_pca_view_hists(sso, t_net, pca):
-    views = np.concatenate(sso.load_views())
+    views = sso.load_views()
     latent = t_net.predict_proba(views2tripletinput(views))
     latent = pca.transform(latent)
     hist0 = np.histogram(latent[:, 0], bins=50, range=[-2, 2], normed=True)
@@ -1212,7 +1201,7 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         matplotlib.use("agg")
     import matplotlib.pyplot as plt
     import matplotlib.ticker as ticker
-    views = np.concatenate(sso.load_views())
+    views = sso.load_views()
     latent = t_net.predict_proba(views2tripletinput(views))
     latent = pca.transform(latent)
     col = (np.array(latent) - latent.min(axis=0)) / (latent.max(axis=0)-latent.min(axis=0))
@@ -1252,7 +1241,7 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
 
 def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
-    node_degrees = np.array(ssv.weighted_graph.degree().values(),
+    node_degrees = np.array(ssv.weighted_graph().degree().values(),
                             dtype=np.int)
 
     sizes = {}
@@ -1275,7 +1264,7 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
         this_i_node = i_node * downsample_by
         this_features = []
 
-        paths = nx.single_source_dijkstra_path(ssv.weighted_graph,
+        paths = nx.single_source_dijkstra_path(ssv.weighted_graph(),
                                                this_i_node,
                                                feature_context_nm)
         neighs = np.array(paths.keys(), dtype=np.int)
@@ -1446,6 +1435,7 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
                                                    nb_cpus=sso.nb_cpus))
         preds = np.concatenate(preds)
         sso.attr_dict[pred_key] = preds
+        sso.save_attributes([pred_key], [preds])
     else:
         preds = sso.lookup_in_attribute_dict(pred_key)
     loc_coords = np.concatenate(sso.sample_locations())
@@ -1460,7 +1450,7 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
     view_ixs = np.array(sso.skeleton["view_ixs"])
     avg_pred = []
 
-    g = sso.weighted_graph
+    g = sso.weighted_graph()
     for n in g.nodes():
         paths = nx.single_source_dijkstra_path(g, n, avg_window)
         neighs = np.array(paths.keys(), dtype=np.int)
@@ -1530,3 +1520,28 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1):
         sso.skeleton["axoness_probas"] = node_probas
         sso.skeleton["view_ixs"] = ixs
     sso.save_skeleton()
+
+
+def majority_vote_compartments(sso, ax_pred_key="axoness_preds_cnn_views_avg10000"):
+    g = sso.weighted_graph(add_node_attr=(ax_pred_key, ))
+    soma_free_g = g.copy()
+    for n, d in g.nodes_iter(data=True):
+        if d[ax_pred_key] == 2:
+            soma_free_g.remove_node(n)
+    ccs = list(nx.connected_component_subgraphs(soma_free_g))
+    new_axoness_dc = nx.get_node_attributes(g, ax_pred_key)
+    for cc in ccs:
+        preds = [d[ax_pred_key] for n, d in cc.nodes_iter(data=True)]
+        cls, cnts = np.unique(preds, return_counts=True)
+        majority = cls[np.argmax(cnts)]
+        for n in cc.nodes_iter():
+            new_axoness_dc[n] = majority
+    nx.set_node_attributes(g, ax_pred_key, new_axoness_dc)
+    new_axoness_arr = np.zeros((len(sso.skeleton["nodes"])))
+    for n, d in g.nodes_iter(data=True):
+        new_axoness_arr[n] = d[ax_pred_key]
+    sso.skeleton[ax_pred_key + "_comp_maj"] = new_axoness_arr
+    sso.save_skeleton()
+
+
+

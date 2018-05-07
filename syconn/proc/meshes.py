@@ -18,7 +18,7 @@ from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 from scipy.ndimage.morphology import binary_closing
 import time
 from ..mp.shared_mem import start_multiprocess_obj
-__all__ = ["MeshObject", "get_object_mesh", "merge_meshs", "triangulation",
+__all__ = ["MeshObject", "get_object_mesh", "merge_meshes", "triangulation",
            "get_random_centered_coords", "write_mesh2kzip", 'write_meshes2kzip',
            "compartmentalize_mesh", 'write_ssomesh2kzip']
 
@@ -473,7 +473,7 @@ def get_random_centered_coords(pts, nb, r):
     return coms
 
 
-def merge_meshs(ind_lst, vert_lst, nb_simplices=3):
+def merge_meshes(ind_lst, vert_lst, nb_simplices=3):
     """
     Combine several meshes into a single one.
 
@@ -837,7 +837,7 @@ def id2rgb_array_contiguous(id_arr):
     x1 = np.arange(256).astype(np.uint8)
     x2 = np.arange(256).astype(np.uint8)
     x3 = np.arange(256).astype(np.uint8)
-    xx1, xx2, xx3 = np.meshgrid(x1, x2, x2, sparse=False, copy=False)
+    xx1, xx2, xx3 = np.meshgrid(x1, x2, x3, sparse=False, copy=False)
     rgb_arr = np.concatenate([xx3.flatten()[:, None], xx1.flatten()[:, None],
                               xx2.flatten()[:, None]], axis=-1)[:nb_ids]
     return rgb_arr

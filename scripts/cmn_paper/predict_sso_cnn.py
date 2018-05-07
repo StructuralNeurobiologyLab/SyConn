@@ -15,7 +15,7 @@ import numpy as np
 from syconn.handler.basics import chunkify, load_pkl2obj, write_obj2pkl, write_txt2kzip, get_filepaths_from_dir
 from syconn.proc.stats import model_performance, model_performance_predonly
 from syconn.reps.super_segmentation_object import predict_sos_views, render_sso_coords
-from syconn.reps.super_segmentation_helper import write_axpred
+from syconn.reps.super_segmentation_helper import write_axpred, extract_skel_features, associate_objs_with_skel_nodes
 from syconn.reps.rep_helper import knossos_ml_from_ccs
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
@@ -64,7 +64,7 @@ def get_test_candidates():
             ssv.predict_nodes(sbc, feature_context_nm=4000)
             ssv.predict_nodes(sbc, feature_context_nm=8000)
             views = ssv.load_views()
-            assert len(views) == len(ssv.sample_locations())
+            assert len(views) == len(np.concatenate(ssv.sample_locations()))
             probas = m.predict_proba(np.concatenate(views))
             ssv.attr_dict["axoness_probas_cnn_gt"] = probas
             ssv.attr_dict["axoness_preds_cnn_gt"] = np.argmax(probas, axis=1)
@@ -98,39 +98,85 @@ def eval_test_candidates():
     all_preds_skel_4000_wo2 = []
     all_preds_skel_8000_wo2 = []
     all_preds_cnn = []
-    currently_annotated = ["34299393.001.k", "8733319.001.k", "30030341.001.k", "28985344.001.k", "12474080.001.k"]
+    all_coords = []  # debug: Check if
+    # V1
+    # currently_annotated = ["34299393.001.k", "8733319.001.k", "30030341.001.k", "28985344.001.k", "12474080.001.k"]
+    # # V2
+    currently_annotated = ["34299393.001.k", "8733319.001.k", "30030341.001.k", "28985344.002.k", "12474080.001.k", "15065120.001.k", "31798150.001.k",
+                           "28531969.001.k", "31936512.001.k"]
     for fname in kzip_ps:
         if not np.any([ca in fname for ca in currently_annotated]):
             continue
+        try:
+            skel = load_skeleton(fname)["skeleton"]
+        except KeyError:
+            print("Skipped file %s." % fname)
+            continue
+        print(fname)
         sso_id = int(re.findall("(\d+).\d+.k.zip", fname)[0])
         sso = ssd_all.get_super_segmentation_object(sso_id)
-        sso.load_skeleton()
+
+        # Build SSO skeleton from k.zip data to retrieve prediction of RFC
+        # trained only on dendrite and axon... Was necessary because SSV
+        # skeletons were updated in the meantime..
+        nodes = []
+        edges = []
+        radii = []
+        node_lookup = {}
+        for n in skel.getNodes():
+            nodes.append(n.getCoordinate())
+            radii.append(n.data["radius"])
+            node_lookup[frozenset(nodes[-1])] = len(nodes) - 1
+        for n1, n2 in skel.iter_edges():
+            try:
+                ix_n1 = node_lookup[frozenset(n1.getCoordinate())]
+                ix_n2 = node_lookup[frozenset(n2.getCoordinate())]
+            except AttributeError:
+                print("Skipped edge...")
+                continue
+            e = [ix_n1, ix_n2]
+            edges.append(e)
+        nodes = np.array(nodes)
+        edges = np.array(edges, dtype=np.uint)
+        radii = np.array(radii)
+        sso.skeleton = dict(edges=edges, nodes=nodes, diameters=radii)
+        # DONE....
+        associate_objs_with_skel_nodes(sso)
         skel_nodes = sso.skeleton["nodes"]
-        feats_4000 = sso.skel_features(feature_context_nm=4000)
+        feats_4000_cache_fname = dest_folder + os.path.split(fname)[1][:-6] + "_4000.npy"
+        feats_8000_cache_fname = dest_folder + os.path.split(fname)[1][:-6] + "_8000.npy"
+        if not os.path.isfile(feats_4000_cache_fname):
+            feats_4000 = extract_skel_features(sso, feature_context_nm=4000)  # sso.skel_features(feature_context_nm=4000), avoid this call because it would trigger caching mechanism
+            np.save(feats_4000_cache_fname, feats_4000)
+        else:
+            feats_4000 = np.load(feats_4000_cache_fname)
+        feats_8000_cache_fname = dest_folder + os.path.split(fname)[1][:-6] + "_8000.npy"
+        if not os.path.isfile(feats_8000_cache_fname):
+            feats_8000 = extract_skel_features(sso, feature_context_nm=8000)  # sso.skel_features(feature_context_nm=8000), avoid this call because it would trigger caching mechanism
+            np.save(feats_8000_cache_fname, feats_8000)
+        else:
+            feats_8000 = np.load(feats_8000_cache_fname)
         preds_4000_wo2 = np.argmax(rfc_4000_wo2.predict_proba(feats_4000), axis=1)
-        feats_8000 = sso.skel_features(feature_context_nm=8000)
         preds_8000_wo2 = np.argmax(rfc_8000_wo2.predict_proba(feats_8000), axis=1)
         preds_4000wo2_dc = {}
         preds_8000wo2_dc = {}
         for i in range(len(skel_nodes)):
             preds_4000wo2_dc[frozenset(skel_nodes[i])] = preds_4000_wo2[i]
             preds_8000wo2_dc[frozenset(skel_nodes[i])] = preds_8000_wo2[i]
-        try:
-            skel = load_skeleton(fname)["skeleton"]
-        except KeyError:
-            continue
         for n in skel.getNodes():
             c = n.getComment()
             try:
                 label = cnv_dict[c]
             except KeyError:
                 continue
+            all_coords.append(np.array(n.getCoordinate()))
             all_labels.append(label)
             all_preds_skel_4000.append(int(n.data["axoness_fc4000_avgwind0"]))
             all_preds_skel_8000.append(int(n.data["axoness_fc8000_avgwind0"]))
             all_preds_skel_4000_wo2.append(preds_4000wo2_dc[frozenset(n.getCoordinate())])
-            all_preds_skel_8000_wo2.append(preds_8000wo2_dc[frozenset(n.getCoordinate())])
+            all_preds_skel_8000_wo2.append(preds_8000wo2_dc[frozenset(n.getCoordinate())])slac
             all_preds_cnn.append(int(n.data["axoness_cnn_k1_gt"]))
+    print("Example pred_skel_8000_rfc data (VALIDATE!!): ", all_preds_skel_8000[::100], all_coords[::100], all_preds_cnn[::100])
     print "Collected %d labeled nodes." % len(all_labels)
     model_performance_predonly(all_preds_skel_4000, all_labels, model_dir=dest_folder, prefix="skel_4000")
     model_performance_predonly(all_preds_skel_8000, all_labels, model_dir=dest_folder, prefix="skel_8000")
@@ -246,7 +292,7 @@ def plot_axoness_comparison():
     plot_bars(np.arange(len(xtick_labels))+0.8, [fscore_so, fscore_den, fscore_ax, fscore_overall_unweighted], legend=False, xtick_labels=xtick_labels, width=0.8, xtick_rotation=90,
             xlabel="model", ylabel="F-Score", legend_labels=["soma", "dendrite", "axon", "avg."], r_x=[0, 6], colorVals=[[0.32, 0.32, 0.32, 1.], [0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
                            np.array([11, 129, 220, 255]) / 255.],
-            save_path="/wholebrain/scratch/pschuber/cmn_paper/figures/axoness_comparison/FINAL_PLOT.png",)# colorVals=['0.32', '0.66'])
+            save_path="/wholebrain/scratch/pschuber/cmn_paper/figures/axoness_comparison/FINAL_PLOT_V2.png",)# colorVals=['0.32', '0.66'])
     # plot_pr(fscore, np.arange(1, len(fscore)+1), xtick_labels=xtick_labels, legend=False,
     #         xlabel="", ylabel="F-Score", r=[0.8, 1.01], r_x=[0, len(fscore) + 1],
     #             save_path="/wholebrain/scratch/pschuber/cmn_paper/figures//glia_performances.png")
@@ -270,9 +316,9 @@ if __name__ == "__main__":
         get_test_candidates()
 
     # eval test set
-    if 0:
-        eval_test_candidates()
     if 1:
+        eval_test_candidates()
+    if 0:
         plot_axoness_comparison()
 
     # evaluate cnn on "pseude" train/valid set (views are different form actual views used during training)
@@ -309,7 +355,7 @@ if __name__ == "__main__":
             # ssv.predict_nodes(sbc, feature_context_nm=4000)
             # ssv.predict_nodes(sbc, feature_context_nm=8000)
             views = ssv.load_views()
-            assert len(views) == len(ssv.sample_locations())
+            assert len(views) == len(np.concatenate(ssv.sample_locations()))
             # probas = m.predict_proba(np.concatenate(views))
             # ssv.attr_dict["axoness_probas_cnn_gt"] = probas
             # ssv.attr_dict["axoness_preds_cnn_gt"] = np.argmax(probas, axis=1)

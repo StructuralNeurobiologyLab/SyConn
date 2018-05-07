@@ -96,6 +96,16 @@ class SkelClassifier(object):
         return str(self._ssd_version)
 
     @property
+    def splitting_fname(self):
+        return self.working_dir + "/ssv_%s/%s_splitting.pkl"\
+               % (self.ssd_version, self.ssd_version)
+
+    @property
+    def label_dict_fname(self):
+        return self.working_dir + "/ssv_%s/%s_labels.pkl" \
+               % (self.ssd_version, self.ssd_version)
+
+    @property
     def path(self):
         return self.working_dir + "/skel_clf_%s_%s" % \
               (self.target_type, self.ssd_version)
@@ -135,14 +145,8 @@ class SkelClassifier(object):
 
     def load_label_dict(self):
         if self.label_dict is None:
-            if self.ssd_version == "axgt":
-                with open(self.working_dir + "/axgt_labels.pkl", "r") as f:
-                    self.label_dict = pkl.load(f)
-            elif self.ssd_version == "ctgt":
-                with open(self.working_dir + "/ctgt_labels.pkl", "r") as f:
-                    self.label_dict = pkl.load(f)
-            elif self.ssd_version == "spgt":
-                with open(self.working_dir + "/spgt_labels.pkl", "r") as f:
+            if self.ssd_version in ["axgt", "spgt", "ctgt"]:
+                with open(self.label_dict_fname, "r") as f:
                     self.label_dict = pkl.load(f)
             else:
                 raise()
@@ -197,8 +201,7 @@ class SkelClassifier(object):
             raise Exception("QSUB not available")
 
     def create_splitting(self, ratios=(.6, .2, .2)):
-        assert not os.path.isfile(self.path + "/%s_splitting.pkl"
-                                  % self.ssd_version), "Splitting file exists."
+        assert not os.path.isfile(self.splitting_fname), "Splitting file exists."
         print("Creating dataset splits.")
         self.load_label_dict()
         classes = np.array(self.label_dict.values(), dtype=np.int)
@@ -226,14 +229,14 @@ class SkelClassifier(object):
             id_bin_dict["valid"] += list(sso_ids[valid_mask])
             id_bin_dict["test"] += list(sso_ids[test_mask])
 
-        with open(self.path + "/%s_splitting.pkl" % self.ssd_version, "w") as f:
+        with open(self.splitting_fname, "w") as f:
             pkl.dump(id_bin_dict, f)
 
     def id_bins(self):
-        if not os.path.exists(self.path + "/%s_splitting.pkl" % self.ssd_version):
+        if not os.path.exists(self.splitting_fname):
             self.create_splitting()
 
-        with open(self.path + "/%s_splitting.pkl" % self.ssd_version, "r") as f:
+        with open(self.splitting_fname, "r") as f:
             part_dict = pkl.load(f)
 
         id_bin_dict = {}

@@ -771,10 +771,17 @@ class SegmentationObject(object):
         kml = knossos_ml_from_svixs([self.id], coords=[self.rep_coord])
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def load_views(self, woglia=True, raw_only=False):
+    def load_views(self, woglia=True, raw_only=False, ignore_missing=False):
         view_dc = LZ4Dict(self.view_path(woglia=woglia),
                           disable_locking=not self.enable_locking)
-        views = view_dc[self.id]
+        try:
+            views = view_dc[self.id]
+        except KeyError as e:
+            if ignore_missing:
+                print("Views of SV %d were missing. Skipping." % self.id)
+                views = np.zeros((0, 4, 2, 128, 256))
+            else:
+                raise KeyError(e)
         if raw_only:
             views = views[:, :1]
         return np.array(views, dtype=np.float32)

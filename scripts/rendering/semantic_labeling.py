@@ -31,7 +31,6 @@ palette = np.array([[1, 0, 0, 1],  # red, e.g. dendrite
 
 
 def remap_rgb_labelviews(rgb_view):
-    start = time.time()
     label_view_flat = rgb_view.flatten().reshape((-1, 3))
     remapped_label_views = np.ones((len(label_view_flat), ), dtype=np.uint16) * BACKGROUND_LABEL
     remapped_label_views[label_view_flat[:, 0] == 255] = 0
@@ -123,8 +122,7 @@ def generate_label_views(kzip_path, gt_type="axgt"):
                                       return_rot_matrices=True)
     sso._pred2mesh(node_coords, node_labels, dest_path="/wholebrain/scratch/pschuber/sso_%d_skeletonlabels.k.zip" % sso.id, ply_fname="0.ply")
     print("rendering index")
-    index_views = render_sso_coords_index_views(sso, locs,
-                                                rot_matrices=rot_mat)
+    index_views = render_sso_coords_index_views(sso, locs, rot_matrices=rot_mat)
     print("rendering raw")
     raw_views = render_sso_coords(sso, locs)
 

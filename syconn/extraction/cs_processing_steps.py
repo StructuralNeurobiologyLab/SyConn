@@ -1006,7 +1006,6 @@ def collect_axoness_from_ssv_partners(wd, conn_version=None,
     for so_dir_path in conn_sd.so_dir_paths:
         multi_params.append([so_dir_path, wd, conn_version,
                              ssd_version])
-
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_collect_axoness_from_ssv_partners_thread,
                                         multi_params, nb_cpus = nb_cpus)
@@ -1041,8 +1040,8 @@ def _collect_axoness_from_ssv_partners_thread(args):
             ssv_o = ssv.get_super_segmentation_object(ssv_partner_id)
             try:
                 axoness.append(ssv_o.axoness_for_coords([conn_o.rep_coord],
-                                                        pred_type='axoness_preds_cnn_views_avg10000')[0])
-            except:
+                                                        pred_type='axoness_preds_cnn_views_avg10000_comp_maj')[0])
+            except Exception as e:
                 axoness.append(-1)
 
         print(axoness)

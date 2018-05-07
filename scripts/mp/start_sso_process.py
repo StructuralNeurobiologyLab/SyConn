@@ -14,7 +14,7 @@ if __name__ == "__main__":
     ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/", version="0")
     multi_params = ssds.ssv_ids
     np.random.shuffle(multi_params)
-    multi_params = chunkify(multi_params, 4000)
-    path_to_out = qu.QSUB_script(multi_params, "map_viewaxoness2skel",#"export_skeletons_new", #"map_viewaxoness2skel",
-                                 n_max_co_processes=20, pe="openmp", queue=None,
-                                 script_folder=script_folder, suffix="", n_cores=10)
+    multi_params = chunkify(multi_params, 2000)
+    path_to_out = qu.QSUB_script(multi_params, "render_sso_ortho",#"export_skeletons_new", #"map_viewaxoness2skel",
+                                 n_max_co_processes=100, pe="openmp", queue=None,
+                                 script_folder=script_folder, suffix="", n_cores=1)
