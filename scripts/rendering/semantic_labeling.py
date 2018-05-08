@@ -23,13 +23,42 @@ import time
 # due to speed issues labels have to be given axis wise:
 #  e.g. (1, 0, 0), (2, 0, 0), ..., (255, 0, 0) and (0, 1, 0), ... (0, 255, 0)
 # this defines rgb values for labels 0, 1 and 2
-def generate_palette(nr_classes):
+
+
+def generate_palette(nr_classes, return_rgba=True):
+    """
+    Creates a RGB(A) palette for N claasses.
+
+    Parameters
+    ----------
+    nr_classes : int
+    return_rgba : bool
+        If True returned array has shape (N, 4) instead of (N, 3)
+
+    Returns
+    -------
+    np.array
+        Unique color array for N input classes
+    """
     classes_ids = np.arange(nr_classes+1) #reserve additional class id for background
     classes_rgb = id2rgb_array_contiguous(classes_ids)[1:].astype(np.float32) / 255  # convention: background is (0,0,0)
-    #Changed :1 to 1: The slice [1:]  mean all but the first  elements of the array
+    if return_rgba:
+        classes_rgb = np.concatenate([classes_rgb, np.ones(classes_rgb.shape[:-1])[..., None]], axis=1)
     return classes_rgb
 
+
 def remap_rgb_labelviews(rgb_view, palette):
+    """
+
+    Parameters
+    ----------
+    rgb_view :
+    palette :
+
+    Returns
+    -------
+
+    """
     label_view_flat = rgb_view.flatten().reshape((-1, 3))
     background_label = (len(palette) + 1)  # convention: Use highest ID as background
     remapped_label_views = np.ones((len(label_view_flat), ), dtype=np.uint16) * background_label  # use (0,0,0) as background color
@@ -39,6 +68,7 @@ def remap_rgb_labelviews(rgb_view, palette):
                (label_view_flat[:, 2] == palette[i, 2])
         remapped_label_views[mask] = i
     return remapped_label_views.reshape(rgb_view.shape[:-1])
+
 
 # create function that converts information in string type to the information in integer type
 def str2intconverter(comment, gt_type):
@@ -120,30 +150,40 @@ def generate_label_views(kzip_path, gt_type="axgt"):
     locs = np.concatenate(sso.sample_locations())
     dist, ind = tree.query(locs)
     locs = locs[dist[:, 0] < 2000]
-    print("rendering labels")
+    print("Rendering label views.")
     label_views, rot_mat = _render_mesh_coords(locs, mo, depth_map=False,
                                       return_rot_matrices=True)
     sso._pred2mesh(node_coords, node_labels, dest_path="/wholebrain/scratch/pschuber/sso_%d_skeletonlabels.k.zip" %
                                                        sso.id, ply_fname="0.ply")
-    print("rendering index")
+    print("Rendering index views.")
     index_views = render_sso_coords_index_views(sso, locs,
                                                 rot_matrices=rot_mat)
-    print("rendering raw")
+    print("Rendering raw views.")
     raw_views = render_sso_coords(sso, locs)
 
-    # DEBUG PRINTS
-    print(locs[:10] / np.array([10, 10, 20]))
-    # print coordinates of vertices rendered in index views 0..9
     vertices_unscaled = sso.mesh[1].reshape((-1, 3)) / np.array([10, 10, 20])
     for ii in range(10):
         print(vertices_unscaled[index_views[ii, 0].flatten()])
 
     return raw_views, remap_rgb_labelviews(label_views, palette), rgb2id_array(index_views)
 
-def GT_generation(pathes,gt_type="spgt"):
+
+def GT_generation(kzip_paths, gt_type="spgt"):
+    """
+    Generates a .npy GT file from all kzip paths.
+
+    Parameters
+    ----------
+    kzip_paths :
+    gt_type :
+
+    Returns
+    -------
+
+    """
     dc = {}
     home = os.path.expanduser("~")
-    for kzip_path in pathes:
+    for kzip_path in kzip_paths:
         sso_id = int(re.findall("/(\d+).", kzip_path)[0])
         raw_views, label_views, index_views = generate_label_views(kzip_path, gt_type)
         dc[sso_id] = [raw_views,label_views,index_views]

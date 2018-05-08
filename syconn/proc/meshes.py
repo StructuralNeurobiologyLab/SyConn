@@ -67,8 +67,9 @@ class MeshObject(object):
         else:
             if np.ndim(self._ext_color) >= 2:
                 self._ext_color = self._ext_color.squeeze()
-                assert self._ext_color.shape[1] == 3,\
-                    "'color' parameter has wrong shape" # changed 4 to 3
+                assert self._ext_color.shape[1] == 4,\
+                    "Rendering requires RGBA 'color' shape of (X, 4). Please" \
+                    "add alpha channel."
                 self._ext_color = self._ext_color.flatten()
             assert len(self._ext_color)/4 == len(self.vertices)/3, \
                 "len(ext_color)/4 must be equal to len(vertices)/3."
