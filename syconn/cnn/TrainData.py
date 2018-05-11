@@ -23,11 +23,6 @@ class MultiViewData(Data):
         self.splitting_dict = load_pkl2obj(self.gt_dir + "%s_splitting.pkl" % gt_type)
         self.ssd = SuperSegmentationDataset(working_dir, version=gt_type)
 
-        if 1 and gt_type == "axgt" and "areaxfs3" in working_dir:
-            print("Added contradictory sample to AxonGT.")
-            self.label_dict[24479744] = 0
-            self.splitting_dict["train"].append(24479744)
-
         # train data
         # get views of each SV
         self.train_d = [self.ssd.get_super_segmentation_object(ix).load_views(
