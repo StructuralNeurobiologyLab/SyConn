@@ -101,9 +101,11 @@ def eval_test_candidates():
     all_coords = []  # debug: Check if
     # V1
     # currently_annotated = ["34299393.001.k", "8733319.001.k", "30030341.001.k", "28985344.001.k", "12474080.001.k"]
-    # # V2
+    # # V2 -- 28 SSV
     currently_annotated = ["34299393.001.k", "8733319.001.k", "30030341.001.k", "28985344.002.k", "12474080.001.k", "15065120.001.k", "31798150.001.k",
-                           "28531969.001.k", "31936512.001.k"]
+                           "28531969.001.k", "31936512.001.k", "141995.004.k", "1931265.001.k", "32946948.002.k", "18916097.001.k", "24300036.002.k",
+                           "782342.001.k", "15372930.001.k.zip", "28418691.001.k", "8138368.001.k", "34053762.001.k", "13463680.001.k", "14539904.001.k",
+                           "23629521.001.k", "22081952.001.k", "5491713.001.k", "10408322.001.k", "22892545.001.k", "13082627.001.k", "32292865.001.k"]
     for fname in kzip_ps:
         if not np.any([ca in fname for ca in currently_annotated]):
             continue
@@ -116,35 +118,36 @@ def eval_test_candidates():
         sso_id = int(re.findall("(\d+).\d+.k.zip", fname)[0])
         sso = ssd_all.get_super_segmentation_object(sso_id)
 
-        # Build SSO skeleton from k.zip data to retrieve prediction of RFC
-        # trained only on dendrite and axon... Was necessary because SSV
-        # skeletons were updated in the meantime..
-        nodes = []
-        edges = []
-        radii = []
-        node_lookup = {}
-        for n in skel.getNodes():
-            nodes.append(n.getCoordinate())
-            radii.append(n.data["radius"])
-            node_lookup[frozenset(nodes[-1])] = len(nodes) - 1
-        for n1, n2 in skel.iter_edges():
-            try:
+        # cache skeleton to make sure its nodes are aligned with their features
+        skel_fname = dest_folder + os.path.split(fname)[1][:-6] + "skel.pkl"
+        if os.path.isfile(skel_fname):
+            sso.skeleton = load_pkl2obj(skel_fname)
+        else:
+            # Build SSO skeleton from k.zip data to retrieve prediction of RFC
+            # trained only on dendrite and axon... Was necessary because SSV
+            # skeletons were updated in the meantime..
+            nodes = []
+            edges = []
+            radii = []
+            node_lookup = {}
+            for n in skel.getNodes():
+                nodes.append(n.getCoordinate())
+                radii.append(n.data["radius"])
+                node_lookup[frozenset(nodes[-1])] = len(nodes) - 1
+            for n1, n2 in skel.iter_edges():
                 ix_n1 = node_lookup[frozenset(n1.getCoordinate())]
                 ix_n2 = node_lookup[frozenset(n2.getCoordinate())]
-            except AttributeError:
-                print("Skipped edge...")
-                continue
-            e = [ix_n1, ix_n2]
-            edges.append(e)
-        nodes = np.array(nodes)
-        edges = np.array(edges, dtype=np.uint)
-        radii = np.array(radii)
-        sso.skeleton = dict(edges=edges, nodes=nodes, diameters=radii)
+                e = [ix_n1, ix_n2]
+                edges.append(e)
+            nodes = np.array(nodes)
+            edges = np.array(edges, dtype=np.uint)
+            radii = np.array(radii)
+            sso.skeleton = dict(edges=edges, nodes=nodes, diameters=radii*2)
+            write_obj2pkl(skel_fname, sso.skeleton)
         # DONE....
         associate_objs_with_skel_nodes(sso)
         skel_nodes = sso.skeleton["nodes"]
         feats_4000_cache_fname = dest_folder + os.path.split(fname)[1][:-6] + "_4000.npy"
-        feats_8000_cache_fname = dest_folder + os.path.split(fname)[1][:-6] + "_8000.npy"
         if not os.path.isfile(feats_4000_cache_fname):
             feats_4000 = extract_skel_features(sso, feature_context_nm=4000)  # sso.skel_features(feature_context_nm=4000), avoid this call because it would trigger caching mechanism
             np.save(feats_4000_cache_fname, feats_4000)
@@ -174,9 +177,8 @@ def eval_test_candidates():
             all_preds_skel_4000.append(int(n.data["axoness_fc4000_avgwind0"]))
             all_preds_skel_8000.append(int(n.data["axoness_fc8000_avgwind0"]))
             all_preds_skel_4000_wo2.append(preds_4000wo2_dc[frozenset(n.getCoordinate())])
-            all_preds_skel_8000_wo2.append(preds_8000wo2_dc[frozenset(n.getCoordinate())])slac
+            all_preds_skel_8000_wo2.append(preds_8000wo2_dc[frozenset(n.getCoordinate())])
             all_preds_cnn.append(int(n.data["axoness_cnn_k1_gt"]))
-    print("Example pred_skel_8000_rfc data (VALIDATE!!): ", all_preds_skel_8000[::100], all_coords[::100], all_preds_cnn[::100])
     print "Collected %d labeled nodes." % len(all_labels)
     model_performance_predonly(all_preds_skel_4000, all_labels, model_dir=dest_folder, prefix="skel_4000")
     model_performance_predonly(all_preds_skel_8000, all_labels, model_dir=dest_folder, prefix="skel_8000")
@@ -195,9 +197,9 @@ def eval_test_candidates():
 
 # model which is NOT trained on all samples, but on training samples
 # as defined in axgt_splitting_v3.pkl
-model_p = "/wholebrain/u/pschuber/CNN_Training/nupa_cnn/axoness_old/" \
-          "g4_axoness_v0_run3/g4_axoness_v0_run3-FINAL.mdl"
 def get_axoness_model():
+    model_p = "/wholebrain/u/pschuber/CNN_Training/nupa_cnn/axoness_old/" \
+              "g4_axoness_v0_run3/g4_axoness_v0_run3-FINAL.mdl"
     m = NeuralNetworkInterface(model_p, imposed_batch_size=200, nb_labels=3)
     _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
     return m
@@ -280,13 +282,13 @@ def plot_axoness_comparison():
     name = ["skel_4000", "skel_8000", "cnn_k1", "skel_4000_wo2", "skel_8000_wo2"]
     xtick_labels = ["RFC-4", "RFC-8", "CNN", "RFC*-4", "RFC*-8"]
     # the f-score value is the weighted f-score average of the three classes
-    fscore_den = np.array([0.8429, 0.8860, 0.9460, 0.8809, 0.9341])
-    fscore_ax = np.array([0.3814, 0.4141, 0.8999, 0.7968, 0.8716])
-    fscore_so = np.array([0.2728, 0.3219, 0.9960, 0, 0])
+    fscore_den = np.array([0.8437, 0.9066, 0.9450, 0.8701, 0.9272])
+    fscore_ax = np.array([0.5959, 0.6437, 0.9386, 0.8615, 0.9156])
+    fscore_so = np.array([0.2171, 0.2677, 0.9820, 0, 0])
     fscore_overall_unweighted = np.mean(np.array([fscore_den[:], fscore_ax, fscore_so]), axis=0)
     fscore_overall_unweighted[-2] = np.mean([fscore_den[-2], fscore_ax[-2]])
     fscore_overall_unweighted[-1] = np.mean([fscore_den[-1], fscore_ax[-1]])
-    fscore_overall_weighted = [0.4851, 0.5295, 0.9635, 0.8542, 0.9142]
+    fscore_overall_weighted = [0.5666, 0.6211, 0.9552, 0.8664, 0.9222]
 
 
     plot_bars(np.arange(len(xtick_labels))+0.8, [fscore_so, fscore_den, fscore_ax, fscore_overall_unweighted], legend=False, xtick_labels=xtick_labels, width=0.8, xtick_rotation=90,
@@ -316,9 +318,9 @@ if __name__ == "__main__":
         get_test_candidates()
 
     # eval test set
-    if 1:
-        eval_test_candidates()
     if 0:
+        eval_test_candidates()
+    if 1:
         plot_axoness_comparison()
 
     # evaluate cnn on "pseude" train/valid set (views are different form actual views used during training)

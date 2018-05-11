@@ -326,10 +326,10 @@ class main_class(QtGui.QDialog):
     def exploration_mode_callback_check(self):
         if self.exploration_mode_chk_box.isChecked():
 
-            sel_seg_objs = KnossosModule.segmentation.selectedObjects()
+            sel_seg_objs = KnossosModule.segmentation.selected_objects()
             sel_sv_ids = []
             for sel_seg_obj in sel_seg_objs:
-                sel_sv_ids.append(KnossosModule.segmentation.subobjectIdsOfObject(sel_seg_obj)[0])
+                sel_sv_ids.append(KnossosModule.segmentation.subobject_ids_of_object(sel_seg_obj)[0])
 
             # get selected ssv ids
             ssv_ids_selected = [self.syconn_gate.get_ssv_of_sv(sv_id)['ssv'] for sv_id in sel_sv_ids]
@@ -360,7 +360,7 @@ class main_class(QtGui.QDialog):
 
             objs_to_del = set(all_objects) - set(ids_selected)
 
-            [KnossosModule.segmentation.removeObject(obj) for obj in objs_to_del]
+            [KnossosModule.segmentation.remove_object(obj) for obj in objs_to_del]
 
             #print('ids to del {0} ids to add {1}'.format(ids_to_del, ids_to_add))
 
@@ -406,7 +406,7 @@ class main_class(QtGui.QDialog):
 
         # delete all existing objects in mergelist
         all_objects = KnossosModule.segmentation.objects()
-        [KnossosModule.segmentation.removeObject(obj) for obj in all_objects]
+        [KnossosModule.segmentation.remove_object(obj) for obj in all_objects]
 
         # iterate over all trees in knossos and delete
         trees = KnossosModule.skeleton.trees()
@@ -423,21 +423,21 @@ class main_class(QtGui.QDialog):
         sv_ids = self.syconn_gate.get_svs_of_ssv(ssv_id)['svs']
         sv_ids = map(int, sv_ids)
 
-        KnossosModule.segmentation.createObject(ssv_id, sv_ids[0], (1,1,1))
-        #KnossosModule.segmentation.selectObject(ssv.id)
+        KnossosModule.segmentation.create_object(ssv_id, sv_ids[0], (1,1,1))
+        #KnossosModule.segmentation.select_object(ssv.id)
         # query object should be red
         #KnossosModule.segmentation.changeColor(ssv_id, QtGui.QColor(255, 0, 0, 255))
 
         # one could cache this, not necessary to rebuild at every step
         for sv_id in sv_ids:
             try:
-                KnossosModule.segmentation.addSubobject(ssv_id, sv_id)
+                KnossosModule.segmentation.add_subobject(ssv_id, sv_id)
             except:
                 pass
 
-        KnossosModule.segmentation.selectObject(ssv_id)
+        KnossosModule.segmentation.select_object(ssv_id)
 
-        KnossosModule.segmentation.setRenderOnlySelectedObjs(True)
+        KnossosModule.segmentation.set_render_only_selected_objs(True)
 
         #print('self.ids_selected {0}'.format(self.ids_selected))
 

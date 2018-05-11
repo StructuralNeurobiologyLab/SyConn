@@ -5,7 +5,7 @@
 import os
 import syconn
 
-save_path = '~/CNN_Training/SyConn/triplet_net_local/'
+save_path = '~/CNN_Training/SyConn/tripletnet_local/'
 save_name = "g0_v0"
 
 # preview_data_path = None

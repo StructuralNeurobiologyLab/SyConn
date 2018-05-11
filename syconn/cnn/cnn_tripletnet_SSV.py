@@ -5,9 +5,9 @@
 import os
 import syconn
 
-save_path = '~/CNN_Training/SyConn/triplet_net_SSV/'
+save_path = '~/CNN_Training/SyConn/tripletnet_SSV/'
 nb_views = 1
-save_name = "wholecell_orthoviews_v1_lowerLR"
+save_name = "wholecell_orthoviews_v3"
 
 # preview_data_path = None
 # preview_kwargs    = dict(export_class='all', max_z_pred=5)
@@ -27,9 +27,9 @@ data_batch_args = {}
 data_init_kwargs = {"downsample": 2}#{"nb_views": nb_views}
 optimiser_params = dict(lr=0.001, mom=0.9, wd=0.5e-3)#, beta2=0.99)
 batch_size = 6
-dr = 0.01
-schedules = {"lr": {"dec": 0.97}}
-alpha = 1e-6
+dr = 0.05
+schedules = {"lr": {"dec": 0.98}}
+alpha = 5e-6
 
 def create_model():
     from elektronn2 import neuromancer

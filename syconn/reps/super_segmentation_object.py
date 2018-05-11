@@ -118,7 +118,7 @@ class SuperSegmentationObject(object):
 
         # init mesh dicts
         self._meshes = {"sv": None, "sj": None,
-                        "vc": None, "mi": None}
+                        "vc": None, "mi": None, "conn": None}
 
         self._views = None
         self._dataset = None

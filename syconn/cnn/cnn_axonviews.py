@@ -6,7 +6,7 @@ import os
 import syconn
 
 save_path = '~/CNN_Training/SyConn/axon_views/'
-save_name = "g1_v1"
+save_name = "g1_v2"
 
 preview_data_path = None
 preview_kwargs    = dict(export_class='all', max_z_pred=5)
@@ -28,7 +28,7 @@ optimiser_params = dict(lr=10e-4, mom=0.9, wd=0.5e-3)#, beta2=0.99)
 batch_size = 20
 # schedules = {'lr': {'updates': [(10e3, 8e-4), (20e3, 7e-4), (40e3, 6e-4), (60e3, 4e-4), (80e3, 2e-4)]}}
 schedules = {"lr": {"dec": 0.95}}
-dr = 0.05
+dr = 0.1
 
 
 def create_model():
