@@ -1570,6 +1570,7 @@ class SuperSegmentationObject(object):
 
         clf_name : str
 
+
         feature_context_nm : int
 
         avg_window : int
