@@ -27,7 +27,7 @@ try:
         subprocess.check_call('qstat', shell=True,
                                 stdout=devnull, stderr=devnull)
 except subprocess.CalledProcessError:
-    print("QSUB not found, switching to single node multiprocessing.")
+    # print("QSUB not found, switching to single node multiprocessing.")
     __QSUB__ = False
 
 home_dir = os.environ['HOME'] + "/"

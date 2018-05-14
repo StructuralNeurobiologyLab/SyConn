@@ -47,7 +47,7 @@ for cc in args:
         warnings.warn("Skipped huge SSV %d." % sso.id)
     try:
         sso.gliasplit(verbose=False)
-    except Exception, e:
+    except Exception as e:
         print("\n--------------------------------------------------------\n"
               "Splitting of SSV %d failed with %s."
               "\n--------------------------------------------------------\n" % (

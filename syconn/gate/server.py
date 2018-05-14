@@ -247,6 +247,12 @@ class SyConnFS_backend(object):
         """
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
+        if obj_type == "sj":
+            try:
+                ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
+                obj_type = "conn"
+            except KeyError:
+                pass
         mesh = ssv._load_obj_mesh_compr(obj_type)
         if mesh is None:
             return None

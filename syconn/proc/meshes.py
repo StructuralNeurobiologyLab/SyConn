@@ -16,10 +16,9 @@ from ..handler.basics import write_txt2kzip, texts2kzip
 from .image import apply_pca
 from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 from scipy.ndimage.morphology import binary_closing
-
-
+import time
 from ..mp.shared_mem import start_multiprocess_obj
-__all__ = ["MeshObject", "get_object_mesh", "merge_meshs", "triangulation",
+__all__ = ["MeshObject", "get_object_mesh", "merge_meshes", "triangulation",
            "get_random_centered_coords", "write_mesh2kzip", 'write_meshes2kzip',
            "compartmentalize_mesh", 'write_ssomesh2kzip']
 
@@ -30,7 +29,7 @@ class MeshObject(object):
         self.object_type = object_type
         self.indices = indices.astype(np.uint)
         if vertices.ndim == 2 and vertices.shape[1] == 3:
-            self.vertices = vertices.reshape(len(vertices) * 3)
+            self.vertices = vertices.flatten()
         else:
             # assume flat array
             self.vertices = np.array(vertices, dtype=np.float)
@@ -46,9 +45,9 @@ class MeshObject(object):
             self.max_dist = bounding_box[1]
         self.center = self.center.astype(np.float)
         self.max_dist = self.max_dist.astype(np.float)
-        vert_resh = np.array(self.vertices).reshape(len(self.vertices) / 3, 3)
-        vert_resh -= self.center
-        vert_resh /= self.max_dist
+        vert_resh = np.array(self.vertices).reshape((len(self.vertices) // 3, 3))
+        vert_resh -= np.array(self.center, dtype=self.vertices.dtype)
+        vert_resh = vert_resh / np.array(self.max_dist)
         self.vertices = vert_resh.reshape(len(self.vertices))
         if normals is not None and len(normals) == 0:
             normals = None
@@ -66,28 +65,31 @@ class MeshObject(object):
         elif np.isscalar(self._ext_color):
             self._colors = np.array(len(self.vertices) / 3 * [self._ext_color]).flatten()
         else:
-            if np.ndim(self._ext_color) == 2:
+            if np.ndim(self._ext_color) >= 2:
+                self._ext_color = self._ext_color.squeeze()
+                assert self._ext_color.shape[1] == 4,\
+                    "'color' parameter has wrong shape"
                 self._ext_color = self._ext_color.flatten()
-            assert len(self._ext_color) == len(self.vertices), "len(ext_color)/4 must " \
-                                                 "be equal to len(vertices)/3."
+            assert len(self._ext_color) / 4 == len(self.vertices) / 3\
+                , "len(ext_color)/4 must be equal to len(vertices)/3."
             self._colors = self._ext_color
         return self._colors
 
     @property
     def vert_resh(self):
-        vert_resh = np.array(self.vertices).reshape(len(self.vertices) / 3, 3)
+        vert_resh = np.array(self.vertices).reshape(-1, 3)
         return vert_resh
 
     @property
     def normals(self):
-        if self._normals is None:
-            print("Calculating normals.")
+        if self._normals is None or len(self._normals) != len(self.vertices):
+            print("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         return self._normals
 
     @property
     def normals_resh(self):
-        return self.normals.reshape(len(self.vertices) / 3, 3)
+        return self.normals.reshape(-1, 3)
 
     def transform_external_coords(self, coords):
         """
@@ -148,6 +150,10 @@ class MeshObject(object):
         vert_resh -= self.center
         vert_resh /= self.max_dist
         self.vertices = vert_resh.reshape(len(self.vertices))
+
+    @property
+    def vertices_scaled(self):
+        return (self.vert_resh * self.max_dist + self.center).flatten()
 
 
 def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=0):
@@ -356,7 +362,7 @@ def get_bounding_box(coordinates):
     if coordinates.ndim == 2 and coordinates.shape[1] == 3:
         coord_resh = coordinates
     else:
-        coord_resh = coordinates.reshape(len(coordinates) / 3, 3)
+        coord_resh = coordinates.reshape(len(coordinates) // 3, 3)
     mean = np.mean(coord_resh, axis=0)
     max_dist = np.max(np.abs(coord_resh - mean))
     return mean, max_dist
@@ -461,7 +467,7 @@ def get_random_centered_coords(pts, nb, r):
     return coms
 
 
-def merge_meshs(ind_lst, vert_lst, nb_simplices=3):
+def merge_meshes(ind_lst, vert_lst, nb_simplices=3):
     """
     Combine several meshes into a single one.
 
@@ -750,3 +756,130 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
         comp_ind = np.array([remap_dict[i] for i in comp_ind], dtype=np.uint)
         comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
     return comp_meshes
+
+
+def id2rgb(vertex_id):
+    """
+    Transforms ID value of single sso vertex into the unique RGD colour.
+
+    Parameters
+    ----------
+    vertex_id : int
+
+    Returns
+    -------
+    np.array
+        RGB values [1, 3]
+    """
+    red = vertex_id % 256
+    green = (vertex_id/256) % 256
+    blue = (vertex_id/256/256) % 256
+    colour = np.array([red, green, blue], dtype=np.uint8)
+    return colour.squeeze()
+
+
+def id2rgb_array(id_arr):
+    """
+    Transforms ID values into the array of RGBs labels based on 'idtorgb'.
+    Note: Linear retrieval time. For small N preferable.
+
+    Parameters
+    ----------
+    id_arr : np.array
+        ID values [N, 1]
+
+    Returns
+    -------
+    np.array
+        RGB values.squeezed [N, 3]
+    """
+
+    if np.max(id_arr) > 256**3:
+        raise ValueError("Overflow in vertex ID array.")
+    if id_arr.ndim == 1:
+        id_arr = id_arr[:, None]
+    elif id_arr.ndim == 2:
+        assert id_arr.shape[1] == 1, "ValueError: unsupported shape"
+    else:
+        raise ValueError("Unsupported shape")
+    rgb_arr = np.apply_along_axis(id2rgb, 1, id_arr)
+    return rgb_arr.squeeze()
+
+
+def id2rgb_array_contiguous(id_arr):
+    """
+    Transforms ID values into the array of RGBs labels based on the assumption
+    that 'id_arr' is contiguous index array from 0...len(id_arr).
+    Same mapping as 'id2rgb_array'.
+    Note: Constant retrieval time. For large N preferable.
+
+    Parameters
+    ----------
+    id_arr : np.array
+        ID values [N, 1]
+
+    Returns
+    -------
+    np.array
+        RGB values.squeezed [N, 3]
+    """
+    if id_arr.squeeze().ndim > 1:
+        raise ValueError("Unsupported index array shape.")
+    nb_ids = len(id_arr.squeeze())
+    if nb_ids > 256**3:
+        raise ValueError("Overflow in vertex ID array.")
+    x1 = np.arange(256).astype(np.uint8)
+    x2 = np.arange(256).astype(np.uint8)
+    x3 = np.arange(256).astype(np.uint8)
+    xx1, xx2, xx3 = np.meshgrid(x1, x2, x3, sparse=False, copy=False)
+    rgb_arr = np.concatenate([xx3.flatten()[:, None], xx1.flatten()[:, None],
+                              xx2.flatten()[:, None]], axis=-1)[:nb_ids]
+    return rgb_arr
+
+
+def rgb2id(rgb):
+    """
+    Transforms unique RGB values into soo vertex ID.
+
+    Parameters
+    ----------
+    rgb: np.array
+        RGB values [1, 3]
+
+    Returns
+    -------
+    np.array
+        ID values [1, 1]
+    """
+    red = rgb[0]
+    green = rgb[1]
+    blue = rgb[2]
+    vertex_id = red + green*256 + blue*(256**2)
+    return np.array([vertex_id], dtype=np.uint32)
+
+
+def rgb2id_array(rgb_arr):
+    """
+    Transforms RGB values into IDs based on 'rgb2id'.
+
+    Parameters
+    ----------
+    rgb_arr : np.array
+        RGB values [N, 3]
+
+    Returns
+    -------
+    np.array
+        ID values [N, ]
+    """
+    if rgb_arr.ndim > 1:
+        assert rgb_arr.shape[-1] == 3, "ValueError: unsupported shape"
+    else:
+        raise ValueError("Unsupported shape")
+    start = time.time()
+    rgb_arr_flat = rgb_arr.flatten().reshape((-1, 3))
+    mask_arr = (rgb_arr_flat[:, 0] != 0) & (rgb_arr_flat[:, 1] != 0) & (rgb_arr_flat[:, 2] != 0)
+    id_arr = np.zeros((len(rgb_arr_flat)), dtype=np.uint32)
+    id_arr[mask_arr] = np.apply_along_axis(rgb2id, 1, rgb_arr_flat[mask_arr]).squeeze()
+    # print("Finisehd remapping rgb-> vertex IDs after [min]:", (time.time()-start)/60.)
+    return id_arr.reshape(rgb_arr.shape[:-1])

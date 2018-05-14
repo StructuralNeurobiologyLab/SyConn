@@ -17,6 +17,7 @@ import sys
 import time
 import warnings
 from collections import Counter
+
 from scipy.misc import imsave
 from knossos_utils import skeleton, knossosdataset
 
@@ -73,6 +74,26 @@ class SuperSegmentationObject(object):
                  object_caching=True, voxel_caching=True, mesh_caching=True,
                  view_caching=False, config=None, nb_cpus=1,
                  enable_locking=True, ssd_type="ssv"):
+        """
+
+        Parameters
+        ----------
+        ssv_id :
+        version :
+        version_dict :
+        working_dir :
+        create :
+        sv_ids :
+        scaling :
+        object_caching :
+        voxel_caching :
+        mesh_caching :
+        view_caching :
+        config :
+        nb_cpus :
+        enable_locking : bool
+        ssd_type :
+        """
         self.nb_cpus = nb_cpus
         self._id = ssv_id
         self.attr_dict = {} # dict(mi=[], sj=[], vc=[], sv=[])
@@ -97,7 +118,7 @@ class SuperSegmentationObject(object):
 
         # init mesh dicts
         self._meshes = {"sv": None, "sj": None,
-                        "vc": None, "mi": None}
+                        "vc": None, "mi": None, "conn": None}
 
         self._views = None
         self._dataset = None
@@ -359,28 +380,36 @@ class SuperSegmentationObject(object):
     def cell_type_ratios(self):
         return self.lookup_in_attribute_dict("cell_type_ratios")
 
-    @property
-    def weighted_graph(self):
+    def weighted_graph(self, add_node_attr=()):
         """
         Creates a distance weighted graph representation of the SSV skeleton.
+
+        Parameters
+        ----------
+        add_node_attr : tuple of keys
 
         Returns
         -------
         nx.Graph
         """
-        if self._weighted_graph is None:
+        if self._weighted_graph is None or np.any([len(nx.get_node_attributes(self._weighted_graph, k)) == 0 for k in add_node_attr]):
             if self.skeleton is None:
                 self.load_skeleton()
 
             node_scaled = self.skeleton["nodes"] * self.scaling
-            edge_coords = node_scaled[self.skeleton["edges"]]
+            edges = np.array(self.skeleton["edges"], dtype=np.uint)
+            edge_coords = node_scaled[edges]
             weights = np.linalg.norm(edge_coords[:, 0] - edge_coords[:, 1],
                                      axis=1)
-
             self._weighted_graph = nx.Graph()
             self._weighted_graph.add_weighted_edges_from(
-                np.concatenate((self.skeleton["edges"], weights[:, None]),
-                               axis=1))
+                [(edges[ii][0], edges[ii][1], weights[ii]) for
+                 ii in range(len(weights))])
+            for k in add_node_attr:
+                dc = {}
+                for n in self._weighted_graph.nodes_iter():
+                    dc[n] = self.skeleton[k][n]
+                nx.set_node_attributes(self._weighted_graph, k, dc)
         return self._weighted_graph
 
     @property
@@ -970,9 +999,8 @@ class SuperSegmentationObject(object):
         self.clear_cache()
 
     def copy2dir(self, dest_dir, safe=True):
-        raise ("To be tested.", NotImplementedError)
         # get all files in home directory
-        fps = get_filepaths_from_dir(self.ssv_dir, ending="")
+        fps = get_filepaths_from_dir(self.ssv_dir, ending=["pkl", "k.zip"])
         fnames = [os.path.split(fname)[1] for fname in fps]
         # Open the file and raise an exception if it exists
         if not os.path.isdir(dest_dir):
@@ -982,8 +1010,9 @@ class SuperSegmentationObject(object):
             dest_filename = dest_dir + "/" + fnames[i]
             try:
                 safe_copy(src_filename, dest_filename, safe=safe)
-            except Exception:
-                print("Skipped", fnames[i])
+                print("Copied %s to %s." % (src_filename, dest_filename))
+            except Exception as e:
+                print("Skipped", fnames[i], str(e))
                 pass
         self.load_attr_dict()
         if os.path.isfile(dest_dir + "/atrr_dict.pkl"):
@@ -991,8 +1020,7 @@ class SuperSegmentationObject(object):
         else:
             dest_attr_dc = {}
         dest_attr_dc.update(self.attr_dict)
-        self.attr_dict = dest_attr_dc
-        self.save_attr_dict()
+        write_obj2pkl(dest_dir + "/atrr_dict.pkl", dest_attr_dc)
 
     def partition_cc(self, max_nb=25):
         """
@@ -1025,13 +1053,13 @@ class SuperSegmentationObject(object):
         -------
 
         """
-        assert len(views) == len(np.concatenate(self.sample_locations()))
         view_dc = LZ4Dict(self.view_path, read_only=False,
                           disable_locking=not self.enable_locking)
         view_dc[view_key] = views
         view_dc.save2pkl()
 
-    def load_views(self, view_key=None, woglia=True, raw_only=False, force=False):
+    def load_views(self, view_key=None, woglia=True, raw_only=False, force_reload=False,
+                   cache_default_views=False, nb_cpus=None, ignore_missing=False):
         """
         Load views which were stored by 'save_views' given the key 'view_key',
         i.e. this operates on SSV level.
@@ -1042,13 +1070,21 @@ class SuperSegmentationObject(object):
         ----------
         woglia : bool
         view_key : str
+        reload : bool
+            if True views are reloaded from SVs
         raw_only : bool
-        force : bool
+        force_reload : bool
             if True will force reloading the SV views.
+        ignore_missing : bool
+            if True, it will not raise KeyError if SV does not exist
+        cache_default_views : bool
+            Stores views in SSV cache if True.
+        nb_cpus : int
+
         Returns
         -------
-        list of array
-            Views for each SV in self.svs
+        np.array
+            Concatenated views for each SV in self.svs
         """
         view_dc = LZ4Dict(self.view_path, read_only=False,
                           disable_locking=not self.enable_locking)
@@ -1058,13 +1094,22 @@ class SuperSegmentationObject(object):
             if not view_key in view_dc:
                 raise ValueError("Given view key does not exist"
                                         " in view dictionary.")
-        if view_key in view_dc and not force:
+        if view_key in view_dc and not force_reload:
             return view_dc[view_key]
-        params = [[sv, {"woglia": woglia, "raw_only": raw_only}]
-                  for sv in self.svs]
+
+        params = [[sv, {"woglia": woglia, "raw_only": raw_only,
+                        "ignore_missing": ignore_missing}] for sv in self.svs]
         # list of arrays
         views = sm.start_multiprocess_obj("load_views", params,
-                                          nb_cpus=self.nb_cpus)
+                                          nb_cpus=self.nb_cpus
+                                          if nb_cpus is None else nb_cpus)
+        views = np.concatenate(views)
+        if cache_default_views:
+            print("Loaded and cached default views of SSO %d at %s. "
+                  "(raw_only: %d, woglia: %d; #views: %d)" % (self.id,
+                  self.view_path, int(raw_only), int(woglia), len(views)))
+            view_dc[view_key] = views
+            view_dc.save2pkl()
         return views
 
     def view_existence(self, woglia=True):
@@ -1138,7 +1183,7 @@ class SuperSegmentationObject(object):
                                verbose=False, overwrite=overwrite,
                                cellobjects_only=cellobjects_only, woglia=woglia)
 
-    def sample_locations(self, force=False, cache=False, verbose=False):
+    def sample_locations(self, force=False, cache=True, verbose=False):
         """
 
         Parameters
@@ -1231,7 +1276,7 @@ class SuperSegmentationObject(object):
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
                         ply_fname=obj_type + ".ply")
 
-    def meshs2kzip(self, dest_path=None, sv_color=None):
+    def meshes2kzip(self, dest_path=None, sv_color=None):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
         for ot in ["sj", "vc", "mi",
@@ -1258,10 +1303,10 @@ class SuperSegmentationObject(object):
         self.save_skeleton_to_kzip(dest_path=dest_path)
         self.save_objects_to_kzip_sparse(["mi", "sj", "vc"],
                                          dest_path=dest_path)
-        self.meshs2kzip(dest_path=dest_path, sv_color=sv_color)
+        self.meshes2kzip(dest_path=dest_path, sv_color=sv_color)
         self.mergelist2kzip(dest_path=dest_path)
 
-    def write_svmeshs2kzip(self, dest_path=None):
+    def write_svmeshes2kzip(self, dest_path=None):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
         for ii, sv in enumerate(self.svs):
@@ -1317,6 +1362,9 @@ class SuperSegmentationObject(object):
         col = colorcode_vertices(mesh[1].reshape((-1, 3)), pred_coords,
                                  preds, colors=colors, k=k)
         if dest_path is None or ply_fname is None:
+            if not dest_path is None and ply_fname is None:
+                print("Specify 'ply_fanme' in order to save colored mesh"
+                      " to k.zip.")
             return mesh[0], mesh[1], col
         else:
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], col,
@@ -1478,11 +1526,11 @@ class SuperSegmentationObject(object):
             "Length of skeleton features is not equal to number of nodes."
         self.save_skeleton()
 
-    def skel_features(self, feature_context_nm):
+    def skel_features(self, feature_context_nm, overwrite=False):
         features = self._load_skelfeatures(feature_context_nm)
         if not "assoc_sj" in self.skeleton:
             ssh.associate_objs_with_skel_nodes(self)
-        if not features:
+        if not features or overwrite:
             features = ssh.extract_skel_features(self, feature_context_nm=
             feature_context_nm)
             self._save_skelfeatures(feature_context_nm, features)
@@ -1500,6 +1548,15 @@ class SuperSegmentationObject(object):
             print(np.unique(axoness, return_counts=True))
             self._pred2mesh(self.skeleton["nodes"] * self.scaling, axoness,
                             k=k, dest_path=dest_path)
+
+    def skelproperty2mesh(self, key, dest_path=None, k=1):
+        if self.skeleton is None:
+            self.load_skeleton()
+        if dest_path is None:
+            dest_path = self.skeleton_kzip_path
+        self._pred2mesh(self.skeleton["nodes"] * self.scaling,
+                        self.skeleton[key], k=k, dest_path=dest_path,
+                        ply_fname=key+".ply")
 
     def predict_nodes(self, sc, clf_name="rfc", feature_context_nm=None,
                       avg_window=0, leave_out_classes=()):
@@ -1535,7 +1592,7 @@ class SuperSegmentationObject(object):
             pred = np.argmax(probas, axis=1)
         else:
             for i_node in range(len(self.skeleton["nodes"])):
-                paths = nx.single_source_dijkstra_path(self.weighted_graph, i_node,
+                paths = nx.single_source_dijkstra_path(self.weighted_graph(), i_node,
                                                        avg_window)
                 neighs = np.array(paths.keys(), dtype=np.int)
                 c = np.argmax(np.sum(probas[neighs], axis=0))
@@ -1569,10 +1626,22 @@ class SuperSegmentationObject(object):
         return np.array(axoness_pred)
 
     def cnn_axoness_2_skel(self, **kwargs):
-        return ssh._cnn_axonness2skel(self, **kwargs)
+        locking_tmp = self.enable_locking
+        self.enable_locking = False  # all SV operations are read-only
+        # (enable_locking is inherited by sso.svs);
+        # SSV operations not, but SSO file structure is not chunked
+        res = ssh._cnn_axonness2skel(self, **kwargs)
+        self.enable_locking = locking_tmp
+        return res
 
     def average_node_axoness_views(self, **kwargs):
-        return ssh._average_node_axoness_views(self, **kwargs)
+        locking_tmp = self.enable_locking
+        self.enable_locking = False  # all SV operations are read-only
+        # (enable_locking is inherited by sso.svs);
+        # SSV operations not, but SSO file structure is not chunked
+        res = ssh._average_node_axoness_views(self, **kwargs)
+        self.enable_locking = locking_tmp
+        return res
 
     # --------------------------------------------------------------- CELL TYPES
     # def predict_cell_type(self, ssd_version="ctgt", clf_name="rfc",
@@ -1609,12 +1678,10 @@ class SuperSegmentationObject(object):
     #     self.attr_dict["cell_type_ratios"] = ratios
     #     self.save_attr_dict()
 
-    def gen_skel_from_sample_locs(self, dest_path=None, pred_key_appendix=""):
+    def gen_skel_from_sample_locs(self, dest_path, pred_key_appendix=""):
         try:
-            if os.path.isfile(self.skeleton_path_views):
+            if os.path.isfile(dest_path):
                 return
-            if dest_path is None:
-                dest_path = self.skeleton_kzip_path_views
             locs = np.concatenate(self.sample_locations())
             edge_list = create_mst_skeleton(locs)
             self.skeleton = {}
@@ -1628,7 +1695,7 @@ class SuperSegmentationObject(object):
             curr_ax_preds = np.argmax(ax_probas, axis=1)
             ax_preds = np.zeros((len(locs)), dtype=np.int)
             for i_node in range(len(self.skeleton["nodes"])):
-                paths = nx.single_source_dijkstra_path(self.weighted_graph, i_node,
+                paths = nx.single_source_dijkstra_path(self.weighted_graph(), i_node,
                                                        30000)
                 neighs = np.array(paths.keys(), dtype=np.int)
                 cnt = Counter(curr_ax_preds[neighs])
@@ -1661,8 +1728,7 @@ class SuperSegmentationObject(object):
                     loc_average[k] = v
                 curr_ax_preds[curr_ixs] = np.argmax(loc_average)
             self.skeleton["axoness"] = curr_ax_preds
-            # self.save_skeleton_to_kzip(dest_path=dest_path)
-            write_obj2pkl(self.skeleton_path_views, self.skeleton)
+            self.save_skeleton_to_kzip(dest_path=dest_path)
         except Exception as e:
             if "null graph" in str(e) and len(self.sv_ids) == 2:
                 print("Null graph error with 2 nodes, falling back to " \
@@ -1682,14 +1748,13 @@ class SuperSegmentationObject(object):
                 # first stage averaging
                 curr_ax_preds = np.argmax(ax_probas, axis=1)
                 self.skeleton["axoness"] = curr_ax_preds
-                write_obj2pkl(self.skeleton_path_views, self.skeleton)
             else:
                 print("Error %s occured with SSO %d  (%d SVs)." % (e, self.id,  len(self.sv_ids)))
 
     def predict_celltype_cnn(self, model):
         ssh.predict_sso_celltype(self, model)
 
-    def render_ortho_views(self, dest_folder=None, colors=None, ws=(2048, 2048),
+    def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
                            obj_to_render=("sv")):
         if colors is None:
             colors = {"sv": (0.5, 0.5, 0.5, 0.5), "mi": (0, 0, 1, 1),

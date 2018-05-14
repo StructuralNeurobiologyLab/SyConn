@@ -664,7 +664,7 @@ def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
 def sso_views_to_modelinput(sso, nb_views):
     np.random.seed(0)
     assert len(sso.sv_ids) > 0
-    views = np.concatenate(sso.load_views())
+    views = sso.load_views()
     np.random.shuffle(views)
     # view shape: (#multi-views, 4 channels, 2 perspectives, 128, 256)
     views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
@@ -736,12 +736,21 @@ def radius_correction(sso):
     return sso.skeleton
 
 
-def radius_correction_found_vertices(sso, plump_factor=1):
+def radius_correction_found_vertices(sso, plump_factor=1, num_found_vertices=10):
     """
-    Algorithm finds two nearest two nearest vertices and takes the median of the distances for every node
-    (gives better result than radius_correction)
-    :param sso: super segmentation object
-    :return: skeleton with diameters estimated
+    Algorithm finds two nearest vertices and takes the median of the distances for every node
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    plump_factor : int
+        multiplication factor for the radius
+    num_found_vertices : int
+        number of closest vertices queried for the node
+
+    Returns
+    -------
+    skeleton with diameters estimated
     """
 
     skel_node = sso.skeleton['nodes']
@@ -749,8 +758,7 @@ def radius_correction_found_vertices(sso, plump_factor=1):
 
     vert_sparse = sso.mesh[1].reshape((-1, 3))
     tree = spatial.cKDTree(vert_sparse)
-
-    dists, all_found_vertices_ixs = tree.query(skel_node * sso.scaling, 2)
+    dists, all_found_vertices_ixs = tree.query(skel_node * sso.scaling, num_found_vertices)
 
     for ii, el in enumerate(skel_node):
         diameters[ii] = np.median(dists[ii]) *2/10
@@ -787,7 +795,7 @@ def get_sso_axoness_from_coord(sso, coord, k=5):
 def calculate_skeleton(sso, size_threshold=1e20, kd=None,
                        coord_scaling=(8, 8, 4), plain=False, cleanup=True,
                        nb_threads=1):
-
+    raise DeprecationWarning("Use 'create_sso_skeleton' instead.")
     if np.product(sso.shape) < size_threshold:
         # vx = self.load_voxels_downsampled(coord_scaling)
         # vx = self.voxels[::coord_scaling[0],
@@ -917,11 +925,17 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
     Removes short stub branches, that are often added by annotators but
     hardly represent true morphology.
 
-    :nx_g: network kx graph
-    :scal:
-    :param len_thres:
-    :param preserve_annotations:
-    :return:
+    Parameters
+    ----------
+    nx_g : network kx graph
+    scal : array of size 3
+        the scaled up factor
+    len_thres : int
+        threshold of the length below which it will be pruned
+
+    Returns
+    -------
+    pruned network kx graph
     """
 
     if preserve_annotations:
@@ -959,185 +973,23 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
     return new_nx_g
 
 
-def create_sso_skeleton(sso, pruning_thresh=700):
-
-    """
-    Creates the super super voxel skeleton
-    :param sso: Super Segmentation Object
-    :param pruning_thresh: threshold for pruning.
-    """
-
-    # Fetching Super voxel Skeletons
-    sso.load_attr_dict()
-    ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
-
-    for sv_id in sso.sv_ids:
-        nodes, diameters, edges = create_new_skeleton(sv_id, sso)
-        # print('LENGTH', len(ssv_skel['nodes']) / 3, len(nodes) / 3, len(ssv_skel['edges']))
-
-        ssv_skel['edges'] = np.concatenate(
-            (ssv_skel['edges'], [(ix + (len(ssv_skel['nodes'])) / 3) for ix in edges]), axis=0)
-        ssv_skel['nodes'] = np.concatenate((ssv_skel['nodes'], nodes), axis=0)
-
-        ssv_skel['diameters'] = np.concatenate((ssv_skel['diameters'], diameters), axis=0)
-        # print('LENGTH', len(ssv_skel['nodes']) / 3, len(nodes) / 3, len(ssv_skel['edges']))
-
-    skel_G = nx.Graph()
-    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
-    if len(new_nodes) == 0:
-        sso.skeleton = ssv_skel
-        return
-
-    for inx, single_node in enumerate(new_nodes):
-        skel_G.add_node(inx, position=single_node)
-
-    new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
-    new_edges = [tuple(ix) for ix in new_edges]
-    skel_G.add_edges_from(new_edges)
-
-    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
-
-    # Stitching Super Voxel Skeletons
-    no_of_seg = len(list(nx.connected_components(skel_G)))
-
-    while no_of_seg != 1:
-
-        rest_nodes = []
-        current_set_of_nodes = []
-
-        list_of_comp = [c for c in sorted(nx.connected_components(skel_G), key=len, reverse=True)]
-
-        # print(list(list_of_comp[1])[:10])
-
-        for single_rest_graph in list_of_comp[len(list(nx.connected_components(skel_G))) - no_of_seg + 1:]:
-            rest_nodes = rest_nodes + [list(skel_G.node[int(ix)]['position']) for ix in single_rest_graph]
-
-        for single_rest_graph in list_of_comp[:len(list(nx.connected_components(skel_G))) - no_of_seg + 1]:
-            current_set_of_nodes = current_set_of_nodes + [list(skel_G.node[int(ix)]['position']) for ix in
-                                                           single_rest_graph]
-
-        tree = spatial.cKDTree(rest_nodes, 1)
-        thread_lengths, indices = tree.query(current_set_of_nodes)
-
-        start_thread_index = np.argmin(thread_lengths)
-        stop_thread_index = indices[start_thread_index]
-
-        start_thread_node = new_nodes.tolist().index(current_set_of_nodes[start_thread_index])
-        stop_thread_node = new_nodes.tolist().index(rest_nodes[stop_thread_index])
-
-        skel_G.add_edge(start_thread_node, stop_thread_node)
-        # print('added thread', start_thread_index, stop_thread_index, thread_lengths[start_thread_index],
-        #       len(list_of_comp[1:]))
-        no_of_seg -= 1
-
-    # Pruning the stitched Super Super Voxel Skeletons
-    if pruning_thresh !=0:
-        skel_G = prune_stub_branches(skel_G, len_thres=pruning_thresh)
-
-    sso.skeleton = {}
-    sso.skeleton['nodes'] = np.array([skel_G.node[ix]['position'] for ix in skel_G.nodes()], dtype=np.uint32)
-    sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
-
-    # Important bit, please don't remove (needed after pruning)
-    temp_edges = np.array(skel_G.edges()).reshape(-1)
-    temp_edges_sorted = np.unique(np.sort(temp_edges))
-    temp_edges_dict = {}
-
-    for ii, ix in enumerate(temp_edges_sorted):
-        temp_edges_dict[ix] = ii
-
-    temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
-
-    temp_edges = np.array(temp_edges).reshape([-1, 2])
-    sso.skeleton['edges'] = temp_edges
-
-    # Estimating the radii
-    sso.skeleton = radius_correction_found_vertices(sso)
-    # sso.enable_locking = True
-    #
-    # sso.export_kzip(
-    #     "/wholebrain/scratch/areaxfs/pruned_radius_etmtd_skeletons/skelG_pruned_test_ignore_%d.k.zip" % sso.id)
-
-    # return sso
-
-
-def glia_pred_exists(so):
-    so.load_attr_dict()
-    return "glia_probas" in so.attr_dict
-
-
-def views2tripletinput(views):
-    views = views[:, :, :1] # use first view only
-    out_d = np.concatenate([views,
-                            np.ones_like(views),
-                            np.ones_like(views)], axis=2)
-    return out_d.astype(np.float32)
-
-
-def get_pca_view_hists(sso, t_net, pca):
-    views = np.concatenate(sso.load_views())
-    latent = t_net.predict_proba(views2tripletinput(views))
-    latent = pca.transform(latent)
-    hist0 = np.histogram(latent[:, 0], bins=50, range=[-2, 2], normed=True)
-    hist1 = np.histogram(latent[:, 1], bins=50, range=[-3.2, 3], normed=True)
-    hist2 = np.histogram(latent[:, 2], bins=50, range=[-3.5, 3.5], normed=True)
-    return np.array([hist0, hist1, hist2])
-
-
-def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(),
-                       special_markers=(), special_kwargs=()):
-    if "matplotlib" not in globals():
-        import matplotlib
-        matplotlib.use("agg")
-    import matplotlib.pyplot as plt
-    import matplotlib.ticker as ticker
-    views = np.concatenate(sso.load_views())
-    latent = t_net.predict_proba(views2tripletinput(views))
-    latent = pca.transform(latent)
-    col = (np.array(latent) - latent.min(axis=0)) / (latent.max(axis=0)-latent.min(axis=0))
-    col = np.concatenate([col, np.ones_like(col)[:, :1]], axis=1)
-    for ii, (a, b) in enumerate([[0, 1], [0, 2], [1, 2]]):
-        fig, ax = plt.subplots()
-        plt.scatter(latent[:, a], latent[:, b], c=col, s=s, lw=0.5, marker="o",
-                    edgecolors=col)
-        if len(special_points) >= 0:
-            for kk, sp in enumerate(special_points):
-                if len(special_markers) == 0:
-                    sm = "x"
-                else:
-                    sm = special_markers[kk]
-                if len(special_kwargs) == 0:
-                    plt.scatter(sp[None, a], sp[None, b], s=75.0, lw=2.3,
-                                marker=sm, edgecolor="0.3", facecolor="none")
-                else:
-                    plt.scatter(sp[None, a], sp[None, b], **special_kwargs)
-        fig.patch.set_facecolor('white')
-        ax.tick_params(axis='x', which='major', labelsize=ls, direction='out',
-                       length=4, width=3, right="off", top="off", pad=10)
-        ax.tick_params(axis='y', which='major', labelsize=ls, direction='out',
-                       length=4, width=3, right="off", top="off", pad=10)
-
-        ax.tick_params(axis='x', which='minor', labelsize=ls, direction='out',
-                       length=4, width=3, right="off", top="off", pad=10)
-        ax.tick_params(axis='y', which='minor', labelsize=ls, direction='out',
-                       length=4, width=3, right="off", top="off", pad=10)
-        plt.xlabel(r"$Z_%d$" % (a+1), fontsize=ls)
-        plt.ylabel(r"$Z_%d$" % (b+1), fontsize=ls)
-        ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
-        ax.yaxis.set_major_locator(ticker.MultipleLocator(2))
-        plt.tight_layout()
-        plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
-        plt.close()
-
-
 def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_thresh=50):
     """
-    Reduces nodes based o
-    :param sso: Super Segmentation Object
-    :param dot_prod_thresh: the 'straightness' of the edges
-    :param max_dist_thresh: maximum distance desired between every node
-    :param min_dist_thresh: minimum distance desired between every node
-    :return: sso containing the sparsed skeleton
+    Reduces nodes in the skeleton. (from dense stacking to sparsed stacking)
+
+    Parameters
+    ----------
+    sso : Super Segmentation Object
+    dot_prod_thresh : float
+        the 'straightness' of the edges
+    max_dist_thresh : int
+        maximum distance desired between every node
+    min_dist_thresh : int
+        minimum distance desired between every node
+
+    Returns
+    -------
+    sso containing the sparsed skeleton
     """
 
     sso.load_skeleton()
@@ -1201,13 +1053,195 @@ def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_th
     # Estimating the radii
     # print("Starting radius correction.")
     sso.skeleton = radius_correction_found_vertices(sso)
+
+    return sso
     # print("Exporting kzip")
     # sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v6.k.zip" % sso.id)
 
 
+def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
+    """
+    Creates the super super voxel skeleton
+
+    Parameters
+    ----------
+    sso : Super Segmentation Object
+    pruning_thresh : int
+        threshold for pruning
+    sparsify : bool
+        will sparsify if True otherwise not
+
+    Returns
+    -------
+
+    """
+
+    # Fetching Super voxel Skeletons
+
+    sso.load_attr_dict()
+    ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
+
+    for sv_id in sso.sv_ids:
+        nodes, diameters, edges = create_new_skeleton(sv_id, sso)
+
+        ssv_skel['edges'] = np.concatenate(
+            (ssv_skel['edges'], [(ix + (len(ssv_skel['nodes'])) / 3) for ix in edges]), axis=0)
+        ssv_skel['nodes'] = np.concatenate((ssv_skel['nodes'], nodes), axis=0)
+
+        ssv_skel['diameters'] = np.concatenate((ssv_skel['diameters'], diameters), axis=0)
+
+    skel_G = nx.Graph()
+    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
+    if len(new_nodes) == 0:
+        sso.skeleton = ssv_skel
+        return
+
+    for inx, single_node in enumerate(new_nodes):
+        skel_G.add_node(inx, position=single_node)
+
+    new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
+    new_edges = [tuple(ix) for ix in new_edges]
+    skel_G.add_edges_from(new_edges)
+
+    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
+
+    # Stitching Super Voxel Skeletons
+    no_of_seg = nx.number_connected_components(skel_G)
+
+    skel_G_nodes = [ii['position'] for ix, ii in skel_G.node.iteritems()]
+
+
+    while no_of_seg != 1:
+
+        rest_nodes = []
+        current_set_of_nodes = []
+
+        list_of_comp = np.array([c for c in sorted(nx.connected_components(skel_G), key=len, reverse=True)])
+
+        for single_rest_graph in list_of_comp[1:]:
+
+            rest_nodes = rest_nodes + [skel_G_nodes[int(ix)] for ix in single_rest_graph]
+
+        for single_rest_graph in list_of_comp[:1]:
+
+            current_set_of_nodes = current_set_of_nodes + [skel_G_nodes[int(ix)] for ix in
+                                                           single_rest_graph]
+
+        tree = spatial.cKDTree(rest_nodes, 1)
+        thread_lengths, indices = tree.query(current_set_of_nodes)
+
+        start_thread_index = np.argmin(thread_lengths)
+        stop_thread_index = indices[start_thread_index]
+
+
+        start_thread_node = np.where(np.sum(np.subtract(new_nodes, current_set_of_nodes[start_thread_index]), axis=1) == 0)[0][0]
+        stop_thread_node = np.where(np.sum(np.subtract(new_nodes, rest_nodes[stop_thread_index]), axis=1) == 0)[0][0]
+
+        skel_G.add_edge(start_thread_node, stop_thread_node)
+        no_of_seg -= 1
+
+
+    # Pruning the stitched Super Super Voxel Skeletons
+    if pruning_thresh !=0:
+        skel_G = prune_stub_branches(skel_G, len_thres=pruning_thresh)
+
+    sso.skeleton = {}
+    sso.skeleton['nodes'] = np.array([skel_G.node[ix]['position'] for ix in skel_G.nodes()], dtype=np.uint32)
+    sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
+
+    # Important bit, please don't remove (needed after pruning)
+    temp_edges = np.array(skel_G.edges()).reshape(-1)
+    temp_edges_sorted = np.unique(np.sort(temp_edges))
+    temp_edges_dict = {}
+
+    for ii, ix in enumerate(temp_edges_sorted):
+        temp_edges_dict[ix] = ii
+
+    temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
+
+    temp_edges = np.array(temp_edges, dtype=np.uint).reshape([-1, 2])
+    sso.skeleton['edges'] = temp_edges
+
+
+    #sparsifying the stacked nodes
+    if sparsify:
+        sso = sparsify_skeleton(sso)
+
+    # Estimating the radii
+    sso.skeleton = radius_correction_found_vertices(sso)
+
+
+def glia_pred_exists(so):
+    so.load_attr_dict()
+    return "glia_probas" in so.attr_dict
+
+
+def views2tripletinput(views):
+    views = views[:, :, :1] # use first view only
+    out_d = np.concatenate([views,
+                            np.ones_like(views),
+                            np.ones_like(views)], axis=2)
+    return out_d.astype(np.float32)
+
+
+def get_pca_view_hists(sso, t_net, pca):
+    views = sso.load_views()
+    latent = t_net.predict_proba(views2tripletinput(views))
+    latent = pca.transform(latent)
+    hist0 = np.histogram(latent[:, 0], bins=50, range=[-2, 2], normed=True)
+    hist1 = np.histogram(latent[:, 1], bins=50, range=[-3.2, 3], normed=True)
+    hist2 = np.histogram(latent[:, 2], bins=50, range=[-3.5, 3.5], normed=True)
+    return np.array([hist0, hist1, hist2])
+
+
+def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(),
+                       special_markers=(), special_kwargs=()):
+    if "matplotlib" not in globals():
+        import matplotlib
+        matplotlib.use("agg")
+    import matplotlib.pyplot as plt
+    import matplotlib.ticker as ticker
+    views = sso.load_views()
+    latent = t_net.predict_proba(views2tripletinput(views))
+    latent = pca.transform(latent)
+    col = (np.array(latent) - latent.min(axis=0)) / (latent.max(axis=0)-latent.min(axis=0))
+    col = np.concatenate([col, np.ones_like(col)[:, :1]], axis=1)
+    for ii, (a, b) in enumerate([[0, 1], [0, 2], [1, 2]]):
+        fig, ax = plt.subplots()
+        plt.scatter(latent[:, a], latent[:, b], c=col, s=s, lw=0.5, marker="o",
+                    edgecolors=col)
+        if len(special_points) >= 0:
+            for kk, sp in enumerate(special_points):
+                if len(special_markers) == 0:
+                    sm = "x"
+                else:
+                    sm = special_markers[kk]
+                if len(special_kwargs) == 0:
+                    plt.scatter(sp[None, a], sp[None, b], s=75.0, lw=2.3,
+                                marker=sm, edgecolor="0.3", facecolor="none")
+                else:
+                    plt.scatter(sp[None, a], sp[None, b], **special_kwargs)
+        fig.patch.set_facecolor('white')
+        ax.tick_params(axis='x', which='major', labelsize=ls, direction='out',
+                       length=4, width=3, right="off", top="off", pad=10)
+        ax.tick_params(axis='y', which='major', labelsize=ls, direction='out',
+                       length=4, width=3, right="off", top="off", pad=10)
+
+        ax.tick_params(axis='x', which='minor', labelsize=ls, direction='out',
+                       length=4, width=3, right="off", top="off", pad=10)
+        ax.tick_params(axis='y', which='minor', labelsize=ls, direction='out',
+                       length=4, width=3, right="off", top="off", pad=10)
+        plt.xlabel(r"$Z_%d$" % (a+1), fontsize=ls)
+        plt.ylabel(r"$Z_%d$" % (b+1), fontsize=ls)
+        ax.xaxis.set_major_locator(ticker.MultipleLocator(2))
+        ax.yaxis.set_major_locator(ticker.MultipleLocator(2))
+        plt.tight_layout()
+        plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
+        plt.close()
+
 def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
-    node_degrees = np.array(ssv.weighted_graph.degree().values(),
+    node_degrees = np.array(ssv.weighted_graph().degree().values(),
                             dtype=np.int)
 
     sizes = {}
@@ -1230,7 +1264,7 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
         this_i_node = i_node * downsample_by
         this_features = []
 
-        paths = nx.single_source_dijkstra_path(ssv.weighted_graph,
+        paths = nx.single_source_dijkstra_path(ssv.weighted_graph(),
                                                this_i_node,
                                                feature_context_nm)
         neighs = np.array(paths.keys(), dtype=np.int)
@@ -1401,6 +1435,7 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
                                                    nb_cpus=sso.nb_cpus))
         preds = np.concatenate(preds)
         sso.attr_dict[pred_key] = preds
+        sso.save_attributes([pred_key], [preds])
     else:
         preds = sso.lookup_in_attribute_dict(pred_key)
     loc_coords = np.concatenate(sso.sample_locations())
@@ -1414,7 +1449,8 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
         _cnn_axonness2skel(sso, pred_key_appendix=pred_key_appendix, k=1)
     view_ixs = np.array(sso.skeleton["view_ixs"])
     avg_pred = []
-    g = sso.weighted_graph
+
+    g = sso.weighted_graph()
     for n in g.nodes():
         paths = nx.single_source_dijkstra_path(g, n, avg_window)
         neighs = np.array(paths.keys(), dtype=np.int)
@@ -1422,6 +1458,7 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
         cls, cnts = np.unique(preds[unique_view_ixs], return_counts=True)
         c = cls[np.argmax(cnts)]
         avg_pred.append(c)
+
     sso.skeleton["%s_views_avg%d" % (pred_key, avg_window)] = avg_pred
     sso.save_skeleton()
 
@@ -1436,7 +1473,7 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1):
     pred_key = "axoness_preds_cnn%s" % pred_key_appendix
     if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key):
         if len(pred_key_appendix) > 0:
-            print("Couldn't find specified axoness prediction. Falling back to " \
+            print("Couldn't find specified axoness prediction. Falling back to "
                   "default (-> per SV stored multi-view prediction including SSV context; RAG: 4b_fix).")
         preds = np.array(start_multiprocess_obj("axoness_preds",
                                                    [[sv, {
@@ -1452,6 +1489,7 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1):
         probas = np.concatenate(probas)
         sso.attr_dict[proba_key] = probas
         sso.attr_dict[pred_key] = preds
+        sso.save_attributes([proba_key, pred_key], [probas, preds])
     else:
         preds = sso.lookup_in_attribute_dict(pred_key)
         probas = sso.lookup_in_attribute_dict(proba_key)
@@ -1482,3 +1520,28 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1):
         sso.skeleton["axoness_probas"] = node_probas
         sso.skeleton["view_ixs"] = ixs
     sso.save_skeleton()
+
+
+def majority_vote_compartments(sso, ax_pred_key="axoness_preds_cnn_views_avg10000"):
+    g = sso.weighted_graph(add_node_attr=(ax_pred_key, ))
+    soma_free_g = g.copy()
+    for n, d in g.nodes_iter(data=True):
+        if d[ax_pred_key] == 2:
+            soma_free_g.remove_node(n)
+    ccs = list(nx.connected_component_subgraphs(soma_free_g))
+    new_axoness_dc = nx.get_node_attributes(g, ax_pred_key)
+    for cc in ccs:
+        preds = [d[ax_pred_key] for n, d in cc.nodes_iter(data=True)]
+        cls, cnts = np.unique(preds, return_counts=True)
+        majority = cls[np.argmax(cnts)]
+        for n in cc.nodes_iter():
+            new_axoness_dc[n] = majority
+    nx.set_node_attributes(g, ax_pred_key, new_axoness_dc)
+    new_axoness_arr = np.zeros((len(sso.skeleton["nodes"])))
+    for n, d in g.nodes_iter(data=True):
+        new_axoness_arr[n] = d[ax_pred_key]
+    sso.skeleton[ax_pred_key + "_comp_maj"] = new_axoness_arr
+    sso.save_skeleton()
+
+
+

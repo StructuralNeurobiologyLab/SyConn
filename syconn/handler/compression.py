@@ -39,7 +39,8 @@ class LZ4DictBase(dict):
     additionally (save decompressing time when accessing items frequently).
     """
     def __init__(self, inp_p, cache_decomp=False, read_only=True,
-                 max_delay=100, timeout=1000, disable_locking=not LOCKING):
+                 max_delay=100, timeout=1000, disable_locking=not LOCKING,
+                 max_nb_attempts=10):
         super(LZ4DictBase, self).__init__()
         self.read_only = read_only
         self.a_lock = None
@@ -47,6 +48,7 @@ class LZ4DictBase(dict):
         self.timeout = timeout
         self.disable_locking = disable_locking
         self._cache_decomp = cache_decomp
+        self._max_nb_attempts = max_nb_attempts
         self._cache_dc = {}
         self._dc_intern = {}
         self._path = inp_p
@@ -130,13 +132,21 @@ class LZ4DictBase(dict):
                 pass
         # acquires lock until released when saving or after loading if self.read_only
         if not self.disable_locking:
-            self.a_lock = fasteners.InterProcessLock(lock_path)
-            start = time.time()
-            gotten = self.a_lock.acquire(blocking=True, timeout=self.timeout,
-                                         delay=0.1, max_delay=self.max_delay)
+            nb_attempts = 1
+            while True:
+                self.a_lock = fasteners.InterProcessLock(lock_path)
+                start = time.time()
+                gotten = self.a_lock.acquire(blocking=True, delay=0.1,
+                                             max_delay=self.max_delay,
+                                             timeout=self.timeout / self._max_nb_attempts)
+                # if not gotten and maximum attempts not reached yet keep trying
+                if not gotten and nb_attempts < 10:
+                    nb_attempts += 1
+                else:
+                    break
             if not gotten:
                 raise RuntimeError("Unable to acquire file lock for %s after"
-                                   "%0.0fs." % (source_path, time.time()-start))
+                               "%0.0fs." % (source_path, time.time()-start))
         if os.path.isfile(source_path):
             try:
                 self._dc_intern = load_pkl2obj(source_path)
@@ -578,9 +588,9 @@ def load_lz4_compressed(p, shape=(-1, 20, 2, 128, 256), dtype=np.float32):
     return decomp_arr
 
 
-# def init_lz4_meshdict(sv_ixs, meshs):
+# def init_lz4_meshdict(sv_ixs, meshes):
 #     res = {}
-#     for m, ix in zip(meshs, sv_ixs):
+#     for m, ix in zip(meshes, sv_ixs):
 #         res[ix] = [arrtolz4string(m[0].astype(np.uint32)),
 #                    arrtolz4string(m[1].astype(np.float32))]
 #     return res
@@ -589,9 +599,9 @@ def load_lz4_compressed(p, shape=(-1, 20, 2, 128, 256), dtype=np.float32):
 # def load_lz4_meshdict_items(dc):
 #     return [(lz4stringtoarr(dc[k][0], dtype=np.uint32),
 #              lz4stringtoarr(dc[k][1], dtype=np.float32)) for k in dc.keys()]
-def init_lz4_meshdict(sv_ixs, meshs):
+def init_lz4_meshdict(sv_ixs, meshes):
     res = {}
-    for m, ix in zip(meshs, sv_ixs):
+    for m, ix in zip(meshes, sv_ixs):
         res[ix] = {"ind": arrtolz4string(m[0]), "vert": arrtolz4string(m[1])}
     return res
 
@@ -605,8 +615,8 @@ def load_lz4_meshdict_items(dc):
              lz4stringtoarr(dc[k]["vert"], dtype=dtype)) for k in dc.keys()]
 
 
-def add_lz4_meshdict_items(dc, sv_ixs, meshs):
-    dc.update(init_lz4_meshdict(sv_ixs, meshs))
+def add_lz4_meshdict_items(dc, sv_ixs, meshes):
+    dc.update(init_lz4_meshdict(sv_ixs, meshes))
 
 
 # ---------------------------- HDF5

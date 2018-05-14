@@ -215,7 +215,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
         if glia_dict[n] != 0 and n not in tiny_glia_fragments:
             g_neuron.remove_node(n)
 
-    # find orphaned neuron SV's
+    # find orphaned neuron SV's and add them to glia graph
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
     for n in g_neuron.nodes():
         if neuron2ccsize_dict[n] < min_cc_size_neuron:
@@ -227,7 +227,6 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
     for n in g_neuron.nodes_iter():
         g_glia.remove_node(n)
 
-    # remove unsupportive glia nodes and small neuron type fragments from neuron graph
     neuron_ccs = list(nx.connected_components(g_neuron))
     if return_removed_nodes:
         glia_ccs = list(nx.connected_components(g_glia))
