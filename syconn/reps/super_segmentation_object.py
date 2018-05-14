@@ -1267,7 +1267,7 @@ class SuperSegmentationObject(object):
             color = (0, 153, 255, 255)
         else:
             mesh = self._meshes[obj_type]
-            color =None
+            color = None
         if ext_color is not None:
             if ext_color == 0:
                 color = None
@@ -1483,7 +1483,7 @@ class SuperSegmentationObject(object):
                         colors=[[11, 129, 220, 255], [218, 73, 58, 255]])
 
     def predict_views_gliaSV(self, model, verbose=True,
-                             overwrite=False, pred_key_appendix=""):
+                             pred_key_appendix=""):
         if verbose:
             start = time.time()
         pred_key = "glia_probas"
@@ -1625,6 +1625,27 @@ class SuperSegmentationObject(object):
                 axoness_pred.append(-1)
 
         return np.array(axoness_pred)
+
+    def predict_views_axoness(self, model, verbose=True,
+                             pred_key_appendix=""):
+        if verbose:
+            start = time.time()
+        pred_key = "axoness_probas"
+        pred_key += pred_key_appendix
+        try:
+            predict_sos_views(model, self.svs, pred_key,
+                              nb_cpus=self.nb_cpus, verbose=True,
+                              woglia=True, raw_only=False)
+        except KeyError:
+            self.render_views(add_cellobjects=True, woglia=True)
+            predict_sos_views(model, self.svs, pred_key,
+                              nb_cpus=self.nb_cpus, verbose=True,
+                              woglia=True, raw_only=False)
+        if verbose:
+            end = time.time()
+            print("Prediction of %d SV's took %0.2fs (incl. read/write). "
+                  "%0.4fs/SV" % (len(self.svs), end - start,
+                                 float(end - start) / len(self.svs)))
 
     def cnn_axoness_2_skel(self, **kwargs):
         locking_tmp = self.enable_locking

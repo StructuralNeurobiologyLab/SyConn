@@ -1,7 +1,7 @@
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.handler.compression import AttributeDict, MeshDict, VoxelDict
-from syconn.mp.shared_mem import start_multiprocess
+from syconn.mp.shared_mem import start_multiprocess_imap
 from syconn.proc.meshes import triangulation
 from syconn.config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, wd, \
     get_dataset_scaling
@@ -10,11 +10,18 @@ import numpy as np
 
 
 def mesh_creator_sso(ssv):
+    ssv.enable_locking = False
     ssv.load_attr_dict()
     _ = ssv._load_obj_mesh(obj_type="mi", rewrite=False)
     _ = ssv._load_obj_mesh(obj_type="sj", rewrite=False)
     _ = ssv._load_obj_mesh(obj_type="vc", rewrite=False)
     _ = ssv._load_obj_mesh(obj_type="sv", rewrite=False)
+    try:
+        ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
+        _ = ssv._load_obj_mesh(obj_type="conn", rewrite=False)
+    except KeyError:
+        print("Loading 'conn' objects failed for SSV %s."
+              % ssv.id)
     ssv.clear_cache()
 
 
@@ -64,7 +71,7 @@ def mesh_proc_chunked(obj_type, working_dir, n_folders_fs=10000):
     assert len(all_poss_attr_dicts) == 10000
     print "Processing %d mesh dicts of %s." % (len(all_poss_attr_dicts), obj_type)
     multi_params = [["%s/%02d/%02d/" % (fold, par[0], par[1]), obj_type] for par in all_poss_attr_dicts]
-    start_multiprocess(mesh_chunk, multi_params, nb_cpus=20, debug=False)
+    start_multiprocess_imap(mesh_chunk, multi_params, nb_cpus=20, debug=False)
 
 
 
@@ -80,7 +87,7 @@ if __name__ == "__main__":
 
     # cache meshes of SSV objects, here for axon ground truth,
     # e.g. change version to "0" for initial run on all SSVs in the segmentation
-    ssds = SuperSegmentationDataset(working_dir=wd,
-                                    version="axgt", ssd_type="ssv")
-    start_multiprocess(mesh_creator_sso, list(ssds.ssvs), nb_cpus=20, debug=False)
+    ssds = SuperSegmentationDataset(working_dir=wd,)
+                                    #version="axgt", ssd_type="ssv")
+    start_multiprocess_imap(mesh_creator_sso, list(ssds.ssvs), nb_cpus=20, debug=False)
 
