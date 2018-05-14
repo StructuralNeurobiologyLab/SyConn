@@ -694,24 +694,16 @@ class SegmentationObject(object):
     def load_skeleton(self, recompute=False):
         return load_skeleton(self, recompute=recompute)
 
-    def glia_pred(self, thresh=0.168, pred_key_appendix=""):
+    def glia_pred(self, thresh, pred_key_appendix=""):
         return glia_pred_so(self, thresh, pred_key_appendix)
 
     def axoness_preds(self, pred_key_appendix=""):
-        assert self.type == "sv"
-        pred_key = "axoness_proba" + pred_key_appendix
-        if not pred_key in self.attr_dict:
-            self.load_attr_dict()
-        if not pred_key in self.attr_dict:
-            print("WARNING: Requested axoness prediction for SV %d is "
-                  "not available." % self.id)
-            return np.array([1] * len(self.sample_locations()))
-        pred = np.argmax(self.attr_dict[pred_key], axis=1)
+        pred = np.argmax(self.axoness_probas(pred_key_appendix), axis=1)
         return pred
 
     def axoness_probas(self, pred_key_appendix=""):
         assert self.type == "sv"
-        pred_key = "axoness_proba" + pred_key_appendix
+        pred_key = "axoness_probas" + pred_key_appendix
         if not pred_key in self.attr_dict:
             self.load_attr_dict()
         if not pred_key in self.attr_dict:

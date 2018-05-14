@@ -251,8 +251,12 @@ class SyConnFS_backend(object):
             try:
                 ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
                 obj_type = "conn"
+                print("Loading 'conn' objects instead of 'sj' for SSV %s."
+                      % ssv_id)
             except KeyError:
                 pass
+        # if not existent, create mesh
+        _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
         if mesh is None:
             return None
@@ -270,6 +274,16 @@ class SyConnFS_backend(object):
         """
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
+        if obj_type == "sj":
+            try:
+                ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
+                obj_type = "conn"
+                print("Loading 'conn' objects instead of 'sj' for SSV %s."
+                      % ssv_id)
+            except KeyError:
+                pass
+        # if not existent, create mesh
+        _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
         return "".join(mesh[0])
 
@@ -282,6 +296,16 @@ class SyConnFS_backend(object):
         """
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
+        if obj_type == "sj":
+            try:
+                ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
+                obj_type = "conn"
+                print("Loading 'conn' objects instead of 'sj' for SSV %s."
+                      % ssv_id)
+            except KeyError:
+                pass
+        # if not existent, create mesh
+        _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
         return "".join(mesh[1])
 
@@ -294,6 +318,16 @@ class SyConnFS_backend(object):
         """
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
+        if obj_type == "sj":
+            try:
+                ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
+                obj_type = "conn"
+                print("Loading 'conn' objects instead of 'sj' for SSV %s."
+                      % ssv_id)
+            except KeyError:
+                pass
+        # if not existent, create mesh
+        _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
         if len(mesh) == 2:
             print(len(mesh), obj_type, ssv_id)
