@@ -331,7 +331,7 @@ def parse_movement_area_from_zip(zip_fname):
     line = line[0]
     bb_min = np.array([re.findall('min.\w="(\d+)"', line)], dtype=np.uint)
     bb_max = np.array([re.findall('max.\w="(\d+)"', line)], dtype=np.uint)
-    return np.concatenate([bb_min, bb_max])
+    return np.concatenate([bb_min, bb_max]) - 1  # correct for 1-indexing of knossos
 
 
 def pred_dataset(*args, **kwargs):

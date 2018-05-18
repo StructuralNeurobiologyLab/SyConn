@@ -211,9 +211,13 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=
     dt = boundaryDistanceTransform(volume, boundary="InterpixelBoundary") #InterpixelBoundary, OuterBoundary, InnerBoundary
     dt[volume == 1] *= -1
     volume = gaussianSmoothing(dt, 1) # this works because only the relative step_size between the dimensions is interesting, therefore we can neglect shrink_fct
-    if np.sum(volume < 0) == 0:  # less smoothing
+    if np.sum(volume < 0) == 0 or  np.sum(volume > 0) == 0:  # less smoothing
         volume = gaussianSmoothing(dt, 0.5)
-    verts, ind, norm, _ = measure.marching_cubes_lewiner(volume, 0, gradient_direction="descent") # also calculates normals!
+    try:
+        verts, ind, norm, _ = measure.marching_cubes_lewiner(volume, 0, gradient_direction="descent") # also calculates normals!
+    except Exception as e:
+        print(e)
+        raise RuntimeError
     if pts.ndim == 2:  # account for [5, 5, 5] offset
         verts -= 5
     return np.array(ind, dtype=np.int), np.array(verts) * downsampling + offset, norm
