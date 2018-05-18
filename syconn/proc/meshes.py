@@ -9,7 +9,7 @@ import itertools
 import numpy as np
 from collections import Counter
 from numba import jit
-from scipy import spatial
+from scipy import spatial, ndimage
 from skimage import measure
 from sklearn.decomposition import PCA
 from ..handler.basics import write_txt2kzip, texts2kzip
@@ -156,7 +156,8 @@ class MeshObject(object):
         return (self.vert_resh * self.max_dist + self.center).flatten()
 
 
-def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=0):
+def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=0,
+                  single_cc=False):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
     by building dense matrix (in case of a point cloud) and applying marching
@@ -171,6 +172,8 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=
     scaling : tuple
     n_closings : int
         Number of closings applied before mesh generation
+    single_cc : bool
+        Returns mesh of biggest connected component only
     Returns
     -------
     array, array, array
@@ -200,6 +203,11 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=
     # volume = multiBinaryErosion(volume, 1).astype(np.float32)
     if n_closings > 0:
         volume = binary_closing(volume, iterations=n_closings).astype(np.float32)
+    if single_cc:
+        labeled, nb_cc = ndimage.label(volume)
+        cnt = Counter(labeled.flatten())
+        l, occ = cnt.most_common(1)[0]
+        volume = np.array(labeled == l, dtype=np.float32)
     dt = boundaryDistanceTransform(volume, boundary="InterpixelBoundary") #InterpixelBoundary, OuterBoundary, InnerBoundary
     dt[volume == 1] *= -1
     volume = gaussianSmoothing(dt, 1) # this works because only the relative step_size between the dimensions is interesting, therefore we can neglect shrink_fct
