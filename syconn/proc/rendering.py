@@ -637,10 +637,12 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
         start = time.time()
     coords = sso.sample_locations()
     if not overwrite:
-        missing_sv_ixs = np.array([not so.views_exist for so in sso.svs], dtype=np.bool)
+        missing_sv_ixs = np.array([not so.views_exist for so in sso.svs],
+                                  dtype=np.bool)
         missing_svs = np.array(sso.svs)[missing_sv_ixs]
         coords = np.array(coords)[missing_sv_ixs]
-        print("Rendering %d missing SV's." % len(missing_svs))
+        print("Rendering %d/%d missing SVs of SSV %d." %
+              (len(missing_svs), len(sso.sv_ids), sso.id))
     else:
         missing_svs = np.array(sso.svs)
     if len(missing_svs) == 0:
@@ -787,8 +789,8 @@ def render_sso_ortho_views(sso):
     # init MeshObject to calculate rotation into PCA frame
     mesh = MeshObject("raw", sso.mesh[0], sso.mesh[1], sso.mesh[2])
     coords = np.array([0, 0, 0])[None,]  # cell center as view location
-    rot_matrices = calc_rot_matrices(mesh.transform_external_coords(coords),
-                                     mesh.vert_resh, np.ones((3,)))[0]
+    # rot_matrices = calc_rot_matrices(mesh.transform_external_coords(coords),
+    #                                  mesh.vert_resh, np.ones((3,)))[0]
 
     views[:, 0] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
                                  obj_to_render=('sv'), )

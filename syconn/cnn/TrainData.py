@@ -474,7 +474,7 @@ class TripletData_SSV(Data):
                             try:
                                 _ = sso.load_views("ortho")
                                 existing_views.append(sso)
-                            except ValueError:
+                            except KeyError:
                                 self.sso_weights[self.sso_ids == ix] = 0  # sso will not be sampled
                                 # print("WARNING: Couldn't find 'ortho' views of SSO %d (weight: %d)" % (ix, i))
                             if len(existing_views) == nb_per_weight or\

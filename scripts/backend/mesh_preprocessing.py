@@ -1,7 +1,7 @@
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.handler.compression import AttributeDict, MeshDict, VoxelDict
-from syconn.mp.shared_mem import start_multiprocess_imap
+from syconn.mp.shared_mem import start_multiprocess_imap, start_multiprocess
 from syconn.proc.meshes import triangulation
 from syconn.config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, wd, \
     get_dataset_scaling
@@ -84,10 +84,9 @@ if __name__ == "__main__":
     mesh_proc_chunked("sj", wd, n_folders_fs=10000)
     mesh_proc_chunked("vc", wd, n_folders_fs=10000)
     mesh_proc_chunked("mi", wd, n_folders_fs=10000)
-
     # cache meshes of SSV objects, here for axon ground truth,
     # e.g. change version to "0" for initial run on all SSVs in the segmentation
     ssds = SuperSegmentationDataset(working_dir=wd,)
                                     #version="axgt", ssd_type="ssv")
-    start_multiprocess_imap(mesh_creator_sso, list(ssds.ssvs), nb_cpus=20, debug=False)
+    start_multiprocess(mesh_creator_sso, list(ssds.ssvs), nb_cpus=20, debug=False)
 

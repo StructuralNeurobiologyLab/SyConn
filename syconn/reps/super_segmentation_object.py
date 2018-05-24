@@ -1092,8 +1092,9 @@ class SuperSegmentationObject(object):
             view_key = "%d%d" % (int(woglia), int(raw_only))
         else:
             if not view_key in view_dc:
-                raise ValueError("Given view key does not exist"
-                                        " in view dictionary.")
+                raise KeyError("Given view key '%s' does not exist"
+                                        " in view dictionary of SSV %d. "
+                               "Existing keys: %s\n" % (view_key, self.id, str(view_dc.keys())))
         if view_key in view_dc and not force_reload:
             return view_dc[view_key]
 
@@ -1633,12 +1634,14 @@ class SuperSegmentationObject(object):
         pred_key += pred_key_appendix
         try:
             predict_sos_views(model, self.svs, pred_key,
-                              nb_cpus=self.nb_cpus, verbose=True,
+                              nb_cpus=self.nb_cpus, verbose=verbose,
                               woglia=True, raw_only=False)
         except KeyError:
+            print("Skipping SSV %d, because views are missing." % self.id)
+            return
             self.render_views(add_cellobjects=True, woglia=True)
             predict_sos_views(model, self.svs, pred_key,
-                              nb_cpus=self.nb_cpus, verbose=True,
+                              nb_cpus=self.nb_cpus, verbose=verbose,
                               woglia=True, raw_only=False)
         if verbose:
             end = time.time()

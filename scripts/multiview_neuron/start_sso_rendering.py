@@ -1,3 +1,6 @@
+# SyConn
+# Copyright (c) 2018 Philipp J. Schubert, J. Kornfeld
+# All rights reserved
 import os
 from syconn.config.global_params import wd
 from syconn.mp import qsub_utils as qu
@@ -18,5 +21,5 @@ if __name__ == "__main__":
     # generic
     script_folder = os.path.dirname(os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     path_to_out = qu.QSUB_script(multi_params, "render_views",
-                                 n_max_co_processes=200, pe="openmp", queue=None,
+                                 n_max_co_processes=100, pe="openmp", queue=None,
                                  script_folder=script_folder, suffix="")

@@ -1,3 +1,6 @@
+# SyConn
+# Copyright (c) 2018 Philipp J. Schubert, J. Kornfeld
+# All rights reserved
 import os
 from syconn.config.global_params import wd, glia_thresh, min_single_sv_size
 from syconn.mp import qsub_utils as qu

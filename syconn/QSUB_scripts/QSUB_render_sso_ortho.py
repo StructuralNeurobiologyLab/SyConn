@@ -33,7 +33,7 @@ for ix in ssv_ixs:
     if sso.size > 1e5:
         try:
              _ = sso.load_views(view_key="ortho")
-        except ValueError:
+        except KeyError:
             print("Rendering missing SSO %d." % sso.id)
             views = render_sso_ortho_views(sso)
             sso.save_views(views, view_key="ortho")

@@ -565,11 +565,16 @@ class NeuralNetworkInterface(object):
 
     def predict_proba(self, x, verbose=False):
         x = x.astype(np.float32)
-        bs = self.model.batch_size
+        bs = self.imposed_batch_size
         if self.arch == "rec_view":
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
                        range(x.shape[1] / bs)]
             proba = np.ones((x.shape[1], 4, self.nb_labels))
+        elif self.arch == "triplet":
+            batches = [np.arange(i * bs, (i + 1) * bs) for i in
+                       range(len(x) / bs)]
+            # nb_labels represents latent space dim.; 3 -> view triplet
+            proba = np.ones((len(x), self.nb_labels, 3))
         else:
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
                        range(len(x) / bs)]
@@ -577,16 +582,16 @@ class NeuralNetworkInterface(object):
         if verbose:
             cnt = 0
             start = time.time()
-        pbar = tqdm.tqdm(total=len(batches), ncols=80, leave=False,
-                         unit='it', unit_scale=True, dynamic_ncols=False)
+            pbar = tqdm.tqdm(total=len(batches), ncols=80, leave=False,
+                             unit='it', unit_scale=True, dynamic_ncols=False)
         for b in batches:
             if verbose:
                 sys.stdout.write("\r%0.2f" % (float(cnt) / len(batches)))
                 sys.stdout.flush()
                 cnt += 1
+                pbar.update()
             x_b = x[b]
             proba[b] = self.model.predict(x_b)[None, ]
-            pbar.update()
         overhead = len(x) % bs
         # TODO: add proper axis handling, maybe introduce axistags
         if overhead != 0:
@@ -602,10 +607,22 @@ class NeuralNetworkInterface(object):
             sys.stdout.flush()
             print "Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
                   (len(x), end-start, (end-start)/len(x))
+            pbar.close()
         return proba
 
 
-def get_axoness_model_new():
+def get_axoness_model_V2():
+    """
+    Retrained with GP dendrites. May 2018.
+    """
+    m = NeuralNetworkInterface("/wholebrain/u/pschuber/CNN_Training/SyConn/axon_views/g1_v2/g1_v2-FINAL.mdl",
+                                  imposed_batch_size=200,
+                                  nb_labels=3)
+    _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
+    return m
+
+
+def get_axoness_model():
     m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/axoness/g5_axoness_v0_all_run2/g5_axoness_v0_all_run2-FINAL.mdl",
                                   imposed_batch_size=200,
                                   nb_labels=3)
@@ -626,6 +643,15 @@ def get_tripletnet_model():
                                   imposed_batch_size=12,
                                   nb_labels=25, arch="triplet")
     _ = m.predict_proba(np.zeros((1, 4, 3, 128, 256)))
+    return m
+
+
+def get_tripletnet_model_ortho():
+    # final model diverged...
+    m = NeuralNetworkInterface("/wholebrain/u/pschuber/CNN_Training/SyConn/triplet_net_SSV/wholecell_orthoviews_v4/Backup/wholecell_orthoviews_v4-180k.mdl",
+                                  imposed_batch_size=6,
+                                  nb_labels=10, arch="triplet")
+    _ = m.predict_proba(np.zeros((1, 4, 3, 512, 512)))
     return m
 
 

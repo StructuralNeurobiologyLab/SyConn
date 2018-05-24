@@ -5,9 +5,9 @@
 import os
 import syconn
 
-save_path = '~/CNN_Training/SyConn/tripletnet_SSV/'
+save_path = '~/CNN_Training/SyConn/triplet_net_SSV/'
 nb_views = 1
-save_name = "wholecell_orthoviews_v3"
+save_name = "wholecell_orthoviews_v6"
 
 # preview_data_path = None
 # preview_kwargs    = dict(export_class='all', max_z_pred=5)
@@ -25,11 +25,11 @@ monitor_batch_size = 6
 optimiser = 'SGD'
 data_batch_args = {}
 data_init_kwargs = {"downsample": 2}#{"nb_views": nb_views}
-optimiser_params = dict(lr=0.001, mom=0.9, wd=0.5e-3)#, beta2=0.99)
+optimiser_params = dict(lr=0.0001, mom=0.9, wd=0.5e-3)#, beta2=0.99)
 batch_size = 6
-dr = 0.05
+dr = 0.1
 schedules = {"lr": {"dec": 0.98}}
-alpha = 5e-6
+alpha = 1e-7#1e-6
 
 def create_model():
     from elektronn2 import neuromancer
@@ -55,9 +55,10 @@ def create_model():
     out0, out1, out2 = neuromancer.split(out, axis="z", n_out=3)
     d_small = neuromancer.EuclideanDistance(out0, out1)
     d_big = neuromancer.EuclideanDistance(out0, out2)
-    loss = neuromancer.RampLoss(d_small, d_big, margin=0.2)
-    reg = neuromancer.loss.L2Reg(out0, out1, out2)
-    loss = neuromancer.AggregateLoss([loss, reg], mixing_weights=[1, alpha])
+    loss = neuromancer.RampLoss(d_small, d_big, margin=0.1)
+    # reg = neuromancer.loss.L2Reg(out0, out1, out2)
+    # loss = neuromancer.AggregateLoss([loss, reg], mixing_weights=[1, alpha])
+    loss = neuromancer.AggregateLoss([loss,])
     model = neuromancer.model_manager.getmodel()
     # model = neuromancer.model.modelload("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/t_net/ssv6_tripletnet_v9/ssv6_tripletnet_v9-FINAL.mdl")
     model.designate_nodes(input_node=inp, target_node=None, loss_node=loss,

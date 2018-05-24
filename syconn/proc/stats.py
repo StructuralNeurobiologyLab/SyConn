@@ -11,7 +11,18 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.ticker as ticker
 from sklearn.metrics import precision_recall_curve, roc_auc_score, \
-    classification_report, precision_recall_fscore_support, accuracy_score
+    classification_report, precision_recall_fscore_support, accuracy_score, average_precision_score
+from sklearn.manifold import TSNE as TSNE_sc
+from sklearn.decomposition import PCA
+import matplotlib.cm as cm
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.ensemble import RandomForestClassifier
+import os
+from sklearn.preprocessing import label_binarize
+from scipy.stats import gaussian_kde
+import seaborn as sns
+from sklearn.externals import joblib
+import matplotlib.patches as mpatches
 
 
 def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
@@ -229,3 +240,345 @@ def plot_pr(precision, recall, title='', r=[0.67, 1.01], legend_labels=None,
         plt.show(block=False)
     else:
         plt.savefig(save_path, dpi=600)
+
+
+def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=None,
+                    return_valid_pred=False):
+    """
+    Create clustering summary and save results to folder.
+
+    Parameters
+    ----------
+    train_d :
+    train_l :
+    valid_d :
+    valid_l :
+    fold : str
+        destination folder
+    """
+    if prefix == "celltype":
+        target_names = ["EA", "MSN", "GP", "INT"]
+        bin_labels = label_binarize(valid_l,
+                                    classes=np.arange(len(target_names)))
+    elif prefix == "axoness":
+        target_names = ["dendrite", "axon", "soma"]
+        bin_labels = label_binarize(valid_l,
+                                    classes=np.arange(len(target_names)))
+        bin_labels = np.hstack((bin_labels, 1 - bin_labels))
+    else:
+        raise()
+
+    # kNN classification with 2D latent space
+    nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='kd_tree', n_jobs=16,
+                                weights="uniform")
+    nbrs.fit(pca.transform(train_d), train_l.ravel())
+    joblib.dump(nbrs, fold + "/knn_embedding_%s.sav" % prefix)
+    pred = nbrs.predict_proba(pca.transform(valid_d))
+    print "2D latent space results for %s:" % prefix
+    print classification_report(valid_l, np.argmax(pred, axis=1),
+                                target_names=target_names)
+    plt.figure()
+    colors = []
+    for i in range(len(target_names)):
+        precision, recall, thresh = precision_recall_curve(bin_labels[:, i], pred[:, i])
+        auc = average_precision_score(bin_labels[:, i], pred[:, i])
+
+        # Plot Precision-Recall curve
+        lines, = plt.plot(recall, precision, lw=3, label='%s: %0.4f' % (target_names[i], auc))
+        colors.append(lines.get_color())
+        print
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.ylim([0.0, 1.05])
+    plt.xlim([0.0, 1.05])
+    plt.title('Precision-Recall')
+    plt.legend(loc="lower left")
+    plt.show(block=False)
+    plt.savefig(fold + "/%s_valid_prec_rec_2d.png" % prefix)
+    plt.close()
+
+    # kNN classification for whole latent space
+    rfc = RandomForestClassifier(n_estimators=1000, oob_score=True, class_weight="balanced")
+    rfc.fit(train_d, train_l.ravel())
+    pred = rfc.predict_proba(valid_d)
+
+    print "Complete latent space results for %s using RFC:" % prefix
+    print classification_report(valid_l, np.argmax(pred, axis=1),
+                                target_names=target_names)
+
+    plt.figure()
+    text_file = open(fold + '/%s_performance_summary_rfc.txt' % prefix, "w")
+    summary_txt = str(classification_report(valid_l, np.argmax(pred, axis=1),
+                                target_names=target_names))
+    text_file.write(summary_txt)
+    text_file.close()
+
+
+    nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='kd_tree', n_jobs=16,
+                                weights="uniform")
+    nbrs.fit(train_d, train_l.ravel())
+    pred = nbrs.predict_proba(valid_d)
+
+    print "Complete latent space results for %s using kNN:" % prefix
+    print classification_report(valid_l, np.argmax(pred, axis=1),
+                                target_names=target_names)
+
+    plt.figure()
+    text_file = open(fold + '/%s_performance_summary.txt' % prefix, "w")
+    summary_txt = str(classification_report(valid_l, np.argmax(pred, axis=1),
+                                target_names=target_names))
+    text_file.write(summary_txt)
+    text_file.close()
+
+    colors = []
+    for i in range(len(target_names)):
+        precision, recall, thresh = precision_recall_curve(bin_labels[:, i],
+                                                           pred[:, i])
+        auc = average_precision_score(bin_labels[:, i], pred[:, i])
+
+        # Plot Precision-Recall curve
+        lines, = plt.plot(recall, precision, lw=3,
+                          label='%s: %0.4f' % (target_names[i], auc))
+        colors.append(lines.get_color())
+        print
+    plt.xlabel('Recall')
+    plt.ylabel('Precision')
+    plt.ylim([0.0, 1.05])
+    plt.xlim([0.0, 1.05])
+    plt.title('Precision-Recall')
+    lgnd = plt.legend(loc="lower left")
+    plt.show(block=False)
+    plt.savefig(fold + "/%s_valid_prec_rec.png" % prefix)
+    plt.close()
+    # plot densities in pca or tSNE latent space
+    # if not os.path.isfile(fold + "/%s_train_kde_pca.png" % prefix):
+    _ = projection2d_pca(valid_d, valid_l, fold + "/%s_valid_kde_pca.png" %
+                         prefix, pca=pca, colors=colors, target_names=target_names)
+    _ = projection2d_pca(train_d, train_l, fold + "/%s_train_kde_pca.png" %
+                         prefix, pca=pca, colors=colors, target_names=target_names)
+    tsne_kwargs = {"n_components": 2, "random_state": 0,
+                   "perplexity": 20, "n_iter": 10000}
+    projection2d_tSNE(train_d, train_l,
+                      fold + "/%s_train_kde_tsne.png" % prefix, colors=colors, target_names=target_names, **tsne_kwargs)
+    if return_valid_pred:
+        return pred
+
+
+def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=False,
+                     target_names=None):
+    """
+
+    Parameters
+    ----------
+    ds_d : np.array
+        data in feature space, e.g. (#data, #feature)
+    ds_l :
+        sparse labels, i.e. (#data, 1)
+    dest_path: str
+        file name of plot
+    pca: PCA
+        prefitted PCA object to use to prject data of ds_d
+    """
+    print "Starting pca visualisation."
+    # pca vis
+    paper_rc = {'lines.linewidth': 1, 'lines.markersize': 1}
+    sns.set_context(rc=paper_rc)
+    if ds_l.ndim == 2:
+        ds_l = ds_l[:, 0]
+    nb_labels = np.unique(ds_l)
+    if pca is None:
+        pca = PCA(3, whiten=True)
+        pca.fit(ds_d)
+    res = pca.transform(ds_d)
+    # density plot 1st and 2nd PC
+    plt.figure()
+    plt.ylabel('$Z_2$', fontsize=15)
+    plt.xlabel('$Z_1$', fontsize=15)
+    if colors is None:
+        colors = ["r", "g", "b", "y", "k"]
+    if target_names is None:
+        target_names = ["%d" % i for i in nb_labels]
+    for i in nb_labels:
+        # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
+        # print "KDE input shape:", res[ds_l == i].shape
+        cur_pal = sns.light_palette(colors[i], as_cmap=True)
+        ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 1])][: ,0], shade=False, cmap=cur_pal,
+                         alpha=0.6, shade_lowest=False, label="%d" % i
+                         , gridsize=100, ls=0.6, lw=0.6)
+        ax.patch.set_facecolor('white')
+        ax.collections[0].set_alpha(0)
+        plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 1],
+                                s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+    handles = []
+    for ii in range(len(target_names)):
+        handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
+    plt.legend(handles=handles, loc="best")
+    plt.savefig(dest_path, dpi=300)
+    plt.close()
+    if do_3d:
+        # density plot 1st and 3rd PC
+        plt.figure()
+        plt.ylabel('$Z_3$', fontsize=15)
+        plt.xlabel('$Z_1$', fontsize=15)
+        if colors is None:
+            colors = ["r", "g", "b", "y", "k"]
+        if target_names is None:
+            target_names = ["%d" % i for i in nb_labels]
+        for i in nb_labels:
+            # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
+            # print "KDE input shape:", res[ds_l == i].shape
+            cur_pal = sns.light_palette(colors[i], as_cmap=True)
+            ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 2])][: ,0], shade=False, cmap=cur_pal,
+                             alpha=0.6, shade_lowest=False, label="%d" % i
+                             , gridsize=100, ls=0.6, lw=0.6)
+            ax.patch.set_facecolor('white')
+            ax.collections[0].set_alpha(0)
+            plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 2],
+                                    s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+        handles = []
+        for ii in range(len(target_names)):
+            handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
+        plt.legend(handles=handles, loc="best")
+        plt.savefig(os.path.splitext(dest_path)[0] + "_2.png", dpi=300)
+        plt.close()
+
+        # density plot 2nd and 3rd PC
+        plt.figure()
+        plt.ylabel('$Z_3$', fontsize=15)
+        plt.xlabel('$Z_2$', fontsize=15)
+        if colors is None:
+            colors = ["r", "g", "b", "y", "k"]
+        if target_names is None:
+            target_names = ["%d" % i for i in nb_labels]
+        for i in nb_labels:
+            # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
+            # print "KDE input shape:", res[ds_l == i].shape
+            cur_pal = sns.light_palette(colors[i], as_cmap=True)
+            ax = sns.kdeplot(res[ds_l == i][:, np.ix_([1, 2])][: ,0], shade=False, cmap=cur_pal,
+                             alpha=0.6, shade_lowest=False, label="%d" % i
+                             , gridsize=100, ls=0.6, lw=0.6)
+            ax.patch.set_facecolor('white')
+            ax.collections[0].set_alpha(0)
+            plt.scatter(res[ds_l == i][:, 1], res[ds_l == i][:, 2],
+                                    s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+        handles = []
+        for ii in range(len(target_names)):
+            handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
+        plt.legend(handles=handles, loc="best")
+        plt.savefig(os.path.splitext(dest_path)[0] + "_3.png", dpi=300)
+        plt.close()
+    return pca
+
+
+def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
+                    do_3d=False, **tsne_kwargs):
+    """
+
+    Parameters
+    ----------
+    ds_d : np.array
+        data in feature space, e.g. (#data, #feature)
+    ds_l :
+        sparse labels, i.e. (#data, 1)
+    dest_path: str
+        file name of plot
+    pca: PCA
+        prefitted PCA object to use to prject data of ds_d
+    """
+    # tsne vis
+    print "Starting tSNE visualisation."
+    paper_rc = {'lines.linewidth': 1, 'lines.markersize': 1}
+    sns.set_context(rc=paper_rc)
+    if ds_l.ndim == 2:
+        ds_l = ds_l[:, 0]
+    assert ds_l.ndim == 1
+    nb_labels = np.unique(ds_l)
+    tsne = TSNE_sc(**tsne_kwargs)
+    tsne.fit(ds_d)
+    while True:
+        try:
+            res = tsne.fit_transform(ds_d)
+            break
+        except MemoryError:
+            print("Downsampling data for tSNE visualization")
+            ds_d = ds_d[::2]
+            ds_l = ds_l[::2]
+
+    # density plot
+    plt.figure()
+    plt.ylabel('$Z_2$', fontsize=15)
+    plt.xlabel('$Z_1$', fontsize=15)
+    if colors is None:
+        colors = ["r", "g", "b", "y", "k"]
+    if target_names is None:
+        target_names = ["%d" % i for i in nb_labels]
+    for i in nb_labels:
+        cur_pal = sns.light_palette(colors[i], as_cmap=True)
+        ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 1])][: ,0], shade=False, cmap=cur_pal,
+                         alpha=0.75, shade_lowest=False, label="%d" % i,
+                         n_levels=15, gridsize=100, ls=1, lw=1)
+        ax.patch.set_facecolor('white')
+        ax.collections[0].set_alpha(0)
+        plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 1],
+                                s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+    handles = []
+    for ii in range(len(target_names)):
+        handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
+    plt.legend(handles=handles, loc="best")
+    plt.savefig(dest_path, dpi=300)
+    plt.close()
+
+    if do_3d:
+        # density plot 1st and 3rd PC
+        plt.figure()
+        plt.ylabel('$Z_3$', fontsize=15)
+        plt.xlabel('$Z_1$', fontsize=15)
+        if colors is None:
+            colors = ["r", "g", "b", "y", "k"]
+        if target_names is None:
+            target_names = ["%d" % i for i in nb_labels]
+        for i in nb_labels:
+            # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
+            # print "KDE input shape:", res[ds_l == i].shape
+            cur_pal = sns.light_palette(colors[i], as_cmap=True)
+            ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 2])][: ,0], shade=False, cmap=cur_pal,
+                             alpha=0.6, shade_lowest=False, label="%d" % i
+                             , gridsize=100, ls=0.6, lw=0.6)
+            ax.patch.set_facecolor('white')
+            ax.collections[0].set_alpha(0)
+            plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 2],
+                                    s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+        handles = []
+        for ii in range(len(target_names)):
+            handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
+        plt.legend(handles=handles, loc="best")
+        plt.savefig(os.path.splitext(dest_path)[0] + "_2.png", dpi=300)
+        plt.close()
+
+
+        # density plot 2nd and 3rd PC
+        plt.figure()
+        plt.ylabel('$Z_3$', fontsize=15)
+        plt.xlabel('$Z_2$', fontsize=15)
+        if colors is None:
+            colors = ["r", "g", "b", "y", "k"]
+        if target_names is None:
+            target_names = ["%d" % i for i in nb_labels]
+        for i in nb_labels:
+            # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
+            # print "KDE input shape:", res[ds_l == i].shape
+            cur_pal = sns.light_palette(colors[i], as_cmap=True)
+            ax = sns.kdeplot(res[ds_l == i][:, np.ix_([1, 2])][: ,0], shade=False, cmap=cur_pal,
+                             alpha=0.6, shade_lowest=False, label="%d" % i
+                             , gridsize=100, ls=0.6, lw=0.6)
+            ax.patch.set_facecolor('white')
+            ax.collections[0].set_alpha(0)
+            plt.scatter(res[ds_l == i][:, 1], res[ds_l == i][:, 2],
+                                    s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+        handles = []
+        for ii in range(len(target_names)):
+            handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
+        plt.legend(handles=handles, loc="best")
+        plt.savefig(os.path.splitext(dest_path)[0] + "_3.png", dpi=300)
+        plt.close()
+    return tsne

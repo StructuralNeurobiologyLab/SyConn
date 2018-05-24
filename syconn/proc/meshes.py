@@ -82,8 +82,13 @@ class MeshObject(object):
 
     @property
     def normals(self):
-        if self._normals is None or len(self._normals) != len(self.vertices):
+        if self._normals is None:
             print("Calculating normals")
+            self._normals = unit_normal(self.vertices, self.indices)
+        elif len(self._normals) != len(self.vertices):
+            print("Calculating normals, because their shape differs from"
+                  " vertices: %s (normals) vs. %s (vertices)" %
+                  (str(self._normals.shape), str(self.vertices.shape)))
             self._normals = unit_normal(self.vertices, self.indices)
         return self._normals
 
