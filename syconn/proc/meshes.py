@@ -9,7 +9,7 @@ import itertools
 import numpy as np
 from collections import Counter
 from numba import jit
-from scipy import spatial
+from scipy import spatial, ndimage
 from skimage import measure
 from sklearn.decomposition import PCA
 from ..handler.basics import write_txt2kzip, texts2kzip
@@ -161,7 +161,8 @@ class MeshObject(object):
         return (self.vert_resh * self.max_dist + self.center).flatten()
 
 
-def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=0):
+def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=0,
+                  single_cc=False):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
     by building dense matrix (in case of a point cloud) and applying marching
@@ -176,13 +177,15 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=
     scaling : tuple
     n_closings : int
         Number of closings applied before mesh generation
+    single_cc : bool
+        Returns mesh of biggest connected component only
     Returns
     -------
     array, array, array
         indices [M, 3], vertices [N, 3], normals [N, 3]
 
     """
-    #  TODO: check offset again!
+    #  TODO: check downsampling and pts.ndim == 2!
     assert type(downsampling) == tuple, "Downsampling has to be of type 'tuple'"
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
         "Point cloud used for mesh generation has wrong shape."
@@ -191,7 +194,6 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=
             raise ValueError("Currently this function only supports point clouds with coordinates >> 1.")
         offset = np.min(pts, axis=0)
         pts -= offset
-        extent_orig = np.max(pts, axis=0)
         pts = (pts / downsampling).astype(np.uint32)
         # add zero boundary around object
         pts += 5
@@ -202,24 +204,28 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=
         volume = pts
         if np.any(np.array(downsampling) != 1):
             volume = measure.block_reduce(volume, downsampling, np.max)
-        vecs = np.argwhere(volume != 0)
-        offset = np.min(vecs, axis=0)
-        extent_orig = np.max(vecs, axis=0) - offset
+        offset = np.array([0, 0, 0])
     # volume = multiBinaryErosion(volume, 1).astype(np.float32)
-    # TODO: Take anisotropy into account when calculating distances...
-    # TODO: try to correct with anistropic smoothing and dimension independent rescaling to match bounding box
     if n_closings > 0:
         volume = binary_closing(volume, iterations=n_closings).astype(np.float32)
+    if single_cc:
+        labeled, nb_cc = ndimage.label(volume)
+        cnt = Counter(labeled.flatten())
+        l, occ = cnt.most_common(1)[0]
+        volume = np.array(labeled == l, dtype=np.float32)
     dt = boundaryDistanceTransform(volume, boundary="InterpixelBoundary") #InterpixelBoundary, OuterBoundary, InnerBoundary
     dt[volume == 1] *= -1
-    volume = gaussianSmoothing(dt, scaling[0], step_size=scaling) # this works because only the relative step_size between the dimensions is interesting, therefore we can neglect shrink_fct
-    if np.sum(volume < 0) == 0: # less smoothing
-        volume = gaussianSmoothing(dt, scaling[0]/2, step_size=scaling)
-    verts, ind, norm, _ = measure.marching_cubes_lewiner(volume, 0, gradient_direction="descent") # also calculates normals!
-    verts -= np.min(verts, axis=0)
-    extent_post = np.max(verts, axis=0)
-    new_fact = extent_orig / extent_post # scale independent for each dimension, s.t. the bounding box coords are the same
-    return np.array(ind, dtype=np.int), np.array(verts) * new_fact + offset, norm
+    volume = gaussianSmoothing(dt, 1) # this works because only the relative step_size between the dimensions is interesting, therefore we can neglect shrink_fct
+    if np.sum(volume < 0) == 0 or  np.sum(volume > 0) == 0:  # less smoothing
+        volume = gaussianSmoothing(dt, 0.5)
+    try:
+        verts, ind, norm, _ = measure.marching_cubes_lewiner(volume, 0, gradient_direction="descent") # also calculates normals!
+    except Exception as e:
+        print(e)
+        raise RuntimeError
+    if pts.ndim == 2:  # account for [5, 5, 5] offset
+        verts -= 5
+    return np.array(ind, dtype=np.int), np.array(verts) * downsampling + offset, norm
 
 
 def get_object_mesh(obj, downsampling, n_closings):
