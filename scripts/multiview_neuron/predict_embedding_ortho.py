@@ -2,7 +2,7 @@
 # Copyright (c) 2018 Philipp J. Schubert, J. Kornfeld
 # All rights reserved
 from syconn.config.global_params import wd, get_dataset_scaling
-from syconn.handler.prediction import get_tripletnet_model_ortho
+from syconn.handler.prediction import get_tripletnet_model_ortho, NeuralNetworkInterface
 from syconn.handler.basics import chunkify
 from syconn.proc.stats import projection_pca, projection_tSNE
 from syconn.mp.shared_mem import start_multiprocess_imap
@@ -45,8 +45,7 @@ def load_latent_data(ssd, ssv_ids=None, diagonal_size=None):
     return latent
 
 
-def predict_latent_ssd(ssd, ssv_ids=None):
-    m = get_tripletnet_model_ortho()
+def predict_latent_ssd(ssd, m, ssv_ids=None):
     if ssv_ids is None:
         ssv_ids = ssd.ssv_ids
     # shuffle SV IDs
@@ -72,19 +71,19 @@ def predict_latent_ssd(ssd, ssv_ids=None):
         for ii, ix in enumerate(ixs):
             ssv = ssd.get_super_segmentation_object(ix)
             ssv.load_attr_dict()
-            if ssv.size > 1e5 and not "latent_ortho" in ssv.attr_dict:
+            if ssv.size > 1e5:
                 ssv.save_attributes(["latent_ortho"], [latent[ii]])
         pbar.update(len(ixs))
 
 
-def load_celltype_ctgt():
+def load_celltype_ctgt(m):
     ct = SSVCelltype(None, None)
     ssv_ids = list(ct.train_d.squeeze()) + list(ct.valid_d.squeeze())
     ssv_labels = list(ct.train_l) + list(ct.valid_l)
     ssv_labels = np.concatenate([[l] * 3 for l in ssv_labels])
     ssd = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/",
                                    version="6")
-    predict_latent_ssd(ssd, ssv_ids)
+    predict_latent_ssd(ssd, m, ssv_ids)
     latent = load_latent_data(ssd, ssv_ids)
     return latent, ssv_labels
 
@@ -93,26 +92,33 @@ if __name__ == "__main__":
     fold = "/wholebrain/scratch/pschuber/"
 
     # # all SSV
-    for ds in [20e3, 50e3, 100e3]:
-        ssd = SuperSegmentationDataset(working_dir=wd)
-        predict_latent_ssd(ssd)
-        latent = load_latent_data(ssd, diagonal_size=ds)
-        labels = np.zeros((len(latent))).astype(np.int8)
-        _ = projection_pca(latent, labels, fold + "/%s_diagonal%d_kde_pca.png" %
-                           ("all", ds), pca=None, colors=None, target_names=["None"])
-        tsne_kwargs = {"n_components": 3, "random_state": 0,
-                       "perplexity": 20, "n_iter": 10000}
-        projection_tSNE(latent, labels,fold + "/%s_diagonal%d_kde_tsne.png" % ("all", ds),
-                        target_names=["none"], **tsne_kwargs)
+    # for ds in [50e3, 100e3]:
+    #     ssd = SuperSegmentationDataset(working_dir=wd)
+    #     predict_latent_ssd(ssd)
+    #     latent = load_latent_data(ssd, diagonal_size=ds)
+    #     labels = np.zeros((len(latent))).astype(np.int8)
+    #     _ = projection_pca(latent, labels, fold + "/%s_diagonal%d_kde_pca.png" %
+    #                        ("all", ds), pca=None, colors=None, target_names=["None"])
+    #     tsne_kwargs = {"n_components": 3, "random_state": 0,
+    #                    "perplexity": 20, "n_iter": 10000}
+    #     projection_tSNE(latent, labels,fold + "/%s_diagonal%d_kde_tsne.png" % ("all", ds),
+    #                     target_names=["none"], **tsne_kwargs)
 
     # celltype gt only
-    ssd = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/",
-                                   version="6")
-    latent, labels = load_celltype_ctgt()
+    for ii in range(4, 7):
+        m_p = "/wholebrain/scratch/pschuber/CNN_Training/SyConn/triplet_net_SSV/wholecell_orthoviews_v%d/wholecell_orthoviews_v%d-FINAL.mdl" % (ii, ii)
+        m = NeuralNetworkInterface(m_p,
+            imposed_batch_size=6,
+            nb_labels=10, arch="triplet")
+        _ = m.predict_proba(np.zeros((1, 4, 3, 512, 512)))
+        ssd = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/",
+                                       version="6")
+        # m = get_tripletnet_model_ortho()
+        latent, labels = load_celltype_ctgt(m)
 
-    _ = projection_pca(latent, labels, fold + "/%s_kde_pca.png" %
-                         "ctgt", pca=None, colors=None,target_names=["EA", "MSN", "GP", "INT"])
-    tsne_kwargs = {"n_components": 3, "random_state": 0,
-                   "perplexity": 20, "n_iter": 10000}
-    projection_tSNE(latent, labels,fold + "/%s_kde_tsne.png" % "ctgt",
-                    target_names=["EA", "MSN", "GP", "INT"], **tsne_kwargs)
+        _ = projection_pca(latent, labels, fold + "/ctgt_%d_kde_pca.png" % ii,
+                           pca=None, colors=None,target_names=["EA", "MSN", "GP", "INT"])
+        tsne_kwargs = {"n_components": 3, "random_state": 0,
+                       "perplexity": 20, "n_iter": 10000}
+        projection_tSNE(latent, labels,fold + "/ctgt_%d_kde_tsne.png" % ii,
+                        target_names=["EA", "MSN", "GP", "INT"], **tsne_kwargs)

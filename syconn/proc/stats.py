@@ -352,19 +352,19 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     plt.close()
     # plot densities in pca or tSNE latent space
     # if not os.path.isfile(fold + "/%s_train_kde_pca.png" % prefix):
-    _ = projection2d_pca(valid_d, valid_l, fold + "/%s_valid_kde_pca.png" %
+    _ = projection_pca(valid_d, valid_l, fold + "/%s_valid_kde_pca.png" %
                          prefix, pca=pca, colors=colors, target_names=target_names)
-    _ = projection2d_pca(train_d, train_l, fold + "/%s_train_kde_pca.png" %
+    _ = projection_pca(train_d, train_l, fold + "/%s_train_kde_pca.png" %
                          prefix, pca=pca, colors=colors, target_names=target_names)
     tsne_kwargs = {"n_components": 2, "random_state": 0,
                    "perplexity": 20, "n_iter": 10000}
-    projection2d_tSNE(train_d, train_l,
+    projection_tSNE(train_d, train_l,
                       fold + "/%s_train_kde_tsne.png" % prefix, colors=colors, target_names=target_names, **tsne_kwargs)
     if return_valid_pred:
         return pred
 
 
-def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=False,
+def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
                      target_names=None):
     """
 

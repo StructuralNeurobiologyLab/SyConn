@@ -731,6 +731,20 @@ class SegmentationObject(object):
         mesh_dc.save2pkl()
 
     def mesh2kzip(self, dest_path, ext_color=None, ply_name=""):
+        """
+
+        Parameters
+        ----------
+        dest_path :
+        ext_color : RGBA or int
+            if set to 0 no color will be written out. Use to adapt color in
+            Knossos.
+        ply_name :
+
+        Returns
+        -------
+
+        """
         mesh = self.mesh
         if self.type == "sv":
             color = (130, 130, 130, 160)
@@ -744,14 +758,14 @@ class SegmentationObject(object):
             color = (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)
         elif self.type == "mi":
             color = (0, 153, 255, 255)
-        elif ext_color is not None:
+        else:
+            raise ("Given object type '%s' does not exist." % self.type,
+                   TypeError)
+        if ext_color is not None:
             if ext_color == 0:
                 color = None
             else:
                 color = ext_color
-        else:
-            raise ("Given object type '%s' does not exist." % self.type,
-                   TypeError)
 
         if ply_name == "":
             ply_name = str(self.id)

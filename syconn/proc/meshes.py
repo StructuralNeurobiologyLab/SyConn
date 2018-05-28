@@ -17,6 +17,7 @@ from .image import apply_pca
 from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 from scipy.ndimage.morphology import binary_closing
 import time
+import vtkInterface
 from ..mp.shared_mem import start_multiprocess_obj
 __all__ = ["MeshObject", "get_object_mesh", "merge_meshes", "triangulation",
            "get_random_centered_coords", "write_mesh2kzip", 'write_meshes2kzip',
@@ -27,12 +28,16 @@ class MeshObject(object):
     def __init__(self, object_type, indices, vertices, normals=None,
                  color=None, bounding_box=None):
         self.object_type = object_type
-        self.indices = indices.astype(np.uint)
         if vertices.ndim == 2 and vertices.shape[1] == 3:
             self.vertices = vertices.flatten()
         else:
             # assume flat array
             self.vertices = np.array(vertices, dtype=np.float)
+        if indices.ndim == 2 and indices.shape[1] == 3:
+            self.indices = indices.flatten().astype(np.uint)
+        else:
+            # assume flat array
+            self.indices = np.array(indices, dtype=np.uint)
         if len(self.vertices) == 0:
             self.center = 0
             self.max_dist = 1
@@ -161,8 +166,8 @@ class MeshObject(object):
         return (self.vert_resh * self.max_dist + self.center).flatten()
 
 
-def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=0,
-                  single_cc=False):
+def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
+                  single_cc=False, decimate_mesh=0):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
     by building dense matrix (in case of a point cloud) and applying marching
@@ -179,13 +184,16 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=
         Number of closings applied before mesh generation
     single_cc : bool
         Returns mesh of biggest connected component only
+    decimate_mesh : float
+        Percentage of mesh size reduction, i.e. 0.1 will leave 90% of the
+        vertices
+
     Returns
     -------
     array, array, array
         indices [M, 3], vertices [N, 3], normals [N, 3]
 
     """
-    #  TODO: check downsampling and pts.ndim == 2!
     assert type(downsampling) == tuple, "Downsampling has to be of type 'tuple'"
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
         "Point cloud used for mesh generation has wrong shape."
@@ -225,10 +233,24 @@ def triangulation(pts, downsampling=(1, 1, 1), scaling=(10, 10, 20), n_closings=
         raise RuntimeError
     if pts.ndim == 2:  # account for [5, 5, 5] offset
         verts -= 5
-    return np.array(ind, dtype=np.int), np.array(verts) * downsampling + offset, norm
+    verts = np.array(verts) * downsampling + offset
+    if decimate_mesh > 0:
+        print("Currently mesh-sparsification may not preserve"
+              " volume.")
+        # add number of vertices in front of every face (required by vtkInterface)
+        ind = np.concatenate([np.ones((len(ind), 1)).astype(np.int64) * 3, ind], axis=1)
+        mesh = vtkInterface.PolyData(verts, ind.flatten()).TriFilter()
+        decimated_mesh = mesh.Decimate(decimate_mesh, volume_preservation=True)
+        # remove face sizes again
+        ind = decimated_mesh.faces.reshape((-1, 4))[:, 1:]
+        verts = decimated_mesh.points
+        mo = MeshObject("", ind, verts)
+        # compute normals
+        norm = mo.normals.reshape((-1, 3))
+    return np.array(ind, dtype=np.int), verts, norm
 
 
-def get_object_mesh(obj, downsampling, n_closings):
+def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0):
     """
     Get object mesh from object voxels using marching cubes.
 
@@ -239,6 +261,7 @@ def get_object_mesh(obj, downsampling, n_closings):
         Magnitude of downsampling for each axis
     n_closings : int
         Number of closings before mesh generation
+    decimate_mesh : float
 
     Returns
     -------
@@ -250,10 +273,13 @@ def get_object_mesh(obj, downsampling, n_closings):
 
     indices, vertices, normals = triangulation(np.array(obj.voxel_list),
                                       downsampling=downsampling,
-                                               n_closings=n_closings)
-    vertices *= obj.scaling
+                                               n_closings=n_closings,
+                                               decimate_mesh=decimate_mesh)
+    vertices += 1  # account for knossos 1-indexing
+    vertices = np.round(vertices * obj.scaling)
     assert len(vertices) == len(normals) or len(normals) == 0, \
-        "Length of normals does not correspond to length of vertices."
+        "Length of normals (%s) does not correspond to length of" \
+        " vertices (%s)." % (str(normals.shape), str(vertices.shape))
     return indices.flatten(), vertices.flatten(), normals.flatten()
 
 
