@@ -12,13 +12,17 @@ from numba import jit
 from scipy import spatial, ndimage
 from skimage import measure
 from sklearn.decomposition import PCA
-from ..handler.basics import write_txt2kzip, texts2kzip
+from ..handler.basics import write_txt2kzip, texts2kzip, chunkify
 from .image import apply_pca
 from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 from scipy.ndimage.morphology import binary_closing
 import time
-import vtkInterface
-from ..mp.shared_mem import start_multiprocess_obj
+try:
+    import vtkInterface
+    __vtk_avail__ = True
+except ImportError:
+    __vtk_avail__ = False
+from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess_imap
 __all__ = ["MeshObject", "get_object_mesh", "merge_meshes", "triangulation",
            "get_random_centered_coords", "write_mesh2kzip", 'write_meshes2kzip',
            "compartmentalize_mesh", 'write_ssomesh2kzip']
@@ -235,6 +239,8 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
         verts -= 5
     verts = np.array(verts) * downsampling + offset
     if decimate_mesh > 0:
+        assert __vtk_avail__, "vtkInterface not installed. Please install vtkInterface." \
+                              "'git clone https://github.com/akaszynski/vtkInterface.git' and 'pip install -e vtkInterface'."
         print("Currently mesh-sparsification may not preserve"
               " volume.")
         # add number of vertices in front of every face (required by vtkInterface)
@@ -536,6 +542,10 @@ def merge_meshes(ind_lst, vert_lst, nb_simplices=3):
     return all_ind, all_vert
 
 
+def mesh_loader(so):
+    return so.mesh
+
+
 def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
                   cmap=None, alpha=1.0):
     """
@@ -562,8 +572,7 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     all_vert = np.zeros((0, ))
     all_norm = np.zeros((0, ))
     colors = np.zeros((0, ))
-    meshes = start_multiprocess_obj("mesh", [[so,] for so in sos],
-                                   nb_cpus=nb_cpus)
+    meshes = start_multiprocess_imap(mesh_loader, sos, nb_cpus=nb_cpus)
     if color_vals is not None and cmap is not None:
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
     for i in range(len(meshes)):
@@ -621,7 +630,21 @@ def make_ply_string(indices, vertices, normals, rgba_color):
     return ply_str
 
 
-def make_ply_string_wocolor(indices, vertices, normals):
+def ply_vertex_generator(vertices):
+    ply_str = ""
+    for v in vertices:
+        ply_str += '{0} {1} {2}\n'.format(v[0], v[1], v[2])
+    return ply_str
+
+
+def ply_index_generator(indices):
+    ply_str = ""
+    for face in indices:
+        ply_str += '3 {0} {1} {2}\n'.format(face[0], face[1], face[2])
+    return ply_str
+
+
+def make_ply_string_wocolor(indices, vertices, normals, nb_cpus=1):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -643,11 +666,16 @@ def make_ply_string_wocolor(indices, vertices, normals):
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
     ply_str = 'ply\nformat ascii 1.0\nelement vertex {0}\nproperty float x\nproperty float y\nproperty float z\n'\
     'element face {1}\nproperty list uint8 uint vertex_indices\nend_header\n'.format(len(vertices), len(indices))
-    for v in vertices:
-        ply_str += '{0} {1} {2}\n'.format(v[0], v[1], v[2])
-
-    for face in indices:
-        ply_str += '3 {0} {1} {2}\n'.format(face[0], face[1], face[2])
+    print("Generating ply vertices.")
+    params = np.array_split(vertices, 100)
+    res = start_multiprocess_imap(ply_vertex_generator, params, nb_cpus=nb_cpus)
+    for el in res:
+        ply_str += el
+    print("Generating ply indices.")
+    params = np.array_split(indices, 100)
+    res = start_multiprocess_imap(ply_index_generator, params, nb_cpus=nb_cpus)
+    for el in res:
+        ply_str += el
     return ply_str
 
 
@@ -670,7 +698,7 @@ def write_ssomesh2kzip(k_path, sso, color=(255, 0, 0, 255), ply_fname="0.ply"):
     write_mesh2kzip(k_path, ind, vert, color, ply_fname)
 
 
-def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
+def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname, nb_cpus=1):
     """
     Writes mesh as .ply's to k.zip file.
 
@@ -690,7 +718,8 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
     if color is not None:
         ply_str = make_ply_string(ind, vert.astype(np.float32), norm, color)
     else:
-        ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm)
+        ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm,
+                                          nb_cpus=nb_cpus)
     write_txt2kzip(k_path, ply_str, ply_fname)
 
 
