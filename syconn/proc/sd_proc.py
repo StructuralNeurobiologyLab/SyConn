@@ -94,7 +94,8 @@ def _dataset_analysis_thread(args):
     working_dir = args[3]
     recompute = args[4]
 
-    global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[])
+    global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[],
+                            mesh_area=[])
 
     for p in paths:
         print(p)
@@ -123,12 +124,10 @@ def _dataset_analysis_thread(args):
                     so.load_voxels(voxel_dc=this_vx_dc)
                     so.calculate_rep_coord(voxel_dc=this_vx_dc)
 
-                if recompute:
                     so.attr_dict["rep_coord"] = so.rep_coord
-                if recompute:
                     so.attr_dict["bounding_box"] = so.bounding_box
-                if recompute:
                     so.attr_dict["size"] = so.size
+                    so.attr_dict["mesh_area"] = so.mesh_area
 
                 for attribute in so.attr_dict.keys():
                     if attribute not in global_attr_dict:
