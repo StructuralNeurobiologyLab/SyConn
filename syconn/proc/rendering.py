@@ -168,7 +168,7 @@ def init_ctx(ws):
     return ctx
 
 
-def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False):
+def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False, smooth_shade=True):
     """
     Initialize OpenGL settings.
 
@@ -199,7 +199,10 @@ def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False):
         glColorMaterial(GL_FRONT, GL_AMBIENT)
     else:
         glEnable(GL_DEPTH_TEST)
-
+    if smooth_shade:
+        glShadeModel(GL_SMOOTH)
+    else:
+        glShadeModel(GL_FLAT)
     glViewport(0, 0, ws[0], ws[1])
     if clear_value is None:
         glClearColor(0., 0., 0., 0.)
@@ -375,7 +378,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=(),
 
 def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                            ws=(256, 128), views_key="raw", nb_simplices=3,
-                           depth_map=True, clahe=False):
+                           depth_map=True, clahe=False, smooth_shade=True):
     """
     Same as multi_view_mesh_coords but without creating gl context.
     Parameters
@@ -428,7 +431,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     else:
         view_sh = (comp_views, ws[1], ws[0], 3)
     res = np.ones([len(coords)] + list(view_sh), dtype=np.uint8)
-    init_opengl(ws, depth_map=depth_map, clear_value=0.0)
+    init_opengl(ws, depth_map=depth_map, clear_value=0.0, smooth_shade=smooth_shade)
     init_object(indices, vertices, normals, colors, ws)
     for ii, c in enumerate(coords):
         c_views = np.ones(view_sh, dtype=np.float32)
@@ -472,7 +475,6 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
             c_views[m] = screen_shot(ws, colored=colored, depth_map=depth_map, clahe=clahe)
             glPopMatrix()
         res[ii] = c_views
-        found_empty_view = False
         for cv in c_views:
             if np.sum(cv) == 0 or np.sum(cv) == np.prod(cv.shape):
                 if views_key == "raw":
@@ -480,8 +482,6 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                                   "vertices found."
                                   % (views_key, len(mesh.vert_resh)),
                                   RuntimeWarning)
-                    found_empty_view = True
-            if found_empty_view:
                 print("View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n" \
                       "'%s'-mesh with %d vertices." %\
                       (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
@@ -546,7 +546,7 @@ def render_mesh_coords(coords, ind, vert, **kwargs):
 
 def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                        rot_matrices=None, views_key="raw", return_rot_matrices=False,
-                       depth_map=True):
+                       depth_map=True, smooth_shade = True):
     """
     Render raw views located at given coordinates in mesh
      Returns ViewContainer list if dest_dir is None, else writes
@@ -592,7 +592,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
     ctx = init_ctx(ws)
     mviews = multi_view_mesh_coords(mesh, coords, local_rot_mat, edge_lengths,
                                     clahe=clahe, views_key=views_key, ws=ws,
-                                    depth_map=depth_map)
+                                    depth_map=depth_map, smooth_shade=smooth_shade)
     if verbose:
         end = time.time()
         print("Finished rendering mesh of type %s at %d locations after"
@@ -757,7 +757,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     # Create mesh object
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
     index_views = _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
-                                      depth_map=False, rot_matrices=rot_matrices)
+                                      depth_map=False, rot_matrices=rot_matrices,smooth_shade=False)
     return (index_views * 255).astype(np.uint8)
 
 
