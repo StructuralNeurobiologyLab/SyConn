@@ -10,14 +10,15 @@ import numpy as np
 import warnings
 from syconn.config.global_params import wd
 from syconn.handler.basics import load_pkl2obj
-from syconn.handler.compression import lz4stringtoarr
+from syconn.handler.compression import lz4stringtoarr, save_to_h5py
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.mp.shared_mem import start_multiprocess_obj
 
 
 class MultiViewData(Data):
-    def __init__(self, working_dir, gt_type, raw_only=False, nb_cpus=20):
+    def __init__(self, working_dir, gt_type, raw_only=False, nb_cpus=20,
+                 force_reload=False):
         self.gt_dir = working_dir + "/ssv_%s/" % (gt_type)
         self.label_dict = load_pkl2obj(self.gt_dir + "%s_labels.pkl" % gt_type)
         self.splitting_dict = load_pkl2obj(self.gt_dir + "%s_splitting.pkl" % gt_type)
@@ -26,40 +27,29 @@ class MultiViewData(Data):
         # train data
         # get views of each SV
         self.train_d = [self.ssd.get_super_segmentation_object(ix).load_views(
-            raw_only=raw_only, cache_default_views=True, nb_cpus=nb_cpus, ignore_missing=True, force_reload=False)
+            raw_only=raw_only, cache_default_views=True, nb_cpus=nb_cpus,
+            ignore_missing=True, force_reload=force_reload)
             for ix in self.splitting_dict["train"]]
         # create labels for SV views according to SSV label, assuming pure SSV compartments
         self.train_l = np.concatenate([[self.label_dict[ix]] * len(self.train_d[ii])
         for ii, ix in enumerate(self.splitting_dict["train"])]).astype(np.uint16)[:, None]
         # concatenate raw data
         self.train_d = np.concatenate(self.train_d)
-        # perform pseudo-normalization (proper normaalization: how to store mean and std for inference?)
-        if not (np.all(0 <= self.train_d) and np.all(self.train_d <= 1.0)):
-            self.train_d = self.train_d.astype(np.float32) / 255 - 0.5
-            print("Performing normalization of train.-views. Double check that "
-                  "all view data ranges from 0...255 originally.")
-        else:
-            self.train_d = self.train_d.astype(np.float32) - 0.5
+        self.train_d = naive_view_normalization(self.train_d)
         # set example shape for parent class 'Data'
         self.example_shape = self.train_d[0].shape
         # valid data
         self.valid_d = [self.ssd.get_super_segmentation_object(ix).load_views(
-            raw_only=raw_only, cache_default_views=True, nb_cpus=nb_cpus, ignore_missing=True, force_reload=False)
+            raw_only=raw_only, cache_default_views=True, nb_cpus=nb_cpus, ignore_missing=True, force_reload=force_reload)
             for ix in self.splitting_dict["valid"]]
         self.valid_l = np.concatenate([[self.label_dict[ix]] * len(self.valid_d[ii])
         for ii, ix in enumerate(self.splitting_dict["valid"])]).astype(np.uint16)[:, None]
         self.valid_d = np.concatenate(self.valid_d)
-        # perform pseudo-normalization (proper normaalization: how to store mean and std for inference?)
-        if not (np.all(0 <= self.valid_d) and np.all(self.valid_d <= 1.0)):
-            self.valid_d = self.valid_d.astype(np.float32) / 255 - 0.5
-            print("Performing normalization of valid.-views. Double check that "
-                  "all view data ranges from 0...255 originally.")
-        else:
-            self.valid_d = self.valid_d.astype(np.float32) - 0.5
+        self.valid_d = naive_view_normalization(self.valid_d)
         # test data
         if len(self.splitting_dict["test"]) > 0:
             self.test_d = [self.ssd.get_super_segmentation_object(ix).load_views(
-                raw_only=raw_only, cache_default_views=True, nb_cpus=nb_cpus, ignore_missing=True, force_reload=False)
+                raw_only=raw_only, cache_default_views=True, nb_cpus=nb_cpus, ignore_missing=True, force_reload=force_reload)
                 for ix in self.splitting_dict["test"]]
             self.test_l = np.concatenate(
                 [[self.label_dict[ix]] * len(self.test_d[ii])
@@ -69,13 +59,7 @@ class MultiViewData(Data):
         else:
             self.test_d = np.zeros((0, ), dtype=np.float32)
             self.test_l = np.zeros((0, ), dtype=np.uint16)
-        # perform pseudo-normalization (proper normaalization: how to store mean and std for inference?)
-        if not (np.all(0 <= self.test_d) and np.all(self.test_d <= 1.0)):
-            self.test_d = self.test_d.astype(np.float32) / 255 - 0.5
-            print("Performing normalization of test.-views. Double check that "
-                  "all view data ranges from 0...255 originally.")
-        else:
-            self.test_d = self.test_d.astype(np.float32) - 0.5
+        self.test_d = naive_view_normalization(self.test_d)
         print("GT splitting:", self.splitting_dict)
         print "\nlabels (train) - 0:%d\t1:%d\t2:%d" % (
             np.sum(self.train_l == 0),
@@ -91,8 +75,10 @@ class MultiViewData(Data):
 class AxonViews(MultiViewData):
     def __init__(self, input_node, target_node, gt_type="axgt", working_dir=wd,
                  nb_views=2, reduce_context=0, channels_to_load=(0, 1, 2, 3),
-                 reduce_context_fact=1, binary_views=False, raw_only=False, nb_cpus=20):
-        super(AxonViews, self).__init__(working_dir, gt_type, raw_only, nb_cpus=nb_cpus)
+                 reduce_context_fact=1, binary_views=False, raw_only=False, nb_cpus=20,
+                 **kwargs):
+        super(AxonViews, self).__init__(working_dir, gt_type, raw_only,
+                                        nb_cpus=nb_cpus, **kwargs)
         self.nb_views = nb_views
         self.reduce_context = reduce_context
         self.reduce_context_fact = reduce_context_fact
@@ -246,12 +232,16 @@ class GliaViews(Data):
 class SSVCelltype(Data):
     """Uses N-views to represent SSVs and perform supervised classification of cell types"""
     def __init__(self, input_node, target_node, nb_views=20, nb_cpus=1,
-                 raw_only=False):
+                 raw_only=False, reduce_context=0,
+                 reduce_context_fact=1, binary_views=False):
         ssv_splits = load_pkl2obj("/wholebrain/scratch/pschuber/NeuroPatch/gt/ssv_ctgt_splitted_ids_cleaned.pkl")
         ssv_gt_dict = load_pkl2obj("/wholebrain/scratch/pschuber/NeuroPatch/gt/ssv_ctgt.pkl")
         self.nb_views = nb_views
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
+        self.reduce_context = reduce_context
+        self.reduce_context_fact = reduce_context_fact
+        self.binary_views = binary_views
         self.sds = SegmentationDataset("sv", working_dir="/wholebrain/scratch/areaxfs/", version="0")
         self.ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/", version="6")
         self.example_shape = (nb_views, 4, 2, 128, 256)
@@ -302,10 +292,17 @@ class SSVCelltype(Data):
             sso = self.ssds.get_super_segmentation_object(ix)
             sso.nb_cpus = self.nb_cpus
             ssos.append(sso)
-        out_d, l = transform_celltype_data(ssos, l, batch_size, self.nb_views)
+        d, l = transform_celltype_data(ssos, l, batch_size, self.nb_views)
+        if self.reduce_context > 0:
+            d = d[:, :, :, (self.reduce_context/2):(-self.reduce_context/2),
+                self.reduce_context:-self.reduce_context]
+        if self.reduce_context_fact > 1:
+            d = d[:, :, :, ::self.reduce_context_fact, ::self.reduce_context_fact]
+        if self.binary_views:
+            d[d < 1.0] = 0
         if self.raw_only:
-            return out_d[:, :1], l
-        return out_d, l
+            return d[:, :1], l
+        return d, l
 
 
 def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1):
@@ -352,11 +349,14 @@ def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1):
 class TripletData_N(Data):
     """Using neighboring location for small distance sample"""
     def __init__(self, input_node, target_node):
-        self.sds = SegmentationDataset("sv", working_dir="/wholebrain/scratch/areaxfs/",
+        self.sds = SegmentationDataset("sv", working_dir="/wholebrain/scratch/areaxfs3/",
                                        version=0)
-        rev_dc = load_pkl2obj("/wholebrain/scratch/pschuber/NeuroPatch/datasets/rev_cc_dict_ssv6.pkl")
-        ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/", version="6")
+        ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/")
         ssds.load_mapping_dict()
+        rev_dc = {}
+        for k, v in ssds.mapping_dict.iteritems():
+            for el in v:
+                rev_dc[el] = k
         self.s_ids = np.concatenate(ssds.mapping_dict.values())
         bb = ssds.load_cached_data("bounding_box")
         # sizes as diagonal of bounding box in um (SV size will be size of corresponding SSV)
@@ -741,3 +741,48 @@ def transform_tripletN_data_predonly(d, channels_to_load, view_striding):
     out_d_3 = out_d_3[:, :, view_sampling[2]][:, :, None]
     out_d = np.concatenate([out_d_1, out_d_2, out_d_3], axis=2)
     return out_d
+
+
+def add_gt_sample(ssv_id, label, gt_type, set_type="train"):
+    """
+
+    Parameters
+    ----------
+    ssv_id : int
+        Supersupervoxel ID
+    gt_type : str
+        e.g. 'axgt'
+    set_type : str
+        either one of: 'train', 'valid', 'test'
+    Returns
+    -------
+
+    """
+    # retrieve SSV from original SSD (which is used in Knossos-Plugin) and
+    # copy its data to the yet empty SSV in the axgt SSD.
+    ssd_axgt = SuperSegmentationDataset(version=gt_type, working_dir=wd)
+    ssd = SuperSegmentationDataset(working_dir=wd)
+    ssv = ssd.get_super_segmentation_object(ssv_id)
+    ssv_axgt = ssd_axgt.get_super_segmentation_object(ssv_id)
+    ssv.copy2dir(ssv_axgt.ssv_dir)
+    # add entries to label and splitting dict
+    base_dir = "{}/ssv_{}/".format(wd, gt_type)
+    splitting = load_pkl2obj("{}/axgt_splitting.pkl".format(base_dir))
+    labels = load_pkl2obj("{}/axgt_labels.pkl".format(base_dir))
+    splitting[set_type].append(ssv_id)
+    labels[ssv_id] = label
+
+
+def naive_view_normalization(d):
+    # perform pseudo-normalization (proper normaalization: how to store mean and std for inference?)
+    if not (np.all(0 <= d) and np.all(d <= 1.0)):
+        for ii in range(len(d)):
+            curr_view = d[ii]
+            if 0 < np.max(curr_view) <= 1.0:
+                curr_view = curr_view - 0.5
+            else:
+                curr_view = curr_view / 255. - 0.5
+            d[ii] = curr_view
+    else:
+        d = d.astype(np.float32) - 0.5
+    return d

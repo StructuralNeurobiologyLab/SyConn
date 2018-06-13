@@ -206,6 +206,11 @@ class SuperSegmentationDataset(object):
             ix += 1
 
     @property
+    def sv_ids(self):
+        self.load_mapping_dict()
+        return np.concatenate(self.mapping_dict.values())
+
+    @property
     def id_changer(self):
         if len(self._id_changer) == 0:
             self.load_id_changer()

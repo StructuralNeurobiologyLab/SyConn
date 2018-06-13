@@ -27,9 +27,10 @@ with open(path_storage_file) as f:
             break
 
 
-so_kwargs = {}  # <-- change SO kwargs here
 ch = args[0]
-kwargs = args[1]
+so_kwargs = args[1]
+kwargs = args[2]
+print kwargs
 for svixs in ch:
     sd = sos_dict_fact(svixs, **so_kwargs)
     sos = init_sos(sd)

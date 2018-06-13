@@ -84,7 +84,8 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
     return result
 
 
-def start_multiprocess_imap(func, params, debug=False, verbose=False, nb_cpus=None):
+def start_multiprocess_imap(func, params, debug=False, verbose=False,
+                            nb_cpus=None, show_progress=True):
     """
 
     Parameters
@@ -130,18 +131,26 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False, nb_cpus=No
     start = time.time()
     if nb_cpus > 1:
         pool = MyPool(nb_cpus)
-        result = list(tqdm.tqdm(pool.imap(func, params), total=len(params), ncols=80, leave=False,
-                         unit='jobs', unit_scale=True, dynamic_ncols=False))
+        if show_progress:
+            result = list(tqdm.tqdm(pool.imap(func, params), total=len(params), ncols=80, leave=False,
+                             unit='jobs', unit_scale=True, dynamic_ncols=False))
+        else:
+            result = pool.imap(func, params)
         pool.close()
         pool.join()
     else:
-        pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
-                                unit='jobs', unit_scale=True, dynamic_ncols=False)
-        result = []
-        for p in params:
-            result.append(func(p))
-            pbar.update(1)
-        pbar.close()
+        if show_progress:
+            pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False, mininterval=1,
+                                    unit='jobs', unit_scale=True, dynamic_ncols=False)
+            result = []
+            for p in params:
+                result.append(func(p))
+                pbar.update(1)
+            pbar.close()
+        else:
+            result = []
+            for p in params:
+                result.append(func(p))
     if verbose:
         print("\nTime to compute:", time.time() - start)
 

@@ -707,9 +707,11 @@ class SegmentationObject(object):
         if not pred_key in self.attr_dict:
             self.load_attr_dict()
         if not pred_key in self.attr_dict:
-            print("WARNING: Requested axoness probability for SV %d is "
-                  "not available." % self.id)
-            return np.array([[0, 1, 0] * len(self.sample_locations())]).reshape((-1, 3))
+            msg = "WARNING: Requested axoness {} for SV {} is "\
+                  "not available. Existing keys: {}".format(
+                pred_key, self.id, str(self.attr_dict.keys()))
+            raise ValueError(msg)
+            # return np.array([[0, 1, 0] * len(self.sample_locations())]).reshape((-1, 3))
         return self.attr_dict[pred_key]
 
     #                                                                  FUNCTIONS
@@ -759,7 +761,7 @@ class SegmentationObject(object):
         elif self.type == "mi":
             color = (0, 153, 255, 255)
         else:
-            raise ("Given object type '%s' does not exist." % self.type,
+            raise ("Given object type '{}' does not exist.".format(self.type),
                    TypeError)
         if ext_color is not None:
             if ext_color == 0:
@@ -784,13 +786,13 @@ class SegmentationObject(object):
             views = view_dc[self.id]
         except KeyError as e:
             if ignore_missing:
-                print("Views of SV %d were missing. Skipping." % self.id)
-                views = np.zeros((0, 4, 2, 128, 256))
+                print("Views of SV {} were missing. Skipping.".format(self.id))
+                views = np.zeros((0, 4, 2, 128, 256), dtype=np.uint8)
             else:
                 raise KeyError(e)
         if raw_only:
             views = views[:, :1]
-        return np.array(views, dtype=np.float32)
+        return views
 
     def save_views(self, views, woglia=True, cellobjects_only=False):
         view_dc = LZ4Dict(self.view_path(woglia=woglia),
@@ -960,7 +962,6 @@ class SegmentationObject(object):
     # SKELETON
     @property
     def skeleton_dict_path(self):
-        print(self.segobj_dir)
         return self.segobj_dir + "/skeletons.pkl"
 
     def copy2dir(self, dest_dir, safe=True):

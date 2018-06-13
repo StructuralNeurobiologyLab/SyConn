@@ -806,7 +806,7 @@ def render_sso_ortho_views(sso):
 # Multiprocessing rendering code
 
 
-def multi_render_sampled_svidlist(svixs):
+def multi_render_sampled_svidlist(args):
     """
     Render SVs with ID's svixs using helper script in syconnfs.examples.
     OS rendering requires individual creation of OSMesaContext.
@@ -817,10 +817,15 @@ def multi_render_sampled_svidlist(svixs):
     svixs : iterable
         SegmentationObject ID's
     """
+    version, svixs = args[0], args[1:]
     fpath = os.path.dirname(os.path.abspath(__file__))
     cmd = "python %s/../../scripts/backend/render_helper_svidlist.py" % fpath
+    cmd += " {}".format(version)
     for ix in svixs:
-        cmd += " %d" % ix
+        cmd += " {}".format(ix)
+    res = os.system(cmd)
+    if type(res) == str and "Error" in res:
+        raise()
 
 
 def multi_render_sampled_sso(sso_ix):
@@ -835,6 +840,5 @@ def multi_render_sampled_sso(sso_ix):
     """
     fpath = os.path.dirname(os.path.abspath(__file__))
     cmd = "python %s/../../scripts/backend//render_helper_sso.py" % fpath
-    cmd += " %d" % sso_ix
-
-
+    cmd += " {}".format(sso_ix)
+    res = os.system(cmd)

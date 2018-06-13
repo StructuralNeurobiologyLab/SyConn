@@ -572,7 +572,8 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     all_vert = np.zeros((0, ))
     all_norm = np.zeros((0, ))
     colors = np.zeros((0, ))
-    meshes = start_multiprocess_imap(mesh_loader, sos, nb_cpus=nb_cpus)
+    meshes = start_multiprocess_imap(mesh_loader, sos, nb_cpus=nb_cpus,
+                                     show_progress=False)
     if color_vals is not None and cmap is not None:
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
     for i in range(len(meshes)):

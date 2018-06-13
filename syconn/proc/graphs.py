@@ -12,7 +12,7 @@ from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import itertools
 import sys
 from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess
-from ..config.global_params import min_cc_size_glia, min_cc_size_neuron, glia_thresh
+from ..config.global_params import min_cc_size_glia, min_cc_size_neuron, glia_thresh, get_dataset_scaling
 
 
 def split_subcc(g, max_nb, verbose=False, start_nodes=None):
@@ -462,8 +462,8 @@ def create_mst_skeleton(coords, max_dist=6000, force_single_cc=True):
     return np.array(g.edges())
 
 
-def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None,
-                    glia_key="glia_probas", node_size_cap=np.inf, mcmp=None):
+def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150,
+                    glia_key="glia_probas", node_size_cap=np.inf, mcmp=None, pos=None):
     """
     Draw graph with nodes colored in red (glia) and blue) depending on their
     class. Writes drawing to dest_path.
@@ -502,8 +502,33 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None,
     nodelist = list(np.array(G.nodes())[n_size > min_sv_size])
     n_size = n_size[n_size >= min_sv_size]
     n_size = n_size / np.max(n_size) * 25.
-    pos = nx.spring_layout(G, weight="weight", iterations=150)
+    if pos is None:
+        pos = nx.spring_layout(G, weight="weight", iterations=iterations)
     nx.draw(G, nodelist=nodelist, node_color=col, node_size=n_size,
             cmap=mcmp, width=0.15, pos=pos, linewidths=0)
     plt.savefig(dest_path)
     plt.close()
+    return pos
+
+
+def nxGraph2kzip(g, coords, kzip_path):
+    import tqdm
+    scaling = get_dataset_scaling()
+    coords = coords / scaling
+    skel = Skeleton()
+    anno = SkeletonAnnotation()
+    anno.scaling = scaling
+    node_mapping = {}
+    pbar = tqdm.tqdm(total=len(coords) + len(g.edges()))
+    for v in g.nodes():
+        c = coords[v]
+        n = SkeletonNode().from_scratch(anno, c[0], c[1], c[2])
+        node_mapping[v] = n
+        anno.addNode(n)
+        pbar.update(1)
+    for e in g.edges():
+        anno.addEdge(node_mapping[e[0]], node_mapping[e[1]])
+        pbar.update(1)
+    skel.add_annotation(anno)
+    skel.to_kzip(kzip_path)
+    pbar.close()

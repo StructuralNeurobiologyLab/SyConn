@@ -6,6 +6,7 @@ from knossos_utils.knossosdataset import KnossosDataset
 from elektronn2.config import config as e2config
 from elektronn2.utils.gpu import initgpu
 from .compression import load_from_h5py, save_to_h5py
+from ..cnn.TrainData import naive_view_normalization
 import numpy as np
 import os
 import sys
@@ -546,7 +547,8 @@ class NeuralNetworkInterface(object):
     Experimental and almost deprecated interface class
     """
     def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
-                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2):
+                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2,
+                 normalize_data=False):
         self.imposed_batch_size = imposed_batch_size
         self.channels_to_load = channels_to_load
         self.arch = arch
@@ -554,6 +556,7 @@ class NeuralNetworkInterface(object):
         self._fname = os.path.split(model_path)[1]
         self.nb_labels = nb_labels
         self.normal = normal
+        self.normalize_data = normalize_data
         if e2config.device is None:
             from elektronn2.utils.gpu import initgpu
             initgpu(0)
@@ -565,6 +568,8 @@ class NeuralNetworkInterface(object):
 
     def predict_proba(self, x, verbose=False):
         x = x.astype(np.float32)
+        if self.normalize_data:
+            x = naive_view_normalization(x)
         bs = self.imposed_batch_size
         if self.arch == "rec_view":
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
@@ -615,9 +620,9 @@ def get_axoness_model_V2():
     """
     Retrained with GP dendrites. May 2018.
     """
-    m = NeuralNetworkInterface("/wholebrain/u/pschuber/CNN_Training/SyConn/axon_views/g1_v2/g1_v2-FINAL.mdl",
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/SyConn/axon_views/g1_v3/g1_v3-FINAL.mdl",
                                   imposed_batch_size=200,
-                                  nb_labels=3)
+                                  nb_labels=3, normalize_data=True)
     _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
     return m
 
@@ -648,7 +653,7 @@ def get_tripletnet_model():
 
 def get_tripletnet_model_ortho():
     # final model diverged...
-    m = NeuralNetworkInterface("/wholebrain/u/pschuber/CNN_Training/SyConn/triplet_net_SSV/wholecell_orthoviews_v4/Backup/wholecell_orthoviews_v4-180k.mdl",
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/SyConn/triplet_net_SSV/wholecell_orthoviews_v4/Backup/wholecell_orthoviews_v4-180k.mdl",
                                   imposed_batch_size=6,
                                   nb_labels=10, arch="triplet")
     _ = m.predict_proba(np.zeros((1, 4, 3, 512, 512)))

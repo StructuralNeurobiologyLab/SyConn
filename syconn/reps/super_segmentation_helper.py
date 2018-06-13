@@ -1463,7 +1463,7 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
     sso.save_skeleton()
 
 
-def _cnn_axonness2skel(sso, pred_key_appendix="", k=1):
+def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False):
     if k > 1:
         print(DeprecationWarning("Using k>1 is deprecated. Use k=1 followed by"
                                  "'_average_node_axoness_views'."))
@@ -1471,10 +1471,10 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1):
         sso.load_skeleton()
     proba_key = "axoness_probas_cnn%s" % pred_key_appendix
     pred_key = "axoness_preds_cnn%s" % pred_key_appendix
-    if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key):
+    if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key) or reload:
         if len(pred_key_appendix) > 0:
-            print("Couldn't find specified axoness prediction. Falling back to "
-                  "default (-> per SV stored multi-view prediction including SSV context; RAG: 4b_fix).")
+            print("Couldn't find specified axoness prediction stored in SSV"
+                  " attribute dict. Trying to load from SVs.")
         preds = np.array(start_multiprocess_obj("axoness_preds",
                                                    [[sv, {
                                                        "pred_key_appendix": pred_key_appendix}]
@@ -1516,13 +1516,13 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1):
             return_ixs=True)
         assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
                                                "coordinates is bigger than length of sample coordinates."
-        sso.skeleton["axoness"] = node_preds
-        sso.skeleton["axoness_probas"] = node_probas
+        sso.skeleton["axoness%s" % pred_key_appendix] = node_preds
+        sso.skeleton["axoness_probas%s" % pred_key_appendix] = node_probas
         sso.skeleton["view_ixs"] = ixs
     sso.save_skeleton()
 
 
-def majority_vote_compartments(sso, ax_pred_key="axoness_preds_cnn_views_avg10000"):
+def majority_vote_compartments(sso, ax_pred_key):
     g = sso.weighted_graph(add_node_attr=(ax_pred_key, ))
     soma_free_g = g.copy()
     for n, d in g.nodes_iter(data=True):
