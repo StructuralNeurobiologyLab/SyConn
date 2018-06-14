@@ -39,3 +39,6 @@ for ix in ssv_ixs:
             _ = sso.skel_features(feat_ctx_nm)
         except IndexError as e:
             print("Error at SSO %d (context: %d).\n%s" % (sso.id, feat_ctx_nm, e))
+
+with open(path_out_file, "wb") as f:
+    pkl.dump("0", f)

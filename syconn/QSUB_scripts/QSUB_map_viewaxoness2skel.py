@@ -51,3 +51,7 @@ for ix in ssv_ixs:
         continue
     pred_key = "axoness_preds_cnn{}_views_avg{}".format(pred_key_appendix, avg_window)
     majority_vote_compartments(sso, pred_key)
+
+
+with open(path_out_file, "wb") as f:
+    pkl.dump("0", f)

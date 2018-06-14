@@ -636,22 +636,21 @@ class SegmentationObject(object):
                               disable_locking=not self.enable_locking)
         return self.id in location_dc
 
-    @property
-    def views_exist(self, woglia=True):
+
+    def views_exist(self, woglia):
         view_dc = LZ4Dict(self.view_path(woglia=woglia),
                           disable_locking=not self.enable_locking)
         return self.id in view_dc
 
-    @property
-    def views(self):
+    def views(self, woglia):
         assert self.type == "sv"
         if self._views is None:
-            if self.views_exist:
+            if self.views_exist(woglia):
                 if self.view_caching:
-                    self._views = self.load_views()
+                    self._views = self.load_views(woglia=woglia)
                     return self._views
                 else:
-                    return self.load_views()
+                    return self.load_views(woglia=woglia)
             else:
                 return -1
         else:

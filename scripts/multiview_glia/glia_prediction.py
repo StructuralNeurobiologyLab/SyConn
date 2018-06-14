@@ -59,6 +59,7 @@ if __name__ == "__main__":
     script_folder = os.path.dirname(
         os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views",
-                                 n_max_co_processes=200, pe="openmp",
+                                 n_max_co_processes=20, pe="openmp",
                                  queue=None, n_cores=10, suffix="_glia",
-                                 script_folder=script_folder)
+                                 script_folder=script_folder,
+                                 sge_additional_flags="-V")

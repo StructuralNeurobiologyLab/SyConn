@@ -31,3 +31,7 @@ wd = args[1]
 for ssv_ix in ch:
     sso = SuperSegmentationObject(ssv_ix, working_dir=wd)
     sso.render_views(add_cellobjects=True, woglia=True, overwrite=True)
+
+
+with open(path_out_file, "wb") as f:
+    pkl.dump("0", f)

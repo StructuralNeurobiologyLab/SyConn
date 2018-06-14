@@ -55,35 +55,26 @@ def mesh_chunk(args):
         # create mesh
         indices, vertices, normals = triangulation(np.array(voxel_list),
                                      downsampling=MESH_DOWNSAMPLING[obj_type],
-                                     scaling=scaling, n_closings=MESH_CLOSING[obj_type])
+                                     n_closings=MESH_CLOSING[obj_type])
         vertices *= scaling
         md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
     md.save2pkl()
     print attr_dir
 
 
-def mesh_proc_chunked(obj_type, working_dir, n_folders_fs=10000):
-    sds = SegmentationDataset(obj_type, working_dir=working_dir, n_folders_fs=n_folders_fs)
-    fold = sds.so_storage_path
-    f1 = np.arange(0, 100)
-    f2 = np.arange(0, 100)
-    all_poss_attr_dicts = list(itertools.product(f1, f2))
-    assert len(all_poss_attr_dicts) == 10000
-    print "Processing %d mesh dicts of %s." % (len(all_poss_attr_dicts), obj_type)
-    multi_params = [["%s/%02d/%02d/" % (fold, par[0], par[1]), obj_type] for par in all_poss_attr_dicts]
+def mesh_proc_chunked(obj_type, working_dir):
+    sd = SegmentationDataset(obj_type, working_dir=working_dir)
+    multi_params = sd.so_dir_paths
+    print "Processing %d mesh dicts of %s." % (len(multi_params), obj_type)
     start_multiprocess_imap(mesh_chunk, multi_params, nb_cpus=20, debug=False)
-
 
 
 if __name__ == "__main__":
     # preprocess meshes of all objects
-    # TODO: check if n_folders_fs makes sense and is there a way
-    # TODO: to get the folder hirarchy (important for 'mesh_proc_chunked'?
-    # TODO: (has to be read out from config or something @sven)
-    mesh_proc_chunked("conn", wd, n_folders_fs=10000)
-    mesh_proc_chunked("sj", wd, n_folders_fs=10000)
-    mesh_proc_chunked("vc", wd, n_folders_fs=10000)
-    mesh_proc_chunked("mi", wd, n_folders_fs=10000)
+    mesh_proc_chunked("conn", wd)
+    mesh_proc_chunked("sj", wd)
+    mesh_proc_chunked("vc", wd)
+    mesh_proc_chunked("mi", wd)
     # cache meshes of SSV objects, here for axon ground truth,
     # e.g. change version to "0" for initial run on all SSVs in the segmentation
     ssds = SuperSegmentationDataset(working_dir=wd,)

@@ -9,7 +9,6 @@ import copy
 import itertools
 from collections import Counter
 from multiprocessing.pool import ThreadPool
-
 import networkx as nx
 import numpy as np
 import os
@@ -19,7 +18,7 @@ from knossos_utils.skeleton_utils import annotation_to_nx_graph, load_skeleton a
 from .rep_helper import assign_rep_values, colorcode_vertices
 from . import segmentation
 from .segmentation import SegmentationObject
-from .segmentation_helper import load_skeleton
+from .segmentation_helper import load_skeleton, find_missing_sv_views
 from ..mp.shared_mem import start_multiprocess, start_multiprocess_obj
 skeletopyze_available = False
 # try:
@@ -651,7 +650,6 @@ def nodes_in_pathlength(anno, max_path_len):
 def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
     sso.load_attr_dict()
     if not overwrite and "celltype_cnn" in sso.attr_dict:
-        print("Prediciton already exists (SSV %d)." % sso.id)
         return
     out_d = sso_views_to_modelinput(sso, nb_views)
     res = model.predict_proba(out_d)
@@ -673,7 +671,6 @@ def sso_views_to_modelinput(sso, nb_views):
         rand_ixs = np.random.choice(np.arange(views.shape[1]),
                                     nb_views - views.shape[1])
         views = np.append(views, views[:, rand_ixs], axis=1)
-        print(rand_ixs, views.shape)
     nb_samples = np.floor(views.shape[1] / nb_views)
     assert nb_samples > 0
     out_d = views[:, :int(nb_samples * nb_views)]
@@ -1544,4 +1541,14 @@ def majority_vote_compartments(sso, ax_pred_key):
     sso.save_skeleton()
 
 
-
+def find_incomplete_ssv_views(ssd, woglia, n_cores=20):
+    sd = ssd.get_segmentationdataset("sv")
+    incomplete_sv_ids = find_missing_sv_views(sd, woglia, n_cores)
+    missing_ssv_ids = set()
+    for sv_id in incomplete_sv_ids:
+        try:
+            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            missing_ssv_ids.add(ssv_id)
+        except KeyError:
+            pass  # sv does not exist in this SSD
+    return list(missing_ssv_ids)

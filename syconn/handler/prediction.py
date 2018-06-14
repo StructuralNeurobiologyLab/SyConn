@@ -559,7 +559,9 @@ class NeuralNetworkInterface(object):
         self.normalize_data = normalize_data
         if e2config.device is None:
             from elektronn2.utils.gpu import initgpu
-            initgpu(0)
+            initgpu('auto')
+        import elektronn2
+        elektronn2.logger.setLevel("ERROR")
         from elektronn2.neuromancer.model import modelload
         self.model = modelload(model_path, replace_bn='const',
                                imposed_batch_size=imposed_batch_size)
@@ -662,7 +664,7 @@ def get_tripletnet_model_ortho():
 
 def get_celltype_model():
     m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/celltypes/g1_20views_v3/g1_20views_v3-FINAL.mdl",
-                               imposed_batch_size=5, nb_labels=4)
+                               imposed_batch_size=2, nb_labels=4)
     _ = m.predict_proba(np.zeros((5, 4, 20, 128, 256)))
     return m
 

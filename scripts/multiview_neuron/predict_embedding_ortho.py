@@ -3,13 +3,14 @@
 # All rights reserved
 from syconn.config.global_params import wd, get_dataset_scaling
 from syconn.handler.prediction import get_tripletnet_model_ortho, NeuralNetworkInterface
-from syconn.handler.basics import chunkify
+from syconn.handler.basics import chunkify, get_filepaths_from_dir
 from syconn.proc.stats import projection_pca, projection_tSNE
 from syconn.mp.shared_mem import start_multiprocess_imap
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.proc.rendering import render_sso_ortho_views
 import numpy as np
 import tqdm
+import os
 from syconn.cnn.TrainData import SSVCelltype
 
 
@@ -105,20 +106,24 @@ if __name__ == "__main__":
     #                     target_names=["none"], **tsne_kwargs)
 
     # celltype gt only
-    for ii in range(4, 7):
-        m_p = "/wholebrain/scratch/pschuber/CNN_Training/SyConn/triplet_net_SSV/wholecell_orthoviews_v%d/wholecell_orthoviews_v%d-FINAL.mdl" % (ii, ii)
-        m = NeuralNetworkInterface(m_p,
-            imposed_batch_size=6,
-            nb_labels=10, arch="triplet")
-        _ = m.predict_proba(np.zeros((1, 4, 3, 512, 512)))
-        ssd = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/",
-                                       version="6")
-        # m = get_tripletnet_model_ortho()
-        latent, labels = load_celltype_ctgt(m)
+    m_dir = "/wholebrain/scratch/pschuber/CNN_Training/SyConn/tripletnet_SSV/"
+    m_ps = get_filepaths_from_dir(m_dir, recursively=True, ending='LAST.mdl')
+    for m_p in m_ps:
+        try:
+            m = NeuralNetworkInterface(m_p,
+                imposed_batch_size=6,
+                nb_labels=10, arch="triplet")
+            _ = m.predict_proba(np.zeros((1, 4, 3, 512, 512)))
+            ssd = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/",
+                                           version="6")
+            # m = get_tripletnet_model_ortho()
+            latent, labels = load_celltype_ctgt(m)
 
-        _ = projection_pca(latent, labels, fold + "/ctgt_%d_kde_pca.png" % ii,
-                           pca=None, colors=None,target_names=["EA", "MSN", "GP", "INT"])
-        tsne_kwargs = {"n_components": 3, "random_state": 0,
-                       "perplexity": 20, "n_iter": 10000}
-        projection_tSNE(latent, labels,fold + "/ctgt_%d_kde_tsne.png" % ii,
-                        target_names=["EA", "MSN", "GP", "INT"], **tsne_kwargs)
+            _ = projection_pca(latent, labels, fold + "/ctgt_{}_kde_pca.tif".format(os.path.split(m_p)[1][:-4]),
+                               pca=None, colors=None,target_names=["EA", "MSN", "GP", "INT"])
+        except ValueError:
+            print "Skipped", m_p
+        # tsne_kwargs = {"n_components": 3, "random_state": 0,
+        #                "perplexity": 20, "n_iter": 10000}
+        # projection_tSNE(latent, labels,fold + "/ctgt_%d_kde_tsne.png" % ii,
+        #                 target_names=["EA", "MSN", "GP", "INT"], **tsne_kwargs)

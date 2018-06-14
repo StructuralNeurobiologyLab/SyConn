@@ -637,7 +637,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
         start = time.time()
     coords = sso.sample_locations()
     if not overwrite:
-        missing_sv_ixs = np.array([not so.views_exist for so in sso.svs],
+        missing_sv_ixs = np.array([not so.views_exist(woglia=woglia)
+                                   for so in sso.svs],
                                   dtype=np.bool)
         missing_svs = np.array(sso.svs)[missing_sv_ixs]
         coords = np.array(coords)[missing_sv_ixs]

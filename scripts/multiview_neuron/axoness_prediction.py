@@ -14,6 +14,7 @@ def axoness_pred_exists(sv):
     sv.load_attr_dict()
     return 'axoness_probas_v2' in sv.attr_dict
 
+
 if __name__ == "__main__":
     # ssd = SuperSegmentationDataset(working_dir=wd)
     # m = get_axoness_model_V2()
@@ -35,10 +36,10 @@ if __name__ == "__main__":
 
 # NEW AND UNTESTED
     ssd = SuperSegmentationDataset(working_dir=wd)
-    sv_ids = ssd.sv_ids
+    sv_ids = ssd.get_super_segmentation_object(21383168).sv_ids#ssd.sv_ids
     np.random.shuffle(sv_ids)
     # chunk them
-    multi_params = chunkify(sv_ids, 100000)
+    multi_params = chunkify(sv_ids, 5)
     # get model properties
     m = get_axoness_model_V2()
     model_kwargs = dict(model_path=m._path, normalize_data=m.normalize_data,
@@ -51,10 +52,10 @@ if __name__ == "__main__":
     pred_kwargs = dict(woglia=True, pred_key="_v2", nb_cpus=1, verbose=False,
                        raw_only=False)
 
-    multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for par in multi_params[:2]]
+    multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for par in multi_params]
     script_folder = os.path.dirname(
         os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views",
-                                 n_max_co_processes=30, pe="openmp", queue=None,
+                                 n_max_co_processes=5, pe="openmp", queue=None,
                                  script_folder=script_folder, n_cores=10,
-                                 suffix="_axoness")
+                                 suffix="_axoness", sge_additional_flags="-V")

@@ -1,18 +1,4 @@
 import os
-os.environ["PATH"] = os.environ["PATH"] + ":/u/pschuber/cuda-8.0/bin"
-try:
-    os.environ["LD_LIBRARY_PATH"] = os.environ["LD_LIBRARY_PATH"] + ":/u/pschuber/cuda-8.0/lib64"
-except KeyError:
-    os.environ["LD_LIBRARY_PATH"] = "/u/pschuber/cuda-8.0/lib64"
-try:
-    os.environ["LIBRARY_PATH"] = os.environ["LIBRARY_PATH"] + ":/u/pschuber/cuda-8.0/lib64/"
-except KeyError:
-    os.environ["LIBRARY_PATH"] = "/u/pschuber/cuda-8.0/lib64/"
-try:
-    os.environ["CUDA_HOME"] = os.environ["CUDA_HOME"] + ":/u/pschuber/cuda-8.0"
-except KeyError:
-    os.environ["CUDA_HOME"] = "/u/pschuber/cuda-8.0"
-
 
 import sys
 import numpy as np
@@ -43,5 +29,7 @@ pred_kwargs = args[3]
 model = NeuralNetworkInterface(**model_kwargs)
 sd = sos_dict_fact(svixs, **so_kwargs)
 sos = init_sos(sd)
-print(svixs)
-predict_sos_views(model, sos, **pred_kwargs)
+out = predict_sos_views(model, sos, **pred_kwargs)
+
+with open(path_out_file, "wb") as f:
+    pkl.dump(out, f)

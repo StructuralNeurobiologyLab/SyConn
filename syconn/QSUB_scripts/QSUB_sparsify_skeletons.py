@@ -35,3 +35,6 @@ for ix in ssv_ixs:
     sparsify_skeleton(sso)
     sso.save_skeleton()
     print("Created stitched, pruned and sparsed skeleton for SSV", ix)
+
+with open(path_out_file, "wb") as f:
+    pkl.dump("0", f)

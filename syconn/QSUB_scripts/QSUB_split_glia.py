@@ -52,3 +52,6 @@ for cc in args:
               "Splitting of SSV %d failed with %s."
               "\n--------------------------------------------------------\n" % (
               cc_ix, e))
+
+with open(path_out_file, "wb") as f:
+    pkl.dump("0", f)

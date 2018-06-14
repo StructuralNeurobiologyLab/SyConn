@@ -1174,7 +1174,7 @@ class SuperSegmentationObject(object):
                 sm.start_multiprocess_imap(multi_render_sampled_svidlist, params,
                                       nb_cpus=self.nb_cpus, debug=False)
             elif qu.__QSUB__:
-                params = chunkify(params, 700)
+                params = chunkify(params, 1000)
                 so_kwargs = {'version': self.svs[0].version,
                              'working_dir': self.working_dir,
                              'obj_type': self.svs[0].type}
@@ -1805,8 +1805,7 @@ class SuperSegmentationObject(object):
 
 def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
                           render_first_only=False, add_cellobjects=True,
-                          overwrite=False, cellobjects_only=False,
-                          return_views=True):
+                          overwrite=False, cellobjects_only=False):
     """
     Renders for each SV views at sampled locations (number is dependent on
     SV mesh size with scaling fact) from combined mesh of all SV.
@@ -1825,12 +1824,12 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
     # initilaize temporary SSO
     if not overwrite:
         if render_first_only:
-            if sos[0].views_exist:
+            if sos[0].views_exist(woglia=woglia):
                 sys.stdout.write("\r%d" % sos[0].id)
                 sys.stdout.flush()
                 return
         else:
-            if np.all([sv.views_exist for sv in sos]):
+            if np.all([sv.views_exist(woglia=woglia) for sv in sos]):
                 return
     sso = SuperSegmentationObject(np.random.randint(0, sys.maxint),
                                   create=False,
