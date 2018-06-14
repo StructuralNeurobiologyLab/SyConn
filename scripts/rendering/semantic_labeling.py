@@ -62,8 +62,8 @@ def remap_rgb_labelviews(rgb_view, palette):
 
     """
     label_view_flat = rgb_view.flatten().reshape((-1, 3))
-    background_label = (len(palette) + 1)  # convention: Use highest ID as background
-    raise()
+    background_label = len(palette)
+    # convention: Use highest ID as background, if we have 3 foreground labels (e.g. 0, 1, 2) then len(palette) will be three which is already one bigger then the highest foreground label
     remapped_label_views = np.ones((len(label_view_flat), ), dtype=np.uint16) * background_label  # use (0,0,0) as background color
     for i in range(len(palette)):
         mask = (label_view_flat[:, 0] == palette[i, 0]) &\
@@ -207,27 +207,28 @@ def GT_generation(kzip_paths, gt_type="spgt"):
     all_label_views = all_label_views[ixs]
     print("Swapping axes.")
     all_raw_views = all_raw_views.swapaxes(2, 1)
-    all_label_views= all_label_views.swapaxes(2, 1)
+    raise()
+    all_label_views = all_label_views.swapaxes(2, 1)
     print("Reshaping arrays.")
     all_raw_views = all_raw_views.reshape((-1, 4, 256, 128))
     all_label_views = all_label_views.reshape((-1, 1, 256, 128))
-    raw_first_split, raw_test = train_test_split(all_raw_views, train_size = 0.9, shuffle=True)
-    raw_train, raw_valid = train_test_split(raw_first_split, train_size = 0.9, shuffle=True)
-    label_first_split, label_test = train_test_split(all_label_views, train_size=0.9, shuffle=True)
-    label_train, label_valid = train_test_split(label_first_split, train_size=0.9, shuffle=True)
+    raw_train, raw_other, label_train, label_other = \
+        train_test_split(all_raw_views, all_label_views, train_size=0.8, shuffle=True)
+    raw_valid, raw_test, label_valid, label_test = \
+        train_test_split(raw_other, label_other, train_size=0.5, shuffle=True)
     h5py_path = os.path.expanduser("~") + "/spine_gt_multiview/"
     print("Writing h5 files.")
-    save_to_h5py([raw_train[:, :, :]], h5py_path + "/raw_train.h5",
+    save_to_h5py([raw_train], h5py_path + "/raw_train.h5",
                  ["raw"])
-    save_to_h5py([raw_valid[:, :, :]], h5py_path + "/raw_valid.h5",
+    save_to_h5py([raw_valid], h5py_path + "/raw_valid.h5",
                  ["raw"])
-    save_to_h5py([raw_test[:, :, :]], h5py_path + "/raw_test.h5",
+    save_to_h5py([raw_test], h5py_path + "/raw_test.h5",
                  ["raw"])
-    save_to_h5py([label_train[:, :, :]], h5py_path + "/label_train.h5",
+    save_to_h5py([label_train], h5py_path + "/label_train.h5",
                  ["label"])
-    save_to_h5py([label_valid[:, :, :]], h5py_path + "/label_valid.h5",
+    save_to_h5py([label_valid], h5py_path + "/label_valid.h5",
                  ["label"])
-    save_to_h5py([label_test[:, :, :]], h5py_path + "/label_test.h5",
+    save_to_h5py([label_test], h5py_path + "/label_test.h5",
                  ["label"])
         # sso_id = int(re.findall("/(\d+).", kzip_paths[ii])[0])
         # all_views = res[ii]
