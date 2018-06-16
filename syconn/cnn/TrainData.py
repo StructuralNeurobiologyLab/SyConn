@@ -774,15 +774,16 @@ def add_gt_sample(ssv_id, label, gt_type, set_type="train"):
 
 
 def naive_view_normalization(d):
-    # perform pseudo-normalization (proper normaalization: how to store mean and std for inference?)
+    d = d.astype(np.float32)
+    # perform pseudo-normalization (proper normalization: how to store mean and std for inference?)
     if not (np.all(0 <= d) and np.all(d <= 1.0)):
         for ii in range(len(d)):
             curr_view = d[ii]
-            if 0 < np.max(curr_view) <= 1.0:
+            if 0 <= np.max(curr_view) <= 1.0:
                 curr_view = curr_view - 0.5
             else:
                 curr_view = curr_view / 255. - 0.5
             d[ii] = curr_view
     else:
-        d = d.astype(np.float32) - 0.5
+        d = d - 0.5
     return d

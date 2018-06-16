@@ -265,3 +265,22 @@ def find_missing_sv_views(sd, woglia, n_cores=20):
     res = start_multiprocess_imap(sv_view_exists, params, nb_cpus=n_cores,
                                   debug=False)
     return np.concatenate(res)
+
+
+def sv_attr_exists(args):
+    ps, attr_key = args
+    missing_ids = []
+    for p in ps:
+        ad = AttributeDict(p + "/attr_dict.pkl", disable_locking=True)
+        for k, v in ad.iteritems():
+            if attr_key not in v:
+                missing_ids.append(k)
+    return missing_ids
+
+
+def find_missing_sv_attributes(sd, attr_key, n_cores=20):
+    multi_params = chunkify(sd.so_dir_paths, 100)
+    params = [(ps, attr_key) for ps in multi_params]
+    res = start_multiprocess_imap(sv_view_exists, params, nb_cpus=n_cores,
+                                  debug=False)
+    return np.concatenate(res)

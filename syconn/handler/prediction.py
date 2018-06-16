@@ -548,7 +548,7 @@ class NeuralNetworkInterface(object):
     """
     def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
                  channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2,
-                 normalize_data=False):
+                 normalize_data=False, normalize_func=None, init_gpu=None):
         self.imposed_batch_size = imposed_batch_size
         self.channels_to_load = channels_to_load
         self.arch = arch
@@ -557,9 +557,12 @@ class NeuralNetworkInterface(object):
         self.nb_labels = nb_labels
         self.normal = normal
         self.normalize_data = normalize_data
+        self.normalize_func = normalize_func
+        if init_gpu is None:
+            init_gpu = 'auto'
         if e2config.device is None:
             from elektronn2.utils.gpu import initgpu
-            initgpu('auto')
+            initgpu(init_gpu)
         import elektronn2
         elektronn2.logger.setLevel("ERROR")
         from elektronn2.neuromancer.model import modelload
@@ -571,7 +574,10 @@ class NeuralNetworkInterface(object):
     def predict_proba(self, x, verbose=False):
         x = x.astype(np.float32)
         if self.normalize_data:
-            x = naive_view_normalization(x)
+            if self.normalize_func is not None:
+                x = self.normalize_func(x)
+            else:
+                x = naive_view_normalization(x)
         bs = self.imposed_batch_size
         if self.arch == "rec_view":
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
@@ -662,11 +668,32 @@ def get_tripletnet_model_ortho():
     return m
 
 
-def get_celltype_model():
+def get_celltype_model(init_gpu=None):
+    # normalize images between 0 and 1 (naive_view_normalization normalizes between -0.5 and 0.5)
     m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/celltypes/g1_20views_v3/g1_20views_v3-FINAL.mdl",
-                               imposed_batch_size=2, nb_labels=4)
-    _ = m.predict_proba(np.zeros((5, 4, 20, 128, 256)))
+                               imposed_batch_size=2, nb_labels=4, normalize_data=True, normalize_func=force_correct_norm,
+                               init_gpu=init_gpu)
+    _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
     return m
+
+
+def force_correct_norm(x):
+    import itertools
+    x = x.astype(np.float32)
+    for ii, jj, kk in itertools.product(np.arange(x.shape[0]), np.arange(x.shape[1]),
+                      np.arange(x.shape[2])):
+        curr_img = x[ii, jj, kk]
+        if np.all(curr_img[0, 0] == curr_img):
+            x[ii, jj, kk] = 1
+        elif np.max(curr_img) <= 1.0 and np.min(curr_img) >= 0:
+            pass
+        elif np.max(curr_img) > 1.0:
+            x[ii, jj, kk] = curr_img / 255.
+        assert np.max(x[ii, jj, kk]) <= 1.0 and np.min(x[ii, jj, kk]) >= 0
+    return x
+
+
+
 
 def _multi_gpu_ds_pred(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size=None, gpu_ids=(0, 1)):
 

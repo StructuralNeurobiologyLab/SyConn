@@ -195,7 +195,7 @@ class SuperSegmentationDataset(object):
     def ssv_ids(self):
         if self._ssv_ids is None:
             if len(self.mapping_dict) > 0:
-                return self.mapping_dict.keys()
+                self._ssv_ids = np.array(self.mapping_dict.keys())
             elif self.mapping_dict_exists:
                 self.load_mapping_dict()
                 self._ssv_ids = np.array(self.mapping_dict.keys())

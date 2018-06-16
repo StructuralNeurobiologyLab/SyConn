@@ -32,7 +32,7 @@ if __name__ == "__main__":
     path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
                                  n_max_co_processes=200, pe="openmp", queue=None,
                                  script_folder=script_folder, suffix="")
-    sd = SegmentationDataset("sv", working_dir=wd, version=version)
+    sd = SegmentationDataset("sv", working_dir=wd)
     res = find_missing_sv_views(sd, woglia=True, n_cores=10)
     all_sv_ids_in_rag = np.concatenate(init_rag.values())
     missing_not_contained_in_rag = []

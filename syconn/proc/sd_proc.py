@@ -423,168 +423,46 @@ def sos_dict_fact(svixs, version=None, scaling=get_dataset_scaling(), obj_type="
 def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
                       verbose=False, raw_only=False, single_cc_only=False,
                       return_proba=False):
-    nb_chunks = np.max([1, len(sos) / 50])
+    nb_chunks = np.max([1, len(sos) / 75])
     so_chs = basics.chunkify(sos, nb_chunks)
     for ch in so_chs:
         views = sm.start_multiprocess_obj("load_views", [[sv, {"woglia": woglia,
                                           "raw_only": raw_only}]
                                           for sv in ch], nb_cpus=nb_cpus)
-        for kk in range(len(views)):
-            data = views[kk]
-            for i in range(len(data)):
-                if single_cc_only:
-                    sing_cc = np.concatenate([single_conn_comp_img(data[i, 0, :1]),
-                                              single_conn_comp_img(data[i, 0, 1:])])
-                    data[i, 0] = sing_cc
-            views[kk] = data
-        part_views = np.cumsum([0] + [len(v) for v in views])
-        views = np.concatenate(views)
-        probas = model.predict_proba(views, verbose=verbose)
-        so_probas = []
-        for ii, so in enumerate(ch):
-            sv_probas = probas[part_views[ii]:part_views[ii + 1]]
-            so_probas.append(sv_probas)
-            # so.attr_dict[key] = sv_probas
-        assert len(so_probas) == len(ch)
-        if return_proba:
-            return so_probas
-        params = [[so, prob, pred_key] for so, prob in zip(ch, so_probas)]
-        sm.start_multiprocess(multi_probas_saver, params, nb_cpus=nb_cpus)
+        return predict_views(model, views, ch, pred_key, verbose=verbose,
+                             single_cc_only=single_cc_only,
+                             return_proba=return_proba, nb_cpus=nb_cpus)
+
+
+def predict_views(model, views, ch, pred_key, single_cc_only=False,
+                  verbose=False, return_proba=False, nb_cpus=1):
+    for kk in range(len(views)):
+        data = views[kk]
+        for i in range(len(data)):
+            if single_cc_only:
+                sing_cc = np.concatenate([single_conn_comp_img(data[i, 0, :1]),
+                                          single_conn_comp_img(data[i, 0, 1:])])
+                data[i, 0] = sing_cc
+        views[kk] = data
+    part_views = np.cumsum([0] + [len(v) for v in views])
+    views = np.concatenate(views)
+    probas = model.predict_proba(views, verbose=verbose)
+    so_probas = []
+    for ii, so in enumerate(ch):
+        sv_probas = probas[part_views[ii]:part_views[ii + 1]]
+        so_probas.append(sv_probas)
+        # so.attr_dict[key] = sv_probas
+    assert len(so_probas) == len(ch)
+    if return_proba:
+        return so_probas
+    params = [[so, prob, pred_key] for so, prob in zip(ch, so_probas)]
+    sm.start_multiprocess(multi_probas_saver, params, nb_cpus=nb_cpus)
 
 
 def multi_probas_saver(args):
     so, probas, key = args
     so.save_attributes([key], [probas])
 
-
-# def export_sd_to_knossosdataset(sd, kd, n_jobs=100, qsub_pe=None,
-#                                 qsub_queue=None, nb_cpus=10,
-#                                 n_max_co_processes=100):
-#     multi_params = []
-#
-#     id_blocks = np.array_split(np.array(sd.ids), n_jobs)
-#
-#     for id_block in id_blocks:
-#         multi_params.append([id_block, sd.type, sd.version, sd.working_dir,
-#                              kd.knossos_path])
-#
-#     if qsub_pe is None and qsub_queue is None:
-#         results = sm.start_multiprocess(_export_sd_to_knossosdataset_thread,
-#                                         multi_params, nb_cpus=nb_cpus)
-#
-#     elif qu.__QSUB__:
-#         path_to_out = qu.QSUB_script(multi_params,
-#                                      "export_sd_to_knossosdataset",
-#                                      pe=qsub_pe, queue=qsub_queue,
-#                                      script_folder=script_folder,
-#                                      n_max_co_processes=n_max_co_processes)
-#     else:
-#         raise Exception("QSUB not available")
-#
-#
-# def _export_sd_to_knossosdataset_thread(args):
-#     so_ids = args[0]
-#     obj_type = args[1]
-#     version = args[2]
-#     working_dir = args[3]
-#     kd_path = args[4]
-#
-#     kd = knossosdataset.KnossosDataset()
-#     kd.initialize_from_knossos_path(kd_path)
-#
-#     sd = segmentation.SegmentationDataset(obj_type=obj_type,
-#                                           working_dir=working_dir,
-#                                           version=version)
-#
-#     for so_id in so_ids:
-#         print(so_id)
-#         so = sd.get_segmentation_object(so_id, False)
-#
-#         offset = so.bounding_box[0]
-#         if not 0 in offset:
-#             kd.from_matrix_to_cubes(offset,
-#                                     data=so.voxels.astype(np.uint64) * so_id,
-#                                     overwrite=False,
-#                                     nb_threads=1)
-
-#
-# def export_sd_to_knossosdataset(sd, kd, block_size=(512, 512, 512),
-#                                 qsub_pe=None, qsub_queue=None, nb_cpus=10,
-#                                 n_max_co_processes=100):
-#
-#     grid_c = []
-#     for i_dim in range(3):
-#         grid_c.append(np.arange(block_size[i_dim] / 2,
-#                                 kd.boundary[i_dim] - block_size[i_dim] / 2,
-#                                 block_size[i_dim]))
-#
-#     grid_points = np.array(np.meshgrid(grid_c[0], grid_c[1], grid_c[2])).reshape(3, -1).T
-#     grid_kdtree = spatial.cKDTree(grid_points)
-#
-#     _, so_to_grid = grid_kdtree.query(sd.rep_coords)
-#
-#
-#     multi_params = []
-#
-#     for i_grid in range(len(grid_points)):
-#         so_ids = sd.ids[so_to_grid == i_grid]
-#
-#         multi_params.append([so_ids, sd.type, sd.version, sd.working_dir, kd.knossos_path])
-#
-#     if qsub_pe is None and qsub_queue is None:
-#         results = sm.start_multiprocess(_export_sd_to_knossosdataset_thread,
-#                                         multi_params, nb_cpus=nb_cpus)
-#
-#     elif qu.__QSUB__:
-#         path_to_out = qu.QSUB_script(multi_params,
-#                                      "export_sd_to_knossosdataset",
-#                                      pe=qsub_pe, queue=qsub_queue,
-#                                      script_folder=script_folder,
-#                                      n_max_co_processes=n_max_co_processes)
-#     else:
-#         raise Exception("QSUB not available")
-#
-#
-# def _export_sd_to_knossosdataset_thread(args):
-#     so_ids = args[0]
-#     obj_type = args[1]
-#     version = args[2]
-#     working_dir = args[3]
-#     kd_path = args[4]
-#
-#     kd = knossosdataset.KnossosDataset()
-#     kd.initialize_from_knossos_path(kd_path)
-#
-#     sd = segmentation.SegmentationDataset(obj_type=obj_type,
-#                                           working_dir=working_dir,
-#                                           version=version)
-#
-#     bbs = sd.load_cached_data("bounding_box")[np.in1d(sd.ids, so_ids)]
-#
-#     bb = [np.max(np.vstack([np.array([0, 0, 0]), np.min(bbs[:, 0], axis=0)]), axis=0),
-#           np.min(np.vstack([kd.boundary, np.max(bbs[:, 1], axis=0)]), axis=0)]
-#     overlay_block = np.zeros(bb[1] - bb[0] + 1, dtype=np.uint64)
-#
-#     for so_id in so_ids:
-#         print(so_id)
-#
-#         so = sd.get_segmentation_object(so_id, False)
-#         vx = so.voxel_list - bb[0]
-#
-#         if np.any(so.bounding_box[0] < 0):
-#             print(so_id, "Failed - low")
-#             continue
-#
-#         if np.any(so.bounding_box[1] - kd.boundary[1] > 0):
-#             print(so_id, "Failed - high")
-#             continue
-#
-#         overlay_block[vx[:, 0], vx[:, 1], vx[:, 2]] = so_id
-#
-#     kd.from_matrix_to_cubes(bb[0],
-#                             data=overlay_block,
-#                             overwrite=False,
-#                             nb_threads=1)
 
 def export_sd_to_knossosdataset(sd, kd, block_edge_length=512,
                                 qsub_pe=None, qsub_queue=None, nb_cpus=10,

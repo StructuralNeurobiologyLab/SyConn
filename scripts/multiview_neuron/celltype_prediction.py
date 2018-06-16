@@ -16,18 +16,18 @@ import os
 
 def predictor(args):
     ssv_ids = args
-    m = get_celltype_model()
+    # randomly initialize gpu
+    m = get_celltype_model(init_gpu=np.random.randint(0, 2))
     pbar = tqdm.tqdm(total=len(ssv_ids))
     missing_ssvs = []
     for ix in ssv_ids:
         ssv = SuperSegmentationObject(ix, working_dir=wd)
-        ssv.nb_cpus = 5
+        ssv.nb_cpus = 1
         try:
-            predict_sso_celltype(ssv, m, overwrite=False)
+            predict_sso_celltype(ssv, m, overwrite=True)
         except Exception as e:
             missing_ssvs.append((ssv.id, e))
             print(repr(e))
-        ssv.load_attr_dict()
         pbar.update(1)
     pbar.close()
     return missing_ssvs
@@ -40,8 +40,13 @@ if __name__ == "__main__":
     np.random.seed(0)
     ssv_ids = ssd.ssv_ids
     np.random.shuffle(ssv_ids)
-    err = start_multiprocess_imap(predictor, chunkify(ssd.ssv_ids, 15), nb_cpus=6)
+    err = start_multiprocess_imap(predictor, chunkify(ssd.ssv_ids, 15),
+                                  nb_cpus=6)
     err = np.concatenate(err)
     if len(err) > 0:
         print("{} errors occurred for SSVs with ID: "
               "{}".format(len(err), [el[0] for el in err]))
+
+
+# TODO: perform async. data loading and model predictions, see
+# https://stackoverflow.com/questions/12474182/asynchronously-read-and-process-an-image-in-python

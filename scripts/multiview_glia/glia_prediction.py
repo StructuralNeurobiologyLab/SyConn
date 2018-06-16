@@ -4,6 +4,8 @@
 from syconn.reps.rep_helper import parse_cc_dict_from_kml
 from syconn.config.global_params import wd
 from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn.reps.segmentation import SegmentationDataset
+from syconn.reps.segmentation_helper import find_missing_sv_attributes
 from syconn.handler.prediction import get_glia_model
 from syconn.handler.basics import chunkify
 from syconn.config.global_params import get_dataset_scaling
@@ -12,34 +14,20 @@ import tqdm
 import numpy as np
 import os
 
-#
-# def new_glia_preds(init_rag):
-#     pbar = tqdm.tqdm(total=len(init_rag))
-#     m = get_glia_model()
-#     for cc_ix, svixs in init_rag.iteritems():
-#         # only create this SSV virtuall (-> 'version'='tmp').
-#         # Views and predictions are stored in SVs with flags 'wo_glia' and 'raw_only'
-#         #  and 'glia_probas'
-#         ssv = SuperSegmentationObject(cc_ix, version="tmp", nb_cpus=20,
-#                                       working_dir=wd, create=False, sv_ids=svixs,
-#                                       scaling=get_dataset_scaling())
-#         ssv.predict_views_gliaSV(m, pred_key_appendix="", verbose=False)
-#         pbar.update(1)
-
 
 if __name__ == "__main__":
+    # only append to this key if needed (for e.g. different versions, change accordingly in 'axoness_mapping.py')
+    pred_key = "glia_probas"
     # Load initial RAG from  Knossos mergelist text file.
     init_rag_p = wd + "initial_rag.txt"
     assert os.path.isfile(init_rag_p), "Initial RAG could not be found at %s."\
                                        % init_rag_p
     init_rag = parse_cc_dict_from_kml(init_rag_p)
-    # new_glia_preds(init_rag)
 
-    # NEW AND UNTESTED
-    sv_ids = np.concatenate(init_rag.values())
-    np.random.shuffle(sv_ids)
     # chunk them
-    multi_params = chunkify(sv_ids, 2000)
+    sd = SegmentationDataset("sv", working_dir=wd)
+    multi_params = chunkify(sd.so_dir_paths, 75)
+
     # get model properties
     m = get_glia_model()
     model_kwargs = dict(model_path=m._path,
@@ -51,15 +39,23 @@ if __name__ == "__main__":
     so_kwargs = dict(working_dir=wd)
     # for glia views set woglia to False (because glia are included),
     #  raw_only to True
-    pred_kwargs = dict(woglia=False, pred_key="", nb_cpus=1, verbose=False,
+    pred_kwargs = dict(woglia=False, pred_key=pred_key, verbose=False,
                        raw_only=True)
 
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for par in
                     multi_params]
+    # randomly assign to gpu 0 or 1
+    for par in multi_params:
+        mk = par[1]
+        mk["init_gpu"] = np.random.rand(0, 2)
     script_folder = os.path.dirname(
-        os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
+        os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts_chunked/"
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views",
-                                 n_max_co_processes=20, pe="openmp",
+                                 n_max_co_processes=25, pe="openmp",
                                  queue=None, n_cores=10, suffix="_glia",
                                  script_folder=script_folder,
                                  sge_additional_flags="-V")
+    res = find_missing_sv_attributes(sd, pred_key, n_cores=10)
+    if len(res) > 0:
+        print("Attribute '{}' missing for follwing"
+              " SVs:\n{}".format(pred_key, res))

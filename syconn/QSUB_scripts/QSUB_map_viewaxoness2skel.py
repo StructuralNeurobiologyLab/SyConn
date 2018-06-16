@@ -27,8 +27,8 @@ with open(path_storage_file) as f:
         except:
             break
 
-ssv_ixs = args
-pred_key_appendix = "_v2"
+ssv_ixs = args[0]
+pred_key_appendix = args[1]
 avg_window = 10000
 for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, working_dir=wd)

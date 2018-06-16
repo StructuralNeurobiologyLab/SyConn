@@ -42,7 +42,7 @@ def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     for n in iter_ixs:
         if verbose:
             if cnt % 100 == 0:
-                sys.stdout.write("\r%0.6f" % (cnt / float(nb_nodes)))
+                sys.stdout.write("\r{0:.6}".format(cnt / float(nb_nodes)))
                 sys.stdout.flush()
             cnt += 1
         n_subgraph = [n]
@@ -307,10 +307,10 @@ def glia_path_length(glia_path, glia_dict, write_paths=None):
     if write_paths is not None:
         shortest_path = nx.dijkstra_path(g, start_ix, end_ix, weight="weights")
         anno = coordpath2anno([all_vert[ix] for ix in shortest_path])
-        anno.setComment("%0.4f" % shortest_path_length)
+        anno.setComment("{0:.4}".format(shortest_path_length))
         skel = Skeleton()
         skel.add_annotation(anno)
-        skel.to_kzip("%s/%0.4f_vertpath.k.zip" % (write_paths, shortest_path_length))
+        skel.to_kzip("{{}/{0:.4}_vertpath.k.zip".format(write_paths, shortest_path_length))
     return shortest_path_length
 
 
@@ -450,8 +450,8 @@ def create_mst_skeleton(coords, max_dist=6000, force_single_cc=True):
         if not force_single_cc:
             break
         max_dist += 2e3
-        print("Generated skeleton is not a single connected component. " \
-              "Increasing maximum node distance to %0.0f" % (max_dist))
+        print("Generated skeleton is not a single connected component. "
+              "Increasing maximum node distance to {0:.0}".format(max_dist))
         pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
         g = nx.Graph()
         weights = np.array(

@@ -142,7 +142,7 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False):
             data = apply_clahe(data)
         data = gaussian_filter(data, .7)
         if np.sum(data) == 0:
-            data = np.ones_like(data)
+            data = np.ones_like(data) * 255
     elif colored:
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_RGB, GL_UNSIGNED_BYTE)
@@ -152,7 +152,7 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False):
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_RGB, GL_UNSIGNED_BYTE)
         data = Image.frombuffer("RGB", (ws[0], ws[1]), data, 'raw', 'RGB', 0, 1) #Image.frombuffer(mode="RGB", size=(ws[0], ws[1]), data=data)
-        data = rgb2gray(np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM)))
+        data = rgb2gray(np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM))) * 255
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     return data
 
@@ -431,7 +431,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         view_sh = (comp_views, ws[1], ws[0])
     else:
         view_sh = (comp_views, ws[1], ws[0], 3)
-    res = np.ones([len(coords)] + list(view_sh), dtype=np.uint8)
+    res = np.ones([len(coords)] + list(view_sh), dtype=np.uint8) * 255
     init_opengl(ws, depth_map=depth_map, clear_value=0.0)
     init_object(indices, vertices, normals, colors, ws)
     for ii, c in enumerate(coords):
@@ -478,7 +478,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         res[ii] = c_views
         found_empty_view = False
         for cv in c_views:
-            if np.sum(cv) == 0 or np.sum(cv) == np.prod(cv.shape):
+            if len(np.unique(cv)) == 1:
                 if views_key == "raw":
                     warnings.warn("Empty view of '%s'-mesh with %d "
                                   "vertices found."
@@ -486,7 +486,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                                   RuntimeWarning)
                     found_empty_view = True
             if found_empty_view:
-                print("View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n" \
+                print("View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
                       "'%s'-mesh with %d vertices." %\
                       (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
                        views_key, len(mesh.vertices)))
@@ -692,7 +692,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
               "No mesh for SSO %d found.\n"
               "----------------------------------------------\n")
         return
-    raw_views = np.ones((len(coords), 2, 128, 256), dtype=np.uint8)
+    raw_views = np.ones((len(coords), 2, 128, 256), dtype=np.uint8) * 255
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
                                 "cellobjects only."
@@ -711,21 +711,21 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
                                           verbose=verbose, rot_matrices=rot_mat,
                                           views_key="mi", ws=ws)
         else:
-            mi_views = np.ones_like(raw_views)
+            mi_views = np.ones_like(raw_views) * 255
         mesh = sso.vc_mesh
         if len(mesh[1]) != 0:
             vc_views = render_mesh_coords(coords, mesh[0], mesh[1], clahe=clahe,
                                           verbose=verbose, rot_matrices=rot_mat,
                                           views_key="vc", ws=ws)
         else:
-            vc_views = np.ones_like(raw_views)
+            vc_views = np.ones_like(raw_views) * 255
         mesh = sso.sj_mesh
         if len(mesh[1]) != 0:
             sj_views = render_mesh_coords(coords, mesh[0], mesh[1], clahe=clahe,
                                           verbose=verbose, rot_matrices=rot_mat,
                                           views_key="sj", ws=ws)
         else:
-            sj_views = np.ones_like(raw_views)
+            sj_views = np.ones_like(raw_views) * 255
         if cellobjects_only:
             return np.concatenate([mi_views[:, None], vc_views[:, None],
                                    sj_views[:, None]], axis=1)

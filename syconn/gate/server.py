@@ -15,7 +15,7 @@ import time
 sys.path.append('/u/jkor/repos/SyConn/')
 sys.path.append('/u/jkor/repos/knossos_utils')
 #sys.path.append('..')
-
+import numpy as np
 #from syconnfs.representations import super_segmentation as ss
 #from ..reps import super_segmentation as ss
 import syconn.reps.super_segmentation as ss
@@ -114,6 +114,11 @@ def route_ssv_of_sv(sv_id):
     return json.dumps(sg_state.backend.ssv_of_sv(sv_id))
 
 
+@app.route('/ct_of_ssv/<ssv_id>', methods=['GET'])
+def route_ct_of_sv(ssv_id):
+    return json.dumps(sg_state.backend.ct_of_sv(ssv_id))
+
+
 @app.route('/all_syn_meta', methods=['GET'])
 def route_all_syn_meta():
     return json.dumps(sg_state.backend.all_syn_meta_data())
@@ -187,7 +192,6 @@ class SyConnFS_backend(object):
 
     def ssv_ind(self, ssv_id):
         """
-        Get mesh indices for ssv_id.
         :param ssv_id: int
         :return: dict
         """
@@ -221,8 +225,14 @@ class SyConnFS_backend(object):
         skeleton = ssv.skeleton
         if skeleton is None:
             return {}
+        skel_attr = ["nodes", "edges", "diameters"]
+        for k in ['axoness_preds_cnn_v2_views_avg10000', 'axoness_preds_cnn_v2']:
+            if k in skeleton:
+                skel_attr.append(k)
+                if type(skeleton[k]) is list:
+                    skeleton[k] = np.array(skeleton[k])
         return {k: skeleton[k].flatten().tolist() for k in
-                ["nodes", "edges", "diameters"]}
+                skel_attr}
 
     def ssv_norm(self, ssv_id):
         """
@@ -339,7 +349,7 @@ class SyConnFS_backend(object):
         Returns all ssvs in dataset.
         :return: dict
         """
-        return {'ssvs': self.ssd.ssv_ids}
+        return {'ssvs': list(self.ssd.ssv_ids)}
 
     def ssv_of_sv(self, sv_id):
         """
@@ -348,6 +358,26 @@ class SyConnFS_backend(object):
         :return: 
         """
         return {'ssv': self.ssd.id_changer[int(sv_id)]}
+
+    def ct_of_sv(self, ssv_id):
+        """
+        Returns the CT for a given SSV ID.
+        :param sv_id:
+        :return:
+        """
+        ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.load_attr_dict()
+        label = ""
+        if "celltype_cnn_probas" in ssv.attr_dict:
+            l = ssv.attr_dict["celltype_cnn"]
+            ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
+            label = ct_label_dc[l]
+            probas = ssv.attr_dict["celltype_cnn_probas"]
+            print(probas, np.mean(probas, axis=1), np.argmax(np.mean(probas, axis=0)))
+        else:
+            print("Celltype prediction not present in attribute dict of SSV {}"
+                  "at {}.".format(ssv_id, ssv.attr_dict_path))
+        return {'ct': label}
 
     def svs_of_ssv(self, ssv_id):
         """
