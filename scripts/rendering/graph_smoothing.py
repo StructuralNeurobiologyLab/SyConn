@@ -11,56 +11,55 @@ from syconn.proc.rendering import render_sso_coords, _render_mesh_coords,\
     render_sso_coords_index_views
 from syconn.reps.super_segmentation import SuperSegmentationObject
 import networkx as nx
+from syconn.proc.graphs import split_subcc
 from itertools import combinations
 
 
 def graph_creator(indices, vertices):
     G = nx.Graph()
-    G.add_nodes_from(indices)
-    triangles = indices.reshape((-1,3))
+    if (indices.ndim == 1) or (indices.ndim == 2 and indices.shape[1] == 1):
+        triangles = indices.reshape((-1,3))
+    else:
+        triangles = indices
+    if (vertices.ndim == 1) or (vertices.ndim == 2 and vertices.shape[1] == 1):
+        vertices = vertices.reshape((-1,3))
     for i in range(len(triangles)):
-        G.add_edge(triangles[i][0], triangles[i][1], weight = )
-        G.add_edge(triangles[i][1], triangles[i][2], weight = )
-        G.add_edge(triangles[i][0], triangles[i][2], weight = )
-    #adding weights
-    vertices = vertices.reshape((-1, 3))
-    for i in range(len(vertices)):
-    for index in
-        weight = math.sqrt(((a1[0] - a2[0]) ** 2) + ((b1[1] - b2[1]) ** 2) + ((c1[1] - c2[1]) ** 2))
+        v0, v1, v2 = vertices[triangles[i][0]], vertices[triangles[i][1]], vertices[triangles[i][2]]
+        w01 = np.linalg.norm(v0-v1)
+        w12 = np.linalg.norm(v1-v2)
+        w02 = np.linalg.norm(v0-v2)
+        G.add_edge(triangles[i][0], triangles[i][1], weight=w01)
+        G.add_edge(triangles[i][1], triangles[i][2], weight=w12)
+        G.add_edge(triangles[i][0], triangles[i][2], weight=w02)
+    return G
 
-class BFS_Smooting (graph):
+
+def bfs_smoothing(indices, vertices, vertex_labels, n_nodes=30):
     """
+    Creates a BFS smoothing on the mesh surface for every vertex. Takes into
+    account 'n_nodes' closest to every vertex to perform majority vote.
+
+    Parameters
+    ----------
+    indices : np.array
+    vertices : np.array
+    vertex_labels :
+    n_nodes :
+
+    Returns
+    -------
 
     """
-    # def bfs(graph, start):
-    #     visited, queue = set(), [start]
-    #     while queue:
-    #         vertex = queue.pop(0)
-    #         if vertex not in visited:
-    #             visited.add(vertex)
-    #             queue.extend(graph[vertex] - visited)
-    #     return visited
-
-    def bfs_paths(graph, start, goal):
-        queue = [(start, [start])]
-        while queue:
-            (vertex, path) = queue.pop(0)
-            for next in graph[vertex] - set(path):
-                if next == goal:
-                    yield path + [next]
-                else:
-                    queue.append((next, path + [next]))
-
-    def shortest_path(graph, start, goal):
-        try:
-            return next(bfs_paths(graph, start, goal))
-        except StopIteration:
-            return None
-
-
-
-
-
+    G = graph_creator(indices, vertices)
+    nn_dc = split_subcc(G, max_nb=n_nodes)
+    maj_vertex_labels = np.zeros_like(vertex_labels)
+    for node_ix, subgraph in nn_dc.iteritems():
+        nn_ixs = subgraph.nodes()
+        nn_vertex_labels = vertex_labels[nn_ixs]
+        labels, cnts = np.unique(nn_vertex_labels, return_counts=True)
+        maj_vote = labels[np.argmax(cnts)]
+        maj_vertex_labels[node_ix] = maj_vote
+    return maj_vertex_labels
 
 
 def new_label_views():
