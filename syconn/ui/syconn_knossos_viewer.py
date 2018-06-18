@@ -424,8 +424,8 @@ class main_class(QtGui.QDialog):
             pass
 
         if self.ssv_selected1:
-            self.ssv_to_knossos(self.ssv_selected1)
             self.ssv_skel_to_knossos_tree(self.ssv_selected1)
+            self.ssv_to_knossos(self.ssv_selected1)
             self.update_celltype(self.ssv_selected1)
         return
 
@@ -559,13 +559,13 @@ class main_class(QtGui.QDialog):
             n_proeprties = {}
             for k in skel:
                 if k in ["nodes", "edges", "diameters"]:
-                    if k == "diameters":
-                        n_proeprties["radius"] = skel[k][ii] / 2
                     continue
                 n_proeprties[k] = float(skel[k][ii])
             k_node = KnossosModule.skeleton.add_node(
                 [n_coord[1] + 1, n_coord[0] + 1, n_coord[2] + 1], k_tree,
                 n_proeprties)
+            KnossosModule.skeleton.set_radius(k_node.node_id(),
+                                              skel["diameters"][ii] / 2)
             nx_knossos_id_map[ii] = k_node.node_id()
 
         # add edges

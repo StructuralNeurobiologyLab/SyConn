@@ -78,9 +78,13 @@ class MeshObject(object):
                 self._ext_color = self._ext_color.squeeze()
                 assert self._ext_color.shape[1] == 4,\
                     "'color' parameter has wrong shape"
+                self._ext_color = self._ext_color.squeeze()
+                assert self._ext_color.shape[1] == 4,\
+                    "Rendering requires RGBA 'color' shape of (X, 4). Please" \
+                    "add alpha channel."
                 self._ext_color = self._ext_color.flatten()
-            assert len(self._ext_color) / 4 == len(self.vertices) / 3\
-                , "len(ext_color)/4 must be equal to len(vertices)/3."
+            assert len(self._ext_color)/4 == len(self.vertices)/3, \
+                "len(ext_color)/4 must be equal to len(vertices)/3."
             self._colors = self._ext_color
         return self._colors
 
@@ -91,7 +95,7 @@ class MeshObject(object):
 
     @property
     def normals(self):
-        if self._normals is None:
+        if self._normals is None or len(self._normals) != len(self.vertices):
             print("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         elif len(self._normals) != len(self.vertices):
