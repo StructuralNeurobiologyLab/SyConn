@@ -671,7 +671,7 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
 
 
 def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=False,
-                      ws=(256, 128), cellobjects_only=False):
+                      ws=(256,128), cellobjects_only=False): #TODO
     """
     Render views of SuperSegmentationObject at given coordinates.
     

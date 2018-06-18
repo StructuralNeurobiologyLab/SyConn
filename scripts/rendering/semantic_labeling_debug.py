@@ -43,12 +43,11 @@ def generate_palette(nr_classes, return_rgba=True):
     np.array
         Unique color array for N input classes
     """
-    classes_ids = np.arange(nr_classes + 1) #reserve additional class id for background
+    classes_ids = np.arange(nr_classes+1) #reserve additional class id for background
     classes_rgb = id2rgb_array_contiguous(classes_ids)[1:]  # convention: background is (0,0,0)
     if return_rgba:
         classes_rgb = np.concatenate([classes_rgb, np.ones(classes_rgb.shape[:-1])[..., None] * 255], axis=1)
     return classes_rgb.astype(np.uint8)
-
 
 def remap_rgb_labelviews(rgb_view, palette):
     """
@@ -92,11 +91,20 @@ def str2intconverter(comment, gt_type):
             return 0
         elif "shaft" in comment:
             return 2
-        elif "other" in comment:
-            return 3
         else:
             return -1
     else: raise ValueError("Given groundtruth type is not valid.")
+
+
+# def map_rgb2label(rgb):
+#     if np.all(rgb == palette[0, :-1]):
+#         return 0
+#     elif np.all(rgb == palette[0, :-1]):
+#         return 1
+#     elif np.all(rgb == palette[0, :-1]):
+#         return 2  #
+#     else:
+#         return BACKGROUND_LABEL  # background
 
 
 def generate_label_views(kzip_path, gt_type="spgt"):
@@ -105,6 +113,7 @@ def generate_label_views(kzip_path, gt_type="spgt"):
     sso_id = int(re.findall("/(\d+).", kzip_path)[0])
     sso = SuperSegmentationObject(sso_id, version=gt_type)
     indices, vertices, normals = sso.mesh
+    raise()
 
     # # Load mesh
     vertices = vertices.reshape((-1, 3))
@@ -115,11 +124,12 @@ def generate_label_views(kzip_path, gt_type="spgt"):
 
     node_coords = np.array([n.getCoordinate() * sso.scaling for n in skel_nodes])
     node_labels = np.array([str2intconverter(n.getComment(), gt_type) for n in skel_nodes], dtype=np.int)
-    node_coords = node_coords[(node_labels != -1) & (node_labels != 3)]
-    node_labels = node_labels[(node_labels != -1) & (node_labels != 3)]
+    node_coords = node_coords[node_labels != -1]
+    node_labels = node_labels[node_labels != -1]
 
     # create KD tree from skeleton node coordinates
     tree = KDTree(node_coords)
+
     # transfer labels from skeleton to mesh
     dist, ind = tree.query(vertices, k=1)
 
@@ -146,13 +156,13 @@ def generate_label_views(kzip_path, gt_type="spgt"):
     locs = locs[dist[:, 0] < 2000]
     print("Rendering label views.")
 
-    # # DEBUG PART
-    # loc_text = ''
-    # for i, c in enumerate(locs):
-    #     loc_text += str(i+1) + "\t" + str((c / np.array([10, 10, 20])).astype(np.int)) +'\n' #rescalling to the voxel grid
-    # with open("/u/shum/view_coordinates_files/view_coords_{}.txt".format(sso_id), "w") as f:
-    #     f.write(loc_text)
-    # # DEBUG PART
+    # DEBUG PART
+    loc_text = ''
+    for i, c in enumerate(locs):
+        loc_text += str(i+1) + "\t" + str((c / np.array([10, 10, 20])).astype(np.int)) +'\n' #rescalling to the voxel grid
+    with open("/u/shum/view_coordinates_files/view_coords_{}.txt".format(sso_id), "w") as f:
+        f.write(loc_text)
+    # DEBUG PART
     label_views, rot_mat = _render_mesh_coords(locs, mo, depth_map=False,
                                       return_rot_matrices=True, smooth_shade=False)
     # sso._pred2mesh(node_coords, node_labels, dest_path="/wholebrain/u/shum/sso_%d_skeletonlabels.k.zip" %
@@ -178,57 +188,51 @@ def GT_generation(kzip_paths, gt_type="spgt"):
     -------
 
     """
-    # dc = {}
+    dc = {}
     gt_path = os.path.expanduser("~") + "/spgt_npy_files/"
     params = [(p, "spgt") for p in kzip_paths]
-    res = start_multiprocess_imap(gt_generation_helper, params, nb_cpus=20, debug=False)
-    all_raw_views = []
-    all_label_views = []
-    all_index_views = []
+    res = start_multiprocess_imap(gt_generation_helper, params, nb_cpus=20, debug=True)
+    # all_raw_views = []
+    # all_label_views = []
+    # for ii in range(len(kzip_paths)):
+    #     all_raw_views.append(res[ii][0])
+    #     all_label_views.append(res[ii][1])
+    # all_raw_views = np.concatenate(all_raw_views)
+    # all_label_views = np.concatenate(all_label_views)
+    # print("Shuffling views.")
+    # ixs = np.arange(len(all_raw_views))
+    # np.random.shuffle(ixs)
+    # all_raw_views = all_raw_views[ixs]
+    # all_label_views = all_label_views[ixs]
+    # print("Swapping axes.")
+    # all_raw_views = all_raw_views.swapaxes(2, 1)
+    # all_label_views = all_label_views.swapaxes(2, 1)
+    # print("Reshaping arrays.")
+    # all_raw_views = all_raw_views.reshape((-1, 4, 128, 256))
+    # all_label_views = all_label_views.reshape((-1, 1, 128, 256))
+    # raw_train, raw_other, label_train, label_other = \
+    #     train_test_split(all_raw_views, all_label_views, train_size=0.8, shuffle=True)
+    # raw_valid, raw_test, label_valid, label_test = \
+    #     train_test_split(raw_other, label_other, train_size=0.5, shuffle=True)
+    # h5py_path = os.path.expanduser("~") + "/spine_gt_multiview/"
+    # print("Writing h5 files.")
+    # save_to_h5py([raw_train], h5py_path + "/raw_train.h5",
+    #              ["raw"])
+    # save_to_h5py([raw_valid], h5py_path + "/raw_valid.h5",
+    #              ["raw"])
+    # save_to_h5py([raw_test], h5py_path + "/raw_test.h5",
+    #              ["raw"])
+    # save_to_h5py([label_train], h5py_path + "/label_train.h5",
+    #              ["label"])
+    # save_to_h5py([label_valid], h5py_path + "/label_valid.h5",
+    #              ["label"])
+    # save_to_h5py([label_test], h5py_path + "/label_test.h5",
+    #              ["label"])
     for ii in range(len(kzip_paths)):
-        all_raw_views.append(res[ii][0])
-        all_label_views.append(res[ii][1])
-        all_index_views.append(res[ii][2])
-    all_raw_views = np.concatenate(all_raw_views)
-    all_label_views = np.concatenate(all_label_views)
-    all_index_views = np.concatenate(all_index_views)
-    print("Shuffling views.")
-    ixs = np.arange(len(all_raw_views))
-    np.random.shuffle(ixs)
-    all_raw_views = all_raw_views[ixs]
-    all_label_views = all_label_views[ixs]
-    all_index_views = all_index_views[ixs]
-    print("Swapping axes.")
-    all_raw_views = all_raw_views.swapaxes(2, 1)
-    all_label_views = all_label_views.swapaxes(2, 1)
-    all_index_views = all_index_views.swapaxes(2, 1)
-    print("Reshaping arrays.")
-    all_raw_views = all_raw_views.reshape((-1, 4, 128, 256))
-    all_label_views = all_label_views.reshape((-1, 1, 128, 256))
-    all_index_views = all_index_views.reshape((-1, 1, 128, 256))
-    all_raw_views = np.concatenate([all_raw_views, all_index_views], axis=1)
-    raw_train, raw_other, label_train, label_other = \
-        train_test_split(all_raw_views, all_label_views, train_size=0.8, shuffle=True)
-    raw_valid, raw_test, label_valid, label_test = \
-        train_test_split(raw_other, label_other, train_size=0.5, shuffle=True)
-    h5py_path = os.path.expanduser("~") + "/spine_gt_multiview/"
-    print("Writing h5 files.")
-    save_to_h5py([raw_train], h5py_path + "/raw_train.h5",
-                 ["raw"])
-    save_to_h5py([raw_valid], h5py_path + "/raw_valid.h5",
-                 ["raw"])
-    save_to_h5py([raw_test], h5py_path + "/raw_test.h5",
-                 ["raw"])
-    save_to_h5py([label_train], h5py_path + "/label_train.h5",
-                 ["label"])
-    save_to_h5py([label_valid], h5py_path + "/label_valid.h5",
-                 ["label"])
-    save_to_h5py([label_test], h5py_path + "/label_test.h5",
-                 ["label"])
-        # sso_id = int(re.findall("/(\d+).", kzip_paths[ii])[0])
-        # all_views = res[ii]
-        # dc[sso_id] = all_views
-    # np.save("{}/spgt_semantic_segmentation.npy".format(gt_path), dc)
+        sso_id = int(re.findall("/(\d+).", kzip_paths[ii])[0])
+        all_views = res[ii]
+        dc[sso_id] = all_views
+    np.save("{}/spgt_semantic_segmentation.npy".format(gt_path), dc)
 
 
 def gt_generation_helper(args):
@@ -237,21 +241,21 @@ def gt_generation_helper(args):
     raw_views, label_views, index_views = generate_label_views(kzip_path, gt_type)
     # raw shape: (locations, channels, nb_views, 256, 128), label_views: (N,auxiliary axis, nb_views, 256, 128)
     # remap index values to uint16 for fiji compatibility...
-    # print("Writing h5 file.")
-    # # TODO: check types of views again...
-    # h5py_path = os.path.expanduser("~") + "/h5py_files/"
-    # save_to_h5py([raw_views[:, 0, 0], label_views[:, 0, 0]], h5py_path + "/sample_views_{}.h5".format(sso_id),
-    #              ["raw", "label"])
+    print("Writing h5 file.")
+    # TODO: check types of views again...
+    h5py_path = os.path.expanduser("~") + "/h5py_files/"
+    save_to_h5py([raw_views[:, 0, 0], label_views[:, 0, 0]], h5py_path + "/sample_views_{}.h5".format(sso_id),
+                 ["raw", "label"])
     # # DEBUG PART
-    # subset_ix_views = index_views[0:50, 0, 0]
+    # subset_ix_views = index_views[:, 0, 0]
     # for ii, uv in enumerate(np.unique(subset_ix_views)):
     #     subset_ix_views[subset_ix_views == uv] = ii
     # # # TODO: check types of views again...
     # h5py_path = os.path.expanduser("~") + "/h5py_files/"
-    # save_to_h5py([raw_views[0:50, 0, 0], label_views[0:50, 0, 0],
+    # save_to_h5py([raw_views[:, 0, 0], label_views[:, 0, 0],
     #               subset_ix_views.astype(np.uint16)], h5py_path + "/sample_views_DEBUG_k50_sm_{}.h5".format(sso_id),
     #              ["raw", "label", "index"])
-    # # DEBUG PART
+    # DEBUG PART
     return raw_views, label_views, index_views
 
 
