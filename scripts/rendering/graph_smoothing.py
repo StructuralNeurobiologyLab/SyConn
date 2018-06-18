@@ -11,6 +11,7 @@ from syconn.proc.rendering import render_sso_coords, _render_mesh_coords,\
     render_sso_coords_index_views
 from syconn.reps.super_segmentation import SuperSegmentationObject
 import networkx as nx
+from itertools import combinations
 
 
 def graph_creator(indices, vertices):
@@ -18,10 +19,44 @@ def graph_creator(indices, vertices):
     G.add_nodes_from(indices)
     triangles = indices.reshape((-1,3))
     for i in range(len(triangles)):
-        for a, b, c in range(triangles[i]):
-        G.add_edge(a, b)
-        G.add_edge(b, c)
-        G.add_edge(a, c)
+        G.add_edge(triangles[i][0], triangles[i][1], weight = )
+        G.add_edge(triangles[i][1], triangles[i][2], weight = )
+        G.add_edge(triangles[i][0], triangles[i][2], weight = )
+    #adding weights
+    vertices = vertices.reshape((-1, 3))
+    for i in range(len(vertices)):
+    for index in
+        weight = math.sqrt(((a1[0] - a2[0]) ** 2) + ((b1[1] - b2[1]) ** 2) + ((c1[1] - c2[1]) ** 2))
+
+class BFS_Smooting (graph):
+    """
+
+    """
+    # def bfs(graph, start):
+    #     visited, queue = set(), [start]
+    #     while queue:
+    #         vertex = queue.pop(0)
+    #         if vertex not in visited:
+    #             visited.add(vertex)
+    #             queue.extend(graph[vertex] - visited)
+    #     return visited
+
+    def bfs_paths(graph, start, goal):
+        queue = [(start, [start])]
+        while queue:
+            (vertex, path) = queue.pop(0)
+            for next in graph[vertex] - set(path):
+                if next == goal:
+                    yield path + [next]
+                else:
+                    queue.append((next, path + [next]))
+
+    def shortest_path(graph, start, goal):
+        try:
+            return next(bfs_paths(graph, start, goal))
+        except StopIteration:
+            return None
+
 
 
 
