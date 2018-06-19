@@ -1264,7 +1264,7 @@ class SuperSegmentationObject(object):
             dest_path = self.skeleton_kzip_path
         if obj_type == "sv":
             mesh = self.mesh
-            color = (130, 130, 130, 160)
+            color = None  # by far more convenient when color is not set explicitely (130, 130, 130, 160)
         elif obj_type == "sj":
             mesh = self.sj_mesh
             color = (int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255)
@@ -1569,7 +1569,7 @@ class SuperSegmentationObject(object):
                         ply_fname=key+".ply")
 
     def predict_nodes(self, sc, clf_name="rfc", feature_context_nm=None,
-                      avg_window=0, leave_out_classes=()):
+                      max_dist=0, leave_out_classes=()):
         """
         Predicting class c
         Parameters
@@ -1583,7 +1583,7 @@ class SuperSegmentationObject(object):
 
         feature_context_nm : int
 
-        avg_window : int
+        max_dist : int
             Defines the maximum path length from a source node for collecting
             neighboring nodes to calculate an average prediction for
             the source node.
@@ -1599,18 +1599,18 @@ class SuperSegmentationObject(object):
                                  leave_out_classes=leave_out_classes)
         probas = clf.predict_proba(self.skel_features(feature_context_nm))
         pred = []
-        if avg_window == 0:
+        if max_dist == 0:
             pred = np.argmax(probas, axis=1)
         else:
             for i_node in range(len(self.skeleton["nodes"])):
                 paths = nx.single_source_dijkstra_path(self.weighted_graph(), i_node,
-                                                       avg_window)
+                                                       max_dist)
                 neighs = np.array(paths.keys(), dtype=np.int)
                 c = np.argmax(np.sum(probas[neighs], axis=0))
                 pred.append(c)
 
         pred_key = "%s_fc%d_avgwind%d" % (sc.target_type, feature_context_nm,
-                                          avg_window)
+                                          max_dist)
         self.skeleton[pred_key] = np.array(pred, dtype=np.int)
         self.skeleton[pred_key+"_proba"] = np.array(probas, dtype=np.float32)
         self.save_skeleton(to_object=True, to_kzip=False)
@@ -1636,8 +1636,8 @@ class SuperSegmentationObject(object):
 
         return np.array(axoness_pred)
 
-    def predict_views_axoness(self, model, verbose=True,
-                             pred_key_appendix=""):
+    def predict_views_axoness(self, model, verbose=False,
+                              pred_key_appendix=""):
         if verbose:
             start = time.time()
         pred_key = "axoness_probas"
@@ -1799,6 +1799,34 @@ class SuperSegmentationObject(object):
                 imsave("%s/SSV_%d_%d.png" % (dest_folder, self.id, ii), v)
         else:
             return views
+
+    def majority_vote(self, prop_key, max_dist):
+        """
+        Smoothes (average using sliding window of 2 times max_dist and majority
+        vote) property prediction in annotation, whereas for axoness somata are
+        untouched.
+
+        Parameters
+        ----------
+        prop_key : str
+            which property to average
+        max_dist : int
+            maximum distance (in nm) for sliding window used in majority voting
+        """
+        assert prop_key in self.skeleton, "Given key does not exist in self.skeleton"
+        prop_array = self.skeleton[prop_key]
+        assert prop_array.squeeze().ndim == 1, "Property array has to be 1D."
+        maj_votes = np.zeros_like(prop_array)
+        for ii in range(len(self.skeleton["nodes"])):
+            paths = nx.single_source_dijkstra_path(self.weighted_graph(),
+                                                   ii, max_dist)
+            neighs = np.array(paths.keys(), dtype=np.int)
+            labels, cnts = np.unique(prop_array[neighs], return_counts=True)
+            maj_label = labels[np.argmax(cnts)]
+            maj_votes[ii] = maj_label
+        return maj_votes
+
+
 
 # ------------------------------------------------------------------------------
 # SO rendering code

@@ -848,10 +848,11 @@ def write_axpred(ssv, pred_key_appendix, dest_path=None, k=1):
     ssv._pred2mesh(pred_coords, preds, "axoness.ply", dest_path=dest_path, k=k)
 
 
-def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
+def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
+                                max_dist=10000,  return_res=False):
     """
     Averages the axoness prediction along skeleton with maximum path length
-    of 'avg_window'. Therefore, view indices were mapped to every skeleton
+    of 'max_dist'. Therefore, view indices were mapped to every skeleton
     node and collected while traversing the skeleton. The majority of the
     set of their predictions will be assigned to the source node.
 
@@ -859,15 +860,22 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
     ----------
     sso : SuperSegmentationObject
     axoness_pred_key : str
-    avg_window : int
+    max_dist : int
+    return_res : bool
     """
     if sso.skeleton is None:
         sso.load_skeleton()
     if len(sso.skeleton["edges"]) == 0:
         print("Zero edges in skeleton of SSV %d. Skipping averaging." % sso.id)
         return
-    pred_key = "axoness_preds_cnn%s" % pred_key_appendix
-    if not sso.attr_exists(pred_key):
+    if pred_key is None:
+        pred_key = "axoness_preds_cnn%s" % pred_key_appendix
+    elif len(pred_key_appendix) > 0:
+        raise ValueError("Only one of the two may be given: 'pred_key' or"
+                         "'pred_key_appendix', but not both.")
+    if type(pred_key) != str:
+        raise ValueError("'pred_key' has to be of type str.")
+    if not sso.attr_exists(pred_key) and ("axoness_preds_cnn" not in pred_key):
         if len(pred_key_appendix) > 0:
             print("Couldn't find specified axoness prediction. Falling back to "
                   "default (-> per SV stored multi-view prediction "
@@ -890,24 +898,27 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
         print("View indices were not yet assigned to skeleton nodes. "
               "Running now '_cnn_axonness2skel(sso, "
               "pred_key_appendix=pred_key_appendix, k=1)'")
-        _cnn_axonness2skel(sso, pred_key_appendix=pred_key_appendix, k=1)
+        _cnn_axonness2skel(sso, pred_key_appendix=pred_key_appendix, k=1,
+                           save_sso=not return_res)
     view_ixs = np.array(sso.skeleton["view_ixs"])
     avg_pred = []
 
     g = sso.weighted_graph()
     for n in g.nodes():
-        paths = nx.single_source_dijkstra_path(g, n, avg_window)
+        paths = nx.single_source_dijkstra_path(g, n, max_dist)
         neighs = np.array(paths.keys(), dtype=np.int)
         unique_view_ixs = np.unique(view_ixs[neighs], return_counts=False)
         cls, cnts = np.unique(preds[unique_view_ixs], return_counts=True)
         c = cls[np.argmax(cnts)]
         avg_pred.append(c)
-
-    sso.skeleton["%s_views_avg%d" % (pred_key, avg_window)] = avg_pred
+    if return_res:
+        return avg_pred
+    sso.skeleton["%s_views_avg%d" % (pred_key, max_dist)] = avg_pred
     sso.save_skeleton()
 
 
-def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False):
+def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False,
+                       save_sso=True):
     if k > 1:
         print(DeprecationWarning("Using k>1 is deprecated. Use k=1 followed by"
                                  "'_average_node_axoness_views'."))
@@ -960,7 +971,8 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False):
         sso.skeleton["axoness%s" % pred_key_appendix] = node_preds
         sso.skeleton["axoness_probas%s" % pred_key_appendix] = node_probas
         sso.skeleton["view_ixs"] = ixs
-    sso.save_skeleton()
+    if save_sso:
+        sso.save_skeleton()
 
 
 def majority_vote_compartments(sso, ax_pred_key):

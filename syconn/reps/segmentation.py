@@ -243,7 +243,8 @@ class SegmentationDataset(object):
         if self._scaling is None:
             try:
                 self._scaling = \
-                    np.array(self.config.entries["Dataset"]["scaling"])
+                    np.array(self.config.entries["Dataset"]["scaling"],
+                             dtype=np.float32)
             except:
                 self._scaling = np.array([1, 1, 1])
 
@@ -408,7 +409,8 @@ class SegmentationObject(object):
         if self._scaling is None:
             try:
                 self._scaling = \
-                    np.array(self.config.entries["Dataset"]["scaling"])
+                    np.array(self.config.entries["Dataset"]["scaling"],
+                             dtype=np.float32)
             except:
                 self._scaling = np.array([1, 1, 1])
 

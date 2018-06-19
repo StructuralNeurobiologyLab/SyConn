@@ -425,13 +425,18 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
                       return_proba=False):
     nb_chunks = np.max([1, len(sos) / 75])
     so_chs = basics.chunkify(sos, nb_chunks)
+    all_probas = []
     for ch in so_chs:
         views = sm.start_multiprocess_obj("load_views", [[sv, {"woglia": woglia,
                                           "raw_only": raw_only}]
                                           for sv in ch], nb_cpus=nb_cpus)
-        return predict_views(model, views, ch, pred_key, verbose=verbose,
+        proba = predict_views(model, views, ch, pred_key, verbose=verbose,
                              single_cc_only=single_cc_only,
                              return_proba=return_proba, nb_cpus=nb_cpus)
+        if return_proba:
+            all_probas.append(np.concatenate(proba))
+    if return_proba:
+        return np.concatenate(all_probas)
 
 
 def predict_views(model, views, ch, pred_key, single_cc_only=False,

@@ -29,7 +29,7 @@ with open(path_storage_file) as f:
 
 ssv_ixs = args[0]
 pred_key_appendix = args[1]
-avg_window = 10000
+max_dist = 10000
 for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, working_dir=wd)
     sso.load_skeleton()
@@ -45,11 +45,11 @@ for ix in ssv_ixs:
         continue
     try:
         sso.average_node_axoness_views(pred_key_appendix=pred_key_appendix,
-                                       avg_window=avg_window)
+                                       max_dist=max_dist)
     except Exception as e:
         print(str(e) + " SSV averaging error " + str(sso.id) )
         continue
-    pred_key = "axoness_preds_cnn{}_views_avg{}".format(pred_key_appendix, avg_window)
+    pred_key = "axoness_preds_cnn{}_views_avg{}".format(pred_key_appendix, max_dist)
     majority_vote_compartments(sso, pred_key)
 
 

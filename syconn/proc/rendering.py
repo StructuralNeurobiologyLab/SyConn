@@ -197,8 +197,8 @@ def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False, s
     if not depth_map:
         glEnable(GL_COLOR_MATERIAL)
         glColorMaterial(GL_FRONT, GL_AMBIENT)
-    else:
-        glEnable(GL_DEPTH_TEST)
+    # objects in the foreground will be visible in the projection
+    glEnable(GL_DEPTH_TEST)
     if smooth_shade:
         glShadeModel(GL_SMOOTH)
     else:

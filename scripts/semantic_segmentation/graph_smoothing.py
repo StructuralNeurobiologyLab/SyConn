@@ -63,7 +63,7 @@ def bfs_smoothing(indices, vertices, vertex_labels, n_nodes=30):
 
 
 def new_label_views():
-
+    return
 
 def generate_label_views(kzip_path, gt_type="spgt"):
     assert gt_type in ["axgt", "spgt"], "Currently only spine and axon GT is supported"

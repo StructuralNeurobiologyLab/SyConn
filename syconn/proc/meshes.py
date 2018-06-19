@@ -797,9 +797,7 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
                                                 for sv in ssv.svs],
                                                nb_cpus=ssv.nb_cpus))
     preds = np.concatenate(preds)
-    print("Collected axoness:", Counter(preds).most_common())
     locs = ssv.sample_locations()
-    print("Collected locations.")
     pred_coords = np.concatenate(locs)
     assert pred_coords.ndim == 2, "Sample locations of ssv have wrong shape."
     assert pred_coords.shape[1] == 3, "Sample locations of ssv have wrong shape."
@@ -953,10 +951,11 @@ def rgb2id_array(rgb_arr):
         assert rgb_arr.shape[-1] == 3, "ValueError: unsupported shape"
     else:
         raise ValueError("Unsupported shape")
-    start = time.time()
+    # start = time.time()
     rgb_arr_flat = rgb_arr.flatten().reshape((-1, 3))
     mask_arr = (rgb_arr_flat[:, 0] != 0) & (rgb_arr_flat[:, 1] != 0) & (rgb_arr_flat[:, 2] != 0)
     id_arr = np.zeros((len(rgb_arr_flat)), dtype=np.uint32)
     id_arr[mask_arr] = np.apply_along_axis(rgb2id, 1, rgb_arr_flat[mask_arr]).squeeze()
+    id_arr[~mask_arr] = np.max(id_arr) + 1  # use highest value as background
     # print("Finisehd remapping rgb-> vertex IDs after [min]:", (time.time()-start)/60.)
     return id_arr.reshape(rgb_arr.shape[:-1])

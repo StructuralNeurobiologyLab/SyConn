@@ -17,8 +17,8 @@ from ..config.global_params import min_cc_size_glia, min_cc_size_neuron, glia_th
 
 def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     """
-    Creates subgraph for each node consisting of nodes within distance
-    threshold.
+    Creates subgraph for each node consisting of nodes until maximum number of
+    nodes is reached.
 
     Parameters
     ----------

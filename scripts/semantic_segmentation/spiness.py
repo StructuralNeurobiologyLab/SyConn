@@ -258,6 +258,6 @@ def gt_generation_helper(args):
 if __name__ == "__main__":
     label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_spgt/" \
                         "spiness_skels_annotated/"
-    file_names = ["/23044610.027.k.zip", "/4741011.045.k.zip", "/18279774.052.k.zip", "/26331138.037.k.zip", "/27965455.029.k.zip"]
+    file_names = ["/23044610.034.k.zip", "/4741011.072.k.zip", "/18279774.078.k.zip", "/26331138.041.k.zip", "/27965455.032.k.zip"]
     file_paths = [label_file_folder + "/" + fname for fname in file_names]
     GT_generation(file_paths)

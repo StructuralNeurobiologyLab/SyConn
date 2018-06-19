@@ -14,7 +14,7 @@ import time
 import os
 
 
-def predictor(args):
+def celltype_predictor(args):
     ssv_ids = args
     # randomly initialize gpu
     m = get_celltype_model(init_gpu=np.random.randint(0, 2))
@@ -40,7 +40,7 @@ if __name__ == "__main__":
     np.random.seed(0)
     ssv_ids = ssd.ssv_ids
     np.random.shuffle(ssv_ids)
-    err = start_multiprocess_imap(predictor, chunkify(ssd.ssv_ids, 15),
+    err = start_multiprocess_imap(celltype_predictor, chunkify(ssd.ssv_ids, 15),
                                   nb_cpus=6)
     err = np.concatenate(err)
     if len(err) > 0:

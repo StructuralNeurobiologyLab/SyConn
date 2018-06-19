@@ -411,7 +411,7 @@ class main_class(QtGui.QDialog):
         trees = KnossosModule.skeleton.trees()
         obj_mesh_ids = set([tree.tree_id() for tree in trees if
                         tree.tree_id() > self.obj_id_offs])
-        for i in range(1, 4):
+        for i in range(1, 5):
             obj_id_to_test = ssv_id + self.obj_id_offs + i
             if obj_id_to_test in obj_mesh_ids:
                 KnossosModule.skeleton.delete_tree(obj_id_to_test)
@@ -424,8 +424,8 @@ class main_class(QtGui.QDialog):
             pass
 
         if self.ssv_selected1:
-            self.ssv_skel_to_knossos_tree(self.ssv_selected1)
             self.ssv_to_knossos(self.ssv_selected1)
+            self.ssv_skel_to_knossos_tree(self.ssv_selected1)
             self.update_celltype(self.ssv_selected1)
         return
 
@@ -479,6 +479,7 @@ class main_class(QtGui.QDialog):
             mi_id = self.obj_id_offs + ssv_id + 1
             sj_id = self.obj_id_offs + ssv_id + 2
             vc_id = self.obj_id_offs + ssv_id + 3
+            neuron_id = self.obj_id_offs + ssv_id + 4
 
             mi_start = time.time()
             mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
@@ -520,19 +521,21 @@ class main_class(QtGui.QDialog):
             print("VC time (Knossos):", time.time() - vc_start)
 
             sv_start = time.time()
+            k_tree = KnossosModule.skeleton.add_tree(ssv_id)
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
             print("SV time:", time.time() - sv_start)
             sv_start = time.time()
             if len(mesh[0]) > 0:
                 print(len(mesh[1]))
-                KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh[1], mesh[2],
+                KnossosModule.skeleton.add_tree_mesh(neuron_id, mesh[1], mesh[2],
                                                      mesh[0],
                                                      [], 4, False)
-                KnossosModule.skeleton.set_tree_color(ssv_id,
+                KnossosModule.skeleton.set_tree_color(neuron_id,
                                                       QtGui.QColor(255, 0, 0, 128))
             print("SV time (Knossos):", time.time() - sv_start)
         else:
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
+            k_tree = KnossosModule.skeleton.add_tree(ssv_id)
             KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh[1], mesh[2],
                                                  mesh[0],
                                                  [], 4, False)

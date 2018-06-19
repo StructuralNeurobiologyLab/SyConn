@@ -340,7 +340,6 @@ class SyConnFS_backend(object):
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
         if len(mesh) == 2:
-            print(len(mesh), obj_type, ssv_id)
             return ""
         return "".join(mesh[2])
 
@@ -373,7 +372,6 @@ class SyConnFS_backend(object):
             ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             label = ct_label_dc[l]
             probas = ssv.attr_dict["celltype_cnn_probas"]
-            print(probas, np.mean(probas, axis=1), np.argmax(np.mean(probas, axis=0)))
         else:
             print("Celltype prediction not present in attribute dict of SSV {}"
                   "at {}.".format(ssv_id, ssv.attr_dict_path))
