@@ -12,7 +12,7 @@ try:
 # TODO: switch to Python3 at some point and remove above
 except Exception:
     import pickle as pkl
-from syconn.reps.super_segmentation_helper import create_sso_skeleton
+from syconn.reps.super_segmentation_helper import create_sso_skeleton, sparsify_skeleton, extract_skel_features, associate_objs_with_skel_nodes
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
 
 path_storage_file = sys.argv[1]
@@ -28,15 +28,23 @@ with open(path_storage_file) as f:
 
 
 ssv_ixs = args
-print(ssv_ixs)
 for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, version="0", working_dir="/wholebrain/scratch/areaxfs3/")
     sso.load_skeleton()
-    if sso.skeleton is not None:
-        continue
     create_sso_skeleton(sso)
+    if sso.skeleton is None or len(sso.skeleton["nodes"]) == 0:
+        continue
     sso.save_skeleton()
     # generate and cache features at different contexts (e.g. spiness/axoness):
-    if len(sso.skeleton["nodes"]) > 0:
-        for ctx in [2000, 8000]:
-            _ = sso.skel_features(ctx)
+    try:
+        if len(sso.skeleton["nodes"]) > 0:
+            if not "assoc_sj" in sso.skeleton:
+                associate_objs_with_skel_nodes(sso)
+            for ctx in [2000, 8000]:
+                features = extract_skel_features(sso, feature_context_nm=ctx)
+                sso._save_skelfeatures(ctx, features, overwrite=True)
+    except Exception as e:
+        print("Error occurred with SSO ", sso.id, str(e))
+
+with open(path_out_file, "wb") as f:
+    pkl.dump("0", f)

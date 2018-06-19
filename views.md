@@ -17,7 +17,6 @@ Now create a new SSD, the post-glia-removal SSD, and run the analysis to
  to all its SSVs #TODO: what exactly has to be called for that?
 
 ## Cellular morphology learning neural networks
-
 Now we can extract the multi-views which contain channels for cell objects and
  are the basis for predicting cell compartments, cell type and spines (coming soon).
 
@@ -25,5 +24,5 @@ Run:
 `start_sso_rendering.py`
 
 
-
-
+# Groundtruth generation
+# TBD

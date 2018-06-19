@@ -6,6 +6,7 @@ from knossos_utils.knossosdataset import KnossosDataset
 from elektronn2.config import config as e2config
 from elektronn2.utils.gpu import initgpu
 from .compression import load_from_h5py, save_to_h5py
+from ..cnn.TrainData import naive_view_normalization
 import numpy as np
 import os
 import sys
@@ -331,10 +332,17 @@ def parse_movement_area_from_zip(zip_fname):
     line = line[0]
     bb_min = np.array([re.findall('min.\w="(\d+)"', line)], dtype=np.uint)
     bb_max = np.array([re.findall('max.\w="(\d+)"', line)], dtype=np.uint)
-    return np.concatenate([bb_min, bb_max])
+    return np.concatenate([bb_min, bb_max]) - 1  # correct for 1-indexing of knossos
 
 
-def pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
+def pred_dataset(*args, **kwargs):
+    warnings.warn("'pred_dataset' will be replaced by 'predict_dataset' in"
+                  " the near future.")
+    return pred_dataset(*args, **kwargs)
+
+
+
+def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
                  mfp_active=False, gpu_ids=(0, ), overwrite=True):
     """
     Runs prediction on the complete knossos dataset.
@@ -534,10 +542,13 @@ def chunk_pred(ch, model, debug=False):
         ch.save_chunk(raw, "pred", "raw", overwrite=False)
 
 
-# almost deprecated interface class
 class NeuralNetworkInterface(object):
+    """
+    Experimental and almost deprecated interface class
+    """
     def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
-                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2):
+                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2,
+                 normalize_data=False, normalize_func=None, init_gpu=None):
         self.imposed_batch_size = imposed_batch_size
         self.channels_to_load = channels_to_load
         self.arch = arch
@@ -545,9 +556,15 @@ class NeuralNetworkInterface(object):
         self._fname = os.path.split(model_path)[1]
         self.nb_labels = nb_labels
         self.normal = normal
+        self.normalize_data = normalize_data
+        self.normalize_func = normalize_func
+        if init_gpu is None:
+            init_gpu = 'auto'
         if e2config.device is None:
             from elektronn2.utils.gpu import initgpu
-            initgpu(0)
+            initgpu(init_gpu)
+        import elektronn2
+        elektronn2.logger.setLevel("ERROR")
         from elektronn2.neuromancer.model import modelload
         self.model = modelload(model_path, replace_bn='const',
                                imposed_batch_size=imposed_batch_size)
@@ -556,11 +573,21 @@ class NeuralNetworkInterface(object):
 
     def predict_proba(self, x, verbose=False):
         x = x.astype(np.float32)
-        bs = self.model.batch_size
+        if self.normalize_data:
+            if self.normalize_func is not None:
+                x = self.normalize_func(x)
+            else:
+                x = naive_view_normalization(x)
+        bs = self.imposed_batch_size
         if self.arch == "rec_view":
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
                        range(x.shape[1] / bs)]
             proba = np.ones((x.shape[1], 4, self.nb_labels))
+        elif self.arch == "triplet":
+            batches = [np.arange(i * bs, (i + 1) * bs) for i in
+                       range(len(x) / bs)]
+            # nb_labels represents latent space dim.; 3 -> view triplet
+            proba = np.ones((len(x), self.nb_labels, 3))
         else:
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
                        range(len(x) / bs)]
@@ -568,16 +595,16 @@ class NeuralNetworkInterface(object):
         if verbose:
             cnt = 0
             start = time.time()
-        pbar = tqdm.tqdm(total=len(batches), ncols=80, leave=False,
-                         unit='it', unit_scale=True, dynamic_ncols=False)
+            pbar = tqdm.tqdm(total=len(batches), ncols=80, leave=False,
+                             unit='it', unit_scale=True, dynamic_ncols=False)
         for b in batches:
             if verbose:
                 sys.stdout.write("\r%0.2f" % (float(cnt) / len(batches)))
                 sys.stdout.flush()
                 cnt += 1
+                pbar.update()
             x_b = x[b]
             proba[b] = self.model.predict(x_b)[None, ]
-            pbar.update()
         overhead = len(x) % bs
         # TODO: add proper axis handling, maybe introduce axistags
         if overhead != 0:
@@ -593,10 +620,22 @@ class NeuralNetworkInterface(object):
             sys.stdout.flush()
             print "Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
                   (len(x), end-start, (end-start)/len(x))
+            pbar.close()
         return proba
 
 
-def get_axoness_model_new():
+def get_axoness_model_V2():
+    """
+    Retrained with GP dendrites. May 2018.
+    """
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/SyConn/axon_views/g1_v3/g1_v3-FINAL.mdl",
+                                  imposed_batch_size=200,
+                                  nb_labels=3, normalize_data=True)
+    _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
+    return m
+
+
+def get_axoness_model():
     m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/axoness/g5_axoness_v0_all_run2/g5_axoness_v0_all_run2-FINAL.mdl",
                                   imposed_batch_size=200,
                                   nb_labels=3)
@@ -620,11 +659,41 @@ def get_tripletnet_model():
     return m
 
 
-def get_celltype_model():
-    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/celltypes/g1_20views_v3/g1_20views_v3-FINAL.mdl",
-                               imposed_batch_size=5, nb_labels=4)
-    _ = m.predict_proba(np.zeros((5, 4, 20, 128, 256)))
+def get_tripletnet_model_ortho():
+    # final model diverged...
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/SyConn/triplet_net_SSV/wholecell_orthoviews_v4/Backup/wholecell_orthoviews_v4-180k.mdl",
+                                  imposed_batch_size=6,
+                                  nb_labels=10, arch="triplet")
+    _ = m.predict_proba(np.zeros((1, 4, 3, 512, 512)))
     return m
+
+
+def get_celltype_model(init_gpu=None):
+    # normalize images between 0 and 1 (naive_view_normalization normalizes between -0.5 and 0.5)
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/celltypes/g1_20views_v3/g1_20views_v3-FINAL.mdl",
+                               imposed_batch_size=2, nb_labels=4, normalize_data=True, normalize_func=force_correct_norm,
+                               init_gpu=init_gpu)
+    _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
+    return m
+
+
+def force_correct_norm(x):
+    import itertools
+    x = x.astype(np.float32)
+    for ii, jj, kk in itertools.product(np.arange(x.shape[0]), np.arange(x.shape[1]),
+                      np.arange(x.shape[2])):
+        curr_img = x[ii, jj, kk]
+        if np.all(curr_img[0, 0] == curr_img):
+            x[ii, jj, kk] = 1
+        elif np.max(curr_img) <= 1.0 and np.min(curr_img) >= 0:
+            pass
+        elif np.max(curr_img) > 1.0:
+            x[ii, jj, kk] = curr_img / 255.
+        assert np.max(x[ii, jj, kk]) <= 1.0 and np.min(x[ii, jj, kk]) >= 0
+    return x
+
+
+
 
 def _multi_gpu_ds_pred(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size=None, gpu_ids=(0, 1)):
 

@@ -13,9 +13,8 @@ try:
 # TODO: switch to Python3 at some point and remove above
 except Exception:
     import pickle as pkl
-from syconn.reps.super_segmentation_helper import sparsify_skeleton, create_sso_skeleton
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
-from scipy.misc import imsave
+from syconn.proc.rendering import render_sso_ortho_views
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -31,10 +30,13 @@ with open(path_storage_file) as f:
 ssv_ixs = args
 for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, version="0", working_dir="/wholebrain/scratch/areaxfs3/")
-
     if sso.size > 1e5:
-        filename = '/wholebrain/scratch/jkornfeld/ssv_gallery/size_{0}_ssv_{1}.png'.format(sso.size, ix)
-        views = sso.render_ortho_views(dest_folder='')
-        # todo: combine views in a single image file
-        imsave(filename, np.hstack(views))
-    print("Rendered ortho views for SSV", ix)
+        try:
+             _ = sso.load_views(view_key="ortho")
+        except KeyError:
+            print("Rendering missing SSO %d." % sso.id)
+            views = render_sso_ortho_views(sso)
+            sso.save_views(views, view_key="ortho")
+
+with open(path_out_file, "wb") as f:
+    pkl.dump("0", f)

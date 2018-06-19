@@ -1,7 +1,7 @@
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.handler.compression import AttributeDict, MeshDict, VoxelDict
-from syconn.mp.shared_mem import start_multiprocess
+from syconn.mp.shared_mem import start_multiprocess_imap, start_multiprocess
 from syconn.proc.meshes import triangulation
 from syconn.config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, wd, \
     get_dataset_scaling
@@ -10,11 +10,18 @@ import numpy as np
 
 
 def mesh_creator_sso(ssv):
+    ssv.enable_locking = False
     ssv.load_attr_dict()
     _ = ssv._load_obj_mesh(obj_type="mi", rewrite=False)
     _ = ssv._load_obj_mesh(obj_type="sj", rewrite=False)
     _ = ssv._load_obj_mesh(obj_type="vc", rewrite=False)
     _ = ssv._load_obj_mesh(obj_type="sv", rewrite=False)
+    try:
+        ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
+        _ = ssv._load_obj_mesh(obj_type="conn", rewrite=False)
+    except KeyError:
+        print("Loading 'conn' objects failed for SSV %s."
+              % ssv.id)
     ssv.clear_cache()
 
 
@@ -48,39 +55,29 @@ def mesh_chunk(args):
         # create mesh
         indices, vertices, normals = triangulation(np.array(voxel_list),
                                      downsampling=MESH_DOWNSAMPLING[obj_type],
-                                     scaling=scaling, n_closings=MESH_CLOSING[obj_type])
+                                     n_closings=MESH_CLOSING[obj_type])
         vertices *= scaling
         md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
     md.save2pkl()
     print attr_dir
 
 
-def mesh_proc_chunked(obj_type, working_dir, n_folders_fs=10000):
-    sds = SegmentationDataset(obj_type, working_dir=working_dir, n_folders_fs=n_folders_fs)
-    fold = sds.so_storage_path
-    f1 = np.arange(0, 100)
-    f2 = np.arange(0, 100)
-    all_poss_attr_dicts = list(itertools.product(f1, f2))
-    assert len(all_poss_attr_dicts) == 10000
-    print "Processing %d mesh dicts of %s." % (len(all_poss_attr_dicts), obj_type)
-    multi_params = [["%s/%02d/%02d/" % (fold, par[0], par[1]), obj_type] for par in all_poss_attr_dicts]
-    start_multiprocess(mesh_chunk, multi_params, nb_cpus=20, debug=False)
-
+def mesh_proc_chunked(obj_type, working_dir):
+    sd = SegmentationDataset(obj_type, working_dir=working_dir)
+    multi_params = sd.so_dir_paths
+    print "Processing %d mesh dicts of %s." % (len(multi_params), obj_type)
+    start_multiprocess_imap(mesh_chunk, multi_params, nb_cpus=20, debug=False)
 
 
 if __name__ == "__main__":
     # preprocess meshes of all objects
-    # TODO: check if n_folders_fs makes sense and is there a way
-    # TODO: to get the folder hirarchy (important for 'mesh_proc_chunked'?
-    # TODO: (has to be read out from config or something @sven)
-    mesh_proc_chunked("conn", wd, n_folders_fs=10000)
-    mesh_proc_chunked("sj", wd, n_folders_fs=10000)
-    mesh_proc_chunked("vc", wd, n_folders_fs=10000)
-    mesh_proc_chunked("mi", wd, n_folders_fs=10000)
-
+    mesh_proc_chunked("conn", wd)
+    mesh_proc_chunked("sj", wd)
+    mesh_proc_chunked("vc", wd)
+    mesh_proc_chunked("mi", wd)
     # cache meshes of SSV objects, here for axon ground truth,
     # e.g. change version to "0" for initial run on all SSVs in the segmentation
-    ssds = SuperSegmentationDataset(working_dir=wd,
-                                    version="axgt", ssd_type="ssv")
+    ssds = SuperSegmentationDataset(working_dir=wd,)
+                                    #version="axgt", ssd_type="ssv")
     start_multiprocess(mesh_creator_sso, list(ssds.ssvs), nb_cpus=20, debug=False)
 

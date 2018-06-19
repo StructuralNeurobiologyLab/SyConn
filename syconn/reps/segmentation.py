@@ -636,22 +636,21 @@ class SegmentationObject(object):
                               disable_locking=not self.enable_locking)
         return self.id in location_dc
 
-    @property
-    def views_exist(self, woglia=True):
+
+    def views_exist(self, woglia):
         view_dc = LZ4Dict(self.view_path(woglia=woglia),
                           disable_locking=not self.enable_locking)
         return self.id in view_dc
 
-    @property
-    def views(self):
+    def views(self, woglia):
         assert self.type == "sv"
         if self._views is None:
-            if self.views_exist:
+            if self.views_exist(woglia):
                 if self.view_caching:
-                    self._views = self.load_views()
+                    self._views = self.load_views(woglia=woglia)
                     return self._views
                 else:
-                    return self.load_views()
+                    return self.load_views(woglia=woglia)
             else:
                 return -1
         else:
@@ -694,30 +693,24 @@ class SegmentationObject(object):
     def load_skeleton(self, recompute=False):
         return load_skeleton(self, recompute=recompute)
 
-    def glia_pred(self, thresh=0.168, pred_key_appendix=""):
+    def glia_pred(self, thresh, pred_key_appendix=""):
         return glia_pred_so(self, thresh, pred_key_appendix)
 
     def axoness_preds(self, pred_key_appendix=""):
-        assert self.type == "sv"
-        pred_key = "axoness_proba" + pred_key_appendix
-        if not pred_key in self.attr_dict:
-            self.load_attr_dict()
-        if not pred_key in self.attr_dict:
-            print("WARNING: Requested axoness prediction for SV %d is "
-                  "not available." % self.id)
-            return np.array([1] * len(self.sample_locations()))
-        pred = np.argmax(self.attr_dict[pred_key], axis=1)
+        pred = np.argmax(self.axoness_probas(pred_key_appendix), axis=1)
         return pred
 
     def axoness_probas(self, pred_key_appendix=""):
         assert self.type == "sv"
-        pred_key = "axoness_proba" + pred_key_appendix
+        pred_key = "axoness_probas" + pred_key_appendix
         if not pred_key in self.attr_dict:
             self.load_attr_dict()
         if not pred_key in self.attr_dict:
-            print("WARNING: Requested axoness probability for SV %d is "
-                  "not available." % self.id)
-            return np.array([[0, 1, 0] * len(self.sample_locations())]).reshape((-1, 3))
+            msg = "WARNING: Requested axoness {} for SV {} is "\
+                  "not available. Existing keys: {}".format(
+                pred_key, self.id, str(self.attr_dict.keys()))
+            raise ValueError(msg)
+            # return np.array([[0, 1, 0] * len(self.sample_locations())]).reshape((-1, 3))
         return self.attr_dict[pred_key]
 
     #                                                                  FUNCTIONS
@@ -739,6 +732,20 @@ class SegmentationObject(object):
         mesh_dc.save2pkl()
 
     def mesh2kzip(self, dest_path, ext_color=None, ply_name=""):
+        """
+
+        Parameters
+        ----------
+        dest_path :
+        ext_color : RGBA or int
+            if set to 0 no color will be written out. Use to adapt color in
+            Knossos.
+        ply_name :
+
+        Returns
+        -------
+
+        """
         mesh = self.mesh
         if self.type == "sv":
             color = (130, 130, 130, 160)
@@ -752,14 +759,14 @@ class SegmentationObject(object):
             color = (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)
         elif self.type == "mi":
             color = (0, 153, 255, 255)
-        elif ext_color is not None:
+        else:
+            raise ("Given object type '{}' does not exist.".format(self.type),
+                   TypeError)
+        if ext_color is not None:
             if ext_color == 0:
                 color = None
             else:
                 color = ext_color
-        else:
-            raise ("Given object type '%s' does not exist." % self.type,
-                   TypeError)
 
         if ply_name == "":
             ply_name = str(self.id)
@@ -771,13 +778,20 @@ class SegmentationObject(object):
         kml = knossos_ml_from_svixs([self.id], coords=[self.rep_coord])
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def load_views(self, woglia=True, raw_only=False):
+    def load_views(self, woglia=True, raw_only=False, ignore_missing=False):
         view_dc = LZ4Dict(self.view_path(woglia=woglia),
                           disable_locking=not self.enable_locking)
-        views = view_dc[self.id]
+        try:
+            views = view_dc[self.id]
+        except KeyError as e:
+            if ignore_missing:
+                print("Views of SV {} were missing. Skipping.".format(self.id))
+                views = np.zeros((0, 4, 2, 128, 256), dtype=np.uint8)
+            else:
+                raise KeyError(e)
         if raw_only:
             views = views[:, :1]
-        return np.array(views, dtype=np.float32)
+        return views
 
     def save_views(self, views, woglia=True, cellobjects_only=False):
         view_dc = LZ4Dict(self.view_path(woglia=woglia),
@@ -947,7 +961,6 @@ class SegmentationObject(object):
     # SKELETON
     @property
     def skeleton_dict_path(self):
-        print(self.segobj_dir)
         return self.segobj_dir + "/skeletons.pkl"
 
     def copy2dir(self, dest_dir, safe=True):

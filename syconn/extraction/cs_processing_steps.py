@@ -1041,8 +1041,8 @@ def _collect_axoness_from_ssv_partners_thread(args):
             ssv_o = ssv.get_super_segmentation_object(ssv_partner_id)
             try:
                 axoness.append(ssv_o.axoness_for_coords([conn_o.rep_coord],
-                                                        pred_type='axoness_preds_cnn_views_avg10000')[0])
-            except:
+                                                        pred_type='axoness_preds_cnn_views_avg10000_comp_maj')[0])
+            except Exception as e:
                 axoness.append(-1)
 
         print(axoness)
@@ -1052,24 +1052,26 @@ def _collect_axoness_from_ssv_partners_thread(args):
     this_attr_dc.save2pkl()
 
 
-def export_matrix(wd, conn_version=None, dest_name=None):
+def export_matrix(wd, conn_version=None, dest_name=None, syn_prob_t=.5):
     conn_sd = segmentation.SegmentationDataset("conn", version=conn_version,
                                                working_dir=wd)
 
     syn_prob = conn_sd.load_cached_data("syn_prob")
 
-    m = syn_prob > .5
+    m = syn_prob > syn_prob_t
     m_axs = conn_sd.load_cached_data("partner_axoness")[m]
     m_coords = conn_sd.rep_coords[m]
-    m_sizes = conn_sd.sizes[m]
+    # m_sizes = conn_sd.sizes[m]
+    m_sizes = conn_sd.load_cached_data("mesh_area")[m] / 2
     m_ssv_partners = conn_sd.load_cached_data("ssv_partners")[m]
+    m_syn_prob = syn_prob[m]
 
-    table = np.concatenate([m_coords, m_ssv_partners, m_sizes[:, None], m_axs], axis=1)
+    table = np.concatenate([m_coords, m_ssv_partners, m_sizes[:, None], m_axs, m_syn_prob[:, None]], axis=1)
 
     if dest_name is None:
         dest_name = conn_sd.path + "/conn_mat"
 
-    np.savetxt(dest_name + ".csv", table, delimiter="\t", header="x\ty\tz\tssv1\tssv2\tsize\tax1\tax2")
+    np.savetxt(dest_name + ".csv", table, delimiter="\t", header="x\ty\tz\tssv1\tssv2\tsize\tax1\tax2\tsynprob")
 
     labels = np.array(["N/A", "D", "A", "S"])
     labels_ids = np.array([-1, 0, 1, 2])
@@ -1087,7 +1089,8 @@ def export_matrix(wd, conn_version=None, dest_name=None):
             c = m_coords[i_syn]
 
             # somewhat approximated from sphere volume:
-            r = np.power(m_sizes[i_syn] / 3., 1 / 3.)
+            # r = np.power(m_sizes[i_syn] / 3., 1 / 3.)
+            r = m_sizes[i_syn]
             skel_node = skeleton.SkeletonNode(). \
                 from_scratch(anno, c[0], c[1], c[2], radius=r)
             skel_node.data["ssv_partners"] = m_ssv_partners[i_syn]

@@ -96,9 +96,18 @@ class SkelClassifier(object):
         return str(self._ssd_version)
 
     @property
+    def splitting_fname(self):
+        return self.working_dir + "/ssv_{}/{}_splitting.pkl".format(self.ssd_version, self.ssd_version)
+
+    @property
+    def label_dict_fname(self):
+        return self.working_dir + "/ssv_%s/%s_labels.pkl" \
+               % (self.ssd_version, self.ssd_version)
+
+    @property
     def path(self):
-        return self.working_dir + "/skel_clf_%s_%s" % \
-              (self.target_type, self.ssd_version)
+        return self.working_dir + "/skel_clf_{}_{}".format(
+            self.target_type, self.ssd_version)
 
     @property
     def labels_path(self):
@@ -125,7 +134,7 @@ class SkelClassifier(object):
         return self._ssd
 
     def avail_feature_contexts(self, clf_name):
-        paths = glob.glob(self.clf_path + "/*%s*.pkl" % clf_name)
+        paths = glob.glob(self.clf_path + "/*{}*.pkl".format(clf_name))
         feature_contexts = set()
         for path in paths:
             fc = int(re.findall("[\d]+", os.path.basename(path))[-1])
@@ -135,14 +144,8 @@ class SkelClassifier(object):
 
     def load_label_dict(self):
         if self.label_dict is None:
-            if self.ssd_version == "axgt":
-                with open(self.working_dir + "/axgt_labels.pkl", "r") as f:
-                    self.label_dict = pkl.load(f)
-            elif self.ssd_version == "ctgt":
-                with open(self.working_dir + "/ctgt_labels.pkl", "r") as f:
-                    self.label_dict = pkl.load(f)
-            elif self.ssd_version == "spgt":
-                with open(self.working_dir + "/spgt_labels.pkl", "r") as f:
+            if self.ssd_version in ["axgt", "spgt", "ctgt"]:
+                with open(self.label_dict_fname, "r") as f:
                     self.label_dict = pkl.load(f)
             else:
                 raise()
@@ -197,8 +200,7 @@ class SkelClassifier(object):
             raise Exception("QSUB not available")
 
     def create_splitting(self, ratios=(.6, .2, .2)):
-        assert not os.path.isfile(self.path + "/%s_splitting.pkl"
-                                  % self.ssd_version), "Splitting file exists."
+        assert not os.path.isfile(self.splitting_fname), "Splitting file exists."
         print("Creating dataset splits.")
         self.load_label_dict()
         classes = np.array(self.label_dict.values(), dtype=np.int)
@@ -226,14 +228,14 @@ class SkelClassifier(object):
             id_bin_dict["valid"] += list(sso_ids[valid_mask])
             id_bin_dict["test"] += list(sso_ids[test_mask])
 
-        with open(self.path + "/%s_splitting.pkl" % self.ssd_version, "w") as f:
+        with open(self.splitting_fname, "w") as f:
             pkl.dump(id_bin_dict, f)
 
     def id_bins(self):
-        if not os.path.exists(self.path + "/%s_splitting.pkl" % self.ssd_version):
+        if not os.path.exists(self.splitting_fname):
             self.create_splitting()
 
-        with open(self.path + "/%s_splitting.pkl" % self.ssd_version, "r") as f:
+        with open(self.splitting_fname, "r") as f:
             part_dict = pkl.load(f)
 
         id_bin_dict = {}
@@ -254,9 +256,9 @@ class SkelClassifier(object):
                 continue
 
             this_feats = np.load(self.feat_path +
-                                 "/features_%d_%d.npy" % (feature_context_nm, sso_id))
+                                 "/features_{}_{}.npy".format(feature_context_nm, sso_id))
             labels_fname = self.feat_path +\
-                            "/labels_%d_%d.npy" % (feature_context_nm, sso_id)
+                            "/labels_{}_{}.npy".format(feature_context_nm, sso_id)
             if not os.path.isfile(labels_fname):
                 this_labels = [self.label_dict[sso_id]] * len(this_feats)
             else:
@@ -270,8 +272,7 @@ class SkelClassifier(object):
                     this_labels[this_labels == 2] = 0
                 this_labels = this_labels.tolist()
                 cnt = Counter(this_labels)
-                print("Found node specific labels in SSV %d. %s" %
-                      (sso_id, cnt))
+                print("Found node specific labels in SSV {}. {}".format(sso_id, cnt))
             if id_bin_dict[sso_id] in feature_dict:
                 feature_dict[id_bin_dict[sso_id]] = \
                     np.concatenate([feature_dict[id_bin_dict[sso_id]],
@@ -314,7 +315,7 @@ class SkelClassifier(object):
 
         overall_score = np.sum((pred == labels) * label_weights) / \
                         float(np.sum(label_weights))
-        print("Overall acc: %.5f\n" % overall_score)
+        print("Overall acc: {0:.5}\n".format(overall_score))
 
         score_dict = {}
         for i_class in range(len(classes)):
@@ -332,8 +333,8 @@ class SkelClassifier(object):
                 f_score = 2 * precision * recall / (recall + precision)
             score_dict[this_class] = [precision, recall, f_score]
 
-            print("class: %d: p: %.4f, r: %.4f, f: %.4f" % \
-                  (this_class, precision, recall, f_score))
+            print("class: {}: p: {0:.4}, r: {0:.4}, f: "
+                  "{0:.4}".format(this_class, precision, recall, f_score))
         return score_dict, label_weights
 
     def train_clf(self, name, n_estimators=2000, feature_context_nm=4000,
@@ -346,7 +347,7 @@ class SkelClassifier(object):
         else:
             raise()
 
-        print("\n --- %s ---\n" % name)
+        print("\n --- {} ---\n".format(name))
         tr_feats, tr_labels, v_feats, v_labels, te_feats, te_labels = \
             self.load_data(feature_context_nm=feature_context_nm)
 
