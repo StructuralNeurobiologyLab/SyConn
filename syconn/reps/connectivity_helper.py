@@ -6,11 +6,10 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 import time
 import numpy as np
-import super_segmentation as ss
-import segmentation
-import connectivity
+from ..reps import super_segmentation as ss
+from ..reps import connectivity
 import networkx as nx
-from ..reps import segmentation as sd
+from ..reps import segmentation
 
 
 def extract_connectivity_thread(args):
@@ -214,7 +213,7 @@ def load_cached_data_dict(syconnfs_working_dir='/wholebrain/scratch/areaxfs/',
 
     """
     start = time.time()
-    csd = sd.SegmentationDataset(obj_type='cs',
+    csd = segmentation.SegmentationDataset(obj_type='cs',
                                  working_dir=syconnfs_working_dir,
                                  version=cs_seg_ds_version)
 

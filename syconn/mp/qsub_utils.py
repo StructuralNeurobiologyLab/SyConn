@@ -13,6 +13,7 @@ import getpass
 import glob
 import numpy as np
 import os
+import io
 import re
 import shutil
 import string
@@ -218,7 +219,7 @@ def number_of_running_processes(job_name):
     process = subprocess.Popen("qstat -u %s" % username,
                                shell=True, stdout=subprocess.PIPE)
     nb_lines = 0
-    for line in iter(process.stdout.readline, ''):
+    for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
         if job_name[:10] in line:
             nb_lines += 1
     return nb_lines

@@ -8,7 +8,7 @@
 try:
     import cPickle as pkl
 # TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 import sys
 from syconn.proc.skel_based_classifier_helper import generate_clf_data_thread
@@ -16,12 +16,12 @@ from syconn.proc.skel_based_classifier_helper import generate_clf_data_thread
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
 
-with open(path_storage_file) as f:
+with open(path_storage_file, 'rb') as f:
     args = []
     while True:
         try:
             args.append(pkl.load(f))
-        except:
+        except EOFError:
             break
 
 out = generate_clf_data_thread(args)

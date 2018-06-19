@@ -115,15 +115,17 @@ def load_voxel_list(so):
     voxel_list = np.array([], dtype=np.int32)
 
     if so._voxels is not None:
-        voxel_list = np.array(zip(*np.nonzero(so.voxels)), dtype=np.int32) + \
+        voxel_list = np.transpose(np.nonzero(so.voxels)).astype(np.uint32) + \
                      so.bounding_box[0]
+
+        # voxel_list = np.array(zip(*np.nonzero(so.voxels)), dtype=np.int32) + \
+        #              so.bounding_box[0]
     else:
         voxel_dc = VoxelDict(so.voxel_path, read_only=True)
         bin_arrs, block_offsets = voxel_dc[so.id]
 
         for i_bin_arr in range(len(bin_arrs)):
-            block_voxels = np.array(zip(*np.nonzero(bin_arrs[i_bin_arr])),
-                                    dtype=np.int32)
+            block_voxels = np.transpose(np.nonzero(bin_arrs[i_bin_arr])).astype(np.uint32)
             block_voxels += np.array(block_offsets[i_bin_arr])
 
             if len(voxel_list) == 0:

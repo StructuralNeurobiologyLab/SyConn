@@ -2,7 +2,7 @@ try:
     import cPickle as pkl
 # TODO: switch to Python3 at some point and remove above
 except Exception:
-    import Pickle as pkl
+    import pickle as pkl
 import glob
 import numpy as np
 import os
