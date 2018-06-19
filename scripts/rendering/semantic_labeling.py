@@ -43,11 +43,12 @@ def generate_palette(nr_classes, return_rgba=True):
     np.array
         Unique color array for N input classes
     """
-    classes_ids = np.arange(nr_classes+1) #reserve additional class id for background
+    classes_ids = np.arange(nr_classes + 1) #reserve additional class id for background
     classes_rgb = id2rgb_array_contiguous(classes_ids)[1:]  # convention: background is (0,0,0)
     if return_rgba:
         classes_rgb = np.concatenate([classes_rgb, np.ones(classes_rgb.shape[:-1])[..., None] * 255], axis=1)
     return classes_rgb.astype(np.uint8)
+
 
 def remap_rgb_labelviews(rgb_view, palette):
     """
@@ -91,20 +92,11 @@ def str2intconverter(comment, gt_type):
             return 0
         elif "shaft" in comment:
             return 2
+        elif "other" in comment:
+            return 3
         else:
             return -1
     else: raise ValueError("Given groundtruth type is not valid.")
-
-
-# def map_rgb2label(rgb):
-#     if np.all(rgb == palette[0, :-1]):
-#         return 0
-#     elif np.all(rgb == palette[0, :-1]):
-#         return 1
-#     elif np.all(rgb == palette[0, :-1]):
-#         return 2  #
-#     else:
-#         return BACKGROUND_LABEL  # background
 
 
 def generate_label_views(kzip_path, gt_type="spgt"):
@@ -123,8 +115,8 @@ def generate_label_views(kzip_path, gt_type="spgt"):
 
     node_coords = np.array([n.getCoordinate() * sso.scaling for n in skel_nodes])
     node_labels = np.array([str2intconverter(n.getComment(), gt_type) for n in skel_nodes], dtype=np.int)
-    node_coords = node_coords[node_labels != -1]
-    node_labels = node_labels[node_labels != -1]
+    node_coords = node_coords[(node_labels != -1) & (node_labels != 3)]
+    node_labels = node_labels[(node_labels != -1) & (node_labels != 3)]
 
     # create KD tree from skeleton node coordinates
     tree = KDTree(node_coords)
