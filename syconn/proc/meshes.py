@@ -957,5 +957,5 @@ def rgb2id_array(rgb_arr):
     id_arr = np.zeros((len(rgb_arr_flat)), dtype=np.uint32)
     id_arr[mask_arr] = np.apply_along_axis(rgb2id, 1, rgb_arr_flat[mask_arr]).squeeze()
     id_arr[~mask_arr] = np.max(id_arr) + 1  # use highest value as background
-    # print("Finisehd remapping rgb-> vertex IDs after [min]:", (time.time()-start)/60.)
+    # print("Finisehd remapping rgb-> vertex IDs after [min]:", (time.time()-start))
     return id_arr.reshape(rgb_arr.shape[:-1])

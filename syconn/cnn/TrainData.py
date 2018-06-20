@@ -11,6 +11,7 @@ import warnings
 from syconn.config.global_params import wd
 from syconn.handler.basics import load_pkl2obj
 from syconn.handler.compression import lz4stringtoarr, save_to_h5py
+from syconn.handler.prediction import force_correct_norm, naive_view_normalization
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.mp.shared_mem import start_multiprocess_obj
@@ -236,14 +237,34 @@ class SSVCelltype(Data):
                  reduce_context_fact=1, binary_views=False):
         ssv_splits = load_pkl2obj("/wholebrain/scratch/pschuber/NeuroPatch/gt/ssv_ctgt_splitted_ids_cleaned.pkl")
         ssv_gt_dict = load_pkl2obj("/wholebrain/scratch/pschuber/NeuroPatch/gt/ssv_ctgt.pkl")
+        self.ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/", version="6")
+        # # This should be done at some point, but currently new views are
+        # old_ssv_ids = ssv_gt_dict.keys()
+        # old_ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/", version="6")
+        # self.ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/")
+        # old_sv_ids = [old_ssds.get_super_segmentation_object(ssv_id).sv_ids for ssv_id in old_ssv_ids]
+        # maj_remap_id = [np.unique([self.ssds.mapping_dict_reversed[sv_id] for sv_id in sv_ids], return_counts=True) for sv_ids in old_sv_ids]
+        # old2new_ssvid = {}
+        # for ii, el in enumerate(maj_remap_id):
+        #     maj_vote = el[0][np.argmax(el[1])]
+        #     if len(el[0])>1:
+        #         print(np.array(el[1], dtype=np.float32) / np.sum(el[1]))
+        #     old2new_ssvid[old_ssv_ids[ii]] = maj_vote
+        # for k in ssv_splits:
+        #     ssv_splits[k] = [old2new_ssvid[ix] for ix in ssv_splits[k]]
+        # new_ssv_gt_dict = {}
+        # for k, v in ssv_gt_dict.iteritems():
+        #     new_ssv_gt_dict[old2new_ssvid[k]] = v
+        # raise()
+        # ssv_gt_dict = new_ssv_gt_dict
         self.nb_views = nb_views
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
         self.reduce_context = reduce_context
         self.reduce_context_fact = reduce_context_fact
         self.binary_views = binary_views
-        self.sds = SegmentationDataset("sv", working_dir="/wholebrain/scratch/areaxfs/", version="0")
-        self.ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/", version="6")
+        # new SV with new views
+        self.sds = SegmentationDataset("sv", working_dir="/wholebrain/scratch/areaxfs3/")
         self.example_shape = (nb_views, 4, 2, 128, 256)
         self.train_d = ssv_splits["train"]
         self.valid_d = ssv_splits["valid"]
@@ -771,19 +792,3 @@ def add_gt_sample(ssv_id, label, gt_type, set_type="train"):
     labels = load_pkl2obj("{}/axgt_labels.pkl".format(base_dir))
     splitting[set_type].append(ssv_id)
     labels[ssv_id] = label
-
-
-def naive_view_normalization(d):
-    d = d.astype(np.float32)
-    # perform pseudo-normalization (proper normalization: how to store mean and std for inference?)
-    if not (np.all(0 <= d) and np.all(d <= 1.0)):
-        for ii in range(len(d)):
-            curr_view = d[ii]
-            if 0 <= np.max(curr_view) <= 1.0:
-                curr_view = curr_view - 0.5
-            else:
-                curr_view = curr_view / 255. - 0.5
-            d[ii] = curr_view
-    else:
-        d = d - 0.5
-    return d

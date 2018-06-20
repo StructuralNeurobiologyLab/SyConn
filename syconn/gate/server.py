@@ -116,7 +116,7 @@ def route_ssv_of_sv(sv_id):
 
 @app.route('/ct_of_ssv/<ssv_id>', methods=['GET'])
 def route_ct_of_sv(ssv_id):
-    return json.dumps(sg_state.backend.ct_of_sv(ssv_id))
+    return json.dumps(sg_state.backend.ct_of_ssv(ssv_id))
 
 
 @app.route('/all_syn_meta', methods=['GET'])
@@ -358,7 +358,7 @@ class SyConnFS_backend(object):
         """
         return {'ssv': self.ssd.id_changer[int(sv_id)]}
 
-    def ct_of_sv(self, ssv_id):
+    def ct_of_ssv(self, ssv_id):
         """
         Returns the CT for a given SSV ID.
         :param sv_id:
@@ -372,6 +372,7 @@ class SyConnFS_backend(object):
             ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             label = ct_label_dc[l]
             probas = ssv.attr_dict["celltype_cnn_probas"]
+            print(np.mean(probas, axis=0))
         else:
             print("Celltype prediction not present in attribute dict of SSV {}"
                   "at {}.".format(ssv_id, ssv.attr_dict_path))

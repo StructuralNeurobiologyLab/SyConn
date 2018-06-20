@@ -154,9 +154,9 @@ class SyConnGateInteraction(object):
         str
 
         """
-        if not ssv_id in self.ct_from_cache:
-            r = self.session.get(self.server + '/ct_of_ssv/{0}'.format(ssv_id))
-            self.ct_from_cache[ssv_id] = json.loads(r.content)["ct"]
+        # if not ssv_id in self.ct_from_cache:
+        r = self.session.get(self.server + '/ct_of_ssv/{0}'.format(ssv_id))
+        self.ct_from_cache[ssv_id] = json.loads(r.content)["ct"]
         print("Celltype: {}".format(self.ct_from_cache[ssv_id]))
         return self.ct_from_cache[ssv_id]
 

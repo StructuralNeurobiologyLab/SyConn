@@ -14,7 +14,6 @@ from elektronn2.config import config as e2config
 from elektronn2.utils.gpu import initgpu
 from .compression import load_from_h5py, save_to_h5py
 from ..proc.image import normalize_img
-from ..cnn.TrainData import naive_view_normalization
 from .basics import read_txt_from_zip
 
 
@@ -660,7 +659,7 @@ def get_glia_model():
 def get_tripletnet_model():
     m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/t_net/ssv6_tripletnet_v9/ssv6_tripletnet_v9-FINAL.mdl",
                                   imposed_batch_size=12, normalize_data=True,
-                                  nb_labels=25, arch="triplet", normalize_func=force_correct_norm)
+                                  nb_labels=25, arch="triplet", )#normalize_func=force_correct_norm)
     _ = m.predict_proba(np.zeros((1, 4, 3, 128, 256)))
     return m
 
@@ -685,7 +684,7 @@ def get_celltype_model(init_gpu=None):
 
 def get_knn_tnet_embedding():
     tnet_eval_dir = "/wholebrain/scratch/pschuber/CNN_Training/" \
-                    "nupa_cnn/t_net/ssv6_tripletnet_v9/pred/"
+                    "nupa_cnn/t_net/ssv6_tripletnet_v9_backup/pred/"
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
@@ -704,6 +703,22 @@ def force_correct_norm(x):
         x[ii, jj, kk] = normalize_img(x[ii, jj, kk], max_val=1.0)
         assert np.max(x[ii, jj, kk]) <= 1.0 and np.min(x[ii, jj, kk]) >= 0
     return x
+
+
+def naive_view_normalization(d):
+    d = d.astype(np.float32)
+    # perform pseudo-normalization (proper normalization: how to store mean and std for inference?)
+    if not (np.min(d) >= 0 and np.max(d) <= 1.0):
+        for ii in range(len(d)):
+            curr_view = d[ii]
+            if 0 <= np.max(curr_view) <= 1.0:
+                curr_view = curr_view - 0.5
+            else:
+                curr_view = curr_view / 255. - 0.5
+            d[ii] = curr_view
+    else:
+        d = d - 0.5
+    return d
 
 
 def _multi_gpu_ds_pred(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size=None, gpu_ids=(0, 1)):

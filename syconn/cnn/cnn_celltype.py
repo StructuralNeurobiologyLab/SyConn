@@ -21,9 +21,9 @@ history_freq = 200
 monitor_batch_size = 48
 optimiser = 'Adam'
 nb_views = 20
-save_name = "g1_%dviews_v3_rawonly_run2" % nb_views
+save_name = "g1_%dviews_v3" % nb_views
 data_batch_args = {}
-data_init_kwargs = {"nb_views": nb_views, "nb_cpus": 1, "raw_only": True,
+data_init_kwargs = {"nb_views": nb_views, "nb_cpus": 1, "raw_only": False,
                     "reduce_context": 0, "reduce_context_fact": 1,
                     "binary_views": False}
 optimiser_params = dict(lr=10e-4, mom=0.9, wd=0.5e-3, beta2=0.99)
