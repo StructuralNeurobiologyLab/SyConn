@@ -1,17 +1,21 @@
 import re
-from .basics import read_txt_from_zip
-from collections import Counter
-from knossos_utils.chunky import ChunkDataset, save_dataset
-from knossos_utils.knossosdataset import KnossosDataset
-from elektronn2.config import config as e2config
-from elektronn2.utils.gpu import initgpu
-from .compression import load_from_h5py, save_to_h5py
 import numpy as np
 import os
 import sys
 import time
 import warnings
 import tqdm
+from sklearn.neighbors import KNeighborsClassifier
+from syconn.handler.basics import get_filepaths_from_dir
+from collections import Counter
+from knossos_utils.chunky import ChunkDataset, save_dataset
+from knossos_utils.knossosdataset import KnossosDataset
+from elektronn2.config import config as e2config
+from elektronn2.utils.gpu import initgpu
+from .compression import load_from_h5py, save_to_h5py
+from ..proc.image import normalize_img
+from ..cnn.TrainData import naive_view_normalization
+from .basics import read_txt_from_zip
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
@@ -546,7 +550,8 @@ class NeuralNetworkInterface(object):
     Experimental and almost deprecated interface class
     """
     def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
-                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2):
+                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2,
+                 normalize_data=False, normalize_func=None, init_gpu=None):
         self.imposed_batch_size = imposed_batch_size
         self.channels_to_load = channels_to_load
         self.arch = arch
@@ -554,9 +559,15 @@ class NeuralNetworkInterface(object):
         self._fname = os.path.split(model_path)[1]
         self.nb_labels = nb_labels
         self.normal = normal
+        self.normalize_data = normalize_data
+        self.normalize_func = normalize_func
+        if init_gpu is None:
+            init_gpu = 'auto'
         if e2config.device is None:
             from elektronn2.utils.gpu import initgpu
-            initgpu(0)
+            initgpu(init_gpu)
+        import elektronn2
+        elektronn2.logger.setLevel("ERROR")
         from elektronn2.neuromancer.model import modelload
         self.model = modelload(model_path, replace_bn='const',
                                imposed_batch_size=imposed_batch_size)
@@ -565,12 +576,18 @@ class NeuralNetworkInterface(object):
 
     def predict_proba(self, x, verbose=False):
         x = x.astype(np.float32)
+        if self.normalize_data:
+            if self.normalize_func is not None:
+                x = self.normalize_func(x)
+            else:
+                x = naive_view_normalization(x)
         bs = self.imposed_batch_size
         if self.arch == "rec_view":
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
                        range(x.shape[1] / bs)]
             proba = np.ones((x.shape[1], 4, self.nb_labels))
         elif self.arch == "triplet":
+            x = views2tripletinput(x)
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
                        range(len(x) / bs)]
             # nb_labels represents latent space dim.; 3 -> view triplet
@@ -608,6 +625,8 @@ class NeuralNetworkInterface(object):
             print "Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
                   (len(x), end-start, (end-start)/len(x))
             pbar.close()
+        if self.arch == "triplet":
+            return proba[..., 0]
         return proba
 
 
@@ -615,17 +634,17 @@ def get_axoness_model_V2():
     """
     Retrained with GP dendrites. May 2018.
     """
-    m = NeuralNetworkInterface("/wholebrain/u/pschuber/CNN_Training/SyConn/axon_views/g1_v2/g1_v2-FINAL.mdl",
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/SyConn/axon_views/g1_v3/g1_v3-FINAL.mdl",
                                   imposed_batch_size=200,
-                                  nb_labels=3)
+                                  nb_labels=3, normalize_data=True)
     _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
     return m
 
 
 def get_axoness_model():
     m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/axoness/g5_axoness_v0_all_run2/g5_axoness_v0_all_run2-FINAL.mdl",
-                                  imposed_batch_size=200,
-                                  nb_labels=3)
+                                  imposed_batch_size=200,  normalize_data=True,
+                                  nb_labels=3, normalize_func=force_correct_norm)
     _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
     return m
 
@@ -640,26 +659,52 @@ def get_glia_model():
 
 def get_tripletnet_model():
     m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/t_net/ssv6_tripletnet_v9/ssv6_tripletnet_v9-FINAL.mdl",
-                                  imposed_batch_size=12,
-                                  nb_labels=25, arch="triplet")
+                                  imposed_batch_size=12, normalize_data=True,
+                                  nb_labels=25, arch="triplet", normalize_func=force_correct_norm)
     _ = m.predict_proba(np.zeros((1, 4, 3, 128, 256)))
     return m
 
 
 def get_tripletnet_model_ortho():
     # final model diverged...
-    m = NeuralNetworkInterface("/wholebrain/u/pschuber/CNN_Training/SyConn/triplet_net_SSV/wholecell_orthoviews_v4/Backup/wholecell_orthoviews_v4-180k.mdl",
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/SyConn/triplet_net_SSV/wholecell_orthoviews_v4/Backup/wholecell_orthoviews_v4-180k.mdl",
                                   imposed_batch_size=6,
                                   nb_labels=10, arch="triplet")
     _ = m.predict_proba(np.zeros((1, 4, 3, 512, 512)))
     return m
 
 
-def get_celltype_model():
+def get_celltype_model(init_gpu=None):
+    # normalize images between 0 and 1 (naive_view_normalization normalizes between -0.5 and 0.5)
     m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/celltypes/g1_20views_v3/g1_20views_v3-FINAL.mdl",
-                               imposed_batch_size=5, nb_labels=4)
-    _ = m.predict_proba(np.zeros((5, 4, 20, 128, 256)))
+                               imposed_batch_size=2, nb_labels=4, normalize_data=True, normalize_func=force_correct_norm,
+                               init_gpu=init_gpu)
+    _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
     return m
+
+
+def get_knn_tnet_embedding():
+    tnet_eval_dir = "/wholebrain/scratch/pschuber/CNN_Training/" \
+                    "nupa_cnn/t_net/ssv6_tripletnet_v9/pred/"
+    return knn_clf_tnet_embedding(tnet_eval_dir)
+
+
+def force_correct_norm(x):
+    import itertools
+    x = x.astype(np.float32)
+    for ii, jj, kk in itertools.product(np.arange(x.shape[0]), np.arange(x.shape[1]),
+                      np.arange(x.shape[2])):
+        curr_img = x[ii, jj, kk]
+        if np.all(curr_img[0, 0] == curr_img):
+            x[ii, jj, kk] = 1. / 255
+        elif np.max(curr_img) <= 1.0 and np.min(curr_img) >= 0:
+            pass
+        elif np.max(curr_img) > 1.0:
+            x[ii, jj, kk] = curr_img / 255.
+        x[ii, jj, kk] = normalize_img(x[ii, jj, kk], max_val=1.0)
+        assert np.max(x[ii, jj, kk]) <= 1.0 and np.min(x[ii, jj, kk]) >= 0
+    return x
+
 
 def _multi_gpu_ds_pred(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size=None, gpu_ids=(0, 1)):
 
@@ -676,3 +721,50 @@ def _multi_gpu_ds_pred(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size=None, gpu_
         t = threading.Thread(target=start_partial_pred, args=(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size,gi,ii, len(gpu_ids)))
         t.daemon = True
         t.start()
+
+
+def knn_clf_tnet_embedding(fold):
+    """
+    Currently it assumes embedding for GT views has been created already in 'fold'
+    and put into l_train_%d.npy / l_valid_%d.npy files
+    Parameters
+    ----------
+    fold :
+
+    Returns
+    -------
+
+    """
+    train_fnames = get_filepaths_from_dir(fold, fname_includes=["l_axoness_train"], ending=".npy")
+    valid_fnames = get_filepaths_from_dir(fold, fname_includes=["l_axoness_valid"], ending=".npy")
+
+    train_d = []
+    train_l = []
+    valid_d = []
+    valid_l = []
+    for tf in train_fnames:
+        train_l.append(np.load(tf))
+        tf = tf.replace("l_axoness_train", "ls_axoness_train")
+        train_d.append(np.load(tf))
+    for tf in valid_fnames:
+        valid_l.append(np.load(tf))
+        tf = tf.replace("l_axoness_valid", "ls_axoness_valid")
+        valid_d.append(np.load(tf))
+
+    train_d = np.concatenate(train_d).astype(dtype=np.float32)
+    train_l = np.concatenate(train_l).astype(dtype=np.uint16)
+    valid_d = np.concatenate(valid_d).astype(dtype=np.float32)
+    valid_l = np.concatenate(valid_l).astype(dtype=np.uint16)
+
+    nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='auto', n_jobs=16,
+                                weights='uniform')
+    nbrs.fit(np.concatenate([train_d, valid_d]), np.concatenate([train_l, valid_l]))
+    return nbrs
+
+
+def views2tripletinput(views):
+    views = views[:, :, :1] # use first view only
+    out_d = np.concatenate([views,
+                            np.ones_like(views),
+                            np.ones_like(views)], axis=2)
+    return out_d.astype(np.float32)

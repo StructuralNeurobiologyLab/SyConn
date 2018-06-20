@@ -237,8 +237,8 @@ def coordpath2anno(coords, scaling=(10, 10, 20), add_edges=True):
     return anno
 
 
-def get_filepaths_from_dir(directory, ending=('k.zip'), recursively=False,
-                           exclude_endings=False):
+def get_filepaths_from_dir(directory, ending=('k.zip',), recursively=False,
+                           exclude_endings=False, fname_includes=()):
     """
     Collect all files with certain ending from directory.
 
@@ -250,7 +250,10 @@ def get_filepaths_from_dir(directory, ending=('k.zip'), recursively=False,
         ending(s) of files
     recursively: boolean
         add files from subdirectories
-
+    fname_includes : str or list
+        file names with this substring(s) will be added
+    exclude_endings : bool
+        filenames with endings defined in endings will not be added
     Returns
     -------
     list of str
@@ -259,24 +262,34 @@ def get_filepaths_from_dir(directory, ending=('k.zip'), recursively=False,
     # make it backwards compatible
     if type(ending) is str:
         ending = [ending]
+    if type(fname_includes) is str:
+        fname_includes = [fname_includes]
     files = []
+    corr_incl = True
+    corr_end = True
     if recursively:
         for r, s, fs in os.walk(directory):
             for f in fs:
-                corr_end = np.any(
-                    [f[-len(end):] == end for end in ending])
-                if exclude_endings:
-                    corr_end = not corr_end
-                if corr_end:
+                if len(ending) > 0:
+                    corr_end = np.any(
+                        [f[-len(end):] == end for end in ending])
+                    if exclude_endings:
+                        corr_end = not corr_end
+                if len(fname_includes) > 0:
+                    corr_incl = np.any([substr in f for substr in fname_includes])
+                if corr_end and corr_incl:
                     files.append(os.path.join(r, f))
 
     else:
         for f in next(os.walk(directory))[2]:
-            corr_end = np.any(
-                [f[-len(end):] == end for end in ending])
-            if exclude_endings:
-                corr_end = not corr_end
-            if corr_end:
+            if len(ending) > 0:
+                corr_end = np.any(
+                    [f[-len(end):] == end for end in ending])
+                if exclude_endings:
+                    corr_end = not corr_end
+            if len(fname_includes) > 0:
+                corr_incl = np.any([substr in f for substr in fname_includes])
+            if corr_end and corr_incl:
                 files.append(os.path.join(directory, f))
     return files
 

@@ -12,13 +12,13 @@ from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import itertools
 import sys
 from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess
-from ..config.global_params import min_cc_size_glia, min_cc_size_neuron, glia_thresh
+from ..config.global_params import min_cc_size_glia, min_cc_size_neuron, glia_thresh, get_dataset_scaling
 
 
 def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     """
-    Creates subgraph for each node consisting of nodes within distance
-    threshold.
+    Creates subgraph for each node consisting of nodes until maximum number of
+    nodes is reached.
 
     Parameters
     ----------
@@ -42,7 +42,7 @@ def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     for n in iter_ixs:
         if verbose:
             if cnt % 100 == 0:
-                sys.stdout.write("\r%0.6f" % (cnt / float(nb_nodes)))
+                sys.stdout.write("\r{0:.6}".format(cnt / float(nb_nodes)))
                 sys.stdout.flush()
             cnt += 1
         n_subgraph = [n]
@@ -307,10 +307,10 @@ def glia_path_length(glia_path, glia_dict, write_paths=None):
     if write_paths is not None:
         shortest_path = nx.dijkstra_path(g, start_ix, end_ix, weight="weights")
         anno = coordpath2anno([all_vert[ix] for ix in shortest_path])
-        anno.setComment("%0.4f" % shortest_path_length)
+        anno.setComment("{0:.4}".format(shortest_path_length))
         skel = Skeleton()
         skel.add_annotation(anno)
-        skel.to_kzip("%s/%0.4f_vertpath.k.zip" % (write_paths, shortest_path_length))
+        skel.to_kzip("{{}/{0:.4}_vertpath.k.zip".format(write_paths, shortest_path_length))
     return shortest_path_length
 
 
@@ -450,8 +450,8 @@ def create_mst_skeleton(coords, max_dist=6000, force_single_cc=True):
         if not force_single_cc:
             break
         max_dist += 2e3
-        print("Generated skeleton is not a single connected component. " \
-              "Increasing maximum node distance to %0.0f" % (max_dist))
+        print("Generated skeleton is not a single connected component. "
+              "Increasing maximum node distance to {0:.0}".format(max_dist))
         pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
         g = nx.Graph()
         weights = np.array(
@@ -462,8 +462,8 @@ def create_mst_skeleton(coords, max_dist=6000, force_single_cc=True):
     return np.array(g.edges())
 
 
-def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None,
-                    glia_key="glia_probas", node_size_cap=np.inf, mcmp=None):
+def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150,
+                    glia_key="glia_probas", node_size_cap=np.inf, mcmp=None, pos=None):
     """
     Draw graph with nodes colored in red (glia) and blue) depending on their
     class. Writes drawing to dest_path.
@@ -502,8 +502,33 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None,
     nodelist = list(np.array(G.nodes())[n_size > min_sv_size])
     n_size = n_size[n_size >= min_sv_size]
     n_size = n_size / np.max(n_size) * 25.
-    pos = nx.spring_layout(G, weight="weight", iterations=150)
+    if pos is None:
+        pos = nx.spring_layout(G, weight="weight", iterations=iterations)
     nx.draw(G, nodelist=nodelist, node_color=col, node_size=n_size,
             cmap=mcmp, width=0.15, pos=pos, linewidths=0)
     plt.savefig(dest_path)
     plt.close()
+    return pos
+
+
+def nxGraph2kzip(g, coords, kzip_path):
+    import tqdm
+    scaling = get_dataset_scaling()
+    coords = coords / scaling
+    skel = Skeleton()
+    anno = SkeletonAnnotation()
+    anno.scaling = scaling
+    node_mapping = {}
+    pbar = tqdm.tqdm(total=len(coords) + len(g.edges()))
+    for v in g.nodes():
+        c = coords[v]
+        n = SkeletonNode().from_scratch(anno, c[0], c[1], c[2])
+        node_mapping[v] = n
+        anno.addNode(n)
+        pbar.update(1)
+    for e in g.edges():
+        anno.addEdge(node_mapping[e[0]], node_mapping[e[1]])
+        pbar.update(1)
+    skel.add_annotation(anno)
+    skel.to_kzip(kzip_path)
+    pbar.close()

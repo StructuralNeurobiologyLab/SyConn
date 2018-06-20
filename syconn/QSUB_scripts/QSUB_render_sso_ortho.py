@@ -37,3 +37,6 @@ for ix in ssv_ixs:
             print("Rendering missing SSO %d." % sso.id)
             views = render_sso_ortho_views(sso)
             sso.save_views(views, view_key="ortho")
+
+with open(path_out_file, "wb") as f:
+    pkl.dump("0", f)

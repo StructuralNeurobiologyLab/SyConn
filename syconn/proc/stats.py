@@ -439,7 +439,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         for ii in range(len(target_names)):
             handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
         plt.legend(handles=handles, loc="best")
-        plt.savefig(os.path.splitext(dest_path)[0] + "_2.png", dpi=300)
+        plt.savefig(os.path.splitext(dest_path)[0] + "_2.tif", dpi=300)
         plt.close()
 
         # density plot 2nd and 3rd PC
@@ -465,7 +465,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         for ii in range(len(target_names)):
             handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
         plt.legend(handles=handles, loc="best")
-        plt.savefig(os.path.splitext(dest_path)[0] + "_3.png", dpi=300)
+        plt.savefig(os.path.splitext(dest_path)[0] + "_3.tif", dpi=300)
         plt.close()
     return pca
 

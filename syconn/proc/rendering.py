@@ -142,7 +142,7 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False):
             data = apply_clahe(data)
         data = gaussian_filter(data, .7)
         if np.sum(data) == 0:
-            data = np.ones_like(data)
+            data = np.ones_like(data) * 255
     elif colored:
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_RGB, GL_UNSIGNED_BYTE)
@@ -152,7 +152,7 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False):
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_RGB, GL_UNSIGNED_BYTE)
         data = Image.frombuffer("RGB", (ws[0], ws[1]), data, 'raw', 'RGB', 0, 1) #Image.frombuffer(mode="RGB", size=(ws[0], ws[1]), data=data)
-        data = rgb2gray(np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM)))
+        data = rgb2gray(np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM))) * 255
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     return data
 
@@ -168,7 +168,7 @@ def init_ctx(ws):
     return ctx
 
 
-def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False):
+def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False, smooth_shade=True):
     """
     Initialize OpenGL settings.
 
@@ -197,9 +197,12 @@ def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False):
     if not depth_map:
         glEnable(GL_COLOR_MATERIAL)
         glColorMaterial(GL_FRONT, GL_AMBIENT)
+    # objects in the foreground will be visible in the projection
+    glEnable(GL_DEPTH_TEST)
+    if smooth_shade:
+        glShadeModel(GL_SMOOTH)
     else:
-        glEnable(GL_DEPTH_TEST)
-
+        glShadeModel(GL_FLAT)
     glViewport(0, 0, ws[0], ws[1])
     if clear_value is None:
         glClearColor(0., 0., 0., 0.)
@@ -379,7 +382,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
 
 def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                            ws=(256, 128), views_key="raw", nb_simplices=3,
-                           depth_map=True, clahe=False):
+                           depth_map=True, clahe=False, smooth_shade=True):
     """
     Same as multi_view_mesh_coords but without creating gl context.
     Parameters
@@ -431,8 +434,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         view_sh = (comp_views, ws[1], ws[0])
     else:
         view_sh = (comp_views, ws[1], ws[0], 3)
-    res = np.ones([len(coords)] + list(view_sh), dtype=np.uint8)
-    init_opengl(ws, depth_map=depth_map, clear_value=0.0)
+    res = np.ones([len(coords)] + list(view_sh), dtype=np.uint8) * 255
+    init_opengl(ws, depth_map=depth_map, clear_value=0.0, smooth_shade=smooth_shade)
     init_object(indices, vertices, normals, colors, ws)
     for ii, c in enumerate(coords):
         c_views = np.ones(view_sh, dtype=np.float32)
@@ -478,7 +481,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         res[ii] = c_views
         found_empty_view = False
         for cv in c_views:
-            if np.sum(cv) == 0 or np.sum(cv) == np.prod(cv.shape):
+            if len(np.unique(cv)) == 1:
                 if views_key == "raw":
                     warnings.warn("Empty view of '%s'-mesh with %d "
                                   "vertices found."
@@ -486,7 +489,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                                   RuntimeWarning)
                     found_empty_view = True
             if found_empty_view:
-                print("View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n" \
+                print("View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
                       "'%s'-mesh with %d vertices." %\
                       (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
                        views_key, len(mesh.vertices)))
@@ -550,7 +553,7 @@ def render_mesh_coords(coords, ind, vert, **kwargs):
 
 def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                        rot_matrices=None, views_key="raw", return_rot_matrices=False,
-                       depth_map=True):
+                       depth_map=True, smooth_shade=True):
     """
     Render raw views located at given coordinates in mesh
      Returns ViewContainer list if dest_dir is None, else writes
@@ -596,7 +599,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
     ctx = init_ctx(ws)
     mviews = multi_view_mesh_coords(mesh, coords, local_rot_mat, edge_lengths,
                                     clahe=clahe, views_key=views_key, ws=ws,
-                                    depth_map=depth_map)
+                                    depth_map=depth_map, smooth_shade=smooth_shade)
     if verbose:
         end = time.time()
         print("Finished rendering mesh of type %s at %d locations after"
@@ -637,7 +640,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
         start = time.time()
     coords = sso.sample_locations()
     if not overwrite:
-        missing_sv_ixs = np.array([not so.views_exist for so in sso.svs],
+        missing_sv_ixs = np.array([not so.views_exist(woglia=woglia)
+                                   for so in sso.svs],
                                   dtype=np.bool)
         missing_svs = np.array(sso.svs)[missing_sv_ixs]
         coords = np.array(coords)[missing_sv_ixs]
@@ -667,7 +671,7 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
 
 
 def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=False,
-                      ws=(256, 128), cellobjects_only=False):
+                      ws=(256,128), cellobjects_only=False): #TODO
     """
     Render views of SuperSegmentationObject at given coordinates.
     
@@ -691,7 +695,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
               "No mesh for SSO %d found.\n"
               "----------------------------------------------\n")
         return
-    raw_views = np.ones((len(coords), 2, 128, 256), dtype=np.uint8)
+    raw_views = np.ones((len(coords), 2, 128, 256), dtype=np.uint8) * 255
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
                                 "cellobjects only."
@@ -710,21 +714,21 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
                                           verbose=verbose, rot_matrices=rot_mat,
                                           views_key="mi", ws=ws)
         else:
-            mi_views = np.ones_like(raw_views)
+            mi_views = np.ones_like(raw_views) * 255
         mesh = sso.vc_mesh
         if len(mesh[1]) != 0:
             vc_views = render_mesh_coords(coords, mesh[0], mesh[1], clahe=clahe,
                                           verbose=verbose, rot_matrices=rot_mat,
                                           views_key="vc", ws=ws)
         else:
-            vc_views = np.ones_like(raw_views)
+            vc_views = np.ones_like(raw_views) * 255
         mesh = sso.sj_mesh
         if len(mesh[1]) != 0:
             sj_views = render_mesh_coords(coords, mesh[0], mesh[1], clahe=clahe,
                                           verbose=verbose, rot_matrices=rot_mat,
                                           views_key="sj", ws=ws)
         else:
-            sj_views = np.ones_like(raw_views)
+            sj_views = np.ones_like(raw_views) * 255
         if cellobjects_only:
             return np.concatenate([mi_views[:, None], vc_views[:, None],
                                    sj_views[:, None]], axis=1)
@@ -763,7 +767,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     # Create mesh object
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
     index_views = _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
-                                      depth_map=False, rot_matrices=rot_matrices)
+                                      depth_map=False, rot_matrices=rot_matrices,smooth_shade=False)
     return (index_views * 255).astype(np.uint8)
 
 
@@ -806,7 +810,7 @@ def render_sso_ortho_views(sso):
 # Multiprocessing rendering code
 
 
-def multi_render_sampled_svidlist(svixs):
+def multi_render_sampled_svidlist(args):
     """
     Render SVs with ID's svixs using helper script in syconnfs.examples.
     OS rendering requires individual creation of OSMesaContext.
@@ -817,10 +821,15 @@ def multi_render_sampled_svidlist(svixs):
     svixs : iterable
         SegmentationObject ID's
     """
+    version, svixs = args[0], args[1:]
     fpath = os.path.dirname(os.path.abspath(__file__))
     cmd = "python %s/../../scripts/backend/render_helper_svidlist.py" % fpath
+    cmd += " {}".format(version)
     for ix in svixs:
-        cmd += " %d" % ix
+        cmd += " {}".format(ix)
+    res = os.system(cmd)
+    if type(res) == str and "Error" in res:
+        raise()
 
 
 def multi_render_sampled_sso(sso_ix):
@@ -835,6 +844,5 @@ def multi_render_sampled_sso(sso_ix):
     """
     fpath = os.path.dirname(os.path.abspath(__file__))
     cmd = "python %s/../../scripts/backend//render_helper_sso.py" % fpath
-    cmd += " %d" % sso_ix
-
-
+    cmd += " {}".format(sso_ix)
+    res = os.system(cmd)

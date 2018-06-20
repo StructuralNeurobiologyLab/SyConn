@@ -682,7 +682,7 @@ def save_to_h5py(data, path, hdf5_names=None, overwrite=False, compression=True)
 
     """
     if (not type(data) is dict) and hdf5_names is None:
-        raise Exception("hdf5names has to be set, when data is a list")
+        raise TypeError("hdf5names has to be set, when data is a list")
     if os.path.isfile(path) and overwrite:
         os.remove(path)
     f = h5py.File(path, "w")
@@ -695,7 +695,7 @@ def save_to_h5py(data, path, hdf5_names=None, overwrite=False, compression=True)
     else:
         if len(hdf5_names) != len(data):
             f.close()
-            raise Exception("Not enough or to much hdf5-names given!")
+            raise ValueError("Not enough or too many hdf5-names given!")
         for nb_data in range(len(data)):
             if compression:
                 f.create_dataset(hdf5_names[nb_data], data=data[nb_data],

@@ -45,3 +45,6 @@ for ix in ssv_ixs:
                 sso._save_skelfeatures(ctx, features, overwrite=True)
     except Exception as e:
         print("Error occurred with SSO ", sso.id, str(e))
+
+with open(path_out_file, "wb") as f:
+    pkl.dump("0", f)

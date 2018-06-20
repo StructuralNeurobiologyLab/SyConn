@@ -16,10 +16,10 @@ from syconn.handler.basics import chunkify, load_pkl2obj, write_obj2pkl, write_t
 from syconn.proc.stats import model_performance, model_performance_predonly
 from syconn.reps.super_segmentation_object import predict_sos_views, render_sso_coords
 from syconn.reps.super_segmentation_helper import write_axpred, extract_skel_features, associate_objs_with_skel_nodes
-from syconn.reps.rep_helper import knossos_ml_from_ccs
+from syconn.reps.rep_helper import knossos_ml_from_ccs, colorcode_vertices
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
-from syconn.handler.prediction import NeuralNetworkInterface
+from syconn.handler.prediction import NeuralNetworkInterface, get_tripletnet_model, get_knn_tnet_embedding, views2tripletinput
 import os
 from syconn.proc.skel_based_classifier import SkelClassifier
 import shutil
@@ -86,18 +86,30 @@ def eval_test_candidates():
     dest_folder = "/wholebrain/scratch/pschuber/cmn_paper/data/axoness_comparison/test_ssv/"
     ssd_all = SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/")
     sc = SkelClassifier(target_type="axoness", working_dir="/wholebrain/scratch/areaxfs3/")
+    rfc_4000 = sc.load_classifier("rfc", feature_context_nm=4000,)
+    rfc_8000 = sc.load_classifier("rfc", feature_context_nm=8000,)
     rfc_4000_wo2 = sc.load_classifier("rfc", feature_context_nm=4000,
                                       prefix="(2,)")
     rfc_8000_wo2 = sc.load_classifier("rfc", feature_context_nm=8000,
                                       prefix="(2,)")
+    cnn_model = get_axoness_model()
+    t_net = get_tripletnet_model()
+    knn_clf = get_knn_tnet_embedding()
     kzip_ps = get_filepaths_from_dir(dest_folder)
     cnv_dict = {"gt_axon": 1, "gt_soma": 2, "gt_dendrite": 0}
     all_labels = []
     all_preds_skel_4000 = []
     all_preds_skel_8000 = []
+    all_preds_skel_4000_maj = []
+    all_preds_skel_8000_maj = []
     all_preds_skel_4000_wo2 = []
+    all_preds_skel_4000_wo2_maj = []
     all_preds_skel_8000_wo2 = []
+    all_preds_skel_8000_wo2_maj = []
+    all_preds_latent = []
+    all_preds_latent_maj = []
     all_preds_cnn = []
+    all_preds_cnn_maj = []
     all_coords = []  # debug: Check if
     # V1
     # currently_annotated = ["34299393.001.k", "8733319.001.k", "30030341.001.k", "28985344.001.k", "12474080.001.k"]
@@ -120,7 +132,7 @@ def eval_test_candidates():
 
         # cache skeleton to make sure its nodes are aligned with their features
         skel_fname = dest_folder + os.path.split(fname)[1][:-6] + "skel.pkl"
-        if os.path.isfile(skel_fname):
+        if 0:#os.path.isfile(skel_fname):
             sso.skeleton = load_pkl2obj(skel_fname)
         else:
             # Build SSO skeleton from k.zip data to retrieve prediction of RFC
@@ -129,10 +141,18 @@ def eval_test_candidates():
             nodes = []
             edges = []
             radii = []
+            nb_nodes = len(skel.getNodes())
+            axoness_fc4000_avgwind0 = np.zeros(nb_nodes)
+            axoness_fc8000_avgwind0 = np.zeros(nb_nodes)
+            axoness_cnn_k1_gt = np.zeros(nb_nodes)
             node_lookup = {}
-            for n in skel.getNodes():
+            for ii, n in enumerate(skel.getNodes()):
                 nodes.append(n.getCoordinate())
                 radii.append(n.data["radius"])
+                axoness_cnn_k1_gt[ii] = int(n.data["axoness_cnn_k1_gt"])
+                # compute those directly
+                # axoness_fc4000_avgwind0[ii] = int(n.data["axoness_fc4000_avgwind0"])
+                # axoness_fc8000_avgwind0[ii] = int(n.data["axoness_fc8000_avgwind0"])
                 node_lookup[frozenset(nodes[-1])] = len(nodes) - 1
             for n1, n2 in skel.iter_edges():
                 ix_n1 = node_lookup[frozenset(n1.getCoordinate())]
@@ -142,30 +162,65 @@ def eval_test_candidates():
             nodes = np.array(nodes)
             edges = np.array(edges, dtype=np.uint)
             radii = np.array(radii)
-            sso.skeleton = dict(edges=edges, nodes=nodes, diameters=radii*2)
+            sso.skeleton = dict(edges=edges, nodes=nodes, diameters=radii*2,)
+                                #axoness_cnn_k1_gt=axoness_cnn_k1_gt)
             write_obj2pkl(skel_fname, sso.skeleton)
         # DONE....
         associate_objs_with_skel_nodes(sso)
-        skel_nodes = sso.skeleton["nodes"]
         feats_4000_cache_fname = dest_folder + os.path.split(fname)[1][:-6] + "_4000.npy"
-        if not os.path.isfile(feats_4000_cache_fname):
+        if 1:#not os.path.isfile(feats_4000_cache_fname):
             feats_4000 = extract_skel_features(sso, feature_context_nm=4000)  # sso.skel_features(feature_context_nm=4000), avoid this call because it would trigger caching mechanism
             np.save(feats_4000_cache_fname, feats_4000)
         else:
             feats_4000 = np.load(feats_4000_cache_fname)
         feats_8000_cache_fname = dest_folder + os.path.split(fname)[1][:-6] + "_8000.npy"
-        if not os.path.isfile(feats_8000_cache_fname):
+        if 1:#not os.path.isfile(feats_8000_cache_fname):
             feats_8000 = extract_skel_features(sso, feature_context_nm=8000)  # sso.skel_features(feature_context_nm=8000), avoid this call because it would trigger caching mechanism
             np.save(feats_8000_cache_fname, feats_8000)
         else:
             feats_8000 = np.load(feats_8000_cache_fname)
         preds_4000_wo2 = np.argmax(rfc_4000_wo2.predict_proba(feats_4000), axis=1)
         preds_8000_wo2 = np.argmax(rfc_8000_wo2.predict_proba(feats_8000), axis=1)
-        preds_4000wo2_dc = {}
-        preds_8000wo2_dc = {}
+        preds_4000 = np.argmax(rfc_4000.predict_proba(feats_4000), axis=1)
+        preds_8000 = np.argmax(rfc_8000.predict_proba(feats_8000), axis=1)
+        sso.skeleton["axoness_fc4000_avgwind0_wo2"] = preds_4000_wo2
+        sso.skeleton["axoness_fc8000_avgwind0_wo2"] = preds_8000_wo2
+        sso.skeleton["axoness_fc4000_avgwind0"] = preds_4000
+        sso.skeleton["axoness_fc8000_avgwind0"] = preds_8000
+        #now create majority vote for each if the predictions
+        # use majority votes of unique views collected within max_dist
+        sso.predict_views_axoness(cnn_model, pred_key_appendix="_gt_v2")
+        sso.cnn_axoness_2_skel(pred_key_appendix="_gt_v2", k=1, reload=False,
+                       save_sso=False)
+        axoness_cnn_k1_gt_avg = sso.average_node_axoness_views(max_dist=12500,
+                                return_res=True, pred_key="axoness_preds_cnn_gt_v2")
+        sso.skeleton["axoness_cnn_k1_gt_v2_maj"] = axoness_cnn_k1_gt_avg
+        # triplet network embedding
+        latent_z = predict_sos_views(t_net, sso.svs, pred_key="latent_gt", return_proba=True)
+        knn_preds = knn_clf.predict_proba(latent_z)
+        knn_preds = np.argmax(knn_preds, axis=1)
+        # Approach 1, assumes sample locations have same ordering as view predictions are returned...
+        sample_locs = np.concatenate(sso.sample_locations())
+        node_latent = colorcode_vertices(sso.skeleton["nodes"] * sso.scaling,
+                                         sample_locs, knn_preds, colors=[0, 1, 2], k=1)
+        # Approach 2; assumes ordering of view prediction is the same as in view_ixs
+        node_latent_v2 = knn_preds[sso.skeleton["view_ixs"]]
+        assert np.all(node_latent == node_latent_v2)
+        sso.skeleton["axoness_cnn_latent"] = node_latent
+        # skeleton based prediction
+        for prop_key in ["axoness_fc4000_avgwind0", "axoness_fc8000_avgwind0",
+                         "axoness_fc4000_avgwind0_wo2", "axoness_fc8000_avgwind0_wo2", "axoness_cnn_latent"]:
+            sso.skeleton[prop_key + "_maj"] = sso.majority_vote(prop_key, max_dist=12500)
+        # map node coordinate to index in skeleton arrays (valid for all skeleton entries with the same ordering as skeleton['nodes'], i.e. all majority votings and predictions
+        skel_nodes = sso.skeleton["nodes"]
+        coord2ix_dc = {}
         for i in range(len(skel_nodes)):
-            preds_4000wo2_dc[frozenset(skel_nodes[i])] = preds_4000_wo2[i]
-            preds_8000wo2_dc[frozenset(skel_nodes[i])] = preds_8000_wo2[i]
+            coord2ix_dc[frozenset(skel_nodes[i])] = i
+        # preds_4000wo2_dc = {}
+        # preds_8000wo2_dc = {}
+        # for i in range(len(skel_nodes)):
+        #     preds_4000wo2_dc[frozenset(skel_nodes[i])] = preds_4000_wo2[i]
+        #     preds_8000wo2_dc[frozenset(skel_nodes[i])] = preds_8000_wo2[i]
         for n in skel.getNodes():
             c = n.getComment()
             try:
@@ -174,31 +229,50 @@ def eval_test_candidates():
                 continue
             all_coords.append(np.array(n.getCoordinate()))
             all_labels.append(label)
-            all_preds_skel_4000.append(int(n.data["axoness_fc4000_avgwind0"]))
-            all_preds_skel_8000.append(int(n.data["axoness_fc8000_avgwind0"]))
-            all_preds_skel_4000_wo2.append(preds_4000wo2_dc[frozenset(n.getCoordinate())])
-            all_preds_skel_8000_wo2.append(preds_8000wo2_dc[frozenset(n.getCoordinate())])
-            all_preds_cnn.append(int(n.data["axoness_cnn_k1_gt"]))
+            ix = coord2ix_dc[frozenset(n.getCoordinate())]
+            all_preds_skel_4000.append(sso.skeleton["axoness_fc4000_avgwind0"][ix])
+            all_preds_skel_8000.append(sso.skeleton["axoness_fc8000_avgwind0"][ix])
+            all_preds_skel_4000_wo2.append(sso.skeleton["axoness_fc4000_avgwind0_wo2"][ix])
+            all_preds_skel_8000_wo2.append(sso.skeleton["axoness_fc8000_avgwind0_wo2"][ix])
+            all_preds_cnn.append(sso.skeleton["axoness_gt_v2"][ix])
+            # get majority votings
+            all_preds_skel_4000_maj.append(sso.skeleton["axoness_fc4000_avgwind0_maj"][ix])
+            all_preds_skel_8000_maj.append(sso.skeleton["axoness_fc8000_avgwind0_maj"][ix])
+            all_preds_skel_4000_wo2_maj.append(sso.skeleton["axoness_fc4000_avgwind0_wo2_maj"][ix])
+            all_preds_skel_8000_wo2_maj.append(sso.skeleton["axoness_fc8000_avgwind0_wo2_maj"][ix])
+            all_preds_latent.append(sso.skeleton["axoness_cnn_latent"][ix])
+            all_preds_latent_maj.append(sso.skeleton["axoness_cnn_latent_maj"][ix])
+            all_preds_cnn_maj.append(sso.skeleton["axoness_cnn_k1_gt_v2_maj"][ix])
     print "Collected %d labeled nodes." % len(all_labels)
     model_performance_predonly(all_preds_skel_4000, all_labels, model_dir=dest_folder, prefix="skel_4000")
     model_performance_predonly(all_preds_skel_8000, all_labels, model_dir=dest_folder, prefix="skel_8000")
     model_performance_predonly(all_preds_cnn, all_labels, model_dir=dest_folder, prefix="cnn_k1")
+    # majority
+    model_performance_predonly(all_preds_skel_4000_maj, all_labels, model_dir=dest_folder, prefix="skel_4000_maj")
+    model_performance_predonly(all_preds_skel_8000_maj, all_labels, model_dir=dest_folder, prefix="skel_8000_maj")
+    model_performance_predonly(all_preds_cnn_maj, all_labels, model_dir=dest_folder, prefix="cnn_k1_maj")
 
+    # withoout soma
     all_labels = np.array(all_labels)
     all_preds_skel_4000_wo2 = np.array(all_preds_skel_4000_wo2)
     all_preds_skel_8000_wo2 = np.array(all_preds_skel_8000_wo2)
+    all_preds_skel_4000_wo2_maj = np.array(all_preds_skel_4000_wo2_maj)
+    all_preds_skel_8000_wo2_maj = np.array(all_preds_skel_8000_wo2_maj)
     all_preds_skel_4000_wo2 = all_preds_skel_4000_wo2[all_labels != 2]
+    all_preds_skel_4000_wo2_maj = all_preds_skel_4000_wo2_maj[all_labels != 2]
     all_preds_skel_8000_wo2 = all_preds_skel_8000_wo2[all_labels != 2]
+    all_preds_skel_8000_wo2_maj = all_preds_skel_8000_wo2_maj[all_labels != 2]
     all_labels = all_labels[all_labels != 2]
-    # and without soma
     model_performance_predonly(all_preds_skel_4000_wo2, all_labels, model_dir=dest_folder, prefix="skel_4000_wo2")
     model_performance_predonly(all_preds_skel_8000_wo2, all_labels, model_dir=dest_folder, prefix="skel_8000_wo2")
-
+    # majority
+    model_performance_predonly(all_preds_skel_4000_wo2_maj, all_labels, model_dir=dest_folder, prefix="skel_4000_wo2_maj")
+    model_performance_predonly(all_preds_skel_8000_wo2_maj, all_labels, model_dir=dest_folder, prefix="skel_8000_wo2_maj")
 
 # model which is NOT trained on all samples, but on training samples
 # as defined in axgt_splitting_v3.pkl
 def get_axoness_model():
-    model_p = "/wholebrain/u/pschuber/CNN_Training/nupa_cnn/axoness_old/" \
+    model_p = "/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/axoness_old/" \
               "g4_axoness_v0_run3/g4_axoness_v0_run3-FINAL.mdl"
     m = NeuralNetworkInterface(model_p, imposed_batch_size=200, nb_labels=3)
     _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
@@ -318,7 +392,7 @@ if __name__ == "__main__":
         get_test_candidates()
 
     # eval test set
-    if 0:
+    if 1:
         eval_test_candidates()
     if 1:
         plot_axoness_comparison()

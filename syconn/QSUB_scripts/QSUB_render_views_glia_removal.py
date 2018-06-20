@@ -29,6 +29,11 @@ ch = args[0]
 wd = args[1]
 version = args[2]
 for sv_ixs in ch:
+    # only generate SSV temporarily but do not write it to FS
+    # corresponding SVs are parsed explicitly ('sv_ids=sv_ixs')
     sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
                                   create=False, sv_ids=sv_ixs)
     sso.render_views(add_cellobjects=False, woglia=False, overwrite=True)
+
+with open(path_out_file, "wb") as f:
+    pkl.dump("0", f)

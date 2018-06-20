@@ -78,9 +78,13 @@ class MeshObject(object):
                 self._ext_color = self._ext_color.squeeze()
                 assert self._ext_color.shape[1] == 4,\
                     "'color' parameter has wrong shape"
+                self._ext_color = self._ext_color.squeeze()
+                assert self._ext_color.shape[1] == 4,\
+                    "Rendering requires RGBA 'color' shape of (X, 4). Please" \
+                    "add alpha channel."
                 self._ext_color = self._ext_color.flatten()
-            assert len(self._ext_color) / 4 == len(self.vertices) / 3\
-                , "len(ext_color)/4 must be equal to len(vertices)/3."
+            assert len(self._ext_color)/4 == len(self.vertices)/3, \
+                "len(ext_color)/4 must be equal to len(vertices)/3."
             self._colors = self._ext_color
         return self._colors
 
@@ -91,7 +95,7 @@ class MeshObject(object):
 
     @property
     def normals(self):
-        if self._normals is None:
+        if self._normals is None or len(self._normals) != len(self.vertices):
             print("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         elif len(self._normals) != len(self.vertices):
@@ -572,7 +576,8 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     all_vert = np.zeros((0, ))
     all_norm = np.zeros((0, ))
     colors = np.zeros((0, ))
-    meshes = start_multiprocess_imap(mesh_loader, sos, nb_cpus=nb_cpus)
+    meshes = start_multiprocess_imap(mesh_loader, sos, nb_cpus=nb_cpus,
+                                     show_progress=False)
     if color_vals is not None and cmap is not None:
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
     for i in range(len(meshes)):
@@ -792,9 +797,7 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
                                                 for sv in ssv.svs],
                                                nb_cpus=ssv.nb_cpus))
     preds = np.concatenate(preds)
-    print("Collected axoness:", Counter(preds).most_common())
     locs = ssv.sample_locations()
-    print("Collected locations.")
     pred_coords = np.concatenate(locs)
     assert pred_coords.ndim == 2, "Sample locations of ssv have wrong shape."
     assert pred_coords.shape[1] == 3, "Sample locations of ssv have wrong shape."
@@ -948,10 +951,11 @@ def rgb2id_array(rgb_arr):
         assert rgb_arr.shape[-1] == 3, "ValueError: unsupported shape"
     else:
         raise ValueError("Unsupported shape")
-    start = time.time()
+    # start = time.time()
     rgb_arr_flat = rgb_arr.flatten().reshape((-1, 3))
     mask_arr = (rgb_arr_flat[:, 0] != 0) & (rgb_arr_flat[:, 1] != 0) & (rgb_arr_flat[:, 2] != 0)
     id_arr = np.zeros((len(rgb_arr_flat)), dtype=np.uint32)
     id_arr[mask_arr] = np.apply_along_axis(rgb2id, 1, rgb_arr_flat[mask_arr]).squeeze()
+    id_arr[~mask_arr] = np.max(id_arr) + 1  # use highest value as background
     # print("Finisehd remapping rgb-> vertex IDs after [min]:", (time.time()-start)/60.)
     return id_arr.reshape(rgb_arr.shape[:-1])

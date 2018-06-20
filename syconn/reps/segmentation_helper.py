@@ -2,7 +2,10 @@ import glob
 import numpy as np
 from scipy import ndimage
 import os
-from ..handler.compression import MeshDict, VoxelDict, AttributeDict, SkeletonDict
+from ..handler.compression import MeshDict, VoxelDict, AttributeDict,\
+    SkeletonDict, LZ4Dict
+from ..handler.basics import chunkify
+from ..mp.shared_mem import start_multiprocess_imap
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
@@ -242,3 +245,44 @@ def binary_closing(vx, n_iterations=13):
             n_iterations: -n_iterations]
 
     return vx
+
+
+def sv_view_exists(args):
+    ps, woglia = args
+    missing_ids = []
+    for p in ps:
+        ad = AttributeDict(p + "/attr_dict.pkl", disable_locking=True)
+        obj_ixs = ad.keys()
+        view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
+        view_dc = LZ4Dict(view_dc_p, disable_locking=True)
+        for ix in obj_ixs:
+            if ix not in view_dc:
+                missing_ids.append(ix)
+    return missing_ids
+
+
+def find_missing_sv_views(sd, woglia, n_cores=20):
+    multi_params = chunkify(sd.so_dir_paths, 100)
+    params = [(ps, woglia) for ps in multi_params]
+    res = start_multiprocess_imap(sv_view_exists, params, nb_cpus=n_cores,
+                                  debug=False)
+    return np.concatenate(res)
+
+
+def sv_attr_exists(args):
+    ps, attr_key = args
+    missing_ids = []
+    for p in ps:
+        ad = AttributeDict(p + "/attr_dict.pkl", disable_locking=True)
+        for k, v in ad.iteritems():
+            if attr_key not in v:
+                missing_ids.append(k)
+    return missing_ids
+
+
+def find_missing_sv_attributes(sd, attr_key, n_cores=20):
+    multi_params = chunkify(sd.so_dir_paths, 100)
+    params = [(ps, attr_key) for ps in multi_params]
+    res = start_multiprocess_imap(sv_view_exists, params, nb_cpus=n_cores,
+                                  debug=False)
+    return np.concatenate(res)
