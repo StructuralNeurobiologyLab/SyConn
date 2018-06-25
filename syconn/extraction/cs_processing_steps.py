@@ -1065,40 +1065,45 @@ def export_matrix(wd, conn_version=None, dest_name=None, syn_prob_t=.5):
     m_sizes = conn_sd.load_cached_data("mesh_area")[m] / 2
     m_ssv_partners = conn_sd.load_cached_data("ssv_partners")[m]
     m_syn_prob = syn_prob[m]
+    m_syn_sign = conn_sd.load_cached_data("syn_sign")[m]
 
-    table = np.concatenate([m_coords, m_ssv_partners, m_sizes[:, None], m_axs, m_syn_prob[:, None]], axis=1)
+    m_sizes = np.multiply(m_sizes,m_syn_sign)
+
+    table = np.concatenate([m_coords, m_ssv_partners, m_sizes[:, None], m_axs,
+                            m_syn_prob[:, None]], axis=1)
 
     if dest_name is None:
         dest_name = conn_sd.path + "/conn_mat"
 
-    np.savetxt(dest_name + ".csv", table, delimiter="\t", header="x\ty\tz\tssv1\tssv2\tsize\tax1\tax2\tsynprob")
+    np.savetxt(dest_name + ".csv", table, delimiter="\t", header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tsynprob")
 
     labels = np.array(["N/A", "D", "A", "S"])
     labels_ids = np.array([-1, 0, 1, 2])
 
     annotations = []
+    m_sizes = np.abs(m_sizes)
 
-    ms_axs = np.sort(m_axs, axis=1)
-    u_axs = np.unique(ms_axs, axis=0)
-    for u_ax in u_axs:
-        anno = skeleton.SkeletonAnnotation()
-        anno.scaling = conn_sd.scaling
-        anno.comment = "%s - %s" % (labels[labels_ids == u_ax[0]][0], labels[labels_ids == u_ax[1]][0])
+    #ms_axs = np.sort(m_axs, axis=1)
+    #u_axs = np.unique(ms_axs, axis=0)
+    #for u_ax in u_axs:
+    #    anno = skeleton.SkeletonAnnotation()
+    #    anno.scaling = conn_sd.scaling
+    #    anno.comment = "%s - %s" % (labels[labels_ids == u_ax[0]][0], labels[labels_ids == u_ax[1]][0])
 
-        for i_syn in np.where(np.sum(np.abs(ms_axs - u_ax), axis=1) == 0)[0]:
-            c = m_coords[i_syn]
+    #    for i_syn in np.where(np.sum(np.abs(ms_axs - u_ax), axis=1) == 0)[0]:
+    #        c = m_coords[i_syn]
 
             # somewhat approximated from sphere volume:
             # r = np.power(m_sizes[i_syn] / 3., 1 / 3.)
-            r = m_sizes[i_syn]
-            skel_node = skeleton.SkeletonNode(). \
-                from_scratch(anno, c[0], c[1], c[2], radius=r)
-            skel_node.data["ssv_partners"] = m_ssv_partners[i_syn]
-            skel_node.data["size"] = m_sizes[i_syn]
+    #        r = m_sizes[i_syn]
+    #        skel_node = skeleton.SkeletonNode(). \
+    #            from_scratch(anno, c[0], c[1], c[2], radius=r)
+    #        skel_node.data["ssv_partners"] = m_ssv_partners[i_syn]
+    #        skel_node.data["size"] = m_sizes[i_syn]
 
-            anno.addNode(skel_node)
+    #        anno.addNode(skel_node)
 
-        annotations.append(anno)
+    #    annotations.append(anno)
 
-    skeleton_utils.write_skeleton(dest_name + ".k.zip", annotations)
+    #skeleton_utils.write_skeleton(dest_name + ".k.zip", annotations)
 
