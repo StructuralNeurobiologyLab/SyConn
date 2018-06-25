@@ -133,7 +133,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
         pool = MyPool(nb_cpus)
         if show_progress:
             result = list(tqdm.tqdm(pool.imap(func, params), total=len(params), ncols=80, leave=False,
-                             unit='jobs', unit_scale=True, dynamic_ncols=False))
+                             unit='jobs', unit_scale=True, dynamic_ncols=False, mininterval=1))
         else:
             result = pool.imap(func, params)
         pool.close()

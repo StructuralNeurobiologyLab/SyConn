@@ -124,6 +124,8 @@ def eval_test_candidates():
                            "782342.001.k", "15372930.001.k.zip", "28418691.001.k", "8138368.001.k", "34053762.001.k", "13463680.001.k", "14539904.001.k",
                            "23629521.001.k", "22081952.001.k", "5491713.001.k", "10408322.001.k", "22892545.001.k", "13082627.001.k", "32292865.001.k"]
     # start_multiprocess_imap(preproc_gt_skels, kzip_ps, nb_cpus=20)
+    sso_sizes = []
+    sso_lenghts = []
     for fname in kzip_ps:
         if not np.any([ca in fname for ca in currently_annotated]):
             continue
@@ -172,6 +174,8 @@ def eval_test_candidates():
                                 axoness_cnn_k1_gt=axoness_cnn_k1_gt)
             write_obj2pkl(skel_fname, sso.skeleton)
         # DONE....
+        sso_sizes.append(sso.size)
+        sso_lenghts.append(sso.total_edge_length())
         associate_objs_with_skel_nodes(sso)
         feats_4000_cache_fname = dest_folder + os.path.split(fname)[1][:-6] + "_4000.npy"
         if not os.path.isfile(feats_4000_cache_fname):
@@ -278,6 +282,7 @@ def eval_test_candidates():
               accuracy_score(np.array(all_labels), np.array(all_preds_cnn_maj)),
               accuracy_score(np.array(all_labels), np.array(all_preds_latent)),
               accuracy_score(np.array(all_labels), np.array(all_preds_latent_maj))))
+    print(np.sum(sso_sizes) / 1e9, np.sum(sso_sizes) * 9 * 9 * 20 / 1e9, np.sum(sso_lenghts) / 1e6, )
     print "Collected %d labeled nodes." % len(all_labels)
     model_performance_predonly(all_preds_skel_4000, all_labels, model_dir=dest_folder, prefix="skel_4000")
     model_performance_predonly(all_preds_skel_8000, all_labels, model_dir=dest_folder, prefix="skel_8000")
@@ -393,9 +398,9 @@ def preproc_gt_skels(fname):
         feats_8000 = np.load(feats_8000_cache_fname)
 
 
-def plot_bars(ind, values, title='', legend_labels=None,
+def plot_bars(ind, values, title='', legend_labels=None, r_y=[0.2, 1.0],
             save_path=None, colorVals=None, r_x=None, xtick_rotation=0,
-            xlabel='', ylabel='', l_pos="upper right",
+            xlabel='', ylabel='', l_pos="upper right", yaxis_mult=0.2,
             legend=True, ls=22, xtick_labels=(), width=None):
 
     if width == None:
@@ -445,7 +450,7 @@ def plot_bars(ind, values, title='', legend_labels=None,
 
     handles = []
     for ii in range(len(values)):
-        rects = ax.bar(ind+width/len(values)*(ii-len(values)//2), values[ii], width/len(values), color=colorVals[ii])
+        rects = ax.bar(ind+width/len(values)*(ii-len(values)/2)+width/len(values)/2, values[ii], width/len(values), color=colorVals[ii])
     for ii in range(len(values)):
         handles.append(patches.Patch(color=colorVals[ii],
                                      label=legend_labels[ii]))
@@ -453,13 +458,17 @@ def plot_bars(ind, values, title='', legend_labels=None,
     if legend:
         ax.legend(handles=handles, frameon=False,
                    prop={'size': ls}, loc='upper right')
-    if plt.xlim(r_x) is not None:
-        plt.xlim(r_x)
+
     ax.set_xticks(ind)
+    if plt.ylim(r_y) is not None:
+        plt.ylim(r_y)
+    ax.yaxis.set_major_locator(ticker.MultipleLocator(yaxis_mult))
     if len(xtick_labels) > 0:
         # ax.xaxis.set_major_locator(ticker.MultipleLocator(1))
         ax.set_xticklabels(xtick_labels, rotation=xtick_rotation)
     plt.tight_layout()
+    if plt.xlim(r_x) is not None:
+        plt.xlim(r_x)
     if save_path is None:
         plt.show(block=False)
     else:
@@ -467,22 +476,22 @@ def plot_bars(ind, values, title='', legend_labels=None,
 
 
 def plot_axoness_comparison():
-    name = ["skel_4000", "skel_8000", "cnn_k1", "skel_4000_wo2", "skel_8000_wo2", "latent", "skel_4000_maj", "skel_8000_maj", "cnn_k1_maj", "skel_4000_wo2_maj", "skel_8000_wo2_maj", "latent_maj"]
-    xtick_labels = ["RFC-4", "RFC-8", "CNN", "RFC*-4", "RFC*-8", "Z", "RFC-4", "skel_8000_maj", "cnn_k1_maj", "skel_4000_wo2_maj", "skel_8000_wo2_maj", "latent_maj"]
+    name = ["skel_4000", "skel_8000", "cnn_k1", "latent", "skel_4000_wo2", "skel_8000_wo2"]
+    ordering = [3, 2, 0, -2, 1, -1]
+    xtick_labels = np.array(["RFC-4", "RFC-8", "CMN", "Z", "RFC*-4", "RFC*-8"])[ordering]
     # the f-score value is the weighted f-score average of the three classes
-    fscore_den = np.array([0.8437, 0.9066, 0.9450, 0.8701, 0.9272])
-    fscore_ax = np.array([0.5959, 0.6437, 0.9386, 0.8615, 0.9156])
-    fscore_so = np.array([0.2171, 0.2677, 0.9820, 0, 0])
+    fscore_den = np.array([0.8437, 0.9066, 0.9450, 0.4026, 0.8701, 0.9272])[ordering]
+    fscore_ax = np.array([0.5959, 0.6437, 0.9386, .6442, 0.8615, 0.9156])[ordering]
+    fscore_so = np.array([0.2171, 0.2677, 0.9820, 0.6750, 0, 0])[ordering]
+    fscore_overall_weighted = np.array([0.5666, 0.6211, 0.9552, 0.5621 , 0.8664, 0.9222])[ordering]
     fscore_overall_unweighted = np.mean(np.array([fscore_den[:], fscore_ax, fscore_so]), axis=0)
     fscore_overall_unweighted[-2] = np.mean([fscore_den[-2], fscore_ax[-2]])
     fscore_overall_unweighted[-1] = np.mean([fscore_den[-1], fscore_ax[-1]])
-    fscore_overall_weighted = [0.5666, 0.6211, 0.9552, 0.8664, 0.9222]
 
-
-    plot_bars(np.arange(len(xtick_labels))+0.8, [fscore_so, fscore_den, fscore_ax, fscore_overall_weighted], legend=False, xtick_labels=xtick_labels, width=0.8, xtick_rotation=90,
-            xlabel="model", ylabel="F-Score", legend_labels=["soma", "dendrite", "axon", "avg."], r_x=[0, 6], colorVals=[[0.32, 0.32, 0.32, 1.], [0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
-                           np.array([11, 129, 220, 255]) / 255.],
-            save_path="/wholebrain/scratch/pschuber/cmn_paper/figures/axoness_comparison/FINAL_PLOT_V2.png",)# colorVals=['0.32', '0.66'])
+    plot_bars(np.arange(len(xtick_labels))+0.9, [fscore_so, fscore_den, fscore_ax, fscore_overall_weighted], legend=False, xtick_labels=xtick_labels, width=0.8, xtick_rotation=90,
+            xlabel="model", ylabel="F1-Score", legend_labels=["soma", "dendrite", "axon", "avg."], r_x=[0, 7.5], colorVals=[[0.32, 0.32, 0.32, 1.], [0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
+                           np.array([11, 129, 220, 255]) / 255.], r_y=[0.0, 1.0],
+            save_path="/wholebrain/scratch/pschuber/cmn_paper/figures/axoness_comparison/node_bar.png",)# colorVals=['0.32', '0.66'])
     # plot_pr(fscore, np.arange(1, len(fscore)+1), xtick_labels=xtick_labels, legend=False,
     #         xlabel="", ylabel="F-Score", r=[0.8, 1.01], r_x=[0, len(fscore) + 1],
     #             save_path="/wholebrain/scratch/pschuber/cmn_paper/figures//glia_performances.png")
@@ -492,30 +501,25 @@ def plot_axoness_comparison():
     #         save_path="/wholebrain/scratch/pschuber/cmn_paper/figures//glia_performances_stacked.png")
 
     # Majority voting with sliding window approahc of 12500nm maximum traversal path length from source node (views were collected along this traversal for majority vote)
-    name = ["skel_4000_maj", "skel_8000_maj", "cnn_k1_maj", "skel_4000_wo2_maj", "skel_8000_wo2_maj", "latent_maj"]
-    xtick_labels = ["RFC-4", "skel_8000_maj", "cnn_k1_maj", "skel_4000_wo2_maj", "skel_8000_wo2_maj", "latent_maj"]
+    name_maj = ["skel_4000_maj", "skel_8000_maj", "cnn_k1_maj", "latent_maj", "skel_4000_wo2_maj", "skel_8000_wo2_maj"]
+    xtick_labels_maj = np.array(["RFC-4", "RFC-8", "CMN", "Z", "RFC*-4", "RFC*-8"])[ordering]
     # the f-score value is the weighted f-score average of the three classes
-    fscore_den = np.array([0.8437, 0.9066, 0.9450, 0.8701, 0.9272])
-    fscore_ax = np.array([0.5959, 0.6437, 0.9386, 0.8615, 0.9156])
-    fscore_so = np.array([0.2171, 0.2677, 0.9820, 0, 0])
-    fscore_overall_unweighted = np.mean(np.array([fscore_den[:], fscore_ax, fscore_so]), axis=0)
-    fscore_overall_unweighted[-2] = np.mean([fscore_den[-2], fscore_ax[-2]])
-    fscore_overall_unweighted[-1] = np.mean([fscore_den[-1], fscore_ax[-1]])
-    fscore_overall_weighted = [0.5666, 0.6211, 0.9552, 0.8664, 0.9222]
+    fscore_den_maj = np.array([0.9168, 0.9337, 0.9661, 0.3418, 0.9296, 0.9448])[ordering]
+    fscore_ax_maj = np.array([0.6065, 0.6442, 0.9720, 0.6622, 0.9188, 0.9339])[ordering]
+    fscore_so_maj = np.array([0.0798, 0.1977, 0.9688, 0.8818, 0, 0])[ordering]
+    fscore_overall_weighted_maj = np.array([0.5528, 0.6088, 0.9687, 0.6118, 0.9249, 0.9401])[ordering]
+    fscore_overall_unweighted_maj = np.mean(np.array([fscore_den_maj[:], fscore_ax_maj, fscore_so_maj]), axis=0)
+    fscore_overall_unweighted_maj[-2] = np.mean([fscore_den_maj[-2], fscore_ax_maj[-2]])
+    fscore_overall_unweighted_maj[-1] = np.mean([fscore_den_maj[-1], fscore_ax_maj[-1]])
 
+    plot_bars(np.arange(len(xtick_labels))+0.9, [fscore_so_maj, fscore_den_maj, fscore_ax_maj, fscore_overall_weighted_maj], legend=False, xtick_labels=xtick_labels, width=0.8, xtick_rotation=90,
+            xlabel="model", ylabel="F1-Score",legend_labels=["soma", "dendrite", "axon", "avg."], r_x=[0, 7.5], colorVals=[[0.32, 0.32, 0.32, 1.], [0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
+                           np.array([11, 129, 220, 255]) / 255.], r_y=[0.0, 1.0],
+            save_path="/wholebrain/scratch/pschuber/cmn_paper/figures/axoness_comparison/majority_vote_bar.png",)
 
-    plot_bars(np.arange(len(xtick_labels))+0.8, [fscore_so, fscore_den, fscore_ax, fscore_overall_weighted], legend=False, xtick_labels=xtick_labels, width=0.8, xtick_rotation=90,
-            xlabel="model", ylabel="F-Score", legend_labels=["soma", "dendrite", "axon", "avg."], r_x=[0, 6], colorVals=[[0.32, 0.32, 0.32, 1.], [0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
-                           np.array([11, 129, 220, 255]) / 255.],
-            save_path="/wholebrain/scratch/pschuber/cmn_paper/figures/axoness_comparison/FINAL_PLOT_V2.png",)# colorVals=['0.32', '0.66'])
-    # plot_pr(fscore, np.arange(1, len(fscore)+1), xtick_labels=xtick_labels, legend=False,
-    #         xlabel="", ylabel="F-Score", r=[0.8, 1.01], r_x=[0, len(fscore) + 1],
-    #             save_path="/wholebrain/scratch/pschuber/cmn_paper/figures//glia_performances.png")
-    # plot_pr_stacked([fscore_neg, fscore], np.arange(1, len(fscore) + 1), xtick_labels=xtick_labels,
-    #         legend=True, legend_labels=["non-glia", "glia", "avg"], colorVals=["0.3", "0.6"],
-    #         xlabel="", ylabel="F-Score", r=[0.8, 1.01], r_x=[0, len(fscore) + 1],
-    #         save_path="/wholebrain/scratch/pschuber/cmn_paper/figures//glia_performances_stacked.png")
-
+    plot_bars(np.arange(len(xtick_labels))+0.9, [fscore_overall_weighted, fscore_overall_weighted_maj], legend=False, xtick_labels=xtick_labels, width=0.8, xtick_rotation=90,
+            xlabel="model", ylabel="F1-Score", legend_labels=["node-wise", "majority"], r_x=[0, 7.5], colorVals=['0.32', '0.66'], r_y=[0.4, 1.0],
+            save_path="/wholebrain/scratch/pschuber/cmn_paper/figures/axoness_comparison/majority_node_comparison.png",)
 
 if __name__ == "__main__":
     m = get_axoness_model()
@@ -531,9 +535,9 @@ if __name__ == "__main__":
         get_test_candidates()
 
     # eval test set
-    if 0:
-        eval_test_candidates()
     if 1:
+        eval_test_candidates()
+    if 0:
         plot_axoness_comparison()
 
     # evaluate cnn on "pseude" train/valid set (views are different form actual views used during training)

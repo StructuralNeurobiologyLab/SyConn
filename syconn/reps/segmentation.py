@@ -716,6 +716,14 @@ class SegmentationObject(object):
         return self.attr_dict[pred_key]
 
     #                                                                  FUNCTIONS
+    def total_edge_length(self):
+        if self.skeleton is None:
+            self.load_skeleton()
+        #  TODO: change interface to match SSV, i.e. to dictionary
+        nodes = self.skeleton[0].reshape(-1, 3).astype(np.float32)
+        edges = self.skeleton[2].reshape(-1, 2)
+        return np.sum([np.linalg.norm(
+            self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
 
     def extent(self):
         return np.linalg.norm(self.shape * self.scaling)
@@ -814,7 +822,7 @@ class SegmentationObject(object):
                                           disable_locking=True)
              self.attr_dict = glob_attr_dc[self.id]
         except (IOError, EOFError):
-            return -1  #
+            return -1
 
     def save_attr_dict(self):
         glob_attr_dc = AttributeDict(self.attr_dict_path, read_only=False,

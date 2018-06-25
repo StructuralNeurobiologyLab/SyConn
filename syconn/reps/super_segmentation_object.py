@@ -36,7 +36,7 @@ from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, 
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..handler.compression import AttributeDict, MeshDict, LZ4Dict
 from ..proc.image import single_conn_comp_img
-from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
+from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords
 from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh
 from ..proc.rendering import render_sampled_sso, comp_window, \
     multi_render_sampled_svidlist, render_sso_coords, multi_view_sso
@@ -869,6 +869,15 @@ class SuperSegmentationObject(object):
                 so_obj.save_kzip(path=self.objects_dense_kzip_path,
                                  write_id=self.dense_kzip_ids[obj_type])
 
+    def total_edge_length(self):
+        if self.skeleton is None:
+            self.load_skeleton()
+        nodes = self.skeleton["nodes"]
+        edges = self.skeleton["edges"]
+        return np.sum([np.linalg.norm(
+            self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
+
+
     def save_skeleton(self, to_kzip=False, to_object=True):
         if to_object:
             write_obj2pkl(self.skeleton, self.skeleton_path)
@@ -879,6 +888,9 @@ class SuperSegmentationObject(object):
     def load_skeleton(self):
         try:
             self.skeleton = load_pkl2obj(self.skeleton_path)
+            # stored as uint32, if used for computations
+            # e.g. edge length then it will overflow
+            self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
         except:
             return False
@@ -1717,7 +1729,9 @@ class SuperSegmentationObject(object):
             if os.path.isfile(dest_path):
                 return
             locs = np.concatenate(self.sample_locations())
-            edge_list = create_mst_skeleton(locs)
+            g = create_graph_from_coords(locs, mst=True)
+            edge_list = np.array(g.edges())
+            del g
             self.skeleton = {}
             self.skeleton["nodes"] = locs / np.array(self.scaling)
             self.skeleton["edges"] = edge_list

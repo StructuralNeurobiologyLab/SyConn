@@ -1045,7 +1045,6 @@ def _collect_axoness_from_ssv_partners_thread(args):
             except Exception as e:
                 axoness.append(-1)
 
-        print(axoness)
         conn_o.attr_dict.update({"partner_axoness": axoness})
         this_attr_dc[conn_id] = conn_o.attr_dict
 

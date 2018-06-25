@@ -768,7 +768,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
     index_views = _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
                                       depth_map=False, rot_matrices=rot_matrices,smooth_shade=False)
-    return (index_views * 255).astype(np.uint8)
+    return index_views
 
 
 def get_sso_view_dc(sso, verbose=False):

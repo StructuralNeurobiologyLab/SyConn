@@ -239,24 +239,27 @@ class SSVCelltype(Data):
         ssv_gt_dict = load_pkl2obj("/wholebrain/scratch/pschuber/NeuroPatch/gt/ssv_ctgt.pkl")
         self.ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/", version="6")
         # # This should be done at some point, but currently new views are
-        # old_ssv_ids = ssv_gt_dict.keys()
-        # old_ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/", version="6")
-        # self.ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/")
-        # old_sv_ids = [old_ssds.get_super_segmentation_object(ssv_id).sv_ids for ssv_id in old_ssv_ids]
-        # maj_remap_id = [np.unique([self.ssds.mapping_dict_reversed[sv_id] for sv_id in sv_ids], return_counts=True) for sv_ids in old_sv_ids]
-        # old2new_ssvid = {}
-        # for ii, el in enumerate(maj_remap_id):
-        #     maj_vote = el[0][np.argmax(el[1])]
-        #     if len(el[0])>1:
-        #         print(np.array(el[1], dtype=np.float32) / np.sum(el[1]))
-        #     old2new_ssvid[old_ssv_ids[ii]] = maj_vote
-        # for k in ssv_splits:
-        #     ssv_splits[k] = [old2new_ssvid[ix] for ix in ssv_splits[k]]
-        # new_ssv_gt_dict = {}
-        # for k, v in ssv_gt_dict.iteritems():
-        #     new_ssv_gt_dict[old2new_ssvid[k]] = v
-        # raise()
-        # ssv_gt_dict = new_ssv_gt_dict
+        old_ssv_ids = ssv_gt_dict.keys()
+        old_ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/", version="6")
+        self.ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/")
+        old_sv_ids = [old_ssds.get_super_segmentation_object(ssv_id).sv_ids for ssv_id in old_ssv_ids]
+        maj_remap_id = [np.unique([self.ssds.mapping_dict_reversed[sv_id] for sv_id in sv_ids if sv_id in self.ssds.mapping_dict_reversed], return_counts=True) for sv_ids in old_sv_ids]
+        old2new_ssvid = {}
+        for ii, el in enumerate(maj_remap_id):
+            if len(el[1]) == 0:
+                print(ii)
+                continue
+            maj_vote = el[0][np.argmax(el[1])]
+            if len(el[0])>1:
+                print(ii, np.array(el[1], dtype=np.float32) / np.sum(el[1]))
+            old2new_ssvid[old_ssv_ids[ii]] = maj_vote
+        for k in ssv_splits:
+            ssv_splits[k] = np.array([old2new_ssvid[ix] for ix in ssv_splits[k]])
+        new_ssv_gt_dict = {}
+        for k, v in ssv_gt_dict.iteritems():
+            if k in old2new_ssvid:
+                new_ssv_gt_dict[old2new_ssvid[k]] = v
+        ssv_gt_dict = new_ssv_gt_dict
         self.nb_views = nb_views
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
@@ -337,6 +340,7 @@ def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1):
         views = np.concatenate(start_multiprocess_obj("load_views", [[sv, ] for sv in sample_svs], nb_cpus=nb_cpus))
         # views = np.concatenate(sso.load_views())
         sso.clear_cache()
+        views = naive_view_normalization(views)
         views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
         curr_nb_samples = int(np.min([np.floor(views.shape[1]/nb_views), batch_size-cnt, batch_size//4]))
         if curr_nb_samples == 0:

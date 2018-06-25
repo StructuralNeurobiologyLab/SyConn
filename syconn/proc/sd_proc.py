@@ -412,8 +412,10 @@ def init_sos(sos_dict):
     return sos
 
 
-def sos_dict_fact(svixs, version=None, scaling=get_dataset_scaling(), obj_type="sv",
+def sos_dict_fact(svixs, version=None, scaling=None, obj_type="sv",
                   working_dir=wd, create=False):
+    if scaling is None:
+        scaling = get_dataset_scaling()
     sos_dict = {"svixs": svixs, "version": version,
                 "working_dir": working_dir, "scaling": scaling,
                 "create": create, "obj_type": obj_type}
