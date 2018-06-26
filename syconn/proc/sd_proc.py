@@ -65,7 +65,7 @@ def dataset_analysis(sd, recompute=True, stride=100, qsub_pe=None,
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
     else:
         raise Exception("QSUB not available")
@@ -127,7 +127,7 @@ def _dataset_analysis_thread(args):
                     so.attr_dict["rep_coord"] = so.rep_coord
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
-                    so.attr_dict["mesh_area"] = so.mesh_area
+                    so.attr_dict["mesh_area"] = so.mesh_area    # TODO try except SV
 
                 for attribute in so.attr_dict.keys():
                     if attribute not in global_attr_dict:
@@ -215,7 +215,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
 
     else:

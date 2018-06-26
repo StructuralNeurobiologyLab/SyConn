@@ -254,7 +254,7 @@ class ConnectivityMatrix(object):
             out_files = glob.glob(path_to_out + "/*")
             results = []
             for out_file in out_files:
-                with open(out_file) as f:
+                with open(out_file, 'rb') as f:
                     results.append(pkl.load(f))
         else:
             raise Exception("QSUB not available")
@@ -288,7 +288,7 @@ class ConnectivityMatrix(object):
             out_files = glob.glob(path_to_out + "/*")
             results = []
             for out_file in out_files:
-                with open(out_file) as f:
+                with open(out_file, 'rb') as f:
                     results.append(pkl.load(f))
         else:
             raise Exception("QSUB not available")

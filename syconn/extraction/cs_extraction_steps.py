@@ -39,7 +39,7 @@ def find_contact_sites(cset, knossos_path, filename, n_max_co_processes=None,
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
     else:
         raise Exception("QSUB not available")
