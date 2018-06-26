@@ -37,7 +37,7 @@ from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, 
 from ..handler.compression import AttributeDict, MeshDict, LZ4Dict
 from ..proc.image import single_conn_comp_img
 from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords
-from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh
+from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh, rgb2id_array
 from ..proc.rendering import render_sampled_sso, comp_window, multi_view_sso,\
     multi_render_sampled_svidlist, render_sso_coords, \
     render_sso_coords_index_views
@@ -1205,13 +1205,49 @@ class SuperSegmentationObject(object):
                                verbose=False, overwrite=overwrite,
                                cellobjects_only=cellobjects_only, woglia=woglia)
 
-    def render_indexviews(self):
+    def _render_indexviews(self):
         locs = np.concatenate(self.sample_locations())
-        index_views = render_sso_coords_index_views(self, locs)
+        start = time.time()
+        index_views = render_sso_coords_index_views(self, locs[:100], verbose=True)
+        end_ix_views = time.time()
+        print("Rendering views took {:.2f} s. {:.2f} views/s".format(
+            end_ix_views - start, len(index_views) / (end_ix_views - start)))
+        index_views = rgb2id_array(index_views)
+        print("Mapping rgb values to vertex indices took {:.2f}s.".format(
+            time.time() - end_ix_views))
         self.save_views(index_views, "indexviews")
 
-    def predict_semseg_spiness(self):
-        m = get_semseg_spiness_model()
+    def _predict_semseg_spiness(self, model):
+        views = self.load_views("views")[:100]
+        labeled_views = m(views)
+        labeled_views = np.argmax(labeled_views, axis=-1)
+        self.save_views(labeled_views, "views_spiness")
+
+    def _spiness2mesh(self, dest_path=None):
+        i_views = self.load_views("indexviews").flatten()
+        unique_ids = np.unique(i_views)
+        print("{}/{} ({:.2f} vertices were captured in the raw views."
+              "".format(len(unique_ids), len(self.mesh[1]),
+                        float(len(unique_ids)) / len(self.mesh[1])))
+        spiness_views = self.load_views("views_spiness").flatten()
+        vertex_labels = np.ones((len(self.mesh[1])), dtype=np.uint8) * 6
+        dc = {}
+        for ii in range(len(spiness_views)):
+            l = spiness_views[ii]
+            try:
+                dc[i_views[ii]].append(l)
+            except KeyError:
+                dc[i_views[ii]] = l
+        for k, v in dc:
+            l, cnts = np.unique(v, return_counts=True)
+            vertex_labels[k] = l[np.argmax(cnts)]
+        predicted_vertices = self.mesh[1][vertex_labels != 6]
+        predictions = vertex_labels[vertex_labels != 6]
+        # [neck, head, shaft, other, background]
+        colors = [[0.6, 0.6, 0.6], [0.9, 0.2, 0.2], [0.1, 0.1, 0.1],
+                  [0.05, 0.6, 0.6], [0.95, 0.95, 0.95]]
+        return self._pred2mesh(predicted_vertices, predictions, ply_fname="spiness",
+                               dest_path=dest_path, colors=colors)
 
 
     def sample_locations(self, force=False, cache=True, verbose=False):

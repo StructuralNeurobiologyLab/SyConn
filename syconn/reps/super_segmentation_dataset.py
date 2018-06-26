@@ -195,10 +195,10 @@ class SuperSegmentationDataset(object):
     def ssv_ids(self):
         if self._ssv_ids is None:
             if len(self.mapping_dict) > 0:
-                self._ssv_ids = np.array(self.mapping_dict.keys())
+                self._ssv_ids = np.array(list(self.mapping_dict.keys()))
             elif self.mapping_dict_exists:
                 self.load_mapping_dict()
-                self._ssv_ids = np.array(self.mapping_dict.keys())
+                self._ssv_ids = np.array(list(self.mapping_dict.keys()))
             elif os.path.exists(self.path + "/ids.npy"):
                 self._ssv_ids = np.load(self.path + "/ids.npy")
             else:
@@ -541,6 +541,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
         else:
             np.save(ssd.path + "/%ss.npy" % attribute,
                     attr_dict[attribute])
+
 #
 #
 def _write_super_segmentation_dataset_thread(args):

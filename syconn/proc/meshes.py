@@ -14,7 +14,10 @@ from skimage import measure
 from sklearn.decomposition import PCA
 from ..handler.basics import write_txt2kzip, texts2kzip, chunkify
 from .image import apply_pca
-from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
+try:
+    from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
+except ImportError as e:
+    print(repr(e))
 from scipy.ndimage.morphology import binary_closing
 import time
 try:
@@ -951,12 +954,14 @@ def rgb2id_array(rgb_arr):
         assert rgb_arr.shape[-1] == 3, "ValueError: unsupported shape"
     else:
         raise ValueError("Unsupported shape")
-    # start = time.time()
     rgb_arr_flat = rgb_arr.flatten().reshape((-1, 3))
-    mask_arr = (rgb_arr_flat[:, 0] == 0) & (rgb_arr_flat[:, 1] == 0) & (rgb_arr_flat[:, 2] == 0)
+    mask_arr = (rgb_arr_flat[:, 0] == 0) & (rgb_arr_flat[:, 1] == 0) & \
+               (rgb_arr_flat[:, 2] == 0)
     id_arr = np.zeros((len(rgb_arr_flat)), dtype=np.uint32)
-    id_arr[~mask_arr] = np.apply_along_axis(rgb2id, 1, rgb_arr_flat[~mask_arr]).squeeze()
+    for ii in range(len(rgb_arr_flat)):
+        if mask_arr[ii]:
+            continue
+        id_arr[ii] = rgb2id(rgb_arr_flat[ii])
     background_ix = np.max(id_arr) + 1  # convention: The highest index value in index view will correspond to the background
     id_arr[mask_arr] = background_ix
-    # print("Finisehd remapping rgb-> vertex IDs after [min]:", (time.time()-start)/60.)
     return id_arr.reshape(rgb_arr.shape[:-1])

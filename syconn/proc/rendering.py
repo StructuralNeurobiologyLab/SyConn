@@ -18,6 +18,7 @@ from ..handler.compression import arrtolz4string
 from .meshes import merge_meshes, get_random_centered_coords, \
     MeshObject, calc_rot_matrices, flag_empty_spaces
 import os
+import tqdm
 from .meshes import id2rgb_array_contiguous
 try:
     import os
@@ -382,7 +383,8 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
 
 def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                            ws=(256, 128), views_key="raw", nb_simplices=3,
-                           depth_map=True, clahe=False, smooth_shade=True):
+                           depth_map=True, clahe=False, smooth_shade=True,
+                           verbose=False):
     """
     Same as multi_view_mesh_coords but without creating gl context.
     Parameters
@@ -437,6 +439,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     res = np.ones([len(coords)] + list(view_sh), dtype=np.uint8) * 255
     init_opengl(ws, depth_map=depth_map, clear_value=0.0, smooth_shade=smooth_shade)
     init_object(indices, vertices, normals, colors, ws)
+    if verbose:
+        pbar = tqdm.tqdm(total=len(res))
     for ii, c in enumerate(coords):
         c_views = np.ones(view_sh, dtype=np.float32)
         rot_mat = rot_matrices[ii]
@@ -479,6 +483,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
             c_views[m] = screen_shot(ws, colored=colored, depth_map=depth_map, clahe=clahe)
             glPopMatrix()
         res[ii] = c_views
+        if verbose:
+            pbar.update(1)
         found_empty_view = False
         for cv in c_views:
             if len(np.unique(cv)) == 1:
@@ -493,6 +499,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                       "'%s'-mesh with %d vertices." %\
                       (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
                        views_key, len(mesh.vertices)))
+    if verbose:
+        pbar.close()
     return res
 
 
@@ -599,7 +607,8 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
     ctx = init_ctx(ws)
     mviews = multi_view_mesh_coords(mesh, coords, local_rot_mat, edge_lengths,
                                     clahe=clahe, views_key=views_key, ws=ws,
-                                    depth_map=depth_map, smooth_shade=smooth_shade)
+                                    depth_map=depth_map, verbose=verbose,
+                                    smooth_shade=smooth_shade)
     if verbose:
         end = time.time()
         print("Finished rendering mesh of type %s at %d locations after"
