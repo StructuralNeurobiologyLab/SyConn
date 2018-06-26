@@ -32,7 +32,6 @@ from scipy import spatial
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
-
 def majority_vote(anno, prop, max_dist):
     """
     Smoothes (average using sliding window of 2 times max_dist and majority
@@ -1021,3 +1020,4 @@ def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=20):
         except KeyError:
             pass  # sv does not exist in this SSD
     return list(missing_ssv_ids)
+

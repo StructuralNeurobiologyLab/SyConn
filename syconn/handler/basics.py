@@ -491,7 +491,7 @@ def chunkify(lst, n):
 
 def flatten_list(lst):
     """
-    Flattens list of lists.
+    Flattens list of lists. Same ordering as np.concatenate
 
     Parameters
     ----------

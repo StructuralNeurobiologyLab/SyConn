@@ -493,7 +493,6 @@ def create_graph_from_coords(coords, max_dist=6000, force_single_cc=True,
     print("Done building Graph.")
     if mst:
         g = nx.minimum_spanning_tree(g)
-
     return g
 
 

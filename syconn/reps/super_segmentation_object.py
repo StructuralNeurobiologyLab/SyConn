@@ -38,8 +38,9 @@ from ..handler.compression import AttributeDict, MeshDict, LZ4Dict
 from ..proc.image import single_conn_comp_img
 from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords
 from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh
-from ..proc.rendering import render_sampled_sso, comp_window, \
-    multi_render_sampled_svidlist, render_sso_coords, multi_view_sso
+from ..proc.rendering import render_sampled_sso, comp_window, multi_view_sso,\
+    multi_render_sampled_svidlist, render_sso_coords, \
+    render_sso_coords_index_views
 if "matplotlib" not in globals():
     import matplotlib
     matplotlib.use("agg")
@@ -1203,6 +1204,15 @@ class SuperSegmentationObject(object):
             render_sampled_sso(self, add_cellobjects=add_cellobjects,
                                verbose=False, overwrite=overwrite,
                                cellobjects_only=cellobjects_only, woglia=woglia)
+
+    def render_indexviews(self):
+        locs = np.concatenate(self.sample_locations())
+        index_views = render_sso_coords_index_views(self, locs)
+        self.save_views(index_views, "indexviews")
+
+    def predict_semseg_spiness(self):
+        m = get_semseg_spiness_model()
+
 
     def sample_locations(self, force=False, cache=True, verbose=False):
         """

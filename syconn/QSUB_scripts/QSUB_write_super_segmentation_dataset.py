@@ -12,7 +12,7 @@ try:
 # TODO: switch to Python3 at some point and remove above
 except Exception:
     import pickle as pkl
-from syconn.proc import ssd_proc
+from syconn.reps.super_segmentation_dataset import _write_super_segmentation_dataset_thread
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -25,7 +25,7 @@ with open(path_storage_file) as f:
         except:
             break
 
-out = ssd_proc._write_super_segmentation_dataset_thread(args)
+out = _write_super_segmentation_dataset_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)
