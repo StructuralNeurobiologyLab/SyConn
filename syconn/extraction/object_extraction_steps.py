@@ -15,6 +15,7 @@ import os
 import scipy.ndimage
 import shutil
 import time
+import itertools
 from collections import defaultdict
 from knossos_utils import knossosdataset, chunky
 
@@ -756,7 +757,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                              n_folders_fs])
 
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_extract_voxels_thread,
+        results = sm.start_multiprocess_imap(_extract_voxels_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
     elif qu.__QSUB__:
@@ -829,35 +830,31 @@ def _extract_voxels_thread(args):
 
                 if not os.path.exists(path):
                     path = chunk.folder + filename + ".h5"
-                this_segmentation_matrix = basics.load_from_h5py(path, [hdf5_name])[0]
+                this_segmentation = basics.load_from_h5py(path, [hdf5_name])[0]
             else:
                 kd = knossosdataset.KnossosDataset()
                 kd.initialize_from_knossos_path(overlaydataset_path)
 
                 try:
-                    this_segmentation_matrix = kd.from_overlaycubes_to_matrix(chunk.size,
-                                                                              chunk.coordinates)
+                    this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
+                                                                       chunk.coordinates)
                 except:
-                    this_segmentation_matrix = kd.from_overlaycubes_to_matrix(chunk.size,
-                                                                              chunk.coordinates,
-                                                                              datatype=np.uint32)
-
-            this_segmentation = this_segmentation_matrix.tolist()
+                    this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
+                                                                       chunk.coordinates,
+                                                                       datatype=np.uint32)
 
             uniqueID_coords_dict = defaultdict(list)  # {sv_id: [(x1,y1,z1),(x2,y2,z2),...]}
-            len_0 = len(this_segmentation)
-            len_1 = len(this_segmentation[0])
-            len_2 = len(this_segmentation[0][0])
-            for x in range(len_0):
-                for y in range(len_1):
-                    for z in range(len_2):
-                        sv_id = this_segmentation[x][y][z]
-                        uniqueID_coords_dict[sv_id].append((x, y, z))
-            unique_ids = uniqueID_coords_dict.keys()
-            if i_chunk == 0:
-                n_per_voxel_path = np.ceil(float(len(unique_ids) * len(chunks)) / len(voxel_paths))
 
-            for sv_id in unique_ids:
+            dims = this_segmentation.shape
+            indices = itertools.product(range(dims[0]), range(dims[1]), range(dims[2]))
+            for idx in indices:
+                sv_id = this_segmentation[idx]
+                uniqueID_coords_dict[sv_id].append(idx)
+
+            if i_chunk == 0:
+                n_per_voxel_path = np.ceil(float(len(uniqueID_coords_dict) * len(chunks)) / len(voxel_paths))
+
+            for sv_id in uniqueID_coords_dict:
                 if sv_id == 0:
                     continue
                 sv_coords = uniqueID_coords_dict[sv_id]
