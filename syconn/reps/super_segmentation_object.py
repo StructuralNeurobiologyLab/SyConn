@@ -265,7 +265,7 @@ class SuperSegmentationObject(object):
 
     @property
     def attr_dict_path(self):
-        return self.ssv_dir + "atrr_dict.pkl"
+        return self.ssv_dir + "attr_dict.pkl"
 
     @property
     def attr_dict_path_new(self):
@@ -1038,12 +1038,12 @@ class SuperSegmentationObject(object):
                 print("Skipped", fnames[i], str(e))
                 pass
         self.load_attr_dict()
-        if os.path.isfile(dest_dir + "/atrr_dict.pkl"):
-            dest_attr_dc = load_pkl2obj(dest_dir + "/atrr_dict.pkl")
+        if os.path.isfile(dest_dir + "/attr_dict.pkl"):
+            dest_attr_dc = load_pkl2obj(dest_dir + "/attr_dict.pkl")
         else:
             dest_attr_dc = {}
         dest_attr_dc.update(self.attr_dict)
-        write_obj2pkl(dest_dir + "/atrr_dict.pkl", dest_attr_dc)
+        write_obj2pkl(dest_dir + "/attr_dict.pkl", dest_attr_dc)
 
     def partition_cc(self, max_nb=25):
         """

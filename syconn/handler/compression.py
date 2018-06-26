@@ -132,6 +132,7 @@ class LZ4DictBase(dict):
                 pass
         # acquires lock until released when saving or after loading if self.read_only
         if not self.disable_locking:
+            gotten = False
             nb_attempts = 1
             while True:
                 self.a_lock = fasteners.InterProcessLock(lock_path)

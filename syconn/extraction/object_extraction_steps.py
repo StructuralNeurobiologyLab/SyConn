@@ -4,8 +4,10 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute for Medical Research, Heidelberg, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
-
-import cPickle as pkl
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
 import glob
 import networkx as nx
 import numpy as np
@@ -177,7 +179,7 @@ def object_segmentation(cset, filename, hdf5names,
         out_files = glob.glob(path_to_out + "/*")
         results_as_list = []
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 for entry in pkl.load(f):
                     results_as_list.append(entry)
     else:
@@ -428,7 +430,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
             stitch_list[hdf5_name] = []
 
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 result = pkl.load(f)
                 for hdf5_name in hdf5names:
                     elems = result[hdf5_name]
@@ -668,7 +670,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                    workfolder=None, overlaydataset_path=None,
                    chunk_list=None, suffix="", n_chunk_jobs=5000,
                    use_work_dir=True, qsub_pe=None, qsub_queue=None,
-                   n_max_co_processes=None, nb_cpus=1):
+                   n_max_co_processes=None, n_cpus=1):
     """
     Extracts voxels for each component id
 
@@ -763,15 +765,14 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=script_folder,
                                      n_max_co_processes=n_max_co_processes,
-                                     n_cores=nb_cpus)
+                                     n_cores=n_cores)
 
         # path_to_out = "/u/sdorkenw/QSUB/extract_voxels_folder/out/"
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
-
     else:
         raise Exception("QSUB not available")
 
@@ -780,7 +781,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
 
         remap_dict = defaultdict(list)
         for result in results:
-            for key, value in result[hdf5_name].iteritems():
+            for key, value in result[hdf5_name].items():
                 remap_dict[key].append(value)
 
         with open("%s/remapping_dict.pkl" % dataset_path, "wb") as f:
@@ -828,49 +829,59 @@ def _extract_voxels_thread(args):
 
                 if not os.path.exists(path):
                     path = chunk.folder + filename + ".h5"
-                this_segmentation = basics.load_from_h5py(path, [hdf5_name])[0]
+                this_segmentation_matrix = basics.load_from_h5py(path, [hdf5_name])[0]
             else:
                 kd = knossosdataset.KnossosDataset()
                 kd.initialize_from_knossos_path(overlaydataset_path)
 
                 try:
-                    this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
-                                                                       chunk.coordinates)
+                    this_segmentation_matrix = kd.from_overlaycubes_to_matrix(chunk.size,
+                                                                              chunk.coordinates)
                 except:
-                    this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
-                                                                       chunk.coordinates,
-                                                                       datatype=np.uint32)
+                    this_segmentation_matrix = kd.from_overlaycubes_to_matrix(chunk.size,
+                                                                              chunk.coordinates,
+                                                                              datatype=np.uint32)
 
-            unique_ids = np.unique(this_segmentation)
+            this_segmentation = this_segmentation_matrix.tolist()
+
+            uniqueID_coords_dict = defaultdict(list)  # {sv_id: [(x1,y1,z1),(x2,y2,z2),...]}
+            len_0 = len(this_segmentation)
+            len_1 = len(this_segmentation[0])
+            len_2 = len(this_segmentation[0][0])
+            for x in range(len_0):
+                for y in range(len_1):
+                    for z in range(len_2):
+                        sv_id = this_segmentation[x][y][z]
+                        uniqueID_coords_dict[sv_id].append((x, y, z))
+            unique_ids = uniqueID_coords_dict.keys()
             if i_chunk == 0:
                 n_per_voxel_path = np.ceil(float(len(unique_ids) * len(chunks)) / len(voxel_paths))
 
-            for i_unique_id in range(len(unique_ids)):
-                unique_id = unique_ids[i_unique_id]
-
-                if unique_id == 0:
+            for sv_id in unique_ids:
+                if sv_id == 0:
                     continue
-
-                unique_id = unique_ids[i_unique_id]
-                id_mask = this_segmentation == unique_id
-                id_mask, in_chunk_offset = basics.crop_bool_array(id_mask)
-                abs_offset = chunk.coordinates + np.array(in_chunk_offset)
-                abs_offset = abs_offset.astype(np.int)
+                sv_coords = uniqueID_coords_dict[sv_id]
+                id_mask_offset = np.min(sv_coords, axis=0)
+                abs_offset = chunk.coordinates + id_mask_offset
+                id_mask_coords = sv_coords - id_mask_offset
+                size = np.max(sv_coords, axis=0) - id_mask_offset + (1, 1, 1)
+                id_mask_coords = np.transpose(id_mask_coords)
+                id_mask = np.zeros(tuple(size), dtype=bool)
+                id_mask[id_mask_coords[0, :], id_mask_coords[1, :], id_mask_coords[2, :]] = True
 
                 if next_id in voxel_dc:
                     voxel_dc.append(next_id, id_mask, abs_offset)
                 else:
                     voxel_dc[next_id] = [id_mask], [abs_offset]
-
-                if not unique_id in map_dict[hdf5_name]:
-                    map_dict[hdf5_name][unique_id] = [next_id]
+                if not sv_id in map_dict[hdf5_name]:
+                    map_dict[hdf5_name][sv_id] = [next_id]
                 else:
-                    map_dict[hdf5_name][unique_id].append(next_id)
+                    map_dict[hdf5_name][sv_id].append(next_id)
 
                 id_count += 1
 
                 if id_count > (cur_path_id + 1) * n_per_voxel_path and \
-                                        cur_path_id + 1 < len(voxel_paths):
+                        cur_path_id + 1 < len(voxel_paths):
                     voxel_dc.save2pkl(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl")
                     cur_path_id += 1
                     voxel_dc = VoxelDict(dataset_path + voxel_paths[cur_path_id],
@@ -936,7 +947,7 @@ def combine_voxels(workfolder, hdf5names,
                                      int(len(voxel_rel_paths) / stride))
 
         dataset_temp_path = workfolder + "/%s_temp/" % hdf5_name
-        with open(dataset_temp_path + "/remapping_dict.pkl", "r") as f:
+        with open(dataset_temp_path + "/remapping_dict.pkl", "rb") as f:
             mapping_dict = pkl.load(f)
 
         voxel_rel_path_dict = {}

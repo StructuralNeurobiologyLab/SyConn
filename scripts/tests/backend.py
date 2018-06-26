@@ -12,7 +12,7 @@ test_p = "/wholebrain/scratch/areaxfs/test.pkl"
 if os.path.isfile(test_p):
     os.remove(test_p)
 
-if 0:
+if 1:
     print("\n---------------------------------------------------\n"
          "Checking locking...\n")
 
@@ -59,7 +59,7 @@ if 0:
 
     p = Process(target=create_waite_close)
     p.start()
-    time.sleep(0.01)
+    time.sleep(0.1)
     p2 = Process(target=create_fail)
     p2.start()
     p3 = Process(target=create_fail2)

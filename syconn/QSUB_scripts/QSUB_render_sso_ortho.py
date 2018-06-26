@@ -19,12 +19,12 @@ from syconn.proc.rendering import render_sso_ortho_views
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
 
-with open(path_storage_file) as f:
+with open(path_storage_file, 'rb') as f:
     args = []
     while True:
         try:
             args.append(pkl.load(f))
-        except:
+        except EOFError:
             break
 
 ssv_ixs = args

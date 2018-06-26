@@ -15,6 +15,8 @@ import sys
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 parent_path = os.path.abspath(os.path.join(dir_path, os.pardir))
+if not os.path.isdir(parent_path + '/logs/'):
+    os.makedirs(parent_path + '/logs/')
 logging.basicConfig(filename=parent_path + '/logs/unit_tests.log',
                     level=logging.DEBUG, filemode='w')
 
@@ -167,7 +169,7 @@ def test_compression_and_decompression_for_mesh_dict():
     try:
         md.save2pkl()
         logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 2 ' + str(e))
-    except Exception, e:
+    except Exception as e:
         assert str(e) ==  "Unable to release an unacquired lock"
     logging.debug("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
 

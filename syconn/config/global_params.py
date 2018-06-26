@@ -6,7 +6,7 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 # # define global working directory
-wd = "/wholebrain/scratch/areaxfs3/"
+wd = "/wholebrain/songbird/j026/areaxfs_v5"
 
 # --------------------------------------------------------------- GLIA PARAMETER
 # min. connected component size of glia nodes/SV after thresholding glia proba

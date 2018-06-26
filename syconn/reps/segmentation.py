@@ -990,8 +990,8 @@ class SegmentationObject(object):
                 pass
         # copy attr_dict values
         self.load_attr_dict()
-        if os.path.isfile(dest_dir+"/atrr_dict.pkl"):
-            dest_attr_dc = load_pkl2obj(dest_dir+"/atrr_dict.pkl")
+        if os.path.isfile(dest_dir+"/attr_dict.pkl"):
+            dest_attr_dc = load_pkl2obj(dest_dir+"/attr_dict.pkl")
         else:
              dest_attr_dc = {}
         # overwrite existing keys in the destination attribute dict

@@ -16,12 +16,12 @@ from syconn.proc import ssd_proc
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
 
-with open(path_storage_file) as f:
+with open(path_storage_file, 'rb') as f:
     args = []
     while True:
         try:
             args.append(pkl.load(f))
-        except:
+        except EOFError:
             break
 
 out = ssd_proc._apply_mapping_decisions_thread(args)

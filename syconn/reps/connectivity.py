@@ -34,9 +34,9 @@ except:
     default_wd_available = False
 
 from ..config import parser
-import connectivity_helper as ch
-import super_segmentation as ss
-import segmentation
+from . import connectivity_helper as ch
+from . import super_segmentation as ss
+from . import segmentation
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 
 
