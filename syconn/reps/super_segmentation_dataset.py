@@ -376,7 +376,7 @@ class SuperSegmentationDataset(object):
             out_files = glob.glob(path_to_out + "/*")
             no_skel_cnt = 0
             for out_file in out_files:
-                with open(out_file) as f:
+                with open(out_file, 'rb') as f:
                     no_skel_cnt += np.sum(pkl.load(f))
 
         else:
@@ -517,7 +517,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
     else:
         raise Exception("QSUB not available")
@@ -786,7 +786,7 @@ def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
         out_files = glob.glob(path_to_out + "/*")
         no_skel_cnt = 0
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 no_skel_cnt += np.sum(pkl.load(f))
 
     else:

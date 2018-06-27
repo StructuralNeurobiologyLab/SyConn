@@ -159,7 +159,7 @@ def check_all_hulls(object_dataset_path, nb_processes, use_qsub=False, queue="fu
         out_files = glob.glob(path_to_out + "/*")
         misses = []
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 misses += pickle.load(f)
 
     else:

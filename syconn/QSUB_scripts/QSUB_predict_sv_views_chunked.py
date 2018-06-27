@@ -47,7 +47,7 @@ for p in so_chunk_paths:
     sd = sos_dict_fact(svixs, **so_kwargs)
     sos = init_sos(sd)
     probas = predict_views(model, views, sos, return_proba=True, **pred_kwargs)
-    attr_dc_p = p +  "/atrr_dict.pkl"
+    attr_dc_p = p + "/attr_dict.pkl"
     ad = AttributeDict(attr_dc_p, disable_locking=True)
     for ii in range(len(sos)):
         ad[sos[ii].id][pred_key] = probas[ii]

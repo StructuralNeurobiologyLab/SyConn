@@ -13,8 +13,9 @@ from syconn.reps import segmentation as seg
 kd_seg_path = "/wholebrain/songbird/j0126/areaxfs_v5/knossosdatasets/"
 wd_dir = "/wholebrain/songbird/j0126/areaxfs_v5/"
 cd_dir = wd_dir + "chunkdatasets/sv/"
+sd_dir = wd_dir + "chunkdatasets/"
 
-##### initializing and loading and chunk dataset from knossosdataset
+#### initializing and loading and chunk dataset from knossosdataset
 kd = knossosdataset.KnossosDataset()    # Sets initial values of object
 kd.initialize_from_knossos_path(kd_seg_path)     # Initializes the dataset by parsing the knossos.conf in path + "mag1"
 
@@ -25,12 +26,13 @@ cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
 chunky.save_dataset(cd)
 cd = chunky.load_dataset(cd_dir)
 
-# SV extraction
+# Object extraction
 oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=5000,
-                        hdf5names=["sv"], qsub_pe='openmp', n_max_co_processes=150)
-# SD Processing
-# sd = seg.SegmentationDataset("sv", working_dir=wd_dir)
-# sd_proc.dataset_analysis(sd, qsub_pe="openmp", n_max_co_processes=100, )
+                        hdf5names=["sv"], n_max_co_processes=150, qsub_pe='openmp', n_folders_fs=10000)
+# Object Processing
+sd = seg.SegmentationDataset("sv", working_dir=sd_dir)
+sd_proc.dataset_analysis(sd, qsub_pe="openmp", n_max_co_processes=100)
+
 ############################################################################################
 # ##### Cell object extraction #####
 # from_probabilities_to_objects(cd, filename, hdf5names)
@@ -73,4 +75,3 @@ oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=
 #
 # ## Synaptic Classification ##
 #
-
