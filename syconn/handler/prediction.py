@@ -12,6 +12,11 @@ from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils.knossosdataset import KnossosDataset
 from elektronn2.config import config as e2config
 from elektronn2.utils.gpu import initgpu
+try:
+    from elektronn3.models.base import InferenceModel
+except ImportError:
+    print("elektronn3 could not be imported. Please see "
+          "'https://github.com/ELEKTRONN/elektronn3' for more information.")
 from .compression import load_from_h5py, save_to_h5py
 from ..proc.image import normalize_img
 from .basics import read_txt_from_zip
@@ -581,19 +586,20 @@ class NeuralNetworkInterface(object):
             else:
                 x = naive_view_normalization(x)
         bs = self.imposed_batch_size
+        # using floor now and remaining samples are treated later
         if self.arch == "rec_view":
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(x.shape[1] / bs)]
+                       range(int(np.floor(x.shape[1] / bs)))]
             proba = np.ones((x.shape[1], 4, self.nb_labels))
         elif self.arch == "triplet":
             x = views2tripletinput(x)
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(len(x) / bs)]
+                       range(int(np.floor(len(x) / bs)))]
             # nb_labels represents latent space dim.; 3 -> view triplet
             proba = np.ones((len(x), self.nb_labels, 3))
         else:
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(len(x) / bs)]
+                       range(int(np.floor(len(x) / bs)))]
             proba = np.ones((len(x), self.nb_labels))
         if verbose:
             cnt = 0
@@ -621,8 +627,8 @@ class NeuralNetworkInterface(object):
             end = time.time()
             sys.stdout.write("\r%0.2f\n" % 1.0)
             sys.stdout.flush()
-            print "Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
-                  (len(x), end-start, (end-start)/len(x))
+            print("Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
+                  (len(x), end-start, (end-start)/len(x)))
             pbar.close()
         if self.arch == "triplet":
             return proba[..., 0]
@@ -682,6 +688,11 @@ def get_celltype_model(init_gpu=None):
     return m
 
 
+def get_semseg_spiness_model():
+    m = InferenceModel("/wholebrain/u/pschuber/e3training/FCN--VG13/")
+    return m
+
+
 def get_knn_tnet_embedding():
     tnet_eval_dir = "/wholebrain/scratch/pschuber/CNN_Training/" \
                     "nupa_cnn/t_net/ssv6_tripletnet_v9_backup/pred/"
@@ -689,8 +700,20 @@ def get_knn_tnet_embedding():
 
 
 def force_correct_norm(x):
+    """
+    For e.g. models trained on views normalized between 0 and 1, whereas empty
+    images are set to 1 / 255. New models trained on old views
+    Parameters
+    ----------
+    x :
+
+    Returns
+    -------
+
+    """
     import itertools
     x = x.astype(np.float32)
+    # iterate over view locations, view channels, view numbers: N, 4, 2
     for ii, jj, kk in itertools.product(np.arange(x.shape[0]), np.arange(x.shape[1]),
                       np.arange(x.shape[2])):
         curr_img = x[ii, jj, kk]

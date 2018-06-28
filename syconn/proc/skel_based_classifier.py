@@ -23,7 +23,7 @@ if "matplotlib" not in globals():
     matplotlib.use("agg")
 from matplotlib import pyplot as plt
 
-import skel_based_classifier_helper as sbch
+from . import skel_based_classifier_helper as sbch
 from ..reps import super_segmentation as ss
 from ..proc.stats import model_performance
 from ..mp import qsub_utils as qu
@@ -156,7 +156,7 @@ class SkelClassifier(object):
 
         multi_params = []
         for fc_block in [feature_contexts_nm[i:i + stride]
-                         for i in xrange(0, len(feature_contexts_nm), stride)]:
+                         for i in range(0, len(feature_contexts_nm), stride)]:
             for this_id in self.label_dict.keys():
                 multi_params.append([this_id, self.ssd_version,
                                      self.working_dir,
@@ -638,7 +638,7 @@ def classifier_production_thread(args):
     production = args[5]
 
     sc = SkelClassifier(target_type, working_dir=working_dir,
-                        create=False)
+                        create=True)
 
     sc.train_clf(name=clf_name, n_estimators=n_estimators,
                  feature_context_nm=feature_context_nm, production=production,

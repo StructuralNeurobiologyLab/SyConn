@@ -469,8 +469,20 @@ def load_pkl2obj(path):
             objects = pkl.load(inp)
     except UnicodeDecodeError: # python3 compatibility
         with open(path, 'rb') as inp:
-            objects = pkl.loads(inp.read(), encoding='latin1')
+            objects = pkl.loads(inp.read(), encoding='bytes')
+        objects = convert_keys_byte2str(objects)
     return objects
+
+
+def convert_keys_byte2str(dc):
+    if type(dc) is not dict:
+        return dc
+    for k in list(dc.keys()):
+        v = convert_keys_byte2str(dc[k])
+        if type(k) is bytes:
+            dc[k.decode('utf-8')] = v
+            del dc[k]
+    return dc
 
 
 def chunkify(lst, n):

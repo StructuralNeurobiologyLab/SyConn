@@ -71,7 +71,7 @@ def split_subcc(g, max_nb, verbose=False, start_nodes=None):
         nb_nodes = g.number_of_nodes()
         pbar = tqdm.tqdm(total=nb_nodes)
     if start_nodes is None:
-        iter_ixs = g.nodes_iter()
+        iter_ixs = g.nodes()
     else:
         iter_ixs = start_nodes
     for n in iter_ixs:
@@ -224,7 +224,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
     if np.all(neuron2ccsize_dict.values() <= min_cc_size_neuron): # no significant neuron SV
         if return_removed_nodes:
-            return [], g.nodes()
+            return [], list(g.nodes())
         return []
 
     # get glia type connected component sizes
@@ -235,7 +235,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
     glia2ccsize_dict = create_ccsize_dict(g_glia, size_dict)
     if np.all(glia2ccsize_dict.values() <= min_cc_size_glia): # no significant glia SV
         if return_removed_nodes:
-            return g.nodes(), []
+            return list(g.nodes()), []
         return []
 
     tiny_glia_fragments = []
@@ -533,7 +533,7 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150,
     n_size[n_size > node_size_cap] = node_size_cap
     col = np.array([glianess[n] for n in G.nodes()])
     col = col[n_size >= min_sv_size]
-    nodelist = list(np.array(G.nodes())[n_size > min_sv_size])
+    nodelist = list(np.array(list(G.nodes()))[n_size > min_sv_size])
     n_size = n_size[n_size >= min_sv_size]
     n_size = n_size / np.max(n_size) * 25.
     if pos is None:

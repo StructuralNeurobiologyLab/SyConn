@@ -166,7 +166,7 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40):
     # labeled skeleton node
     locs = np.concatenate(sso.sample_locations())
     dist, ind = tree.query(locs)
-    locs = locs[dist[:, 0] < 2000]#[::2][:50]
+    locs = locs[dist[:, 0] < 2000][::2][:60]
     print("Rendering label views.")
 
     # # DEBUG PART START
@@ -180,15 +180,18 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40):
     with open("{}/viewcoords.txt".format(dest_folder), "w") as f:
         f.write(loc_text)
     # # DEBUG PART END
+
     label_views, rot_mat = _render_mesh_coords(locs, mo, depth_map=False,
-                                      return_rot_matrices=True, smooth_shade=False)
+                                               return_rot_matrices=True,
+                                               smooth_shade=False)
     # sso._pred2mesh(node_coords, node_labels, dest_path="/wholebrain/u/shum/sso_%d_skeletonlabels.k.zip" %
     #                                                    sso.id, ply_fname="0.ply")
     print("Rendering index views.")
     index_views = render_sso_coords_index_views(sso, locs, rot_matrices=rot_mat)
     print("Rendering raw views.")
     raw_views = render_sso_coords(sso, locs)
-    return raw_views, remap_rgb_labelviews(label_views, palette)[:, None], rgb2id_array(index_views)[:, None]
+    raw_views_wire = render_sso_coords(sso, locs, wire_frame=True, ws=(2048, 1024))   # TODO: HACK
+    return raw_views_wire, raw_views, remap_rgb_labelviews(label_views, palette)[:, None], rgb2id_array(index_views)[:, None]
 
 
 def GT_generation(kzip_paths, dest_dir=None, gt_type="spgt", n_voting=40):
@@ -209,76 +212,78 @@ def GT_generation(kzip_paths, dest_dir=None, gt_type="spgt", n_voting=40):
         dest_dir = os.path.expanduser("~") + "/spine_gt_multiview/"
     params = [(p, gt_type, n_voting) for p in kzip_paths]
     res = start_multiprocess_imap(gt_generation_helper, params, nb_cpus=20,
-                                  debug=False)
-
-    # Create Dataset splits for training, validation and test
-    all_raw_views = []
-    all_label_views = []
-    all_index_views = []
-    for ii in range(len(kzip_paths)):
-        all_raw_views.append(res[ii][0])
-        all_label_views.append(res[ii][1])
-        all_index_views.append(res[ii][2])
-    all_raw_views = np.concatenate(all_raw_views)
-    all_label_views = np.concatenate(all_label_views)
-    all_index_views = np.concatenate(all_index_views)
-    print("Shuffling views.")
-    ixs = np.arange(len(all_raw_views))
-    np.random.shuffle(ixs)
-    all_raw_views = all_raw_views[ixs]
-    all_label_views = all_label_views[ixs]
-    all_index_views = all_index_views[ixs]
-    print("Swapping axes.")
-    all_raw_views = all_raw_views.swapaxes(2, 1)
-    all_label_views = all_label_views.swapaxes(2, 1)
-    all_index_views = all_index_views.swapaxes(2, 1)
-    print("Reshaping arrays.")
-    all_raw_views = all_raw_views.reshape((-1, 4, 128, 256))
-    all_label_views = all_label_views.reshape((-1, 1, 128, 256))
-    all_index_views = all_index_views.reshape((-1, 1, 128, 256))
-    all_raw_views = np.concatenate([all_raw_views, all_index_views], axis=1)
-    raw_train, raw_other, label_train, label_other = \
-        train_test_split(all_raw_views, all_label_views, train_size=0.8, shuffle=True)
-    raw_valid, raw_test, label_valid, label_test = \
-        train_test_split(raw_other, label_other, train_size=0.5, shuffle=True)
-    print("Writing h5 files.")
-    save_to_h5py([raw_train], dest_dir + "/raw_train.h5",
-                 ["raw"])
-    save_to_h5py([raw_valid], dest_dir + "/raw_valid.h5",
-                 ["raw"])
-    save_to_h5py([raw_test], dest_dir + "/raw_test.h5",
-                 ["raw"])
-    save_to_h5py([label_train], dest_dir + "/label_train.h5",
-                 ["label"])
-    save_to_h5py([label_valid], dest_dir + "/label_valid.h5",
-                 ["label"])
-    save_to_h5py([label_test], dest_dir + "/label_test.h5",
-                 ["label"])
+                                  debug=True)
+    #
+    # # Create Dataset splits for training, validation and test
+    # all_raw_views = []
+    # all_label_views = []
+    # all_index_views = []
+    # for ii in range(len(kzip_paths)):
+    #     all_raw_views.append(res[ii][0])
+    #     all_label_views.append(res[ii][1])
+    #     all_index_views.append(res[ii][2])
+    # all_raw_views = np.concatenate(all_raw_views)
+    # all_label_views = np.concatenate(all_label_views)
+    # all_index_views = np.concatenate(all_index_views)
+    # print("Shuffling views.")
+    # ixs = np.arange(len(all_raw_views))
+    # np.random.shuffle(ixs)
+    # all_raw_views = all_raw_views[ixs]
+    # all_label_views = all_label_views[ixs]
+    # all_index_views = all_index_views[ixs]
+    # print("Swapping axes.")
+    # all_raw_views = all_raw_views.swapaxes(2, 1)
+    # all_label_views = all_label_views.swapaxes(2, 1)
+    # all_index_views = all_index_views.swapaxes(2, 1)
+    # print("Reshaping arrays.")
+    # all_raw_views = all_raw_views.reshape((-1, 4, 128, 256))
+    # all_label_views = all_label_views.reshape((-1, 1, 128, 256))
+    # all_index_views = all_index_views.reshape((-1, 1, 128, 256))
+    # all_raw_views = np.concatenate([all_raw_views, all_index_views], axis=1)
+    # raw_train, raw_other, label_train, label_other = \
+    #     train_test_split(all_raw_views, all_label_views, train_size=0.8, shuffle=True)
+    # raw_valid, raw_test, label_valid, label_test = \
+    #     train_test_split(raw_other, label_other, train_size=0.5, shuffle=True)
+    # print("Writing h5 files.")
+    # save_to_h5py([raw_train], dest_dir + "/raw_train.h5",
+    #              ["raw"])
+    # save_to_h5py([raw_valid], dest_dir + "/raw_valid.h5",
+    #              ["raw"])
+    # save_to_h5py([raw_test], dest_dir + "/raw_test.h5",
+    #              ["raw"])
+    # save_to_h5py([label_train], dest_dir + "/label_train.h5",
+    #              ["label"])
+    # save_to_h5py([label_valid], dest_dir + "/label_valid.h5",
+    #              ["label"])
+    # save_to_h5py([label_test], dest_dir + "/label_test.h5",
+    #              ["label"])
 
 
 def gt_generation_helper(args):
     kzip_path, gt_type, n_voting = args
     sso_id = int(re.findall("/(\d+).", kzip_path)[0])
-    raw_views, label_views, index_views = generate_label_views(kzip_path, gt_type, n_voting)
+    raw_views_wire, raw_views, label_views, index_views = generate_label_views(kzip_path, gt_type, n_voting)
     #
-    # # DEBUG PART START
-    # h5py_path = os.path.expanduser("~") + "/spiness_skels/{}/view_imgs_{}/".format(sso_id, n_voting)
-    # if not os.path.isdir(h5py_path):
-    #     os.makedirs(h5py_path)
-    # save_to_h5py([raw_views[:, 0, 0], label_views[:, 0, 0],
-    #               index_views[:, 0, 0]], h5py_path + "/views.h5",
-    #              ["raw", "label", "index"])
-    # vc = ViewContainer("", views=raw_views)
-    # # randomize color map of index views
-    # colored_indices = np.zeros(list(index_views.shape) + [3], dtype=np.uint8)
-    # for ix in np.unique(index_views):
-    #     rand_col = np.random.randint(0, 256, 3)
-    #     colored_indices[index_views == ix] = rand_col
-    # for ii in range(50):
-    #     vc.write_single_plot("{}/{}_raw.tif".format(h5py_path, ii), ii)
-    #     imsave(h5py_path + "{}_label.tif".format(ii), label_views[:, 0, 0][ii])
-    #     imsave(h5py_path + "{}_index.tif".format(ii), colored_indices[:, 0, 0][ii])
-    # # DEBUG PART END
+    # DEBUG PART START
+    h5py_path = os.path.expanduser("~") + "/spiness_skels/{}/view_imgs_{}/".format(sso_id, n_voting)
+    if not os.path.isdir(h5py_path):
+        os.makedirs(h5py_path)
+    save_to_h5py([raw_views[:, 0, 0], label_views[:, 0, 0],
+                  index_views[:, 0, 0]], h5py_path + "/views.h5",
+                 ["raw", "label", "index"])
+    vc = ViewContainer("", views=raw_views)
+    vc_wire = ViewContainer("", views=raw_views_wire)
+    # randomize color map of index views
+    colored_indices = np.zeros(list(index_views.shape) + [3], dtype=np.uint8)
+    for ix in np.unique(index_views):
+        rand_col = np.random.randint(0, 256, 3)
+        colored_indices[index_views == ix] = rand_col
+    for ii in range(60):
+        vc_wire.write_single_plot("{}/{}_raw_wire.tif".format(h5py_path, ii), ii)
+        vc.write_single_plot("{}/{}_raw.tif".format(h5py_path, ii), ii)
+        imsave(h5py_path + "{}_label.tif".format(ii), label_views[:, 0, 0][ii])
+        imsave(h5py_path + "{}_index.tif".format(ii), colored_indices[:, 0, 0][ii])
+    # DEBUG PART END
 
     return raw_views, label_views, index_views
 
@@ -286,6 +291,8 @@ def gt_generation_helper(args):
 if __name__ == "__main__":
     label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_spgt/" \
                         "spiness_skels_annotated/"
-    file_names = ["/23044610.035.k.zip", "/4741011.073.k.zip", "/18279774.078.k.zip", "/26331138.043.k.zip", "/27965455.032.k.zip"]
+    file_names = ["/23044610.035.k.zip", "/4741011.073.k.zip",
+                  "/18279774.078.k.zip", "/26331138.043.k.zip",
+                  "/27965455.032.k.zip"]
     file_paths = [label_file_folder + "/" + fname for fname in file_names]
     GT_generation(file_paths)

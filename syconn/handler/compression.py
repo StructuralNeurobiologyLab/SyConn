@@ -278,7 +278,8 @@ class VoxelDictL(LZ4DictBase):
             curr_sh[0] = -1
             sh[i] = curr_sh
         value_intern = {"arr": [arrtolz4string_list(v) for v in voxel_masks],
-                        "sh": sh, "dt": voxel_masks[0].dtype.str, "off": offsets}
+                        "sh": sh, "dt": voxel_masks[0].dtype.str,
+                        "off": offsets}
         self._dc_intern[key] = value_intern
 
     def append(self, key, voxel_mask, offset):
@@ -401,8 +402,8 @@ class SkeletonDict(LZ4DictBase):
             pass
         comp_arrs = self._dc_intern[item]
         skeleton = {"nodes": lz4string_listtoarr(comp_arrs[0], dtype=np.uint32),
-                       "diameters": lz4string_listtoarr(comp_arrs[1], dtype=np.float32),
-                       "edges": lz4string_listtoarr(comp_arrs[2], dtype=np.uint32)}
+                    "diameters": lz4string_listtoarr(comp_arrs[1], dtype=np.float32),
+                    "edges": lz4string_listtoarr(comp_arrs[2], dtype=np.uint32)}
         if self._cache_decomp:
             self._cache_dc[item] = skeleton
         return skeleton
@@ -413,8 +414,8 @@ class SkeletonDict(LZ4DictBase):
         Parameters
         ----------
         key : int/str
-        skeleton : list of np.array
-            [indices, vertices]
+        skeleton : dict
+            keys: nodes diameters edges
         """
         if self._cache_decomp:
             self._cache_dc[key] = skeleton
@@ -466,7 +467,7 @@ def lz4stringtoarr(string, dtype=np.float32, shape=None):
     np.array
         1d array
     """
-    if string == "":
+    if len(string) == 0:
         return np.zeros((0, ), dtype=dtype)
     try:
         arr_1d = np.frombuffer(decompress(string), dtype=dtype)
@@ -587,37 +588,6 @@ def load_lz4_compressed(p, shape=(-1, 20, 2, 128, 256), dtype=np.float32):
         decomp_arr2 = load_lz4_compressed(new_p2, shape=shape, dtype=dtype)
         decomp_arr = np.concatenate([decomp_arr1, decomp_arr2])
     return decomp_arr
-
-
-# def init_lz4_meshdict(sv_ixs, meshes):
-#     res = {}
-#     for m, ix in zip(meshes, sv_ixs):
-#         res[ix] = [arrtolz4string(m[0].astype(np.uint32)),
-#                    arrtolz4string(m[1].astype(np.float32))]
-#     return res
-#
-#
-# def load_lz4_meshdict_items(dc):
-#     return [(lz4stringtoarr(dc[k][0], dtype=np.uint32),
-#              lz4stringtoarr(dc[k][1], dtype=np.float32)) for k in dc.keys()]
-def init_lz4_meshdict(sv_ixs, meshes):
-    res = {}
-    for m, ix in zip(meshes, sv_ixs):
-        res[ix] = {"ind": arrtolz4string(m[0]), "vert": arrtolz4string(m[1])}
-    return res
-
-
-def load_lz4_meshdict_items(dc):
-    dtype = np.float
-    # HACK: check if vertices were saved as integer or float
-    if np.sum(lz4stringtoarr(dc[dc.keys()[0]]["vert"], dtype=np.float32).astype(np.uint)) == 0:
-        dtype = np.uint
-    return [(lz4stringtoarr(dc[k]["ind"], dtype=np.uint),
-             lz4stringtoarr(dc[k]["vert"], dtype=dtype)) for k in dc.keys()]
-
-
-def add_lz4_meshdict_items(dc, sv_ixs, meshes):
-    dc.update(init_lz4_meshdict(sv_ixs, meshes))
 
 
 # ---------------------------- HDF5

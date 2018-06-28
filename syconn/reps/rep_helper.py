@@ -313,7 +313,7 @@ def subfold_from_ix_SSO(ix):
 
 
 def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
-                       nb_cpus=-1, k=1):
+                       nb_cpus=-1, k=1, return_color=True):
     """
 
     Parameters
@@ -330,6 +330,8 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     nb_cpus : int
     k : int
         Number of nearest neighbors (average prediction)
+    return_color : bool
+        If false it returns the majority vote for each index
 
     Returns
     -------
@@ -340,6 +342,8 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
         colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
                            [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
     else:
+        if np.max(colors) <= 1.0:
+            colors = np.array(colors) * 255
         colors = np.array(colors, dtype=np.uint)
     assert len(colors) >= np.max(rep_values) + 1
     hull_tree = spatial.cKDTree(rep_coords)
@@ -351,6 +355,8 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
             curr_reps = np.array([curr_reps])
         curr_maj = Counter(curr_reps).most_common(1)[0][0]
         hull_rep[i] = curr_maj
+    if not return_color:
+        return hull_rep
     vert_col = colors[hull_rep]
     return vert_col
 

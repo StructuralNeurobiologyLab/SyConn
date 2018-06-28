@@ -58,7 +58,7 @@ def get_test_candidates():
                 new_view_path = sv.view_path(woglia=True)
                 old_view_path = old_sd.get_segmentation_object(sv.id).view_path(woglia=True)
                 if not os.path.isfile(new_view_path):
-                    print old_view_path, new_view_path
+                    print(old_view_path, new_view_path)
                     # copy views to new SSD in areaxfs3
                     shutil.copy(old_view_path, new_view_path)
             # save kzip
@@ -89,8 +89,8 @@ def eval_test_candidates():
     ssd_all = SuperSegmentationDataset("/wholebrain/scratch/areaxfs3/")
     old_sd = SegmentationDataset("sv", working_dir="/wholebrain/scratch/areaxfs/")
     sc = SkelClassifier(target_type="axoness", working_dir="/wholebrain/scratch/areaxfs3/")
-    rfc_4000 = sc.load_classifier("rfc", feature_context_nm=4000,)
-    rfc_8000 = sc.load_classifier("rfc", feature_context_nm=8000,)
+    rfc_4000 = sc.load_classifier("rfc", feature_context_nm=4001,)
+    rfc_8000 = sc.load_classifier("rfc", feature_context_nm=8001,)
     rfc_4000_wo2 = sc.load_classifier("rfc", feature_context_nm=4000,
                                       prefix="(2,)")
     rfc_8000_wo2 = sc.load_classifier("rfc", feature_context_nm=8000,
@@ -119,7 +119,7 @@ def eval_test_candidates():
     # V1
     # currently_annotated = ["34299393.001.k", "8733319.001.k", "30030341.001.k", "28985344.001.k", "12474080.001.k"]
     # # V2 -- 28 SSV
-    currently_annotated = ["34299393.001.k", "8733319.001.k", "30030341.001.k", "28985344.002.k", "12474080.001.k", "15065120.001.k", "31798150.001.k",
+    currently_annotated = ["15065120.001.k", "34299393.001.k", "8733319.001.k", "30030341.001.k", "28985344.002.k", "12474080.001.k", "31798150.001.k",
                            "28531969.001.k", "31936512.001.k", "141995.004.k", "1931265.001.k", "32946948.002.k", "18916097.001.k", "24300036.002.k",
                            "782342.001.k", "15372930.001.k.zip", "28418691.001.k", "8138368.001.k", "34053762.001.k", "13463680.001.k", "14539904.001.k",
                            "23629521.001.k", "22081952.001.k", "5491713.001.k", "10408322.001.k", "22892545.001.k", "13082627.001.k", "32292865.001.k"]
@@ -282,8 +282,14 @@ def eval_test_candidates():
               accuracy_score(np.array(all_labels), np.array(all_preds_cnn_maj)),
               accuracy_score(np.array(all_labels), np.array(all_preds_latent)),
               accuracy_score(np.array(all_labels), np.array(all_preds_latent_maj))))
+        print("RFC-4000: {:0.4f}\t{:0.4f}\n"
+              "RFC-8000: {:0.4f}\t{:0.4f}".format(
+              accuracy_score(np.array(all_labels), np.array(all_preds_skel_4000)),
+              accuracy_score(np.array(all_labels), np.array(all_preds_skel_4000_maj)),
+              accuracy_score(np.array(all_labels), np.array(all_preds_skel_8000)),
+              accuracy_score(np.array(all_labels), np.array(all_preds_skel_8000_maj))))
     print(np.sum(sso_sizes) / 1e9, np.sum(sso_sizes) * 9 * 9 * 20 / 1e9, np.sum(sso_lenghts) / 1e6, )
-    print "Collected %d labeled nodes." % len(all_labels)
+    print("Collected %d labeled nodes." % len(all_labels))
     model_performance_predonly(all_preds_skel_4000, all_labels, model_dir=dest_folder, prefix="skel_4000")
     model_performance_predonly(all_preds_skel_8000, all_labels, model_dir=dest_folder, prefix="skel_8000")
     model_performance_predonly(all_preds_cnn, all_labels, model_dir=dest_folder, prefix="cnn_k1")
@@ -557,14 +563,14 @@ if __name__ == "__main__":
         total_labels_rfc_large = []
         for ssv in ssd.ssvs:
             if not ssv.id in axgt_labels:
-                print "Skipping", ssv.id
+                print("Skipping", ssv.id)
                 continue
             if eval_valid and not ssv.id in splitting["valid"]:
                 continue
             if not eval_valid and not ssv.id in splitting["train"]:
                 continue
-            print "\n-------------------------"
-            print "[%d] Label: %d" % (ssv.id, axgt_labels[ssv.id])
+            print("\n-------------------------")
+            print("[%d] Label: %d" % (ssv.id, axgt_labels[ssv.id]))
             if eval_valid:
                 assert ssv.id in splitting["valid"]
             else:
@@ -595,7 +601,7 @@ if __name__ == "__main__":
             ssv.save_skeleton_to_kzip(kzip_p, additional_keys=["axoness_cnn_k1", "axoness_fc4000_avgwind0", "axoness_fc8000_avgwind0"])
             write_axpred(ssv, pred_key_appendix="_cnn_gt", k=1,
                          dest_path=kzip_p)
-            print "-------------------------\n"
+            print("-------------------------\n")
         model_performance(np.concatenate(total_proba_view), np.concatenate(total_labels_view),
                           model_dir=working_dir, prefix="cnn_views_%s" % ("vaild" if eval_valid else "train"))
         model_performance(np.concatenate(total_proba_node), np.concatenate(total_labels_node),

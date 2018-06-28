@@ -36,7 +36,7 @@ from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, 
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..handler.compression import AttributeDict, MeshDict, LZ4Dict
 from ..proc.image import single_conn_comp_img
-from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords
+from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords, bfs_smoothing
 from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh, rgb2id_array
 from ..proc.rendering import render_sampled_sso, comp_window, multi_view_sso,\
     multi_render_sampled_svidlist, render_sso_coords, \
@@ -265,11 +265,9 @@ class SuperSegmentationObject(object):
 
     @property
     def attr_dict_path(self):
-        return self.ssv_dir + "attr_dict.pkl"
-
-    @property
-    def attr_dict_path_new(self):
-        return self.ssv_dir + "attr_dict.pkl"
+        # TODO: Change as soon as new SSD is created! Now kept for backwards compatibility
+        return self.ssv_dir + "atrr_dict.pkl"
+        #return self.ssv_dir + "attr_dict.pkl"
 
     @property
     def skeleton_kzip_path(self):
@@ -818,7 +816,7 @@ class SuperSegmentationObject(object):
                 dest_path = self.skeleton_kzip_path
             write_skeleton_kzip(dest_path, [a])
         except Exception as e:
-            print("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, e))
+            print("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, repr(e)))
 
     def save_objects_to_kzip_sparse(self, obj_types=("sj", "mi", "vc"),
                                     dest_path=None):
@@ -1205,49 +1203,130 @@ class SuperSegmentationObject(object):
                                verbose=False, overwrite=overwrite,
                                cellobjects_only=cellobjects_only, woglia=woglia)
 
-    def _render_indexviews(self):
+    def _render_indexviews(self, nb_views=2):
+        try:
+            raise KeyError
+            views = self.load_views("index{}".format(nb_views))
+            return
+        except KeyError:
+            pass
         locs = np.concatenate(self.sample_locations())
         start = time.time()
-        index_views = render_sso_coords_index_views(self, locs[:100], verbose=True)
+        index_views = render_sso_coords_index_views(self, locs, nb_views=nb_views,
+                                                    verbose=True)
         end_ix_views = time.time()
         print("Rendering views took {:.2f} s. {:.2f} views/s".format(
             end_ix_views - start, len(index_views) / (end_ix_views - start)))
+        # max ID will be background
         index_views = rgb2id_array(index_views)
         print("Mapping rgb values to vertex indices took {:.2f}s.".format(
             time.time() - end_ix_views))
-        self.save_views(index_views, "indexviews")
+        self.save_views(index_views[:, None], "index{}".format(nb_views))
 
-    def _predict_semseg_spiness(self, model):
-        views = self.load_views("views")[:100]
-        labeled_views = m(views)
-        labeled_views = np.argmax(labeled_views, axis=-1)
-        self.save_views(labeled_views, "views_spiness")
+    def _render_rawviews(self, nb_views=2):
+        try:
+            views = self.load_views("raw{}".format(nb_views))
+            return
+        except KeyError:
+            pass
+        views = render_sso_coords(self, np.concatenate(self.sample_locations()),
+                                  add_cellobjects=True, verbose=False,
+                                  nb_views=nb_views)
+        self.save_views(views, "raw{}".format(nb_views))
 
-    def _spiness2mesh(self, dest_path=None):
-        i_views = self.load_views("indexviews").flatten()
-        unique_ids = np.unique(i_views)
-        print("{}/{} ({:.2f} vertices were captured in the raw views."
-              "".format(len(unique_ids), len(self.mesh[1]),
-                        float(len(unique_ids)) / len(self.mesh[1])))
-        spiness_views = self.load_views("views_spiness").flatten()
-        vertex_labels = np.ones((len(self.mesh[1])), dtype=np.uint8) * 6
+    def _predict_semseg(self, m, semseg_key, nb_views=2):
+        # N, 4, 2, 128, 256
+        try:
+            views = self.load_views("raw".format(nb_views))
+        except KeyError:
+            self._render_rawviews(nb_views)
+            views = self.load_views("raw".format(nb_views))
+        assert len(views) == len(np.concatenate(self.sample_locations())), "Unequal number of views and redering locations."
+        views = views.astype(np.float32) / 255.
+        views = views.swapaxes(1, 2)  # swap channel and view axis
+        # N, 2, 4, 128, 256
+        orig_shape = views.shape
+        # reshape to predict single projections
+        views = views.reshape([-1] + list(orig_shape[2:]))
+        # predict and reset to original shape: N, 2, 4, 128, 256
+        labeled_views = m.predict_proba(views, bs=200, verbose=False)
+        labeled_views = np.argmax(labeled_views, axis=1)[:, None]
+        labeled_views = labeled_views.reshape(list(orig_shape[:2])
+                                              + list(labeled_views.shape[1:]))
+        # swap axes to get source shape
+        labeled_views = labeled_views.swapaxes(2, 1)
+        self.save_views(labeled_views, semseg_key + "{}".format(nb_views))
+
+    def _semseg2mesh(self, semseg_key, nb_views=2, dest_path=None,
+                     k=1):
+        i_views = self.load_views("index".format(nb_views)).flatten()
+        spiness_views = self.load_views(semseg_key +
+                                        "{}".format(nb_views)).flatten()
+        vertex_labels = np.ones((len(self.mesh[1]) // 3), dtype=np.uint8) * 5
         dc = {}
         for ii in range(len(spiness_views)):
             l = spiness_views[ii]
             try:
                 dc[i_views[ii]].append(l)
             except KeyError:
-                dc[i_views[ii]] = l
-        for k, v in dc:
+                dc[i_views[ii]] = [l]
+        del dc[np.max(i_views)]  # remove max ID which corresponds to background
+        for ix, v in dc.items():
             l, cnts = np.unique(v, return_counts=True)
-            vertex_labels[k] = l[np.argmax(cnts)]
-        predicted_vertices = self.mesh[1][vertex_labels != 6]
-        predictions = vertex_labels[vertex_labels != 6]
-        # [neck, head, shaft, other, background]
-        colors = [[0.6, 0.6, 0.6], [0.9, 0.2, 0.2], [0.1, 0.1, 0.1],
-                  [0.05, 0.6, 0.6], [0.95, 0.95, 0.95]]
-        return self._pred2mesh(predicted_vertices, predictions, ply_fname="spiness",
-                               dest_path=dest_path, colors=colors)
+            vertex_labels[ix] = l[np.argmax(cnts)]
+        if k == 1:
+            predicted_vertices = self.mesh[1].reshape(-1, 3)#[vertex_labels != 5]
+            predictions = vertex_labels#[vertex_labels != 5]
+            # [neck, head, shaft, other, background, unpredicted]
+            colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
+                      [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]]
+        else:
+            predicted_vertices = self.mesh[1].reshape(-1, 3)[vertex_labels != 5]
+            predictions = vertex_labels[vertex_labels != 5]
+            # [neck, head, shaft, other, background]
+            colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
+                      [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1]]
+        colors = np.array(colors)
+        print("Starting colorcoding of vertices with k: ", k)
+        maj_vote = colorcode_vertices(self.mesh[1].reshape((-1, 3)), predicted_vertices,
+                                 predictions, colors=colors, k=k, return_color=False)
+        print("Colorcoding finished.")
+        self.attr_dict["semseg_"+semseg_key+"_k"+str(k)] = maj_vote
+        col = colors[maj_vote]
+        if dest_path is not None:
+            write_mesh2kzip(dest_path, self.mesh[0], self.mesh[1], self.mesh[2], col,
+                            ply_fname=semseg_key)
+            return
+        return self.mesh[0], self.mesh[1], self.mesh[2], col
+
+    def get_spine_compartments(self, k, min_cc_size=20):
+        vertex_labels = self.attr_dict["semseg_spiness_k" + str(k)]
+        vertices = self.mesh[1].reshape((-1, 3))
+        g = create_graph_from_coords(vertices, max_dist=120)
+        for e in list(g.edges()):
+            l0 = vertex_labels[e[0]]
+            l1 = vertex_labels[e[1]]
+            if l0 != l1:
+                g.remove_edge(e[0], e[1])
+        all_ccs = list(sorted(nx.connected_components(g), key=len,
+                                reverse=True))
+        sizes = np.array([len(c) for c in all_ccs])
+        thresh_ix = np.argmax(sizes < min_cc_size)
+        all_ccs = all_ccs[:thresh_ix]
+        cc_labels = []
+        cc_coords = []
+        for c in all_ccs:
+            curr_v_ixs = list(c)
+            curr_v_l = vertex_labels[curr_v_ixs]
+            curr_v_c = vertices[curr_v_ixs]
+            assert len(np.unique(curr_v_l)) == 1, "Connected component contains multiple labels."
+            cc_labels.append(curr_v_l[0])
+            cc_coords.append(np.mean(curr_v_c, axis=0))
+        cc_labels = np.array(cc_labels)
+        cc_coords = np.array(cc_coords)
+        neck_ixs = np.nonzero(cc_labels == 0)
+        head_ixs = np.nonzero(cc_labels == 1)
+        # TODO: DO IT
 
 
     def sample_locations(self, force=False, cache=True, verbose=False):
@@ -1279,7 +1358,7 @@ class SuperSegmentationObject(object):
             self.save_attributes(["sample_locations"], [locs])
         if verbose:
             dur = time.time() - start
-            print("Sampling locations from %d SVs took %0.2fs. %0.4fs/SV (in" \
+            print("Sampling locations from %d SVs took %0.2fs. %0.4fs/SV (in"
                   "cl. read/write)" % (len(self.svs), dur, dur / len(self.svs)))
         return locs
 
@@ -1414,7 +1493,7 @@ class SuperSegmentationObject(object):
         Parameters
         ----------
         pred_coords : np.array
-            N x 3
+            N x 3; scaled to nm
         preds : np.array
             N x 1
         ply_fname : str
@@ -1427,6 +1506,8 @@ class SuperSegmentationObject(object):
         -------
         None or [np.array, np.array, np.array]
         """
+        if not ply_fname.endswith(".ply"):
+            ply_fname += ".ply"
         mesh = self.mesh
         col = colorcode_vertices(mesh[1].reshape((-1, 3)), pred_coords,
                                  preds, colors=colors, k=k)
@@ -1597,9 +1678,9 @@ class SuperSegmentationObject(object):
 
     def skel_features(self, feature_context_nm, overwrite=False):
         features = self._load_skelfeatures(feature_context_nm)
-        if not "assoc_sj" in self.skeleton:
-            ssh.associate_objs_with_skel_nodes(self)
         if not features or overwrite:
+            if not "assoc_sj" in self.skeleton:
+                ssh.associate_objs_with_skel_nodes(self)
             features = ssh.extract_skel_features(self, feature_context_nm=
             feature_context_nm)
             self._save_skelfeatures(feature_context_nm, features)
@@ -1825,7 +1906,7 @@ class SuperSegmentationObject(object):
             self.save_skeleton_to_kzip(dest_path=dest_path)
         except Exception as e:
             if "null graph" in str(e) and len(self.sv_ids) == 2:
-                print("Null graph error with 2 nodes, falling back to " \
+                print("Null graph error with 2 nodes, falling back to "
                       "original classification and one edge.")
                 locs = np.concatenate(self.sample_locations())
                 self.skeleton = {}

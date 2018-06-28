@@ -73,9 +73,9 @@ class MeshObject(object):
     @property
     def colors(self):
         if self._ext_color is None:
-            self._colors = np.ones(len(self.vertices) / 3 * 4) * 0.5
+            self._colors = np.ones(len(self.vertices) // 3 * 4) * 0.5
         elif np.isscalar(self._ext_color):
-            self._colors = np.array(len(self.vertices) / 3 * [self._ext_color]).flatten()
+            self._colors = np.array(len(self.vertices) // 3 * [self._ext_color]).flatten()
         else:
             if np.ndim(self._ext_color) >= 2:
                 self._ext_color = self._ext_color.squeeze()
@@ -167,7 +167,7 @@ class MeshObject(object):
         self.center, self.max_dist = bounding_box
         self.center = self.center.astype(np.float)
         self.max_dist = self.max_dist.astype(np.float)
-        vert_resh = np.array(self.vertices).reshape(len(self.vertices) / 3, 3)
+        vert_resh = np.array(self.vertices).reshape(len(self.vertices) // 3, 3)
         vert_resh -= self.center
         vert_resh /= self.max_dist
         self.vertices = vert_resh.reshape(len(self.vertices))
@@ -309,7 +309,7 @@ def normalize_vertices(vertices):
     array
         transformed vertices
     """
-    vert_resh = vertices.reshape(len(vertices) / 3, 3)
+    vert_resh = vertices.reshape(len(vertices) // 3, 3)
     vert_resh = apply_pca(vert_resh)
     vert_resh -= np.median(vert_resh, axis=0)
     max_val = np.abs(vert_resh).max()
@@ -477,11 +477,11 @@ def unit_normal(vertices, indices):
         Unit face normals per vertex
     """
     vertices = np.array(vertices, dtype=np.float)
-    nbvert = len(vertices) / 3
+    nbvert = len(vertices) // 3
     # get coordinate list
     vert_lst = vertices.reshape(nbvert, 3)[indices]
     # get traingles from coordinates
-    triangles = vert_lst.reshape(len(vert_lst) / 3, 3, 3)
+    triangles = vert_lst.reshape(len(vert_lst) // 3, 3, 3)
     # calculate normals of triangles
     v = triangles[:, 1] - triangles[:, 0]
     w = triangles[:, 2] - triangles[:, 0]

@@ -274,9 +274,9 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     nbrs.fit(pca.transform(train_d), train_l.ravel())
     joblib.dump(nbrs, fold + "/knn_embedding_%s.sav" % prefix)
     pred = nbrs.predict_proba(pca.transform(valid_d))
-    print "2D latent space results for %s:" % prefix
-    print classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names)
+    print("2D latent space results for %s:" % prefix)
+    print(classification_report(valid_l, np.argmax(pred, axis=1),
+                                target_names=target_names))
     plt.figure()
     colors = []
     for i in range(len(target_names)):
@@ -302,9 +302,9 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     rfc.fit(train_d, train_l.ravel())
     pred = rfc.predict_proba(valid_d)
 
-    print "Complete latent space results for %s using RFC:" % prefix
-    print classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names)
+    print("Complete latent space results for %s using RFC:" % prefix)
+    print(classification_report(valid_l, np.argmax(pred, axis=1),
+                                target_names=target_names))
 
     plt.figure()
     text_file = open(fold + '/%s_performance_summary_rfc.txt' % prefix, "w")
@@ -319,9 +319,9 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     nbrs.fit(train_d, train_l.ravel())
     pred = nbrs.predict_proba(valid_d)
 
-    print "Complete latent space results for %s using kNN:" % prefix
-    print classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names)
+    print("Complete latent space results for %s using kNN:" % prefix)
+    print(classification_report(valid_l, np.argmax(pred, axis=1),
+                                target_names=target_names))
 
     plt.figure()
     text_file = open(fold + '/%s_performance_summary.txt' % prefix, "w")
@@ -379,7 +379,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
     pca: PCA
         prefitted PCA object to use to prject data of ds_d
     """
-    print "Starting pca visualisation."
+    print("Starting pca visualisation.")
     # pca vis
     paper_rc = {'lines.linewidth': 1, 'lines.markersize': 1}
     sns.set_context(rc=paper_rc)
@@ -399,8 +399,6 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
     if target_names is None:
         target_names = ["%d" % i for i in nb_labels]
     for i in nb_labels:
-        # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
-        # print "KDE input shape:", res[ds_l == i].shape
         cur_pal = sns.light_palette(colors[i], as_cmap=True)
         ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 1])][: ,0], shade=False, cmap=cur_pal,
                          alpha=0.6, shade_lowest=False, label="%d" % i
@@ -425,8 +423,6 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         if target_names is None:
             target_names = ["%d" % i for i in nb_labels]
         for i in nb_labels:
-            # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
-            # print "KDE input shape:", res[ds_l == i].shape
             cur_pal = sns.light_palette(colors[i], as_cmap=True)
             ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 2])][: ,0], shade=False, cmap=cur_pal,
                              alpha=0.6, shade_lowest=False, label="%d" % i
@@ -451,8 +447,6 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         if target_names is None:
             target_names = ["%d" % i for i in nb_labels]
         for i in nb_labels:
-            # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
-            # print "KDE input shape:", res[ds_l == i].shape
             cur_pal = sns.light_palette(colors[i], as_cmap=True)
             ax = sns.kdeplot(res[ds_l == i][:, np.ix_([1, 2])][: ,0], shade=False, cmap=cur_pal,
                              alpha=0.6, shade_lowest=False, label="%d" % i
@@ -486,7 +480,7 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
         prefitted PCA object to use to prject data of ds_d
     """
     # tsne vis
-    print "Starting tSNE visualisation."
+    print("Starting tSNE visualisation.")
     paper_rc = {'lines.linewidth': 1, 'lines.markersize': 1}
     sns.set_context(rc=paper_rc)
     if ds_l.ndim == 2:
@@ -538,8 +532,6 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
         if target_names is None:
             target_names = ["%d" % i for i in nb_labels]
         for i in nb_labels:
-            # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
-            # print "KDE input shape:", res[ds_l == i].shape
             cur_pal = sns.light_palette(colors[i], as_cmap=True)
             ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 2])][: ,0], shade=False, cmap=cur_pal,
                              alpha=0.6, shade_lowest=False, label="%d" % i
@@ -565,8 +557,6 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
         if target_names is None:
             target_names = ["%d" % i for i in nb_labels]
         for i in nb_labels:
-            # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
-            # print "KDE input shape:", res[ds_l == i].shape
             cur_pal = sns.light_palette(colors[i], as_cmap=True)
             ax = sns.kdeplot(res[ds_l == i][:, np.ix_([1, 2])][: ,0], shade=False, cmap=cur_pal,
                              alpha=0.6, shade_lowest=False, label="%d" % i

@@ -684,7 +684,7 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
 
 def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
-    node_degrees = np.array(ssv.weighted_graph().degree().values(),
+    node_degrees = np.array(dict(ssv.weighted_graph().degree()).values(),
                             dtype=np.int)
 
     sizes = {}

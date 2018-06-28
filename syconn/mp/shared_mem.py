@@ -76,7 +76,7 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
         pool.close()
         pool.join()
     else:
-        result = map(func, params)
+        result = list(map(func, params))
 
     if verbose:
         print("\nTime to compute:", time.time() - start)
@@ -119,7 +119,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
         Process = NoDaemonProcess
 
     if nb_cpus is None:
-        nb_cpus = max(cpu_count(), 1)
+        nb_cpus = min(cpu_count(), len(params))
 
     if debug:
         nb_cpus = 1
@@ -209,11 +209,9 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
         pool.close()
         pool.join()
     else:
-        result = map(multi_helper_obj, params)
-
+        result = list(map(multi_helper_obj, params))
     if verbose:
         print("\nTime to compute:", time.time() - start)
-
     return result
 
 
