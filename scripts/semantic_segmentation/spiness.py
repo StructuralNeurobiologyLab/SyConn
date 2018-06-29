@@ -261,7 +261,7 @@ def gt_generation_helper(args):
     for ix in np.unique(index_views):
         rand_col = np.random.randint(0, 256, 3)
         colored_indices[index_views == ix] = rand_col
-    for ii in range(100):
+    for ii in range(len(raw_views)):
         vc_wire.write_single_plot("{}/{}_raw_wire.tif".format(h5py_path, ii), ii)
         vc.write_single_plot("{}/{}_raw.tif".format(h5py_path, ii), ii)
         imsave(h5py_path + "{}_label.tif".format(ii), label_views[:, 0, 0][ii])
@@ -277,5 +277,5 @@ if __name__ == "__main__":
     file_names = ["/23044610.035.k.zip", "/4741011.073.k.zip",
                   "/18279774.078.k.zip", "/26331138.043.k.zip",
                   "/27965455.032.k.zip"]
-    file_paths = [label_file_folder + "/" + fname for fname in file_names]
+    file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
     GT_generation(file_paths)

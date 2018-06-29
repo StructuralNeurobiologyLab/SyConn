@@ -910,9 +910,9 @@ class SuperSegmentationObject(object):
         for obj_type in obj_types:
             if obj_type in mappings:
                 self.attr_dict["mapping_%s_ids" % obj_type] = \
-                    mappings[obj_type].keys()
+                    list(mappings[obj_type].keys())
                 self.attr_dict["mapping_%s_ratios" % obj_type] = \
-                    mappings[obj_type].values()
+                    list(mappings[obj_type].values())
 
         if save:
             self.save_attr_dict()
@@ -1265,17 +1265,17 @@ class SuperSegmentationObject(object):
                                               + list(labeled_views.shape[1:]))
         # swap axes to get source shape
         labeled_views = labeled_views.swapaxes(2, 1)
+        assert labeled_views.shape[2] == nb_views, "Predictions have wrong shape."
         self.save_views(labeled_views, semseg_key + "{}".format(nb_views))
 
     def _semseg2mesh(self, semseg_key, nb_views=2, dest_path=None,
                      k=1):
         i_views = self.load_views("index{}".format(nb_views)).flatten()
-        spiness_views = self.load_views(semseg_key +
-                                        "{}".format(nb_views)).flatten()
+        spiness_views = self.load_views(semseg_key + "{}".format(nb_views)).flatten()
         ind = self.mesh[0]
         dc = defaultdict(list)
         background_id = np.max(i_views)
-        for ii in range(len(spiness_views)):
+        for ii in range(len(i_views)):
             triangle_ix = i_views[ii]
             if triangle_ix == background_id:
                 continue
@@ -1340,6 +1340,7 @@ class SuperSegmentationObject(object):
         cc_coords = np.array(cc_coords)
         neck_ixs = np.nonzero(cc_labels == 0)
         head_ixs = np.nonzero(cc_labels == 1)
+        raise()
         np.random.seed(0)
         np.random.shuffle(neck_ixs)
         np.random.shuffle(head_ixs)
@@ -1436,8 +1437,6 @@ class SuperSegmentationObject(object):
                 color = None
             else:
                 color = ext_color
-        print("Collected mesh of SSV {} with {} SVs.".format(self.id,
-                                                             len(self.sv_ids)))
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
                         ply_fname=obj_type + ".ply", nb_cpus=self.nb_cpus)
 

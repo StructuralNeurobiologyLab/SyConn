@@ -23,8 +23,7 @@ import h5py
 import os
 import shutil
 import warnings
-__all__ = ["arrtolz4string", "lz4stringtoarr", "load_lz4_meshdict_items",
-           "load_lz4_compressed", "add_lz4_meshdict_items", "init_lz4_meshdict",
+__all__ = ["arrtolz4string", "lz4stringtoarr", "load_lz4_compressed",
            "save_lz4_compressed", "load_compressed", "load_from_h5py",
            "save_to_h5py"]
 

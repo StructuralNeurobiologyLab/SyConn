@@ -625,7 +625,12 @@ def make_ply_string(indices, vertices, normals, rgba_color):
         rgba_color = [rgba_color for i in range(len(vertices))]
     else:
         assert len(rgba_color) == len(vertices) and len(rgba_color[0]) == 4
-    if rgba_color.dtype.kind not in ("u", "i"):
+    if type(rgba_color) is list:
+        print("WARNING: Color input is list."
+              " It will now be converted automatically, "
+              "data will be unusable if not normalized between 0 and 255.")
+        rgba_color = np.array(rgba_color, dtype=np.uint8)
+    elif rgba_color.dtype.kind not in ("u", "i"):
         print("WARNING: Color array is not of type integer or unsigned integer."
               " It will now be converted automatically, "
               "data will be unusable if not normalized between 0 and 255.")

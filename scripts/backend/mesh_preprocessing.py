@@ -31,7 +31,7 @@ def mesh_chunk(args):
     ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
     obj_ixs = ad.keys()
     if len(obj_ixs) == 0:
-        print "EMPTY ATTRIBUTE DICT", attr_dir
+        print("EMPTY ATTRIBUTE DICT", attr_dir)
         return
     voxel_dc = VoxelDict(attr_dir + "/voxel.pkl", disable_locking=True)
     md = MeshDict(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)
@@ -59,13 +59,12 @@ def mesh_chunk(args):
         vertices *= scaling
         md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
     md.save2pkl()
-    print attr_dir
 
 
 def mesh_proc_chunked(obj_type, working_dir):
     sd = SegmentationDataset(obj_type, working_dir=working_dir)
     multi_params = sd.so_dir_paths
-    print "Processing %d mesh dicts of %s." % (len(multi_params), obj_type)
+    print("Processing %d mesh dicts of %s." % (len(multi_params), obj_type))
     start_multiprocess_imap(mesh_chunk, multi_params, nb_cpus=20, debug=False)
 
 

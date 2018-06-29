@@ -222,7 +222,7 @@ class SuperSegmentationDataset(object):
 
     @property
     def id_changer(self):
-        # TODO: Understand reason for 'id_changer' data type and
+        # TODO: Understand reason for 'id_changer' and
         # replace it by 'mapping_dict_reversed'
         if len(self._id_changer) == 0:
             self.load_id_changer()
