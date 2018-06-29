@@ -1184,7 +1184,6 @@ def copy_ssvs2new_SSD_simple(ssvs, version, n_jobs=1):
                                           working_dir=wd, sv_ids=old_ssv.sv_ids,
                                           scaling=old_ssv.scaling)
         old_ssv.copy2dir(dest_dir=new_ssv.ssv_dir)
-    raise()
     print("Saving dataset deep.")
     new_ssd.save_dataset_deep(new_mapping=False, nb_cpus=n_jobs)
 

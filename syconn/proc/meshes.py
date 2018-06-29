@@ -625,6 +625,11 @@ def make_ply_string(indices, vertices, normals, rgba_color):
         rgba_color = [rgba_color for i in range(len(vertices))]
     else:
         assert len(rgba_color) == len(vertices) and len(rgba_color[0]) == 4
+    if rgba_color.dtype.kind not in ("u", "i"):
+        print("WARNING: Color array is not of type integer or unsigned integer."
+              " It will now be converted automatically, "
+              "data will be unusable if not normalized between 0 and 255.")
+        rgba_color = np.array(rgba_color, dtype=np.uint8)
     ply_str = 'ply\nformat ascii 1.0\nelement vertex {0}\nproperty float x\nproperty float y\nproperty float z\n'\
     'property uint8 red\nproperty uint8 green\nproperty uint8 blue\nproperty uint8 alpha\n'\
     'element face {1}\nproperty list uint8 uint vertex_indices\nend_header\n'.format(len(vertices), len(indices))
@@ -884,6 +889,7 @@ def id2rgb_array(id_arr):
     return rgb_arr.squeeze()
 
 
+@jit
 def id2rgb_array_contiguous(id_arr):
     """
     Transforms ID values into the array of RGBs labels based on the assumption
@@ -904,7 +910,7 @@ def id2rgb_array_contiguous(id_arr):
     if id_arr.squeeze().ndim > 1:
         raise ValueError("Unsupported index array shape.")
     nb_ids = len(id_arr.squeeze())
-    if nb_ids > 256**3:
+    if nb_ids >= 256**3:
         raise ValueError("Overflow in vertex ID array.")
     x1 = np.arange(256).astype(np.uint8)
     x2 = np.arange(256).astype(np.uint8)
@@ -936,6 +942,7 @@ def rgb2id(rgb):
     return np.array([vertex_id], dtype=np.uint32)
 
 
+@jit
 def rgb2id_array(rgb_arr):
     """
     Transforms RGB values into IDs based on 'rgb2id'.
@@ -955,13 +962,14 @@ def rgb2id_array(rgb_arr):
     else:
         raise ValueError("Unsupported shape")
     rgb_arr_flat = rgb_arr.flatten().reshape((-1, 3))
-    mask_arr = (rgb_arr_flat[:, 0] == 0) & (rgb_arr_flat[:, 1] == 0) & \
-               (rgb_arr_flat[:, 2] == 0)
+    mask_arr = (rgb_arr_flat[:, 0] == 255) & (rgb_arr_flat[:, 1] == 255) & \
+               (rgb_arr_flat[:, 2] == 255)
     id_arr = np.zeros((len(rgb_arr_flat)), dtype=np.uint32)
     for ii in range(len(rgb_arr_flat)):
         if mask_arr[ii]:
             continue
-        id_arr[ii] = rgb2id(rgb_arr_flat[ii])
+        rgb = rgb_arr_flat[ii]
+        id_arr[ii] = rgb[0] + rgb[1]*256 + rgb[2]*(256**2)
     background_ix = np.max(id_arr) + 1  # convention: The highest index value in index view will correspond to the background
     id_arr[mask_arr] = background_ix
     return id_arr.reshape(rgb_arr.shape[:-1])

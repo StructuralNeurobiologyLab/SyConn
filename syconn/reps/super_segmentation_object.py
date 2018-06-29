@@ -20,7 +20,7 @@ from collections import Counter
 
 from scipy.misc import imsave
 from knossos_utils import skeleton, knossosdataset
-
+from collections import defaultdict
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
 
@@ -1203,14 +1203,17 @@ class SuperSegmentationObject(object):
                                verbose=False, overwrite=overwrite,
                                cellobjects_only=cellobjects_only, woglia=woglia)
 
-    def _render_indexviews(self, nb_views=2):
-        try:
-            raise KeyError
-            views = self.load_views("index{}".format(nb_views))
-            return
-        except KeyError:
-            pass
-        locs = np.concatenate(self.sample_locations())
+    def _render_indexviews(self, nb_views=2, save=True, force_recompute=False):
+        if not force_recompute:
+            try:
+                views = self.load_views("index{}".format(nb_views))
+                if not save:
+                    return views
+                else:
+                    return
+            except KeyError:
+                pass
+        locs = np.concatenate(self.sample_locations(cache=False))
         start = time.time()
         index_views = render_sso_coords_index_views(self, locs, nb_views=nb_views,
                                                     verbose=True)
@@ -1218,21 +1221,28 @@ class SuperSegmentationObject(object):
         print("Rendering views took {:.2f} s. {:.2f} views/s".format(
             end_ix_views - start, len(index_views) / (end_ix_views - start)))
         # max ID will be background
-        index_views = rgb2id_array(index_views)
+        index_views = rgb2id_array(index_views)[:, None]
         print("Mapping rgb values to vertex indices took {:.2f}s.".format(
             time.time() - end_ix_views))
-        self.save_views(index_views[:, None], "index{}".format(nb_views))
+        if not save:
+            return index_views
+        self.save_views(index_views, "index{}".format(nb_views))
 
-    def _render_rawviews(self, nb_views=2):
+    def _render_rawviews(self, nb_views=2, save=True):
         try:
             views = self.load_views("raw{}".format(nb_views))
+            if not save:
+                return views
             return
         except KeyError:
             pass
         views = render_sso_coords(self, np.concatenate(self.sample_locations()),
                                   add_cellobjects=True, verbose=False,
                                   nb_views=nb_views)
-        self.save_views(views, "raw{}".format(nb_views))
+        if save:
+            self.save_views(views, "raw{}".format(nb_views))
+        else:
+            return views
 
     def _predict_semseg(self, m, semseg_key, nb_views=2):
         # N, 4, 2, 128, 256
@@ -1259,22 +1269,27 @@ class SuperSegmentationObject(object):
 
     def _semseg2mesh(self, semseg_key, nb_views=2, dest_path=None,
                      k=1):
-        i_views = self.load_views("index".format(nb_views)).flatten()
+        i_views = self.load_views("index{}".format(nb_views)).flatten()
         spiness_views = self.load_views(semseg_key +
                                         "{}".format(nb_views)).flatten()
-        vertex_labels = np.ones((len(self.mesh[1]) // 3), dtype=np.uint8) * 5
-        dc = {}
+        ind = self.mesh[0]
+        dc = defaultdict(list)
+        background_id = np.max(i_views)
         for ii in range(len(spiness_views)):
-            l = spiness_views[ii]
-            try:
-                dc[i_views[ii]].append(l)
-            except KeyError:
-                dc[i_views[ii]] = [l]
-        del dc[np.max(i_views)]  # remove max ID which corresponds to background
+            triangle_ix = i_views[ii]
+            if triangle_ix == background_id:
+                continue
+            l = spiness_views[ii] # triangle label
+            # get vertex ixs from triangle ixs via:
+            vertex_ix = triangle_ix * 3
+            dc[ind[vertex_ix]].append(l)
+            dc[ind[vertex_ix+1]].append(l)
+            dc[ind[vertex_ix+2]].append(l)
+        vertex_labels = np.ones((len(self.mesh[1]) // 3), dtype=np.uint8) * 5
         for ix, v in dc.items():
             l, cnts = np.unique(v, return_counts=True)
             vertex_labels[ix] = l[np.argmax(cnts)]
-        if k == 1:
+        if k == 1:  # map actual prediction situation / coverage
             predicted_vertices = self.mesh[1].reshape(-1, 3)#[vertex_labels != 5]
             predictions = vertex_labels#[vertex_labels != 5]
             # [neck, head, shaft, other, background, unpredicted]
@@ -1286,23 +1301,22 @@ class SuperSegmentationObject(object):
             # [neck, head, shaft, other, background]
             colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
                       [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1]]
-        colors = np.array(colors)
-        print("Starting colorcoding of vertices with k: ", k)
+        colors = np.array(colors) * 255
         maj_vote = colorcode_vertices(self.mesh[1].reshape((-1, 3)), predicted_vertices,
                                  predictions, colors=colors, k=k, return_color=False)
-        print("Colorcoding finished.")
-        self.attr_dict["semseg_"+semseg_key+"_k"+str(k)] = maj_vote
-        col = colors[maj_vote]
+        self.attr_dict["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)] = maj_vote
+        # self.save_attributes(["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)], [maj_vote])
+        col = colors[maj_vote].astype(np.uint8)
         if dest_path is not None:
             write_mesh2kzip(dest_path, self.mesh[0], self.mesh[1], self.mesh[2], col,
-                            ply_fname=semseg_key)
+                            ply_fname=semseg_key+".ply")
             return
         return self.mesh[0], self.mesh[1], self.mesh[2], col
 
-    def get_spine_compartments(self, k, min_cc_size=20):
-        vertex_labels = self.attr_dict["semseg_spiness_k" + str(k)]
+    def get_spine_compartments(self, k, nb_views, min_cc_size=20):
+        vertex_labels = self.attr_dict["semseg_spiness_k"+str(k)+"_"+str(nb_views)]
         vertices = self.mesh[1].reshape((-1, 3))
-        g = create_graph_from_coords(vertices, max_dist=120)
+        g = create_graph_from_coords(vertices, max_dist=110, force_single_cc=False)
         for e in list(g.edges()):
             l0 = vertex_labels[e[0]]
             l1 = vertex_labels[e[1]]
@@ -1326,8 +1340,11 @@ class SuperSegmentationObject(object):
         cc_coords = np.array(cc_coords)
         neck_ixs = np.nonzero(cc_labels == 0)
         head_ixs = np.nonzero(cc_labels == 1)
-        # TODO: DO IT
-
+        np.random.seed(0)
+        np.random.shuffle(neck_ixs)
+        np.random.shuffle(head_ixs)
+        np.save("/wholebrain/scratch/pschuber/cmn_paper/data/semantic_segmentation/eval/neck_coords_ssv{}_k{}_{}views.npy".format(self.id, k, nb_views), cc_coords[neck_ixs])
+        np.save("/wholebrain/scratch/pschuber/cmn_paper/data/semantic_segmentation/eval/head_coords_ssv{}_k{}_{}views.npy".format(self.id, k, nb_views), cc_coords[head_ixs])
 
     def sample_locations(self, force=False, cache=True, verbose=False):
         """
@@ -2056,3 +2073,10 @@ def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
     return views
 
 
+def merge_axis02(arr):
+    arr = arr.swapaxes(1, 2)  # swap channel and view axis
+    # N, 2, 4, 128, 256
+    orig_shape = arr.shape
+    # reshape to predict single projections
+    arr = arr.reshape([-1] + list(orig_shape[2:]))
+    return arr

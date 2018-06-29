@@ -484,13 +484,11 @@ def create_graph_from_coords(coords, max_dist=6000, force_single_cc=True,
             print("Generated skeleton is not a single connected component. "
                   "Increasing maximum node distance to {}".format(max_dist))
             pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
-    print("Queried {} edges.".format(len(pairs)))
     g = nx.Graph()
     g.add_nodes_from(np.arange(len(coords)))
     weights = np.linalg.norm(coords[pairs[:, 0]]-coords[pairs[:, 1]], axis=1)#np.array([np.linalg.norm(coords[p[0]]-coords[p[1]]) for p in pairs])
     # this is slow, but there seems no way to add weights from an array with the same ordering as edges, so one loop is needed..
     g.add_weighted_edges_from([[pairs[i][0], pairs[i][1], weights[i]] for i in range(len(pairs))])
-    print("Done building Graph.")
     if mst:
         g = nx.minimum_spanning_tree(g)
     return g

@@ -61,15 +61,15 @@ def init_object(indices, vertices, normals, colors, ws):
     -------
 
     """
-    global ind_cnt
-    vertices = vertices.astype(np.float32)
+    global ind_cnt, vertex_cnt
     indices = indices.astype(np.uint32)
+    vertices = vertices.astype(np.float32).reshape(-1, 3)  # create individual vertices for each triangle
+    colors = colors.reshape(-1, 4)  # adapt color array
     ind_cnt = len(indices)
-    normals = normals.astype(np.float32)
-    data = np.concatenate((vertices.reshape(len(vertices) // 3, 3),
-                           normals.reshape(len(vertices) // 3, 3),
-                           colors.reshape((len(vertices) // 3, 4))),
-                           axis=1).reshape(len(vertices)*2 + len(colors))
+    vertex_cnt = len(vertices)
+    normals = normals.astype(np.float32).reshape(-1, 3)
+    data = np.concatenate((vertices, normals, colors),
+                          axis=1).reshape(-1)
     # enabling arrays
     glEnableClientState(GL_VERTEX_ARRAY)
     glEnableClientState(GL_NORMAL_ARRAY)
@@ -111,6 +111,7 @@ def draw_object(triangulation=True):
     glColorPointer(4, GL_FLOAT, record_len, color_offset)
     if triangulation is True:
         glDrawElements(GL_TRIANGLES, ind_cnt, GL_UNSIGNED_INT, None)
+        # glDrawArrays(GL_TRIANGLES, 0, vertex_cnt)
     elif triangulation == "points":
         glDrawElements(GL_POINTS, ind_cnt, GL_UNSIGNED_INT, None)
     else:
@@ -447,7 +448,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     else:
         view_sh = (nb_views, ws[1], ws[0], 3)
     res = np.ones([len(coords)] + list(view_sh), dtype=np.uint8) * 255
-    init_opengl(ws, depth_map=depth_map, clear_value=0.0,
+    init_opengl(ws, depth_map=depth_map, clear_value=1.0,
                 smooth_shade=smooth_shade, wire_frame=wire_frame)
     init_object(indices, vertices, normals, colors, ws)
     if verbose:
@@ -788,12 +789,15 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
               "No mesh for SSO %d found.\n"
               "----------------------------------------------\n")
         return np.ones((len(coords), 2, 128, 256, 3), dtype=np.uint8)
-    color_array = id2rgb_array_contiguous(np.arange(len(vert) // 3))
+    color_array = id2rgb_array_contiguous(np.arange(len(ind) // 3))
     color_array = np.concatenate([color_array, np.ones((len(color_array), 1), dtype=np.uint8)*255],
                                  axis=-1).astype(np.float32) / 255. # in init it seems color values have to be normalized, check problems with uniqueness if
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
     # backwards compatibility with other color-dependent rendering methods
     # Create mesh object
+    vert = vert.reshape(-1, 3)[ind].flatten()  # create redundant vertices to enable per-face colors
+    ind = np.arange(len(vert) // 3)
+    color_array = np.repeat(color_array, 3, axis=0)
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
     index_views = _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
                                       depth_map=False, rot_matrices=rot_matrices,

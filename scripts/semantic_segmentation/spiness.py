@@ -18,17 +18,13 @@ from syconn.mp.shared_mem import start_multiprocess_imap
 # from scripts.rendering.inversed_mapping import id2rgb_array
 # import matplotlib.pylab as plt
 # from imageio import imwrite
+from numba import jit
 import re
 import tqdm
 import os
 import time
 from scipy.misc import imsave
 from sklearn.model_selection import train_test_split
-
-# define palette, but also take care of inverse mapping 'remap_rgb_labelviews'
-# due to speed issues labels have to be given axis wise:
-#  e.g. (1, 0, 0), (2, 0, 0), ..., (255, 0, 0) and (0, 1, 0), ... (0, 255, 0)
-# this defines rgb values for labels 0, 1 and 2
 
 
 def generate_palette(nr_classes, return_rgba=True):
@@ -46,13 +42,14 @@ def generate_palette(nr_classes, return_rgba=True):
     np.array
         Unique color array for N input classes
     """
-    classes_ids = np.arange(nr_classes + 1) #reserve additional class id for background
-    classes_rgb = id2rgb_array_contiguous(classes_ids)[1:]  # convention: background is (0,0,0)
+    classes_ids = np.arange(nr_classes) #reserve additional class id for background
+    classes_rgb = id2rgb_array_contiguous(classes_ids)  # convention: do not use 1, 1, 1; will be background value
     if return_rgba:
         classes_rgb = np.concatenate([classes_rgb, np.ones(classes_rgb.shape[:-1])[..., None] * 255], axis=1)
     return classes_rgb.astype(np.uint8)
 
 
+@jit
 def remap_rgb_labelviews(rgb_view, palette):
     """
 
@@ -66,14 +63,18 @@ def remap_rgb_labelviews(rgb_view, palette):
 
     """
     label_view_flat = rgb_view.flatten().reshape((-1, 3))
-    background_label = len(palette)
-    # convention: Use highest ID as background, if we have 3 foreground labels (e.g. 0, 1, 2) then len(palette) will be three which is already one bigger then the highest foreground label
-    remapped_label_views = np.ones((len(label_view_flat), ), dtype=np.uint16) * background_label  # use (0,0,0) as background color
-    for i in range(len(palette)):
-        mask = (label_view_flat[:, 0] == palette[i, 0]) &\
-               (label_view_flat[:, 1] == palette[i, 1]) &\
-               (label_view_flat[:, 2] == palette[i, 2])
-        remapped_label_views[mask] = i
+    background_label = len(palette) + 1
+    # convention: Use highest ID as background
+    remapped_label_views = np.ones((len(label_view_flat), ), dtype=np.uint16) * background_label
+    for kk in range(len(label_view_flat)):
+        if np.all(label_view_flat[kk] == 255):  # background
+            continue
+        for i in range(len(palette)):
+            if (label_view_flat[kk, 0] == palette[i, 0]) and \
+               (label_view_flat[kk, 1] == palette[i, 1]) and \
+               (label_view_flat[kk, 2] == palette[i, 2]):
+                remapped_label_views[kk] = i
+                break
     return remapped_label_views.reshape(rgb_view.shape[:-1])
 
 
@@ -142,19 +143,6 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40):
 
     vertex_labels = node_labels[ind]  # retrieving labels of vertices
 
-    # this can be misleading for the new 'other' class
-    # # if no skeleton nodes closer than 2um were found set their label
-    # # to 2 (shaft; basically this is our background class)
-    # vertex_labels[dist > 2000] = 2
-
-    # Old smoothing:
-    # smooth vertex labels
-    # tree = KDTree(vertices)
-    # _, ind = tree.query(vertices, k=50)
-    # # now extract k-closest labels for every vertex
-    # vertex_labels = vertex_labels[ind]
-    # # apply majority voting; remove auxiliary axis
-    # vertex_labels = np.apply_along_axis(majority_element_1d, 1, vertex_labels)[:, 0]
     vertex_labels = bfs_smoothing(vertices, vertex_labels, n_voting=n_voting)
 
     color_array = palette[vertex_labels].astype(np.float32)/255
@@ -166,8 +154,7 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40):
     # labeled skeleton node
     locs = np.concatenate(sso.sample_locations())
     dist, ind = tree.query(locs)
-    locs = locs[dist[:, 0] < 2000][::2][:60]
-    print("Rendering label views.")
+    locs = locs[dist[:, 0] < 2000][::3][:100]
 
     # # DEBUG PART START
     dest_folder = os.path.expanduser("~") + \
@@ -184,11 +171,7 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40):
     label_views, rot_mat = _render_mesh_coords(locs, mo, depth_map=False,
                                                return_rot_matrices=True,
                                                smooth_shade=False)
-    # sso._pred2mesh(node_coords, node_labels, dest_path="/wholebrain/u/shum/sso_%d_skeletonlabels.k.zip" %
-    #                                                    sso.id, ply_fname="0.ply")
-    print("Rendering index views.")
     index_views = render_sso_coords_index_views(sso, locs, rot_matrices=rot_mat)
-    print("Rendering raw views.")
     raw_views = render_sso_coords(sso, locs)
     raw_views_wire = render_sso_coords(sso, locs, wire_frame=True, ws=(2048, 1024))   # TODO: HACK
     return raw_views_wire, raw_views, remap_rgb_labelviews(label_views, palette)[:, None], rgb2id_array(index_views)[:, None]
@@ -211,8 +194,8 @@ def GT_generation(kzip_paths, dest_dir=None, gt_type="spgt", n_voting=40):
     if dest_dir is None:
         dest_dir = os.path.expanduser("~") + "/spine_gt_multiview/"
     params = [(p, gt_type, n_voting) for p in kzip_paths]
-    res = start_multiprocess_imap(gt_generation_helper, params, nb_cpus=20,
-                                  debug=True)
+    res = start_multiprocess_imap(gt_generation_helper, params, nb_cpus=5,
+                                  debug=False)
     #
     # # Create Dataset splits for training, validation and test
     # all_raw_views = []
@@ -268,9 +251,9 @@ def gt_generation_helper(args):
     h5py_path = os.path.expanduser("~") + "/spiness_skels/{}/view_imgs_{}/".format(sso_id, n_voting)
     if not os.path.isdir(h5py_path):
         os.makedirs(h5py_path)
-    save_to_h5py([raw_views[:, 0, 0], label_views[:, 0, 0],
-                  index_views[:, 0, 0]], h5py_path + "/views.h5",
-                 ["raw", "label", "index"])
+    # save_to_h5py([raw_views[:, 0, 0], label_views[:, 0, 0],
+    #               index_views[:, 0, 0]], h5py_path + "/views.h5",
+    #              ["raw", "label", "index"])
     vc = ViewContainer("", views=raw_views)
     vc_wire = ViewContainer("", views=raw_views_wire)
     # randomize color map of index views
@@ -278,7 +261,7 @@ def gt_generation_helper(args):
     for ix in np.unique(index_views):
         rand_col = np.random.randint(0, 256, 3)
         colored_indices[index_views == ix] = rand_col
-    for ii in range(60):
+    for ii in range(100):
         vc_wire.write_single_plot("{}/{}_raw_wire.tif".format(h5py_path, ii), ii)
         vc.write_single_plot("{}/{}_raw.tif".format(h5py_path, ii), ii)
         imsave(h5py_path + "{}_label.tif".format(ii), label_views[:, 0, 0][ii])
