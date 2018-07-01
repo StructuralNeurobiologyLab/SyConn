@@ -486,8 +486,12 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
 
         glMatrixMode(GL_MODELVIEW)
         for m in range(0, nb_views):
+            if nb_views == 2:
+                rot_angle = 360. / 4 * m  # views are orthogonal
+            else:
+                rot_angle = 360. / nb_views * m  # views are equi-angular
             glPushMatrix()
-            glRotate(360. / 4 * m, edge_lengths[0], 0, 0)
+            glRotate(rot_angle, edge_lengths[0], 0, 0)
             glMultMatrixf(rot_mat)
             glTranslate(-transformed_c[0], -transformed_c[1], -transformed_c[2])
             light_position = [1., 1., 2., 0.]
@@ -720,10 +724,10 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
               "No mesh for SSO %d found.\n"
               "----------------------------------------------\n")
         return
-    raw_views = np.ones((len(coords), 2, 128, 256), dtype=np.uint8) * 255
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
                                 "cellobjects only."
+        raw_views = np.ones((len(coords), nb_views, 128, 256), dtype=np.uint8) * 255
         edge_lengths = np.array([comp_window, comp_window / 2, comp_window / 2])
         mo = MeshObject("raw", mesh[0], mesh[1])
         mo._colors = None

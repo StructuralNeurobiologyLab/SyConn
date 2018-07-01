@@ -1228,14 +1228,15 @@ class SuperSegmentationObject(object):
             return index_views
         self.save_views(index_views, "index{}".format(nb_views))
 
-    def _render_rawviews(self, nb_views=2, save=True):
-        try:
-            views = self.load_views("raw{}".format(nb_views))
-            if not save:
-                return views
-            return
-        except KeyError:
-            pass
+    def _render_rawviews(self, nb_views=2, save=True, force_recompute=False):
+        if not force_recompute:
+            try:
+                views = self.load_views("raw{}".format(nb_views))
+                if not save:
+                    return views
+                return
+            except KeyError:
+                pass
         views = render_sso_coords(self, np.concatenate(self.sample_locations()),
                                   add_cellobjects=True, verbose=False,
                                   nb_views=nb_views)
@@ -1247,11 +1248,11 @@ class SuperSegmentationObject(object):
     def _predict_semseg(self, m, semseg_key, nb_views=2):
         # N, 4, 2, 128, 256
         try:
-            views = self.load_views("raw".format(nb_views))
+            views = self.load_views("raw{}".format(nb_views))
         except KeyError:
             self._render_rawviews(nb_views)
-            views = self.load_views("raw".format(nb_views))
-        assert len(views) == len(np.concatenate(self.sample_locations())), "Unequal number of views and redering locations."
+            views = self.load_views("raw{}".format(nb_views))
+        assert len(views) == len(np.concatenate(self.sample_locations(cache=False))), "Unequal number of views and redering locations."
         views = views.astype(np.float32) / 255.
         views = views.swapaxes(1, 2)  # swap channel and view axis
         # N, 2, 4, 128, 256
@@ -1268,8 +1269,7 @@ class SuperSegmentationObject(object):
         assert labeled_views.shape[2] == nb_views, "Predictions have wrong shape."
         self.save_views(labeled_views, semseg_key + "{}".format(nb_views))
 
-    def _semseg2mesh(self, semseg_key, nb_views=2, dest_path=None,
-                     k=1):
+    def _semseg2mesh(self, semseg_key, nb_views=2, dest_path=None, k=1):
         i_views = self.load_views("index{}".format(nb_views)).flatten()
         spiness_views = self.load_views(semseg_key + "{}".format(nb_views)).flatten()
         ind = self.mesh[0]
@@ -1317,7 +1317,8 @@ class SuperSegmentationObject(object):
         vertex_labels = self.attr_dict["semseg_spiness_k"+str(k)+"_"+str(nb_views)]
         vertices = self.mesh[1].reshape((-1, 3))
         g = create_graph_from_coords(vertices, max_dist=110, force_single_cc=False)
-        for e in list(g.edges()):
+        g_orig = g.copy()
+        for e in g_orig.edges():
             l0 = vertex_labels[e[0]]
             l1 = vertex_labels[e[1]]
             if l0 != l1:
@@ -1327,6 +1328,7 @@ class SuperSegmentationObject(object):
         sizes = np.array([len(c) for c in all_ccs])
         thresh_ix = np.argmax(sizes < min_cc_size)
         all_ccs = all_ccs[:thresh_ix]
+        sizes = sizes[:thresh_ix]
         cc_labels = []
         cc_coords = []
         for c in all_ccs:
@@ -1335,17 +1337,17 @@ class SuperSegmentationObject(object):
             curr_v_c = vertices[curr_v_ixs]
             assert len(np.unique(curr_v_l)) == 1, "Connected component contains multiple labels."
             cc_labels.append(curr_v_l[0])
-            cc_coords.append(np.mean(curr_v_c, axis=0))
+            cc_coords.append(np.median(curr_v_c, axis=0))
         cc_labels = np.array(cc_labels)
         cc_coords = np.array(cc_coords)
-        neck_ixs = np.nonzero(cc_labels == 0)
-        head_ixs = np.nonzero(cc_labels == 1)
-        raise()
         np.random.seed(0)
-        np.random.shuffle(neck_ixs)
-        np.random.shuffle(head_ixs)
-        np.save("/wholebrain/scratch/pschuber/cmn_paper/data/semantic_segmentation/eval/neck_coords_ssv{}_k{}_{}views.npy".format(self.id, k, nb_views), cc_coords[neck_ixs])
-        np.save("/wholebrain/scratch/pschuber/cmn_paper/data/semantic_segmentation/eval/head_coords_ssv{}_k{}_{}views.npy".format(self.id, k, nb_views), cc_coords[head_ixs])
+        neck_c = (cc_coords[cc_labels == 0] / self.scaling).astype(np.uint)
+        neck_s = sizes[cc_labels == 0]
+        head_c = (cc_coords[cc_labels == 1] / self.scaling).astype(np.uint)
+        head_s = sizes[cc_labels == 1]
+        np.save("/wholebrain/scratch/pschuber/cmn_paper/data/semantic_segmentation/eval/neck_coords_ssv{}_k{}_{}views.npy".format(self.id, k, nb_views), neck_c)
+        np.save("/wholebrain/scratch/pschuber/cmn_paper/data/semantic_segmentation/eval/head_coords_ssv{}_k{}_{}views.npy".format(self.id, k, nb_views), head_c)
+        return neck_c, neck_s, head_c, head_s
 
     def sample_locations(self, force=False, cache=True, verbose=False):
         """
@@ -1363,11 +1365,11 @@ class SuperSegmentationObject(object):
         """
         if not force and self._sample_locations:
             return self._sample_locations
-        if verbose:
-            start = time.time()
         if not force:
             if self.attr_exists("sample_locations"):
                 return self.attr_dict["sample_locations"]
+        if verbose:
+            start = time.time()
         params = [[sv, {"force": force}] for sv in self.svs]
         # list of arrays
         locs = sm.start_multiprocess_obj("sample_locations", params,
