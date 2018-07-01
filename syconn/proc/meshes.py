@@ -684,12 +684,10 @@ def make_ply_string_wocolor(indices, vertices, normals, nb_cpus=1):
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
     ply_str = 'ply\nformat ascii 1.0\nelement vertex {0}\nproperty float x\nproperty float y\nproperty float z\n'\
     'element face {1}\nproperty list uint8 uint vertex_indices\nend_header\n'.format(len(vertices), len(indices))
-    print("Generating ply vertices.")
     params = np.array_split(vertices, 100)
     res = start_multiprocess_imap(ply_vertex_generator, params, nb_cpus=nb_cpus)
     for el in res:
         ply_str += el
-    print("Generating ply indices.")
     params = np.array_split(indices, 100)
     res = start_multiprocess_imap(ply_index_generator, params, nb_cpus=nb_cpus)
     for el in res:
