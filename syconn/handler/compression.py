@@ -498,7 +498,7 @@ def arrtolz4string_list(arr):
         str_lst = [compress(arr.tobytes())]
     # catch Value error which is thrown in py3 lz4 version
     except (OverflowError, ValueError):
-        half_ix = len(arr) / 2
+        half_ix = len(arr) // 2
         str_lst = arrtolz4string_list(arr[:half_ix]) + \
                    arrtolz4string_list(arr[half_ix:])
     return str_lst
@@ -551,12 +551,12 @@ def save_lz4_compressed(p, arr, dtype=np.float32):
         text_file = open(p, "wb")
         text_file.write(arrtolz4string(arr))
         text_file.close()
-    except OverflowError:
+    except (OverflowError, ValueError):
         # save dummy (emtpy) file
         text_file = open(p, "wb")
         text_file.write("")
         text_file.close()
-        half_ix = len(arr) / 2
+        half_ix = len(arr) // 2
         new_p1 = p[:-4] + "_1" + p[-4:]
         new_p2 = p[:-4] + "_2" + p[-4:]
         save_lz4_compressed(new_p1, arr[:half_ix])
