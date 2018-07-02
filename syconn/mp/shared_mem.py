@@ -124,7 +124,6 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
     if debug:
         nb_cpus = 1
 
-
     if verbose:
         print("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
 

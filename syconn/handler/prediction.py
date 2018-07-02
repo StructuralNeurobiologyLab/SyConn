@@ -232,7 +232,7 @@ def zxy2xyz(vol):
     return vol
 
 
-def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None):
+def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True):
     """
     Create .h5 files for ELEKTRONN input. Only supports binary labels
      (0=background, 1=foreground).
@@ -245,11 +245,16 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None):
         ids which have to be converted to foreground, i.e. 1. Everything
         else is considered background (0). If None, everything except 0 is
         treated as foreground.
+    overwrite : bool
+        If True, will overwrite existing .h5 files
     """
-    raw, label = load_gt_from_kzip(zip_fname, kd_p)
     fname, ext = os.path.splitext(zip_fname)
     if fname[-2:] == ".k":
         fname = fname[:-2]
+    if os.path.isfile(fname + ".h5") and not overwrite:
+        print("File at {} already exists. Skipping.".format(fname))
+        return
+    raw, label = load_gt_from_kzip(zip_fname, kd_p)
     create_h5_gt_file(fname, raw, label, foreground_ids)
 
 
