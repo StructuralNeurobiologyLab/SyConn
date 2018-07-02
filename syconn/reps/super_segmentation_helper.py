@@ -586,7 +586,12 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
 
     # Pruning the stitched Super Super Voxel Skeletons
     if pruning_thresh !=0:
-        skel_G = prune_stub_branches(skel_G, len_thres=pruning_thresh)
+        pruning_complete = False
+        while not pruning_complete:
+            skel_G_pruned = prune_stub_branches(skel_G, len_thres=pruning_thresh)
+            if len(skel_G_pruned.nodes) == len(skel_G.nodes):
+                pruning_complete = True
+            skel_G = skel_G_pruned
 
     sso.skeleton = {}
     sso.skeleton['nodes'] = np.array([skel_G.node[ix]['position'] for ix in skel_G.nodes()], dtype=np.uint32)
