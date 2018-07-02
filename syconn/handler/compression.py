@@ -496,7 +496,8 @@ def arrtolz4string_list(arr):
         return [""]
     try:
         str_lst = [compress(arr.tobytes())]
-    except OverflowError:
+    # catch Value error which is thrown in py3 lz4 version
+    except (OverflowError, ValueError):
         half_ix = len(arr) / 2
         str_lst = arrtolz4string_list(arr[:half_ix]) + \
                    arrtolz4string_list(arr[half_ix:])
