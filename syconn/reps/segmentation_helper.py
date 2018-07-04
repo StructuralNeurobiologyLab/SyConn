@@ -129,13 +129,12 @@ def load_voxel_list(so):
 
         for i_bin_arr in range(len(bin_arrs)):
             block_voxels = np.transpose(np.nonzero(bin_arrs[i_bin_arr])).astype(np.uint32)
-            block_voxels += np.array(block_offsets[i_bin_arr])
+            block_voxels += np.array(block_offsets[i_bin_arr]).astype(np.uint32)
 
             if len(voxel_list) == 0:
                 voxel_list = block_voxels
             else:
                 voxel_list = np.concatenate([voxel_list, block_voxels])
-
     return voxel_list
 
 

@@ -678,3 +678,56 @@ class ConnectivityMatrix(object):
         self.plot_wiring(cum_matrix, range(1, len(ax_borders)+1), range(1, len(ax_borders)+1), cum=True, cum_size=intensity_plot.shape[0])
 
 
+def get_sso_specific_info_thread(args):
+    sso_ids = args[0]
+    sj_version = args[1]
+    ssd_version = args[2]
+    working_dir = args[3]
+    version = args[4]
+
+    ssd = ss.SuperSegmentationDataset(working_dir,
+                                      version=ssd_version)
+
+    cm = connectivity.ConnectivityMatrix(working_dir,
+                                         version=version,
+                                         sj_version=sj_version,
+                                         create=False)
+
+    axoness_entries = []
+    cell_types = {}
+    blacklist = []
+    shapes = {}
+    for sso_id in sso_ids:
+        print(sso_id)
+        sso = ssd.get_super_segmentation_object(sso_id)
+
+        if not sso.load_skeleton():
+            blacklist.append(sso_id)
+            continue
+
+        if "axoness" not in sso.skeleton:
+            blacklist.append(sso_id)
+            continue
+
+        if sso.cell_type is None:
+            blacklist.append(sso_id)
+            continue
+
+        con_mask, pos = np.where(cm.connectivity[:, :2] == sso_id)
+
+        sj_coords = cm.connectivity[con_mask, -3:]
+        sj_axoness = sso.axoness_for_coords(sj_coords)
+
+        con_ax = np.concatenate([con_mask[:, None], pos[:, None],
+                                 sj_axoness[:, None]], axis=1)
+
+        if len(axoness_entries) == 0:
+            axoness_entries = con_ax
+        else:
+            axoness_entries = np.concatenate((axoness_entries, con_ax))
+
+        cell_types[sso_id] = sso.cell_type
+        shapes[sso_id] = sso.shape
+
+    axoness_entries = np.array(axoness_entries, dtype=np.int)
+    return axoness_entries, cell_types, shapes, blacklist

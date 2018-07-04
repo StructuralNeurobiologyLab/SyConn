@@ -62,21 +62,24 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
     plt.close()
 
 
-def model_performance_predonly(pred, labels, model_dir=None, prefix="", target_names=None):
-    header = "-------------------------------\n\t\t%s\n" % prefix
+def model_performance_predonly(y_pred, y_true, model_dir=None, prefix="",
+                               target_names=None, labels=None):
+    header = "----------------------------------------------------\n\t\t" \
+             "%s\n" % prefix
     if target_names is None:
         target_names = ["Dendrite", "Axon", "Soma"]
-    header += classification_report(labels, pred, digits=4,
-                                target_names=target_names)
-    header += "acc.: %0.4f" % accuracy_score(labels, pred)
-    header += "\n-------------------------------\n"
+    header += classification_report(y_true, y_pred, digits=4,
+                                target_names=target_names, labels=labels)
+    header += "acc.: {:.4f} -- {} wrongly predicted samples." \
+              "".format(accuracy_score(y_true, y_pred), np.sum(y_true != y_pred))
+    header += "\n-------------------------------------------------\n"
     print(header)
     if model_dir is not None:
         text_file = open(model_dir + '/prec_rec_%s.txt' % prefix, "w")
         text_file.write(header)
         text_file.close()
-        prec, rec, fs, supp = precision_recall_fscore_support(labels, pred)
-        np.save(model_dir + '/prec_rec_%s.npy' % prefix, [prec, rec, fs])
+        # prec, rec, fs, supp = precision_recall_fscore_support(labels, pred)
+        # np.save(model_dir + '/prec_rec_%s.npy' % prefix, [prec, rec, fs])
     plt.close()
 
 
@@ -387,7 +390,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         ds_l = ds_l[:, 0]
     nb_labels = np.unique(ds_l)
     if pca is None:
-        pca = PCA(3, whiten=True)
+        pca = PCA(3, whiten=True, random_state=0)
         pca.fit(ds_d)
     res = pca.transform(ds_d)
     # density plot 1st and 2nd PC

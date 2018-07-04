@@ -269,13 +269,26 @@ class SegmentationDataset(object):
                                    working_dir=self.working_dir)
 
     def get_segmentation_object(self, obj_id, create=False):
-        return SegmentationObject(obj_id=obj_id,
-                                  obj_type=self.type,
-                                  version=self.version,
-                                  working_dir=self.working_dir,
-                                  scaling=self.scaling,
-                                  create=create,
-                                  n_folders_fs=self.n_folders_fs)
+        if np.isscalar(obj_id):
+            return SegmentationObject(obj_id=obj_id,
+                                      obj_type=self.type,
+                                      version=self.version,
+                                      working_dir=self.working_dir,
+                                      scaling=self.scaling,
+                                      create=create,
+                                      n_folders_fs=self.n_folders_fs)
+        else:
+            res = []
+            for ix in obj_id:
+                obj = SegmentationObject(obj_id=ix,
+                                      obj_type=self.type,
+                                      version=self.version,
+                                      working_dir=self.working_dir,
+                                      scaling=self.scaling,
+                                      create=create,
+                                      n_folders_fs=self.n_folders_fs)
+                res.append(obj)
+            return res
 
     def save_version_dict(self):
         write_obj2pkl(self.version_dict_path, self.version_dict)

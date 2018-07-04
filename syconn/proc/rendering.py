@@ -37,7 +37,6 @@ except Exception as e:
 # ------------------------------------------------------------------------------
 # General rendering code
 
-comp_window = 8e3 # window length along main p.c. for mesh view
 float_size = sizeof(c_float)
 vertex_offset = c_void_p(0 * float_size)
 normal_offset = c_void_p(3 * float_size)
@@ -580,7 +579,8 @@ def render_mesh_coords(coords, ind, vert, **kwargs):
 def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                         rot_matrices=None, views_key="raw", return_rot_matrices=False,
                         depth_map=True, smooth_shade=True, wire_frame=False,
-                        nb_views=2, triangulation=True):
+                        nb_views=2, triangulation=True,
+                        comp_window=8e3):
     """
     Render raw views located at given coordinates in mesh
      Returns ViewContainer list if dest_dir is None, else writes
@@ -599,6 +599,8 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
     return_rot_matrices : bool
     depth_map : bool
     wire_frame : bool
+    comp_window : float
+        window length along main p.c. for mesh view
 
     Returns
     -------
@@ -699,7 +701,7 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
 
 def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=False,
                       ws=(256,128), cellobjects_only=False, wire_frame=False,
-                      nb_views=2):
+                      nb_views=2, comp_window=8e3, rot_mat=None, return_rot_mat=False):
     """
     Render views of SuperSegmentationObject at given coordinates.
     
@@ -731,20 +733,21 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
         edge_lengths = np.array([comp_window, comp_window / 2, comp_window / 2])
         mo = MeshObject("raw", mesh[0], mesh[1])
         mo._colors = None
-        rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
-                                    mo.vert_resh, edge_lengths / mo.max_dist)
+        if rot_mat is None:
+            rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
+                                        mo.vert_resh, edge_lengths / mo.max_dist)
     else:
         raw_views, rot_mat = render_mesh_coords(coords, mesh[0], mesh[1], clahe=clahe,
-                                       verbose=verbose, return_rot_matrices=True,
-                                                ws=ws, wire_frame=wire_frame,
-                                                nb_views=nb_views)
+                                                verbose=verbose, return_rot_matrices=True,
+                                                ws=ws, wire_frame=wire_frame, rot_matrices=rot_mat,
+                                                nb_views=nb_views, comp_window=comp_window)
     if add_cellobjects:
         mesh = sso.mi_mesh
         if len(mesh[1]) != 0:
             mi_views = render_mesh_coords(coords, mesh[0], mesh[1], clahe=clahe,
                                           verbose=verbose, rot_matrices=rot_mat,
                                           views_key="mi", ws=ws, wire_frame=wire_frame,
-                                          nb_views=nb_views)
+                                          nb_views=nb_views, comp_window=comp_window)
         else:
             mi_views = np.ones_like(raw_views) * 255
         mesh = sso.vc_mesh
@@ -752,7 +755,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
             vc_views = render_mesh_coords(coords, mesh[0], mesh[1], clahe=clahe,
                                           verbose=verbose, rot_matrices=rot_mat,
                                           views_key="vc", ws=ws, wire_frame=wire_frame,
-                                          nb_views=nb_views)
+                                          nb_views=nb_views, comp_window=comp_window)
         else:
             vc_views = np.ones_like(raw_views) * 255
         mesh = sso.sj_mesh
@@ -760,19 +763,28 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
             sj_views = render_mesh_coords(coords, mesh[0], mesh[1], clahe=clahe,
                                           verbose=verbose, rot_matrices=rot_mat,
                                           views_key="sj", ws=ws, wire_frame=wire_frame,
-                                          nb_views=nb_views)
+                                          nb_views=nb_views, comp_window=comp_window)
         else:
             sj_views = np.ones_like(raw_views) * 255
         if cellobjects_only:
-            return np.concatenate([mi_views[:, None], vc_views[:, None],
+            res = np.concatenate([mi_views[:, None], vc_views[:, None],
                                    sj_views[:, None]], axis=1)
-        return np.concatenate([raw_views[:, None], mi_views[:, None],
+            if return_rot_mat:
+                return res, rot_mat
+            return res
+        res = np.concatenate([raw_views[:, None], mi_views[:, None],
                                vc_views[:, None], sj_views[:, None]], axis=1)
+        if return_rot_mat:
+            return res, rot_mat
+        return res
+    if return_rot_mat:
+        return raw_views[:, None], rot_mat
     return raw_views[:, None]
 
 
 def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
-                                  rot_matrices=None, nb_views=2):
+                                  rot_mat=None, nb_views=2,
+                                  comp_window=8e3, return_rot_matrices=False):
     """
 
     Parameters
@@ -782,6 +794,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     verbose :
     ws :
     rot_mat :
+    comp_window : float
 
     Returns
     -------
@@ -799,15 +812,20 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
     # backwards compatibility with other color-dependent rendering methods
     # Create mesh object
+    if rot_mat is None:
+        edge_lengths = np.array([comp_window, comp_window / 2, comp_window / 2])
+        mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
+        rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
+                                    mo.vert_resh, edge_lengths / mo.max_dist)
     vert = vert.reshape(-1, 3)[ind].flatten()  # create redundant vertices to enable per-face colors
     ind = np.arange(len(vert) // 3)
     color_array = np.repeat(color_array, 3, axis=0)
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
-    index_views = _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
-                                      depth_map=False, rot_matrices=rot_matrices,
-                                      smooth_shade=False, views_key="index",
-                                      nb_views=nb_views)
-    return index_views
+    return _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
+                               depth_map=False, rot_matrices=rot_mat,
+                               smooth_shade=False, views_key="index",
+                               nb_views=nb_views, comp_window=comp_window,
+                               return_rot_matrices=return_rot_matrices)
 
 
 def get_sso_view_dc(sso, verbose=False):

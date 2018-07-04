@@ -146,7 +146,7 @@ class MeshObject(object):
         Rotates vertices into principal component coordinate system.
         """
         if self.pca is None:
-            self.pca = PCA(n_components=3, whiten=False)
+            self.pca = PCA(n_components=3, whiten=False, random_state=0)
             self.pca.fit(self.vert_resh)
         self.vertices = self.pca.transform(
             self.vert_resh).reshape(len(self.vertices))
@@ -364,7 +364,7 @@ def get_rotmatrix_from_points(points):
         return np.zeros((16))
     new_center = np.mean(points, axis=0)
     points -= new_center
-    pca = PCA(n_components=3)
+    pca = PCA(n_components=3, random_state=0)
     pca.fit(points)
     rot_mat = np.zeros((4, 4))
     rot_mat[:3, :3] = pca.components_

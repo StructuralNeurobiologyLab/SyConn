@@ -38,7 +38,7 @@ from ..handler.compression import AttributeDict, MeshDict, LZ4Dict
 from ..proc.image import single_conn_comp_img
 from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords, bfs_smoothing
 from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh, rgb2id_array
-from ..proc.rendering import render_sampled_sso, comp_window, multi_view_sso,\
+from ..proc.rendering import render_sampled_sso, multi_view_sso,\
     multi_render_sampled_svidlist, render_sso_coords, \
     render_sso_coords_index_views
 if "matplotlib" not in globals():
@@ -125,6 +125,7 @@ class SuperSegmentationObject(object):
         self._dataset = None
         self._weighted_graph = None
         self._sample_locations = None
+        self._rot_mat = None
 
         if sv_ids is not None:
             self.attr_dict["sv"] = sv_ids
@@ -1215,8 +1216,14 @@ class SuperSegmentationObject(object):
                 pass
         locs = np.concatenate(self.sample_locations(cache=False))
         start = time.time()
-        index_views = render_sso_coords_index_views(self, locs, nb_views=nb_views,
-                                                    verbose=True)
+        if self._rot_mat is None:
+            index_views, rot_mat = render_sso_coords_index_views(
+                self, locs, nb_views=nb_views, verbose=True,
+                return_rot_matrices=True)
+            self._rot_mat = rot_mat
+        else:
+            index_views = render_sso_coords_index_views(self, locs,
+                        nb_views=nb_views, verbose=True, rot_mat=self._rot_mat)
         end_ix_views = time.time()
         print("Rendering views took {:.2f} s. {:.2f} views/s".format(
             end_ix_views - start, len(index_views) / (end_ix_views - start)))
@@ -1237,9 +1244,16 @@ class SuperSegmentationObject(object):
                 return
             except KeyError:
                 pass
-        views = render_sso_coords(self, np.concatenate(self.sample_locations()),
-                                  add_cellobjects=True, verbose=False,
-                                  nb_views=nb_views)
+        locs = np.concatenate(self.sample_locations(cache=False))
+        if self._rot_mat is None:
+            views, rot_mat = render_sso_coords(self, locs,
+                                      add_cellobjects=True, verbose=True,
+                                      nb_views=nb_views, return_rot_mat=True)
+            self._rot_mat = rot_mat
+        else:
+            views = render_sso_coords(self, locs,
+                                      add_cellobjects=True, verbose=True,
+                                      nb_views=nb_views, rot_mat=self._rot_mat)
         if save:
             self.save_views(views, "raw{}".format(nb_views))
         else:
@@ -1252,7 +1266,8 @@ class SuperSegmentationObject(object):
         except KeyError:
             self._render_rawviews(nb_views)
             views = self.load_views("raw{}".format(nb_views))
-        assert len(views) == len(np.concatenate(self.sample_locations(cache=False))), "Unequal number of views and redering locations."
+        assert len(views) == len(np.concatenate(self.sample_locations(cache=False))), \
+            "Unequal number of views and redering locations."
         views = views.astype(np.float32) / 255.
         views = views.swapaxes(1, 2)  # swap channel and view axis
         # N, 2, 4, 128, 256
@@ -1260,7 +1275,7 @@ class SuperSegmentationObject(object):
         # reshape to predict single projections
         views = views.reshape([-1] + list(orig_shape[2:]))
         # predict and reset to original shape: N, 2, 4, 128, 256
-        labeled_views = m.predict_proba(views, bs=200, verbose=False)
+        labeled_views = m.predict_proba(views, bs=250, verbose=True)
         labeled_views = np.argmax(labeled_views, axis=1)[:, None]
         labeled_views = labeled_views.reshape(list(orig_shape[:2])
                                               + list(labeled_views.shape[1:]))
@@ -1290,21 +1305,29 @@ class SuperSegmentationObject(object):
             l, cnts = np.unique(v, return_counts=True)
             vertex_labels[ix] = l[np.argmax(cnts)]
         if k == 1:  # map actual prediction situation / coverage
-            predicted_vertices = self.mesh[1].reshape(-1, 3)#[vertex_labels != 5]
-            predictions = vertex_labels#[vertex_labels != 5]
+            # keep unpredicted vertices and vertices with background labels
+            predicted_vertices = self.mesh[1].reshape(-1, 3)
+            predictions = vertex_labels
             # [neck, head, shaft, other, background, unpredicted]
             colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
                       [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]]
         else:
             predicted_vertices = self.mesh[1].reshape(-1, 3)[vertex_labels != 5]
             predictions = vertex_labels[vertex_labels != 5]
+            # remove background class
+            predicted_vertices = predicted_vertices[predictions != 4]
+            predictions = predictions[predictions != 4]
             # [neck, head, shaft, other, background]
             colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
-                      [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1]]
+                      [0.05, 0.6, 0.6, 1]]
         colors = np.array(colors) * 255
         maj_vote = colorcode_vertices(self.mesh[1].reshape((-1, 3)), predicted_vertices,
                                  predictions, colors=colors, k=k, return_color=False)
         self.attr_dict["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)] = maj_vote
+        ad = AttributeDict(self.attr_dict_path, read_only=False)
+        ad["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)] = maj_vote
+        ad.save2pkl()
+        # will cause collisions if this method is called multiple times for the same ssv during multiprocessing
         # self.save_attributes(["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)], [maj_vote])
         col = colors[maj_vote].astype(np.uint8)
         if dest_path is not None:
@@ -1313,18 +1336,20 @@ class SuperSegmentationObject(object):
             return
         return self.mesh[0], self.mesh[1], self.mesh[2], col
 
-    def get_spine_compartments(self, k, nb_views, min_cc_size=20):
+    def get_spine_compartments(self, k, nb_views, min_cc_size=10):
         vertex_labels = self.attr_dict["semseg_spiness_k"+str(k)+"_"+str(nb_views)]
         vertices = self.mesh[1].reshape((-1, 3))
-        g = create_graph_from_coords(vertices, max_dist=110, force_single_cc=False)
+        g = create_graph_from_coords(vertices, max_dist=110, force_single_cc=True)
         g_orig = g.copy()
         for e in g_orig.edges():
             l0 = vertex_labels[e[0]]
             l1 = vertex_labels[e[1]]
             if l0 != l1:
                 g.remove_edge(e[0], e[1])
+        print("Starting connected components for SSV {}.".format(self.id))
         all_ccs = list(sorted(nx.connected_components(g), key=len,
                                 reverse=True))
+        print("Finished connected components for SSV {}.".format(self.id))
         sizes = np.array([len(c) for c in all_ccs])
         thresh_ix = np.argmax(sizes < min_cc_size)
         all_ccs = all_ccs[:thresh_ix]
@@ -1345,8 +1370,10 @@ class SuperSegmentationObject(object):
         neck_s = sizes[cc_labels == 0]
         head_c = (cc_coords[cc_labels == 1] / self.scaling).astype(np.uint)
         head_s = sizes[cc_labels == 1]
-        np.save("/wholebrain/scratch/pschuber/cmn_paper/data/semantic_segmentation/eval/neck_coords_ssv{}_k{}_{}views.npy".format(self.id, k, nb_views), neck_c)
-        np.save("/wholebrain/scratch/pschuber/cmn_paper/data/semantic_segmentation/eval/head_coords_ssv{}_k{}_{}views.npy".format(self.id, k, nb_views), head_c)
+        np.save("/wholebrain/scratch/pschuber/cmn_paper/data/semantic_"
+                "segmentation/eval/neck_coords_ssv{}_k{}_{}views_ccsize{}.npy".format(self.id, k, nb_views, min_cc_size), neck_c)
+        np.save("/wholebrain/scratch/pschuber/cmn_paper/data/semantic_"
+                "segmentation/eval/head_coords_ssv{}_k{}_{}views_ccsize{}.npy".format(self.id, k, nb_views, min_cc_size), head_c)
         return neck_c, neck_s, head_c, head_s
 
     def sample_locations(self, force=False, cache=True, verbose=False):
@@ -1424,13 +1451,13 @@ class SuperSegmentationObject(object):
             color = None  # by far more convenient when color is not set explicitely (130, 130, 130, 160)
         elif obj_type == "sj":
             mesh = self.sj_mesh
-            color = (int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255)
+            color = np.array([int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255])
         elif obj_type == "vc":
             mesh = self.vc_mesh
-            color = (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)
+            color = np.array([int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255])
         elif obj_type == "mi":
             mesh = self.mi_mesh
-            color = (0, 153, 255, 255)
+            color = np.array([0, 153, 255, 255])
         else:
             mesh = self._meshes[obj_type]
             color = None
@@ -1882,7 +1909,8 @@ class SuperSegmentationObject(object):
             self.skeleton["edges"] = edge_list
             self.skeleton["diameters"] = np.ones(len(locs))
             ax_probas = np.array(sm.start_multiprocess_obj("axoness_probas",
-                                 [[sv, {"pred_key_appendix": pred_key_appendix}] for sv in self.svs], nb_cpus=self.nb_cpus))
+                                 [[sv, {"pred_key_appendix": pred_key_appendix}]
+                                  for sv in self.svs], nb_cpus=self.nb_cpus))
             ax_probas = np.concatenate(ax_probas)
             # first stage averaging
             curr_ax_preds = np.argmax(ax_probas, axis=1)
@@ -1896,7 +1924,8 @@ class SuperSegmentationObject(object):
                 for k, v in cnt.items():
                     loc_average[k] = v
                 loc_average /= float(len(neighs))
-                if (curr_ax_preds[i_node] == 2 and loc_average[2] >= 0.20) or (loc_average[2] >= 0.98):
+                if (curr_ax_preds[i_node] == 2 and loc_average[2] >= 0.20) or \
+                        (loc_average[2] >= 0.98):
                     ax_preds[i_node] = 2
                 else:
                     ax_preds[i_node] = np.argmax(loc_average[:2])
