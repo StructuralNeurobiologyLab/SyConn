@@ -1108,7 +1108,7 @@ class SuperSegmentationObject(object):
         np.array
             Concatenated views for each SV in self.svs
         """
-        view_dc = LZ4Dict(self.view_path, read_only=False,
+        view_dc = LZ4Dict(self.view_path, read_only=True,
                           disable_locking=not self.enable_locking)
         if view_key is None:
             view_key = "%d%d" % (int(woglia), int(raw_only))
@@ -1119,7 +1119,7 @@ class SuperSegmentationObject(object):
                                "Existing keys: %s\n" % (view_key, self.id, str(view_dc.keys())))
         if view_key in view_dc and not force_reload:
             return view_dc[view_key]
-
+        del view_dc
         params = [[sv, {"woglia": woglia, "raw_only": raw_only,
                         "ignore_missing": ignore_missing}] for sv in self.svs]
         # list of arrays
@@ -1127,6 +1127,8 @@ class SuperSegmentationObject(object):
                                           nb_cpus=self.nb_cpus
                                           if nb_cpus is None else nb_cpus)
         views = np.concatenate(views)
+        view_dc = LZ4Dict(self.view_path, read_only=False,
+                          disable_locking=not self.enable_locking)
         if cache_default_views:
             print("Loaded and cached default views of SSO %d at %s. "
                   "(raw_only: %d, woglia: %d; #views: %d)" % (self.id,
@@ -1281,7 +1283,8 @@ class SuperSegmentationObject(object):
                                               + list(labeled_views.shape[1:]))
         # swap axes to get source shape
         labeled_views = labeled_views.swapaxes(2, 1)
-        assert labeled_views.shape[2] == nb_views, "Predictions have wrong shape."
+        assert labeled_views.shape[2] == nb_views, \
+            "Predictions have wrong shape."
         self.save_views(labeled_views, semseg_key + "{}".format(nb_views))
 
     def _semseg2mesh(self, semseg_key, nb_views=2, dest_path=None, k=1):

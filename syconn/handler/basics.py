@@ -551,7 +551,7 @@ def safe_copy(src, dest, safe=True):
     if safe:
         fd = os.open(dest, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         # Copy the file and automatically close files at the end
-        with os.fdopen(fd, 'w') as f:
+        with os.fdopen(fd, 'wb') as f:
             with open(src, 'rb') as sf:
                 shutil.copyfileobj(sf, f)
     else:

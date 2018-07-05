@@ -64,6 +64,10 @@ class LZ4DictBase(dict):
         except KeyError:
             raise AttributeError("No such attribute: ", key)
 
+    def __del__(self):
+        if self.a_lock is not None and self.a_lock.acquired:
+            self.a_lock.release()
+
     def __len__(self):
         return self._dc_intern.__len__()
 
