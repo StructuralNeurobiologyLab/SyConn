@@ -9,8 +9,7 @@
 # adjusted neuro3d.py
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 import os
 

@@ -2,11 +2,8 @@
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 import numpy as np
-import os
-import seaborn as sns
-if "matplotlib" not in globals():
-    import matplotlib
-    matplotlib.use("agg")
+import matplotlib
+matplotlib.use("Agg", warn=False, force=True)
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.ticker as ticker

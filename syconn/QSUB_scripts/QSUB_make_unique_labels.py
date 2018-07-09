@@ -9,8 +9,7 @@ import sys
 
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 from syconn.extraction import object_extraction_steps as oes
 

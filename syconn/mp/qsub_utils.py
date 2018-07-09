@@ -7,7 +7,7 @@
 
 try:
     import cPickle as pkl
-except:
+except ImportError:
     import pickle as pkl
 import getpass
 import glob

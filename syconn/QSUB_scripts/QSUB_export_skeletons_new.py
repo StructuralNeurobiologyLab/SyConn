@@ -9,8 +9,7 @@ import sys
 
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation_helper import create_sso_skeleton, sparsify_skeleton, extract_skel_features, associate_objs_with_skel_nodes
 from syconn.reps.super_segmentation_object import SuperSegmentationObject

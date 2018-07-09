@@ -4,7 +4,7 @@
 # non-relative import needed for this file in order to be importable by
 # ELEKTRONN2 architectures
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("Agg", warn=False, force=True)
 from elektronn2.data.traindata import Data
 import numpy as np
 import warnings
@@ -62,14 +62,14 @@ class MultiViewData(Data):
             self.test_l = np.zeros((0, ), dtype=np.uint16)
         self.test_d = naive_view_normalization(self.test_d)
         print("GT splitting:", self.splitting_dict)
-        print "\nlabels (train) - 0:%d\t1:%d\t2:%d" % (
+        print("\nlabels (train) - 0:%d\t1:%d\t2:%d" % (
             np.sum(self.train_l == 0),
             np.sum(self.train_l == 1),
-            np.sum(self.train_l == 2))
-        print "labels (valid) - 0:%d\t1:%d\t2:%d" % (
+            np.sum(self.train_l == 2)))
+        print("labels (valid) - 0:%d\t1:%d\t2:%d" % (
             np.sum(self.valid_l == 0),
             np.sum(self.valid_l == 1),
-            np.sum(self.valid_l == 2))
+            np.sum(self.valid_l == 2)))
         super(MultiViewData, self).__init__()
 
 
@@ -88,7 +88,7 @@ class AxonViews(MultiViewData):
         self.nb_views = nb_views
         self.raw_only = raw_only
         self.example_shape = (nb_views, 4, 2, 128, 256)
-        print "Initializing AxonViews:", self.__repr__()
+        print("Initializing AxonViews:", self.__repr__())
         self.example_shape = self.train_d[0].shape
 
     def getbatch(self, batch_size, source='train'):
@@ -125,12 +125,12 @@ class GliaViews(Data):
         self.clahe = clahe
         self.binary_views = binary_views
         self.augmentation = augmentation
-        print "Initializing GliaViews:", self.__dict__
+        print("Initializing GliaViews:", self.__dict__)
         ax_gt_dir = wd + "/gt/gt_axoness/"
 
         if clahe:
             # load glia views
-            raise(NotImplementedError)
+            raise NotImplementedError("Clahe views are not supported currently.")
             self.glia_dict = load_pkl2obj(
                 wd + "/gt/gt_gliacells/views/glia_dict_v2_withclahe.pkl")
         else:
@@ -147,11 +147,13 @@ class GliaViews(Data):
         nb_nonglia_valid = len(nonglia_valid_d)
         nb_nonglia_test = len(nonglia_test_d)
         nb_ch = len(channels_to_load)
-        print "%d training and %d validation samples for non glia. " \
-              "Decompressing glia samples." % (nb_nonglia_train, nb_nonglia_valid)
+        print("%d training and %d validation samples for non glia. " \
+              "Decompressing glia samples." % (nb_nonglia_train, nb_nonglia_valid))
         nb_glia = 0
         for k in self.glia_dict.keys():
-            decomp_arr = lz4stringtoarr(self.glia_dict[k], shape=(-1, nb_ch, nb_views, 128, 256), dtype=np.float64)[:, :, :nb_views].astype(np.float32)
+            decomp_arr = lz4stringtoarr(self.glia_dict[k],
+                                        shape=(-1, nb_ch, nb_views, 128, 256),
+                                        dtype=np.float64)[:, :, :nb_views].astype(np.float32)
             self.glia_dict[k] = decomp_arr
             nb_glia += len(decomp_arr)
         glia_samples = np.zeros((nb_glia, nb_ch, nb_views, 128, 256), dtype=np.float32)
@@ -189,21 +191,21 @@ class GliaViews(Data):
             self.train_l[self.train_l == 3] = 1
             self.valid_l[self.valid_l != 3] = 0
             self.valid_l[self.valid_l == 3] = 1
-            print "\nlabels (train) - 0:%d\t1:%d" % (np.sum(self.train_l==0),
-                                                         np.sum(self.train_l == 1))
-            print "labels (valid) - 0:%d\t1:%d" % (np.sum(self.valid_l==0),
-                                                         np.sum(self.valid_l == 1))
+            print("\nlabels (train) - 0:%d\t1:%d" % (np.sum(self.train_l==0),
+                                                         np.sum(self.train_l == 1)))
+            print("labels (valid) - 0:%d\t1:%d" % (np.sum(self.valid_l==0),
+                                                         np.sum(self.valid_l == 1)))
         else:
-            print "\nlabels (train) - 0:%d\t1:%d\t2:%d\t3:%d" % (
+            print("\nlabels (train) - 0:%d\t1:%d\t2:%d\t3:%d" % (
             np.sum(self.train_l == 0),
             np.sum(self.train_l == 1),
             np.sum(self.train_l == 2),
-            np.sum(self.train_l == 3))
-            print "labels (valid) - 0:%d\t1:%d\t2:%d\t3:%d" % (
+            np.sum(self.train_l == 3)))
+            print("labels (valid) - 0:%d\t1:%d\t2:%d\t3:%d" % (
             np.sum(self.valid_l == 0),
             np.sum(self.valid_l == 1),
             np.sum(self.valid_l == 2),
-            np.sum(self.valid_l == 3))
+            np.sum(self.valid_l == 3)))
         self.example_shape = self.train_d[0].shape
         super(GliaViews, self).__init__()
 
@@ -279,7 +281,7 @@ class SSVCelltype(Data):
         self.valid_d = self.valid_d[:, None]
         self.test_d = self.test_d[:, None]
         super(SSVCelltype, self).__init__()
-        print "Initializing SSV Data:", self.__repr__()
+        print("Initializing SSV Data:", self.__repr__())
 
     def getbatch(self, batch_size, source='train'):
         self._reseed()
@@ -353,10 +355,10 @@ def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1):
         if cnt == batch_size:
             break
     if cnt == 0:
-        print "--------------------------------------" \
+        print("--------------------------------------" \
               "Number of views in batch is zero. " \
               "Missing views and labels were filled with 0." \
-              "--------------------------------------"
+              "--------------------------------------")
     elif cnt < batch_size:
         # print "--------------------------------------" \
         #       "%d/%d samples were collected initially. Filling up missing" \
@@ -395,28 +397,28 @@ class TripletData_N(Data):
         self.s_weights *= np.array(self.s_weights > 0, dtype=np.int)
         self.s_weights = np.ceil(self.s_weights)
         self.s_weights[self.s_weights > 6] = 6
-        print "Data Summary:\nweight\t#samples"
+        print("Data Summary:\nweight\t#samples")
         for i in range(7):
-            print "%d\t%d" % (i, np.sum(self.s_weights == i))
-        print "Using %d SV (weight bigger than 0)." % (np.sum(self.s_weights > 0))
+            print("%d\t%d" % (i, np.sum(self.s_weights == i)))
+        print("Using %d SV (weight bigger than 0)." % (np.sum(self.s_weights > 0)))
         example = self.sds.get_segmentation_object(self.s_ids[1])
         self.example_shape = example.load_views()[0].shape
         self.train_d = np.array(self.s_ids)
         self.valid_d = np.zeros((0, ))
         self.test_d = np.zeros((0, ))
-        print "Samples (train):", self.train_d.shape
-        print "Samples (valid):", self.valid_d.shape
-        print "Samples (test):", self.test_d.shape
+        print("Samples (train):", self.train_d.shape)
+        print("Samples (valid):", self.valid_d.shape)
+        print("Samples (test):", self.test_d.shape)
         self.train_l = np.zeros((len(self.train_d), 1))
         self.test_l = np.zeros((len(self.test_d), 1))
         self.valid_l = np.zeros((len(self.valid_d), 1))
         super(TripletData_N, self).__init__()
-        print "Initializing SSV Data:", self.__repr__()
+        print("Initializing SSV Data:", self.__repr__())
 
     def getbatch(self, batch_size, source='train'):
         if source != "train":
-            print "Does not have valid and test datasets, returning batch " \
-                  "from training pool."
+            print("Does not have valid and test datasets, returning batch " \
+                  "from training pool.")
         self._reseed()
         nb_per_weight = batch_size // 6
         assert nb_per_weight * 6 == batch_size, "Batch size must be multiple of 6"
@@ -474,7 +476,7 @@ class TripletData_SSV(Data):
         self.sso_weights[self.sso_weights > 6] = 6
         self.sso_ids = np.array(self.sso_ids, dtype=np.uint32)
         super(TripletData_SSV, self).__init__()
-        print "Initializing SSV Data:", self.__repr__()
+        print("Initializing SSV Data:", self.__repr__())
 
     def getbatch(self, batch_size, source='train'):
         while True:
@@ -581,7 +583,7 @@ class TripletData_SSV_nviews(Data):
         self.sso_weights[self.sso_weights > 6] = 6
         self.sso_ids = np.array(self.sso_ids, dtype=np.uint32)
         super(TripletData_SSV_nviews, self).__init__()
-        print "Initializing SSV Data:", self.__repr__()
+        print("Initializing SSV Data:", self.__repr__())
 
     def getbatch(self, batch_size, source='train'):
         while True:

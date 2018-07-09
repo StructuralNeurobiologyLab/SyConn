@@ -8,10 +8,6 @@
 from ..handler.compression import load_lz4_compressed, save_lz4_compressed
 import numpy as np
 import os
-import warnings
-if "matplotlib" not in globals():
-    import matplotlib
-    matplotlib.use("agg")
 
 
 class ViewContainer(object):
@@ -69,9 +65,8 @@ class ViewContainer(object):
         return views
 
     def plot(self, fig=None, view_nb=0):
-        if "matplotlib" not in globals():
-            import matplotlib
-            matplotlib.use("agg")
+        import matplotlib
+        matplotlib.use("Agg", warn=False, force=True)
         import matplotlib.pyplot as plt
         import matplotlib.ticker as ticker
         tick_spacing = 40
@@ -113,6 +108,8 @@ class ViewContainer(object):
         ax.spines['bottom'].set_visible(False)
 
     def write_single_plot(self, dest_path, view_nb, dpi=400):
+        import matplotlib
+        matplotlib.use("Agg", warn=False, force=True)
         import matplotlib.pyplot as plt
         plt.ioff()
         fig = plt.figure()
@@ -145,6 +142,8 @@ def plot_n_views(view_array):
     ----------
     view_array : numpy.array
     """
+    import matplotlib
+    matplotlib.use("Agg", warn=False, force=True)
     import matplotlib.pyplot as plt
     nb_views = len(view_array)
     fig, ax = plt.subplots(5, 4)

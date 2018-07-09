@@ -9,8 +9,7 @@ import sys
 import numpy as np
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation import SuperSegmentationObject
 

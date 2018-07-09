@@ -4,8 +4,7 @@ import sys
 import numpy as np
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation import render_sampled_sos_cc
 from syconn.proc.sd_proc import sos_dict_fact, init_sos, predict_sos_views

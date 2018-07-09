@@ -15,8 +15,7 @@ import tempfile
 import zipfile
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 from knossos_utils.skeleton_utils import loadj0126NML
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode

@@ -9,8 +9,7 @@ import sys
 import numpy as np
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation import render_sampled_sos_cc
 from syconn.proc.sd_proc import sos_dict_fact, init_sos
@@ -30,9 +29,6 @@ with open(path_storage_file, 'rb') as f:
 ch = args[0]
 so_kwargs = args[1]
 kwargs = args[2]
-print so_kwargs
-print kwargs
-print ch
 for svixs in ch:
     sd = sos_dict_fact(svixs, **so_kwargs)
     sos = init_sos(sd)

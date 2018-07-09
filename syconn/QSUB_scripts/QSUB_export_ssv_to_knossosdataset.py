@@ -9,7 +9,6 @@ import sys
 
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
 except Exception:
     import pickle as pkl
 from syconn.reps import super_segmentation_dataset as ssd

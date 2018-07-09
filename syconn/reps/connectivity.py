@@ -5,18 +5,18 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-if not "matplotlib" not in globals():
-    import matplotlib
-    matplotlib.use("agg")
-
+import matplotlib
+matplotlib.use("Agg", warn=False, force=True)
+import matplotlib.colors as mcolors
 import glob
 import os
 import re
+import matplotlib.pyplot as plt
+from matplotlib import gridspec
 
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 import numpy as np
 import pandas
@@ -45,7 +45,6 @@ def make_colormap(seq):
     seq: a sequence of floats and RGB-tuples. The floats should be increasing
     and in the interval (0,1).
     """
-    import matplotlib.colors as mcolors
     seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
     cdict = {'red': [], 'green': [], 'blue': []}
     for i, item in enumerate(seq):
@@ -67,7 +66,6 @@ def diverge_map(low=(239/255., 65/255., 50/255.),
     ends of the spectrum. they can be either color strings
     or rgb color tuples
     """
-    import matplotlib.colors as mcolors
     c = mcolors.ColorConverter().to_rgb
     if isinstance(low, basestring): low = c(low)
     if isinstance(high, basestring): high = c(high)
@@ -543,11 +541,6 @@ class ConnectivityMatrix(object):
         big_entries : bool
             artificially increase pixel size from 1 to 3 for better visualization
         """
-        from matplotlib import gridspec
-        if "matplotlib" not in globals():
-            import matplotlib
-            matplotlib.use("agg")
-            import matplotlib.pyplot as plt
         if cum:
             entry_width = 1
 

@@ -7,8 +7,7 @@
 
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 import glob
 import numpy as np
@@ -18,9 +17,8 @@ from collections import Counter
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, AdaBoostClassifier
 from sklearn.externals import joblib
 from sklearn.metrics import precision_recall_fscore_support, precision_recall_curve
-if "matplotlib" not in globals():
-    import matplotlib
-    matplotlib.use("agg")
+import matplotlib
+matplotlib.use("Agg", warn=False, force=True)
 from matplotlib import pyplot as plt
 
 from . import skel_based_classifier_helper as sbch

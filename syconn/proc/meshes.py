@@ -12,14 +12,14 @@ from numba import jit
 from scipy import spatial, ndimage
 from skimage import measure
 from sklearn.decomposition import PCA
-from ..handler.basics import write_txt2kzip, texts2kzip, chunkify
+from ..handler.basics import write_txt2kzip, texts2kzip
 from .image import apply_pca
 try:
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 except ImportError as e:
     print(repr(e))
 from scipy.ndimage.morphology import binary_closing
-import time
+
 try:
     import vtkInterface
     __vtk_avail__ = True
@@ -842,137 +842,3 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
         comp_ind = np.array([remap_dict[i] for i in comp_ind], dtype=np.uint)
         comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
     return comp_meshes
-
-
-def id2rgb(vertex_id):
-    """
-    Transforms ID value of single sso vertex into the unique RGD colour.
-
-    Parameters
-    ----------
-    vertex_id : int
-
-    Returns
-    -------
-    np.array
-        RGB values [1, 3]
-    """
-    red = vertex_id % 256
-    green = (vertex_id/256) % 256
-    blue = (vertex_id/256/256) % 256
-    colour = np.array([red, green, blue], dtype=np.uint8)
-    return colour.squeeze()
-
-
-def id2rgb_array(id_arr):
-    """
-    Transforms ID values into the array of RGBs labels based on 'idtorgb'.
-    Note: Linear retrieval time. For small N preferable.
-
-    Parameters
-    ----------
-    id_arr : np.array
-        ID values [N, 1]
-
-    Returns
-    -------
-    np.array
-        RGB values.squeezed [N, 3]
-    """
-
-    if np.max(id_arr) > 256**3:
-        raise ValueError("Overflow in vertex ID array.")
-    if id_arr.ndim == 1:
-        id_arr = id_arr[:, None]
-    elif id_arr.ndim == 2:
-        assert id_arr.shape[1] == 1, "ValueError: unsupported shape"
-    else:
-        raise ValueError("Unsupported shape")
-    rgb_arr = np.apply_along_axis(id2rgb, 1, id_arr)
-    return rgb_arr.squeeze()
-
-
-@jit
-def id2rgb_array_contiguous(id_arr):
-    """
-    Transforms ID values into the array of RGBs labels based on the assumption
-    that 'id_arr' is contiguous index array from 0...len(id_arr).
-    Same mapping as 'id2rgb_array'.
-    Note: Constant retrieval time. For large N preferable.
-
-    Parameters
-    ----------
-    id_arr : np.array
-        ID values [N, 1]
-
-    Returns
-    -------
-    np.array
-        RGB values.squeezed [N, 3]
-    """
-    if id_arr.squeeze().ndim > 1:
-        raise ValueError("Unsupported index array shape.")
-    nb_ids = len(id_arr.squeeze())
-    if nb_ids >= 256**3:
-        raise ValueError("Overflow in vertex ID array.")
-    x1 = np.arange(256).astype(np.uint8)
-    x2 = np.arange(256).astype(np.uint8)
-    x3 = np.arange(256).astype(np.uint8)
-    xx1, xx2, xx3 = np.meshgrid(x1, x2, x3, sparse=False, copy=False)
-    rgb_arr = np.concatenate([xx3.flatten()[:, None], xx1.flatten()[:, None],
-                              xx2.flatten()[:, None]], axis=-1)[:nb_ids]
-    return rgb_arr
-
-
-def rgb2id(rgb):
-    """
-    Transforms unique RGB values into soo vertex ID.
-
-    Parameters
-    ----------
-    rgb: np.array
-        RGB values [1, 3]
-
-    Returns
-    -------
-    np.array
-        ID values [1, 1]
-    """
-    red = rgb[0]
-    green = rgb[1]
-    blue = rgb[2]
-    vertex_id = red + green*256 + blue*(256**2)
-    return np.array([vertex_id], dtype=np.uint32)
-
-
-@jit
-def rgb2id_array(rgb_arr):
-    """
-    Transforms RGB values into IDs based on 'rgb2id'.
-
-    Parameters
-    ----------
-    rgb_arr : np.array
-        RGB values [N, 3]
-
-    Returns
-    -------
-    np.array
-        ID values [N, ]
-    """
-    if rgb_arr.ndim > 1:
-        assert rgb_arr.shape[-1] == 3, "ValueError: unsupported shape"
-    else:
-        raise ValueError("Unsupported shape")
-    rgb_arr_flat = rgb_arr.flatten().reshape((-1, 3))
-    mask_arr = (rgb_arr_flat[:, 0] == 255) & (rgb_arr_flat[:, 1] == 255) & \
-               (rgb_arr_flat[:, 2] == 255)
-    id_arr = np.zeros((len(rgb_arr_flat)), dtype=np.uint32)
-    for ii in range(len(rgb_arr_flat)):
-        if mask_arr[ii]:
-            continue
-        rgb = rgb_arr_flat[ii]
-        id_arr[ii] = rgb[0] + rgb[1]*256 + rgb[2]*(256**2)
-    background_ix = np.max(id_arr) + 1  # convention: The highest index value in index view will correspond to the background
-    id_arr[mask_arr] = background_ix
-    return id_arr.reshape(rgb_arr.shape[:-1])

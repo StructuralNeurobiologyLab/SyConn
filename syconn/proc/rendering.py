@@ -15,11 +15,13 @@ import sys
 import warnings
 from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
+from ..handler.multiviews import generate_palette, remap_rgb_labelviews, rgb2id_array
 from .meshes import merge_meshes, get_random_centered_coords, \
     MeshObject, calc_rot_matrices, flag_empty_spaces
 import os
 import tqdm
-from .meshes import id2rgb_array_contiguous
+from syconn.handler.multiviews import id2rgb_array_contiguous
+
 try:
     import os
     if not os.environ.get('PYOPENGL_PLATFORM'):
@@ -456,7 +458,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         c_views = np.ones(view_sh, dtype=np.float32)
         rot_mat = rot_matrices[ii]
         if np.sum(np.abs(rot_mat)) == 0 or np.sum(np.abs(mesh.vertices)) == 0:
-            if views_key == "raw":
+            if views_key in ["raw", "index"]:
                 print("Rotation matrix or vertices of '%s' with %d "
                       "vertices is zero during rendering at %s. Skipping."
                               % (views_key, len(mesh.vert_resh), str(c)))
@@ -821,11 +823,61 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     ind = np.arange(len(vert) // 3)
     color_array = np.repeat(color_array, 3, axis=0)
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
-    return _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
+    if return_rot_matrices:
+        ix_views, rot_mat = _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
                                depth_map=False, rot_matrices=rot_mat,
                                smooth_shade=False, views_key="index",
                                nb_views=nb_views, comp_window=comp_window,
                                return_rot_matrices=return_rot_matrices)
+        ix_views = rgb2id_array(ix_views)[:, None]
+        return ix_views, rot_mat
+    ix_views = _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
+                           depth_map=False, rot_matrices=rot_mat,
+                           smooth_shade=False, views_key="index",
+                           nb_views=nb_views, comp_window=comp_window,
+                           return_rot_matrices=return_rot_matrices)
+    return rgb2id_array(ix_views)[:, None]
+
+
+def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
+                                  ws=(256, 128), rot_mat=None, nb_views=2,
+                                  comp_window=8e3, return_rot_matrices=False):
+    """
+    Render views with vertex colors corresponding to vertex labels.
+    Parameters
+    ----------
+    sso :
+    vertex_labels : np.array
+        vertex labels [N, 1]. Ordering and length have to be the same as
+        vertex array of SuperSegmentationObject (len(sso.mesh[1]) // 3).
+    coords :
+    verbose :
+    ws :
+    rot_mat :
+    nb_views :
+    comp_window :
+    return_rot_matrices :
+
+    Returns
+    -------
+
+    """
+    ind, vert, _ = sso.mesh
+    if len(vertex_labels) != len(vert) // 3:
+        raise ValueError("Length of vertex labels and vertices "
+                         "have to be equal.")
+    palette = generate_palette(len(np.unique(vertex_labels)))
+    color_array = palette[vertex_labels].astype(np.float32)/255
+    mo = MeshObject("neuron", ind, vert, color=color_array)
+    label_views, rot_mat = _render_mesh_coords(coords, mo, depth_map=False, ws=ws,
+                                               rot_matrices=rot_mat, nb_views=nb_views,
+                                               smooth_shade=False, verbose=verbose,
+                                               comp_window=comp_window,
+                                               return_rot_matrices=True)
+    label_views = remap_rgb_labelviews(label_views, palette)[:, None]
+    if return_rot_matrices:
+        return label_views, rot_mat
+    return label_views
 
 
 def get_sso_view_dc(sso, verbose=False):

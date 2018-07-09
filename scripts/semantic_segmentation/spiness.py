@@ -6,101 +6,19 @@
 import numpy as np
 from knossos_utils.skeleton_utils import load_skeleton
 from sklearn.neighbors import KDTree
-from syconn.proc.meshes import MeshObject, rgb2id_array, id2rgb_array_contiguous, write_mesh2kzip
+from syconn.proc.meshes import MeshObject
 from syconn.proc.graphs import bfs_smoothing
-from syconn.handler.basics import majority_element_1d
 from syconn.proc.rendering import render_sso_coords, _render_mesh_coords,\
     render_sso_coords_index_views
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.reps.views import ViewContainer
 from syconn.handler.compression import save_to_h5py
+from syconn.handler.multiviews import generate_palette, remap_rgb_labelviews, str2intconverter
 from syconn.mp.shared_mem import start_multiprocess_imap
-# from scripts.rendering.inversed_mapping import id2rgb_array
-# import matplotlib.pylab as plt
-# from imageio import imwrite
-from numba import jit
 import re
-import tqdm
 import os
-import time
 from scipy.misc import imsave
 from sklearn.model_selection import train_test_split
-
-
-def generate_palette(nr_classes, return_rgba=True):
-    """
-    Creates a RGB(A) palette for N classes.
-
-    Parameters
-    ----------
-    nr_classes : int
-    return_rgba : bool
-        If True returned array has shape (N, 4) instead of (N, 3)
-
-    Returns
-    -------
-    np.array
-        Unique color array for N input classes
-    """
-    classes_ids = np.arange(nr_classes) #reserve additional class id for background
-    classes_rgb = id2rgb_array_contiguous(classes_ids)  # convention: do not use 1, 1, 1; will be background value
-    if return_rgba:
-        classes_rgb = np.concatenate([classes_rgb, np.ones(classes_rgb.shape[:-1])[..., None] * 255], axis=1)
-    return classes_rgb.astype(np.uint8)
-
-
-@jit
-def remap_rgb_labelviews(rgb_view, palette):
-    """
-
-    Parameters
-    ----------
-    rgb_view :
-    palette :
-
-    Returns
-    -------
-
-    """
-    label_view_flat = rgb_view.flatten().reshape((-1, 3))
-    background_label = len(palette)
-    # convention: Use highest ID as background
-    remapped_label_views = np.ones((len(label_view_flat), ), dtype=np.uint16) * background_label
-    for kk in range(len(label_view_flat)):
-        if np.all(label_view_flat[kk] == 255):  # background
-            continue
-        for i in range(len(palette)):
-            if (label_view_flat[kk, 0] == palette[i, 0]) and \
-               (label_view_flat[kk, 1] == palette[i, 1]) and \
-               (label_view_flat[kk, 2] == palette[i, 2]):
-                remapped_label_views[kk] = i
-                break
-    return remapped_label_views.reshape(rgb_view.shape[:-1])
-
-
-# create function that converts information in string type to the information in integer type
-def str2intconverter(comment, gt_type):
-    if gt_type == "axgt":
-        if comment == "gt_axon":
-            return 1
-        elif comment == "gt_dendrite":
-            return 0
-        elif comment == "gt_soma":
-            return 2
-        else:
-            return -1
-    elif gt_type == "spgt":
-        if "head" in comment:
-            return 1
-        elif "neck" in comment:
-            return 0
-        elif "shaft" in comment:
-            return 2
-        elif "other" in comment:
-            return 3
-        else:
-            return -1
-    else: raise ValueError("Given groundtruth type is not valid.")
 
 
 def generate_label_views(kzip_path, gt_type="spgt", n_voting=40, nb_views=2,
@@ -123,7 +41,6 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40, nb_views=2,
     palette = generate_palette(n_labels)
     sso_id = int(re.findall("/(\d+).", kzip_path)[0])
     sso = SuperSegmentationObject(sso_id, version=gt_type)
-    # try:
     sso.load_attr_dict()
     indices, vertices, normals = sso.mesh
 
@@ -152,8 +69,7 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40, nb_views=2,
     # np.save("/wholebrain/u/pschuber/spiness_skels/sso_%d_verts.k.zip" % sso.id, vertices)
 
     # for getting colored meshes
-    # colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
-    #           [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1]]
+    # colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1]]
     # colors = np.array(colors) * 255
     # color_array = (colors[vertex_labels].astype(np.float32))[:, 0]
     # write_mesh2kzip("/wholebrain/u/pschuber/spiness_skels/sso_%d_skeletonlabels.k.zip" % sso.id,
@@ -170,8 +86,7 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40, nb_views=2,
     locs = locs[dist[:, 0] < 2000]#[::3][:5]
 
 
-    # # # DEBUG PART START
-    # locs = np.array([[8626, 1175, 4530], [8450, 1125, 4502], [5486, 1387, 4116], [5281, 5636, 2646]]) * np.array([10, 10, 20])
+    # # # To get view locations
     # dest_folder = os.path.expanduser("~") + \
     #               "/spiness_skels/{}/view_imgs_{}/".format(sso_id, n_voting)
     # if not os.path.isdir(dest_folder):
@@ -188,17 +103,13 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40, nb_views=2,
                                                smooth_shade=False, nb_views=nb_views,
                                                comp_window=comp_window, verbose=True)
     label_views = remap_rgb_labelviews(label_views, palette)[:, None]
-    index_views = render_sso_coords_index_views(sso, locs, rot_matrices=rot_mat, verbose=True,
+    index_views = render_sso_coords_index_views(sso, locs, rot_mat=rot_mat, verbose=True,
                                                 nb_views=nb_views, ws=ws, comp_window=comp_window)
     raw_views = render_sso_coords(sso, locs, nb_views=nb_views, ws=ws,
                                   comp_window=comp_window, verbose=True, rot_mat=rot_mat)
-    # Only for necessary once
     # raw_views_wire = render_sso_coords(sso, locs, wire_frame=True,
     #  ws=(2048, 1024), nb_views=nb_views, rot_mat=rot_mat)
-    # except Exception as e:
-    #     print(repr(e), sso.id,)
-    #     raise()
-    return raw_views, label_views, rgb2id_array(index_views)[:, None]
+    return raw_views, label_views, index_views
 
 
 def GT_generation(kzip_paths, nb_views, dest_dir=None, gt_type="spgt",

@@ -5,8 +5,7 @@ import sys
 import numpy as np
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 import time
 # get paths to job handling directories
@@ -24,5 +23,5 @@ with open(path_storage_file) as f:
 
 numbers = args[0]
 for n in numbers:
-    print n
+    print(n)
     time.sleep(0.2)

@@ -9,8 +9,7 @@ import sys
 
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation_dataset import _write_super_segmentation_dataset_thread
 

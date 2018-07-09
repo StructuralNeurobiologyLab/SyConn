@@ -33,7 +33,7 @@ for ix in ssv_ixs:
         continue
     create_sso_skeleton(sso)
     if len(sso.skeleton["nodes"]) == 0:
-        print "Skeleton of SSV %d has zero nodes." % ix
+        print("Skeleton of SSV %d has zero nodes." % ix)
         continue
     sparsify_skeleton(sso)
     sso.save_skeleton()

@@ -19,7 +19,7 @@ import warnings
 from collections import Counter
 
 from scipy.misc import imsave
-from knossos_utils import skeleton, knossosdataset
+from knossos_utils import skeleton
 from collections import defaultdict
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
@@ -30,20 +30,16 @@ from . import super_segmentation_helper as ssh
 from .segmentation import SegmentationObject
 from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
-    knossos_ml_from_svixs, subfold_from_ix, subfold_from_ix_SSO, assign_rep_values
+    knossos_ml_from_svixs, subfold_from_ix_SSO
 from ..config import parser
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..handler.compression import AttributeDict, MeshDict, LZ4Dict
-from ..proc.image import single_conn_comp_img
-from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords, bfs_smoothing
-from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh, rgb2id_array
+from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords
+from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh
 from ..proc.rendering import render_sampled_sso, multi_view_sso,\
     multi_render_sampled_svidlist, render_sso_coords, \
     render_sso_coords_index_views
-if "matplotlib" not in globals():
-    import matplotlib
-    matplotlib.use("agg")
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
@@ -1229,8 +1225,6 @@ class SuperSegmentationObject(object):
         end_ix_views = time.time()
         print("Rendering views took {:.2f} s. {:.2f} views/s".format(
             end_ix_views - start, len(index_views) / (end_ix_views - start)))
-        # max ID will be background
-        index_views = rgb2id_array(index_views)[:, None]
         print("Mapping rgb values to vertex indices took {:.2f}s.".format(
             time.time() - end_ix_views))
         if not save:
@@ -1307,7 +1301,7 @@ class SuperSegmentationObject(object):
         for ix, v in dc.items():
             l, cnts = np.unique(v, return_counts=True)
             vertex_labels[ix] = l[np.argmax(cnts)]
-        if k == 1:  # map actual prediction situation / coverage
+        if k == 0:  # map actual prediction situation / coverage
             # keep unpredicted vertices and vertices with background labels
             predicted_vertices = self.mesh[1].reshape(-1, 3)
             predictions = vertex_labels
@@ -1465,7 +1459,7 @@ class SuperSegmentationObject(object):
             mesh = self._meshes[obj_type]
             color = None
         if ext_color is not None:
-            if ext_color == 0:
+            if np.isscalar(ext_color) and ext_color == 0:
                 color = None
             else:
                 color = ext_color
