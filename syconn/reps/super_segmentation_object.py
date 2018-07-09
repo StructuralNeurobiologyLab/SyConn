@@ -710,55 +710,6 @@ class SuperSegmentationObject(object):
         else:
             self._bounding_box = np.zeros((2, 3), dtype=np.int)
 
-    # def calculate_skeleton(self, size_threshold=1e20, kd=None,
-    #                        coord_scaling=(8, 8, 4), plain=False, cleanup=True,
-    #                        nb_threads=1):
-    #     if np.product(self.shape) < size_threshold:
-    #         # vx = self.load_voxels_downsampled(coord_scaling)
-    #         # vx = self.voxels[::coord_scaling[0],
-    #         #                  ::coord_scaling[1],
-    #         #                  ::coord_scaling[2]]
-    #         vx = self.load_voxels_downsampled(downsampling=coord_scaling)
-    #         vx = scipy.ndimage.morphology.binary_closing(
-    #             np.pad(vx, 3, mode="constant", constant_values=0), iterations=3)
-    #         vx = vx[3: -3, 3: -3, 3:-3]
-    #
-    #         if plain:
-    #             nodes, edges, diameters = \
-    #                 ssh.reskeletonize_plain(vx, coord_scaling=coord_scaling)
-    #             nodes = np.array(nodes, dtype=np.int) + self.bounding_box[0]
-    #         else:
-    #             nodes, edges, diameters = \
-    #                 ssh.reskeletonize_chunked(self.id, self.shape,
-    #                                           self.bounding_box[0],
-    #                                           self.scaling,
-    #                                           voxels=vx,
-    #                                           coord_scaling=coord_scaling,
-    #                                           nb_threads=nb_threads)
-    #
-    #     elif kd is not None:
-    #         nodes, edges, diameters = \
-    #             ssh.reskeletonize_chunked(self.id, self.shape,
-    #                                       self.bounding_box[0], self.scaling,
-    #                                       kd=kd, coord_scaling=coord_scaling,
-    #                                       nb_threads=nb_threads)
-    #     else:
-    #         return
-    #
-    #     nodes = np.array(nodes, dtype=np.int)
-    #     edges = np.array(edges, dtype=np.int)
-    #     diameters = np.array(diameters, dtype=np.float)
-    #
-    #     self.skeleton = {}
-    #     self.skeleton["edges"] = edges
-    #     self.skeleton["nodes"] = nodes
-    #     self.skeleton["diameters"] = diameters
-    #
-    #     if cleanup:
-    #         for i in range(2):
-    #             if len(self.skeleton["edges"]) > 2:
-    #                 self.skeleton = ssh.cleanup_skeleton(self.skeleton,
-    #                                                      coord_scaling)
     def calculate_skeleton(self, force=False):
         self.load_skeleton()
         if self.skeleton is not None and len(self.skeleton["nodes"]) != 0\
@@ -1146,6 +1097,9 @@ class SuperSegmentationObject(object):
         Renders views for each SV based on SSV context and stores them
         on SV level. Usually only used once: for initial glia or axoness
         prediction.
+        THIS WILL BE SAVED DISTRIBUTED AT EACH SV VIEW DICTIONARY
+        AND NOT FOR IN THE ONE OF THIS SSV.
+        See '_render_rawviews' for storing the views in the SSV folder.
 
         Parameters
         ----------
@@ -1231,7 +1185,8 @@ class SuperSegmentationObject(object):
             return index_views
         self.save_views(index_views, "index{}".format(nb_views))
 
-    def _render_rawviews(self, nb_views=2, save=True, force_recompute=False):
+    def _render_rawviews(self, nb_views=2, save=True, force_recompute=False,
+                         add_cellobjects=True):
         if not force_recompute:
             try:
                 views = self.load_views("raw{}".format(nb_views))
@@ -1242,13 +1197,13 @@ class SuperSegmentationObject(object):
                 pass
         locs = np.concatenate(self.sample_locations(cache=False))
         if self._rot_mat is None:
-            views, rot_mat = render_sso_coords(self, locs,
-                                      add_cellobjects=True, verbose=True,
+            views, rot_mat = render_sso_coords(self, locs,  verbose=True,
+                                      add_cellobjects=add_cellobjects,
                                       nb_views=nb_views, return_rot_mat=True)
             self._rot_mat = rot_mat
         else:
-            views = render_sso_coords(self, locs,
-                                      add_cellobjects=True, verbose=True,
+            views = render_sso_coords(self, locs, verbose=True,
+                                      add_cellobjects=add_cellobjects,
                                       nb_views=nb_views, rot_mat=self._rot_mat)
         if save:
             self.save_views(views, "raw{}".format(nb_views))
