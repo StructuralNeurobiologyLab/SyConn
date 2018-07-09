@@ -1,6 +1,15 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 import numpy as np
 import os
-import cPickle as pickle
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
 from knossos_utils import chunky
 import re
 from scipy import ndimage
@@ -9,13 +18,6 @@ import shutil
 from multiprocessing import Pool
 import glob
 
-# -*- coding: utf-8 -*-
-# SyConn - Synaptic connectivity inference toolkit
-#
-# Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-
 
 try:
     import QSUB_MAIN as qm
@@ -23,7 +25,7 @@ try:
 except:
     qsub_available = False
 
-from syconn.utils import basics
+from ..utils import basics
 
 
 def get_rel_path(obj_name, filename, suffix=""):
@@ -96,7 +98,7 @@ def extract_and_save_all_hull_voxels(object_dataset_path, overwrite=False,
         if objs_p_job >= 4000:
             break
 
-    print "%d objects per jobs" % objs_p_job
+    print("%d objects per jobs" % objs_p_job)
 
     set_cnt = 0
     multi_params = []
@@ -157,7 +159,7 @@ def check_all_hulls(object_dataset_path, nb_processes, use_qsub=False, queue="fu
         out_files = glob.glob(path_to_out + "/*")
         misses = []
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 misses += pickle.load(f)
 
     else:
@@ -180,11 +182,9 @@ def check_all_hulls_loop(object_dataset_paths, nb_processes=1, use_qsub=False, q
     for object_dataset_path in object_dataset_paths:
         misses[object_dataset_path] = check_all_hulls(object_dataset_path, nb_processes=nb_processes,
                                                       use_qsub=use_qsub, queue=queue)
-        print "%s: %d" % (object_dataset_path, len(misses[object_dataset_path]))
-        print misses[object_dataset_path]
-        print
-        print "---------------------------------------------------------"
-        print
+        print("%s: %d" % (object_dataset_path, len(misses[object_dataset_path]))+
+              misses[object_dataset_path]+
+              "\n---------------------------------------------------------\n")
     return misses
 
 
@@ -220,7 +220,7 @@ def load_dataset(path, use_shelve=False):
     #     this_input.object_dict = shelve.open(path+"/shelve_object_dictionary", flag='r', protocol=2)
 
     if os.path.normpath(this_input.path).strip("/") != os.path.normpath(path).strip("/"):
-        print "Updating paths..."
+        print("Updating paths...")
         this_input._path_to_chunk_dataset_head =""
         if path[-1] == "/":
             for part in path.split("/")[:-2]:
@@ -249,7 +249,7 @@ def load_dataset(path, use_shelve=False):
 
                 this_input.object_dict[key]._path_to_voxel[nb_voxel_path] = voxel_path
 
-        print "... finished."
+        print("... finished.")
     this_input._temp_sizes = []
     this_input._temp_rep_coords = []
     return this_input
@@ -627,7 +627,7 @@ class SegmentationObject(object):
             voxels = np.array(np.array(self.voxels) - this_bb[0],
                               dtype=np.uint32)
             if np.ndim(voxels) != 2:
-                print "No voxels found in %s. Shape: %s" % (self.type, str(voxels.shape))
+                print("No voxels found in %s. Shape: %s" % (self.type, str(voxels.shape)))
                 return
             else:
                 if overwrite:

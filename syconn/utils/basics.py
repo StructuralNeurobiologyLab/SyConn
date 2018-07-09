@@ -16,11 +16,37 @@ import warnings
 import re
 
 
+def argsort(seq):
+    # http://stackoverflow.com/questions/3071415/efficient-method-to-calculate-the-rank-vector-of-a-list-in-python
+    return sorted(range(len(seq)), key=seq.__getitem__)
+
+
 def switch_array_entries(this_array, entries):
     entry_0 = this_array[entries[0]]
     this_array[entries[0]] = this_array[entries[1]]
     this_array[entries[1]] = entry_0
     return this_array
+
+
+def crop_bool_array(arr):
+    """
+    Crops a bool array to its True region
+
+    :param arr: 3d bool array
+        array to crop
+    :return: 3d bool array, list
+        cropped array, offset
+    """
+    in_mask_indices = [np.flatnonzero(arr.sum(axis=(1, 2))),
+                       np.flatnonzero(arr.sum(axis=(0, 2))),
+                       np.flatnonzero(arr.sum(axis=(0, 1)))]
+
+    return arr[in_mask_indices[0].min(): in_mask_indices[0].max() + 1,
+               in_mask_indices[1].min(): in_mask_indices[1].max() + 1,
+               in_mask_indices[2].min(): in_mask_indices[2].max() + 1],\
+           [in_mask_indices[0].min(),
+            in_mask_indices[1].min(),
+            in_mask_indices[2].min()]
 
 
 def negative_to_zero(a):
@@ -69,7 +95,7 @@ def get_orth_plane(node_com):
                     orth_plane[i, :] = arr([-1.0*(y[i]**2+z[i]**2)/x[i],
                                             y[i], z[i]])
                 else:
-                    print "WARNING: Problem finding orth. plane. ", i, lin_interp[i]
+                    print("WARNING: Problem finding orth. plane. ", i, lin_interp[i])
         inner_prod[i] = np.inner(orth_plane[i], lin_interp[i])
         n = np.linalg.norm(orth_plane[i])
         if n != 0:
@@ -201,7 +227,7 @@ def cell_object_coord_parser(voxel_tree):
         elif 'sj' in comment:
             sj_coords.append(node.getCoordinate())
         else:
-            print "Couldn't understand comment:", comment
+            print("Couldn't understand comment:", comment)
     return arr(mito_coords), arr(vc_coords), arr(sj_coords)
 
 

@@ -1,18 +1,5 @@
-try:
-    from setuptools import setup, find_packages
-except ImportError:
-    from distutils.core import setup, find_packages
-from distutils.extension import Extension
-import numpy as np
-try:
-    from Cython.Distutils import build_ext
-    from Cython.Build import cythonize
-except ImportError:
-    raise ImportError('Cython not find, please install manually beforehand.')
-cmdclass = {'build_ext': build_ext}
-ext_modules = [Extension("syconn.ray_casting.ray_casting_radius",
-                         ["syconn/ray_casting/ray_casting_radius.pyx"],
-                         include_dirs=[np.get_include()], language="c++")]
+from setuptools import setup, find_packages
+# TODO: add vigra and opencv (cv2)
 config = {
     'description': 'Analysis pipeline for EM raw data based on deep and '
                    'supervised learning to extract high level biological'
@@ -21,17 +8,15 @@ config = {
     'url': 'syconn.org',
     'download_url': 'https://github.com/StructuralNeurobiologyLab/SyConn.git',
     'author_email': '',
-    'version': '0.1',
-    'install_requires': ['cython', 'knossos_utils', 'nose',
-                         'matplotlib', 'scikit-learn==0.17.1', 'networkx', 'numpy',
-                         'scipy', 'seaborn'],
-    'scripts': [],  'cmdclass': cmdclass, 'ext_modules': ext_modules,
+    'version': '0.2',
+    'install_requires': ['knossos_utils', 'ELEKTRONN2', 'matplotlib',
+                         'numpy', 'scipy', 'lz4', 'h5py', 'networkx',
+                         'configobj', 'fasteners', 'flask'],
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_utils'
-                         '/tarball/master#egg=knossos_utils'],
-    'include_dirs': [np.get_include()],
-    'package_data': {'syconn': ['ray_casting/*.so']},
-    'packages': find_packages(), ' include_package_data': True,
+                         '/tarball/master#egg=knossos_utils',
+                         'https://github.com/ELEKTRONN/ELEKTRONN2'
+                         '/tarball/master#egg=ELEKTRONN2'],
+    'packages': find_packages(exclude=['scripts']),
 }
 setup(**config)
-# compile ray casting c function
