@@ -583,3 +583,56 @@ class DelayedInterrupt(object):
             signal.signal(sig, self.old_handlers[sig])
             if self.signal_received[sig] and self.old_handlers[sig]:
                 self.old_handlers[sig](*self.signal_received[sig])
+
+
+def prase_cc_dict_from_txt(txt):
+    """
+    Parse connected components from knossos mergelist text file
+
+    Parameters
+    ----------
+    txt : str
+
+    Returns
+    -------
+    dict
+    """
+    cc_dict = {}
+    for line in txt.splitlines()[::4]:
+        line_nb = np.array(re.findall("(\d+)", line), dtype=np.uint)
+        curr_ixs = line_nb[3:]
+        cc_ix = line_nb[0]
+        curr_ixs = curr_ixs[curr_ixs != 0]
+        cc_dict[cc_ix] = curr_ixs
+    return cc_dict
+
+
+def parse_cc_dict_from_kml(kml_path):
+    """
+    Parse connected components from knossos mergelist text file
+
+    Parameters
+    ----------
+    kml_path : str
+
+    Returns
+    -------
+    dict
+    """
+    txt = open(kml_path, "rb").read()
+    return prase_cc_dict_from_txt(txt)
+
+
+def parse_cc_dict_from_kzip(k_path):
+    """
+
+    Parameters
+    ----------
+    k_path : str
+
+    Returns
+    -------
+    dict
+    """
+    txt = read_txt_from_zip(k_path, "mergelist.txt")
+    return prase_cc_dict_from_txt(txt)

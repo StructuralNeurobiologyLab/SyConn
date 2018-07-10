@@ -2,7 +2,7 @@
 # Copyright (c) 2016 Philipp J. Schubert
 # All rights reserved
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
-
+from syconn.handler.basics import write_obj2pkl
 # ------------------------------------------------------------------------------
 # example script for generating a ground truth SSD based on IDs (for coords
 #  one has to query the corresponding ID from the desired KnossosDataset)
@@ -56,6 +56,9 @@ if __name__ == "__main__":
     for k in glia_ids: ssd_new.mapping_dict[k] = [k]
     # save SSVs
     ssd_new.save_dataset_deep()
+    gt_dir = "/wholebrain/scratch/areaxfs3//ssv_gliagt/"
+    label_dict = write_obj2pkl(gt_dir +"gliagt_labels.pkl", {k: 1 for k in
+                                                             glia_ids})
     # Neuron GT is given by axon GT ...
     for ssv in ssd_new.ssvs:
         ssv.load_attr_dict()

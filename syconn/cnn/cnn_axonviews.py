@@ -6,7 +6,7 @@ import os
 import syconn
 
 save_path = '~/CNN_Training/SyConn/axon_views/'
-save_name = "g1_v4"
+save_name = "g1_v4_TESTONLY"
 
 preview_data_path = None
 preview_kwargs    = dict(export_class='all', max_z_pred=5)

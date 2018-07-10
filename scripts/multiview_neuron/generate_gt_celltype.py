@@ -4,7 +4,7 @@
 from syconn.reps.super_segmentation import *
 
 
-# based on /wholebrain/scratch/areaxfs3/ and j0126
+# based on /wholebrain/scratch/areaxfs/ and j0126
 ssv_ids = [14438658, 19348869, 6259714, 30491392, 25330819, 26043712, 13961728, 31780672,
  34777476, 5913984, 18514945, 4871938, 13871746, 26892160, 24279553, 7211394,
  1183363, 18580484, 13608577, 22161416, 19005955, 16300292, 6685574, 7446555,
@@ -80,11 +80,15 @@ ssv_labels = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 if __name__ == "__main__":
     ssd_new = SuperSegmentationDataset(
         working_dir="/wholebrain/scratch/areaxfs3/", version="ctgt")
-    ssd_all = SuperSegmentationDataset(
-        working_dir="/wholebrain/scratch/areaxfs3/")
-    orig_ssvs = ssd_all.get_super_segmentation_object(ssv_ids)
-    copy_ssvs2new_SSD_simple(orig_ssvs, new_version="ctgt")
-    ssd_new.save_dataset_deep()
-    for ii, ssv_id in enumerate(ssd_new.ssvs):
+    # ssd_all = SuperSegmentationDataset(
+    #     working_dir="/wholebrain/scratch/areaxfs/")
+    # orig_ssvs = ssd_all.get_super_segmentation_object(ssv_ids)
+    # for ssv in orig_ssvs:
+    #     assert os.path.isfile(ssv.attr_dict_path)
+    # copy_ssvs2new_SSD_simple(orig_ssvs, new_version="ctgt",
+    #                          target_wd="/wholebrain/scratch/areaxfs3/")
+    # ssd_new.save_dataset_deep()
+    for ii, ssv_id in enumerate(ssv_ids):
         ssv = ssd_new.get_super_segmentation_object(ssv_id)
         ssv.save_attributes(["cellttype_gt"], [ssv_labels[ii]])
+        ssv._render_rawviews(2)

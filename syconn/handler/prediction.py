@@ -6,7 +6,6 @@ import time
 import warnings
 import tqdm
 from sklearn.neighbors import KNeighborsClassifier
-from syconn.handler.basics import get_filepaths_from_dir
 from collections import Counter
 from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils.knossosdataset import KnossosDataset
@@ -19,7 +18,7 @@ except ImportError:
           "'https://github.com/ELEKTRONN/elektronn3' for more information.")
 from .compression import load_from_h5py, save_to_h5py
 from ..proc.image import normalize_img
-from .basics import read_txt_from_zip
+from .basics import read_txt_from_zip, get_filepaths_from_dir, parse_cc_dict_from_kzip
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
@@ -255,6 +254,12 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True):
         print("File at {} already exists. Skipping.".format(fname))
         return
     raw, label = load_gt_from_kzip(zip_fname, kd_p)
+    if foreground_ids is None:
+        try:
+            cc_dc = parse_cc_dict_from_kzip(zip_fname)
+            foreground_ids = np.concatenate(list(cc_dc.values()))
+        except:  # mergelist.txt does not exist
+            foreground_ids = []
     create_h5_gt_file(fname, raw, label, foreground_ids)
 
 

@@ -4,8 +4,7 @@
 import os
 from syconn.config.global_params import wd
 from syconn.mp import qsub_utils as qu
-from syconn.handler.basics import chunkify
-from syconn.reps.rep_helper import parse_cc_dict_from_kml
+from syconn.handler.basics import chunkify, parse_cc_dict_from_kml
 from syconn.reps.segmentation_helper import find_missing_sv_views
 from syconn.reps.segmentation import SegmentationDataset
 import numpy as np

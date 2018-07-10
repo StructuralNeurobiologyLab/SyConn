@@ -15,21 +15,40 @@ from syconn.handler.prediction import force_correct_norm, naive_view_normalizati
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.mp.shared_mem import start_multiprocess_obj
+import os
+# fix random seed.
+np.random.seed(0)
 
 
 class MultiViewData(Data):
-    def __init__(self, working_dir, gt_type, raw_only=False, nb_cpus=20,
-                 force_reload=False):
+    def __init__(self, working_dir, gt_type, nb_cpus=20,
+                 label_dict=None, view_kwargs=None):
+        if view_kwargs is None:
+            view_kwargs = dict(raw_only=False, cache_default_views=True,
+                               nb_cpus=nb_cpus, ignore_missing=True,
+                               force_reload=False)
         self.gt_dir = working_dir + "/ssv_%s/" % (gt_type)
-        self.label_dict = load_pkl2obj(self.gt_dir + "%s_labels.pkl" % gt_type)
-        self.splitting_dict = load_pkl2obj(self.gt_dir + "%s_splitting.pkl" % gt_type)
+        if label_dict is None:
+            self.label_dict = load_pkl2obj(self.gt_dir +
+                                           "%s_labels.pkl" % gt_type)
+        if not os.path.isfile(self.gt_dir + "%s_splitting.pkl" % gt_type):
+            print("Splitting file not found. Splitting data accoring to 85"
+                  " (train) - 15 (valid).")
+            ixs = np.arange(len(self.label_dict))
+            np.random.shuffle(ixs)
+            ssv_ids = list(self.label_dict.keys())
+            split_ix = int(len(ixs) * 0.85)
+            splits = (ssv_ids[:split_ix], ssv_ids[split_ix:])
+            self.splitting_dict = {"train": splits[0], "valid": splits[1],
+                                   "test": []}
+        else:
+            self.splitting_dict = load_pkl2obj(self.gt_dir +
+                                               "%s_splitting.pkl" % gt_type)
         self.ssd = SuperSegmentationDataset(working_dir, version=gt_type)
 
         # train data
         # get views of each SV
-        self.train_d = [self.ssd.get_super_segmentation_object(ix).load_views(
-            raw_only=raw_only, cache_default_views=True, nb_cpus=nb_cpus,
-            ignore_missing=True, force_reload=force_reload)
+        self.train_d = [self.ssd.get_super_segmentation_object(ix).load_views(**view_kwargs)
             for ix in self.splitting_dict["train"]]
         # create labels for SV views according to SSV label, assuming pure SSV compartments
         self.train_l = np.concatenate([[self.label_dict[ix]] * len(self.train_d[ii])
@@ -40,8 +59,7 @@ class MultiViewData(Data):
         # set example shape for parent class 'Data'
         self.example_shape = self.train_d[0].shape
         # valid data
-        self.valid_d = [self.ssd.get_super_segmentation_object(ix).load_views(
-            raw_only=raw_only, cache_default_views=True, nb_cpus=nb_cpus, ignore_missing=True, force_reload=force_reload)
+        self.valid_d = [self.ssd.get_super_segmentation_object(ix).load_views(**view_kwargs)
             for ix in self.splitting_dict["valid"]]
         self.valid_l = np.concatenate([[self.label_dict[ix]] * len(self.valid_d[ii])
         for ii, ix in enumerate(self.splitting_dict["valid"])]).astype(np.uint16)[:, None]
@@ -49,18 +67,17 @@ class MultiViewData(Data):
         self.valid_d = naive_view_normalization(self.valid_d)
         # test data
         if len(self.splitting_dict["test"]) > 0:
-            self.test_d = [self.ssd.get_super_segmentation_object(ix).load_views(
-                raw_only=raw_only, cache_default_views=True, nb_cpus=nb_cpus, ignore_missing=True, force_reload=force_reload)
+            self.test_d = [self.ssd.get_super_segmentation_object(ix).load_views(**view_kwargs)
                 for ix in self.splitting_dict["test"]]
             self.test_l = np.concatenate(
                 [[self.label_dict[ix]] * len(self.test_d[ii])
                  for ii, ix in enumerate(self.splitting_dict["test"])]).astype(
                 np.uint16)[:, None]
             self.test_d = np.concatenate(self.test_d)
+            self.test_d = naive_view_normalization(self.test_d)
         else:
-            self.test_d = np.zeros((0, ), dtype=np.float32)
-            self.test_l = np.zeros((0, ), dtype=np.uint16)
-        self.test_d = naive_view_normalization(self.test_d)
+            self.test_d = np.zeros_like(self.valid_d)[:1]
+            self.test_l = np.zeros_like(self.valid_l)[:1]
         print("GT splitting:", self.splitting_dict)
         print("\nlabels (train) - 0:%d\t1:%d\t2:%d" % (
             np.sum(self.train_l == 0),
@@ -74,20 +91,23 @@ class MultiViewData(Data):
 
 
 class AxonViews(MultiViewData):
-    def __init__(self, input_node, target_node, gt_type="axgt", working_dir=wd,
+    def __init__(self, inp_node, out_node, gt_type="axgt", working_dir=wd,
                  nb_views=2, reduce_context=0, channels_to_load=(0, 1, 2, 3),
                  reduce_context_fact=1, binary_views=False, raw_only=False, nb_cpus=20,
                  **kwargs):
-        super(AxonViews, self).__init__(working_dir, gt_type, raw_only,
+        super(AxonViews, self).__init__(working_dir, gt_type,
                                         nb_cpus=nb_cpus, **kwargs)
         self.nb_views = nb_views
         self.reduce_context = reduce_context
         self.reduce_context_fact = reduce_context_fact
         self.channels_to_load = channels_to_load
         self.binary_views = binary_views
-        self.nb_views = nb_views
         self.raw_only = raw_only
-        self.example_shape = (nb_views, 4, 2, 128, 256)
+        if self.raw_only and self.train_d.shape[1] > 1:
+            self.train_d = self.train_d[: ,:1]
+            self.valid_d = self.valid_d[: ,:1]
+            if len(self.test_d) > 0:
+                self.test_d = self.test_d[: ,:1]
         print("Initializing AxonViews:", self.__repr__())
         self.example_shape = self.train_d[0].shape
 
@@ -109,103 +129,39 @@ class AxonViews(MultiViewData):
         d = d[:, :, view_shuffle[:self.nb_views]]
         if self.binary_views:
             d[d < 1.0] = 0
-        return d, l
+        return tuple([d, l])
 
 
 class GliaViews(Data):
-    def __init__(self, input_node, target_node, channels_to_load=(0, ),
-                 nb_views=2, glia_only=False, augmentation=False, clahe=False,
-                 train_all=False, squeeze=True, reduce_context=0, binary_views=False,
-                 reduce_context_fact=1):
+    def __init__(self, inp_node, out_node, raw_only=True, nb_views=2,
+                 reduce_context=0, binary_views=False, reduce_context_fact=1):
         self.nb_views = nb_views
+        self.raw_only = raw_only
         self.reduce_context = reduce_context
         self.reduce_context_fact = reduce_context_fact
-        self.channels_to_load = channels_to_load
-        self.glia_only = glia_only
-        self.clahe = clahe
         self.binary_views = binary_views
-        self.augmentation = augmentation
         print("Initializing GliaViews:", self.__dict__)
-        ax_gt_dir = wd + "/gt/gt_axoness/"
-
-        if clahe:
-            # load glia views
-            raise NotImplementedError("Clahe views are not supported currently.")
-            self.glia_dict = load_pkl2obj(
-                wd + "/gt/gt_gliacells/views/glia_dict_v2_withclahe.pkl")
-        else:
-            # load glia views
-            self.glia_dict = load_pkl2obj(
-                wd + "/gt/gt_gliacells/views/glia_dict_v2.pkl")
-
-        nonglia_train_d, nonglia_train_l, nonglia_valid_d, nonglia_valid_l, \
-        nonglia_test_d, nonglia_test_l = load_axon_gt(channels_to_load, nb_views,
-                                                      version="6with2axonmergers", squeeze=squeeze,
-                                                      train_all=train_all,
-                                                      new_squeeze=False)
-        nb_nonglia_train = len(nonglia_train_d)
-        nb_nonglia_valid = len(nonglia_valid_d)
-        nb_nonglia_test = len(nonglia_test_d)
-        nb_ch = len(channels_to_load)
-        print("%d training and %d validation samples for non glia. " \
-              "Decompressing glia samples." % (nb_nonglia_train, nb_nonglia_valid))
-        nb_glia = 0
-        for k in self.glia_dict.keys():
-            decomp_arr = lz4stringtoarr(self.glia_dict[k],
-                                        shape=(-1, nb_ch, nb_views, 128, 256),
-                                        dtype=np.float64)[:, :, :nb_views].astype(np.float32)
-            self.glia_dict[k] = decomp_arr
-            nb_glia += len(decomp_arr)
-        glia_samples = np.zeros((nb_glia, nb_ch, nb_views, 128, 256), dtype=np.float32)
-        cnt = 0
-        for decomp_arr in self.glia_dict.itervalues():
-            glia_samples[cnt:(cnt+len(decomp_arr))] = decomp_arr
-            cnt += len(decomp_arr)
-        glia_boarder = int(nb_glia * 0.9)
-        nb_valid = nb_nonglia_valid+(nb_glia-glia_boarder)
-        nb_train = nb_nonglia_train+glia_boarder
-        self.train_d = np.zeros((nb_train, nb_ch, 2, 128, 256), dtype=np.float32)
-        self.train_l = np.zeros((nb_train, 1), dtype=np.int16)
-        self.train_d[:nb_nonglia_train] = nonglia_train_d
-        self.train_l[:nb_nonglia_train] = nonglia_train_l
-        del nonglia_train_d
-        del nonglia_train_l
-
-        self.valid_d = np.zeros((nb_valid, nb_ch, 2, 128, 256), dtype=np.float32)
-        self.valid_l = np.zeros((nb_valid, 1), dtype=np.int16)
-        self.valid_d[:nb_nonglia_valid] = nonglia_valid_d
-        self.valid_l[:nb_nonglia_valid] = nonglia_valid_l
-        del nonglia_valid_d
-        del nonglia_valid_l
-
-        self.test_d = np.zeros((0, nb_ch, nb_views, 128, 256), dtype=np.float32)
-        self.test_l = np.zeros((0, 1), dtype=np.int16)
-
-        self.train_d[nb_nonglia_train:] = glia_samples[:glia_boarder]
-        self.train_l[nb_nonglia_train:] = 3
-
-        self.valid_d[nb_nonglia_valid:] = glia_samples[glia_boarder:]
-        self.valid_l[nb_nonglia_valid:] = 3
-        if self.glia_only:
-            self.train_l[self.train_l != 3] = 0
-            self.train_l[self.train_l == 3] = 1
-            self.valid_l[self.valid_l != 3] = 0
-            self.valid_l[self.valid_l == 3] = 1
-            print("\nlabels (train) - 0:%d\t1:%d" % (np.sum(self.train_l==0),
-                                                         np.sum(self.train_l == 1)))
-            print("labels (valid) - 0:%d\t1:%d" % (np.sum(self.valid_l==0),
-                                                         np.sum(self.valid_l == 1)))
-        else:
-            print("\nlabels (train) - 0:%d\t1:%d\t2:%d\t3:%d" % (
+        # get glia gt
+        GV = MultiViewData("/wholebrain/scratch/areaxfs3/", "gliagt",
+                           view_kwargs=dict(view_key="raw{}".format(nb_views)))
+        # get axon GT
+        AV = AxonViews(inp_node, out_node, raw_only=True, nb_views=nb_views)
+        # set label to non-glia
+        AV.train_l[:] = 0
+        AV.valid_l[:] = 0
+        AV.test_l[:] = 0
+        self.train_d = np.concatenate([AV.train_d, GV.train_d])
+        self.train_l = np.concatenate([AV.train_l, GV.train_l])
+        self.valid_d = np.concatenate([AV.valid_d, GV.valid_d])
+        self.valid_l = np.concatenate([AV.valid_l, GV.valid_l])
+        self.test_d = np.concatenate([AV.test_d, GV.test_d])
+        self.test_l = np.concatenate([AV.test_l, GV.test_l])
+        print("\nlabels (train) - 0:%d\t1:%d" % (
             np.sum(self.train_l == 0),
-            np.sum(self.train_l == 1),
-            np.sum(self.train_l == 2),
-            np.sum(self.train_l == 3)))
-            print("labels (valid) - 0:%d\t1:%d\t2:%d\t3:%d" % (
+            np.sum(self.train_l == 1)))
+        print("labels (valid) - 0:%d\t1:%d" % (
             np.sum(self.valid_l == 0),
-            np.sum(self.valid_l == 1),
-            np.sum(self.valid_l == 2),
-            np.sum(self.valid_l == 3)))
+            np.sum(self.valid_l == 1)))
         self.example_shape = self.train_d[0].shape
         super(GliaViews, self).__init__()
 
@@ -224,12 +180,17 @@ class GliaViews(Data):
                 self.reduce_context:-self.reduce_context]
         if self.reduce_context_fact > 1:
             d = d[:, :, :, ::self.reduce_context_fact, ::self.reduce_context_fact]
-        d = d[:, :, view_shuffle[:self.nb_views]]
-        if self.augmentation:
-            d = _augmentViews(d)
+        d = d[:, :, view_shuffle]
+        flipx, flipy = np.random.randint(0, 2, 2)
+        if flipx:
+            d = d[..., ::-1, :]
+        if flipy:
+            d = d[..., ::-1]
         if self.binary_views:
             d[d < 1.0] = 0
-        return d, l
+        if self.raw_only and d.shape[1] > 1:
+            d = d[:, :1]
+        return tuple([d, l])
 
 
 class SSVCelltype(Data):
@@ -328,7 +289,7 @@ class SSVCelltype(Data):
             d[d < 1.0] = 0
         if self.raw_only:
             return d[:, :1], l
-        return d, l
+        return tuple([d, l])
 
 
 def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1):
@@ -370,7 +331,7 @@ def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1):
             orig_views[cnt:(curr_nb_samples + cnt)] = orig_views[random_ix]
             new_labels[cnt:(curr_nb_samples + cnt)] = new_labels[random_ix]
             cnt += curr_nb_samples
-    return orig_views, new_labels
+    return tuple([orig_views, new_labels])
 
 
 class TripletData_N(Data):
@@ -435,7 +396,7 @@ class TripletData_N(Data):
             out_d = out_d[..., ::-1]
         if rotate_by_pi_x:
             out_d = out_d[..., ::-1, :]
-        return out_d, None
+        return tuple([out_d, None])
 
 
 class TripletData_SSV(Data):
@@ -681,22 +642,6 @@ def transform_tripletN_data_so(sos):
                             small_dist_d[:, :, None],
                             bigger_dist_d[:, :, None]], axis=2)
     return out_d.astype(np.float32)
-
-
-def _augmentViews(data, crop=(4, 8)):
-    """
-    Creates new data, by cropping/shifting data.
-    """
-    for i in range(data.shape[0]):
-        v = data[i]
-        crop0a = np.random.randint(0, crop[0])
-        crop0b = np.random.randint(0, crop[0])
-        crop1a = np.random.randint(0, crop[1])
-        crop1b = np.random.randint(0, crop[1])
-        new = np.ones_like(v)
-        new[:, :, crop0a:-crop0b, crop1a:-crop1b] = v[:, :, crop0a:-crop0b, crop1a:-crop1b]
-        data[i] = new
-    return data
 
 
 def transform_tripletN_data(d, channels_to_load, view_striding):

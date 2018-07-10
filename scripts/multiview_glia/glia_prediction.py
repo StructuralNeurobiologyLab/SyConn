@@ -1,13 +1,12 @@
 # SyConn
 # Copyright (c) 2018 Philipp J. Schubert, J. Kornfeld
 # All rights reserved
-from syconn.reps.rep_helper import parse_cc_dict_from_kml
 from syconn.config.global_params import wd
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.segmentation_helper import find_missing_sv_attributes
 from syconn.handler.prediction import get_glia_model
-from syconn.handler.basics import chunkify
+from syconn.handler.basics import chunkify, parse_cc_dict_from_kml
 from syconn.config.global_params import get_dataset_scaling
 from syconn.mp import qsub_utils as qu
 import tqdm

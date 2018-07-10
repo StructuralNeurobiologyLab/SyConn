@@ -9,7 +9,8 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.handler.basics import *
 from syconn.handler.compression import AttributeDict
-from syconn.reps.rep_helper import parse_cc_dict_from_kml, knossos_ml_from_ccs
+from syconn.reps.rep_helper import knossos_ml_from_ccs
+from syconn.handler.basics import parse_cc_dict_from_kml
 import numpy as np
 import networkx as nx
 import itertools
@@ -43,15 +44,7 @@ def collect_glia_sv():
     ids_in_rag = np.concatenate(cc_dict.values())
     sds = SegmentationDataset("sv", working_dir=wd)
     # get all SV glia probas (faster than single access)
-    # TODO: check if there is a way to auto-generate folder structure
-    f1 = np.arange(0, 100)
-    f2 = np.arange(0, 100)
-    f3 = np.arange(0, 10)
-    all_poss_attr_dicts = list(itertools.product(f1, f2, f3))
-    assert len(all_poss_attr_dicts) == 100*100*10
-    fold = sds.so_storage_path
-    multi_params = ["%s/%d/%d/%d/" % (fold, par[0], par[1], par[2])
-                    for par in all_poss_attr_dicts]
+    multi_params = sds.so_dir_paths
     # glia predictions only used for SSVs which only have single SV and were
     # not contained in RAG
     glia_preds_list = start_multiprocess(collect_gliaSV_helper_chunked,
@@ -145,12 +138,12 @@ def write_glia_rag(path2rag, suffix=""):
         if all_size_dict[ix] > min_single_sv_size:
             neuron_g.add_node(ix)
             neuron_g.add_edge(ix, ix)
-    print "Added %d neuron CCs with one SV." % (len(neuron_g.nodes()) - before_cnt)
+    print("Added %d neuron CCs with one SV." % (len(neuron_g.nodes()) - before_cnt))
     ccs = sorted(list(nx.connected_components(neuron_g)), reverse=True, key=len)
     txt = knossos_ml_from_ccs([list(cc)[0] for cc in ccs], ccs)
     write_txt2kzip(wd + "/glia/neuron_rag_ml%s.k.zip" % suffix, txt, "mergelist.txt")
     nx.write_edgelist(neuron_g, wd + "/glia/neuron_rag%s.bz2" % suffix)
-    print "Nb neuron CC's:", len(ccs), len(ccs[0])
+    print("Nb neuron CC's:", len(ccs), len(ccs[0]))
     # add glia CCs with single SV
     missing_glia_svs = set(glia_svs).difference(glia_g.nodes())
     before_cnt = len(glia_g.nodes())
@@ -158,9 +151,9 @@ def write_glia_rag(path2rag, suffix=""):
         if all_size_dict[ix] > min_single_sv_size:
             glia_g.add_node(ix)
             glia_g.add_edge(ix, ix)
-    print "Added %d glia CCs with one SV." % (len(glia_g.nodes()) - before_cnt)
+    print("Added %d glia CCs with one SV." % (len(glia_g.nodes()) - before_cnt))
     ccs = list(nx.connected_components(glia_g))
-    print "Nb glia CC's:", len(ccs)
+    print("Nb glia CC's:", len(ccs))
     nx.write_edgelist(glia_g, wd + "/glia/glia_rag%s.bz2" % suffix)
     txt = knossos_ml_from_ccs([list(cc)[0] for cc in ccs], ccs)
     write_txt2kzip(wd + "/glia/glia_rag_ml%s.k.zip" % suffix, txt, "mergelist.txt")
