@@ -15,13 +15,19 @@ import warnings
 # try:
 args = sys.argv
 so_version = args[1]
+skip_indexviews = args[2]
 so_kwargs = {'version': so_version, 'working_dir': wd}
-svixs = np.array(args[2:], dtype=np.uint)
+svixs = np.array(args[3:], dtype=np.uint)
 sd = sos_dict_fact(svixs, **so_kwargs)
 sos = init_sos(sd)
+# render raw
 render_sampled_sos_cc(sos, render_first_only=True, woglia=True,
                       verbose=False, add_cellobjects=True, overwrite=False,
                       cellobjects_only=False)
+if not skip_indexviews:
+    # render index views
+    render_sampled_sos_cc(sos, render_first_only=True, woglia=True, index_views=True,
+                          verbose=False, overwrite=False)
 # except Exception as e:
 #     print "Error occured:", e
 

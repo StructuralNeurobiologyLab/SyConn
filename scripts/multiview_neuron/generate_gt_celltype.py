@@ -92,3 +92,6 @@ if __name__ == "__main__":
         ssv = ssd_new.get_super_segmentation_object(ssv_id)
         ssv.save_attributes(["cellttype_gt"], [ssv_labels[ii]])
         ssv._render_rawviews(2)
+    gt_dir = "/wholebrain/scratch/areaxfs3//ssv_gliagt/"
+    label_dict = write_obj2pkl(gt_dir +"gliagt_labels.pkl",
+                 {ssv_ids[kk]: ssv_labels[kk] for kk in range(len(ssv_ids))})

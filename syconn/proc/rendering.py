@@ -645,7 +645,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
 
 
 def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
-                       add_cellobjects=True, overwrite=True,
+                       add_cellobjects=True, overwrite=True, index_views=False,
                        return_views=False, cellobjects_only=False):
     """
 
@@ -662,6 +662,7 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
     cellobjects_only : bool
     woglia : bool
         without glia
+    index_views : bool
     overwrite : bool
     return_views : bool
     cellobjects_only : bool
@@ -687,18 +688,23 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
     # len(part_views) == N + 1
     part_views = np.cumsum([0] + [len(c) for c in coords])
     flat_coords = np.array(flatten_list(coords))
-    views = render_sso_coords(sso, flat_coords, ws=ws, verbose=verbose,
-                              add_cellobjects=add_cellobjects,
-                              cellobjects_only=cellobjects_only)
+    if index_views:
+        views = render_sso_coords_index_views(sso, flat_coords, ws=ws,
+                                              verbose=verbose)
+    else:
+        views = render_sso_coords(sso, flat_coords, ws=ws, verbose=verbose,
+                                  add_cellobjects=add_cellobjects,
+                                  cellobjects_only=cellobjects_only)
     for i, so in enumerate(missing_svs):
         sv_views = views[part_views[i]:part_views[i+1]]
-        so.save_views(sv_views, woglia=woglia, cellobjects_only=cellobjects_only)
+        so.save_views(sv_views, woglia=woglia, cellobjects_only=cellobjects_only,
+                      index_views=index_views)
     if verbose:
         dur = time.time() - start
         print ("Rendering of %d views took %0.2fs (incl. read/write). "
               "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
     if return_views:
-        return sso.load_views(woglia=woglia)
+        return sso.load_views(woglia=woglia, index_views=index_views)
 
 
 def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=False,
@@ -930,10 +936,11 @@ def multi_render_sampled_svidlist(args):
     svixs : iterable
         SegmentationObject ID's
     """
-    version, svixs = args[0], args[1:]
+    version, skip_indexviews, svixs = args[0], args[1], args[2:]
     fpath = os.path.dirname(os.path.abspath(__file__))
     cmd = "python %s/../../scripts/backend/render_helper_svidlist.py" % fpath
     cmd += " {}".format(version)
+    cmd += " {}".format(skip_indexviews)
     for ix in svixs:
         cmd += " {}".format(ix)
     res = os.system(cmd)
@@ -951,6 +958,7 @@ def multi_render_sampled_sso(sso_ix):
     ----------
     sso_ix : int
     """
+    raise DeprecationWarning("Do not use anymore.")
     fpath = os.path.dirname(os.path.abspath(__file__))
     cmd = "python %s/../../scripts/backend//render_helper_sso.py" % fpath
     cmd += " {}".format(sso_ix)

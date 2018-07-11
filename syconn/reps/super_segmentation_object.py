@@ -1092,7 +1092,7 @@ class SuperSegmentationObject(object):
 
     def render_views(self, add_cellobjects=False,
                      qsub_pe=None, overwrite=False, cellobjects_only=False,
-                     woglia=True):
+                     woglia=True, skip_indexviews=False):
         """
         Renders views for each SV based on SSV context and stores them
         on SV level. Usually only used once: for initial glia or axoness
@@ -1103,13 +1103,14 @@ class SuperSegmentationObject(object):
 
         Parameters
         ----------
-        add_cellobjects :
-        random_processing :
-        qsub_pe :
-        overwrite :
-        cellobjects_only :
-        woglia :
-
+        add_cellobjects : bool
+        qsub_pe : str
+        overwrite : bool
+        cellobjects_only : bool
+        woglia : bool
+        skip_indexviews : bool
+            Index views will not be generated, import for e.g. initial SSV
+            rendering prior to glia-splitting.
         Returns
         -------
 
@@ -1134,7 +1135,7 @@ class SuperSegmentationObject(object):
                 part[k] = [so.id for so in val]
             params = part.values()
             if qsub_pe is None:
-                params = [[self.svs[0].version] + list(p) for p in params]
+                params = [[self.svs[0].version, skip_indexviews] + list(p) for p in params]
                 sm.start_multiprocess_imap(multi_render_sampled_svidlist, params,
                                       nb_cpus=self.nb_cpus, debug=False)
             elif qu.__QSUB__:
@@ -1145,16 +1146,23 @@ class SuperSegmentationObject(object):
                 render_kwargs = {"overwrite": overwrite, 'woglia': woglia,
                                  "render_first_only": True,
                                  'add_cellobjects':add_cellobjects,
-                                 "cellobjects_only": cellobjects_only}
+                                 "cellobjects_only": cellobjects_only,
+                                 'skip_indexviews': skip_indexviews}
                 params = [[par, so_kwargs, render_kwargs] for par in params]
                 qu.QSUB_script(params, "render_views_partial", pe=qsub_pe, queue=None,
                                script_folder=script_folder, n_max_co_processes=200)
             else:
                 raise Exception("QSUB not available")
         else:
+            # render raw data
             render_sampled_sso(self, add_cellobjects=add_cellobjects,
                                verbose=False, overwrite=overwrite,
                                cellobjects_only=cellobjects_only, woglia=woglia)
+            if skip_indexviews:
+                return
+            # render index views
+            render_sampled_sso(self, verbose=False, overwrite=overwrite,
+                               index_views=True)
 
     def _render_indexviews(self, nb_views=2, save=True, force_recompute=False):
         if not force_recompute:
@@ -1973,7 +1981,8 @@ class SuperSegmentationObject(object):
 
 def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
                           render_first_only=False, add_cellobjects=True,
-                          overwrite=False, cellobjects_only=False):
+                          overwrite=False, cellobjects_only=False,
+                          index_views=False):
     """
     Renders for each SV views at sampled locations (number is dependent on
     SV mesh size with scaling fact) from combined mesh of all SV.
@@ -2011,15 +2020,22 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
     if add_cellobjects:
         sso._map_cellobjects(save=False)
     part_views = np.cumsum([0] + [len(c) for c in coords])
-    views = render_sso_coords(sso, flatten_list(coords), add_cellobjects=add_cellobjects,
-                              ws=ws, verbose=verbose, cellobjects_only=cellobjects_only)
+    if index_views:
+        views = render_sso_coords_index_views(sso, flatten_list(coords),
+                                  ws=ws, verbose=verbose)
+    else:
+        views = render_sso_coords(sso, flatten_list(coords),
+                                  add_cellobjects=add_cellobjects,
+                                  ws=ws, verbose=verbose,
+                                  cellobjects_only=cellobjects_only)
     for i in range(len(coords)):
         v = views[part_views[i]:part_views[i+1]]
         if np.sum(v) == 0 or np.sum(v) == np.prod(v.shape):
             warnings.warn("Empty views detected after rendering.",
                           RuntimeWarning)
         sv_obj = sos[i]
-        sv_obj.save_views(views=v, woglia=woglia, cellobjects_only=cellobjects_only)
+        sv_obj.save_views(views=v, woglia=woglia, index_views=index_views,
+                          cellobjects_only=cellobjects_only)
 
 
 def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):

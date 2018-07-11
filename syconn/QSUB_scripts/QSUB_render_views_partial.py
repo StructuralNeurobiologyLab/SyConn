@@ -29,10 +29,16 @@ with open(path_storage_file, 'rb') as f:
 ch = args[0]
 so_kwargs = args[1]
 kwargs = args[2]
+skip_indexviews = kwargs['skip_indexviews']
+del kwargs['skip_indexviews']
 for svixs in ch:
     sd = sos_dict_fact(svixs, **so_kwargs)
     sos = init_sos(sd)
-    render_sampled_sos_cc(sos, **kwargs)
+    # render raw views
+    render_sampled_sos_cc(sos, index_views=False, **kwargs)
+    # now render with index views True.
+    if not skip_indexviews:
+        render_sampled_sos_cc(sos, index_views=True, **kwargs)
 
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

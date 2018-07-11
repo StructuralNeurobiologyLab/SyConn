@@ -9,6 +9,7 @@ from sklearn.neighbors import KNeighborsClassifier
 from collections import Counter
 from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils.knossosdataset import KnossosDataset
+import elektronn2
 from elektronn2.config import config as e2config
 from elektronn2.utils.gpu import initgpu
 try:
@@ -260,6 +261,7 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True):
             foreground_ids = np.concatenate(list(cc_dc.values()))
         except:  # mergelist.txt does not exist
             foreground_ids = []
+        print("Foreground IDs not assigned. Inferring from 'mergelist.txt' in k.zip.:", foreground_ids)
     create_h5_gt_file(fname, raw, label, foreground_ids)
 
 
@@ -561,7 +563,8 @@ def chunk_pred(ch, model, debug=False):
 
 class NeuralNetworkInterface(object):
     """
-    Experimental and almost deprecated interface class
+    Inference class for elektronn2 models, support will end at some point.
+    Switching to 'InferenceModel' in elektronn3.model.base in the long run.
     """
     def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
                  channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2,
@@ -580,7 +583,6 @@ class NeuralNetworkInterface(object):
         if e2config.device is None:
             from elektronn2.utils.gpu import initgpu
             initgpu(init_gpu)
-        import elektronn2
         elektronn2.logger.setLevel("ERROR")
         from elektronn2.neuromancer.model import modelload
         self.model = modelload(model_path, replace_bn='const',
@@ -656,6 +658,27 @@ def get_axoness_model_V2():
     return m
 
 
+def get_glia_model_v2():
+    """
+    Retrained with GP dendrites. May 2018.
+    """
+    m = NeuralNetworkInterface("/wholebrain/u/pschuber/CNN_Training/SyConn/glia_views/g0_v0/g0_v0-FINAL.mdl",
+                                  imposed_batch_size=200,
+                                  nb_labels=2, normalize_data=True)
+    _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
+    return m
+
+
+def get_celltype_model_v2(init_gpu=None):
+    # this model was trained with 'naive_view_normalization'
+    m = NeuralNetworkInterface("/wholebrain/u/pschuber/CNN_Training/SyConn/celltype/g1_20views_v3/g1_20views_v3-FINAL.mdl",
+                               imposed_batch_size=2, nb_labels=4, normalize_data=True,
+                               init_gpu=init_gpu)
+    _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
+    return m
+
+
+# Old models, were trained on old views without normalization
 def get_axoness_model():
     m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/axoness/g5_axoness_v0_all_run2/g5_axoness_v0_all_run2-FINAL.mdl",
                                   imposed_batch_size=200,  normalize_data=True,
@@ -740,7 +763,8 @@ def force_correct_norm(x):
 
 def naive_view_normalization(d):
     d = d.astype(np.float32)
-    # perform pseudo-normalization (proper normalization: how to store mean and std for inference?)
+    # perform pseudo-normalization
+    # (proper normalization: how to store mean and std for inference?)
     if not (np.min(d) >= 0 and np.max(d) <= 1.0):
         for ii in range(len(d)):
             curr_view = d[ii]

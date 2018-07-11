@@ -194,7 +194,10 @@ class GliaViews(Data):
 
 
 class SSVCelltype(Data):
-    """Uses N-views to represent SSVs and perform supervised classification of cell types"""
+    """Uses N-views to represent SSVs and perform supervised classification
+    of cell types.
+    TODO: Switch to new GT at ssv_ctgt
+    """
     def __init__(self, input_node, target_node, nb_views=20, nb_cpus=1,
                  raw_only=False, reduce_context=0,
                  reduce_context_fact=1, binary_views=False):
@@ -279,6 +282,7 @@ class SSVCelltype(Data):
             sso = self.ssds.get_super_segmentation_object(ix)
             sso.nb_cpus = self.nb_cpus
             ssos.append(sso)
+        # NOTE: also performs 'naive_view_normalization'
         d, l = transform_celltype_data(ssos, l, batch_size, self.nb_views)
         if self.reduce_context > 0:
             d = d[:, :, :, (self.reduce_context/2):(-self.reduce_context/2),

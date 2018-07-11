@@ -497,7 +497,7 @@ def chunkify(lst, n):
     -------
 
     """
-    return [lst[i::n] for i in xrange(n)]
+    return [lst[i::n] for i in range(n)]
 
 
 def flatten_list(lst):
