@@ -54,17 +54,19 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
             print('Using scale adapted raw offset:', raw_data_offset)
     elif len(raw_data_offset) != 3:
         raise ValueError("Offset for raw cubes has to have length 3.")
+    else:
+        raw_data_offset = np.array(raw_data_offset)
     raw = kd.from_raw_cubes_to_matrix(size + 2 * raw_data_offset,
                                       offset - raw_data_offset, nb_threads=2,
                                       mag=1, show_progress=False)
     try:
-        label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
-                                       verbose=False, show_progress=False)
-        label = label.astype(np.uint16)
-    except Exception as e:
-        print("\nError occured for file " + zip_fname + repr(e) +
-              "\nLabels are set to zeros (background).")
+        _ = parse_cc_dict_from_kzip(zip_fname)
+    except:  # mergelist.txt does not exist
         label = np.zeros_like(raw).astype(np.uint16)
+        return raw.astype(np.float32) / 255., label
+    label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
+                                   verbose=False, show_progress=False)
+    label = label.astype(np.uint16)
     return raw.astype(np.float32) / 255., label
 
 
@@ -365,8 +367,8 @@ def parse_movement_area_from_zip(zip_fname):
     assert len(line) == 1
     line = line[0]
     bb_min = np.array([re.findall('min.\w="(\d+)"', line)], dtype=np.uint)
-    bb_max = np.array([re.findall('max.\w="(\d+)"', line)], dtype=np.uint)
-    return np.concatenate([bb_min, bb_max]) - 1  # correct for 1-indexing of knossos
+    bb_max = np.array([re.findall('max.\w="(\d+)"', line)], dtype=np.uint) + 1 # upper bound is included
+    return np.concatenate([bb_min, bb_max])  # Movement area is stored with 0-indexing! No adjustment needed
 
 
 def pred_dataset(*args, **kwargs):
