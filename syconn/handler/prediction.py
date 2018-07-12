@@ -32,8 +32,11 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
     zip_fname : str
     kd_p : str
     raw_data_offset : int
-        additional offset for raw data to use full label volume, i.e. raw cube shape will be the shape of the labels
-        plus 2 times raw_data_offset
+        number of voxels used for additional raw offset, i.e. the offset for the
+        raw data will be label_offset - raw_data_offset, while the raw data
+        volume will be label_volume + 2*raw_data_offset. It will
+        use 'kd.scaling' to account for dataset anisotropy if scalar or a
+        list of length 3 hast to be provided for a custom x, y, z offset.
 
     Returns
     -------
@@ -48,7 +51,7 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
     if np.isscalar(raw_data_offset):
         raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling)
         if verbose:
-            print('Using scale adapted raw offset:', np.array([75, 75,  6]))
+            print('Using scale adapted raw offset:', raw_data_offset)
     elif len(raw_data_offset) != 3:
         raise ValueError("Offset for raw cubes has to have length 3.")
     raw = kd.from_raw_cubes_to_matrix(size + 2 * raw_data_offset,
@@ -232,7 +235,8 @@ def zxy2xyz(vol):
     return vol
 
 
-def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True):
+def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True,
+                        raw_data_offset=75):
     """
     Create .h5 files for ELEKTRONN input. Only supports binary labels
      (0=background, 1=foreground).
@@ -247,6 +251,12 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True):
         treated as foreground.
     overwrite : bool
         If True, will overwrite existing .h5 files
+    raw_data_offset : int
+        number of voxels used for additional raw offset, i.e. the offset for the
+        raw data will be label_offset - raw_data_offset, while the raw data
+        volume will be label_volume + 2*raw_data_offset. It will
+        use 'kd.scaling' to account for dataset anisotropy if scalar or a
+        list of length 3 hast to be provided for a custom x, y, z offset.
     """
     fname, ext = os.path.splitext(zip_fname)
     if fname[-2:] == ".k":
@@ -254,14 +264,16 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True):
     if os.path.isfile(fname + ".h5") and not overwrite:
         print("File at {} already exists. Skipping.".format(fname))
         return
-    raw, label = load_gt_from_kzip(zip_fname, kd_p)
+    raw, label = load_gt_from_kzip(zip_fname, kd_p,
+                      raw_data_offset=raw_data_offset)
     if foreground_ids is None:
         try:
             cc_dc = parse_cc_dict_from_kzip(zip_fname)
             foreground_ids = np.concatenate(list(cc_dc.values()))
         except:  # mergelist.txt does not exist
             foreground_ids = []
-        print("Foreground IDs not assigned. Inferring from 'mergelist.txt' in k.zip.:", foreground_ids)
+        print("Foreground IDs not assigned. Inferring from "
+              "'mergelist.txt' in k.zip.:", foreground_ids)
     create_h5_gt_file(fname, raw, label, foreground_ids)
 
 
@@ -282,6 +294,9 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None):
         ids which have to be converted to foreground, i.e. 1. Everything
         else is considered background (0). If None, everything except 0 is
         treated as foreground.
+    raw_overlap : int
+        number of voxels used for additional raw overlap. It will
+        use 'kd.scaling' to account for dataset anisotropy.
     """
     print(os.path.split(fname)[1])
     label = binarize_labels(label, foreground_ids)
