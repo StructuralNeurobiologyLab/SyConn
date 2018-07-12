@@ -222,7 +222,7 @@ class SSVCelltype(Data):
         for k in ssv_splits:
             ssv_splits[k] = np.array([old2new_ssvid[ix] for ix in ssv_splits[k]])
         new_ssv_gt_dict = {}
-        for k, v in ssv_gt_dict.iteritems():
+        for k, v in ssv_gt_dict.items():
             if k in old2new_ssvid:
                 new_ssv_gt_dict[old2new_ssvid[k]] = v
         ssv_gt_dict = new_ssv_gt_dict
@@ -346,7 +346,7 @@ class TripletData_N(Data):
         ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/")
         ssds.load_mapping_dict()
         rev_dc = {}
-        for k, v in ssds.mapping_dict.iteritems():
+        for k, v in ssds.mapping_dict.items():
             for el in v:
                 rev_dc[el] = k
         self.s_ids = np.concatenate(ssds.mapping_dict.values())

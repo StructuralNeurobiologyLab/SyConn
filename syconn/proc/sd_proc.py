@@ -222,7 +222,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
 
     sv_obj_map_dict = defaultdict(dict)
     for result in results:
-        for sv_key, value in result.iteritems():
+        for sv_key, value in result.items():
             sv_obj_map_dict[sv_key].update(value)
 
     mapping_dict_path = seg_dataset.path + "/sv_%s_mapping_dict.pkl" % sd.version

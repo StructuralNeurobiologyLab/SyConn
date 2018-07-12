@@ -103,6 +103,7 @@ class LZ4DictBase(dict):
     def keys(self):
         return self._dc_intern.keys()
 
+    # TODO: make above items, values, keys generators
     def iteritems(self):
         for k in self.keys():
             yield k, self[k]

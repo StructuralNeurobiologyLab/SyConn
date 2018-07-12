@@ -5,29 +5,19 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-
 import sys
 import copy
 import logging
 import time
 
 # temporary for easier development
-sys.path.append('/u/jkor/repos/SyConn/')
-sys.path.append('/u/jkor/repos/knossos_utils')
+#sys.path.append('/u/jkor/repos/SyConn/')
+#sys.path.append('/u/jkor/repos/knossos_utils')
 #sys.path.append('..')
 import numpy as np
-#from syconnfs.representations import super_segmentation as ss
-#from ..reps import super_segmentation as ss
-import syconn.reps.super_segmentation as ss
-import syconn.reps.connectivity_helper as conn
-
-#from ..reps import connectivity_helper as conn
-#from syconnfs.representations import segmentation as sd
-#from syconnfs.representations import connectivity as conn
-
+from syconn.reps import super_segmentation as ss
+from syconn.reps import connectivity_helper as conn
 from flask import Flask
-from flask import request
-
 import json
 
 app = Flask(__name__)
@@ -40,7 +30,7 @@ global sg_state
 def route_ssv_skeleton(ssv_id):
     d = sg_state.backend.ssv_skeleton(ssv_id)
     start = time.time()
-    ret = json.dumps(d)
+    ret = json.dumps(d, cls=MyEncoder)
     print("JSON dump:", time.time() - start)
     return ret
 
@@ -49,7 +39,7 @@ def route_ssv_skeleton(ssv_id):
 def route_ssv_mesh(ssv_id):
     d = sg_state.backend.ssv_mesh(ssv_id)
     start = time.time()
-    ret = json.dumps(d)
+    ret = json.dumps(d, cls=MyEncoder)
     print("JSON dump:", time.time() - start)
     return ret
 
@@ -76,7 +66,7 @@ def route_ssv_norm(ssv_id):
 def ssv_obj_mesh(ssv_id, obj_type):
     d = sg_state.backend.ssv_obj_mesh(ssv_id, obj_type)
     start = time.time()
-    ret = json.dumps(d)
+    ret = json.dumps(d, cls=MyEncoder)
     print("JSON dump:", time.time() - start)
     return ret
 
@@ -101,32 +91,32 @@ def ssv_obj_norm(ssv_id, obj_type):
 
 @app.route('/ssv_list', methods=['GET'])
 def route_ssv_list():
-    return json.dumps(sg_state.backend.ssv_list())
+    return json.dumps(sg_state.backend.ssv_list(), cls=MyEncoder)
 
 
 @app.route('/svs_of_ssv/<ssv_id>', methods=['GET'])
 def route_svs_of_ssv(ssv_id):
-    return json.dumps(sg_state.backend.svs_of_ssv(ssv_id))
+    return json.dumps(sg_state.backend.svs_of_ssv(ssv_id), cls=MyEncoder)
 
 
 @app.route('/ssv_of_sv/<sv_id>', methods=['GET'])
 def route_ssv_of_sv(sv_id):
-    return json.dumps(sg_state.backend.ssv_of_sv(sv_id))
+    return json.dumps(sg_state.backend.ssv_of_sv(sv_id), cls=MyEncoder)
 
 
 @app.route('/ct_of_ssv/<ssv_id>', methods=['GET'])
 def route_ct_of_sv(ssv_id):
-    return json.dumps(sg_state.backend.ct_of_ssv(ssv_id))
+    return json.dumps(sg_state.backend.ct_of_ssv(ssv_id), cls=MyEncoder)
 
 
 @app.route('/all_syn_meta', methods=['GET'])
 def route_all_syn_meta():
-    return json.dumps(sg_state.backend.all_syn_meta_data())
+    return json.dumps(sg_state.backend.all_syn_meta_data(), cls=MyEncoder)
 
 
 @app.route("/", methods=['GET'])
 def route_hello():
-    return json.dumps({'Welcome to': 'SyConnGate'})
+    return json.dumps({'Welcome to': 'SyConnGate'}, cls=MyEncoder)
 
 
 class SyConnFS_backend(object):
@@ -143,7 +133,6 @@ class SyConnFS_backend(object):
 
         :param syconnfs_path: str 
         """
-
         self.logger = logger
         self.logger.info('Initializing SyConn backend')
 
@@ -157,20 +146,18 @@ class SyConnFS_backend(object):
         # flat array representation of all synapses
         self.conn_dict = conn.load_cached_data_dict()
 
-
         idx_filter = self.conn_dict['synaptivity_proba'] > 0.5
         #  & (df_dict['syn_size'] < 5.)
 
-        for k, v in self.conn_dict.iteritems():
+        for k, v in self.conn_dict.items():
             self.conn_dict[k] = v[idx_filter]
 
-        idx_filter = (self.conn_dict['neuron_partner_ax_0'] \
+        idx_filter = (self.conn_dict['neuron_partner_ax_0']
                       + self.conn_dict['neuron_partner_ax_1']) == 1
 
-        for k, v in self.conn_dict.iteritems():
+        for k, v in self.conn_dict.items():
             self.conn_dict[k] = v[idx_filter]
         self.logger.info('In memory cache of synapses initialized.')
-
 
         return
 
@@ -199,7 +186,7 @@ class SyConnFS_backend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
-        return "".join(mesh[0])
+        return b"".join(mesh[0])
 
     def ssv_vert(self, ssv_id):
         """
@@ -211,7 +198,7 @@ class SyConnFS_backend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
-        return "".join(mesh[1])
+        return b"".join(mesh[1])
 
     def ssv_skeleton(self, ssv_id):
         """
@@ -246,7 +233,7 @@ class SyConnFS_backend(object):
         mesh = ssv._load_obj_mesh_compr("sv")
         if len(mesh) == 2:
             return ""
-        return "".join(mesh[2])
+        return b"".join(mesh[2])
 
     def ssv_obj_mesh(self, ssv_id, obj_type):
         """
@@ -295,7 +282,7 @@ class SyConnFS_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
-        return "".join(mesh[0])
+        return b"".join(mesh[0])
 
     def ssv_obj_vert(self, ssv_id, obj_type):
         """
@@ -317,7 +304,7 @@ class SyConnFS_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
-        return "".join(mesh[1])
+        return b"".join(mesh[1])
 
     def ssv_obj_norm(self, ssv_id, obj_type):
         """
@@ -341,7 +328,7 @@ class SyConnFS_backend(object):
         mesh = ssv._load_obj_mesh_compr(obj_type)
         if len(mesh) == 2:
             return ""
-        return "".join(mesh[2])
+        return b"".join(mesh[2])
 
     def ssv_list(self):
         """
@@ -397,7 +384,7 @@ class SyConnFS_backend(object):
         all_syn_meta_dict = copy.copy(self.conn_dict)
 
         # the self.conn_dict is not json serializeble, due to the numpy arrays
-        for k, v in all_syn_meta_dict.iteritems():
+        for k, v in all_syn_meta_dict.items():
             all_syn_meta_dict[k] = v.tolist()
 
         return all_syn_meta_dict
@@ -479,6 +466,21 @@ def initialize_logging(log_file):
 
     return logger
 
+
+class MyEncoder(json.JSONEncoder):
+    """
+    From https://stackoverflow.com/questions/27050108/convert-numpy-type-to-python/27050186#27050186
+    """
+    def default(self, obj):
+        if isinstance(obj, np.integer):
+            return int(obj)
+        elif isinstance(obj, np.floating):
+            return float(obj)
+        elif isinstance(obj, np.ndarray):
+            return obj.tolist()
+        else:
+            return super(MyEncoder, self).default(obj)
+
 #print('This is the name')
 #print(__name__)
 #if __name__ == "__main__":
@@ -486,6 +488,10 @@ def initialize_logging(log_file):
 Alternative way of running the server is currently:
 export FLASK_APP=server.py
 flask run --host=0.0.0.0 --port=8080 --debugger
+
+OR
+
+FLASK_APP=server.py FLASK_DEBUG=1 flask run --host=0.0.0.0 --port 8081
 
 """
 sg_state = ServerState()

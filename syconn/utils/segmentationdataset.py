@@ -337,7 +337,7 @@ class UltrastructuralDataset(object):
         bounding_boxes = []
         most_distant_voxels = []
 
-        for key, obj in self.object_dict.iteritems():
+        for key, obj in self.object_dict.items():
             paths_to_voxel.append(obj._path_to_voxel)
             try:
                 paths_to_hull_voxel.append(obj._path_to_hull_voxel)

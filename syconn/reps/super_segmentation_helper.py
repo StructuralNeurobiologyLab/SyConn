@@ -387,7 +387,7 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
         new_nx_g = nx_g
 
     # find all tip nodes in an anno, ie degree 1 nodes
-    end_nodes = list({k for k, v in dict(nx_g.degree()).iteritems() if v == 1})
+    end_nodes = list({k for k, v in dict(nx_g.degree()).items() if v == 1})
 
     # DFS to first branch node
     for end_node in end_nodes:
@@ -454,7 +454,7 @@ def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_th
     while change > 0:
         # run_cnt += 1
         change = 0
-        visiting_nodes = list({k for k, v in dict(skel_G.degree()).iteritems() if v == 2})
+        visiting_nodes = list({k for k, v in dict(skel_G.degree()).items() if v == 2})
         for visiting_node in visiting_nodes:
             neighbours = [n for n in skel_G.neighbors(visiting_node)]
             if skel_G.degree(visiting_node) == 2:
@@ -551,7 +551,7 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     # Stitching Super Voxel Skeletons
     no_of_seg = nx.number_connected_components(skel_G)
 
-    skel_G_nodes = [ii['position'] for ix, ii in skel_G.node.iteritems()]
+    skel_G_nodes = [ii['position'] for ix, ii in skel_G.node.items()]
 
 
     while no_of_seg != 1:

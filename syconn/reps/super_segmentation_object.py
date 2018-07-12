@@ -11,19 +11,16 @@ import numpy as np
 import os
 import re
 import scipy.spatial
-import seaborn as sns
 import shutil
 import sys
 import time
 import warnings
 from collections import Counter
-
 from scipy.misc import imsave
 from knossos_utils import skeleton
 from collections import defaultdict
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
-
 from scipy import spatial
 from . import segmentation
 from . import super_segmentation_helper as ssh
@@ -1529,6 +1526,7 @@ class SuperSegmentationObject(object):
     def gliaprobas2mesh(self, dest_path=None, pred_key_appendix=""):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
+        import seaborn as sns
         mcmp = sns.diverging_palette(250, 15, s=99, l=60, center="dark",
                                      as_cmap=True)
         self._svattr2mesh(dest_path, "glia_probas" + pred_key_appendix,

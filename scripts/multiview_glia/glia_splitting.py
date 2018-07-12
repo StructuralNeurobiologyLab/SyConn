@@ -41,7 +41,7 @@ def collect_glia_sv():
     """
     cc_dict = load_pkl2obj(wd + "/glia/cc_dict_rag.pkl")
     # get single SV glia probas which were not included in the old RAG
-    ids_in_rag = np.concatenate(cc_dict.values())
+    ids_in_rag = np.concatenate(list(cc_dict.values()))
     sds = SegmentationDataset("sv", working_dir=wd)
     # get all SV glia probas (faster than single access)
     multi_params = sds.so_dir_paths
@@ -95,7 +95,7 @@ def collect_gliaSV_helper_chunked(path):
     """
     ad = AttributeDict(path + "attr_dict.pkl")
     glia_preds = {}
-    for k, v in ad.iteritems():
+    for k, v in ad.items():
         # see syconn.reps.segmentation_helper.glia_pred_so
         glia_pred = 0
         preds = np.array(v["glia_probas"][:, 1] > glia_thresh, dtype=np.int)

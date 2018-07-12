@@ -18,7 +18,6 @@ from collections import Counter
 from multiprocessing.pool import ThreadPool
 
 from knossos_utils import knossosdataset
-
 from ..reps import segmentation
 from ..config import parser
 from ..handler.basics import load_pkl2obj, write_obj2pkl
@@ -26,7 +25,6 @@ try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
-
 from ..proc.ssd_assembly import assemble_from_mergelist
 from ..mp import qsub_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
@@ -183,7 +181,7 @@ class SuperSegmentationDataset(object):
             else:
                 self._mapping_dict_reversed = {}
                 self.load_mapping_dict()
-                for k, v in self.mapping_dict.iteritems():
+                for k, v in self.mapping_dict.items():
                     for ix in v:
                         self._mapping_dict_reversed[ix] = k
                 self.save_mapping_dict_reversed()

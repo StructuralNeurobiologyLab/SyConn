@@ -18,7 +18,7 @@ if __name__ == "__main__":
                                        % init_rag_p
     init_rag = parse_cc_dict_from_kml(init_rag_p)
     # get SVs of every connected component
-    multi_params = init_rag.values()
+    multi_params = list(init_rag.values())
     # shuffle connected components
     np.random.shuffle(multi_params)
     # chunk them
@@ -33,7 +33,7 @@ if __name__ == "__main__":
                                  script_folder=script_folder, suffix="")
     sd = SegmentationDataset("sv", working_dir=wd)
     res = find_missing_sv_views(sd, woglia=True, n_cores=10)
-    all_sv_ids_in_rag = np.concatenate(init_rag.values())
+    all_sv_ids_in_rag = np.concatenate(list(init_rag.values()))
     missing_not_contained_in_rag = []
     missing_contained_in_rag = []
     for el in res:

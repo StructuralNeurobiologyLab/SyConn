@@ -273,7 +273,7 @@ def sv_attr_exists(args):
     missing_ids = []
     for p in ps:
         ad = AttributeDict(p + "/attr_dict.pkl", disable_locking=True)
-        for k, v in ad.iteritems():
+        for k, v in ad.items():
             if attr_key not in v:
                 missing_ids.append(k)
     return missing_ids

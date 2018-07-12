@@ -110,14 +110,14 @@ def connectivity_to_nx_graph():
     idx_filter = cd_dict['synaptivity_proba'] > 0.5
     #  & (df_dict['syn_size'] < 5.)
 
-    for k, v in cd_dict.iteritems():
+    for k, v in cd_dict.items():
         cd_dict[k] = v[idx_filter]
 
 
     idx_filter = (cd_dict['neuron_partner_ax_0']\
                  + cd_dict['neuron_partner_ax_1']) == 1
 
-    for k, v in cd_dict.iteritems():
+    for k, v in cd_dict.items():
         cd_dict[k] = v[idx_filter]
 
     nxg = nx.DiGraph()
@@ -227,7 +227,7 @@ def connectivity_exporter(human_cell_type_labels = True,
         idx_filter = df_dict['synaptivity_proba'] > 0.5
         #  & (df_dict['syn_size'] < 5.)
 
-        for k, v in df_dict.iteritems():
+        for k, v in df_dict.items():
             df_dict[k] = v[idx_filter]
 
         print('{0} synapses of'
@@ -246,7 +246,7 @@ def connectivity_exporter(human_cell_type_labels = True,
             idx_filter = (df_dict['neuron_partner_ax_0']\
                          + df_dict['neuron_partner_ax_1']) == 1
 
-            for k, v in df_dict.iteritems():
+            for k, v in df_dict.items():
                 df_dict[k] = v[idx_filter]
 
             print('{0} axo-dendritic synapses'.format(sum(idx_filter)))
