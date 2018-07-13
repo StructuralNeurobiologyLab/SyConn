@@ -671,7 +671,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                    workfolder=None, overlaydataset_path=None,
                    chunk_list=None, suffix="", n_chunk_jobs=5000,
                    use_work_dir=True, qsub_pe=None, qsub_queue=None,
-                   n_max_co_processes=None, n_cpus=1):
+                   n_max_co_processes=None, nb_cpus=1):
     """
     Extracts voxels for each component id
 
@@ -695,6 +695,8 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         qsub parallel environment
     qsub_queue: str or None
         qsub queue
+    nb_cpus : int
+        number of parallel jobs
 
     """
 
@@ -766,7 +768,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=script_folder,
                                      n_max_co_processes=n_max_co_processes,
-                                     n_cores=n_cores)
+                                     n_cores=nb_cpus)
 
         # path_to_out = "/u/sdorkenw/QSUB/extract_voxels_folder/out/"
         out_files = glob.glob(path_to_out + "/*")
