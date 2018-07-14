@@ -158,6 +158,8 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     if not data_is_zxy:
         raw = xyz2zxy(raw)
     initgpu(gpu_ix)
+    if raw.dtype.kind in ('u', 'i'):
+        raw = raw.astype(np.float32) / 255.
     from elektronn2.neuromancer.model import modelload
     m = modelload(m_path, imposed_patch_size=list(imposed_patch_size)
     if isinstance(imposed_patch_size, tuple) else imposed_patch_size,
