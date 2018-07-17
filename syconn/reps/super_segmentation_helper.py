@@ -501,16 +501,10 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, mi
     for inx, single_node in enumerate(sso.skeleton['nodes']):
         nx_g.add_node(inx, position=single_node)
 
-    new_edges = [tuple(ix) for ix in temp_edges]
     nx_g.add_edges_from(temp_edges)
 
-    # Estimating the radii
-    # print("Starting radius correction.")
-    # sso.skeleton = radius_correction_found_vertices(sso)
-
     return sso,nx_g
-    # print("Exporting kzip")
-    # sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v6.k.zip" % sso.id)
+
 
 
 
@@ -526,8 +520,6 @@ def smooth_skeleton(skel_nx, scal=[10,10,20]):
         if skel_nx.degree(visiting_node) == 2:
             left_node = neighbours[0]
             right_node = neighbours[1]
-            # left_neighbours = [n for n in skel_nx.neighbors(left_node)]
-            # right_neighbours = [n for n in skel_nx.neighbors(right_node)]
 
 
 
@@ -688,7 +680,7 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     if sparsify:
         sso , skel_nx = sparsify_skeleton(sso,skel_nx)
 
-    # x = smooth_skeleton(x)
+        # x = smooth_skeleton(x)
 
     #Copying information from the nx graph to sso skeleton
     sso = from_netkx_to_sso(sso,skel_nx)
