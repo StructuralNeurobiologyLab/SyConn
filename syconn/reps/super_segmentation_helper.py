@@ -381,42 +381,55 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
     pruned network kx graph
     """
 
+    pruning_complete = False
+
     if preserve_annotations:
         new_nx_g = nx_g.copy()
     else:
         new_nx_g = nx_g
 
     # find all tip nodes in an anno, ie degree 1 nodes
-    end_nodes = list({k for k, v in dict(nx_g.degree()).items() if v == 1})
+    while not pruning_complete:
 
-    # DFS to first branch node
-    for end_node in end_nodes:
-        prune_nodes = []
-        for curr_node in nx.traversal.dfs_preorder_nodes(nx_g, end_node):
-            if nx_g.degree(curr_node) > 2:
-                loc_end = convert_coord(nx_g.node[end_node]['position'], scal)
-                loc_curr = convert_coord(nx_g.node[curr_node]['position'], scal)
-                b_len = np.linalg.norm(loc_end - loc_curr)
-                if b_len < len_thres:
-                    # remove this stub, i.e. prune the nodes that were
-                    # collected on our way to the branch point
-                    for prune_node in prune_nodes:
-                        new_nx_g.remove_node(prune_node)
-                        # print('this got removed', prune_node, len(prune_nodes))
-                    break
-                else:
-                    break
-            # add this node to the list of nodes that MAY get removed
-            # in case a stub is detected later in the loop
-            prune_nodes.append(curr_node)
+        nx_g = new_nx_g
 
+        end_nodes = list({k for k, v in dict(nx_g.degree()).items() if v == 1})
+
+        # DFS to first branch node
+        for end_node in end_nodes:
+            prune_nodes = []
+            for curr_node in nx.traversal.dfs_preorder_nodes(nx_g, end_node):
+                if nx_g.degree(curr_node) > 2:
+                    loc_end = convert_coord(nx_g.node[end_node]['position'], scal)
+                    loc_curr = convert_coord(nx_g.node[curr_node]['position'], scal)
+                    b_len = np.linalg.norm(loc_end - loc_curr)
+
+                    # pdb.set_trace()
+                    if b_len < len_thres:
+                        # remove this stub, i.e. prune the nodes that were
+                        # collected on our way to the branch point
+                        for prune_node in prune_nodes:
+                            new_nx_g.remove_node(prune_node)
+                            # print('this got removed', prune_node, len(prune_nodes))
+                        break
+                    else:
+                        break
+                # add this node to the list of nodes that MAY get removed
+                # in case a stub is detected later in the loop
+                prune_nodes.append(curr_node)
+
+        if len(new_nx_g.nodes) == len(nx_g.nodes):
+            pruning_complete = True
     # Important assert. Please don't remove
     assert nx.number_connected_components(new_nx_g) == 1
+
+    print('NUMber of comp after pruning',nx.number_connected_components(new_nx_g) )
+
 
     return new_nx_g
 
 
-def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_thresh=50):
+def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_thresh=50):
     """
     Reduces nodes in the skeleton. (from dense stacking to sparsed stacking)
 
@@ -425,6 +438,7 @@ def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_th
     sso : Super Segmentation Object
     dot_prod_thresh : float
         the 'straightness' of the edges
+    skel_nx : networkx graph of the sso skel
     max_dist_thresh : int
         maximum distance desired between every node
     min_dist_thresh : int
@@ -436,52 +450,42 @@ def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_th
     """
 
     sso.load_skeleton()
-    ssv_skel = sso.skeleton
     scal = sso.scaling
-
-    skel_G = nx.Graph()
-    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
-
-    for inx, single_node in enumerate(new_nodes):
-        skel_G.add_node(inx, position=single_node)
-
-    new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
-    new_edges = [tuple(ix) for ix in new_edges]
-    skel_G.add_edges_from(new_edges)
     change = 1
-    run_cnt = 0
-    # orig_node_cnt = len(new_nodes)
+
+
     while change > 0:
-        # run_cnt += 1
         change = 0
-        visiting_nodes = list({k for k, v in dict(skel_G.degree()).items() if v == 2})
+        visiting_nodes = list({k for k, v in dict(skel_nx.degree()).items() if v == 2})
         for visiting_node in visiting_nodes:
-            neighbours = [n for n in skel_G.neighbors(visiting_node)]
-            if skel_G.degree(visiting_node) == 2:
+            neighbours = [n for n in skel_nx.neighbors(visiting_node)]
+            if skel_nx.degree(visiting_node) == 2:
                 left_node = neighbours[0]
                 right_node = neighbours[1]
-                vector_left_node = np.array([int(skel_G.node[left_node]['position'][ix]) - int(skel_G.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
-                vector_right_node =np.array([int(skel_G.node[right_node]['position'][ix]) - int(skel_G.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+                vector_left_node = np.array([int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+                vector_right_node =np.array([int(skel_nx.node[right_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
 
                 dot_prod = np.dot(vector_left_node/ np.linalg.norm(vector_left_node),vector_right_node/ np.linalg.norm(vector_right_node))
-                dist = np.linalg.norm([int(skel_G.node[right_node]['position'][ix]*scal[ix]) - int(skel_G.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
+                dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix]*scal[ix]) - int(skel_nx.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
 
                 # print('dots', dot_prod, 'dist', dist)
 
                 if (abs(dot_prod) > dot_prod_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
-                    skel_G.remove_node(visiting_node)
-                    skel_G.add_edge(left_node,right_node)
-                    change += 1
-                    # print('this got removed', visiting_node)
-                # if change == 0:
-                #     change = -1
-    # print("Removed %d nodes after %d iterations." %
-    #       (orig_node_cnt-len(skel_G.nodes()), run_cnt))
+                    skel_nx_copy = skel_nx
 
-    sso.skeleton['nodes'] = np.array([skel_G.node[ix]['position'] for ix in skel_G.nodes()], dtype=np.uint32)
+                    skel_nx.remove_node(visiting_node)
+                    skel_nx.add_edge(left_node,right_node)
+
+                    if nx.number_connected_components(skel_nx) ==1:
+                        change += 1
+                    else:
+                        skel_nx = skel_nx_copy
+
+
+    sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.uint32)
     sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
 
-    temp_edges = np.array(skel_G.edges()).reshape(-1)
+    temp_edges = np.array(skel_nx.edges()).reshape(-1)
     temp_edges_sorted = np.unique(np.sort(temp_edges))
     temp_edges_dict = {}
 
@@ -493,14 +497,164 @@ def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_th
 
     sso.skeleton['edges'] = temp_edges
 
+    nx_g = nx.Graph()
+    for inx, single_node in enumerate(sso.skeleton['nodes']):
+        nx_g.add_node(inx, position=single_node)
+
+    new_edges = [tuple(ix) for ix in temp_edges]
+    nx_g.add_edges_from(temp_edges)
+
     # Estimating the radii
     # print("Starting radius correction.")
-    sso.skeleton = radius_correction_found_vertices(sso)
+    # sso.skeleton = radius_correction_found_vertices(sso)
 
-    return sso
+    return sso,nx_g
     # print("Exporting kzip")
     # sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v6.k.zip" % sso.id)
 
+
+
+def smooth_skeleton(skel_nx, scal=[10,10,20]):
+    visiting_nodes = list({k for k, v in dict(skel_nx.degree()).items() if v == 2})
+
+    for index, visiting_node in enumerate(visiting_nodes):
+        import pdb
+        # pdb.set_trace()
+        neighbours = [n for n in skel_nx.neighbors(visiting_node)]
+
+        # pdb.set_trace()
+        if skel_nx.degree(visiting_node) == 2:
+            left_node = neighbours[0]
+            right_node = neighbours[1]
+            # left_neighbours = [n for n in skel_nx.neighbors(left_node)]
+            # right_neighbours = [n for n in skel_nx.neighbors(right_node)]
+
+
+
+            if skel_nx.degree(left_node) == 2 and skel_nx.degree(right_node)==2:
+                vector_left_node = np.array(
+                    [int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in
+                     range(3)]) * scal
+                vector_right_node = np.array(
+                    [int(skel_nx.node[right_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix
+                     in range(3)]) * scal
+
+                dot_prod = np.dot(vector_left_node / np.linalg.norm(vector_left_node),
+                                  vector_right_node / np.linalg.norm(vector_right_node))
+                dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix] * scal[ix]) - int(
+                    skel_nx.node[left_node]['position'][ix] * scal[ix]) for ix in range(3)])
+
+                print(dot_prod)
+                if abs(dot_prod) < 0.3:
+
+                    x_dist = np.linalg.norm([int(skel_nx.node[visiting_node]['position'][ix] * scal[ix]) - int(
+                        skel_nx.node[left_node]['position'][ix] * scal[ix]) for ix in range(3)])
+
+                    y_dist = np.linalg.norm([int(skel_nx.node[visiting_node]['position'][ix] * scal[ix]) - int(
+                        skel_nx.node[right_node]['position'][ix] * scal[ix]) for ix in range(3)])
+
+
+                    p = [(int(skel_nx.node[right_node]['position'][ix] + int(skel_nx.node[left_node]['position'][ix]))*x_dist/(x_dist +y_dist)) for ix in range(3)]
+
+                    final_node = (1*p + skel_nx.node[visiting_node]['position']*99)/100
+                    print ('original ' , skel_nx.node[visiting_node]['position'], 'final ',final_node)
+
+                    skel_nx.node[visiting_node]['position'] = np.array(final_node, dtype = np.int)
+
+
+    return skel_nx
+#
+
+def from_netkx_to_sso(sso, skel_nx):
+
+    sso.skeleton = {}
+    sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.uint32)
+    sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
+
+    assert nx.number_connected_components(skel_nx) == 1
+
+    # Important bit, please don't remove (needed after pruning)
+    temp_edges = np.array(skel_nx.edges()).reshape(-1)
+    temp_edges_sorted = np.unique(np.sort(temp_edges))
+    temp_edges_dict = {}
+
+    for ii, ix in enumerate(temp_edges_sorted):
+        temp_edges_dict[ix] = ii
+
+    temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
+
+    temp_edges = np.array(temp_edges, dtype=np.uint).reshape([-1, 2])
+    sso.skeleton['edges'] = temp_edges
+
+    return sso
+
+def from_sso_to_netkx(sso):
+
+    skel_nx = nx.Graph()
+    sso.load_attr_dict()
+    ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
+
+    for sv_id in sso.sv_ids:
+        nodes, diameters, edges = create_new_skeleton(sv_id, sso)
+
+        ssv_skel['edges'] = np.concatenate(
+            (ssv_skel['edges'], [(ix + (len(ssv_skel['nodes'])) / 3) for ix in edges]), axis=0)
+        ssv_skel['nodes'] = np.concatenate((ssv_skel['nodes'], nodes), axis=0)
+
+        ssv_skel['diameters'] = np.concatenate((ssv_skel['diameters'], diameters), axis=0)
+
+
+    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
+    if len(new_nodes) == 0:
+        sso.skeleton = ssv_skel
+        return
+
+    for inx, single_node in enumerate(new_nodes):
+        skel_nx.add_node(inx, position=single_node)
+
+    new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
+    new_edges = [tuple(ix) for ix in new_edges]
+    skel_nx.add_edges_from(new_edges)
+
+
+    return skel_nx
+
+
+def stitch_skel_nx(skel_nx):
+
+    no_of_seg = nx.number_connected_components(skel_nx)
+
+    skel_nx_nodes = [ii['position'] for ix, ii in skel_nx.node.items()]
+
+    new_nodes = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.uint32)
+    while no_of_seg != 1:
+
+        rest_nodes = []
+        current_set_of_nodes = []
+
+        list_of_comp = np.array([c for c in sorted(nx.connected_components(skel_nx), key=len, reverse=True)])
+
+        for single_rest_graph in list_of_comp[1:]:
+            rest_nodes = rest_nodes + [skel_nx_nodes[int(ix)] for ix in single_rest_graph]
+
+        for single_rest_graph in list_of_comp[:1]:
+            current_set_of_nodes = current_set_of_nodes + [skel_nx_nodes[int(ix)] for ix in
+                                                           single_rest_graph]
+
+        tree = spatial.cKDTree(rest_nodes, 1)
+        thread_lengths, indices = tree.query(current_set_of_nodes)
+
+        start_thread_index = np.argmin(thread_lengths)
+        stop_thread_index = indices[start_thread_index]
+
+        start_thread_node = \
+        np.where(np.sum(np.subtract(new_nodes, current_set_of_nodes[start_thread_index]), axis=1) == 0)[0][0]
+        stop_thread_node = np.where(np.sum(np.subtract(new_nodes, rest_nodes[stop_thread_index]), axis=1) == 0)[0][0]
+
+        skel_nx.add_edge(start_thread_node, stop_thread_node)
+        no_of_seg -= 1
+
+    return skel_nx
 
 def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     """
@@ -519,104 +673,31 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
 
     """
 
-    # Fetching Super voxel Skeletons
-
-    sso.load_attr_dict()
-    ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
-
-    for sv_id in sso.sv_ids:
-        nodes, diameters, edges = create_new_skeleton(sv_id, sso)
-
-        ssv_skel['edges'] = np.concatenate(
-            (ssv_skel['edges'], [(ix + (len(ssv_skel['nodes'])) / 3) for ix in edges]), axis=0)
-        ssv_skel['nodes'] = np.concatenate((ssv_skel['nodes'], nodes), axis=0)
-
-        ssv_skel['diameters'] = np.concatenate((ssv_skel['diameters'], diameters), axis=0)
-
-    skel_G = nx.Graph()
-    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
-    if len(new_nodes) == 0:
-        sso.skeleton = ssv_skel
-        return
-
-    for inx, single_node in enumerate(new_nodes):
-        skel_G.add_node(inx, position=single_node)
-
-    new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
-    new_edges = [tuple(ix) for ix in new_edges]
-    skel_G.add_edges_from(new_edges)
-
-    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
-
-    # Stitching Super Voxel Skeletons
-    no_of_seg = nx.number_connected_components(skel_G)
-
-    skel_G_nodes = [ii['position'] for ix, ii in skel_G.node.items()]
+    # Creating network kx graph from sso skel
+    skel_nx = from_sso_to_netkx(sso)
 
 
-    while no_of_seg != 1:
+    # Stitching sso skeletons
+    skel_nx = stitch_skel_nx(skel_nx)
 
-        rest_nodes = []
-        current_set_of_nodes = []
+    # Pruning the stitched sso skeletons
+    skel_nx = prune_stub_branches(skel_nx, len_thres=pruning_thresh)
 
-        list_of_comp = np.array([c for c in sorted(nx.connected_components(skel_G), key=len, reverse=True)])
+    sso = from_netkx_to_sso(sso,skel_nx)
 
-        for single_rest_graph in list_of_comp[1:]:
-
-            rest_nodes = rest_nodes + [skel_G_nodes[int(ix)] for ix in single_rest_graph]
-
-        for single_rest_graph in list_of_comp[:1]:
-
-            current_set_of_nodes = current_set_of_nodes + [skel_G_nodes[int(ix)] for ix in
-                                                           single_rest_graph]
-
-        tree = spatial.cKDTree(rest_nodes, 1)
-        thread_lengths, indices = tree.query(current_set_of_nodes)
-
-        start_thread_index = np.argmin(thread_lengths)
-        stop_thread_index = indices[start_thread_index]
-
-
-        start_thread_node = np.where(np.sum(np.subtract(new_nodes, current_set_of_nodes[start_thread_index]), axis=1) == 0)[0][0]
-        stop_thread_node = np.where(np.sum(np.subtract(new_nodes, rest_nodes[stop_thread_index]), axis=1) == 0)[0][0]
-
-        skel_G.add_edge(start_thread_node, stop_thread_node)
-        no_of_seg -= 1
-
-
-    # Pruning the stitched Super Super Voxel Skeletons
-    if pruning_thresh !=0:
-        pruning_complete = False
-        while not pruning_complete:
-            skel_G_pruned = prune_stub_branches(skel_G, len_thres=pruning_thresh)
-            if len(skel_G_pruned.nodes) == len(skel_G.nodes):
-                pruning_complete = True
-            skel_G = skel_G_pruned
-
-    sso.skeleton = {}
-    sso.skeleton['nodes'] = np.array([skel_G.node[ix]['position'] for ix in skel_G.nodes()], dtype=np.uint32)
-    sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
-
-    # Important bit, please don't remove (needed after pruning)
-    temp_edges = np.array(skel_G.edges()).reshape(-1)
-    temp_edges_sorted = np.unique(np.sort(temp_edges))
-    temp_edges_dict = {}
-
-    for ii, ix in enumerate(temp_edges_sorted):
-        temp_edges_dict[ix] = ii
-
-    temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
-
-    temp_edges = np.array(temp_edges, dtype=np.uint).reshape([-1, 2])
-    sso.skeleton['edges'] = temp_edges
-
-
-    #sparsifying the stacked nodes
     if sparsify:
-        sso = sparsify_skeleton(sso)
+        sso , skel_nx = sparsify_skeleton(sso,skel_nx)
+
+    # x = smooth_skeleton(x)
+
+    #Copying information from the nx graph to sso skeleton
+    sso = from_netkx_to_sso(sso,skel_nx)
+
 
     # Estimating the radii
     sso.skeleton = radius_correction_found_vertices(sso)
+
+    return sso
 
 
 def glia_pred_exists(so):
