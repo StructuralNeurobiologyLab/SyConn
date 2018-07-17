@@ -62,7 +62,7 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
     try:
         _ = parse_cc_dict_from_kzip(zip_fname)
     except:  # mergelist.txt does not exist
-        label = np.zeros_like(raw).astype(np.uint16)
+        label = np.zeros(size).astype(np.uint16)
         return raw.astype(np.float32) / 255., label
     label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
                                    verbose=False, show_progress=False)
