@@ -236,7 +236,7 @@ class ConnectivityMatrix(object):
                              nb_cpus=1):
         multi_params = []
         for id_block in [self.sj_ids[i:i + stride]
-                         for i in xrange(0, len(self.sj_ids), stride)]:
+                         for i in range(0, len(self.sj_ids), stride)]:
             multi_params.append([id_block, self._sj_version, self._ssd_version,
                                  self.working_dir])
 
@@ -270,7 +270,7 @@ class ConnectivityMatrix(object):
 
         multi_params = []
         for id_block in [present_sso_ids[i:i + stride]
-                         for i in xrange(0, len(present_sso_ids), stride)]:
+                         for i in range(0, len(present_sso_ids), stride)]:
             multi_params.append([id_block, self._sj_version, self._ssd_version,
                                  self.working_dir, self.version])
 

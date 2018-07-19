@@ -1760,20 +1760,34 @@ class SuperSegmentationObject(object):
 
     def axoness_for_coords(self, coords, radius_nm=4000, pred_type="axoness"):
         coords = np.array(coords)
-
         self.load_skeleton()
+        if self.skeleton is None or len(self.skeleton["nodes"]) == 0:
+            print("Skeleton did not exist for SSV {} (size: {}; rep. coord.: "
+                  "{}).".format(self.id, self.size, self.rep_coord))
+            return [-1]
+        if pred_type not in self.skeleton:  # for glia SSV this does not exist.
+            return [-1]
         kdtree = scipy.spatial.cKDTree(self.skeleton["nodes"] * self.scaling)
         close_node_ids = kdtree.query_ball_point(coords * self.scaling,
                                                  radius_nm)
-
         axoness_pred = []
         for i_coord in range(len(coords)):
+            curr_close_node_ids = close_node_ids[i_coord]
+            if len(curr_close_node_ids) == 0:
+                dist, curr_close_node_ids = kdtree.query(coords * self.scaling)
+                print(
+                    "Couldn't find skeleton nodes within {} nm. Using nearest "
+                    "one with distance {} nm. SSV ID {}, coordinate at {}."
+                    "".format(radius_nm, dist[0], self.id, coords[i_coord]))
             cls, cnts = np.unique(
-                np.array(self.skeleton[pred_type])[np.array(close_node_ids[i_coord])],
+                np.array(self.skeleton[pred_type])[np.array(curr_close_node_ids)],
                 return_counts=True)
             if len(cls) > 0:
                 axoness_pred.append(cls[np.argmax(cnts)])
             else:
+                print("Did not find any skeleton node within {} nm at {}."
+                      " SSV {} (size: {}; rep. coord.: {}).".format(
+                    radius_nm, i_coord, self.id, self.size, self.rep_coord))
                 axoness_pred.append(-1)
 
         return np.array(axoness_pred)

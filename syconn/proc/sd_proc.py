@@ -97,7 +97,6 @@ def _dataset_analysis_thread(args):
                             mesh_area=[])
 
     for p in paths:
-        print(p)
         if not len(os.listdir(p)) > 0:
             os.rmdir(p)
         else:
@@ -110,7 +109,6 @@ def _dataset_analysis_thread(args):
             else:
                 so_ids = this_attr_dc.keys()
 
-            print(so_ids)
 
             for so_id in so_ids:
                 global_attr_dict["id"].append(so_id)
@@ -556,7 +554,6 @@ def _export_sd_to_knossosdataset_thread(args):
 
         overlay_block[vx[:, 0], vx[:, 1], vx[:, 2]] = so_id
 
-    print(np.array(np.where(overlay_block == 1127314)).T + block_start)
     kd.from_matrix_to_cubes(block_start,
                             data=overlay_block,
                             overwrite=True,

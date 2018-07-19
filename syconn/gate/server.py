@@ -167,14 +167,16 @@ class SyConnFS_backend(object):
         :param ssv_id: int
         :return: dict
         """
-        self.logger.info('Loading ssv mesh {0}'.format(ssv_id))
+        start = time.time()
+        self.logger.info('Loading ssv mesh {}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         mesh = {'vertices': mesh[1],
                 'indices': mesh[0],
                 'normals': mesh[2] if len(mesh) == 2 else []}
-        self.logger.info('Got ssv mesh {0}'.format(ssv_id))
+        dtime = start - time.time()
+        self.logger.info('Got ssv mesh {} after {:.0f}'.format(ssv_id, dtime))
         return mesh
 
     def ssv_ind(self, ssv_id):
@@ -182,10 +184,14 @@ class SyConnFS_backend(object):
         :param ssv_id: int
         :return: dict
         """
-        self.logger.info('Loading ssv mesh indices {0}'.format(ssv_id))
+        start = time.time()
+        self.logger.info('Loading {} ssv mesh indices'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
+        dtime = start - time.time()
+        self.logger.info('Got ssv {} mesh indices after'
+                         ' {:.0f}'.format(ssv_id, dtime))
         return b"".join(mesh[0])
 
     def ssv_vert(self, ssv_id):
@@ -194,10 +200,14 @@ class SyConnFS_backend(object):
         :param ssv_id: int
         :return: dict
         """
-        self.logger.info('Loading ssv mesh vertices {0}'.format(ssv_id))
+        start = time.time()
+        self.logger.info('Loading ssv {} mesh vertices'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
+        dtime = start - time.time()
+        self.logger.info('Got ssv {} mesh vertices after'
+                         ' {:.0f}'.format(ssv_id, dtime))
         return b"".join(mesh[1])
 
     def ssv_skeleton(self, ssv_id):
@@ -206,14 +216,14 @@ class SyConnFS_backend(object):
         :param ssv_id: int
         :return: dict
         """
-        self.logger.info('Loading ssv skeleton {0}'.format(ssv_id))
+        self.logger.info('Loading ssv skeleton {}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_skeleton()
         skeleton = ssv.skeleton
         if skeleton is None:
             return {}
         skel_attr = ["nodes", "edges", "diameters"]
-        for k in ['axoness_preds_cnn_v2_views_avg10000', 'axoness_preds_cnn_v2']:
+        for k in ['axoness_preds_cnn_v2_views_avg10000', 'axoness_preds_cnn_v2_views_avg10000_comp_maj']:
             if k in skeleton:
                 skel_attr.append(k)
                 if type(skeleton[k]) is list:
@@ -227,10 +237,14 @@ class SyConnFS_backend(object):
         :param ssv_id: int
         :return: dict
         """
-        self.logger.info('Loading ssv mesh normals {0}'.format(ssv_id))
+        start = time.time()
+        self.logger.info('Loading ssv {} mesh normals'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
+        dtime = start - time.time()
+        self.logger.info('Got ssv {} mesh normals after'
+                         ' {:.0f}'.format(ssv_id, dtime))
         if len(mesh) == 2:
             return ""
         return b"".join(mesh[2])
@@ -269,6 +283,9 @@ class SyConnFS_backend(object):
         :param obj_type: str
         :return: dict
         """
+        start = time.time()
+        self.logger.info('Loading ssv {} {} mesh indices'
+                         ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         if obj_type == "sj":
@@ -282,6 +299,9 @@ class SyConnFS_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
+        dtime = start - time.time()
+        self.logger.info('Got ssv {} {} mesh indices after'
+                         ' {:.0f}'.format(ssv_id, obj_type, dtime))
         return b"".join(mesh[0])
 
     def ssv_obj_vert(self, ssv_id, obj_type):
@@ -291,6 +311,9 @@ class SyConnFS_backend(object):
         :param obj_type: str
         :return: dict
         """
+        start = time.time()
+        self.logger.info('Loading ssv {} {} mesh vertices'
+                         ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         if obj_type == "sj":
@@ -304,6 +327,9 @@ class SyConnFS_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
+        dtime = start - time.time()
+        self.logger.info('Got ssv {} {} mesh vertices after'
+                         ' {:.0f}'.format(ssv_id, obj_type, dtime))
         return b"".join(mesh[1])
 
     def ssv_obj_norm(self, ssv_id, obj_type):
@@ -313,6 +339,9 @@ class SyConnFS_backend(object):
         :param obj_type: str
         :return: dict
         """
+        start = time.time()
+        self.logger.info('Loading ssv {} {} mesh normals'
+                         ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         if obj_type == "sj":
@@ -326,6 +355,9 @@ class SyConnFS_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
+        dtime = start - time.time()
+        self.logger.info('Got ssv {} {} mesh normals after'
+                         ' {:.0f}'.format(ssv_id, obj_type, dtime))
         if len(mesh) == 2:
             return ""
         return b"".join(mesh[2])

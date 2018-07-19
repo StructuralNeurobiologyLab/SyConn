@@ -962,8 +962,7 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False,
             sso.skeleton["nodes"] * sso.scaling,
             loc_coords, probas, colors=[0, 1, 2], k=k)
         sso.skeleton["axoness_cnn_k%d%s" % (k, pred_key_appendix)] = node_preds
-        sso.skeleton["axoness_cnn_k%d%s_probas" % (
-            k, pred_key_appendix)] = node_probas
+        sso.skeleton["axoness_cnn_k%d%s_probas" % (k, pred_key_appendix)] = node_probas
     else:
         node_probas, ixs = assign_rep_values(
             sso.skeleton["nodes"] * sso.scaling,
@@ -990,6 +989,10 @@ def majority_vote_compartments(sso, ax_pred_key):
         preds = [d[ax_pred_key] for n, d in cc.nodes_iter(data=True)]
         cls, cnts = np.unique(preds, return_counts=True)
         majority = cls[np.argmax(cnts)]
+        probas = np.array(cnts, dtype=np.float32) / np.sum(cnts)
+        # positively bias dendrite assignment
+        if (majority == 1) and (probas[cls == 1] < 0.66):
+            majority = 0
         for n in cc.nodes_iter():
             new_axoness_dc[n] = majority
     nx.set_node_attributes(g, ax_pred_key, new_axoness_dc)
