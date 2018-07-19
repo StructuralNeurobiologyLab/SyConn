@@ -7,8 +7,7 @@
 
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 import getpass
 from multiprocessing import cpu_count, Process
@@ -76,7 +75,7 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
         pool.close()
         pool.join()
     else:
-        result = map(func, params)
+        result = list(map(func, params))
 
     if verbose:
         print("\nTime to compute:", time.time() - start)
@@ -84,7 +83,8 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
     return result
 
 
-def start_multiprocess_imap(func, params, debug=False, verbose=False, nb_cpus=None):
+def start_multiprocess_imap(func, params, debug=False, verbose=False,
+                            nb_cpus=None, show_progress=True):
     """
 
     Parameters
@@ -118,11 +118,10 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False, nb_cpus=No
         Process = NoDaemonProcess
 
     if nb_cpus is None:
-        nb_cpus = max(cpu_count(), 1)
+        nb_cpus = min(cpu_count(), len(params))
 
     if debug:
         nb_cpus = 1
-
 
     if verbose:
         print("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
@@ -130,18 +129,26 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False, nb_cpus=No
     start = time.time()
     if nb_cpus > 1:
         pool = MyPool(nb_cpus)
-        result = list(tqdm.tqdm(pool.imap(func, params), total=len(params), ncols=80, leave=False,
-                         unit='jobs', unit_scale=True, dynamic_ncols=False))
+        if show_progress:
+            result = list(tqdm.tqdm(pool.imap(func, params), total=len(params), ncols=80, leave=False,
+                             unit='jobs', unit_scale=True, dynamic_ncols=False, mininterval=1))
+        else:
+            result = pool.imap(func, params)
         pool.close()
         pool.join()
     else:
-        pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
-                                unit='jobs', unit_scale=True, dynamic_ncols=False)
-        result = []
-        for p in params:
-            result.append(func(p))
-            pbar.update(1)
-        pbar.close()
+        if show_progress:
+            pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False, mininterval=1,
+                                    unit='jobs', unit_scale=True, dynamic_ncols=False)
+            result = []
+            for p in params:
+                result.append(func(p))
+                pbar.update(1)
+            pbar.close()
+        else:
+            result = []
+            for p in params:
+                result.append(func(p))
     if verbose:
         print("\nTime to compute:", time.time() - start)
 
@@ -200,11 +207,9 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
         pool.close()
         pool.join()
     else:
-        result = map(multi_helper_obj, params)
-
+        result = list(map(multi_helper_obj, params))
     if verbose:
         print("\nTime to compute:", time.time() - start)
-
     return result
 
 

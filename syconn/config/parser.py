@@ -42,7 +42,7 @@ class Config(object):
 
     @property
     def sections(self):
-        return self.entries.keys()
+        return list(self.entries.keys())
 
     def parse_config(self, validate=True):
         assert self.path_config

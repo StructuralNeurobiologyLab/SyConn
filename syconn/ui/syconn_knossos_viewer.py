@@ -25,6 +25,7 @@ class SyConnGateInteraction(object):
         self.server = server
         self.session = requests.Session()
         self.ssv_from_sv_cache = dict()
+        self.ct_from_cache = dict()
         self.svs_from_ssv = dict()
 
     def get_ssv_mesh(self, ssv_id):
@@ -68,9 +69,11 @@ class SyConnGateInteraction(object):
         skel["nodes"][:, 0] = skel_nodes[:, 1]
         skel["nodes"][:, 1] = skel_nodes[:, 0]
         skel["edges"] = np.array(skel["edges"], dtype=np.uint32).reshape(-1, 2)
-        skel["diameters"] = np.array(skel["diameters"], dtype=np.float32)
+        for k in skel:
+            if k in ['nodes', 'edges']:
+                continue
+            skel[k] = np.array(skel[k], dtype=np.float32)
         return skel if len(skel) > 0 else None
-
 
     def get_ssv_obj_mesh(self, ssv_id, obj_type):
         """
@@ -94,7 +97,7 @@ class SyConnGateInteraction(object):
         ind = lz4stringtoarr(r1.content, dtype=np.uint32)
         vert = lz4stringtoarr(r2.content, dtype=np.float32)
         norm = lz4stringtoarr(r3.content, dtype=np.float32)
-        return ind, vert, norm
+        return ind, vert, -norm  # invert normals
 
     def get_list_of_all_ssv_ids(self):
         """
@@ -138,6 +141,25 @@ class SyConnGateInteraction(object):
             self.ssv_from_sv_cache[sv_id] = json.loads(r.content)
         return self.ssv_from_sv_cache[sv_id]
 
+    def get_celltype_of_ssv(self, ssv_id):
+        """
+        Get SSV cell type if available.
+
+        Parameters
+        ----------
+        ssv_id : int
+
+        Returns
+        -------
+        str
+
+        """
+        # if not ssv_id in self.ct_from_cache:
+        r = self.session.get(self.server + '/ct_of_ssv/{0}'.format(ssv_id))
+        self.ct_from_cache[ssv_id] = json.loads(r.content)["ct"]
+        print("Celltype: {}".format(self.ct_from_cache[ssv_id]))
+        return self.ct_from_cache[ssv_id]
+
     def get_all_syn_metda_data(self):
         """
 
@@ -156,7 +178,7 @@ class main_class(QtGui.QDialog):
         #Qt.QApplication.processEvents()
         super(main_class, self).__init__(parent, Qt.Qt.WA_DeleteOnClose)
         try:
-            exec(KnossosModule.scripting.getInstanceInContainerStr(__name__)\
+            exec(KnossosModule.scripting.getInstanceInContainerStr(__name__)
                  + " = self")
         except KeyError:
             # Allow running from __main__ context
@@ -250,6 +272,9 @@ class main_class(QtGui.QDialog):
         self.direct_ssv_id_input.setValidator(QtGui.QIntValidator())
         self.direct_ssv_id_input.setMaxLength(16)
 
+        # celltype
+        self.celltype_field = QtGui.QLabel("CellType:      ", self)
+
         self.exploration_mode_chk_box = QtGui.QCheckBox('Exploration mode')
         self.exploration_mode_chk_box.setChecked(True)
         #self.ssv_selection_model =
@@ -274,6 +299,7 @@ class main_class(QtGui.QDialog):
         layout.addWidget(self.show_button, 3, 0, 1, 1)
         layout.addWidget(self.clear_knossos_view_button, 3, 1, 1, 1)
         layout.addWidget(self.exploration_mode_chk_box, 4, 0, 1, 2)
+        layout.addWidget(self.celltype_field, 4, 2, 1, 2)
 
         #self.ssv_select_model.itemChanged.connect(self.on_ssv_selector_changed)
         #self.selectionModel.selectionChanged.connect(self.on_ssv_selector_changed)
@@ -370,6 +396,7 @@ class main_class(QtGui.QDialog):
             [self.remove_ssv_from_knossos(ssv_id) for ssv_id in ids_to_del]
             [self.ssv_to_knossos(ssv_id) for ssv_id in ids_to_add]
             [self.ssv_skel_to_knossos_tree(ssv_id) for ssv_id in ids_to_add]
+            [self.update_celltype(ssv_id) for ssv_id in ids_to_add]
 
             if len(ids_in_k) != 1 or len(ids_to_del) > 0:
                 [KnossosModule.skeleton.delete_tree(sv_id) for sv_id in
@@ -384,7 +411,7 @@ class main_class(QtGui.QDialog):
         trees = KnossosModule.skeleton.trees()
         obj_mesh_ids = set([tree.tree_id() for tree in trees if
                         tree.tree_id() > self.obj_id_offs])
-        for i in range(1, 4):
+        for i in range(1, 5):
             obj_id_to_test = ssv_id + self.obj_id_offs + i
             if obj_id_to_test in obj_mesh_ids:
                 KnossosModule.skeleton.delete_tree(obj_id_to_test)
@@ -399,7 +426,7 @@ class main_class(QtGui.QDialog):
         if self.ssv_selected1:
             self.ssv_to_knossos(self.ssv_selected1)
             self.ssv_skel_to_knossos_tree(self.ssv_selected1)
-
+            self.update_celltype(self.ssv_selected1)
         return
 
     def clear_knossos_view_button_clicked(self):
@@ -414,6 +441,10 @@ class main_class(QtGui.QDialog):
         [KnossosModule.skeleton.delete_tree(sv_id) for sv_id in ids_in_k]
 
         return
+
+    def update_celltype(self, ssv_id):
+        ct = self.syconn_gate.get_celltype_of_ssv(ssv_id)
+        self.celltype_field.setText("CellType: {}".format(ct))
 
     def ssv_to_knossos(self, ssv_id):
         start = time.time()
@@ -448,11 +479,14 @@ class main_class(QtGui.QDialog):
             mi_id = self.obj_id_offs + ssv_id + 1
             sj_id = self.obj_id_offs + ssv_id + 2
             vc_id = self.obj_id_offs + ssv_id + 3
+            neuron_id = self.obj_id_offs + ssv_id + 4
 
             mi_start = time.time()
             mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
             print("Mi time:", time.time() - mi_start)
+            mi_start = time.time()
             if len(mi_mesh[0]) > 0:
+                print(len(mi_mesh[1]))
                 KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh[1], mi_mesh[2],
                                                      mi_mesh[0],
                                                      [], 4, False)
@@ -463,7 +497,9 @@ class main_class(QtGui.QDialog):
             sj_start = time.time()
             sj_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'sj')
             print("SJ time:", time.time() - sj_start)
+            sj_start = time.time()
             if len(sj_mesh[0]) > 0:
+                print(len(sj_mesh[1]))
                 KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh[1], sj_mesh[2],
                                                      sj_mesh[0],
                                                      [], 4, False)
@@ -474,7 +510,9 @@ class main_class(QtGui.QDialog):
             vc_start = time.time()
             vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
             print("VC time:", time.time() - vc_start)
+            vc_start = time.time()
             if len(vc_mesh[0]) > 0:
+                print(len(vc_mesh[1]))
                 KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh[1], vc_mesh[2],
                                                      vc_mesh[0],
                                                      [], 4, False)
@@ -483,17 +521,21 @@ class main_class(QtGui.QDialog):
             print("VC time (Knossos):", time.time() - vc_start)
 
             sv_start = time.time()
+            k_tree = KnossosModule.skeleton.add_tree(ssv_id)
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
             print("SV time:", time.time() - sv_start)
+            sv_start = time.time()
             if len(mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh[1], mesh[2],
+                print(len(mesh[1]))
+                KnossosModule.skeleton.add_tree_mesh(neuron_id, mesh[1], mesh[2],
                                                      mesh[0],
                                                      [], 4, False)
-                KnossosModule.skeleton.set_tree_color(ssv_id,
+                KnossosModule.skeleton.set_tree_color(neuron_id,
                                                       QtGui.QColor(255, 0, 0, 128))
             print("SV time (Knossos):", time.time() - sv_start)
         else:
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
+            k_tree = KnossosModule.skeleton.add_tree(ssv_id)
             KnossosModule.skeleton.add_tree_mesh(ssv_id, mesh[1], mesh[2],
                                                  mesh[0],
                                                  [], 4, False)
@@ -517,8 +559,16 @@ class main_class(QtGui.QDialog):
         nx_knossos_id_map = dict()
         for ii, n_coord in enumerate(skel["nodes"]):
             # newsk_node.from_scratch(newsk_anno, nx_coord[1]+1, nx_coord[0]+1, nx_coord[2]+1, ID=nx_node)
+            n_proeprties = {}
+            for k in skel:
+                if k in ["nodes", "edges", "diameters"]:
+                    continue
+                n_proeprties[k] = float(skel[k][ii])
             k_node = KnossosModule.skeleton.add_node(
-                [n_coord[1] + 1, n_coord[0] + 1, n_coord[2] + 1], k_tree)
+                [n_coord[1] + 1, n_coord[0] + 1, n_coord[2] + 1], k_tree,
+                n_proeprties)
+            KnossosModule.skeleton.set_radius(k_node.node_id(),
+                                              skel["diameters"][ii] / 2)
             nx_knossos_id_map[ii] = k_node.node_id()
 
         # add edges

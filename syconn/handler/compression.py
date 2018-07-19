@@ -23,8 +23,7 @@ import h5py
 import os
 import shutil
 import warnings
-__all__ = ["arrtolz4string", "lz4stringtoarr", "load_lz4_meshdict_items",
-           "load_lz4_compressed", "add_lz4_meshdict_items", "init_lz4_meshdict",
+__all__ = ["arrtolz4string", "lz4stringtoarr", "load_lz4_compressed",
            "save_lz4_compressed", "load_compressed", "load_from_h5py",
            "save_to_h5py"]
 
@@ -65,6 +64,10 @@ class LZ4DictBase(dict):
         except KeyError:
             raise AttributeError("No such attribute: ", key)
 
+    def __del__(self):
+        if self.a_lock is not None and self.a_lock.acquired:
+            self.a_lock.release()
+
     def __len__(self):
         return self._dc_intern.__len__()
 
@@ -100,6 +103,7 @@ class LZ4DictBase(dict):
     def keys(self):
         return self._dc_intern.keys()
 
+    # TODO: make above items, values, keys generators
     def iteritems(self):
         for k in self.keys():
             yield k, self[k]
@@ -132,6 +136,7 @@ class LZ4DictBase(dict):
                 pass
         # acquires lock until released when saving or after loading if self.read_only
         if not self.disable_locking:
+            gotten = False
             nb_attempts = 1
             while True:
                 self.a_lock = fasteners.InterProcessLock(lock_path)
@@ -277,7 +282,8 @@ class VoxelDictL(LZ4DictBase):
             curr_sh[0] = -1
             sh[i] = curr_sh
         value_intern = {"arr": [arrtolz4string_list(v) for v in voxel_masks],
-                        "sh": sh, "dt": voxel_masks[0].dtype.str, "off": offsets}
+                        "sh": sh, "dt": voxel_masks[0].dtype.str,
+                        "off": offsets}
         self._dc_intern[key] = value_intern
 
     def append(self, key, voxel_mask, offset):
@@ -400,8 +406,8 @@ class SkeletonDict(LZ4DictBase):
             pass
         comp_arrs = self._dc_intern[item]
         skeleton = {"nodes": lz4string_listtoarr(comp_arrs[0], dtype=np.uint32),
-                       "diameters": lz4string_listtoarr(comp_arrs[1], dtype=np.float32),
-                       "edges": lz4string_listtoarr(comp_arrs[2], dtype=np.uint32)}
+                    "diameters": lz4string_listtoarr(comp_arrs[1], dtype=np.float32),
+                    "edges": lz4string_listtoarr(comp_arrs[2], dtype=np.uint32)}
         if self._cache_decomp:
             self._cache_dc[item] = skeleton
         return skeleton
@@ -412,8 +418,8 @@ class SkeletonDict(LZ4DictBase):
         Parameters
         ----------
         key : int/str
-        skeleton : list of np.array
-            [indices, vertices]
+        skeleton : dict
+            keys: nodes diameters edges
         """
         if self._cache_decomp:
             self._cache_dc[key] = skeleton
@@ -465,7 +471,7 @@ def lz4stringtoarr(string, dtype=np.float32, shape=None):
     np.array
         1d array
     """
-    if string == "":
+    if len(string) == 0:
         return np.zeros((0, ), dtype=dtype)
     try:
         arr_1d = np.frombuffer(decompress(string), dtype=dtype)
@@ -495,8 +501,9 @@ def arrtolz4string_list(arr):
         return [""]
     try:
         str_lst = [compress(arr.tobytes())]
-    except OverflowError:
-        half_ix = len(arr) / 2
+    # catch Value error which is thrown in py3 lz4 version
+    except (OverflowError, ValueError):
+        half_ix = len(arr) // 2
         str_lst = arrtolz4string_list(arr[:half_ix]) + \
                    arrtolz4string_list(arr[half_ix:])
     return str_lst
@@ -549,12 +556,12 @@ def save_lz4_compressed(p, arr, dtype=np.float32):
         text_file = open(p, "wb")
         text_file.write(arrtolz4string(arr))
         text_file.close()
-    except OverflowError:
+    except (OverflowError, ValueError):
         # save dummy (emtpy) file
         text_file = open(p, "wb")
         text_file.write("")
         text_file.close()
-        half_ix = len(arr) / 2
+        half_ix = len(arr) // 2
         new_p1 = p[:-4] + "_1" + p[-4:]
         new_p2 = p[:-4] + "_2" + p[-4:]
         save_lz4_compressed(new_p1, arr[:half_ix])
@@ -586,37 +593,6 @@ def load_lz4_compressed(p, shape=(-1, 20, 2, 128, 256), dtype=np.float32):
         decomp_arr2 = load_lz4_compressed(new_p2, shape=shape, dtype=dtype)
         decomp_arr = np.concatenate([decomp_arr1, decomp_arr2])
     return decomp_arr
-
-
-# def init_lz4_meshdict(sv_ixs, meshes):
-#     res = {}
-#     for m, ix in zip(meshes, sv_ixs):
-#         res[ix] = [arrtolz4string(m[0].astype(np.uint32)),
-#                    arrtolz4string(m[1].astype(np.float32))]
-#     return res
-#
-#
-# def load_lz4_meshdict_items(dc):
-#     return [(lz4stringtoarr(dc[k][0], dtype=np.uint32),
-#              lz4stringtoarr(dc[k][1], dtype=np.float32)) for k in dc.keys()]
-def init_lz4_meshdict(sv_ixs, meshes):
-    res = {}
-    for m, ix in zip(meshes, sv_ixs):
-        res[ix] = {"ind": arrtolz4string(m[0]), "vert": arrtolz4string(m[1])}
-    return res
-
-
-def load_lz4_meshdict_items(dc):
-    dtype = np.float
-    # HACK: check if vertices were saved as integer or float
-    if np.sum(lz4stringtoarr(dc[dc.keys()[0]]["vert"], dtype=np.float32).astype(np.uint)) == 0:
-        dtype = np.uint
-    return [(lz4stringtoarr(dc[k]["ind"], dtype=np.uint),
-             lz4stringtoarr(dc[k]["vert"], dtype=dtype)) for k in dc.keys()]
-
-
-def add_lz4_meshdict_items(dc, sv_ixs, meshes):
-    dc.update(init_lz4_meshdict(sv_ixs, meshes))
 
 
 # ---------------------------- HDF5
@@ -681,7 +657,7 @@ def save_to_h5py(data, path, hdf5_names=None, overwrite=False, compression=True)
 
     """
     if (not type(data) is dict) and hdf5_names is None:
-        raise Exception("hdf5names has to be set, when data is a list")
+        raise TypeError("hdf5names has to be set, when data is a list")
     if os.path.isfile(path) and overwrite:
         os.remove(path)
     f = h5py.File(path, "w")
@@ -694,7 +670,7 @@ def save_to_h5py(data, path, hdf5_names=None, overwrite=False, compression=True)
     else:
         if len(hdf5_names) != len(data):
             f.close()
-            raise Exception("Not enough or to much hdf5-names given!")
+            raise ValueError("Not enough or too many hdf5-names given!")
         for nb_data in range(len(data)):
             if compression:
                 f.create_dataset(hdf5_names[nb_data], data=data[nb_data],

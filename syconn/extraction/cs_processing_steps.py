@@ -16,6 +16,7 @@ script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold
 from ..handler.compression import VoxelDict, AttributeDict
+from ..handler.basics import chunkify
 
 
 def filter_relevant_cs_agg(cs_agg, ssd):
@@ -1003,12 +1004,12 @@ def collect_axoness_from_ssv_partners(wd, conn_version=None,
                                                working_dir=wd)
 
     multi_params = []
-    for so_dir_path in conn_sd.so_dir_paths:
-        multi_params.append([so_dir_path, wd, conn_version,
+    for so_dir_paths in chunkify(conn_sd.so_dir_paths, 4000):
+        multi_params.append([so_dir_paths, wd, conn_version,
                              ssd_version])
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_collect_axoness_from_ssv_partners_thread,
-                                        multi_params, nb_cpus = nb_cpus)
+        results = sm.start_multiprocess_imap(_collect_axoness_from_ssv_partners_thread,
+                                        multi_params, nb_cpus=nb_cpus)
     elif qu.__QSUB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "collect_axoness_from_ssv_partners",
@@ -1020,60 +1021,63 @@ def collect_axoness_from_ssv_partners(wd, conn_version=None,
 
 
 def _collect_axoness_from_ssv_partners_thread(args):
-    so_dir_path, wd, conn_version, ssd_version = args
+    so_dir_paths, wd, conn_version, ssd_version = args
 
     ssv = super_segmentation.SuperSegmentationDataset(working_dir=wd,
                                                       version=ssd_version)
     conn_sd = segmentation.SegmentationDataset(obj_type="conn",
                                                working_dir=wd,
                                                version=conn_version)
+    for so_dir_path in so_dir_paths:
+        this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
+                                     read_only=False, timeout=3600)
 
-    this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
-                                 read_only=False, timeout=3600)
+        for conn_id in this_attr_dc.keys():
+            conn_o = conn_sd.get_segmentation_object(conn_id)
+            conn_o.load_attr_dict()
 
-    for conn_id in this_attr_dc.keys():
-        conn_o = conn_sd.get_segmentation_object(conn_id)
-        conn_o.load_attr_dict()
-
-        axoness = []
-        for ssv_partner_id in conn_o.attr_dict["ssv_partners"]:
-            ssv_o = ssv.get_super_segmentation_object(ssv_partner_id)
-            try:
+            axoness = []
+            for ssv_partner_id in conn_o.attr_dict["ssv_partners"]:
+                ssv_o = ssv.get_super_segmentation_object(ssv_partner_id)
                 axoness.append(ssv_o.axoness_for_coords([conn_o.rep_coord],
-                                                        pred_type='axoness_preds_cnn_views_avg10000_comp_maj')[0])
-            except Exception as e:
-                axoness.append(-1)
+                                                        pred_type='axoness_preds_cnn_v2_views_avg10000')[0])
 
-        print(axoness)
-        conn_o.attr_dict.update({"partner_axoness": axoness})
-        this_attr_dc[conn_id] = conn_o.attr_dict
+            conn_o.attr_dict.update({"partner_axoness": axoness})
+            this_attr_dc[conn_id] = conn_o.attr_dict
 
-    this_attr_dc.save2pkl()
+        this_attr_dc.save2pkl()
 
 
-def export_matrix(wd, conn_version=None, dest_name=None):
+def export_matrix(wd, conn_version=None, dest_name=None, syn_prob_t=.5):
     conn_sd = segmentation.SegmentationDataset("conn", version=conn_version,
                                                working_dir=wd)
 
     syn_prob = conn_sd.load_cached_data("syn_prob")
 
-    m = syn_prob > .5
+    m = syn_prob > syn_prob_t
     m_axs = conn_sd.load_cached_data("partner_axoness")[m]
     m_coords = conn_sd.rep_coords[m]
-    m_sizes = conn_sd.sizes[m]
+    # m_sizes = conn_sd.sizes[m]
+    m_sizes = conn_sd.load_cached_data("mesh_area")[m] / 2
     m_ssv_partners = conn_sd.load_cached_data("ssv_partners")[m]
+    m_syn_prob = syn_prob[m]
+    m_syn_sign = conn_sd.load_cached_data("syn_sign")[m]
 
-    table = np.concatenate([m_coords, m_ssv_partners, m_sizes[:, None], m_axs], axis=1)
+    m_sizes = np.multiply(m_sizes,m_syn_sign)
+
+    table = np.concatenate([m_coords, m_ssv_partners, m_sizes[:, None], m_axs,
+                            m_syn_prob[:, None]], axis=1)
 
     if dest_name is None:
         dest_name = conn_sd.path + "/conn_mat"
 
-    np.savetxt(dest_name + ".csv", table, delimiter="\t", header="x\ty\tz\tssv1\tssv2\tsize\tax1\tax2")
+    np.savetxt(dest_name + ".csv", table, delimiter="\t", header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tsynprob")
 
     labels = np.array(["N/A", "D", "A", "S"])
     labels_ids = np.array([-1, 0, 1, 2])
 
     annotations = []
+    m_sizes = np.abs(m_sizes)
 
     ms_axs = np.sort(m_axs, axis=1)
     u_axs = np.unique(ms_axs, axis=0)
@@ -1084,17 +1088,16 @@ def export_matrix(wd, conn_version=None, dest_name=None):
 
         for i_syn in np.where(np.sum(np.abs(ms_axs - u_ax), axis=1) == 0)[0]:
             c = m_coords[i_syn]
-
             # somewhat approximated from sphere volume:
             r = np.power(m_sizes[i_syn] / 3., 1 / 3.)
+            #    r = m_sizes[i_syn]
             skel_node = skeleton.SkeletonNode(). \
-                from_scratch(anno, c[0], c[1], c[2], radius=r)
+            from_scratch(anno, c[0], c[1], c[2], radius=r)
             skel_node.data["ssv_partners"] = m_ssv_partners[i_syn]
             skel_node.data["size"] = m_sizes[i_syn]
-
+            skel_node.data["syn_prob"] = m_syn_prob[i_syn]
+            skel_node.data["sign"] = m_syn_sign[i_syn]
             anno.addNode(skel_node)
-
         annotations.append(anno)
-
     skeleton_utils.write_skeleton(dest_name + ".k.zip", annotations)
 

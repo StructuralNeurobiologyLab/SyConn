@@ -15,8 +15,7 @@ import tempfile
 import zipfile
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 from knossos_utils.skeleton_utils import loadj0126NML
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
@@ -28,7 +27,8 @@ import logging
 __all__ = ["load_from_h5py", "save_to_h5py", "crop_bool_array",
            "get_filepaths_from_dir", "write_obj2pkl", "load_pkl2obj",
            "write_data2kzip", "remove_from_zip", "chunkify", "flatten_list",
-           "get_skelID_from_path", "write_txt2kzip"]
+           "get_skelID_from_path", "write_txt2kzip", "switch_array_entries",
+           "parse_cc_dict_from_kzip", "parse_cc_dict_from_kml"]
 
 
 def argsort(seq):
@@ -237,8 +237,8 @@ def coordpath2anno(coords, scaling=(10, 10, 20), add_edges=True):
     return anno
 
 
-def get_filepaths_from_dir(directory, ending=('k.zip'), recursively=False,
-                           exclude_endings=False):
+def get_filepaths_from_dir(directory, ending=('k.zip',), recursively=False,
+                           exclude_endings=False, fname_includes=()):
     """
     Collect all files with certain ending from directory.
 
@@ -250,7 +250,10 @@ def get_filepaths_from_dir(directory, ending=('k.zip'), recursively=False,
         ending(s) of files
     recursively: boolean
         add files from subdirectories
-
+    fname_includes : str or list
+        file names with this substring(s) will be added
+    exclude_endings : bool
+        filenames with endings defined in endings will not be added
     Returns
     -------
     list of str
@@ -259,24 +262,34 @@ def get_filepaths_from_dir(directory, ending=('k.zip'), recursively=False,
     # make it backwards compatible
     if type(ending) is str:
         ending = [ending]
+    if type(fname_includes) is str:
+        fname_includes = [fname_includes]
     files = []
+    corr_incl = True
+    corr_end = True
     if recursively:
         for r, s, fs in os.walk(directory):
             for f in fs:
-                corr_end = np.any(
-                    [f[-len(end):] == end for end in ending])
-                if exclude_endings:
-                    corr_end = not corr_end
-                if corr_end:
+                if len(ending) > 0:
+                    corr_end = np.any(
+                        [f[-len(end):] == end for end in ending])
+                    if exclude_endings:
+                        corr_end = not corr_end
+                if len(fname_includes) > 0:
+                    corr_incl = np.any([substr in f for substr in fname_includes])
+                if corr_end and corr_incl:
                     files.append(os.path.join(r, f))
 
     else:
         for f in next(os.walk(directory))[2]:
-            corr_end = np.any(
-                [f[-len(end):] == end for end in ending])
-            if exclude_endings:
-                corr_end = not corr_end
-            if corr_end:
+            if len(ending) > 0:
+                corr_end = np.any(
+                    [f[-len(end):] == end for end in ending])
+                if exclude_endings:
+                    corr_end = not corr_end
+            if len(fname_includes) > 0:
+                corr_incl = np.any([substr in f for substr in fname_includes])
+            if corr_end and corr_incl:
                 files.append(os.path.join(directory, f))
     return files
 
@@ -456,8 +469,20 @@ def load_pkl2obj(path):
             objects = pkl.load(inp)
     except UnicodeDecodeError: # python3 compatibility
         with open(path, 'rb') as inp:
-            objects = pkl.loads(inp.read(), encoding='latin1')
+            objects = pkl.loads(inp.read(), encoding='bytes')
+        objects = convert_keys_byte2str(objects)
     return objects
+
+
+def convert_keys_byte2str(dc):
+    if type(dc) is not dict:
+        return dc
+    for k in list(dc.keys()):
+        v = convert_keys_byte2str(dc[k])
+        if type(k) is bytes:
+            dc[k.decode('utf-8')] = v
+            del dc[k]
+    return dc
 
 
 def chunkify(lst, n):
@@ -473,12 +498,12 @@ def chunkify(lst, n):
     -------
 
     """
-    return [lst[i::n] for i in xrange(n)]
+    return [lst[i::n] for i in range(n)]
 
 
 def flatten_list(lst):
     """
-    Flattens list of lists.
+    Flattens list of lists. Same ordering as np.concatenate
 
     Parameters
     ----------
@@ -526,8 +551,8 @@ def safe_copy(src, dest, safe=True):
     if safe:
         fd = os.open(dest, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
         # Copy the file and automatically close files at the end
-        with os.fdopen(fd, 'w') as f:
-            with open(src) as sf:
+        with os.fdopen(fd, 'wb') as f:
+            with open(src, 'rb') as sf:
                 shutil.copyfileobj(sf, f)
     else:
         shutil.copy(src, dest)
@@ -559,3 +584,56 @@ class DelayedInterrupt(object):
             signal.signal(sig, self.old_handlers[sig])
             if self.signal_received[sig] and self.old_handlers[sig]:
                 self.old_handlers[sig](*self.signal_received[sig])
+
+
+def prase_cc_dict_from_txt(txt):
+    """
+    Parse connected components from knossos mergelist text file
+
+    Parameters
+    ----------
+    txt : str
+
+    Returns
+    -------
+    dict
+    """
+    cc_dict = {}
+    for line in txt.splitlines()[::4]:
+        line_nb = np.array(re.findall("(\d+)", line), dtype=np.uint)
+        curr_ixs = line_nb[3:]
+        cc_ix = line_nb[0]
+        curr_ixs = curr_ixs[curr_ixs != 0]
+        cc_dict[cc_ix] = curr_ixs
+    return cc_dict
+
+
+def parse_cc_dict_from_kml(kml_path):
+    """
+    Parse connected components from knossos mergelist text file
+
+    Parameters
+    ----------
+    kml_path : str
+
+    Returns
+    -------
+    dict
+    """
+    txt = open(kml_path, "rb").read()
+    return prase_cc_dict_from_txt(txt)
+
+
+def parse_cc_dict_from_kzip(k_path):
+    """
+
+    Parameters
+    ----------
+    k_path : str
+
+    Returns
+    -------
+    dict
+    """
+    txt = read_txt_from_zip(k_path, "mergelist.txt")
+    return prase_cc_dict_from_txt(txt)

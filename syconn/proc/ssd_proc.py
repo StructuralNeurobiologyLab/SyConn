@@ -1,7 +1,6 @@
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 import glob
 import numpy as np
@@ -9,7 +8,6 @@ import os
 from collections import Counter
 from ..mp import qsub_utils as qu
 from ..mp import shared_mem as sm
-
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 from ..reps import segmentation, super_segmentation
 

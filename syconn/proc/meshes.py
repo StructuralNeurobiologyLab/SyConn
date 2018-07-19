@@ -14,11 +14,18 @@ from skimage import measure
 from sklearn.decomposition import PCA
 from ..handler.basics import write_txt2kzip, texts2kzip
 from .image import apply_pca
-from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
+try:
+    from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
+except ImportError as e:
+    print(repr(e))
 from scipy.ndimage.morphology import binary_closing
-import time
-import vtkInterface
-from ..mp.shared_mem import start_multiprocess_obj
+
+try:
+    import vtkInterface
+    __vtk_avail__ = True
+except ImportError:
+    __vtk_avail__ = False
+from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess_imap
 __all__ = ["MeshObject", "get_object_mesh", "merge_meshes", "triangulation",
            "get_random_centered_coords", "write_mesh2kzip", 'write_meshes2kzip',
            "compartmentalize_mesh", 'write_ssomesh2kzip']
@@ -66,17 +73,21 @@ class MeshObject(object):
     @property
     def colors(self):
         if self._ext_color is None:
-            self._colors = np.ones(len(self.vertices) / 3 * 4) * 0.5
+            self._colors = np.ones(len(self.vertices) // 3 * 4) * 0.5
         elif np.isscalar(self._ext_color):
-            self._colors = np.array(len(self.vertices) / 3 * [self._ext_color]).flatten()
+            self._colors = np.array(len(self.vertices) // 3 * [self._ext_color]).flatten()
         else:
             if np.ndim(self._ext_color) >= 2:
                 self._ext_color = self._ext_color.squeeze()
                 assert self._ext_color.shape[1] == 4,\
                     "'color' parameter has wrong shape"
+                self._ext_color = self._ext_color.squeeze()
+                assert self._ext_color.shape[1] == 4,\
+                    "Rendering requires RGBA 'color' shape of (X, 4). Please" \
+                    "add alpha channel."
                 self._ext_color = self._ext_color.flatten()
-            assert len(self._ext_color) / 4 == len(self.vertices) / 3\
-                , "len(ext_color)/4 must be equal to len(vertices)/3."
+            assert len(self._ext_color)/4 == len(self.vertices)/3, \
+                "len(ext_color)/4 must be equal to len(vertices)/3."
             self._colors = self._ext_color
         return self._colors
 
@@ -87,7 +98,7 @@ class MeshObject(object):
 
     @property
     def normals(self):
-        if self._normals is None:
+        if self._normals is None or len(self._normals) != len(self.vertices):
             print("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         elif len(self._normals) != len(self.vertices):
@@ -135,7 +146,7 @@ class MeshObject(object):
         Rotates vertices into principal component coordinate system.
         """
         if self.pca is None:
-            self.pca = PCA(n_components=3, whiten=False)
+            self.pca = PCA(n_components=3, whiten=False, random_state=0)
             self.pca.fit(self.vert_resh)
         self.vertices = self.pca.transform(
             self.vert_resh).reshape(len(self.vertices))
@@ -156,7 +167,7 @@ class MeshObject(object):
         self.center, self.max_dist = bounding_box
         self.center = self.center.astype(np.float)
         self.max_dist = self.max_dist.astype(np.float)
-        vert_resh = np.array(self.vertices).reshape(len(self.vertices) / 3, 3)
+        vert_resh = np.array(self.vertices).reshape(len(self.vertices) // 3, 3)
         vert_resh -= self.center
         vert_resh /= self.max_dist
         self.vertices = vert_resh.reshape(len(self.vertices))
@@ -235,6 +246,8 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
         verts -= 5
     verts = np.array(verts) * downsampling + offset
     if decimate_mesh > 0:
+        assert __vtk_avail__, "vtkInterface not installed. Please install vtkInterface." \
+                              "'git clone https://github.com/akaszynski/vtkInterface.git' and 'pip install -e vtkInterface'."
         print("Currently mesh-sparsification may not preserve"
               " volume.")
         # add number of vertices in front of every face (required by vtkInterface)
@@ -296,7 +309,7 @@ def normalize_vertices(vertices):
     array
         transformed vertices
     """
-    vert_resh = vertices.reshape(len(vertices) / 3, 3)
+    vert_resh = vertices.reshape(len(vertices) // 3, 3)
     vert_resh = apply_pca(vert_resh)
     vert_resh -= np.median(vert_resh, axis=0)
     max_val = np.abs(vert_resh).max()
@@ -351,7 +364,7 @@ def get_rotmatrix_from_points(points):
         return np.zeros((16))
     new_center = np.mean(points, axis=0)
     points -= new_center
-    pca = PCA(n_components=3)
+    pca = PCA(n_components=3, random_state=0)
     pca.fit(points)
     rot_mat = np.zeros((4, 4))
     rot_mat[:3, :3] = pca.components_
@@ -464,11 +477,11 @@ def unit_normal(vertices, indices):
         Unit face normals per vertex
     """
     vertices = np.array(vertices, dtype=np.float)
-    nbvert = len(vertices) / 3
+    nbvert = len(vertices) // 3
     # get coordinate list
     vert_lst = vertices.reshape(nbvert, 3)[indices]
     # get traingles from coordinates
-    triangles = vert_lst.reshape(len(vert_lst) / 3, 3, 3)
+    triangles = vert_lst.reshape(len(vert_lst) // 3, 3, 3)
     # calculate normals of triangles
     v = triangles[:, 1] - triangles[:, 0]
     w = triangles[:, 2] - triangles[:, 0]
@@ -536,6 +549,10 @@ def merge_meshes(ind_lst, vert_lst, nb_simplices=3):
     return all_ind, all_vert
 
 
+def mesh_loader(so):
+    return so.mesh
+
+
 def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
                   cmap=None, alpha=1.0):
     """
@@ -562,8 +579,8 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     all_vert = np.zeros((0, ))
     all_norm = np.zeros((0, ))
     colors = np.zeros((0, ))
-    meshes = start_multiprocess_obj("mesh", [[so,] for so in sos],
-                                   nb_cpus=nb_cpus)
+    meshes = start_multiprocess_imap(mesh_loader, sos, nb_cpus=nb_cpus,
+                                     show_progress=False)
     if color_vals is not None and cmap is not None:
         color_vals = color_factory(color_vals, cmap, alpha=alpha)
     for i in range(len(meshes)):
@@ -608,6 +625,16 @@ def make_ply_string(indices, vertices, normals, rgba_color):
         rgba_color = [rgba_color for i in range(len(vertices))]
     else:
         assert len(rgba_color) == len(vertices) and len(rgba_color[0]) == 4
+    if type(rgba_color) is list:
+        print("WARNING: Color input is list."
+              " It will now be converted automatically, "
+              "data will be unusable if not normalized between 0 and 255.")
+        rgba_color = np.array(rgba_color, dtype=np.uint8)
+    elif rgba_color.dtype.kind not in ("u", "i"):
+        print("WARNING: Color array is not of type integer or unsigned integer."
+              " It will now be converted automatically, "
+              "data will be unusable if not normalized between 0 and 255.")
+        rgba_color = np.array(rgba_color, dtype=np.uint8)
     ply_str = 'ply\nformat ascii 1.0\nelement vertex {0}\nproperty float x\nproperty float y\nproperty float z\n'\
     'property uint8 red\nproperty uint8 green\nproperty uint8 blue\nproperty uint8 alpha\n'\
     'element face {1}\nproperty list uint8 uint vertex_indices\nend_header\n'.format(len(vertices), len(indices))
@@ -621,7 +648,21 @@ def make_ply_string(indices, vertices, normals, rgba_color):
     return ply_str
 
 
-def make_ply_string_wocolor(indices, vertices, normals):
+def ply_vertex_generator(vertices):
+    ply_str = ""
+    for v in vertices:
+        ply_str += '{0} {1} {2}\n'.format(v[0], v[1], v[2])
+    return ply_str
+
+
+def ply_index_generator(indices):
+    ply_str = ""
+    for face in indices:
+        ply_str += '3 {0} {1} {2}\n'.format(face[0], face[1], face[2])
+    return ply_str
+
+
+def make_ply_string_wocolor(indices, vertices, normals, nb_cpus=1):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -643,11 +684,14 @@ def make_ply_string_wocolor(indices, vertices, normals):
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
     ply_str = 'ply\nformat ascii 1.0\nelement vertex {0}\nproperty float x\nproperty float y\nproperty float z\n'\
     'element face {1}\nproperty list uint8 uint vertex_indices\nend_header\n'.format(len(vertices), len(indices))
-    for v in vertices:
-        ply_str += '{0} {1} {2}\n'.format(v[0], v[1], v[2])
-
-    for face in indices:
-        ply_str += '3 {0} {1} {2}\n'.format(face[0], face[1], face[2])
+    params = np.array_split(vertices, 100)
+    res = start_multiprocess_imap(ply_vertex_generator, params, nb_cpus=nb_cpus)
+    for el in res:
+        ply_str += el
+    params = np.array_split(indices, 100)
+    res = start_multiprocess_imap(ply_index_generator, params, nb_cpus=nb_cpus)
+    for el in res:
+        ply_str += el
     return ply_str
 
 
@@ -670,7 +714,7 @@ def write_ssomesh2kzip(k_path, sso, color=(255, 0, 0, 255), ply_fname="0.ply"):
     write_mesh2kzip(k_path, ind, vert, color, ply_fname)
 
 
-def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
+def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname, nb_cpus=1):
     """
     Writes mesh as .ply's to k.zip file.
 
@@ -690,7 +734,8 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
     if color is not None:
         ply_str = make_ply_string(ind, vert.astype(np.float32), norm, color)
     else:
-        ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm)
+        ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm,
+                                          nb_cpus=nb_cpus)
     write_txt2kzip(k_path, ply_str, ply_fname)
 
 
@@ -763,9 +808,7 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
                                                 for sv in ssv.svs],
                                                nb_cpus=ssv.nb_cpus))
     preds = np.concatenate(preds)
-    print("Collected axoness:", Counter(preds).most_common())
     locs = ssv.sample_locations()
-    print("Collected locations.")
     pred_coords = np.concatenate(locs)
     assert pred_coords.ndim == 2, "Sample locations of ssv have wrong shape."
     assert pred_coords.shape[1] == 3, "Sample locations of ssv have wrong shape."
@@ -799,130 +842,3 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
         comp_ind = np.array([remap_dict[i] for i in comp_ind], dtype=np.uint)
         comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
     return comp_meshes
-
-
-def id2rgb(vertex_id):
-    """
-    Transforms ID value of single sso vertex into the unique RGD colour.
-
-    Parameters
-    ----------
-    vertex_id : int
-
-    Returns
-    -------
-    np.array
-        RGB values [1, 3]
-    """
-    red = vertex_id % 256
-    green = (vertex_id/256) % 256
-    blue = (vertex_id/256/256) % 256
-    colour = np.array([red, green, blue], dtype=np.uint8)
-    return colour.squeeze()
-
-
-def id2rgb_array(id_arr):
-    """
-    Transforms ID values into the array of RGBs labels based on 'idtorgb'.
-    Note: Linear retrieval time. For small N preferable.
-
-    Parameters
-    ----------
-    id_arr : np.array
-        ID values [N, 1]
-
-    Returns
-    -------
-    np.array
-        RGB values.squeezed [N, 3]
-    """
-
-    if np.max(id_arr) > 256**3:
-        raise ValueError("Overflow in vertex ID array.")
-    if id_arr.ndim == 1:
-        id_arr = id_arr[:, None]
-    elif id_arr.ndim == 2:
-        assert id_arr.shape[1] == 1, "ValueError: unsupported shape"
-    else:
-        raise ValueError("Unsupported shape")
-    rgb_arr = np.apply_along_axis(id2rgb, 1, id_arr)
-    return rgb_arr.squeeze()
-
-
-def id2rgb_array_contiguous(id_arr):
-    """
-    Transforms ID values into the array of RGBs labels based on the assumption
-    that 'id_arr' is contiguous index array from 0...len(id_arr).
-    Same mapping as 'id2rgb_array'.
-    Note: Constant retrieval time. For large N preferable.
-
-    Parameters
-    ----------
-    id_arr : np.array
-        ID values [N, 1]
-
-    Returns
-    -------
-    np.array
-        RGB values.squeezed [N, 3]
-    """
-    if id_arr.squeeze().ndim > 1:
-        raise ValueError("Unsupported index array shape.")
-    nb_ids = len(id_arr.squeeze())
-    if nb_ids > 256**3:
-        raise ValueError("Overflow in vertex ID array.")
-    x1 = np.arange(256).astype(np.uint8)
-    x2 = np.arange(256).astype(np.uint8)
-    x3 = np.arange(256).astype(np.uint8)
-    xx1, xx2, xx3 = np.meshgrid(x1, x2, x3, sparse=False, copy=False)
-    rgb_arr = np.concatenate([xx3.flatten()[:, None], xx1.flatten()[:, None],
-                              xx2.flatten()[:, None]], axis=-1)[:nb_ids]
-    return rgb_arr
-
-
-def rgb2id(rgb):
-    """
-    Transforms unique RGB values into soo vertex ID.
-
-    Parameters
-    ----------
-    rgb: np.array
-        RGB values [1, 3]
-
-    Returns
-    -------
-    np.array
-        ID values [1, 1]
-    """
-    red = rgb[0]
-    green = rgb[1]
-    blue = rgb[2]
-    vertex_id = red + green*256 + blue*(256**2)
-    return np.array([vertex_id], dtype=np.uint32)
-
-
-def rgb2id_array(rgb_arr):
-    """
-    Transforms RGB values into IDs based on 'rgb2id'.
-
-    Parameters
-    ----------
-    rgb_arr : np.array
-        RGB values [N, 3]
-
-    Returns
-    -------
-    np.array
-        ID values [N, ]
-    """
-    if rgb_arr.ndim > 1:
-        assert rgb_arr.shape[-1] == 3, "ValueError: unsupported shape"
-    else:
-        raise ValueError("Unsupported shape")
-    start = time.time()
-    rgb_arr_flat = rgb_arr.flatten().reshape((-1, 3))
-    mask_arr = (rgb_arr_flat[:, 0] != 0) & (rgb_arr_flat[:, 1] != 0) & (rgb_arr_flat[:, 2] != 0)
-    id_arr = np.zeros((len(rgb_arr_flat)), dtype=np.uint32)
-    id_arr[mask_arr] = np.apply_along_axis(rgb2id, 1, rgb_arr_flat[mask_arr]).squeeze()
-    # print("Finisehd remapping rgb-> vertex IDs after [min]:", (time.time()-start)/60.)
-    return id_arr.reshape(rgb_arr.shape[:-1])

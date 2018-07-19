@@ -67,3 +67,6 @@ target/
 /scripts/rendering/gener_lab_views.py
 /scripts/rendering/pallete.py
 /scripts/rendering/rendering_example.py
+
+# PyCharm
+.idea/

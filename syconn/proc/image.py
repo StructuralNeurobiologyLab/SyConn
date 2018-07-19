@@ -247,7 +247,7 @@ def apply_pca(sv, pca=None):
         super voxel coordinates rotated in principle component system
     """
     if pca is None:
-        pca = PCA(n_components=3)
+        pca = PCA(n_components=3, random_state=0)
         sv = pca.fit_transform(sv)
     else:
         sv = pca.transform(sv)

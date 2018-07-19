@@ -6,6 +6,7 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 # # define global working directory
+# wd = "/wholebrain/songbird/j0126/areaxfs_v5"
 wd = "/wholebrain/scratch/areaxfs3/"
 
 # --------------------------------------------------------------- GLIA PARAMETER

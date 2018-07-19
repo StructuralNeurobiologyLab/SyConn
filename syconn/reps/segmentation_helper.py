@@ -2,7 +2,10 @@ import glob
 import numpy as np
 from scipy import ndimage
 import os
-from ..handler.compression import MeshDict, VoxelDict, AttributeDict, SkeletonDict
+from ..handler.compression import MeshDict, VoxelDict, AttributeDict,\
+    SkeletonDict, LZ4Dict
+from ..handler.basics import chunkify
+from ..mp.shared_mem import start_multiprocess_imap
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
@@ -115,22 +118,23 @@ def load_voxel_list(so):
     voxel_list = np.array([], dtype=np.int32)
 
     if so._voxels is not None:
-        voxel_list = np.array(zip(*np.nonzero(so.voxels)), dtype=np.int32) + \
+        voxel_list = np.transpose(np.nonzero(so.voxels)).astype(np.uint32) + \
                      so.bounding_box[0]
+
+        # voxel_list = np.array(zip(*np.nonzero(so.voxels)), dtype=np.int32) + \
+        #              so.bounding_box[0]
     else:
         voxel_dc = VoxelDict(so.voxel_path, read_only=True)
         bin_arrs, block_offsets = voxel_dc[so.id]
 
         for i_bin_arr in range(len(bin_arrs)):
-            block_voxels = np.array(zip(*np.nonzero(bin_arrs[i_bin_arr])),
-                                    dtype=np.int32)
-            block_voxels += np.array(block_offsets[i_bin_arr])
+            block_voxels = np.transpose(np.nonzero(bin_arrs[i_bin_arr])).astype(np.uint32)
+            block_voxels += np.array(block_offsets[i_bin_arr]).astype(np.uint32)
 
             if len(voxel_list) == 0:
                 voxel_list = block_voxels
             else:
                 voxel_list = np.concatenate([voxel_list, block_voxels])
-
     return voxel_list
 
 
@@ -240,3 +244,56 @@ def binary_closing(vx, n_iterations=13):
             n_iterations: -n_iterations]
 
     return vx
+
+
+def sv_view_exists(args):
+    ps, woglia = args
+    missing_ids = []
+    for p in ps:
+        ad = AttributeDict(p + "/attr_dict.pkl", disable_locking=True)
+        obj_ixs = ad.keys()
+        view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
+        view_dc = LZ4Dict(view_dc_p, disable_locking=True)
+        for ix in obj_ixs:
+            if ix not in view_dc:
+                missing_ids.append(ix)
+    return missing_ids
+
+
+def find_missing_sv_views(sd, woglia, n_cores=20):
+    multi_params = chunkify(sd.so_dir_paths, 100)
+    params = [(ps, woglia) for ps in multi_params]
+    res = start_multiprocess_imap(sv_view_exists, params, nb_cpus=n_cores,
+                                  debug=False)
+    return np.concatenate(res)
+
+
+def sv_attr_exists(args):
+    ps, attr_key = args
+    missing_ids = []
+    for p in ps:
+        ad = AttributeDict(p + "/attr_dict.pkl", disable_locking=True)
+        for k, v in ad.items():
+            if attr_key not in v:
+                missing_ids.append(k)
+    return missing_ids
+
+
+def find_missing_sv_attributes(sd, attr_key, n_cores=20):
+    """
+
+    Parameters
+    ----------
+    sd : SegmentationDataset
+    attr_key : str
+    n_cores : int
+
+    Returns
+    -------
+
+    """
+    multi_params = chunkify(sd.so_dir_paths, 100)
+    params = [(ps, attr_key) for ps in multi_params]
+    res = start_multiprocess_imap(sv_attr_exists, params, nb_cpus=n_cores,
+                                  debug=False)
+    return np.concatenate(res)

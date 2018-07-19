@@ -243,7 +243,8 @@ class SegmentationDataset(object):
         if self._scaling is None:
             try:
                 self._scaling = \
-                    np.array(self.config.entries["Dataset"]["scaling"])
+                    np.array(self.config.entries["Dataset"]["scaling"],
+                             dtype=np.float32)
             except:
                 self._scaling = np.array([1, 1, 1])
 
@@ -268,13 +269,26 @@ class SegmentationDataset(object):
                                    working_dir=self.working_dir)
 
     def get_segmentation_object(self, obj_id, create=False):
-        return SegmentationObject(obj_id=obj_id,
-                                  obj_type=self.type,
-                                  version=self.version,
-                                  working_dir=self.working_dir,
-                                  scaling=self.scaling,
-                                  create=create,
-                                  n_folders_fs=self.n_folders_fs)
+        if np.isscalar(obj_id):
+            return SegmentationObject(obj_id=obj_id,
+                                      obj_type=self.type,
+                                      version=self.version,
+                                      working_dir=self.working_dir,
+                                      scaling=self.scaling,
+                                      create=create,
+                                      n_folders_fs=self.n_folders_fs)
+        else:
+            res = []
+            for ix in obj_id:
+                obj = SegmentationObject(obj_id=ix,
+                                      obj_type=self.type,
+                                      version=self.version,
+                                      working_dir=self.working_dir,
+                                      scaling=self.scaling,
+                                      create=create,
+                                      n_folders_fs=self.n_folders_fs)
+                res.append(obj)
+            return res
 
     def save_version_dict(self):
         write_obj2pkl(self.version_dict_path, self.version_dict)
@@ -408,7 +422,8 @@ class SegmentationObject(object):
         if self._scaling is None:
             try:
                 self._scaling = \
-                    np.array(self.config.entries["Dataset"]["scaling"])
+                    np.array(self.config.entries["Dataset"]["scaling"],
+                             dtype=np.float32)
             except:
                 self._scaling = np.array([1, 1, 1])
 
@@ -479,9 +494,12 @@ class SegmentationObject(object):
     def attr_dict_path(self):
         return self.segobj_dir + "attr_dict.pkl"
 
-    def view_path(self, woglia=True):
-        if woglia:
+    def view_path(self, woglia=True, index_views=False):
+        if index_views:
+            return self.segobj_dir + "views_index.pkl"
+        elif woglia:
             return self.segobj_dir + "views_woglia.pkl"
+
         return self.segobj_dir + "views.pkl"
 
     @property
@@ -636,22 +654,23 @@ class SegmentationObject(object):
                               disable_locking=not self.enable_locking)
         return self.id in location_dc
 
-    @property
-    def views_exist(self, woglia=True):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia),
+
+    def views_exist(self, woglia, index_views=False):
+        view_dc = LZ4Dict(self.view_path(woglia=woglia, index_views=index_views),
                           disable_locking=not self.enable_locking)
         return self.id in view_dc
 
-    @property
-    def views(self):
+    def views(self, woglia, index_views=False):
         assert self.type == "sv"
         if self._views is None:
-            if self.views_exist:
+            if self.views_exist(woglia):
                 if self.view_caching:
-                    self._views = self.load_views()
+                    self._views = self.load_views(woglia=woglia,
+                                                  index_views=index_views)
                     return self._views
                 else:
-                    return self.load_views()
+                    return self.load_views(woglia=woglia,
+                                           index_views=index_views)
             else:
                 return -1
         else:
@@ -707,12 +726,22 @@ class SegmentationObject(object):
         if not pred_key in self.attr_dict:
             self.load_attr_dict()
         if not pred_key in self.attr_dict:
-            print("WARNING: Requested axoness probability for SV %d is "
-                  "not available." % self.id)
-            return np.array([[0, 1, 0] * len(self.sample_locations())]).reshape((-1, 3))
+            msg = "WARNING: Requested axoness {} for SV {} is "\
+                  "not available. Existing keys: {}".format(
+                pred_key, self.id, str(self.attr_dict.keys()))
+            raise ValueError(msg)
+            # return np.array([[0, 1, 0] * len(self.sample_locations())]).reshape((-1, 3))
         return self.attr_dict[pred_key]
 
     #                                                                  FUNCTIONS
+    def total_edge_length(self):
+        if self.skeleton is None:
+            self.load_skeleton()
+        #  TODO: change interface to match SSV, i.e. to dictionary
+        nodes = self.skeleton[0].reshape(-1, 3).astype(np.float32)
+        edges = self.skeleton[2].reshape(-1, 2)
+        return np.sum([np.linalg.norm(
+            self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
 
     def extent(self):
         return np.linalg.norm(self.shape * self.scaling)
@@ -759,7 +788,7 @@ class SegmentationObject(object):
         elif self.type == "mi":
             color = (0, 153, 255, 255)
         else:
-            raise ("Given object type '%s' does not exist." % self.type,
+            raise ("Given object type '{}' does not exist.".format(self.type),
                    TypeError)
         if ext_color is not None:
             if ext_color == 0:
@@ -777,23 +806,25 @@ class SegmentationObject(object):
         kml = knossos_ml_from_svixs([self.id], coords=[self.rep_coord])
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def load_views(self, woglia=True, raw_only=False, ignore_missing=False):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia),
+    def load_views(self, woglia=True, raw_only=False, ignore_missing=False,
+                   index_views=False):
+        view_dc = LZ4Dict(self.view_path(woglia=woglia, index_views=index_views),
                           disable_locking=not self.enable_locking)
         try:
             views = view_dc[self.id]
         except KeyError as e:
             if ignore_missing:
-                print("Views of SV %d were missing. Skipping." % self.id)
-                views = np.zeros((0, 4, 2, 128, 256))
+                print("Views of SV {} were missing. Skipping.".format(self.id))
+                views = np.zeros((0, 4, 2, 128, 256), dtype=np.uint8)
             else:
                 raise KeyError(e)
         if raw_only:
             views = views[:, :1]
-        return np.array(views, dtype=np.float32)
+        return views
 
-    def save_views(self, views, woglia=True, cellobjects_only=False):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia),
+    def save_views(self, views, woglia=True, cellobjects_only=False,
+                   index_views=False):
+        view_dc = LZ4Dict(self.view_path(woglia=woglia, index_views=index_views),
                           read_only=False,
                           disable_locking=not self.enable_locking)
         if cellobjects_only:
@@ -811,7 +842,7 @@ class SegmentationObject(object):
                                           disable_locking=True)
              self.attr_dict = glob_attr_dc[self.id]
         except (IOError, EOFError):
-            return -1  #
+            return -1
 
     def save_attr_dict(self):
         glob_attr_dc = AttributeDict(self.attr_dict_path, read_only=False,
@@ -960,7 +991,6 @@ class SegmentationObject(object):
     # SKELETON
     @property
     def skeleton_dict_path(self):
-        print(self.segobj_dir)
         return self.segobj_dir + "/skeletons.pkl"
 
     def copy2dir(self, dest_dir, safe=True):
@@ -980,8 +1010,8 @@ class SegmentationObject(object):
                 pass
         # copy attr_dict values
         self.load_attr_dict()
-        if os.path.isfile(dest_dir+"/atrr_dict.pkl"):
-            dest_attr_dc = load_pkl2obj(dest_dir+"/atrr_dict.pkl")
+        if os.path.isfile(dest_dir+"/attr_dict.pkl"):
+            dest_attr_dc = load_pkl2obj(dest_dir+"/attr_dict.pkl")
         else:
              dest_attr_dc = {}
         # overwrite existing keys in the destination attribute dict

@@ -5,18 +5,18 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-if not "matplotlib" not in globals():
-    import matplotlib
-    matplotlib.use("agg")
-
+import matplotlib
+matplotlib.use("Agg", warn=False, force=True)
+import matplotlib.colors as mcolors
 import glob
 import os
 import re
+import matplotlib.pyplot as plt
+from matplotlib import gridspec
 
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 import numpy as np
 import pandas
@@ -34,9 +34,9 @@ except:
     default_wd_available = False
 
 from ..config import parser
-import connectivity_helper as ch
-import super_segmentation as ss
-import segmentation
+from . import connectivity_helper as ch
+from . import super_segmentation as ss
+from . import segmentation
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 
 
@@ -45,7 +45,6 @@ def make_colormap(seq):
     seq: a sequence of floats and RGB-tuples. The floats should be increasing
     and in the interval (0,1).
     """
-    import matplotlib.colors as mcolors
     seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
     cdict = {'red': [], 'green': [], 'blue': []}
     for i, item in enumerate(seq):
@@ -67,7 +66,6 @@ def diverge_map(low=(239/255., 65/255., 50/255.),
     ends of the spectrum. they can be either color strings
     or rgb color tuples
     """
-    import matplotlib.colors as mcolors
     c = mcolors.ColorConverter().to_rgb
     if isinstance(low, basestring): low = c(low)
     if isinstance(high, basestring): high = c(high)
@@ -238,7 +236,7 @@ class ConnectivityMatrix(object):
                              nb_cpus=1):
         multi_params = []
         for id_block in [self.sj_ids[i:i + stride]
-                         for i in xrange(0, len(self.sj_ids), stride)]:
+                         for i in range(0, len(self.sj_ids), stride)]:
             multi_params.append([id_block, self._sj_version, self._ssd_version,
                                  self.working_dir])
 
@@ -254,7 +252,7 @@ class ConnectivityMatrix(object):
             out_files = glob.glob(path_to_out + "/*")
             results = []
             for out_file in out_files:
-                with open(out_file) as f:
+                with open(out_file, 'rb') as f:
                     results.append(pkl.load(f))
         else:
             raise Exception("QSUB not available")
@@ -272,7 +270,7 @@ class ConnectivityMatrix(object):
 
         multi_params = []
         for id_block in [present_sso_ids[i:i + stride]
-                         for i in xrange(0, len(present_sso_ids), stride)]:
+                         for i in range(0, len(present_sso_ids), stride)]:
             multi_params.append([id_block, self._sj_version, self._ssd_version,
                                  self.working_dir, self.version])
 
@@ -288,7 +286,7 @@ class ConnectivityMatrix(object):
             out_files = glob.glob(path_to_out + "/*")
             results = []
             for out_file in out_files:
-                with open(out_file) as f:
+                with open(out_file, 'rb') as f:
                     results.append(pkl.load(f))
         else:
             raise Exception("QSUB not available")
@@ -543,10 +541,6 @@ class ConnectivityMatrix(object):
         big_entries : bool
             artificially increase pixel size from 1 to 3 for better visualization
         """
-        from matplotlib import gridspec
-        if "matplotlib" not in globals():
-            import matplotlib
-            matplotlib.use("agg")
         if cum:
             entry_width = 1
 
@@ -677,3 +671,56 @@ class ConnectivityMatrix(object):
         self.plot_wiring(cum_matrix, range(1, len(ax_borders)+1), range(1, len(ax_borders)+1), cum=True, cum_size=intensity_plot.shape[0])
 
 
+def get_sso_specific_info_thread(args):
+    sso_ids = args[0]
+    sj_version = args[1]
+    ssd_version = args[2]
+    working_dir = args[3]
+    version = args[4]
+
+    ssd = ss.SuperSegmentationDataset(working_dir,
+                                      version=ssd_version)
+
+    cm = connectivity.ConnectivityMatrix(working_dir,
+                                         version=version,
+                                         sj_version=sj_version,
+                                         create=False)
+
+    axoness_entries = []
+    cell_types = {}
+    blacklist = []
+    shapes = {}
+    for sso_id in sso_ids:
+        print(sso_id)
+        sso = ssd.get_super_segmentation_object(sso_id)
+
+        if not sso.load_skeleton():
+            blacklist.append(sso_id)
+            continue
+
+        if "axoness" not in sso.skeleton:
+            blacklist.append(sso_id)
+            continue
+
+        if sso.cell_type is None:
+            blacklist.append(sso_id)
+            continue
+
+        con_mask, pos = np.where(cm.connectivity[:, :2] == sso_id)
+
+        sj_coords = cm.connectivity[con_mask, -3:]
+        sj_axoness = sso.axoness_for_coords(sj_coords)
+
+        con_ax = np.concatenate([con_mask[:, None], pos[:, None],
+                                 sj_axoness[:, None]], axis=1)
+
+        if len(axoness_entries) == 0:
+            axoness_entries = con_ax
+        else:
+            axoness_entries = np.concatenate((axoness_entries, con_ax))
+
+        cell_types[sso_id] = sso.cell_type
+        shapes[sso_id] = sso.shape
+
+    axoness_entries = np.array(axoness_entries, dtype=np.int)
+    return axoness_entries, cell_types, shapes, blacklist

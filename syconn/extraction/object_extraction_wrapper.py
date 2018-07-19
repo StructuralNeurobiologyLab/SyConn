@@ -387,7 +387,7 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
 def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
                         overlaydataset_path=None, chunk_list=None, offset=None,
                         size=None, suffix="", qsub_pe=None, qsub_queue=None,
-                        n_max_co_processes=None):
+                        n_max_co_processes=None, n_chunk_jobs=5000):
     """
     Main function for the object extraction step; combines all needed steps
     Parameters
@@ -439,7 +439,7 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
                        overlaydataset_path=overlaydataset_path,
                        chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
                        qsub_queue=qsub_queue,
-                       n_folders_fs=n_folders_fs,
+                       n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
                        n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")

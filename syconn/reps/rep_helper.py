@@ -12,60 +12,6 @@ from scipy import spatial
 from collections import Counter
 
 
-def prase_cc_dict_from_txt(txt):
-    """
-    Parse connected components from knossos mergelist text file
-
-    Parameters
-    ----------
-    txt : str
-
-    Returns
-    -------
-    dict
-    """
-    cc_dict = {}
-    for line in txt.splitlines()[::4]:
-        line_nb = np.array(re.findall("(\d+)", line), dtype=np.uint)
-        curr_ixs = line_nb[3:]
-        cc_ix = line_nb[0]
-        curr_ixs = curr_ixs[curr_ixs != 0]
-        cc_dict[cc_ix] = curr_ixs
-    return cc_dict
-
-
-def parse_cc_dict_from_kml(kml_path):
-    """
-    Parse connected components from knossos mergelist text file
-
-    Parameters
-    ----------
-    kml_path : str
-
-    Returns
-    -------
-    dict
-    """
-    txt = open(kml_path, "rb").read()
-    return prase_cc_dict_from_txt(txt)
-
-
-def parse_cc_dict_from_kzip(k_path):
-    """
-
-    Parameters
-    ----------
-    k_path : str
-
-    Returns
-    -------
-    dict
-    """
-    txt = read_txt_from_zip(k_path, "mergelist.txt")
-    return prase_cc_dict_from_txt(txt)
-
-
-
 def knossos_ml_from_svixs(sv_ixs, coords=None, comments=None):
     """
 
@@ -313,7 +259,7 @@ def subfold_from_ix_SSO(ix):
 
 
 def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
-                       nb_cpus=-1, k=1):
+                       nb_cpus=-1, k=1, return_color=True):
     """
 
     Parameters
@@ -330,6 +276,8 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     nb_cpus : int
     k : int
         Number of nearest neighbors (average prediction)
+    return_color : bool
+        If false it returns the majority vote for each index
 
     Returns
     -------
@@ -340,6 +288,8 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
         colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
                            [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
     else:
+        if np.max(colors) <= 1.0:
+            colors = np.array(colors) * 255
         colors = np.array(colors, dtype=np.uint)
     assert len(colors) >= np.max(rep_values) + 1
     hull_tree = spatial.cKDTree(rep_coords)
@@ -351,6 +301,8 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
             curr_reps = np.array([curr_reps])
         curr_maj = Counter(curr_reps).most_common(1)[0][0]
         hull_rep[i] = curr_maj
+    if not return_color:
+        return hull_rep
     vert_col = colors[hull_rep]
     return vert_col
 

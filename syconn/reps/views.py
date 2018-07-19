@@ -8,10 +8,6 @@
 from ..handler.compression import load_lz4_compressed, save_lz4_compressed
 import numpy as np
 import os
-import warnings
-if "matplotlib" not in globals():
-    import matplotlib
-    matplotlib.use("agg")
 
 
 class ViewContainer(object):
@@ -69,32 +65,51 @@ class ViewContainer(object):
         return views
 
     def plot(self, fig=None, view_nb=0):
-        if "matplotlib" not in globals():
-            import matplotlib
-            matplotlib.use("agg")
+        import matplotlib
+        matplotlib.use("Agg", warn=False, force=True)
         import matplotlib.pyplot as plt
         import matplotlib.ticker as ticker
         tick_spacing = 40
         if self.views is None:
             views = self.load()
+        else:
+            views = self.views
         if fig is None:
             fig = plt.figure()
         ax = fig.add_subplot(111)
-        plt.suptitle("%s" % str(self))
+        # plt.suptitle("%s" % str(self))
         colors = ['Greys_r', 'Blues_r', 'Greens_r', 'Reds_r']
         for k in range(4):
-            if np.all(views[view_nb, k, 0] == 0.) or \
-                    np.all(views[view_nb, k, 0] == 1.):
+            if len(np.unique(views[view_nb, k, 0])) == 1:
                 continue
             cm = plt.cm.get_cmap(colors[k], lut=256)
             cm._init()
             cm._lut[-20:, -1] = 0
             cm._lut[:-20, -1] = 0.7
             plt.imshow(views[view_nb, k, 0], cmap=cm, interpolation='none')
-        ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
-        ax.yaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
+        # ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
+        # ax.yaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
+        ax.tick_params(axis='x', which='major', labelsize=0, direction='out',
+                       length=4, width=3, right="off", top="off", pad=10,
+                       left="off", bottom="off")
+        ax.tick_params(axis='y', which='major', labelsize=0, direction='out',
+                       length=4, width=3, right="off", top="off", pad=10,
+                       left="off", bottom="off")
+
+        ax.tick_params(axis='x', which='minor', labelsize=0, direction='out',
+                       length=4, width=3, right="off", top="off", pad=10,
+                       left="off", bottom="off")
+        ax.tick_params(axis='y', which='minor', labelsize=0, direction='out',
+                       length=4, width=3, right="off", top="off", pad=10,
+                       left="off", bottom="off")
+        ax.spines['right'].set_visible(False)
+        ax.spines['top'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
 
     def write_single_plot(self, dest_path, view_nb, dpi=400):
+        import matplotlib
+        matplotlib.use("Agg", warn=False, force=True)
         import matplotlib.pyplot as plt
         plt.ioff()
         fig = plt.figure()
@@ -127,6 +142,8 @@ def plot_n_views(view_array):
     ----------
     view_array : numpy.array
     """
+    import matplotlib
+    matplotlib.use("Agg", warn=False, force=True)
     import matplotlib.pyplot as plt
     nb_views = len(view_array)
     fig, ax = plt.subplots(5, 4)

@@ -1,8 +1,7 @@
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
-    import Pickle as pkl
+except ImportError:
+    import pickle as pkl
 import glob
 import os
 from ..mp import qsub_utils as qu
@@ -37,7 +36,7 @@ def find_missing_overlaycubes(path, stride=100, qsub_pe=None, qsub_queue=None,
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
 
     else:
