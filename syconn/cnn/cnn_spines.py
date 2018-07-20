@@ -50,7 +50,7 @@ if __name__ == "__main__":
     elektronn3.select_mpl_backend('Agg')
 
     from elektronn3.training import Trainer, Backup
-    from syconn.cnn.TrainData import MultiviewData
+    from syconn.cnn.TrainData import MultiviewDataSpines
 
     torch.manual_seed(0)
 
@@ -74,8 +74,8 @@ if __name__ == "__main__":
 
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
-    train_dataset = MultiviewData(train=True, transform=transform)
-    valid_dataset = MultiviewData(train=False, transform=transform)
+    train_dataset = MultiviewDataSpines(train=True, transform=transform)
+    valid_dataset = MultiviewDataSpines(train=False, transform=transform)
 
     # Set up optimization
     optimizer = optim.Adam(

@@ -16,7 +16,9 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.mp.shared_mem import start_multiprocess_obj
 import os
-from elektronn3.data import Dataset, transforms
+from torch.utils import data
+from elektronn3.data import transforms
+import contextlib
 from typing import Callable
 import h5py
 # fix random seed.
@@ -25,7 +27,7 @@ np.random.seed(0)
 
 # -------------------------------------- elektronn3 ----------------------------
 
-class MultiviewData(Dataset):
+class MultiviewDataSpines(data.Dataset):
     """
     Multiview spine data loader.
     """
@@ -70,51 +72,125 @@ class MultiviewData(Dataset):
         self.target_file.close()
 
 
-class MultiviewData_TNet(Dataset):
+class MultiviewData_TNet_online(data.Dataset):
     """
     Multiview spine data loader.
     """
 
     def __init__(
             self,
-            train=True,
+            train=True, epoch_size=10000,
             transform: Callable = transforms.Identity()
     ):
         super().__init__()
         self.transform = transform
+        self.epoch_size = epoch_size
+        self.train = train
         # load GliaView Data and store all views in memory
         # inefficient because GV has to be loaded twice (train and valid)
-        GV = GliaViews(None, None)
-        self.inp = GV.train_d if train else GV.valid_d
+        print("Loaded all data. Concatenating now.")
+        AV = AxonViews(None, None, raw_only=False, nb_views=2,
+                       naive_norm=False, load_data=False)
+
+        CTV = MultiViewData("/wholebrain/scratch/areaxfs3/", "ctgt",
+                            view_kwargs=dict(view_key="raw{}".format(2)),
+                            naive_norm=False, load_data=False)
+        if train:
+            self.inp = [AV.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["train"]] + \
+                       [CTV.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["train"]]
+        else:
+            self.inp = [AV.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["valid"]] + \
+                       [CTV.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["valid"]]
+        print("Concatenated all data. Normalizing now.")
         ixs = np.arange(len(self.inp))
         np.random.shuffle(ixs)
-        self.inp = self.inp[ixs]
+        self.inp = np.array(self.inp)[ixs]
         print("Dataset: {}\t{}".format("train" if train else "valid",
                                        self.inp.shape))
+        self._cache_use = 0
+        self._max_cache_usages = 200
+        self._cache = None
 
     def __getitem__(self, index):
-        inp = self.inp[index]
-        # similar pair
-        inp = self.transform(inp)
-        # get random different single view; self.view was shuffled during init
-        if index == len(inp) - 1:
-            dist_ix = index - 1
+        if self._cache is None or self._cache_use > self._max_cache_usages:
+            # use random seed locally; overwrite index -> always draw randomly
+            with temp_seed(None):
+                index = np.random.randint(0, len(self.inp))
+            self._cache_use = 0
+            # similar pair views
+            ssv = self.inp[index]
+            if ssv.version is "ctgt":
+                views = ssv.load_views(view_key="raw2")
+            else:
+                views = ssv.load_views()
+            self._max_cache_usages = np.max([200, int(len(views) * 1.5)])
+            # get random different SSV
+            views = naive_view_normalization(views)
+            while True:
+                # use random seed locally; overwrite index -> always draw randomly
+                with temp_seed(None):
+                    dist_ix = np.random.randint(0, len(self.inp))
+                if dist_ix != index:
+                    break
+            ssv_dist = self.inp[dist_ix]
+            if ssv_dist.version is "ctgt":
+                views_dist = ssv_dist.load_views(view_key="raw2")
+            else:
+                views_dist = ssv_dist.load_views()
+            views_dist = naive_view_normalization(views_dist)
+            self._cache = (views, views_dist)
         else:
-            dist_ix = index + 1
-        return np.concatenate([inp, self.inp[dist_ix]])
+            views, views_dist = self._cache
+            self._cache_use += 1
+
+        # similar views are from same, randomly picked location
+        mview_ix = np.random.randint(0, len(views))
+        views_sim = views[mview_ix]
+        views_sim = self.transform(views_sim, target=None)[0]
+        views_sim = views_sim.swapaxes(1, 0)
+
+        # single unsimilar view is from different SSV and randomly picked location
+        mview_ix = np.random.randint(0, len(views_dist))
+        # choose random view locations and random view (out of the two) and add the two axes back to the shape
+        view_dist = views_dist[mview_ix][None, :, np.random.randint(0, 2)]
+        view_dist = self.transform(view_dist, target=None)[0]
+        return np.concatenate([views_sim, view_dist]).astype(np.float32) / 255.
 
     def __len__(self):
-        return self.inp.shape[0]
+        if self.train:
+            return self.epoch_size
+        else:
+            return 200
 
     def close_files(self):
         return
 
 
+@contextlib.contextmanager
+def temp_seed(seed):
+    """
+    From https://stackoverflow.com/questions/49555991/can-i-create-a-local-numpy-random-seed
+    Parameters
+    ----------
+    seed :
+
+    Returns
+    -------
+
+    """
+    state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        yield
+    finally:
+        np.random.set_state(state)
+
 # -------------------------------------- ELEKTRONN2 ----------------------------
 
 class MultiViewData(Data):
     def __init__(self, working_dir, gt_type, nb_cpus=20,
-                 label_dict=None, view_kwargs=None):
+                 label_dict=None, view_kwargs=None, naive_norm=True,
+                 load_data=True):
         if view_kwargs is None:
             view_kwargs = dict(raw_only=False, cache_default_views=True,
                                nb_cpus=nb_cpus, ignore_missing=True,
@@ -137,6 +213,16 @@ class MultiViewData(Data):
             self.splitting_dict = load_pkl2obj(self.gt_dir +
                                                "%s_splitting.pkl" % gt_type)
         self.ssd = SuperSegmentationDataset(working_dir, version=gt_type)
+        if not load_data:
+            self.test_d = np.zeros((1, 1))
+            self.test_l = np.zeros((1, 1))
+            self.train_d = np.zeros((1, 1))
+            self.train_l = np.zeros((1, 1))
+            self.valid_d = np.zeros((1, 1))
+            self.valid_l = np.zeros((1, 1))
+            self.example_shape = self.train_d[0].shape
+            super(MultiViewData, self).__init__()
+            return
 
         # train data
         # get views of each SV
@@ -147,7 +233,8 @@ class MultiViewData(Data):
         for ii, ix in enumerate(self.splitting_dict["train"])]).astype(np.uint16)[:, None]
         # concatenate raw data
         self.train_d = np.concatenate(self.train_d)
-        self.train_d = naive_view_normalization(self.train_d)
+        if naive_norm:
+            self.train_d = naive_view_normalization(self.train_d)
         # set example shape for parent class 'Data'
         self.example_shape = self.train_d[0].shape
         # valid data
@@ -156,7 +243,8 @@ class MultiViewData(Data):
         self.valid_l = np.concatenate([[self.label_dict[ix]] * len(self.valid_d[ii])
         for ii, ix in enumerate(self.splitting_dict["valid"])]).astype(np.uint16)[:, None]
         self.valid_d = np.concatenate(self.valid_d)
-        self.valid_d = naive_view_normalization(self.valid_d)
+        if naive_norm:
+            self.valid_d = naive_view_normalization(self.valid_d)
         # test data
         if len(self.splitting_dict["test"]) > 0:
             self.test_d = [self.ssd.get_super_segmentation_object(ix).load_views(**view_kwargs)
@@ -166,19 +254,16 @@ class MultiViewData(Data):
                  for ii, ix in enumerate(self.splitting_dict["test"])]).astype(
                 np.uint16)[:, None]
             self.test_d = np.concatenate(self.test_d)
-            self.test_d = naive_view_normalization(self.test_d)
+            if naive_norm:
+                self.test_d = naive_view_normalization(self.test_d)
         else:
             self.test_d = np.zeros_like(self.valid_d)[:1]
             self.test_l = np.zeros_like(self.valid_l)[:1]
         print("GT splitting:", self.splitting_dict)
-        print("\nlabels (train) - 0:%d\t1:%d\t2:%d" % (
-            np.sum(self.train_l == 0),
-            np.sum(self.train_l == 1),
-            np.sum(self.train_l == 2)))
-        print("labels (valid) - 0:%d\t1:%d\t2:%d" % (
-            np.sum(self.valid_l == 0),
-            np.sum(self.valid_l == 1),
-            np.sum(self.valid_l == 2)))
+        print("\nlabels (train) - {}".format(np.unique(self.train_l,
+                                                       return_counts=True)))
+        print("\nlabels (valid) - {}".format(np.unique(self.valid_l,
+                                                       return_counts=True)))
         super(MultiViewData, self).__init__()
 
 
@@ -189,6 +274,7 @@ class AxonViews(MultiViewData):
                  **kwargs):
         super(AxonViews, self).__init__(working_dir, gt_type,
                                         nb_cpus=nb_cpus, **kwargs)
+        print("Initialized AxonViews:", self.__repr__())
         self.nb_views = nb_views
         self.reduce_context = reduce_context
         self.reduce_context_fact = reduce_context_fact
@@ -200,7 +286,6 @@ class AxonViews(MultiViewData):
             self.valid_d = self.valid_d[: ,:1]
             if len(self.test_d) > 0:
                 self.test_d = self.test_d[: ,:1]
-        print("Initializing AxonViews:", self.__repr__())
         self.example_shape = self.train_d[0].shape
 
     def getbatch(self, batch_size, source='train'):
@@ -226,7 +311,8 @@ class AxonViews(MultiViewData):
 
 class GliaViews(Data):
     def __init__(self, inp_node, out_node, raw_only=True, nb_views=2,
-                 reduce_context=0, binary_views=False, reduce_context_fact=1):
+                 reduce_context=0, binary_views=False, reduce_context_fact=1,
+                 naive_norm=True):
         self.nb_views = nb_views
         self.raw_only = raw_only
         self.reduce_context = reduce_context
@@ -235,9 +321,11 @@ class GliaViews(Data):
         print("Initializing GliaViews:", self.__dict__)
         # get glia gt
         GV = MultiViewData("/wholebrain/scratch/areaxfs3/", "gliagt",
-                           view_kwargs=dict(view_key="raw{}".format(nb_views)))
+                           view_kwargs=dict(view_key="raw{}".format(nb_views)),
+                           naive_norm=naive_norm)
         # get axon GT
-        AV = AxonViews(inp_node, out_node, raw_only=True, nb_views=nb_views)
+        AV = AxonViews(inp_node, out_node, raw_only=True, nb_views=nb_views,
+                       naive_norm=naive_norm)
         # set label to non-glia
         AV.train_l[:] = 0
         AV.valid_l[:] = 0

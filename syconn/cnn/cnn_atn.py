@@ -25,7 +25,7 @@ class RepresentationNetwork(nn.Module):
     def __init__(self, n_in_channels, n_out_channels=10, dr=.0,
                  leaky_relu=True):
         if dr > 0:
-            DropOut = lambda: nn.Dropout3d(dr)
+            DropOut = lambda: nn.Dropout2d(dr)
         else:
             DropOut = passthrough
         act = nn.LeakyReLU if leaky_relu else nn.ReLU
@@ -33,28 +33,25 @@ class RepresentationNetwork(nn.Module):
         self.dr = dr
         self.n_out_channels = n_out_channels
         self.conv = nn.Sequential(
-            nn.Conv2d(n_in_channels, 15, (5, 5)), act(),
-            nn.Conv2d(15, 19, (5, 5)),act(),
-            nn.MaxPool3d((2, 2)),
-            nn.Conv2d(19, 25, (4, 4)), act(),
-            DropOut(),
-            nn.Conv2d(25, 25, (4, 4)), act(),
-            nn.MaxPool3d((2, 2)),
-            nn.Conv2d(25, 30, (2, 2)), act(),
-            DropOut(),
-            nn.Conv2d(30, 32, (2, 2)), act(),
-            nn.MaxPool3d((2, 2)),
-            nn.Conv2d(32, 32, 1),
+            nn.Conv2d(n_in_channels, 15, (5, 5)), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(15, 19, (5, 5)), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(19, 25, (4, 4)), DropOut(), act(),
+            nn.Conv2d(25, 25, (4, 4)), DropOut(), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(25, 30, (2, 2)), DropOut(), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(30, 32, (2, 2)), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(32, 32, 1), act(),
         )
-        self.fc1 = nn.Sequential(
-            nn.Linear(100, 50), act())
-        self.fc2 = nn.Linear(50, n_out_channels)
+        self.fc = nn.Sequential(
+            nn.AdaptiveAvgPool1d(200),  # flexible to various input sizes
+            nn.Linear(200, 100), act(),
+            DropOut(),
+            nn.Linear(100, n_out_channels)
+        )
 
     def forward(self, x):
         x = self.conv(x)  # representation network
-        x = self.fc1(x)
-        x = F.dropout(x, p=self.dr, training=self.training)
-        return self.fc2(x)
+        x = x.view(x.size()[0], 1, -1)
+        return self.fc(x)
 
 
 # Discriminator
@@ -62,14 +59,15 @@ class D_net_gauss(nn.Module):
     """
     adapted from https://blog.paperspace.com/adversarial-autoencoders-with-pytorch/
     """
-    # z_dim has to be equal to n_out_channels in TrupletNet
+    # z_dim has to be equal to n_out_channels in TripletNet
     def __init__(self, z_dim=10, dr=.0):
         super().__init__()
         if dr > 0:
-            DropOut = lambda: nn.Dropout3d(dr)
+            DropOut = lambda: nn.Dropout(dr)
         else:
             DropOut = passthrough
-        self.fc = nn.Sequential(nn.Linear(z_dim, 250), nn.ReLU(),
+        # factor 3 because it has to process the latent space of the triplet
+        self.fc = nn.Sequential(nn.Linear(z_dim * 3, 250), nn.ReLU(),
                                 DropOut(),
                                 nn.Linear(250, 100), nn.ReLU(),
                                 DropOut(),
@@ -107,7 +105,7 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="FCN-VGG13--BlurryBoundary--NewGT", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="ATN", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
@@ -127,7 +125,7 @@ if __name__ == "__main__":
 
     from elektronn3.training import Backup
     from elektronn3.training.trainer_tnet import TripletNetTrainer
-    from syconn.cnn.TrainData import MultiviewData_TNet
+    from syconn.cnn.TrainData import MultiviewData_TNet_online
 
     torch.manual_seed(0)
 
@@ -140,7 +138,7 @@ if __name__ == "__main__":
     lr_stepsize = 500
     lr_dec = 0.99
     batch_size = 20
-    margin = 0.2
+    margin = 0.1
 
     model = get_model()
     if torch.cuda.device_count() > 1:
@@ -156,9 +154,8 @@ if __name__ == "__main__":
 
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
-    train_dataset = MultiviewData_TNet(train=True, transform=transform)
-    valid_dataset = MultiviewData_TNet(train=False, transform=transform)
-
+    train_dataset = MultiviewData_TNet_online(train=True, transform=transform)
+    valid_dataset = MultiviewData_TNet_online(train=False, transform=transform)
     # Set up optimization
     optimizer = optim.Adam(
         model.parameters(),
@@ -185,7 +182,7 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         valid_dataset=valid_dataset,
         batchsize=batch_size,
-        num_workers=2,
+        num_workers=4,
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched},
