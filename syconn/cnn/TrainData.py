@@ -79,7 +79,7 @@ class MultiviewData_TNet_online(data.Dataset):
 
     def __init__(
             self,
-            train=True, epoch_size=10000,
+            train=True, epoch_size=6000,
             transform: Callable = transforms.Identity()
     ):
         super().__init__()
@@ -108,8 +108,12 @@ class MultiviewData_TNet_online(data.Dataset):
         print("Dataset: {}\t{}".format("train" if train else "valid",
                                        self.inp.shape))
         self._cache_use = 0
+        self._cache_use_dist = 0
         self._max_cache_usages = 200
+        self._max_cache_usages_dist = 200
         self._cache = None
+        self._cache_dist = None
+        self._cached_ssv_ix = None
 
     def __getitem__(self, index):
         if self._cache is None or self._cache_use > self._max_cache_usages:
@@ -123,14 +127,21 @@ class MultiviewData_TNet_online(data.Dataset):
                 views = ssv.load_views(view_key="raw2")
             else:
                 views = ssv.load_views()
+            # 50% more because of augmentations
             self._max_cache_usages = np.max([200, int(len(views) * 1.5)])
             # get random different SSV
             views = naive_view_normalization(views)
+            self._cache = views
+            self._cached_ssv_ix = index
+        else:
+            views = self._cache
+            self._cache_use += 1
+        if self._cache_dist is None or self._cache_use_dist > self._max_cache_usages_dist:
             while True:
                 # use random seed locally; overwrite index -> always draw randomly
                 with temp_seed(None):
                     dist_ix = np.random.randint(0, len(self.inp))
-                if dist_ix != index:
+                if dist_ix != self._cached_ssv_ix:
                     break
             ssv_dist = self.inp[dist_ix]
             if ssv_dist.version is "ctgt":
@@ -138,10 +149,12 @@ class MultiviewData_TNet_online(data.Dataset):
             else:
                 views_dist = ssv_dist.load_views()
             views_dist = naive_view_normalization(views_dist)
-            self._cache = (views, views_dist)
+            self._cache_dist = views_dist
+            # fact 2 because only drawing 1 view, and additional 50% because of augmentations
+            self._max_cache_usages_dist = np.max([200, len(views_dist) * 3])
         else:
-            views, views_dist = self._cache
-            self._cache_use += 1
+            views_dist = self._cache_dist
+            self._cache_use_dist += 1
 
         # similar views are from same, randomly picked location
         mview_ix = np.random.randint(0, len(views))
@@ -160,7 +173,7 @@ class MultiviewData_TNet_online(data.Dataset):
         if self.train:
             return self.epoch_size
         else:
-            return 200
+            return 600
 
     def close_files(self):
         return

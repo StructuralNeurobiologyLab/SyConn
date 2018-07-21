@@ -5,7 +5,6 @@
 # Authors: Philipp Schubert
 import argparse
 import os
-from elektronn3.models.fcn_2d import *
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 import torch
@@ -105,7 +104,7 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="ATN", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="ATN-debug", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
@@ -129,7 +128,6 @@ if __name__ == "__main__":
 
     torch.manual_seed(0)
 
-
     # USER PATHS
     save_root = os.path.expanduser('~/e3training/')
 
@@ -139,7 +137,6 @@ if __name__ == "__main__":
     lr_dec = 0.99
     batch_size = 20
     margin = 0.1
-
     model = get_model()
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
