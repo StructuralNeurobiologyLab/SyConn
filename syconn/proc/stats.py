@@ -400,13 +400,13 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         target_names = ["%d" % i for i in nb_labels]
     for i in nb_labels:
         cur_pal = sns.light_palette(colors[i], as_cmap=True)
-        ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 1])][: ,0], shade=False, cmap=cur_pal,
-                         alpha=0.6, shade_lowest=False, label="%d" % i
-                         , gridsize=100, ls=0.6, lw=0.6)
+        ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 1])][:, 0], shade=False, cmap=cur_pal,
+                         alpha=0.6, shade_lowest=False, gridsize=100)
         ax.patch.set_facecolor('white')
         ax.collections[0].set_alpha(0)
         plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 1],
                                 s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+    raise()
     handles = []
     for ii in range(len(target_names)):
         handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
@@ -425,8 +425,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         for i in nb_labels:
             cur_pal = sns.light_palette(colors[i], as_cmap=True)
             ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 2])][: ,0], shade=False, cmap=cur_pal,
-                             alpha=0.6, shade_lowest=False, label="%d" % i
-                             , gridsize=100, ls=0.6, lw=0.6)
+                             alpha=0.6, shade_lowest=False, gridsize=100)
             ax.patch.set_facecolor('white')
             ax.collections[0].set_alpha(0)
             plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 2],
@@ -435,7 +434,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         for ii in range(len(target_names)):
             handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
         plt.legend(handles=handles, loc="best")
-        plt.savefig(os.path.splitext(dest_path)[0] + "_2.tif", dpi=300)
+        plt.savefig(os.path.splitext(dest_path)[0] + "_2.png", dpi=300)
         plt.close()
 
         # density plot 2nd and 3rd PC
@@ -449,8 +448,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         for i in nb_labels:
             cur_pal = sns.light_palette(colors[i], as_cmap=True)
             ax = sns.kdeplot(res[ds_l == i][:, np.ix_([1, 2])][: ,0], shade=False, cmap=cur_pal,
-                             alpha=0.6, shade_lowest=False, label="%d" % i
-                             , gridsize=100, ls=0.6, lw=0.6)
+                             alpha=0.6, shade_lowest=False, gridsize=100)
             ax.patch.set_facecolor('white')
             ax.collections[0].set_alpha(0)
             plt.scatter(res[ds_l == i][:, 1], res[ds_l == i][:, 2],
@@ -459,7 +457,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         for ii in range(len(target_names)):
             handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
         plt.legend(handles=handles, loc="best")
-        plt.savefig(os.path.splitext(dest_path)[0] + "_3.tif", dpi=300)
+        plt.savefig(os.path.splitext(dest_path)[0] + "_3.png", dpi=300)
         plt.close()
     return pca
 

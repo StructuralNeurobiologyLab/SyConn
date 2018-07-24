@@ -745,6 +745,11 @@ def get_semseg_spiness_model():
     return m
 
 
+def get_tripletnet_model_e3():
+    m = InferenceModel("/wholebrain/u/pschuber/e3training/ATN/")
+    return m
+
+
 def get_knn_tnet_embedding():
     tnet_eval_dir = "/wholebrain/scratch/pschuber/CNN_Training/" \
                     "nupa_cnn/t_net/ssv6_tripletnet_v9_backup/pred/"

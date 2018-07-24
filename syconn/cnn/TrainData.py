@@ -79,7 +79,7 @@ class MultiviewData_TNet_online(data.Dataset):
 
     def __init__(
             self,
-            train=True, epoch_size=6000,
+            train=True, epoch_size=10000,
             transform: Callable = transforms.Identity()
     ):
         super().__init__()
@@ -92,9 +92,7 @@ class MultiviewData_TNet_online(data.Dataset):
         AV = AxonViews(None, None, raw_only=False, nb_views=2,
                        naive_norm=False, load_data=False)
 
-        CTV = MultiViewData("/wholebrain/scratch/areaxfs3/", "ctgt",
-                            view_kwargs=dict(view_key="raw{}".format(2)),
-                            naive_norm=False, load_data=False)
+        CTV = CelltypeViews(load_data=False)
         if train:
             self.inp = [AV.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["train"]] + \
                        [CTV.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["train"]]
@@ -319,6 +317,48 @@ class AxonViews(MultiViewData):
         d = d[:, :, view_shuffle[:self.nb_views]]
         if self.binary_views:
             d[d < 1.0] = 0
+        return tuple([d, l])
+
+
+class CelltypeViews(MultiViewData):
+    def __init__(self, raw_only=True, nb_views=2,
+                 reduce_context=0, binary_views=False, reduce_context_fact=1,
+                 naive_norm=True, load_data=False):
+        self.nb_views = nb_views
+        self.raw_only = raw_only
+        self.reduce_context = reduce_context
+        self.reduce_context_fact = reduce_context_fact
+        self.binary_views = binary_views
+        print("Initializing GliaViews:", self.__dict__)
+        super().__init__("/wholebrain/scratch/areaxfs3/", "ctgt",
+                            view_kwargs=dict(view_key="raw{}".format(2)),
+                            naive_norm=naive_norm, load_data=load_data)
+
+    def getbatch(self, batch_size, source='train'):
+        if source == 'valid':
+            nb = len(self.valid_l)
+            ixs = np.arange(nb)
+            np.random.shuffle(ixs)
+            self.valid_d = self.valid_d[ixs]
+            self.valid_l = self.valid_l[ixs]
+        d, l = super().getbatch(batch_size, source)
+        view_shuffle = np.arange(0, d.shape[2])
+        np.random.shuffle(view_shuffle)
+        if self.reduce_context > 0:
+            d = d[:, :, :, (self.reduce_context/2):(-self.reduce_context/2),
+                self.reduce_context:-self.reduce_context]
+        if self.reduce_context_fact > 1:
+            d = d[:, :, :, ::self.reduce_context_fact, ::self.reduce_context_fact]
+        d = d[:, :, view_shuffle]
+        flipx, flipy = np.random.randint(0, 2, 2)
+        if flipx:
+            d = d[..., ::-1, :]
+        if flipy:
+            d = d[..., ::-1]
+        if self.binary_views:
+            d[d < 1.0] = 0
+        if self.raw_only and d.shape[1] > 1:
+            d = d[:, :1]
         return tuple([d, l])
 
 

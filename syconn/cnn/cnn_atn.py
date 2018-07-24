@@ -23,10 +23,7 @@ class RepresentationNetwork(nn.Module):
     """
     def __init__(self, n_in_channels, n_out_channels=10, dr=.0,
                  leaky_relu=True):
-        if dr > 0:
-            DropOut = lambda: nn.Dropout2d(dr)
-        else:
-            DropOut = passthrough
+        DropOut = lambda: nn.Dropout2d(dr)
         act = nn.LeakyReLU if leaky_relu else nn.ReLU
         super().__init__()
         self.dr = dr
@@ -41,7 +38,7 @@ class RepresentationNetwork(nn.Module):
             nn.Conv2d(32, 32, 1), act(),
         )
         self.fc = nn.Sequential(
-            nn.AdaptiveAvgPool1d(200),  # flexible to various input sizes
+            nn.AdaptiveMaxPool1d(200),  # flexible to various input sizes
             nn.Linear(200, 100), act(),
             DropOut(),
             nn.Linear(100, n_out_channels)
@@ -49,8 +46,8 @@ class RepresentationNetwork(nn.Module):
 
     def forward(self, x):
         x = self.conv(x)  # representation network
-        x = x.view(x.size()[0], 1, -1)
-        return self.fc(x)
+        x = x.view(1, x.size()[0], -1)  # add auxiliary axis
+        return self.fc(x).squeeze()  # get rid of auxiliary axis needed for AdaptiveMaxPool
 
 
 # Discriminator
@@ -59,17 +56,11 @@ class D_net_gauss(nn.Module):
     adapted from https://blog.paperspace.com/adversarial-autoencoders-with-pytorch/
     """
     # z_dim has to be equal to n_out_channels in TripletNet
-    def __init__(self, z_dim=10, dr=.0):
+    def __init__(self, z_dim=10):
         super().__init__()
-        if dr > 0:
-            DropOut = lambda: nn.Dropout(dr)
-        else:
-            DropOut = passthrough
         # factor 3 because it has to process the latent space of the triplet
         self.fc = nn.Sequential(nn.Linear(z_dim * 3, 250), nn.ReLU(),
-                                DropOut(),
                                 nn.Linear(250, 100), nn.ReLU(),
-                                DropOut(),
                                 nn.Linear(100, 1))
 
     def forward(self, x):
@@ -97,6 +88,7 @@ class TripletNet(nn.Module):
 
 
 def get_model():
+    device = torch.device('cuda')
     return TripletNet(n_in_channels=4,
                       n_out_channels=10, dr=0.1).to(device)
 
@@ -104,7 +96,7 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="ATN-debug", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="ATN-V2", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
@@ -132,11 +124,11 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3training/')
 
     max_steps = args.max_steps
-    lr = 0.004
+    lr = 0.01
     lr_stepsize = 500
     lr_dec = 0.99
     batch_size = 20
-    margin = 0.1
+    margin = 0.2
     model = get_model()
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -144,7 +136,7 @@ if __name__ == "__main__":
         model = nn.DataParallel(model)
     model.to(device)
 
-    model_discr = D_net_gauss(dr=0.1)
+    model_discr = D_net_gauss()
     if torch.cuda.device_count() > 1:
         model_discr = nn.DataParallel(model_discr)
     model_discr.to(device)
@@ -168,7 +160,7 @@ if __name__ == "__main__":
     )
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
-    criterion = nn.MarginRankingLoss(margin).to(device)
+    criterion = nn.MarginRankingLoss(margin=margin).to(device)
 
     # Create and run trainer
     trainer = TripletNetTrainer(
@@ -183,7 +175,8 @@ if __name__ == "__main__":
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched},
-        ipython_on_error=False
+        ipython_on_error=False,
+        alpha=1e-3, alpha2=1
     )
 
     # Archiving training script, src folder, env info
