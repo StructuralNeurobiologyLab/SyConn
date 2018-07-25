@@ -11,7 +11,7 @@ import torch
 from torch import nn
 from torch import optim
 import torch.nn.functional as F
-
+from torch.distributions.cauchy import Cauchy
 
 def passthrough(x, **kwargs):
     return x
@@ -34,8 +34,8 @@ class RepresentationNetwork(nn.Module):
             nn.Conv2d(19, 25, (4, 4)), DropOut(), act(),
             nn.Conv2d(25, 25, (4, 4)), DropOut(), nn.MaxPool2d((2, 2)), act(),
             nn.Conv2d(25, 30, (2, 2)), DropOut(), nn.MaxPool2d((2, 2)), act(),
-            nn.Conv2d(30, 32, (2, 2)), nn.MaxPool2d((2, 2)), act(),
-            nn.Conv2d(32, 32, 1), act(),
+            nn.Conv2d(30, 35, (2, 2)), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(35, 35, 1), act(),
         )
         self.fc = nn.Sequential(
             nn.AdaptiveMaxPool1d(200),  # flexible to various input sizes
@@ -72,11 +72,9 @@ class TripletNet(nn.Module):
     """
     adapted from https://github.com/andreasveit/triplet-network-pytorch/blob/master/tripletnet.py
     """
-    def __init__(self, n_in_channels, n_out_channels=10, dr=.0,
-                 leaky_relu=True):
+    def __init__(self, rep_net):
         super().__init__()
-        self.rep_net = RepresentationNetwork(n_in_channels, n_out_channels,
-                                             dr, leaky_relu)
+        self.rep_net = rep_net
 
     def forward(self, x, y, z):
         z_0 = self.rep_net(x)
@@ -89,14 +87,15 @@ class TripletNet(nn.Module):
 
 def get_model():
     device = torch.device('cuda')
-    return TripletNet(n_in_channels=4,
-                      n_out_channels=10, dr=0.1).to(device)
+    RepNet = RepresentationNetwork(n_in_channels=4, n_out_channels=10, dr=0.1,
+                                   leaky_relu=True)
+    return TripletNet(RepNet).to(device)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="ATN-V2", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="ATN-Cauchy-#1", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
@@ -124,11 +123,12 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3training/')
 
     max_steps = args.max_steps
-    lr = 0.01
+    lr = 0.0005
+    lr_discr = 0.001
     lr_stepsize = 500
     lr_dec = 0.99
     batch_size = 20
-    margin = 0.2
+    margin = 0.1
     model = get_model()
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -155,13 +155,16 @@ if __name__ == "__main__":
     optimizer_disc = optim.Adam(
         model.parameters(),
         weight_decay=0.5e-4,
-        lr=lr,
+        lr=lr_discr,
         amsgrad=True
     )
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
     criterion = nn.MarginRankingLoss(margin=margin).to(device)
 
+    # latent distribution
+    l_distr = m = Cauchy(torch.tensor([0.0]), torch.tensor([5.0]))
+    l_sample_func = lambda n, z: l_distr.rsample((n, z)).squeeze()
     # Create and run trainer
     trainer = TripletNetTrainer(
         model=[model, model_discr],
@@ -171,12 +174,13 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         valid_dataset=valid_dataset,
         batchsize=batch_size,
-        num_workers=4,
+        num_workers=2,
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched},
         ipython_on_error=False,
-        alpha=1e-3, alpha2=1
+        alpha=1e-6, alpha2=0.1,
+        latent_distr=l_sample_func
     )
 
     # Archiving training script, src folder, env info

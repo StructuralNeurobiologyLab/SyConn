@@ -406,7 +406,6 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         ax.collections[0].set_alpha(0)
         plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 1],
                                 s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
-    raise()
     handles = []
     for ii in range(len(target_names)):
         handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))

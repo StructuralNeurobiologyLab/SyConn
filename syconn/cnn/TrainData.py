@@ -11,7 +11,7 @@ import warnings
 from syconn.config.global_params import wd
 from syconn.handler.basics import load_pkl2obj
 from syconn.handler.compression import lz4stringtoarr, save_to_h5py
-from syconn.handler.prediction import force_correct_norm, naive_view_normalization
+from syconn.handler.prediction import force_correct_norm, naive_view_normalization, naive_view_normalization_new
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.mp.shared_mem import start_multiprocess_obj
@@ -92,13 +92,14 @@ class MultiviewData_TNet_online(data.Dataset):
         AV = AxonViews(None, None, raw_only=False, nb_views=2,
                        naive_norm=False, load_data=False)
 
-        CTV = CelltypeViews(load_data=False)
+        CTV = CelltypeViews(load_data=False, naive_norm=False)
         if train:
             self.inp = [AV.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["train"]] + \
                        [CTV.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["train"]]
         else:
             self.inp = [AV.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["valid"]] + \
                        [CTV.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["valid"]]
+            self.inp = [ssv.load_views(view_key="raw2") for ssv in self.inp]
         print("Concatenated all data. Normalizing now.")
         ixs = np.arange(len(self.inp))
         np.random.shuffle(ixs)
@@ -120,15 +121,15 @@ class MultiviewData_TNet_online(data.Dataset):
                 index = np.random.randint(0, len(self.inp))
             self._cache_use = 0
             # similar pair views
-            ssv = self.inp[index]
-            if ssv.version is "ctgt":
+            if self.train:
+                ssv = self.inp[index]
                 views = ssv.load_views(view_key="raw2")
             else:
-                views = ssv.load_views()
+                views = self.inp[index]
             # 50% more because of augmentations
             self._max_cache_usages = np.max([200, int(len(views) * 1.5)])
             # get random different SSV
-            views = naive_view_normalization(views)
+            views = naive_view_normalization_new(views)
             self._cache = views
             self._cached_ssv_ix = index
         else:
@@ -141,12 +142,12 @@ class MultiviewData_TNet_online(data.Dataset):
                     dist_ix = np.random.randint(0, len(self.inp))
                 if dist_ix != self._cached_ssv_ix:
                     break
-            ssv_dist = self.inp[dist_ix]
-            if ssv_dist.version is "ctgt":
-                views_dist = ssv_dist.load_views(view_key="raw2")
+            if self.train:
+                ssv = self.inp[dist_ix]
+                views_dist = ssv.load_views(view_key="raw2")
             else:
-                views_dist = ssv_dist.load_views()
-            views_dist = naive_view_normalization(views_dist)
+                views_dist = self.inp[dist_ix]
+            views_dist = naive_view_normalization_new(views_dist)
             self._cache_dist = views_dist
             # fact 2 because only drawing 1 view, and additional 50% because of augmentations
             self._max_cache_usages_dist = np.max([200, len(views_dist) * 3])
@@ -165,7 +166,7 @@ class MultiviewData_TNet_online(data.Dataset):
         # choose random view locations and random view (out of the two) and add the two axes back to the shape
         view_dist = views_dist[mview_ix][None, :, np.random.randint(0, 2)]
         view_dist = self.transform(view_dist, target=None)[0]
-        return np.concatenate([views_sim, view_dist]).astype(np.float32) / 255.
+        return np.concatenate([views_sim, view_dist])
 
     def __len__(self):
         if self.train:

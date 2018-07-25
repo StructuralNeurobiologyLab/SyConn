@@ -1058,9 +1058,10 @@ class SuperSegmentationObject(object):
             view_key = "%d%d" % (int(woglia), int(raw_only))
         else:
             if not view_key in view_dc:
-                raise KeyError("Given view key '%s' does not exist"
-                                        " in view dictionary of SSV %d. "
-                               "Existing keys: %s\n" % (view_key, self.id, str(view_dc.keys())))
+                raise KeyError("Given view key '{}' does not exist"
+                               " in view dictionary of SSV {} at"
+                               "{}. Existing keys: {}\n".format(view_key, self.id, self.view_path,
+                                                                str(view_dc.keys())))
         if view_key in view_dc and not force_reload:
             return view_dc[view_key]
         del view_dc

@@ -802,6 +802,10 @@ def naive_view_normalization(d):
     return d
 
 
+def naive_view_normalization_new(d):
+    return d.astype(np.float32) / 255. - 0.5
+
+
 def _multi_gpu_ds_pred(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size=None, gpu_ids=(0, 1)):
 
     import threading
