@@ -1,10 +1,13 @@
-# SyConn
-# Copyright (c) 2018 Philipp J. Schubert, J. Kornfeld
-# All rights reserved
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import os
 from syconn.config.global_params import wd, glia_thresh, min_single_sv_size
 from syconn.mp import qsub_utils as qu
-from syconn.mp.shared_mem import start_multiprocess
+from syconn.mp.mp_utils import start_multiprocess
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.handler.basics import *
@@ -54,7 +57,7 @@ def collect_glia_sv():
         glia_preds.update(dc)
     print("Collected SV glianess.")
     # get SSV glia splits
-    chs = chunkify(cc_dict.keys(), 1000)
+    chs = chunkify(list(cc_dict.keys()), 1000)
     glia_svs = np.concatenate(start_multiprocess(collect_gliaSV_helper, chs,
                                                  nb_cpus=20))
     print("Collected SSV glia SVs.")

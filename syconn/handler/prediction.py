@@ -20,6 +20,7 @@ except ImportError:
 from .compression import load_from_h5py, save_to_h5py
 from ..proc.image import normalize_img
 from .basics import read_txt_from_zip, get_filepaths_from_dir, parse_cc_dict_from_kzip
+from numba import jit
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
@@ -746,7 +747,7 @@ def get_semseg_spiness_model():
 
 
 def get_tripletnet_model_e3():
-    m = InferenceModel("/wholebrain/u/pschuber/e3training/ATN/")
+    m = InferenceModel("/wholebrain/u/pschuber/e3training/ATN-Cauchy-#1/")
     return m
 
 
@@ -783,6 +784,34 @@ def force_correct_norm(x):
         x[ii, jj, kk] = normalize_img(x[ii, jj, kk], max_val=1.0)
         assert np.max(x[ii, jj, kk]) <= 1.0 and np.min(x[ii, jj, kk]) >= 0
     return x
+
+
+def force_correct_norm_new(x):
+    """
+    For e.g. models trained on views normalized between 0 and 1, whereas empty
+    images are set to 1 / 255. New models trained on old views
+    Parameters
+    ----------
+    x :
+
+    Returns
+    -------
+
+    """
+    import itertools
+    x = x.astype(np.float32)
+    # iterate over view locations, view channels, view numbers: N, 4, 2
+    for ii, jj, kk in itertools.product(np.arange(x.shape[0]), np.arange(x.shape[1]),
+                      np.arange(x.shape[2])):
+        curr_img = x[ii, jj, kk]
+        if np.all(curr_img[0, 0] == curr_img): # everything is the same value / empty view
+            x[ii, jj, kk] = 1.
+        elif np.max(curr_img) <= 1.0 and np.min(curr_img) >= 0:
+            pass
+        elif np.max(curr_img) > 1.0:
+            x[ii, jj, kk] = curr_img / 255.
+        assert np.max(x[ii, jj, kk]) <= 1.0 and np.min(x[ii, jj, kk]) >= 0
+    return x - 0.5
 
 
 def naive_view_normalization(d):

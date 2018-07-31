@@ -14,14 +14,10 @@ import sys
 
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-parent_path = os.path.abspath(os.path.join(dir_path, os.pardir))
-if not os.path.isdir(parent_path + '/logs/'):
-    os.makedirs(parent_path + '/logs/')
-logging.basicConfig(filename=parent_path + '/logs/unit_tests.log',
+logging.basicConfig(filename=dir_path + '/unit_tests.log',
                     level=logging.DEBUG, filemode='w')
 
-
-test_p = "/wholebrain/scratch/areaxfs/test.pkl"
+test_p = dir_path + "/test.pkl"
 if os.path.isfile(test_p):
     os.remove(test_p)
 
@@ -135,14 +131,14 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
         start = time.time()
         ad = AttributeDict(test_p, read_only=True)
         logging.debug("Loading AttributeDict took %0.4f." % (time.time() - start))
-        assert len(ad.keys()) == 100
+        assert len(list(ad.keys())) == 100
         assert np.all(ad[0]["glia_probability"] == np.ones((10, 2)).astype(np.uint8))
         ad.update({100: "b"})
         assert 100 in ad
         start = time.time()
         dc_constr = ad.copy_intern()
         logging.debug("Copying dict from AttributeDict took %0.4f." % (time.time() - start))
-        assert len(dc_constr.keys()) == 101
+        assert len(list(dc_constr.keys())) == 101
         del ad
         os.remove(test_p)
         logging.info('PASSED: test_loading_and_copying_process_for_Attribute_dict')

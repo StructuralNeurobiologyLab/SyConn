@@ -12,7 +12,7 @@ from ..reps import segmentation, connectivity_helper as ch, \
     super_segmentation as ss, rep_helper
 
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 from collections import defaultdict
 import networkx as nx
 import os

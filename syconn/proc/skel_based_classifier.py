@@ -22,10 +22,12 @@ matplotlib.use("Agg", warn=False, force=True)
 from matplotlib import pyplot as plt
 
 from . import skel_based_classifier_helper as sbch
+from ..handler.basics import load_pkl2obj
 from ..reps import super_segmentation as ss
 from ..proc.stats import model_performance
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
+from ..config.global_params import wd
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",
@@ -62,13 +64,15 @@ class SkelClassifier(object):
         elif target_type == "spiness":
             ssd_version = "spgt"
         else:
-            raise NotImplementedError
+            raise ValueError("'target_type' has to be one of "
+                             "['axoness', 'spiness']")
         self._target_type = target_type
         self._ssd_version = ssd_version
         self._working_dir = working_dir
         self._clf = None
         self._ssd = None
         self.label_dict = None
+        self.splitting_dict = None
 
         if create and not os.path.exists(self.path):
             os.makedirs(self.path)
@@ -143,24 +147,29 @@ class SkelClassifier(object):
     def load_label_dict(self):
         if self.label_dict is None:
             if self.ssd_version in ["axgt", "spgt", "ctgt"]:
-                with open(self.label_dict_fname, "r") as f:
+                with open(self.label_dict_fname, "rb") as f:
                     self.label_dict = pkl.load(f)
             else:
                 raise()
 
-    def generate_data(self, feature_contexts_nm=(500, 1000, 2000, 4000, 8000), stride=10,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=1):
-        self.load_label_dict()
+    def load_splitting_dict(self):
+        if self.splitting_dict is None:
+            assert os.path.isfile(self.splitting_fname)
+            self.splitting_dict = load_pkl2obj(self.splitting_fname)
 
+    def generate_data(self, feature_contexts_nm=(500, 1000, 2000, 4000, 8000), stride=10,
+                      qsub_pe=None, qsub_queue=None, nb_cpus=1, overwrite=True):
+        self.load_label_dict()
+        self.load_splitting_dict()
         multi_params = []
         for fc_block in [feature_contexts_nm[i:i + stride]
                          for i in range(0, len(feature_contexts_nm), stride)]:
-            for this_id in self.label_dict.keys():
+            for this_id in np.concatenate(list(self.splitting_dict.values())):
                 multi_params.append([this_id, self.ssd_version,
                                      self.working_dir,
                                      fc_block,
                                      self.feat_path + "/features_%d_%d.npy",
-                                    comment_converter[self.ssd_version]])
+                                    comment_converter[self.ssd_version], overwrite])
 
         if qsub_pe is None and qsub_queue is None:
             results = sm.start_multiprocess(sbch.generate_clf_data_thread,
@@ -206,7 +215,7 @@ class SkelClassifier(object):
 
         id_bin_dict = {"train": [], "valid": [], "test": []}
         for this_class in unique_classes:
-            sso_ids = np.array(self.label_dict.keys())[classes == this_class]
+            sso_ids = np.array(list(self.label_dict.keys()))[classes == this_class]
 
             weights = []
             for sso_id in sso_ids:
@@ -243,13 +252,13 @@ class SkelClassifier(object):
         return id_bin_dict
 
     def load_data(self, feature_context_nm, ratio=(0.7, .15, .15)):
-        self.load_label_dict()
+        self.load_splitting_dict()
 
         id_bin_dict = self.id_bins()
 
         feature_dict = {}
         labels_dict = {}
-        for sso_id in self.label_dict.keys():
+        for sso_id in np.concatenate(list(self.splitting_dict.values())):
             if not sso_id in id_bin_dict:
                 continue
 
@@ -331,8 +340,8 @@ class SkelClassifier(object):
                 f_score = 2 * precision * recall / (recall + precision)
             score_dict[this_class] = [precision, recall, f_score]
 
-            print("class: {}: p: {0:.4}, r: {0:.4}, f: "
-                  "{0:.4}".format(this_class, precision, recall, f_score))
+            print("class: {}: p: {:.4}, r: {:.4}, f: "
+                  "{:.4}".format(this_class, precision, recall, f_score))
         return score_dict, label_weights
 
     def train_clf(self, name, n_estimators=2000, feature_context_nm=4000,
@@ -641,4 +650,3 @@ def classifier_production_thread(args):
     sc.train_clf(name=clf_name, n_estimators=n_estimators,
                  feature_context_nm=feature_context_nm, production=production,
                  save=True)
-

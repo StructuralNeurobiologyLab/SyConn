@@ -14,7 +14,7 @@ from syconn.handler.compression import lz4stringtoarr, save_to_h5py
 from syconn.handler.prediction import force_correct_norm, naive_view_normalization, naive_view_normalization_new
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
-from syconn.mp.shared_mem import start_multiprocess_obj
+from syconn.mp.mp_utils import start_multiprocess_obj
 import os
 from torch.utils import data
 from elektronn3.data import transforms
@@ -79,7 +79,7 @@ class MultiviewData_TNet_online(data.Dataset):
 
     def __init__(
             self,
-            train=True, epoch_size=10000,
+            train=True, epoch_size=40000,
             transform: Callable = transforms.Identity()
     ):
         super().__init__()
@@ -172,7 +172,7 @@ class MultiviewData_TNet_online(data.Dataset):
         if self.train:
             return self.epoch_size
         else:
-            return 600
+            return 1000
 
     def close_files(self):
         return

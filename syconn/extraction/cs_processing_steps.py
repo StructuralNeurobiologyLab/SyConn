@@ -10,7 +10,7 @@ from sklearn import ensemble, cross_validation, externals
 from knossos_utils import knossosdataset, skeleton_utils, skeleton
 
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch

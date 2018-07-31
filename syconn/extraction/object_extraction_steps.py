@@ -21,7 +21,7 @@ from knossos_utils import knossosdataset, chunky
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
-from ..mp import qsub_utils as qu, shared_mem as sm
+from ..mp import qsub_utils as qu, mp_utils as sm
 from ..proc.general import cut_array_in_one_dim
 from ..reps import segmentation, rep_helper as rh
 from ..handler import basics

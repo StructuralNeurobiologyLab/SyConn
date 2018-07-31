@@ -59,9 +59,9 @@ class D_net_gauss(nn.Module):
     def __init__(self, z_dim=10):
         super().__init__()
         # factor 3 because it has to process the latent space of the triplet
-        self.fc = nn.Sequential(nn.Linear(z_dim * 3, 250), nn.ReLU(),
-                                nn.Linear(250, 100), nn.ReLU(),
-                                nn.Linear(100, 1))
+        self.fc = nn.Sequential(nn.Linear(z_dim * 3, 200), nn.Dropout(p=0.2), nn.ReLU(),
+                                nn.Linear(200, 75), nn.Dropout(p=0.2), nn.ReLU(),
+                                nn.Linear(75, 1))
 
     def forward(self, x):
         x = self.fc(x)
@@ -95,7 +95,7 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="ATN-Cauchy-#1", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="ATN-Gauss-debug", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
@@ -127,7 +127,7 @@ if __name__ == "__main__":
     lr_discr = 0.001
     lr_stepsize = 500
     lr_dec = 0.99
-    batch_size = 20
+    batch_size = 30
     margin = 0.1
     model = get_model()
     if torch.cuda.device_count() > 1:
@@ -159,12 +159,14 @@ if __name__ == "__main__":
         amsgrad=True
     )
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
+    lr_discr_sched = optim.lr_scheduler.StepLR(optimizer_disc, lr_stepsize, lr_dec)
 
     criterion = nn.MarginRankingLoss(margin=margin).to(device)
 
     # latent distribution
-    l_distr = m = Cauchy(torch.tensor([0.0]), torch.tensor([5.0]))
-    l_sample_func = lambda n, z: l_distr.rsample((n, z)).squeeze()
+    # l_distr = m = Cauchy(torch.tensor([0.0]), torch.tensor([5.0]))
+    # l_sample_func = lambda n, z: l_distr.rsample((n, z)).squeeze()
+    l_sample_func = latent_distr = lambda n, z: torch.randn(n, z)
     # Create and run trainer
     trainer = TripletNetTrainer(
         model=[model, model_discr],
@@ -174,12 +176,12 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         valid_dataset=valid_dataset,
         batchsize=batch_size,
-        num_workers=2,
+        num_workers=6,
         save_root=save_root,
         exp_name=args.exp_name,
-        schedulers={"lr": lr_sched},
+        schedulers={"lr": lr_sched, "lr_discr": lr_discr_sched},
         ipython_on_error=False,
-        alpha=1e-6, alpha2=0.1,
+        alpha=1e-5, alpha2=.5,
         latent_distr=l_sample_func
     )
 

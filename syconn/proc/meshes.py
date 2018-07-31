@@ -25,7 +25,7 @@ try:
     __vtk_avail__ = True
 except ImportError:
     __vtk_avail__ = False
-from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess_imap
+from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 __all__ = ["MeshObject", "get_object_mesh", "merge_meshes", "triangulation",
            "get_random_centered_coords", "write_mesh2kzip", 'write_meshes2kzip',
            "compartmentalize_mesh", 'write_ssomesh2kzip']

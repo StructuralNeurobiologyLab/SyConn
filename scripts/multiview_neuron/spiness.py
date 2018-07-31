@@ -14,7 +14,7 @@ from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.reps.views import ViewContainer
 from syconn.handler.compression import save_to_h5py
 from syconn.handler.multiviews import generate_palette, remap_rgb_labelviews, str2intconverter
-from syconn.mp.shared_mem import start_multiprocess_imap
+from syconn.mp.mp_utils import start_multiprocess_imap
 import re
 import os
 from scipy.misc import imsave

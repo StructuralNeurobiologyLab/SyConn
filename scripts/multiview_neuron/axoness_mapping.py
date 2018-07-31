@@ -1,6 +1,6 @@
 import os
 from syconn.mp import qsub_utils as qu
-from syconn.mp.shared_mem import start_multiprocess
+from syconn.mp.mp_utils import start_multiprocess
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.handler.basics import chunkify
 from syconn.proc.mapping import map_glia_fraction

@@ -51,7 +51,7 @@ except:
     # print "skeletopyze not found - you won't be able to compute skeletons. " \
     #       "Install skeletopyze from https://github.com/funkey/skeletopyze"
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 try:
@@ -713,9 +713,7 @@ class SuperSegmentationObject(object):
                 and not force:
             return
         ssh.create_sso_skeleton(self)
-        if len(self.skeleton["nodes"]) != 0:
-            ssh.sparsify_skeleton(self)
-        else:
+        if len(self.skeleton["nodes"]) == 0:
             print("%s has zero nodes." % repr(self))
         self.save_skeleton()
 
@@ -1748,7 +1746,7 @@ class SuperSegmentationObject(object):
             for i_node in range(len(self.skeleton["nodes"])):
                 paths = nx.single_source_dijkstra_path(self.weighted_graph(), i_node,
                                                        max_dist)
-                neighs = np.array(paths.keys(), dtype=np.int)
+                neighs = np.array(list(paths.keys()), dtype=np.int)
                 c = np.argmax(np.sum(probas[neighs], axis=0))
                 pred.append(c)
 
@@ -1891,7 +1889,7 @@ class SuperSegmentationObject(object):
             for i_node in range(len(self.skeleton["nodes"])):
                 paths = nx.single_source_dijkstra_path(self.weighted_graph(), i_node,
                                                        30000)
-                neighs = np.array(paths.keys(), dtype=np.int)
+                neighs = np.array(list(paths.keys()), dtype=np.int)
                 cnt = Counter(curr_ax_preds[neighs])
                 loc_average = np.zeros((3, ))
                 for k, v in cnt.items():
@@ -1981,7 +1979,7 @@ class SuperSegmentationObject(object):
         for ii in range(len(self.skeleton["nodes"])):
             paths = nx.single_source_dijkstra_path(self.weighted_graph(),
                                                    ii, max_dist)
-            neighs = np.array(paths.keys(), dtype=np.int)
+            neighs = np.array(list(paths.keys()), dtype=np.int)
             labels, cnts = np.unique(prop_array[neighs], return_counts=True)
             maj_label = labels[np.argmax(cnts)]
             maj_votes[ii] = maj_label
