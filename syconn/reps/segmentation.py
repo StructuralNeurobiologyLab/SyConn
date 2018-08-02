@@ -480,7 +480,7 @@ class SegmentationObject(object):
                                subfold_from_ix(self.id, self.n_folders_fs))
         else:
             return "%s/%s/" % (self.so_storage_path,
-                               subfold_from_ix(self.id, self.n_folders_fs, old_version=True))
+                               subfold_from_ix(self.id, self.n_folders_fs, old_version=True))   # TODO: why True?
 
     @property
     def mesh_path(self):
