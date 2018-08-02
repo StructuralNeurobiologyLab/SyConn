@@ -363,7 +363,7 @@ def convert_coord(coord_list, scal):
     return np.array([coord_list[1] + 1, coord_list[0] + 1, coord_list[2] + 1]) * np.array(scal)
 
 
-def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annotations=True):
+def prune_stub_branches(sso=None, nx_g=None, scal=[10, 10, 20], len_thres=1000, preserve_annotations=True):
     """
     Removes short stub branches, that are often added by annotators but
     hardly represent true morphology.
@@ -391,7 +391,7 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
     # find all tip nodes in an anno, ie degree 1 nodes
     while not pruning_complete:
 
-        nx_g = new_nx_g
+        nx_g = new_nx_g.copy()
 
         end_nodes = list({k for k, v in dict(nx_g.degree()).items() if v == 1})
 
@@ -404,7 +404,6 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
                     loc_curr = convert_coord(nx_g.node[curr_node]['position'], scal)
                     b_len = np.linalg.norm(loc_end - loc_curr)
 
-                    # pdb.set_trace()
                     if b_len < len_thres:
                         # remove this stub, i.e. prune the nodes that were
                         # collected on our way to the branch point
@@ -414,19 +413,20 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
                         break
                     else:
                         break
-                # add this node to the list of nodes that MAY get removed
-                # in case a stub is detected later in the loop
                 prune_nodes.append(curr_node)
 
         if len(new_nx_g.nodes) == len(nx_g.nodes):
             pruning_complete = True
+
     # Important assert. Please don't remove
     assert nx.number_connected_components(new_nx_g) == 1
 
     print('NUMber of comp after pruning',nx.number_connected_components(new_nx_g) )
 
+    if sso is not None:
+        sso = from_netkx_to_sso(sso, new_nx_g)
 
-    return new_nx_g
+    return sso, new_nx_g
 
 
 def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_thresh=50):
@@ -471,17 +471,12 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, mi
                 # print('dots', dot_prod, 'dist', dist)
 
                 if (abs(dot_prod) > dot_prod_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
-                    skel_nx_copy = skel_nx
 
                     skel_nx.remove_node(visiting_node)
                     skel_nx.add_edge(left_node,right_node)
+                    change += 1
 
-                    if nx.number_connected_components(skel_nx) ==1:
-                        change += 1
-                    else:
-                        skel_nx = skel_nx_copy
-
-
+    # print('number of connected comp sparsification' , nx.number_connected_components(skel_nx))
     sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.uint32)
     sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
 
@@ -493,15 +488,13 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, mi
         temp_edges_dict[ix] = ii
     temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
 
-    temp_edges = np.array(temp_edges).reshape([-1, 2])
-
-    sso.skeleton['edges'] = temp_edges
+    sso.skeleton['edges'] = np.array(temp_edges).reshape([-1, 2])
 
     nx_g = nx.Graph()
     for inx, single_node in enumerate(sso.skeleton['nodes']):
         nx_g.add_node(inx, position=single_node)
 
-    nx_g.add_edges_from(temp_edges)
+    nx_g.add_edges_from(np.array(temp_edges).reshape([-1, 2]))
 
     return sso,nx_g
 
@@ -512,18 +505,14 @@ def smooth_skeleton(skel_nx, scal=[10,10,20]):
     visiting_nodes = list({k for k, v in dict(skel_nx.degree()).items() if v == 2})
 
     for index, visiting_node in enumerate(visiting_nodes):
-        import pdb
-        # pdb.set_trace()
+
         neighbours = [n for n in skel_nx.neighbors(visiting_node)]
 
-        # pdb.set_trace()
         if skel_nx.degree(visiting_node) == 2:
             left_node = neighbours[0]
             right_node = neighbours[1]
 
-
-
-            if skel_nx.degree(left_node) == 2 and skel_nx.degree(right_node)==2:
+        if skel_nx.degree(left_node) == 2 and skel_nx.degree(right_node)==2:
                 vector_left_node = np.array(
                     [int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in
                      range(3)]) * scal
@@ -668,23 +657,18 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     # Creating network kx graph from sso skel
     skel_nx = from_sso_to_netkx(sso)
 
+    if sparsify:
+        sso, skel_nx = sparsify_skeleton(sso,skel_nx)
 
     # Stitching sso skeletons
     skel_nx = stitch_skel_nx(skel_nx)
 
-    # Pruning the stitched sso skeletons
-    skel_nx = prune_stub_branches(skel_nx, len_thres=pruning_thresh)
-
-    sso = from_netkx_to_sso(sso,skel_nx)
-
+    # Sparse again after stitching. Inexpensive.
     if sparsify:
-        sso , skel_nx = sparsify_skeleton(sso,skel_nx)
+        sso, skel_nx = sparsify_skeleton(sso, skel_nx)
 
-        # x = smooth_skeleton(x)
-
-    #Copying information from the nx graph to sso skeleton
-    sso = from_netkx_to_sso(sso,skel_nx)
-
+    # Pruning the stitched sso skeletons
+    sso, skel_nx = prune_stub_branches(sso, skel_nx, len_thres=pruning_thresh)
 
     # Estimating the radii
     sso.skeleton = radius_correction_found_vertices(sso)
