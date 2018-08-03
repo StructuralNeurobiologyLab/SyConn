@@ -1667,14 +1667,15 @@ class SuperSegmentationObject(object):
         else:
             return None
 
-    def _save_skelfeatures(self, key, features, overwrite=False):
+    def _save_skelfeatures(self, k, features, overwrite=False):
         if not self.skeleton:
             self.load_skeleton()
         assert self.skeleton is not None, "Skeleton does not exist."
-        if key in self.skeleton and not overwrite:
-            raise ValueError("Key %s already exists in skeleton feature dict.")
-        self.skeleton[key] = features
-        assert len(self.skeleton["nodes"]) == len(self.skeleton[key]), \
+        if k in self.skeleton and not overwrite:
+            raise ValueError("Key {} already exists in skeleton"
+                             " feature dict.".format(k))
+        self.skeleton[k] = features
+        assert len(self.skeleton["nodes"]) == len(self.skeleton[k]), \
             "Length of skeleton features is not equal to number of nodes."
         self.save_skeleton()
 
@@ -1685,7 +1686,8 @@ class SuperSegmentationObject(object):
                 ssh.associate_objs_with_skel_nodes(self)
             features = ssh.extract_skel_features(self, feature_context_nm=
             feature_context_nm)
-            self._save_skelfeatures(feature_context_nm, features)
+            self._save_skelfeatures(feature_context_nm, features,
+                                    overwrite=True)
         return features
 
     def write_axpred_rfc(self, dest_path=None, k=1):

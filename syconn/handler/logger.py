@@ -47,7 +47,7 @@ def initialize_logging(log_name):
     -------
 
     """
-    predefined_lognames = ['mp', 'gate', 'proc', 'ui']
+    predefined_lognames = ['mp', 'gate', 'proc', 'ui', 'skeleton', 'multiview']
     if log_name not in predefined_lognames:
         main_log = get_main_log()
         main_log.warn("Please use logger names as specified"

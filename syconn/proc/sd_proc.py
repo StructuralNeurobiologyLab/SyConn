@@ -224,7 +224,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
             sv_obj_map_dict[sv_key].update(value)
 
     mapping_dict_path = seg_dataset.path + "/sv_%s_mapping_dict.pkl" % sd.version
-    with open(mapping_dict_path, "w") as f:
+    with open(mapping_dict_path, "wb") as f:
         pkl.dump(sv_obj_map_dict, f)
 
     paths = sd.so_dir_paths
@@ -330,7 +330,7 @@ def _write_mapping_to_sv_thread(args):
     obj_type = args[1]
     mapping_dict_path = args[2]
 
-    with open(mapping_dict_path, "r") as f:
+    with open(mapping_dict_path, "rb") as f:
         mapping_dict = pkl.load(f)
 
     for p in paths:

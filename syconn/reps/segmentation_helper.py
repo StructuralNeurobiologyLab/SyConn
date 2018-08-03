@@ -161,7 +161,7 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
         if True in dvoxels:
             break
 
-        downsampling /= 2
+        downsampling = downsampling // 2
         downsampling[downsampling < 1] = 1
         dvoxels = so.load_voxels_downsampled(downsampling)
 
@@ -225,7 +225,7 @@ def load_skeleton(so, recompute=False):
             print("\n-----------------------\n"
                   "Skeleton of SV %d (size: %d) not found.\n"
                   "-------------------------\n" % (so.id, so.size))
-            return np.zeros((0,)).astype(np.int), np.zeros((0,)),np.zeros((0,)).astype(np.int)
+            return np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0,)).astype(np.int)
 
     nodes = np.array(nodes, dtype=np.int)
     diameters = np.array(diameters, dtype=np.float)

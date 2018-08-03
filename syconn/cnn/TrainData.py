@@ -21,6 +21,7 @@ from elektronn3.data import transforms
 import contextlib
 from typing import Callable
 import h5py
+import time
 # fix random seed.
 np.random.seed(0)
 
@@ -115,6 +116,8 @@ class MultiviewData_TNet_online(data.Dataset):
         self._cached_ssv_ix = None
 
     def __getitem__(self, index):
+        start = time.time()
+        summary = ""
         if self._cache is None or self._cache_use > self._max_cache_usages:
             # use random seed locally; overwrite index -> always draw randomly
             with temp_seed(None):
@@ -123,6 +126,7 @@ class MultiviewData_TNet_online(data.Dataset):
             # similar pair views
             if self.train:
                 ssv = self.inp[index]
+                ssv.disable_locking = True
                 views = ssv.load_views(view_key="raw2")
             else:
                 views = self.inp[index]
@@ -135,6 +139,10 @@ class MultiviewData_TNet_online(data.Dataset):
         else:
             views = self._cache
             self._cache_use += 1
+        dtime_similar = time.time() - start
+        if dtime_similar > 10:
+            summary += "Found similar views after {:.1}s.".format(dtime_similar)
+        start = time.time()
         if self._cache_dist is None or self._cache_use_dist > self._max_cache_usages_dist:
             while True:
                 # use random seed locally; overwrite index -> always draw randomly
@@ -144,6 +152,7 @@ class MultiviewData_TNet_online(data.Dataset):
                     break
             if self.train:
                 ssv = self.inp[dist_ix]
+                ssv.disable_locking = True
                 views_dist = ssv.load_views(view_key="raw2")
             else:
                 views_dist = self.inp[dist_ix]
@@ -154,7 +163,10 @@ class MultiviewData_TNet_online(data.Dataset):
         else:
             views_dist = self._cache_dist
             self._cache_use_dist += 1
-
+        dtime_distant = time.time() - start
+        if dtime_distant > 10 or dtime_similar > 10:
+            summary += "Found distant views after {:.1}s.".format(dtime_distant)
+        start = time.time()
         # similar views are from same, randomly picked location
         mview_ix = np.random.randint(0, len(views))
         views_sim = views[mview_ix]
@@ -166,6 +178,10 @@ class MultiviewData_TNet_online(data.Dataset):
         # choose random view locations and random view (out of the two) and add the two axes back to the shape
         view_dist = views_dist[mview_ix][None, :, np.random.randint(0, 2)]
         view_dist = self.transform(view_dist, target=None)[0]
+        dtime_transf = time.time() - start
+        if dtime_distant > 10 or dtime_similar > 10 or dtime_transf > 10:
+            summary += "Transformation finished after {:.1}s.".format(dtime_transf)
+            print(summary)
         return np.concatenate([views_sim, view_dist])
 
     def __len__(self):

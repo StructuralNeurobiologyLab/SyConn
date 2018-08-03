@@ -612,7 +612,7 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
     multi_params = []
     merge_list_dict_path = cset.path_head_folder + "merge_list_dict.pkl"
 
-    f = open(merge_list_dict_path, "w")
+    f = open(merge_list_dict_path, "wb")
     pkl.dump(merge_list_dict, f)
     f.close()
 

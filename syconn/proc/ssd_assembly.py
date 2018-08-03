@@ -17,7 +17,7 @@ def assemble_from_mergelist(ssd, mergelist):
         if isinstance(mergelist, dict):
             pass
         elif isinstance(mergelist, str):
-            with open(mergelist, "r") as f:
+            with open(mergelist, "rb") as f:
                 mergelist = mergelist_tools. \
                     subobject_map_from_mergelist(f.read())
         else:

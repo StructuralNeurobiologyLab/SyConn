@@ -64,6 +64,8 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
 
 def model_performance_predonly(y_pred, y_true, model_dir=None, prefix="",
                                target_names=None, labels=None):
+    y_pred = np.array(y_pred, dtype=np.int)
+    y_true = np.array(y_true, dtype=np.int)
     header = "----------------------------------------------------\n\t\t" \
              "%s\n" % prefix
     if target_names is None:

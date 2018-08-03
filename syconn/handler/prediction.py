@@ -742,18 +742,23 @@ def get_celltype_model(init_gpu=None):
 
 
 def get_semseg_spiness_model():
-    m = InferenceModel("/wholebrain/u/pschuber/e3training/FCN--VG13/")
+    m = InferenceModel("/wholebrain/scratch/pschuber/e3training_August1st/FCN--VG13/")
     return m
 
 
 def get_tripletnet_model_e3():
-    m = InferenceModel("/wholebrain/u/pschuber/e3training/ATN-Cauchy-#1/")
+    m = InferenceModel("/wholebrain/scratch/pschuber/e3training_August1st/ATN-Gauss-noAdv-#1/")
     return m
 
 
 def get_knn_tnet_embedding():
     tnet_eval_dir = "/wholebrain/scratch/pschuber/CNN_Training/" \
                     "nupa_cnn/t_net/ssv6_tripletnet_v9_backup/pred/"
+    return knn_clf_tnet_embedding(tnet_eval_dir)
+
+
+def get_knn_tnet_embedding_e3():
+    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_August1st/ATN-Gauss-noAdv-#1/pred/"
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
@@ -852,7 +857,7 @@ def _multi_gpu_ds_pred(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size=None, gpu_
         t.start()
 
 
-def knn_clf_tnet_embedding(fold):
+def knn_clf_tnet_embedding(fold, fit_all=False):
     """
     Currently it assumes embedding for GT views has been created already in 'fold'
     and put into l_train_%d.npy / l_valid_%d.npy files
@@ -887,7 +892,10 @@ def knn_clf_tnet_embedding(fold):
 
     nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='auto', n_jobs=16,
                                 weights='uniform')
-    nbrs.fit(np.concatenate([train_d, valid_d]), np.concatenate([train_l, valid_l]))
+    if fit_all:
+        nbrs.fit(np.concatenate([train_d, valid_d]), np.concatenate([train_l, valid_l]))
+    else:
+        nbrs.fit(train_d, train_l)
     return nbrs
 
 

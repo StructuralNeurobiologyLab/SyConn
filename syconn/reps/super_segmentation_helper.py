@@ -685,7 +685,6 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     #Copying information from the nx graph to sso skeleton
     sso = from_netkx_to_sso(sso,skel_nx)
 
-
     # Estimating the radii
     sso.skeleton = radius_correction_found_vertices(sso)
 
@@ -759,7 +758,7 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
         plt.close()
 
-def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
+def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=2000,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
     node_degrees = np.array(list(dict(ssv.weighted_graph().degree()).values()),
                             dtype=np.int)
@@ -967,8 +966,8 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
     else:
         preds = sso.lookup_in_attribute_dict(pred_key)
     loc_coords = np.concatenate(sso.sample_locations())
-    assert len(loc_coords) == len(preds), "Number of view coordinates is" \
-                                          "different from number of view" \
+    assert len(loc_coords) == len(preds), "Number of view coordinates is " \
+                                          "different from number of view " \
                                           "predictions. SSO %d" % sso.id
     if "view_ixs" not in sso.skeleton.keys():
         print("View indices were not yet assigned to skeleton nodes. "
