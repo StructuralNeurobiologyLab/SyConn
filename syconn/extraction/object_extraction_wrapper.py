@@ -434,27 +434,40 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
 
     # --------------------------------------------------------------------------
 
+    # time_start = time.time()
+    # oes.extract_voxels(cset, filename, hdf5names,
+    #                    overlaydataset_path=overlaydataset_path,
+    #                    chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
+    #                    qsub_queue=qsub_queue,
+    #                    n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
+    #                    n_max_co_processes=n_max_co_processes)
+    # all_times.append(time.time() - time_start)
+    # step_names.append("voxel extraction")
+    # print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
+
+    # --------------------------------------------------------------------------
+
+    # time_start = time.time()
+    # oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
+    #                    hdf5names, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+    #                    n_folders_fs=n_folders_fs,
+    #                    n_max_co_processes=n_max_co_processes)
+    # all_times.append(time.time() - time_start)
+    # step_names.append("combine voxels")
+    # print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
+
+    # --------------------------------------------------------------------------
+
     time_start = time.time()
-    oes.extract_voxels(cset, filename, hdf5names,
+    oes.extract_voxels_combined(cset, filename, hdf5names,
                        overlaydataset_path=overlaydataset_path,
                        chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
                        qsub_queue=qsub_queue,
                        n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
                        n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
-    step_names.append("voxel extraction")
-    print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
-
-    # --------------------------------------------------------------------------
-
-    time_start = time.time()
-    oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
-                       hdf5names, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-                       n_folders_fs=n_folders_fs,
-                       n_max_co_processes=n_max_co_processes)
-    all_times.append(time.time() - time_start)
-    step_names.append("combine voxels")
-    print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
+    step_names.append("extract voxels combined")
+    print("\nTime needed for extracting voxels combined: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
