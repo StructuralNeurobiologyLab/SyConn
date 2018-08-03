@@ -171,7 +171,7 @@ def object_segmentation(cset, filename, hdf5names,
         assert transform_func == _gauss_threshold_connected_components_thread,\
             "QSUB currently only supported for gaussian threshold CC."
         path_to_out = qu.QSUB_script(multi_params,
-                                     "_gauss_threshold_connected_components",
+                                     "gauss_threshold_connected_components",
                                      pe=qsub_pe, queue=qsub_queue,
                                      n_cores=nb_cpus,
                                      script_folder=script_folder,
@@ -646,7 +646,7 @@ def _apply_merge_list_thread(args):
                                          "_unique_components%s.h5"
                                          % postfix, hdf5names)
 
-    merge_list_dict = pkl.load(open(merge_list_dict_path))
+    merge_list_dict = pkl.load(open(merge_list_dict_path,'rb'))
 
     for nb_hdf5_name in range(len(hdf5names)):
         hdf5_name = hdf5names[nb_hdf5_name]
