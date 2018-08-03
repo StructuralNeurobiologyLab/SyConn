@@ -18,8 +18,8 @@ from knossos_utils.skeleton_utils import annotation_to_nx_graph, load_skeleton a
 from .rep_helper import assign_rep_values, colorcode_vertices
 from . import segmentation
 from .segmentation import SegmentationObject
-from .segmentation_helper import load_skeleton, find_missing_sv_views, find_missing_sv_attributes
-from ..mp.shared_mem import start_multiprocess, start_multiprocess_obj
+from .segmentation_helper import load_skeleton, find_missing_sv_views, find_missing_sv_attributes, find_missing_sv_skeletons
+from ..mp.mp_utils import start_multiprocess, start_multiprocess_obj
 skeletopyze_available = False
 # try:
 #     import skeletopyze
@@ -743,9 +743,9 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
         plt.close()
 
-def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
+def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=2000,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
-    node_degrees = np.array(dict(ssv.weighted_graph().degree()).values(),
+    node_degrees = np.array(list(dict(ssv.weighted_graph().degree()).values()),
                             dtype=np.int)
 
     sizes = {}
@@ -771,7 +771,7 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
         paths = nx.single_source_dijkstra_path(ssv.weighted_graph(),
                                                this_i_node,
                                                feature_context_nm)
-        neighs = np.array(paths.keys(), dtype=np.int)
+        neighs = np.array(list(paths.keys()), dtype=np.int)
 
         neigh_diameters = ssv.skeleton["diameters"][neighs]
         this_features.append(np.mean(neigh_diameters))
@@ -875,7 +875,7 @@ def label_array_for_sso_skel(sso, comment_converter):
     cd = skelnode_comment_dict(sso)
     label_array = np.ones(len(sso.skeleton["nodes"]), dtype=np.int) * -1
     for ii, n in enumerate(sso.skeleton["nodes"]):
-        comment = cd[frozenset(n)].lower()
+        comment = cd[frozenset(n.astype(np.int))].lower()
         try:
             label_array[ii] = comment_converter[comment]
         except KeyError:
@@ -951,8 +951,8 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
     else:
         preds = sso.lookup_in_attribute_dict(pred_key)
     loc_coords = np.concatenate(sso.sample_locations())
-    assert len(loc_coords) == len(preds), "Number of view coordinates is" \
-                                          "different from number of view" \
+    assert len(loc_coords) == len(preds), "Number of view coordinates is " \
+                                          "different from number of view " \
                                           "predictions. SSO %d" % sso.id
     if "view_ixs" not in sso.skeleton.keys():
         print("View indices were not yet assigned to skeleton nodes. "
@@ -966,7 +966,7 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
     g = sso.weighted_graph()
     for n in g.nodes():
         paths = nx.single_source_dijkstra_path(g, n, max_dist)
-        neighs = np.array(paths.keys(), dtype=np.int)
+        neighs = np.array(list(paths.keys()), dtype=np.int)
         unique_view_ixs = np.unique(view_ixs[neighs], return_counts=False)
         cls, cnts = np.unique(preds[unique_view_ixs], return_counts=True)
         c = cls[np.argmax(cnts)]
@@ -1063,6 +1063,19 @@ def majority_vote_compartments(sso, ax_pred_key):
 def find_incomplete_ssv_views(ssd, woglia, n_cores=20):
     sd = ssd.get_segmentationdataset("sv")
     incomplete_sv_ids = find_missing_sv_views(sd, woglia, n_cores)
+    missing_ssv_ids = set()
+    for sv_id in incomplete_sv_ids:
+        try:
+            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            missing_ssv_ids.add(ssv_id)
+        except KeyError:
+            pass  # sv does not exist in this SSD
+    return list(missing_ssv_ids)
+
+
+def find_incomplete_ssv_skeletons(ssd, n_cores=20):
+    svs = np.concatenate([list(ssv.svs) for ssv in ssd.ssvs])
+    incomplete_sv_ids = find_missing_sv_skeletons(svs, n_cores)
     missing_ssv_ids = set()
     for sv_id in incomplete_sv_ids:
         try:

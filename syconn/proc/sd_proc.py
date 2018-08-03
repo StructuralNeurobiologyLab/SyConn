@@ -10,7 +10,7 @@ from collections import defaultdict
 from .image import single_conn_comp_img
 from knossos_utils import knossosdataset
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 from ..handler.compression import VoxelDict, AttributeDict
 from ..reps import segmentation, segmentation_helper
@@ -105,9 +105,9 @@ def _dataset_analysis_thread(args):
             if recompute:
                 this_vx_dc = VoxelDict(p + "/voxel.pkl",
                                        read_only=True, timeout=3600)
-                so_ids = this_vx_dc.keys()
+                so_ids = list(this_vx_dc.keys())
             else:
-                so_ids = this_attr_dc.keys()
+                so_ids = list(this_attr_dc.keys())
 
 
             for so_id in so_ids:
@@ -224,7 +224,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
             sv_obj_map_dict[sv_key].update(value)
 
     mapping_dict_path = seg_dataset.path + "/sv_%s_mapping_dict.pkl" % sd.version
-    with open(mapping_dict_path, "w") as f:
+    with open(mapping_dict_path, "wb") as f:
         pkl.dump(sv_obj_map_dict, f)
 
     paths = sd.so_dir_paths
@@ -330,7 +330,7 @@ def _write_mapping_to_sv_thread(args):
     obj_type = args[1]
     mapping_dict_path = args[2]
 
-    with open(mapping_dict_path, "r") as f:
+    with open(mapping_dict_path, "rb") as f:
         mapping_dict = pkl.load(f)
 
     for p in paths:
@@ -339,9 +339,9 @@ def _write_mapping_to_sv_thread(args):
 
         for sv_id in this_attr_dc.keys():
             this_attr_dc[sv_id]["mapping_%s_ids" % obj_type] = \
-                mapping_dict[sv_id].keys()
+                list(mapping_dict[sv_id].keys())
             this_attr_dc[sv_id]["mapping_%s_ratios" % obj_type] = \
-                mapping_dict[sv_id].values()
+                list(mapping_dict[sv_id].values())
 
         this_attr_dc.save2pkl()
 

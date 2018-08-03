@@ -130,7 +130,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names,
     step_names = []
 
     if prob_kd_path_dict is not None:
-        kd_keys = prob_kd_path_dict.keys()
+        kd_keys = list(prob_kd_path_dict.keys())
         assert len(kd_keys) == len(hdf5names)
         for kd_key in kd_keys:
             assert kd_key in hdf5names

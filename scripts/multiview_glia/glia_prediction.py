@@ -1,6 +1,9 @@
-# SyConn
-# Copyright (c) 2018 Philipp J. Schubert, J. Kornfeld
-# All rights reserved
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 from syconn.config.global_params import wd
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.reps.segmentation import SegmentationDataset

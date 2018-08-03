@@ -7,7 +7,7 @@ from syconn.handler.basics import chunkify
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
 from syconn.reps.super_segmentation_helper import predict_sso_celltype
 from syconn.mp import qsub_utils as qu
-from syconn.mp.shared_mem import start_multiprocess_imap, start_multiprocess
+from syconn.mp.mp_utils import start_multiprocess_imap, start_multiprocess
 import numpy as np
 import tqdm
 import time

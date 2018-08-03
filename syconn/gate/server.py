@@ -1,19 +1,13 @@
 # -*- coding: utf-8 -*-
 # SyConn - Synaptic connectivity inference toolkit
-# SyConn Gate is a thin flask server that allows clients
-# over a RESTful HTTP API to interact with a SyConn dataset
+#
 # Copyright (c) 2016 - now
-# Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import sys
 import copy
-import logging
 import time
-
-# temporary for easier development
-#sys.path.append('/u/jkor/repos/SyConn/')
-#sys.path.append('/u/jkor/repos/knossos_utils')
-#sys.path.append('..')
+from ..handler.logger import initialize_logging
 import numpy as np
 from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
@@ -119,7 +113,7 @@ def route_hello():
     return json.dumps({'Welcome to': 'SyConnGate'}, cls=MyEncoder)
 
 
-class SyConnFS_backend(object):
+class SyConn_backend(object):
     def __init__(self, syconnfs_path='', logger=None):
         """
         Initializes a SyConnFS backend for operation.
@@ -463,40 +457,17 @@ class SyConnFS_backend(object):
 
 
 class ServerState(object):
-    def __init__(self, log_file='/wholebrain/scratch/areaxfs3/gate/server_log'):
+    def __init__(self):
 
-        self.logger = initialize_logging(log_file)
+        self.logger = initialize_logging('gate')
 
         self.logger.info('SyConn gate server starting up.')
-        self.backend = SyConnFS_backend('/wholebrain/scratch/areaxfs3/',
+        self.backend = SyConn_backend('/wholebrain/scratch/areaxfs3/',
                                         logger=self.logger)
         self.logger.info('SyConn gate server running.')
         return
 
 
-def initialize_logging(log_file):
-    logger = logging.getLogger('gate_logger')
-
-    logger.setLevel(logging.INFO)
-
-    # create file handler which logs even debug messages
-    fh = logging.FileHandler(log_file)
-    fh.setLevel(logging.INFO)
-
-    # create console handler with a higher log level
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-
-    # create formatter and add it to the handlers
-    formatter = logging.Formatter('%(asctime)s %(message)s')
-
-    ch.setFormatter(formatter)
-    fh.setFormatter(formatter)
-    # add the handlers to logger
-    logger.addHandler(ch)
-    logger.addHandler(fh)
-
-    return logger
 
 
 class MyEncoder(json.JSONEncoder):

@@ -10,7 +10,7 @@ import time
 from knossos_utils import chunky, knossosdataset
 from ..reps import segmentation
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 
 from ..handler import compression
 from ..proc.general import crop_bool_array
