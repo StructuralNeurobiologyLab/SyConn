@@ -19,7 +19,7 @@ try:
 except ImportError as e:
     print(repr(e))
 from scipy.ndimage.morphology import binary_closing
-
+from ..proc import log_proc
 try:
     import vtkInterface
     __vtk_avail__ = True
@@ -604,6 +604,7 @@ def make_ply_string(indices, vertices, normals, rgba_color):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
+    # TODO: write out normals
 
     Parameters
     ----------
@@ -626,14 +627,16 @@ def make_ply_string(indices, vertices, normals, rgba_color):
     else:
         assert len(rgba_color) == len(vertices) and len(rgba_color[0]) == 4
     if type(rgba_color) is list:
-        print("WARNING: Color input is list."
-              " It will now be converted automatically, "
-              "data will be unusable if not normalized between 0 and 255.")
         rgba_color = np.array(rgba_color, dtype=np.uint8)
+        log_proc.warn("Color input is list. It will now be converted "
+                      "automatically, data will be unusable if not normalized"
+                      " between 0 and 255. min/max of data:"
+                      " {}, {}".format(rgba_color.min(), rgba_color.max()))
     elif rgba_color.dtype.kind not in ("u", "i"):
-        print("WARNING: Color array is not of type integer or unsigned integer."
-              " It will now be converted automatically, "
-              "data will be unusable if not normalized between 0 and 255.")
+        log_proc.warn("Color array is not of type integer or unsigned integer."
+                      " It will now be converted automatically, data will be "
+                      "unusable if not normalized between 0 and 255."
+                      "min/max of data: {}, {}".format(rgba_color.min(), rgba_color.max()))
         rgba_color = np.array(rgba_color, dtype=np.uint8)
     ply_str = 'ply\nformat ascii 1.0\nelement vertex {0}\nproperty float x\nproperty float y\nproperty float z\n'\
     'property uint8 red\nproperty uint8 green\nproperty uint8 blue\nproperty uint8 alpha\n'\
@@ -666,6 +669,7 @@ def make_ply_string_wocolor(indices, vertices, normals, nb_cpus=1):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
+    # TODO: write out normals
 
     Parameters
     ----------
@@ -730,6 +734,8 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname, nb_cpus=1):
     ply_fname : str
     """
     if len(vert) == 0:
+        log_proc.warn("'write_mesh2kzip' call with empty vertex array. Did not"
+                      " write data to kzip.")
         return
     if color is not None:
         ply_str = make_ply_string(ind, vert.astype(np.float32), norm, color)
@@ -739,7 +745,8 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname, nb_cpus=1):
     write_txt2kzip(k_path, ply_str, ply_fname)
 
 
-def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames, force_overwrite=False):
+def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
+                      force_overwrite=False):
     """
     Writes meshes as .ply's to k.zip file.
 
@@ -747,12 +754,12 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames, force_over
     ----------
     k_path : str
         path to zip
-    ind : list of np.array
-    vert : list of np.array
-    norm : list of np.array
-    color : list of tuple or np.array
+    inds : list of np.array
+    verts : list of np.array
+    norms : list of np.array
+    colors : list of tuple or np.array
         rgba between 0 and 255
-    ply_fname : list of str
+    ply_fnames : list of str
     force_overwrite : bool
     """
     ply_strs = []

@@ -6,10 +6,9 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 import numpy as np
-import re
-from ..handler.basics import read_txt_from_zip
 from scipy import spatial
 from collections import Counter
+from ..reps import log_reps
 
 
 def knossos_ml_from_svixs(sv_ixs, coords=None, comments=None):
@@ -307,9 +306,11 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     return vert_col
 
 
-def assign_rep_values(target_coords, rep_coords, rep_values, colors=None,
-                       nb_cpus=-1, k=1, return_ixs=False):
+def assign_rep_values(target_coords, rep_coords, rep_values,
+                       nb_cpus=-1, return_ixs=False):
     """
+    Assigns values corresponding to representative coordinates to every target
+    coordinate.
 
     Parameters
     ----------
@@ -318,32 +319,28 @@ def assign_rep_values(target_coords, rep_coords, rep_values, colors=None,
     rep_coords : np.array
         [M ,3]
     rep_values : np.array
-        [M, 1] int values to be color coded for each vertex; used as indices
-        for colors
-    colors : list
-        color for each rep_value
+        [M, Z] any type of values for each rep_coord.
     nb_cpus : int
-    k : int
-        Number of nearest neighbors (average prediction)
     return_ixs : bool
         returns indices of k-closest rep_coord for every target coordinate
 
     Returns
     -------
-    np. array [N, 4]
-        rgba values for every vertex from 0 to 255
+    np. array [N, Z]
+        representation values for every vertex
     """
-    if colors is None:
-        colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
-                           [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
-    else:
-        colors = np.array(colors, dtype=np.uint)
-    assert len(colors) >= np.max(rep_values) + 1
+    if not type(rep_values) is np.ndarray:
+        rep_values = np.array(rep_values)
+    if not rep_values.ndim == 2:
+        msg = "Number of dimensions of representation values " \
+              "have to be exactly 2."
+        log_reps.exception(msg)
+        raise ValueError(msg)
     hull_tree = spatial.cKDTree(rep_coords)
-    dists, ixs = hull_tree.query(target_coords, n_jobs=nb_cpus, k=k)
-    hull_rep = [None] * len(target_coords)
+    dists, ixs = hull_tree.query(target_coords, n_jobs=nb_cpus, k=1)
+    hull_rep = np.zeros((len(target_coords), rep_values.shape[1]))
     for i in range(len(ixs)):
-        curr_reps = np.array(rep_values)[ixs[i]]
+        curr_reps = rep_values[ixs[i]]
         hull_rep[i] = curr_reps
     if return_ixs:
         return hull_rep, ixs

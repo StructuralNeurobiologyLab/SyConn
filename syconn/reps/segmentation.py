@@ -7,11 +7,11 @@
 import errno
 import os
 import re
-import shutil
 import networkx as nx
 
-from scipy import ndimage, spatial
+from scipy import spatial
 from knossos_utils import knossosdataset
+
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 try:
     default_wd_available = True
@@ -20,11 +20,9 @@ except:
     default_wd_available = False
 from ..config import parser
 from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING
-from ..handler.compression import LZ4Dict
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
 from ..handler.basics import get_filepaths_from_dir, safe_copy, write_txt2kzip
-import warnings
 from .segmentation_helper import *
 from ..proc import meshes
 from skimage.measure import mesh_surface_area
@@ -564,8 +562,8 @@ class SegmentationObject(object):
 
     @property
     def voxels_exist(self):
-        voxel_dc = VoxelDict(self.voxel_path, read_only=True,
-                             disable_locking=True)
+        voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
+                                disable_locking=True)
         return self.id in voxel_dc
 
 
@@ -593,14 +591,14 @@ class SegmentationObject(object):
 
     @property
     def mesh_exists(self):
-        mesh_dc = MeshDict(self.mesh_path,
-                           disable_locking=not self.enable_locking)
+        mesh_dc = MeshStorage(self.mesh_path,
+                              disable_locking=not self.enable_locking)
         return self.id in mesh_dc
 
     @property
     def skeleton_exists(self):
-        skeleton_dc = SkeletonDict(self.skeleton_path,
-                           disable_locking=not self.enable_locking)
+        skeleton_dc = SkeletonStorage(self.skeleton_path,
+                                      disable_locking=not self.enable_locking)
         return self.id in skeleton_dc
 
     @property
@@ -650,14 +648,14 @@ class SegmentationObject(object):
 
     @property
     def sample_locations_exist(self):
-        location_dc = LZ4Dict(self.locations_path,
-                              disable_locking=not self.enable_locking)
+        location_dc = CompressedStorage(self.locations_path,
+                                        disable_locking=not self.enable_locking)
         return self.id in location_dc
 
 
     def views_exist(self, woglia, index_views=False):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia, index_views=index_views),
-                          disable_locking=not self.enable_locking)
+        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views),
+                                    disable_locking=not self.enable_locking)
         return self.id in view_dc
 
     def views(self, woglia, index_views=False):
@@ -679,12 +677,12 @@ class SegmentationObject(object):
     def sample_locations(self, force=False):
         assert self.type == "sv"
         if self.sample_locations_exist and not force:
-            return LZ4Dict(self.locations_path,
-                           disable_locking=not self.enable_locking)[self.id]
+            return CompressedStorage(self.locations_path,
+                                     disable_locking=not self.enable_locking)[self.id]
         else:
             coords = surface_samples(self.mesh[1].reshape(-1, 3))
-            loc_dc = LZ4Dict(self.locations_path, read_only=False,
-                             disable_locking=not self.enable_locking)
+            loc_dc = CompressedStorage(self.locations_path, read_only=False,
+                                       disable_locking=not self.enable_locking)
             loc_dc[self.id] = coords.astype(np.float32)
             loc_dc.save2pkl()
             return coords.astype(np.float32)
@@ -754,8 +752,8 @@ class SegmentationObject(object):
         return meshes.get_object_mesh(self, downsampling, n_closings=n_closings)
 
     def _save_mesh(self, ind, vert, normals):
-        mesh_dc = MeshDict(self.mesh_path, read_only=False,
-                           disable_locking=not self.enable_locking)
+        mesh_dc = MeshStorage(self.mesh_path, read_only=False,
+                              disable_locking=not self.enable_locking)
         mesh_dc[self.id] = [ind, vert, normals]
         mesh_dc.save2pkl()
 
@@ -808,8 +806,8 @@ class SegmentationObject(object):
 
     def load_views(self, woglia=True, raw_only=False, ignore_missing=False,
                    index_views=False):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia, index_views=index_views),
-                          disable_locking=not self.enable_locking)
+        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views),
+                                    disable_locking=not self.enable_locking)
         try:
             views = view_dc[self.id]
         except KeyError as e:
@@ -824,9 +822,9 @@ class SegmentationObject(object):
 
     def save_views(self, views, woglia=True, cellobjects_only=False,
                    index_views=False):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia, index_views=index_views),
-                          read_only=False,
-                          disable_locking=not self.enable_locking)
+        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views),
+                                    read_only=False,
+                                    disable_locking=not self.enable_locking)
         if cellobjects_only:
             assert self.id in view_dc, "SV must already contain raw views " \
                                        "if adding views for cellobjects only."
@@ -898,8 +896,8 @@ class SegmentationObject(object):
 
     def calculate_rep_coord(self, voxel_dc=None, fast=False):
         if voxel_dc is None:
-           voxel_dc = VoxelDict(self.voxel_path, read_only=True,
-                                disable_locking=True)
+           voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
+                                   disable_locking=True)
 
         if not self.id in voxel_dc:
             self._bounding_box = np.array([[-1, -1, -1], [-1, -1, -1]])

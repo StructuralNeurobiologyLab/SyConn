@@ -8,8 +8,8 @@ import glob
 import numpy as np
 from scipy import ndimage
 import os
-from ..handler.compression import MeshDict, VoxelDict, AttributeDict,\
-    SkeletonDict, LZ4Dict
+from syconn.backend.storage import AttributeDict, CompressedStorage, MeshStorage, VoxelStorage, \
+    SkeletonStorage
 from ..handler.basics import chunkify
 from ..mp.mp_utils import start_multiprocess_imap
 
@@ -49,7 +49,7 @@ def acquire_obj_ids(sd):
         sd._ids = []
         for path in paths:
             if os.path.exists(path + "voxel.pkl"):
-                this_ids = list(VoxelDict(path + "voxel.pkl",  read_only=True).keys())
+                this_ids = list(VoxelStorage(path + "voxel.pkl", read_only=True).keys())
             elif os.path.exists(path + "attr_dict.pkl"):
                 this_ids = list(AttributeDict(path + "attr_dict.pkl", read_only=True).keys())
             else:
@@ -64,8 +64,8 @@ def acquire_obj_ids(sd):
 def save_voxels(so, bin_arr, offset, overwrite=False):
     assert bin_arr.dtype == bool
 
-    voxel_dc = VoxelDict(so.voxel_path, read_only=False, timeout=3600,
-                         disable_locking=True)
+    voxel_dc = VoxelStorage(so.voxel_path, read_only=False,
+                            disable_locking=True)
 
     if so.id in voxel_dc and not overwrite:
         voxel_dc.append(so.id, bin_arr, offset)
@@ -77,8 +77,8 @@ def save_voxels(so, bin_arr, offset, overwrite=False):
 
 def load_voxels(so, voxel_dc=None):
     if voxel_dc is None:
-        voxel_dc = VoxelDict(so.voxel_path, read_only=True,
-                                   disable_locking=True)
+        voxel_dc = VoxelStorage(so.voxel_path, read_only=True,
+                                disable_locking=True)
 
     so._size = 0
     if so.id not in voxel_dc:
@@ -127,7 +127,7 @@ def load_voxel_list(so):
         voxel_list = np.transpose(np.nonzero(so.voxels)).astype(np.uint32) + \
                      so.bounding_box[0]
     else:
-        voxel_dc = VoxelDict(so.voxel_path, read_only=True)
+        voxel_dc = VoxelStorage(so.voxel_path, read_only=True)
         bin_arrs, block_offsets = voxel_dc[so.id]
 
         for i_bin_arr in range(len(bin_arrs)):
@@ -174,8 +174,8 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
 def load_mesh(so, recompute=False):
     if not recompute and so.mesh_exists:
         try:
-            mesh = MeshDict(so.mesh_path,
-                            disable_locking=not so.enable_locking)[so.id]
+            mesh = MeshStorage(so.mesh_path,
+                               disable_locking=not so.enable_locking)[so.id]
             if len(mesh) == 2:
                 indices, vertices = mesh
                 normals = np.zeros((0, ), dtype=np.float32)
@@ -210,8 +210,8 @@ def load_mesh(so, recompute=False):
 def load_skeleton(so, recompute=False):
     if not recompute and so.skeleton_exists:
         try:
-            skeleton_dc = SkeletonDict(so.skeleton_path,
-                                       disable_locking=not so.enable_locking)
+            skeleton_dc = SkeletonStorage(so.skeleton_path,
+                                          disable_locking=not so.enable_locking)
             nodes, diameters, edges = skeleton_dc[so.id]['nodes'], skeleton_dc[so.id]['diameters'], skeleton_dc[so.id]['edges']
         except Exception as e:
             print("\n---------------------------------------------------\n"
@@ -235,8 +235,8 @@ def load_skeleton(so, recompute=False):
 
 
 def save_skeleton(so, overwrite=False):
-    skeleton_dc = SkeletonDict(so.skeleton_path, read_only=False,
-                               disable_locking=not so.enable_locking)
+    skeleton_dc = SkeletonStorage(so.skeleton_path, read_only=False,
+                                  disable_locking=not so.enable_locking)
     if not overwrite and so.id in skeleton_dc:
         raise ValueError("Skeleton of SV {} already exists.".format(so.id))
     sv_skel = {"nodes": so.skeleton[0], "edges": so.skeleton[2],
@@ -267,7 +267,7 @@ def sv_view_exists(args):
         ad = AttributeDict(p + "/attr_dict.pkl", disable_locking=True)
         obj_ixs = ad.keys()
         view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
-        view_dc = LZ4Dict(view_dc_p, disable_locking=True)
+        view_dc = CompressedStorage(view_dc_p, disable_locking=True)
         for ix in obj_ixs:
             if ix not in view_dc:
                 missing_ids.append(ix)

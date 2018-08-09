@@ -1,6 +1,6 @@
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
-from syconn.handler.compression import AttributeDict, MeshDict, VoxelDict
+from syconn.backend.storage import AttributeDict, MeshStorage, VoxelStorage
 from syconn.mp.mp_utils import start_multiprocess_imap, start_multiprocess
 from syconn.proc.meshes import triangulation
 from syconn.config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, wd, \
@@ -33,8 +33,8 @@ def mesh_chunk(args):
     if len(obj_ixs) == 0:
         print("EMPTY ATTRIBUTE DICT", attr_dir)
         return
-    voxel_dc = VoxelDict(attr_dir + "/voxel.pkl", disable_locking=True)
-    md = MeshDict(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)
+    voxel_dc = VoxelStorage(attr_dir + "/voxel.pkl", disable_locking=True)
+    md = MeshStorage(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)
     valid_obj_types = ["vc", "sj", "mi", "con"]
     if not obj_type in valid_obj_types:
         raise NotImplementedError("Object type must be one of the following:\n"

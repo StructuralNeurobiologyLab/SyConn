@@ -8,7 +8,7 @@ import logging
 import coloredlogs
 from ..config.global_params import wd
 import os
-
+__all__ = ['log_main', 'initialize_logging']
 
 def get_main_log():
     logger = logging.getLogger('syconn')
@@ -31,7 +31,8 @@ def get_main_log():
 
 def initialize_logging(log_name):
     """
-
+    Logger for each package module. For import processing steps individual
+    logger can be defined (e.g. multiviews, skeleton)
     Parameters
     ----------
     log_name : str
@@ -41,10 +42,11 @@ def initialize_logging(log_name):
     -------
 
     """
-    predefined_lognames = ['mp', 'gate', 'proc', 'ui', 'skeleton', 'multiview']
+    predefined_lognames = ['mp', 'gate', 'proc', 'ui', 'skeleton', 'multiview',
+                           'handler', 'cnn', 'extraction', 'reps']
+
     if log_name not in predefined_lognames:
-        main_log = get_main_log()
-        main_log.warn("Please use logger names as specified"
+        log_main.warn("Please use logger names as specified"
                       " here: {}".format(predefined_lognames))
     logger = logging.getLogger(log_name)
     coloredlogs.install(level='DEBUG', logger=logger)
@@ -59,6 +61,13 @@ def initialize_logging(log_name):
     if os.path.isfile(log_dir + log_name + '.log'):
         os.remove(log_dir + log_name + '.log')
     logger.addHandler(fh)
-    logger.info("Initialized logger '{}'. Log-files are stored at"
-                " {}.".format(log_name, log_dir + log_name + ".log"))
+    log_main.info("Initialized logger '{}'. Log-files are stored at"
+                  " {}.".format(log_name, log_dir + log_name + ".log"))
     return logger
+
+
+# init main logger
+log_main = get_main_log()
+
+
+

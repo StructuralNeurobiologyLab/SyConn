@@ -6,8 +6,8 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 import numpy as np
-from syconn.reps import super_segmentation as ss
-import syconn.reps.super_segmentation_helper as ssh
+from ..reps import super_segmentation as ss
+from ..reps import super_segmentation_helper as ssh
 import os
 
 

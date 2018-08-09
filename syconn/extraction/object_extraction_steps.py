@@ -25,7 +25,7 @@ from ..mp import qsub_utils as qu, mp_utils as sm
 from ..proc.general import cut_array_in_one_dim
 from ..reps import segmentation, rep_helper as rh
 from ..handler import basics
-from..handler.compression import VoxelDict, VoxelDictL
+from syconn.backend.storage import VoxelStorageL, VoxelStorage
 
 
 def gauss_threshold_connected_components(*args, **kwargs):
@@ -812,10 +812,9 @@ def _extract_voxels_thread(args):
         dataset_path = workfolder + "/%s_temp/" % dataset_name
 
         cur_path_id = 0
-        voxel_dc = VoxelDict(
+        voxel_dc = VoxelStorage(
             dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl",
             read_only=False,
-            timeout=3600,
             disable_locking=True)
 
         # os.makedirs(dataset_path + voxel_paths[cur_path_id])
@@ -883,10 +882,9 @@ def _extract_voxels_thread(args):
                         cur_path_id + 1 < len(voxel_paths):
                     voxel_dc.save2pkl(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl")
                     cur_path_id += 1
-                    voxel_dc = VoxelDict(dataset_path + voxel_paths[cur_path_id],
-                                         read_only=False,
-                                         timeout=3600,
-                                         disable_locking=True)
+                    voxel_dc = VoxelStorage(dataset_path + voxel_paths[cur_path_id],
+                                            read_only=False,
+                                            disable_locking=True)
                     # os.makedirs(dataset_path + voxel_paths[cur_path_id])
                     p_parts = voxel_paths[cur_path_id].strip("/").split("/")
                     next_id = int("".join(p_parts))
@@ -1006,18 +1004,18 @@ def _combine_voxels_thread(args):
 
     for i_voxel_rel_path, voxel_rel_path in enumerate(voxel_rel_paths):
 
-        voxel_dc = VoxelDict(segdataset.so_storage_path + voxel_rel_path +
+        voxel_dc = VoxelStorage(segdataset.so_storage_path + voxel_rel_path +
                              "/voxel.pkl", read_only=False,
-                             disable_locking=True)
+                                disable_locking=True)
 
         for so_id in path_block_dicts[i_voxel_rel_path]:
             # print(so_id)
             fragments = path_block_dicts[i_voxel_rel_path][so_id]
             fragments = [item for sublist in fragments for item in sublist]
             for i_fragment_id, fragment_id in enumerate(fragments):
-                voxel_dc_read = VoxelDict(dataset_temp_path +
-                                          rh.subfold_from_ix(fragment_id, n_folders_fs) + "/voxel.pkl",
-                                          read_only=True, disable_locking=True)
+                voxel_dc_read = VoxelStorage(dataset_temp_path +
+                                             rh.subfold_from_ix(fragment_id, n_folders_fs) + "/voxel.pkl",
+                                             read_only=True, disable_locking=True)
 
                 bin_arrs, block_offsets = voxel_dc_read[fragment_id]
 
@@ -1162,11 +1160,9 @@ def _extract_voxels_combined_thread(args):
                 id_mask = np.zeros(tuple(size), dtype=bool)
                 id_mask[id_mask_coords[0, :], id_mask_coords[1, :], id_mask_coords[2, :]] = True
                 voxel_rel_path = rh.subfold_from_ix(sv_id, n_folders_fs)
-                voxel_dc = VoxelDictL(
+                voxel_dc = VoxelStorageL(
                     segdataset.so_storage_path + voxel_rel_path + "/voxel.pkl",
-                    read_only=False,
-                    timeout=3600,
-                    )
+                    read_only=False)
 
                 if sv_id in voxel_dc:
                     voxel_dc.append(sv_id, id_mask, abs_offset)

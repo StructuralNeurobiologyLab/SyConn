@@ -7,12 +7,12 @@
 import sys
 import copy
 import time
-from ..handler.logger import initialize_logging
 import numpy as np
 from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
 from flask import Flask
 import json
+from..gate import log_gate
 
 app = Flask(__name__)
 
@@ -459,7 +459,7 @@ class SyConn_backend(object):
 class ServerState(object):
     def __init__(self):
 
-        self.logger = initialize_logging('gate')
+        self.logger = log_gate
 
         self.logger.info('SyConn gate server starting up.')
         self.backend = SyConn_backend('/wholebrain/scratch/areaxfs3/',

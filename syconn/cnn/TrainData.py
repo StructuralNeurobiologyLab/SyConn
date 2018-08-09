@@ -1,6 +1,9 @@
-# NeuroPatch
-# Copyright (c) 2016 Philipp J. Schubert
-# All rights reserved
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
 # non-relative import needed for this file in order to be importable by
 # ELEKTRONN2 architectures
 import matplotlib

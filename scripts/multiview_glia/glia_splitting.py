@@ -11,7 +11,7 @@ from syconn.mp.mp_utils import start_multiprocess
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.handler.basics import *
-from syconn.handler.compression import AttributeDict
+from syconn.backend.storage import AttributeDict
 from syconn.reps.rep_helper import knossos_ml_from_ccs
 from syconn.handler.basics import parse_cc_dict_from_kml
 import numpy as np

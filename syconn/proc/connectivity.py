@@ -17,7 +17,7 @@ from collections import defaultdict
 import networkx as nx
 import os
 import scipy.spatial
-from ..handler.compression import VoxelDict, AttributeDict
+from syconn.backend.storage import AttributeDict, VoxelStorage
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
@@ -144,10 +144,10 @@ def combine_and_split_cs_agg_helper(args):
     cur_path_id = 0
 
     os.makedirs(cs.so_storage_path + voxel_rel_paths[cur_path_id])
-    voxel_dc = VoxelDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                         "/voxel.pkl", read_only=False, timeout=3600)
+    voxel_dc = VoxelStorage(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+                         "/voxel.pkl", read_only=False)
     attr_dc = AttributeDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                            "/attr_dict.pkl", read_only=False, timeout=3600)
+                            "/attr_dict.pkl", read_only=False)
 
     p_parts = voxel_rel_paths[cur_path_id].strip("/").split("/")
     next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]),
@@ -200,11 +200,11 @@ def combine_and_split_cs_agg_helper(args):
 
             os.makedirs(cs.so_storage_path + voxel_rel_paths[cur_path_id])
 
-            voxel_dc = VoxelDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                                 "voxel.pkl", read_only=False, timeout=3600)
+            voxel_dc = VoxelStorage(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+                                 "voxel.pkl", read_only=False)
             attr_dc = AttributeDict(cs.so_storage_path +
                                     voxel_rel_paths[cur_path_id] + "attr_dict.pkl",
-                                    read_only=False, timeout=3600)
+                                    read_only=False)
 
     if n_items_for_path > 0:
         voxel_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
@@ -240,9 +240,8 @@ def map_objects_to_cs_thread(args):
 
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=False, timeout=3600)
-        this_vx_dc = VoxelDict(p + "/voxel.pkl", read_only=True,
-                               timeout=3600)
+                                     read_only=False)
+        this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True)
 
         for cs_id in this_vx_dc.keys():
             print(cs_id)

@@ -12,7 +12,7 @@ from knossos_utils import knossosdataset
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-from ..handler.compression import VoxelDict, AttributeDict
+from syconn.backend.storage import AttributeDict, VoxelStorage
 from ..reps import segmentation, segmentation_helper
 from ..handler import basics
 import tqdm
@@ -102,10 +102,9 @@ def _dataset_analysis_thread(args):
             os.rmdir(p)
         else:
             this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                         read_only=not recompute, timeout=3600)
+                                         read_only=not recompute)
             if recompute:
-                this_vx_dc = VoxelDict(p + "/voxel.pkl",
-                                       read_only=True, timeout=3600)
+                this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True)
                 so_ids = list(this_vx_dc.keys())
             else:
                 so_ids = list(this_attr_dc.keys())
@@ -275,9 +274,8 @@ def _map_objects_thread(args):
 
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=readonly, timeout=3600)
-        this_vx_dc = VoxelDict(p + "/voxel.pkl", read_only=True,
-                               timeout=3600)
+                                     read_only=readonly)
+        this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True)
 
         for so_id in this_vx_dc.keys():
             so = seg_dataset.get_segmentation_object(so_id)
@@ -336,7 +334,7 @@ def _write_mapping_to_sv_thread(args):
 
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=False, timeout=3600)
+                                     read_only=False)
 
         for sv_id in this_attr_dc.keys():
             this_attr_dc[sv_id]["mapping_%s_ids" % obj_type] = \
@@ -387,8 +385,7 @@ def _binary_filling_cs_thread(args):
                                              working_dir=working_dir)
 
     for p in paths:
-        this_vx_dc = VoxelDict(p + "/voxel.pkl", read_only=False,
-                               timeout=3600)
+        this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=False)
 
         for so_id in this_vx_dc.keys():
             so = cs_sd.get_segmentation_object(so_id)
@@ -439,7 +436,7 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
             pbar.update(len(ch))
         if return_proba:
             all_probas.append(np.concatenate(proba))
-    if vebrose:
+    if verbose:
         pbar.close()
     if return_proba:
         return np.concatenate(all_probas)
@@ -626,8 +623,7 @@ def _extract_synapse_type_thread(args):
 
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=False, timeout=3600,
-                                     disable_locking=True)
+                                     read_only=False, disable_locking=True)
 
         for so_id in this_attr_dc.keys():
             so = seg_dataset.get_segmentation_object(so_id)

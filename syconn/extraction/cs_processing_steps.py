@@ -15,7 +15,7 @@ script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold
-from ..handler.compression import VoxelDict, AttributeDict
+from ..backend.storage import AttributeDict, VoxelStorage
 from ..handler.basics import chunkify
 
 
@@ -119,10 +119,10 @@ def _combine_and_split_cs_agg_thread(args):
         os.makedirs(cs.so_storage_path + voxel_rel_paths[cur_path_id])
     except:
         pass
-    voxel_dc = VoxelDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                         "/voxel.pkl", read_only=False, timeout=3600)
+    voxel_dc = VoxelStorage(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+                         "/voxel.pkl", read_only=False)
     attr_dc = AttributeDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                            "/attr_dict.pkl", read_only=False, timeout=3600)
+                            "/attr_dict.pkl", read_only=False)
 
     p_parts = voxel_rel_paths[cur_path_id].strip("/").split("/")
     next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]),
@@ -184,11 +184,11 @@ def _combine_and_split_cs_agg_thread(args):
             except:
                 pass
 
-            voxel_dc = VoxelDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                                 "voxel.pkl", read_only=False, timeout=3600)
+            voxel_dc = VoxelStorage(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+                                 "voxel.pkl", read_only=False)
             attr_dc = AttributeDict(cs.so_storage_path +
                                     voxel_rel_paths[cur_path_id] + "attr_dict.pkl",
-                                    read_only=False, timeout=3600)
+                                    read_only=False)
 
     if n_items_for_path > 0:
         voxel_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
@@ -287,9 +287,8 @@ def _map_objects_to_cs_thread(args):
 
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=False, timeout=3600)
-        this_vx_dc = VoxelDict(p + "/voxel.pkl", read_only=True,
-                               timeout=3600)
+                                     read_only=False)
+        this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True)
 
         for cs_id in this_vx_dc.keys():
             print(cs_id)
@@ -515,12 +514,10 @@ def _overlap_mapping_sj_to_cs_thread(args):
 
         rel_path = subfold_from_ix(i_cs_start_id + block_start, conn_sd.n_folders_fs)
 
-        voxel_dc = VoxelDict(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
-                             read_only=False,
-                             timeout=3600)
+        voxel_dc = VoxelStorage(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
+                                read_only=False)
         attr_dc = AttributeDict(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl",
-                                read_only=False,
-                                timeout=3600)
+                                read_only=False)
 
         next_conn_id = i_cs_start_id + block_start
         n_items_for_path = 0
@@ -655,12 +652,10 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
     for i_sj_id_block, sj_id_block in enumerate(sj_id_blocks):
         rel_path = voxel_rel_paths[i_sj_id_block]
 
-        voxel_dc = VoxelDict(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
-                             read_only=False,
-                             timeout=3600)
+        voxel_dc = VoxelStorage(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
+                                read_only=False)
         attr_dc = AttributeDict(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl",
-                                read_only=False,
-                                timeout=3600)
+                                read_only=False)
 
         next_conn_id = ix_from_subfold(rel_path,
                                        conn_sd.n_folders_fs)
@@ -860,7 +855,7 @@ def _map_objects_to_conn_thread(args):
                                              version=vc_version)
 
     this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
-                                 read_only=False, timeout=3600)
+                                 read_only=False)
 
     for conn_id in this_attr_dc.keys():
         conn_o = conn_sd.get_segmentation_object(conn_id)
@@ -980,7 +975,7 @@ def _classify_conn_objects_thread(args):
     rfc = externals.joblib.load(conn_sd.path + "/conn_syn_rfc/rfc")
 
     this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
-                                 read_only=False, timeout=3600)
+                                 read_only=False)
 
     for conn_id in this_attr_dc.keys():
         conn_o = conn_sd.get_segmentation_object(conn_id)
@@ -1030,7 +1025,7 @@ def _collect_axoness_from_ssv_partners_thread(args):
                                                version=conn_version)
     for so_dir_path in so_dir_paths:
         this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
-                                     read_only=False, timeout=3600)
+                                     read_only=False)
 
         for conn_id in this_attr_dc.keys():
             conn_o = conn_sd.get_segmentation_object(conn_id)

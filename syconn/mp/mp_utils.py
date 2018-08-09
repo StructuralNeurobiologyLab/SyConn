@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
-# Authors: Philipp Schubert, Joergen Kornfeld
+# Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
 
 try:
     import cPickle as pkl

@@ -5,9 +5,12 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-# # define global working directory
+# --------- Define global working directory
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5"
 wd = "/wholebrain/scratch/areaxfs3/"
+
+# --------- Define backend
+backend = "FS"
 
 # TODO: Add package config in addition to working directory config (-> example_config.ini)
 # --------------------------------------------------------------- GLIA PARAMETER

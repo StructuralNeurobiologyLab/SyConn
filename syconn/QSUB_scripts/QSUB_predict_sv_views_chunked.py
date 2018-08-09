@@ -9,7 +9,8 @@ except ImportError:
 from syconn.reps.super_segmentation import render_sampled_sos_cc
 from syconn.proc.sd_proc import sos_dict_fact, init_sos, predict_views
 from syconn.handler.prediction import NeuralNetworkInterface
-from syconn.handler.compression import LZ4Dict, AttributeDict
+from syconn.backend.storage import AttributeDict, CompressedStorage
+
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
 
@@ -38,7 +39,7 @@ else:
 model = NeuralNetworkInterface(**model_kwargs)
 for p in so_chunk_paths:
     view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
-    view_dc = LZ4Dict(view_dc_p, disable_locking=True)
+    view_dc = CompressedStorage(view_dc_p, disable_locking=True)
     svixs = list(view_dc.keys())
     views = list(view_dc.values())
     if raw_only:

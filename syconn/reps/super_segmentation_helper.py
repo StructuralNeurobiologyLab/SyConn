@@ -21,12 +21,7 @@ from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton, find_missing_sv_views, find_missing_sv_attributes, find_missing_sv_skeletons
 from ..mp.mp_utils import start_multiprocess, start_multiprocess_obj
 skeletopyze_available = False
-# try:
-#     import skeletopyze
-#     skeletopyze_available = True
-# except:
-#     print("skeletopyze not found - you won't be able to compute skeletons. "
-#           "Install skeletopyze from https://github.com/funkey/skeletopyze")
+from ..reps import log_reps
 from scipy import spatial
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
@@ -979,9 +974,9 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
 
 def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False,
                        save_sso=True):
-    if k > 1:
-        print(DeprecationWarning("Using k>1 is deprecated. Use k=1 followed by"
-                                 "'_average_node_axoness_views'."))
+    if k != 1:
+        log_reps.warn("Parameter 'k' is deprecated but was set to {}. "
+                      "It is not longer used in this method.".format(k))
     if sso.skeleton is None:
         sso.load_skeleton()
     proba_key = "axoness_probas_cnn%s" % pred_key_appendix
@@ -1009,27 +1004,18 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False,
     assert len(loc_coords) == len(preds), "Number of view coordinates is" \
                                           "different from number of view" \
                                           "predictions. SSO %d" % sso.id
-    # find kNN in loc_coords for every skeleton node and use their majority
+    # find NN in loc_coords for every skeleton node and use their majority
     # prediction
     node_preds = colorcode_vertices(sso.skeleton["nodes"] * sso.scaling,
-                                    loc_coords, preds, colors=[0, 1, 2], k=k)
-
-    if k != 1:
-        node_probas = assign_rep_values(
-            sso.skeleton["nodes"] * sso.scaling,
-            loc_coords, probas, colors=[0, 1, 2], k=k)
-        sso.skeleton["axoness_cnn_k%d%s" % (k, pred_key_appendix)] = node_preds
-        sso.skeleton["axoness_cnn_k%d%s_probas" % (k, pred_key_appendix)] = node_probas
-    else:
-        node_probas, ixs = assign_rep_values(
-            sso.skeleton["nodes"] * sso.scaling,
-            loc_coords, probas, colors=[0, 1, 2], k=k,
-            return_ixs=True)
-        assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
-                                               "coordinates is bigger than length of sample coordinates."
-        sso.skeleton["axoness%s" % pred_key_appendix] = node_preds
-        sso.skeleton["axoness_probas%s" % pred_key_appendix] = node_probas
-        sso.skeleton["view_ixs"] = ixs
+                                    loc_coords, preds, colors=[0, 1, 2], k=1)
+    node_probas, ixs = assign_rep_values(sso.skeleton["nodes"] * sso.scaling,
+                                         loc_coords, probas, return_ixs=True)
+    assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
+                                           "coordinates is bigger than " \
+                                           "length of sample coordinates."
+    sso.skeleton["axoness%s" % pred_key_appendix] = node_preds
+    sso.skeleton["axoness_probas%s" % pred_key_appendix] = node_probas
+    sso.skeleton["view_ixs"] = ixs
     if save_sso:
         sso.save_skeleton()
 
