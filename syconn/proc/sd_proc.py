@@ -181,7 +181,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
         max number of workers running at the same time when using qsub
     :return:
     """
-    if sd.version != "sv":
+    if sd.type != "sv":
         print("WARNING: You are mapping to a non-sv dataset")
 
     assert obj_type in sd.version_dict
@@ -194,8 +194,8 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, obj_type,
-                             sd.version_dict[obj_type], sd.working_dir,
-                             kd_path, readonly])
+                            sd.version_dict[obj_type], sd.working_dir,
+                            kd_path, readonly])
 
     # Running workers - Extracting mapping
 
@@ -226,7 +226,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
             sv_obj_map_dict[sv_key].update(value)
 
     mapping_dict_path = seg_dataset.path + "/sv_%s_mapping_dict.pkl" % sd.version
-    with open(mapping_dict_path, "w") as f:
+    with open(mapping_dict_path, "wb") as f:
         pkl.dump(sv_obj_map_dict, f)
 
     paths = sd.so_dir_paths
@@ -341,9 +341,9 @@ def _write_mapping_to_sv_thread(args):
 
         for sv_id in this_attr_dc.keys():
             this_attr_dc[sv_id]["mapping_%s_ids" % obj_type] = \
-                mapping_dict[sv_id].keys()
+                list(mapping_dict[sv_id].keys())
             this_attr_dc[sv_id]["mapping_%s_ratios" % obj_type] = \
-                mapping_dict[sv_id].values()
+                list(mapping_dict[sv_id].values())
 
         this_attr_dc.save2pkl()
 

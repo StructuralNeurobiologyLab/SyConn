@@ -7,7 +7,8 @@
 
 # # define global working directory
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5"
-wd = "/wholebrain/scratch/areaxfs3/"
+wd = "/wholebrain/songbird/j0126/areaxfs_v5/chunkdatasets"
+# wd = "/wholebrain/scratch/areaxfs3/"
 
 # --------------------------------------------------------------- GLIA PARAMETER
 # min. connected component size of glia nodes/SV after thresholding glia proba

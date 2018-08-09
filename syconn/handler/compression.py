@@ -129,11 +129,6 @@ class LZ4DictBase(dict):
             source_path = self._path
         fold, fname = os.path.split(source_path)
         lock_path = fold + "/." + fname + ".lk"
-        if not os.path.isdir(os.path.split(source_path)[0]):
-            try:
-                os.makedirs(os.path.split(source_path)[0])
-            except:
-                pass
         # acquires lock until released when saving or after loading if self.read_only
         if not self.disable_locking:
             gotten = False
