@@ -8,6 +8,7 @@ flask
 fasteners
 cython
 numpy
+coloredlogs
 scikit-learn
 git+https://github.com/knossos-project/knossos_utils.git
 git+https://github.com/ELEKTRONN/ELEKTRONN2.git

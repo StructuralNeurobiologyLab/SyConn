@@ -58,7 +58,7 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
         text_file.close()
         prec, rec, fs, supp = precision_recall_fscore_support(labels, np.argmax(proba, axis=1))
         np.save(model_dir + '/prec_rec_%s.npy' % prefix, [prec, rec, fs])
-        # plt.savefig(model_dir + '/prec_rec_%s.png' % prefix)
+        plt.savefig(model_dir + '/prec_rec_%s.png' % prefix)
     plt.close()
 
 

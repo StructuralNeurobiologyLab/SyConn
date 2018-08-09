@@ -6,6 +6,7 @@ import time
 import warnings
 import tqdm
 from sklearn.neighbors import KNeighborsClassifier
+from sklearn.decomposition import PCA
 from collections import Counter
 from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils.knossosdataset import KnossosDataset
@@ -762,6 +763,11 @@ def get_knn_tnet_embedding_e3():
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
+def get_pca_tnet_embedding_e3():
+    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_August1st/ATN-Gauss-noAdv-#1/pred/"
+    return pca_tnet_embedding(tnet_eval_dir)
+
+
 def force_correct_norm(x):
     """
     For e.g. models trained on views normalized between 0 and 1, whereas empty
@@ -897,6 +903,47 @@ def knn_clf_tnet_embedding(fold, fit_all=False):
     else:
         nbrs.fit(train_d, train_l)
     return nbrs
+
+
+def pca_tnet_embedding(fold, n_components=3, fit_all=False):
+    """
+    Currently it assumes embedding for GT views has been created already in 'fold'
+    and put into l_train_%d.npy / l_valid_%d.npy files
+    Parameters
+    ----------
+    fold :
+
+    Returns
+    -------
+
+    """
+    train_fnames = get_filepaths_from_dir(fold, fname_includes=["l_axoness_train"], ending=".npy")
+    valid_fnames = get_filepaths_from_dir(fold, fname_includes=["l_axoness_valid"], ending=".npy")
+
+    train_d = []
+    train_l = []
+    valid_d = []
+    valid_l = []
+    for tf in train_fnames:
+        train_l.append(np.load(tf))
+        tf = tf.replace("l_axoness_train", "ls_axoness_train")
+        train_d.append(np.load(tf))
+    for tf in valid_fnames:
+        valid_l.append(np.load(tf))
+        tf = tf.replace("l_axoness_valid", "ls_axoness_valid")
+        valid_d.append(np.load(tf))
+
+    train_d = np.concatenate(train_d).astype(dtype=np.float32)
+    train_l = np.concatenate(train_l).astype(dtype=np.uint16)
+    valid_d = np.concatenate(valid_d).astype(dtype=np.float32)
+    valid_l = np.concatenate(valid_l).astype(dtype=np.uint16)
+
+    pca = PCA(n_components, random_state=0)
+    if fit_all:
+        pca.fit(np.concatenate([train_d, valid_d]), np.concatenate([train_l, valid_l]))
+    else:
+        pca.fit(train_d, train_l)
+    return pca
 
 
 def views2tripletinput(views):

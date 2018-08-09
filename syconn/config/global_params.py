@@ -9,6 +9,7 @@
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5"
 wd = "/wholebrain/scratch/areaxfs3/"
 
+# TODO: Add package config in addition to working directory config (-> example_config.ini)
 # --------------------------------------------------------------- GLIA PARAMETER
 # min. connected component size of glia nodes/SV after thresholding glia proba
 min_cc_size_glia = 8e3  # in nm; L1-norm on vertex bounding box

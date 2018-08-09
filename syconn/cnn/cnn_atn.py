@@ -31,25 +31,27 @@ class RepresentationNetwork(nn.Module):
         self.dr = dr
         self.n_out_channels = n_out_channels
         self.conv = nn.Sequential(
-            nn.Conv2d(n_in_channels, 13, (5, 5)), act(), nn.MaxPool2d((2, 2)),
-            nn.Conv2d(13, 17, (5, 5)), act(), nn.MaxPool2d((2, 2)),
-            nn.Conv2d(17, 21, (4, 4)), DropOut(), nn.MaxPool2d((2, 2)), act(),
-            nn.Conv2d(21, 25, (4, 4)), DropOut(), nn.MaxPool2d((2, 2)), act(),
-            nn.Conv2d(25, 29, (2, 2)), DropOut(), nn.MaxPool2d((2, 2)), act(),
-            nn.Conv2d(29, 30, (1, 1)), nn.MaxPool2d((2, 2)), act(),
-            nn.Conv2d(30, 31, (1, 1)), act(),
+            nn.Conv2d(n_in_channels, 20, (5, 5)), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(20, 25, (5, 5)), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(25, 30, (4, 4)), DropOut(), act(),
+            nn.Conv2d(30, 35, (4, 4)), DropOut(), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(35, 40, (2, 2)), DropOut(), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(40, 45, (2, 2)), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(45, 45, 1), act(),
         )
         self.fc = nn.Sequential(
-            # nn.AdaptiveMaxPool1d(100),  # flexible to various input sizes
-            nn.Linear(93, 40), act(),  # 93 is hard-coded for this architecture and input size: 128, 256
+            nn.AdaptiveMaxPool1d(200),  # flexible to various input sizes
+            nn.Linear(200, 100), act(),  # 93 is hard-coded for this architecture and input size: 128, 256
             DropOut(),
-            nn.Linear(40, n_out_channels)
+            nn.Linear(100, n_out_channels)
         )
 
     def forward(self, x):
         x = self.conv(x)  # representation network
-        x = x.view(x.size()[0], -1)  # flatten and # add auxiliary axis
-        return self.fc(x).squeeze()  # get rid of auxiliary axis needed for AdaptiveMaxPool
+        x = x.view(1, x.size()[0], -1)  # x.view(1, x.size()[0], -1) #flatten and # add auxiliary axis
+        x = self.fc(x)
+        x = x.view(x.size()[1:])
+        return x  #.squeeze()  # get rid of auxiliary axis needed for AdaptiveMaxPool
 
 
 # # Discriminator
@@ -101,8 +103,12 @@ class TripletNet(nn.Module):
         z_0 = self.rep_net(x)
         z_1 = self.rep_net(y)
         z_2 = self.rep_net(z)
-        dist_a = F.pairwise_distance(z_0, z_1, 2)
-        dist_b = F.pairwise_distance(z_0, z_2, 2)
+        if self.train:
+                dist_a = F.pairwise_distance(z_0, z_1, 2)
+                dist_b = F.pairwise_distance(z_0, z_2, 2)
+        else:
+                dist_a = None
+                dist_b = None
         return dist_a, dist_b, z_0, z_1, z_2
 
 
@@ -116,10 +122,14 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="ATN-GaussBimodal-Z10-#3", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="ATN-Gauss-Z10-New", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
+    )
+    parser.add_argument(
+        '-r', '--resume', metavar='PATH',
+        help='Path to pretrained model state dict from which to resume training.'
     )
     args = parser.parse_args()
 
@@ -144,11 +154,11 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3training/')
 
     max_steps = args.max_steps
-    lr = 0.001
-    lr_discr = 0.0005
+    lr = 0.0005
+    lr_discr = 0.0001
     lr_stepsize = 500
     lr_dec = 0.99
-    batch_size = 120
+    batch_size = 180
     margin = 0.1
     model = get_model()
     if torch.cuda.device_count() > 1:
@@ -156,6 +166,8 @@ if __name__ == "__main__":
         batch_size = batch_size * torch.cuda.device_count()
         model = nn.DataParallel(model)
     model.to(device)
+    if args.resume is not None:  # Load pretrained network params
+        model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
 
     model_discr = D_net_gauss(Z_DIM)
     if torch.cuda.device_count() > 1:
@@ -191,10 +203,10 @@ if __name__ == "__main__":
     # latent distribution
     # l_distr = Cauchy(torch.tensor([0.0]), torch.tensor([1.0]))
     # l_sample_func = lambda n, z: l_distr.rsample((n, z)).squeeze()
-    # l_sample_func = lambda n, z: torch.randn(n, z)
+    l_sample_func = lambda n, z: torch.randn(n, z)
     # bimodal normals
-    l_distr = lambda : Normal(torch.tensor([-3.0]), torch.tensor([1.0])) if np.random.randint(2) else Normal(torch.tensor([3.0]), torch.tensor([1.0]))
-    l_sample_func = lambda n, z: l_distr().rsample((n, z)).squeeze()
+    # l_distr = lambda : Normal(torch.tensor([-3.0]), torch.tensor([1.0])) if np.random.randint(2) else Normal(torch.tensor([3.0]), torch.tensor([1.0]))
+    # l_sample_func = lambda n, z: l_distr().rsample((n, z)).squeeze()
     # Create and run trainer
     trainer = TripletNetTrainer(
         model=[model, model_discr],
@@ -209,7 +221,7 @@ if __name__ == "__main__":
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched, "lr_discr": lr_discr_sched},
         ipython_on_error=False,
-        alpha=1e-6, alpha2=0.33,  # Adv. regularization will make up 25% of the total loss
+        alpha=1e-5, alpha2=0.1,  # Adv. regularization will make up (alpha2 * 100)% of the total loss
         latent_distr=l_sample_func
     )
 

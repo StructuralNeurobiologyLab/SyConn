@@ -11,7 +11,7 @@ config = {
     'version': '0.2',
     'install_requires': ['knossos_utils', 'ELEKTRONN2', 'matplotlib',
                          'numpy', 'scipy', 'lz4', 'h5py', 'networkx',
-                         'configobj', 'fasteners', 'flask'],
+                         'configobj', 'fasteners', 'flask', 'coloredlogs'],
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_utils'
                          '/tarball/master#egg=knossos_utils',

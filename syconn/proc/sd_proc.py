@@ -15,6 +15,7 @@ script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 from ..handler.compression import VoxelDict, AttributeDict
 from ..reps import segmentation, segmentation_helper
 from ..handler import basics
+import tqdm
 
 
 def dataset_analysis(sd, recompute=True, stride=100, qsub_pe=None,
@@ -422,18 +423,24 @@ def sos_dict_fact(svixs, version=None, scaling=None, obj_type="sv",
 def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
                       verbose=False, raw_only=False, single_cc_only=False,
                       return_proba=False):
-    nb_chunks = np.max([1, len(sos) / 75])
+    nb_chunks = np.max([1, len(sos) // 200])
     so_chs = basics.chunkify(sos, nb_chunks)
     all_probas = []
+    if verbose:
+        pbar = tqdm.tqdm(total=len(sos))
     for ch in so_chs:
         views = sm.start_multiprocess_obj("load_views", [[sv, {"woglia": woglia,
                                           "raw_only": raw_only}]
                                           for sv in ch], nb_cpus=nb_cpus)
-        proba = predict_views(model, views, ch, pred_key, verbose=verbose,
+        proba = predict_views(model, views, ch, pred_key, verbose=False,
                              single_cc_only=single_cc_only,
                              return_proba=return_proba, nb_cpus=nb_cpus)
+        if verbose:
+            pbar.update(len(ch))
         if return_proba:
             all_probas.append(np.concatenate(proba))
+    if vebrose:
+        pbar.close()
     if return_proba:
         return np.concatenate(all_probas)
 

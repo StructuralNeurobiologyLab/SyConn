@@ -41,15 +41,6 @@ try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
-skeletopyze_available = False
-attempted_skeletopyze_import = False
-try:
-    import skeletopyze
-    skeletopyze_available = True
-except:
-    skeletopyze_available = False
-    # print "skeletopyze not found - you won't be able to compute skeletons. " \
-    #       "Install skeletopyze from https://github.com/funkey/skeletopyze"
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
@@ -72,21 +63,24 @@ class SuperSegmentationObject(object):
 
         Parameters
         ----------
-        ssv_id :
-        version :
+        ssv_id : int
+            unique SSV ID
+        version : str
+            version string identifier
         version_dict :
-        working_dir :
-        create :
-        sv_ids :
-        scaling :
-        object_caching :
-        voxel_caching :
-        mesh_caching :
-        view_caching :
+        working_dir : str
+            path to working directory
+        create : bool
+        sv_ids : np.array
+        scaling : tuple
+        object_caching : bool
+        voxel_caching : bool
+        mesh_caching : bool
+        view_caching : bool
         config :
-        nb_cpus :
+        nb_cpus : int
         enable_locking : bool
-        ssd_type :
+        ssd_type : str
         """
         self.nb_cpus = nb_cpus
         self._id = ssv_id
@@ -173,7 +167,6 @@ class SuperSegmentationObject(object):
         else:
             if isinstance(version_dict, dict):
                 self.version_dict = version_dict
-            # TODO @Sven: only valid for SSDS!
             elif isinstance(version_dict, str) and version_dict == "load":
                 if self.version_dict_exists:
                     self.load_version_dict()
@@ -2022,7 +2015,7 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
             if np.all([sv.views_exist(woglia=woglia) for sv in sos]):
                 return
     sso = SuperSegmentationObject(np.random.randint(0, sys.maxint),
-                                  create=False,
+                                  create=False, enable_locking=False,
                                   working_dir=sos[0].working_dir,
                                   version="tmp", scaling=sos[0].scaling)
     sso._objects["sv"] = sos
@@ -2072,7 +2065,7 @@ def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
     """
     # initilaize temporary SSO for cellobject mapping purposes
     sso = SuperSegmentationObject(np.random.randint(0, sys.maxint),
-                                  create=False,
+                                  create=False, enable_locking=False,
                                   working_dir=so.working_dir,
                                   version="tmp", scaling=so.scaling)
     sso._objects["sv"] = [so]

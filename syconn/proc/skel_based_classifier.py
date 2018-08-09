@@ -427,9 +427,9 @@ class SkelClassifier(object):
             sample_weights[tr_labels == unique_labels[i_label]] = 1. / labels_cnt[i_label]
 
         clf.fit(tr_feats, tr_labels, sample_weight=sample_weights)
-
+        summary_str = ""
         if name in ["rfc", "ext"]:
-            print("OOB score (train set): %.10f" % clf.oob_score_)
+            summary_str += "OOB score (train set): %.10f" % clf.oob_score_
         #
         # print "Label occ.:", np.unique(v_labels, return_counts=True)
         #
@@ -451,16 +451,17 @@ class SkelClassifier(object):
         feat_set = np.array(feature_set)[sorting]
         feat_imps = feat_imps[sorting]
 
-        print("\nFEATURE IMPORTANCES" +
-              "--------------------\n")
+        summary_str += "\nFEATURE IMPORTANCES--------------------\n"
         for i_feat in range(np.min([5, len(feat_imps)])):#len(feat_imps)):
-            print("%s: %.5f" % (feat_set[i_feat], feat_imps[i_feat]))
-
+            summary_str += "%s: %.5f" % (feat_set[i_feat], feat_imps[i_feat])
+        print("{}".format(summary_str))
         if save:
             prefix = "%s" % repr(leave_out_classes) if \
                 len(leave_out_classes) > 0 else ""
             self.save_classifier(clf, name, feature_context_nm,
                                  production=production, prefix=prefix)
+            with open(self.plots_path + prefix + "_summary.txt", 'w') as f:
+                      f.write(summary_str)
         if not production:
             v_proba = clf.predict_proba(v_feats)
             if len(te_feats) > 0:
@@ -468,7 +469,7 @@ class SkelClassifier(object):
             else:
                 te_proba = np.zeros((0, v_proba.shape[-1]))
             self.eval_performance(v_proba, v_labels, te_proba, te_labels, leave_out_classes,
-                                  [name, str(n_estimators), str(feature_context_nm)])
+                                  [name, str(n_estimators), str(feature_context_nm), str(leave_out_classes)])
 
     def create_rfc(self, n_estimators=2000):
         rfc = RandomForestClassifier(warm_start=False, oob_score=True,
