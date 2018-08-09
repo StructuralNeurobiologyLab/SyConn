@@ -31,7 +31,7 @@ def qsub_glia_splitting():
               (len(huge_ssvs), huge_ssvs))
     script_folder = os.path.dirname(
         os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
-    chs = chunkify(cc_dict.values(), 1000)
+    chs = chunkify(list(cc_dict.values()), 1000)
     qu.QSUB_script(chs, "split_glia", pe="openmp", queue=None,
                    script_folder=script_folder, n_max_co_processes=100)
 

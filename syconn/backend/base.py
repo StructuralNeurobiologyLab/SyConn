@@ -21,6 +21,7 @@ import time
 import shutil
 from ..handler.basics import write_obj2pkl, load_pkl2obj
 __all__ = ['LZ4DictBase', 'BTBase']
+# TODO: adapt to new class interface all-over syconn
 
 
 class StorageBase(dict):

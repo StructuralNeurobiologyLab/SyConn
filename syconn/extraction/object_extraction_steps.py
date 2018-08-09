@@ -159,7 +159,7 @@ def object_segmentation(cset, filename, hdf5names,
              hdf5_name_membrane, fast_load, suffix, func_kwargs])
 
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(transform_func,
+        results = sm.start_multiprocess_imap(transform_func,
                                         multi_params, debug=debug)
 
         results_as_list = []
@@ -325,7 +325,7 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                              this_max_nb_dict, suffix])
 
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_make_unique_labels_thread,
+        results = sm.start_multiprocess_imap(_make_unique_labels_thread,
                                          multi_params, debug=debug, nb_cpus=nb_cpus)
 
     elif qu.__QSUB__:
@@ -404,7 +404,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                              stitch_overlap, overlap, suffix, chunk_list])
 
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_make_stitch_list_thread,
+        results = sm.start_multiprocess_imap(_make_stitch_list_thread,
                                          multi_params, debug=debug, nb_cpus=nb_cpus)
 
         stitch_list = {}
@@ -621,7 +621,7 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                              merge_list_dict_path, suffix])
 
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_apply_merge_list_thread,
+        results = sm.start_multiprocess_imap(_apply_merge_list_thread,
                                          multi_params, debug=debug, nb_cpus=nb_cpus)
 
     elif qu.__QSUB__:
@@ -646,7 +646,7 @@ def _apply_merge_list_thread(args):
                                          "_unique_components%s.h5"
                                          % postfix, hdf5names)
 
-    merge_list_dict = pkl.load(open(merge_list_dict_path,'rb'))
+    merge_list_dict = pkl.load(open(merge_list_dict_path, 'rb'))
 
     for nb_hdf5_name in range(len(hdf5names)):
         hdf5_name = hdf5names[nb_hdf5_name]
@@ -973,7 +973,7 @@ def combine_voxels(workfolder, hdf5names,
                                  n_folders_fs])
 
         if qsub_pe is None and qsub_queue is None:
-            results = sm.start_multiprocess(_combine_voxels_thread,
+            results = sm.start_multiprocess_imap(_combine_voxels_thread,
                                             multi_params, nb_cpus=nb_cpus)
 
         elif qu.__QSUB__:
@@ -1033,7 +1033,7 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                    workfolder=None, overlaydataset_path=None,
                    chunk_list=None, suffix="", n_chunk_jobs=5000,
                    use_work_dir=True, qsub_pe=None, qsub_queue=None,
-                   n_max_co_processes=None, nb_cpus=1):
+                   n_max_co_processes=None, nb_cpus=1, object_names=None):
 
     if chunk_list is None:
         chunk_list = [ii for ii in range(len(cset.chunk_dict))]
@@ -1055,6 +1055,7 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
 
     if dataset_names is not None:
         # for dataset_name in dataset_names:    TODO: handle
+        raise NotImplementedError
         #     dataset_path = workfolder + "/%s_temp/" % dataset_name
         #     if os.path.exists(dataset_path):
         #         shutil.rmtree(dataset_path)
@@ -1064,9 +1065,11 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
         pass    # TODO: del
     else:
         dataset_names = hdf5names
-
-        for hdf5_name in hdf5names:
-            segdataset = segmentation.SegmentationDataset(obj_type=hdf5_name,
+        if object_names is not None and len(object_names) != len(hdf5names):
+            raise ValueError('object_names were specified but did not match length of "dataset_names"/"hdf5names"')
+        for kk, hdf5_name in enumerate(hdf5names):
+            object_name = object_names[kk]
+            segdataset = segmentation.SegmentationDataset(obj_type=object_name,
                                                       working_dir=workfolder,
                                                       create=True,
                                                       n_folders_fs=n_folders_fs)
@@ -1087,8 +1090,7 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
         multi_params.append([[cset.chunk_dict[nb_chunk] for nb_chunk in chunk_blocks[i_job]], workfolder,
                              filename, hdf5names, dataset_names,
                              overlaydataset_path,
-                             suffix,
-                             n_folders_fs])
+                             suffix, n_folders_fs, object_names])
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess_imap(_extract_voxels_combined_thread,
@@ -1112,10 +1114,13 @@ def _extract_voxels_combined_thread(args):
     overlaydataset_path = args[5]
     suffix = args[6]
     n_folders_fs = args[7]
-
+    object_names = args[8]
+    if object_names is None:
+        object_names = hdf5names
     for nb_hdf5_name in range(len(hdf5names)):
         hdf5_name = hdf5names[nb_hdf5_name]
-        segdataset = segmentation.SegmentationDataset(obj_type=hdf5_name,
+        object_name = object_names[nb_hdf5_name]
+        segdataset = segmentation.SegmentationDataset(obj_type=object_name,
                                                       working_dir=workfolder,
                                                       create=True,
                                                       n_folders_fs=n_folders_fs)
