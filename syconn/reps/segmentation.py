@@ -654,7 +654,6 @@ class SegmentationObject(object):
                               disable_locking=not self.enable_locking)
         return self.id in location_dc
 
-
     def views_exist(self, woglia, index_views=False):
         view_dc = LZ4Dict(self.view_path(woglia=woglia, index_views=index_views),
                           disable_locking=not self.enable_locking)
@@ -678,16 +677,20 @@ class SegmentationObject(object):
 
     def sample_locations(self, force=False):
         assert self.type == "sv"
-        if self.sample_locations_exist and not force:
-            return LZ4Dict(self.locations_path,
-                           disable_locking=not self.enable_locking)[self.id]
-        else:
-            coords = surface_samples(self.mesh[1].reshape(-1, 3))
-            loc_dc = LZ4Dict(self.locations_path, read_only=False,
-                             disable_locking=not self.enable_locking)
-            loc_dc[self.id] = coords.astype(np.float32)
-            loc_dc.save2pkl()
-            return coords.astype(np.float32)
+        try:
+            if self.sample_locations_exist and not force:
+                return LZ4Dict(self.locations_path,
+                               disable_locking=not self.enable_locking)[self.id]
+            else:
+                coords = surface_samples(self.mesh[1].reshape(-1, 3))
+                loc_dc = LZ4Dict(self.locations_path, read_only=False,
+                                 disable_locking=not self.enable_locking)
+                loc_dc[self.id] = coords.astype(np.float32)
+                loc_dc.save2pkl()
+                return coords.astype(np.float32)
+        except Exception as e:
+            print(self.id)
+            raise Exception(e)
 
     def save_voxels(self, bin_arr, offset, overwrite=False):
         save_voxels(self, bin_arr, offset, overwrite=overwrite)
@@ -915,7 +918,7 @@ class SegmentationObject(object):
                 sizes.append(np.sum(bin_arrs[i_bin_arr]))
 
             self._size = np.sum(sizes)
-            block_offsets = np.array(block_offsets)
+
             sizes = np.array(sizes)
             center_of_gravity = [np.mean(block_offsets[:, 0] * sizes) / self.size,
                                  np.mean(block_offsets[:, 1] * sizes) / self.size,

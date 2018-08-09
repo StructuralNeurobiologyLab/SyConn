@@ -513,11 +513,11 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                                   % (views_key, len(mesh.vert_resh)),
                                   RuntimeWarning)
                     found_empty_view = True
-            if found_empty_view:
-                print("View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
-                      "'%s'-mesh with %d vertices." %\
-                      (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
-                       views_key, len(mesh.vertices)))
+        if found_empty_view:
+            print("View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
+                  "'%s'-mesh with %d vertices. Location: %s" %
+                  (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
+                   views_key, len(mesh.vertices), repr(c)))
     if verbose:
         pbar.close()
     return res
@@ -670,7 +670,7 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
     # get coordinates for N SV's in SSO
     if verbose:
         start = time.time()
-    coords = sso.sample_locations()
+    coords = sso.sample_locations(cache=False)
     if not overwrite:
         missing_sv_ixs = np.array([not so.views_exist(woglia=woglia)
                                    for so in sso.svs],
@@ -945,7 +945,7 @@ def multi_render_sampled_svidlist(args):
         cmd += " {}".format(ix)
     res = os.system(cmd)
     if type(res) == str and "Error" in res:
-        raise()
+        raise Exception(res)
 
 
 def multi_render_sampled_sso(sso_ix):
