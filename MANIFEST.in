@@ -1,5 +1,5 @@
 # Include the license file
 include LICENSE.txt
 include syconn/utils/*.py
-include syconn/processing/*.py
-include syconn/multi_proc/*.py
+include syconn/proc/*.py
+include syconn/mp/*.py

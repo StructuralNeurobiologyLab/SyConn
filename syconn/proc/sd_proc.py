@@ -10,7 +10,7 @@ from collections import defaultdict
 from .image import single_conn_comp_img
 from knossos_utils import knossosdataset
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 from ..handler.compression import VoxelDict, AttributeDict
 from ..reps import segmentation, segmentation_helper
@@ -97,7 +97,6 @@ def _dataset_analysis_thread(args):
                             mesh_area=[])
 
     for p in paths:
-        print(p)
         if not len(os.listdir(p)) > 0:
             os.rmdir(p)
         else:
@@ -106,11 +105,10 @@ def _dataset_analysis_thread(args):
             if recompute:
                 this_vx_dc = VoxelDict(p + "/voxel.pkl",
                                        read_only=True, timeout=3600)
-                so_ids = this_vx_dc.keys()
+                so_ids = list(this_vx_dc.keys())
             else:
-                so_ids = this_attr_dc.keys()
+                so_ids = list(this_attr_dc.keys())
 
-            print(so_ids)
 
             for so_id in so_ids:
                 global_attr_dict["id"].append(so_id)
@@ -332,7 +330,7 @@ def _write_mapping_to_sv_thread(args):
     obj_type = args[1]
     mapping_dict_path = args[2]
 
-    with open(mapping_dict_path, "r") as f:
+    with open(mapping_dict_path, "rb") as f:
         mapping_dict = pkl.load(f)
 
     for p in paths:
@@ -556,7 +554,6 @@ def _export_sd_to_knossosdataset_thread(args):
 
         overlay_block[vx[:, 0], vx[:, 1], vx[:, 2]] = so_id
 
-    print(np.array(np.where(overlay_block == 1127314)).T + block_start)
     kd.from_matrix_to_cubes(block_start,
                             data=overlay_block,
                             overwrite=True,

@@ -12,7 +12,7 @@ from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import itertools
 import sys
 import tqdm
-from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess
+from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess
 from ..config.global_params import min_cc_size_glia, min_cc_size_neuron, glia_thresh, get_dataset_scaling
 
 

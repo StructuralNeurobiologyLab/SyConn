@@ -18,8 +18,8 @@ from knossos_utils.skeleton_utils import annotation_to_nx_graph, load_skeleton a
 from .rep_helper import assign_rep_values, colorcode_vertices
 from . import segmentation
 from .segmentation import SegmentationObject
-from .segmentation_helper import load_skeleton, find_missing_sv_views, find_missing_sv_attributes
-from ..mp.shared_mem import start_multiprocess, start_multiprocess_obj
+from .segmentation_helper import load_skeleton, find_missing_sv_views, find_missing_sv_attributes, find_missing_sv_skeletons
+from ..mp.mp_utils import start_multiprocess, start_multiprocess_obj
 skeletopyze_available = False
 # try:
 #     import skeletopyze
@@ -363,7 +363,7 @@ def convert_coord(coord_list, scal):
     return np.array([coord_list[1] + 1, coord_list[0] + 1, coord_list[2] + 1]) * np.array(scal)
 
 
-def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annotations=True):
+def prune_stub_branches(sso=None, nx_g=None, scal=[10, 10, 20], len_thres=1000, preserve_annotations=True):
     """
     Removes short stub branches, that are often added by annotators but
     hardly represent true morphology.
@@ -391,7 +391,7 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
     # find all tip nodes in an anno, ie degree 1 nodes
     while not pruning_complete:
 
-        nx_g = new_nx_g
+        nx_g = new_nx_g.copy()
 
         end_nodes = list({k for k, v in dict(nx_g.degree()).items() if v == 1})
 
@@ -404,7 +404,6 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
                     loc_curr = convert_coord(nx_g.node[curr_node]['position'], scal)
                     b_len = np.linalg.norm(loc_end - loc_curr)
 
-                    # pdb.set_trace()
                     if b_len < len_thres:
                         # remove this stub, i.e. prune the nodes that were
                         # collected on our way to the branch point
@@ -414,19 +413,20 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
                         break
                     else:
                         break
-                # add this node to the list of nodes that MAY get removed
-                # in case a stub is detected later in the loop
                 prune_nodes.append(curr_node)
 
         if len(new_nx_g.nodes) == len(nx_g.nodes):
             pruning_complete = True
+
     # Important assert. Please don't remove
     assert nx.number_connected_components(new_nx_g) == 1
 
     print('NUMber of comp after pruning',nx.number_connected_components(new_nx_g) )
 
+    if sso is not None:
+        sso = from_netkx_to_sso(sso, new_nx_g)
 
-    return new_nx_g
+    return sso, new_nx_g
 
 
 def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_thresh=50):
@@ -471,17 +471,12 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, mi
                 # print('dots', dot_prod, 'dist', dist)
 
                 if (abs(dot_prod) > dot_prod_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
-                    skel_nx_copy = skel_nx
 
                     skel_nx.remove_node(visiting_node)
                     skel_nx.add_edge(left_node,right_node)
+                    change += 1
 
-                    if nx.number_connected_components(skel_nx) ==1:
-                        change += 1
-                    else:
-                        skel_nx = skel_nx_copy
-
-
+    # print('number of connected comp sparsification' , nx.number_connected_components(skel_nx))
     sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.uint32)
     sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
 
@@ -493,15 +488,13 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, mi
         temp_edges_dict[ix] = ii
     temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
 
-    temp_edges = np.array(temp_edges).reshape([-1, 2])
-
-    sso.skeleton['edges'] = temp_edges
+    sso.skeleton['edges'] = np.array(temp_edges).reshape([-1, 2])
 
     nx_g = nx.Graph()
     for inx, single_node in enumerate(sso.skeleton['nodes']):
         nx_g.add_node(inx, position=single_node)
 
-    nx_g.add_edges_from(temp_edges)
+    nx_g.add_edges_from(np.array(temp_edges).reshape([-1, 2]))
 
     return sso,nx_g
 
@@ -512,18 +505,14 @@ def smooth_skeleton(skel_nx, scal=[10,10,20]):
     visiting_nodes = list({k for k, v in dict(skel_nx.degree()).items() if v == 2})
 
     for index, visiting_node in enumerate(visiting_nodes):
-        import pdb
-        # pdb.set_trace()
+
         neighbours = [n for n in skel_nx.neighbors(visiting_node)]
 
-        # pdb.set_trace()
         if skel_nx.degree(visiting_node) == 2:
             left_node = neighbours[0]
             right_node = neighbours[1]
 
-
-
-            if skel_nx.degree(left_node) == 2 and skel_nx.degree(right_node)==2:
+        if skel_nx.degree(left_node) == 2 and skel_nx.degree(right_node)==2:
                 vector_left_node = np.array(
                     [int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in
                      range(3)]) * scal
@@ -668,23 +657,18 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     # Creating network kx graph from sso skel
     skel_nx = from_sso_to_netkx(sso)
 
+    if sparsify:
+        sso, skel_nx = sparsify_skeleton(sso,skel_nx)
 
     # Stitching sso skeletons
     skel_nx = stitch_skel_nx(skel_nx)
 
-    # Pruning the stitched sso skeletons
-    skel_nx = prune_stub_branches(skel_nx, len_thres=pruning_thresh)
-
-    sso = from_netkx_to_sso(sso,skel_nx)
-
+    # Sparse again after stitching. Inexpensive.
     if sparsify:
-        sso , skel_nx = sparsify_skeleton(sso,skel_nx)
+        sso, skel_nx = sparsify_skeleton(sso, skel_nx)
 
-        # x = smooth_skeleton(x)
-
-    #Copying information from the nx graph to sso skeleton
-    sso = from_netkx_to_sso(sso,skel_nx)
-
+    # Pruning the stitched sso skeletons
+    sso, skel_nx = prune_stub_branches(sso, skel_nx, len_thres=pruning_thresh)
 
     # Estimating the radii
     sso.skeleton = radius_correction_found_vertices(sso)
@@ -759,9 +743,9 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
         plt.close()
 
-def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
+def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=2000,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
-    node_degrees = np.array(dict(ssv.weighted_graph().degree()).values(),
+    node_degrees = np.array(list(dict(ssv.weighted_graph().degree()).values()),
                             dtype=np.int)
 
     sizes = {}
@@ -787,7 +771,7 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
         paths = nx.single_source_dijkstra_path(ssv.weighted_graph(),
                                                this_i_node,
                                                feature_context_nm)
-        neighs = np.array(paths.keys(), dtype=np.int)
+        neighs = np.array(list(paths.keys()), dtype=np.int)
 
         neigh_diameters = ssv.skeleton["diameters"][neighs]
         this_features.append(np.mean(neigh_diameters))
@@ -891,7 +875,7 @@ def label_array_for_sso_skel(sso, comment_converter):
     cd = skelnode_comment_dict(sso)
     label_array = np.ones(len(sso.skeleton["nodes"]), dtype=np.int) * -1
     for ii, n in enumerate(sso.skeleton["nodes"]):
-        comment = cd[frozenset(n)].lower()
+        comment = cd[frozenset(n.astype(np.int))].lower()
         try:
             label_array[ii] = comment_converter[comment]
         except KeyError:
@@ -967,8 +951,8 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
     else:
         preds = sso.lookup_in_attribute_dict(pred_key)
     loc_coords = np.concatenate(sso.sample_locations())
-    assert len(loc_coords) == len(preds), "Number of view coordinates is" \
-                                          "different from number of view" \
+    assert len(loc_coords) == len(preds), "Number of view coordinates is " \
+                                          "different from number of view " \
                                           "predictions. SSO %d" % sso.id
     if "view_ixs" not in sso.skeleton.keys():
         print("View indices were not yet assigned to skeleton nodes. "
@@ -982,7 +966,7 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
     g = sso.weighted_graph()
     for n in g.nodes():
         paths = nx.single_source_dijkstra_path(g, n, max_dist)
-        neighs = np.array(paths.keys(), dtype=np.int)
+        neighs = np.array(list(paths.keys()), dtype=np.int)
         unique_view_ixs = np.unique(view_ixs[neighs], return_counts=False)
         cls, cnts = np.unique(preds[unique_view_ixs], return_counts=True)
         c = cls[np.argmax(cnts)]
@@ -1035,8 +1019,7 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False,
             sso.skeleton["nodes"] * sso.scaling,
             loc_coords, probas, colors=[0, 1, 2], k=k)
         sso.skeleton["axoness_cnn_k%d%s" % (k, pred_key_appendix)] = node_preds
-        sso.skeleton["axoness_cnn_k%d%s_probas" % (
-            k, pred_key_appendix)] = node_probas
+        sso.skeleton["axoness_cnn_k%d%s_probas" % (k, pred_key_appendix)] = node_probas
     else:
         node_probas, ixs = assign_rep_values(
             sso.skeleton["nodes"] * sso.scaling,
@@ -1063,6 +1046,10 @@ def majority_vote_compartments(sso, ax_pred_key):
         preds = [d[ax_pred_key] for n, d in cc.nodes_iter(data=True)]
         cls, cnts = np.unique(preds, return_counts=True)
         majority = cls[np.argmax(cnts)]
+        probas = np.array(cnts, dtype=np.float32) / np.sum(cnts)
+        # positively bias dendrite assignment
+        if (majority == 1) and (probas[cls == 1] < 0.66):
+            majority = 0
         for n in cc.nodes_iter():
             new_axoness_dc[n] = majority
     nx.set_node_attributes(g, ax_pred_key, new_axoness_dc)
@@ -1076,6 +1063,19 @@ def majority_vote_compartments(sso, ax_pred_key):
 def find_incomplete_ssv_views(ssd, woglia, n_cores=20):
     sd = ssd.get_segmentationdataset("sv")
     incomplete_sv_ids = find_missing_sv_views(sd, woglia, n_cores)
+    missing_ssv_ids = set()
+    for sv_id in incomplete_sv_ids:
+        try:
+            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            missing_ssv_ids.add(ssv_id)
+        except KeyError:
+            pass  # sv does not exist in this SSD
+    return list(missing_ssv_ids)
+
+
+def find_incomplete_ssv_skeletons(ssd, n_cores=20):
+    svs = np.concatenate([list(ssv.svs) for ssv in ssd.ssvs])
+    incomplete_sv_ids = find_missing_sv_skeletons(svs, n_cores)
     missing_ssv_ids = set()
     for sv_id in incomplete_sv_ids:
         try:

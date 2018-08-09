@@ -1,19 +1,13 @@
 # -*- coding: utf-8 -*-
 # SyConn - Synaptic connectivity inference toolkit
-# SyConn Gate is a thin flask server that allows clients
-# over a RESTful HTTP API to interact with a SyConn dataset
+#
 # Copyright (c) 2016 - now
-# Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import sys
 import copy
-import logging
 import time
-
-# temporary for easier development
-#sys.path.append('/u/jkor/repos/SyConn/')
-#sys.path.append('/u/jkor/repos/knossos_utils')
-#sys.path.append('..')
+from ..handler.logger import initialize_logging
 import numpy as np
 from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
@@ -119,7 +113,7 @@ def route_hello():
     return json.dumps({'Welcome to': 'SyConnGate'}, cls=MyEncoder)
 
 
-class SyConnFS_backend(object):
+class SyConn_backend(object):
     def __init__(self, syconnfs_path='', logger=None):
         """
         Initializes a SyConnFS backend for operation.
@@ -167,14 +161,16 @@ class SyConnFS_backend(object):
         :param ssv_id: int
         :return: dict
         """
-        self.logger.info('Loading ssv mesh {0}'.format(ssv_id))
+        start = time.time()
+        self.logger.info('Loading ssv mesh {}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         mesh = {'vertices': mesh[1],
                 'indices': mesh[0],
                 'normals': mesh[2] if len(mesh) == 2 else []}
-        self.logger.info('Got ssv mesh {0}'.format(ssv_id))
+        dtime = start - time.time()
+        self.logger.info('Got ssv mesh {} after {:.0f}'.format(ssv_id, dtime))
         return mesh
 
     def ssv_ind(self, ssv_id):
@@ -182,10 +178,14 @@ class SyConnFS_backend(object):
         :param ssv_id: int
         :return: dict
         """
-        self.logger.info('Loading ssv mesh indices {0}'.format(ssv_id))
+        start = time.time()
+        self.logger.info('Loading {} ssv mesh indices'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
+        dtime = start - time.time()
+        self.logger.info('Got ssv {} mesh indices after'
+                         ' {:.0f}'.format(ssv_id, dtime))
         return b"".join(mesh[0])
 
     def ssv_vert(self, ssv_id):
@@ -194,10 +194,14 @@ class SyConnFS_backend(object):
         :param ssv_id: int
         :return: dict
         """
-        self.logger.info('Loading ssv mesh vertices {0}'.format(ssv_id))
+        start = time.time()
+        self.logger.info('Loading ssv {} mesh vertices'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
+        dtime = start - time.time()
+        self.logger.info('Got ssv {} mesh vertices after'
+                         ' {:.0f}'.format(ssv_id, dtime))
         return b"".join(mesh[1])
 
     def ssv_skeleton(self, ssv_id):
@@ -206,14 +210,14 @@ class SyConnFS_backend(object):
         :param ssv_id: int
         :return: dict
         """
-        self.logger.info('Loading ssv skeleton {0}'.format(ssv_id))
+        self.logger.info('Loading ssv skeleton {}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_skeleton()
         skeleton = ssv.skeleton
         if skeleton is None:
             return {}
         skel_attr = ["nodes", "edges", "diameters"]
-        for k in ['axoness_preds_cnn_v2_views_avg10000', 'axoness_preds_cnn_v2']:
+        for k in ['axoness_preds_cnn_v2_views_avg10000', 'axoness_preds_cnn_v2_views_avg10000_comp_maj']:
             if k in skeleton:
                 skel_attr.append(k)
                 if type(skeleton[k]) is list:
@@ -227,10 +231,14 @@ class SyConnFS_backend(object):
         :param ssv_id: int
         :return: dict
         """
-        self.logger.info('Loading ssv mesh normals {0}'.format(ssv_id))
+        start = time.time()
+        self.logger.info('Loading ssv {} mesh normals'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
+        dtime = start - time.time()
+        self.logger.info('Got ssv {} mesh normals after'
+                         ' {:.0f}'.format(ssv_id, dtime))
         if len(mesh) == 2:
             return ""
         return b"".join(mesh[2])
@@ -269,6 +277,9 @@ class SyConnFS_backend(object):
         :param obj_type: str
         :return: dict
         """
+        start = time.time()
+        self.logger.info('Loading ssv {} {} mesh indices'
+                         ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         if obj_type == "sj":
@@ -282,6 +293,9 @@ class SyConnFS_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
+        dtime = start - time.time()
+        self.logger.info('Got ssv {} {} mesh indices after'
+                         ' {:.0f}'.format(ssv_id, obj_type, dtime))
         return b"".join(mesh[0])
 
     def ssv_obj_vert(self, ssv_id, obj_type):
@@ -291,6 +305,9 @@ class SyConnFS_backend(object):
         :param obj_type: str
         :return: dict
         """
+        start = time.time()
+        self.logger.info('Loading ssv {} {} mesh vertices'
+                         ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         if obj_type == "sj":
@@ -304,6 +321,9 @@ class SyConnFS_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
+        dtime = start - time.time()
+        self.logger.info('Got ssv {} {} mesh vertices after'
+                         ' {:.0f}'.format(ssv_id, obj_type, dtime))
         return b"".join(mesh[1])
 
     def ssv_obj_norm(self, ssv_id, obj_type):
@@ -313,6 +333,9 @@ class SyConnFS_backend(object):
         :param obj_type: str
         :return: dict
         """
+        start = time.time()
+        self.logger.info('Loading ssv {} {} mesh normals'
+                         ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         if obj_type == "sj":
@@ -326,6 +349,9 @@ class SyConnFS_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
+        dtime = start - time.time()
+        self.logger.info('Got ssv {} {} mesh normals after'
+                         ' {:.0f}'.format(ssv_id, obj_type, dtime))
         if len(mesh) == 2:
             return ""
         return b"".join(mesh[2])
@@ -431,40 +457,17 @@ class SyConnFS_backend(object):
 
 
 class ServerState(object):
-    def __init__(self, log_file='/wholebrain/scratch/areaxfs3/gate/server_log'):
+    def __init__(self):
 
-        self.logger = initialize_logging(log_file)
+        self.logger = initialize_logging('gate')
 
         self.logger.info('SyConn gate server starting up.')
-        self.backend = SyConnFS_backend('/wholebrain/scratch/areaxfs3/',
+        self.backend = SyConn_backend('/wholebrain/scratch/areaxfs3/',
                                         logger=self.logger)
         self.logger.info('SyConn gate server running.')
         return
 
 
-def initialize_logging(log_file):
-    logger = logging.getLogger('gate_logger')
-
-    logger.setLevel(logging.INFO)
-
-    # create file handler which logs even debug messages
-    fh = logging.FileHandler(log_file)
-    fh.setLevel(logging.INFO)
-
-    # create console handler with a higher log level
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-
-    # create formatter and add it to the handlers
-    formatter = logging.Formatter('%(asctime)s %(message)s')
-
-    ch.setFormatter(formatter)
-    fh.setFormatter(formatter)
-    # add the handlers to logger
-    logger.addHandler(ch)
-    logger.addHandler(fh)
-
-    return logger
 
 
 class MyEncoder(json.JSONEncoder):

@@ -39,8 +39,8 @@ model = NeuralNetworkInterface(**model_kwargs)
 for p in so_chunk_paths:
     view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
     view_dc = LZ4Dict(view_dc_p, disable_locking=True)
-    svixs = view_dc.keys()
-    views = view_dc.values()
+    svixs = list(view_dc.keys())
+    views = list(view_dc.values())
     if raw_only:
         views = views[:, :1]
     sd = sos_dict_fact(svixs, **so_kwargs)

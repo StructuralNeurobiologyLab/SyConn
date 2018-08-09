@@ -29,7 +29,7 @@ except ImportError:
 from ..proc.ssd_assembly import assemble_from_mergelist
 from ..mp import qsub_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 try:
     default_wd_available = True

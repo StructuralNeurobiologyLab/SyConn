@@ -51,7 +51,7 @@ except:
     # print "skeletopyze not found - you won't be able to compute skeletons. " \
     #       "Install skeletopyze from https://github.com/funkey/skeletopyze"
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 try:
@@ -724,9 +724,7 @@ class SuperSegmentationObject(object):
                 and not force:
             return
         ssh.create_sso_skeleton(self)
-        if len(self.skeleton["nodes"]) != 0:
-            ssh.sparsify_skeleton(self)
-        else:
+        if len(self.skeleton["nodes"]) == 0:
             print("%s has zero nodes." % repr(self))
         self.save_skeleton()
 
@@ -1069,9 +1067,10 @@ class SuperSegmentationObject(object):
             view_key = "%d%d" % (int(woglia), int(raw_only))
         else:
             if not view_key in view_dc:
-                raise KeyError("Given view key '%s' does not exist"
-                                        " in view dictionary of SSV %d. "
-                               "Existing keys: %s\n" % (view_key, self.id, str(view_dc.keys())))
+                raise KeyError("Given view key '{}' does not exist"
+                               " in view dictionary of SSV {} at"
+                               "{}. Existing keys: {}\n".format(view_key, self.id, self.view_path,
+                                                                str(view_dc.keys())))
         if view_key in view_dc and not force_reload:
             return view_dc[view_key]
         del view_dc
@@ -1684,14 +1683,15 @@ class SuperSegmentationObject(object):
         else:
             return None
 
-    def _save_skelfeatures(self, key, features, overwrite=False):
+    def _save_skelfeatures(self, k, features, overwrite=False):
         if not self.skeleton:
             self.load_skeleton()
         assert self.skeleton is not None, "Skeleton does not exist."
-        if key in self.skeleton and not overwrite:
-            raise ValueError("Key %s already exists in skeleton feature dict.")
-        self.skeleton[key] = features
-        assert len(self.skeleton["nodes"]) == len(self.skeleton[key]), \
+        if k in self.skeleton and not overwrite:
+            raise ValueError("Key {} already exists in skeleton"
+                             " feature dict.".format(k))
+        self.skeleton[k] = features
+        assert len(self.skeleton["nodes"]) == len(self.skeleton[k]), \
             "Length of skeleton features is not equal to number of nodes."
         self.save_skeleton()
 
@@ -1702,7 +1702,8 @@ class SuperSegmentationObject(object):
                 ssh.associate_objs_with_skel_nodes(self)
             features = ssh.extract_skel_features(self, feature_context_nm=
             feature_context_nm)
-            self._save_skelfeatures(feature_context_nm, features)
+            self._save_skelfeatures(feature_context_nm, features,
+                                    overwrite=True)
         return features
 
     def write_axpred_rfc(self, dest_path=None, k=1):
@@ -1763,7 +1764,7 @@ class SuperSegmentationObject(object):
             for i_node in range(len(self.skeleton["nodes"])):
                 paths = nx.single_source_dijkstra_path(self.weighted_graph(), i_node,
                                                        max_dist)
-                neighs = np.array(paths.keys(), dtype=np.int)
+                neighs = np.array(list(paths.keys()), dtype=np.int)
                 c = np.argmax(np.sum(probas[neighs], axis=0))
                 pred.append(c)
 
@@ -1776,20 +1777,34 @@ class SuperSegmentationObject(object):
 
     def axoness_for_coords(self, coords, radius_nm=4000, pred_type="axoness"):
         coords = np.array(coords)
-
         self.load_skeleton()
+        if self.skeleton is None or len(self.skeleton["nodes"]) == 0:
+            print("Skeleton did not exist for SSV {} (size: {}; rep. coord.: "
+                  "{}).".format(self.id, self.size, self.rep_coord))
+            return [-1]
+        if pred_type not in self.skeleton:  # for glia SSV this does not exist.
+            return [-1]
         kdtree = scipy.spatial.cKDTree(self.skeleton["nodes"] * self.scaling)
         close_node_ids = kdtree.query_ball_point(coords * self.scaling,
                                                  radius_nm)
-
         axoness_pred = []
         for i_coord in range(len(coords)):
+            curr_close_node_ids = close_node_ids[i_coord]
+            if len(curr_close_node_ids) == 0:
+                dist, curr_close_node_ids = kdtree.query(coords * self.scaling)
+                print(
+                    "Couldn't find skeleton nodes within {} nm. Using nearest "
+                    "one with distance {} nm. SSV ID {}, coordinate at {}."
+                    "".format(radius_nm, dist[0], self.id, coords[i_coord]))
             cls, cnts = np.unique(
-                np.array(self.skeleton[pred_type])[np.array(close_node_ids[i_coord])],
+                np.array(self.skeleton[pred_type])[np.array(curr_close_node_ids)],
                 return_counts=True)
             if len(cls) > 0:
                 axoness_pred.append(cls[np.argmax(cnts)])
             else:
+                print("Did not find any skeleton node within {} nm at {}."
+                      " SSV {} (size: {}; rep. coord.: {}).".format(
+                    radius_nm, i_coord, self.id, self.size, self.rep_coord))
                 axoness_pred.append(-1)
 
         return np.array(axoness_pred)
@@ -1892,7 +1907,7 @@ class SuperSegmentationObject(object):
             for i_node in range(len(self.skeleton["nodes"])):
                 paths = nx.single_source_dijkstra_path(self.weighted_graph(), i_node,
                                                        30000)
-                neighs = np.array(paths.keys(), dtype=np.int)
+                neighs = np.array(list(paths.keys()), dtype=np.int)
                 cnt = Counter(curr_ax_preds[neighs])
                 loc_average = np.zeros((3, ))
                 for k, v in cnt.items():
@@ -1982,7 +1997,7 @@ class SuperSegmentationObject(object):
         for ii in range(len(self.skeleton["nodes"])):
             paths = nx.single_source_dijkstra_path(self.weighted_graph(),
                                                    ii, max_dist)
-            neighs = np.array(paths.keys(), dtype=np.int)
+            neighs = np.array(list(paths.keys()), dtype=np.int)
             labels, cnts = np.unique(prop_array[neighs], return_counts=True)
             maj_label = labels[np.argmax(cnts)]
             maj_votes[ii] = maj_label

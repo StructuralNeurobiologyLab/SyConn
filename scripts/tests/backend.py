@@ -1,6 +1,9 @@
-# SyConnFS
-# Copyright (c) 2016 Philipp J. Schubert
-# All rights reserved
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import numpy as np
 import time
 from multiprocessing import Process
@@ -92,7 +95,7 @@ if 1:
     start = time.time()
     ad = AttributeDict(test_p, read_only=True)
     print("Loading AttributeDict took %0.4f." % (time.time() - start))
-    assert len(ad.keys()) == 10000
+    assert len(list(ad.keys())) == 10000
     assert np.all(ad[0]["glia_proba"] == np.ones((10, 2)).astype(np.uint8))
     ad.update({10000: "b"})
     assert 10000 in ad

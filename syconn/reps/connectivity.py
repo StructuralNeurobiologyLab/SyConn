@@ -2,8 +2,8 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 
 import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
@@ -23,7 +23,7 @@ import pandas
 import scipy.ndimage
 
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
@@ -225,7 +225,7 @@ class ConnectivityMatrix(object):
         return self._blacklist
 
     def extent_sorted_sso_ids(self):
-        sso_ids = np.array(self.shapes.keys()).astype(np.int)
+        sso_ids = np.array(list(self.shapes.keys())).astype(np.int)
         mask = np.in1d(sso_ids, self.blacklist, invert=True)
         sso_ids = sso_ids[mask]
         shapes = np.array(self.shapes.values())[mask]
@@ -236,7 +236,7 @@ class ConnectivityMatrix(object):
                              nb_cpus=1):
         multi_params = []
         for id_block in [self.sj_ids[i:i + stride]
-                         for i in xrange(0, len(self.sj_ids), stride)]:
+                         for i in range(0, len(self.sj_ids), stride)]:
             multi_params.append([id_block, self._sj_version, self._ssd_version,
                                  self.working_dir])
 
@@ -270,7 +270,7 @@ class ConnectivityMatrix(object):
 
         multi_params = []
         for id_block in [present_sso_ids[i:i + stride]
-                         for i in xrange(0, len(present_sso_ids), stride)]:
+                         for i in range(0, len(present_sso_ids), stride)]:
             multi_params.append([id_block, self._sj_version, self._ssd_version,
                                  self.working_dir, self.version])
 

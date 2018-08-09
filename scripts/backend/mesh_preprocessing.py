@@ -1,7 +1,7 @@
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.handler.compression import AttributeDict, MeshDict, VoxelDict
-from syconn.mp.shared_mem import start_multiprocess_imap, start_multiprocess
+from syconn.mp.mp_utils import start_multiprocess_imap, start_multiprocess
 from syconn.proc.meshes import triangulation
 from syconn.config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, wd, \
     get_dataset_scaling
@@ -29,7 +29,7 @@ def mesh_chunk(args):
     scaling = get_dataset_scaling()
     attr_dir, obj_type = args
     ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
-    obj_ixs = ad.keys()
+    obj_ixs = list(ad.keys())
     if len(obj_ixs) == 0:
         print("EMPTY ATTRIBUTE DICT", attr_dir)
         return

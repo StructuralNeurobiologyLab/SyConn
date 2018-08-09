@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 try:
     import cPickle as pkl
 except ImportError:
@@ -7,7 +13,7 @@ import numpy as np
 import os
 from collections import Counter
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 from ..reps import segmentation, super_segmentation
 

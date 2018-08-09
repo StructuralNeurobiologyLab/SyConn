@@ -2,8 +2,8 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import errno
 import os
 import re
@@ -731,7 +731,7 @@ class SegmentationObject(object):
         if not pred_key in self.attr_dict:
             msg = "WARNING: Requested axoness {} for SV {} is "\
                   "not available. Existing keys: {}".format(
-                pred_key, self.id, str(self.attr_dict.keys()))
+                pred_key, self.id, self.attr_dict.keys())
             raise ValueError(msg)
             # return np.array([[0, 1, 0] * len(self.sample_locations())]).reshape((-1, 3))
         return self.attr_dict[pred_key]

@@ -20,6 +20,7 @@ except ImportError:
 from .compression import load_from_h5py, save_to_h5py
 from ..proc.image import normalize_img
 from .basics import read_txt_from_zip, get_filepaths_from_dir, parse_cc_dict_from_kzip
+from numba import jit
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
@@ -62,7 +63,7 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
     try:
         _ = parse_cc_dict_from_kzip(zip_fname)
     except:  # mergelist.txt does not exist
-        label = np.zeros_like(raw).astype(np.uint16)
+        label = np.zeros(size).astype(np.uint16)
         return raw.astype(np.float32) / 255., label
     label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
                                    verbose=False, show_progress=False)
@@ -741,13 +742,23 @@ def get_celltype_model(init_gpu=None):
 
 
 def get_semseg_spiness_model():
-    m = InferenceModel("/wholebrain/u/pschuber/e3training/FCN--VG13/")
+    m = InferenceModel("/wholebrain/scratch/pschuber/e3training_August1st/FCN--VG13/")
+    return m
+
+
+def get_tripletnet_model_e3():
+    m = InferenceModel("/wholebrain/scratch/pschuber/e3training_August1st/ATN-Gauss-noAdv-#1/")
     return m
 
 
 def get_knn_tnet_embedding():
     tnet_eval_dir = "/wholebrain/scratch/pschuber/CNN_Training/" \
                     "nupa_cnn/t_net/ssv6_tripletnet_v9_backup/pred/"
+    return knn_clf_tnet_embedding(tnet_eval_dir)
+
+
+def get_knn_tnet_embedding_e3():
+    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_August1st/ATN-Gauss-noAdv-#1/pred/"
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
@@ -780,6 +791,34 @@ def force_correct_norm(x):
     return x
 
 
+def force_correct_norm_new(x):
+    """
+    For e.g. models trained on views normalized between 0 and 1, whereas empty
+    images are set to 1 / 255. New models trained on old views
+    Parameters
+    ----------
+    x :
+
+    Returns
+    -------
+
+    """
+    import itertools
+    x = x.astype(np.float32)
+    # iterate over view locations, view channels, view numbers: N, 4, 2
+    for ii, jj, kk in itertools.product(np.arange(x.shape[0]), np.arange(x.shape[1]),
+                      np.arange(x.shape[2])):
+        curr_img = x[ii, jj, kk]
+        if np.all(curr_img[0, 0] == curr_img): # everything is the same value / empty view
+            x[ii, jj, kk] = 1.
+        elif np.max(curr_img) <= 1.0 and np.min(curr_img) >= 0:
+            pass
+        elif np.max(curr_img) > 1.0:
+            x[ii, jj, kk] = curr_img / 255.
+        assert np.max(x[ii, jj, kk]) <= 1.0 and np.min(x[ii, jj, kk]) >= 0
+    return x - 0.5
+
+
 def naive_view_normalization(d):
     d = d.astype(np.float32)
     # perform pseudo-normalization
@@ -795,6 +834,10 @@ def naive_view_normalization(d):
     else:
         d = d - 0.5
     return d
+
+
+def naive_view_normalization_new(d):
+    return d.astype(np.float32) / 255. - 0.5
 
 
 def _multi_gpu_ds_pred(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size=None, gpu_ids=(0, 1)):
@@ -814,7 +857,7 @@ def _multi_gpu_ds_pred(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size=None, gpu_
         t.start()
 
 
-def knn_clf_tnet_embedding(fold):
+def knn_clf_tnet_embedding(fold, fit_all=False):
     """
     Currently it assumes embedding for GT views has been created already in 'fold'
     and put into l_train_%d.npy / l_valid_%d.npy files
@@ -849,7 +892,10 @@ def knn_clf_tnet_embedding(fold):
 
     nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='auto', n_jobs=16,
                                 weights='uniform')
-    nbrs.fit(np.concatenate([train_d, valid_d]), np.concatenate([train_l, valid_l]))
+    if fit_all:
+        nbrs.fit(np.concatenate([train_d, valid_d]), np.concatenate([train_l, valid_l]))
+    else:
+        nbrs.fit(train_d, train_l)
     return nbrs
 
 

@@ -1,5 +1,5 @@
 from syconn.reps import super_segmentation as ss
-from syconn.mp.shared_mem import start_multiprocess
+from syconn.mp.mp_utils import start_multiprocess
 # most methods can be run via qsub or shared_mem multiprocessing
 # set your favorite qsub_pe / qsub_queue as parameter
 # you should also set a sufficient stride: ~1000 jobs as result is good

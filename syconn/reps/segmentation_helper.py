@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import glob
 import numpy as np
 from scipy import ndimage
@@ -5,7 +11,7 @@ import os
 from ..handler.compression import MeshDict, VoxelDict, AttributeDict,\
     SkeletonDict, LZ4Dict
 from ..handler.basics import chunkify
-from ..mp.shared_mem import start_multiprocess_imap
+from ..mp.mp_utils import start_multiprocess_imap
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
@@ -43,9 +49,9 @@ def acquire_obj_ids(sd):
         sd._ids = []
         for path in paths:
             if os.path.exists(path + "voxel.pkl"):
-                this_ids = VoxelDict(path + "voxel.pkl",  read_only=True).keys()
+                this_ids = list(VoxelDict(path + "voxel.pkl",  read_only=True).keys())
             elif os.path.exists(path + "attr_dict.pkl"):
-                this_ids = AttributeDict(path + "attr_dict.pkl", read_only=True).keys()
+                this_ids = list(AttributeDict(path + "attr_dict.pkl", read_only=True).keys())
             else:
                 this_ids = []
 
@@ -120,9 +126,6 @@ def load_voxel_list(so):
     if so._voxels is not None:
         voxel_list = np.transpose(np.nonzero(so.voxels)).astype(np.uint32) + \
                      so.bounding_box[0]
-
-        # voxel_list = np.array(zip(*np.nonzero(so.voxels)), dtype=np.int32) + \
-        #              so.bounding_box[0]
     else:
         voxel_dc = VoxelDict(so.voxel_path, read_only=True)
         bin_arrs, block_offsets = voxel_dc[so.id]
@@ -141,7 +144,7 @@ def load_voxel_list(so):
 def load_voxel_list_downsampled(so, downsampling=(2, 2, 1)):
     downsampling = np.array(downsampling)
     dvoxels = so.load_voxels_downsampled(downsampling)
-    voxel_list = np.array(zip(*np.nonzero(dvoxels)), dtype=np.int32)
+    voxel_list = np.array(np.transpose(np.nonzero(dvoxels)), dtype=np.int32)
     voxel_list = voxel_list * downsampling + np.array(so.bounding_box[0])
 
     return voxel_list
@@ -158,11 +161,11 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
         if True in dvoxels:
             break
 
-        downsampling /= 2
+        downsampling = downsampling // 2
         downsampling[downsampling < 1] = 1
         dvoxels = so.load_voxels_downsampled(downsampling)
 
-    voxel_list = np.array(zip(*np.nonzero(dvoxels)), dtype=np.int32)
+    voxel_list = np.array(np.transpose(np.nonzero(dvoxels)), dtype=np.int32)
     voxel_list = voxel_list * downsampling + np.array(so.bounding_box[0])
 
     return voxel_list
@@ -222,13 +225,24 @@ def load_skeleton(so, recompute=False):
             print("\n-----------------------\n"
                   "Skeleton of SV %d (size: %d) not found.\n"
                   "-------------------------\n" % (so.id, so.size))
-            return np.zeros((0,)).astype(np.int), np.zeros((0,)),np.zeros((0,)).astype(np.int)
+            return np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0,)).astype(np.int)
 
     nodes = np.array(nodes, dtype=np.int)
     diameters = np.array(diameters, dtype=np.float)
     edges = np.array(edges, dtype=np.int)
 
     return nodes, diameters, edges
+
+
+def save_skeleton(so, overwrite=False):
+    skeleton_dc = SkeletonDict(so.skeleton_path, read_only=False,
+                               disable_locking=not so.enable_locking)
+    if not overwrite and so.id in skeleton_dc:
+        raise ValueError("Skeleton of SV {} already exists.".format(so.id))
+    sv_skel = {"nodes": so.skeleton[0], "edges": so.skeleton[2],
+               "diameters": so.skeleton[1]}
+    skeleton_dc[so.id] = sv_skel
+    skeleton_dc.save2pkl()
 
 
 def binary_closing(vx, n_iterations=13):
@@ -266,6 +280,18 @@ def find_missing_sv_views(sd, woglia, n_cores=20):
     res = start_multiprocess_imap(sv_view_exists, params, nb_cpus=n_cores,
                                   debug=False)
     return np.concatenate(res)
+
+
+def sv_skeleton_missing(sv):
+    if sv.skeleton is None:
+        sv.load_skeleton()
+    return (sv.skeleton is None) or (len(sv.skeleton[0]) == 0)
+
+
+def find_missing_sv_skeletons(svs, n_cores=20):
+    res = start_multiprocess_imap(sv_skeleton_missing, svs, nb_cpus=n_cores,
+                                  debug=False)
+    return [svs[kk].id for kk in range(len(svs)) if res[kk]]
 
 
 def sv_attr_exists(args):
