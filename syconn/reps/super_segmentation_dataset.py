@@ -18,7 +18,8 @@ from collections import Counter
 from multiprocessing.pool import ThreadPool
 
 from knossos_utils import knossosdataset
-from ..reps import segmentation
+from . import segmentation  # TODO: del
+# from ..reps import segmentation
 from ..config import parser
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 try:

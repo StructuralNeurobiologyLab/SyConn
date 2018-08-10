@@ -179,7 +179,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
         max number of workers running at the same time when using qsub
     :return:
     """
-    if sd.version != "sv":
+    if sd.type != "sv":
         print("WARNING: You are mapping to a non-sv dataset")
 
     assert obj_type in sd.version_dict
@@ -192,8 +192,8 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, obj_type,
-                             sd.version_dict[obj_type], sd.working_dir,
-                             kd_path, readonly])
+                            sd.version_dict[obj_type], sd.working_dir,
+                            kd_path, readonly])
 
     # Running workers - Extracting mapping
 

@@ -652,7 +652,6 @@ class SegmentationObject(object):
                                         disable_locking=not self.enable_locking)
         return self.id in location_dc
 
-
     def views_exist(self, woglia, index_views=False):
         view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views),
                                     disable_locking=not self.enable_locking)
@@ -913,7 +912,7 @@ class SegmentationObject(object):
                 sizes.append(np.sum(bin_arrs[i_bin_arr]))
 
             self._size = np.sum(sizes)
-            block_offsets = np.array(block_offsets)
+
             sizes = np.array(sizes)
             center_of_gravity = [np.mean(block_offsets[:, 0] * sizes) / self.size,
                                  np.mean(block_offsets[:, 1] * sizes) / self.size,

@@ -58,7 +58,7 @@ class SuperSegmentationObject(object):
                  working_dir=None, create=True, sv_ids=None, scaling=None,
                  object_caching=True, voxel_caching=True, mesh_caching=True,
                  view_caching=False, config=None, nb_cpus=1,
-                 enable_locking=True, ssd_type="ssv"):
+                 enable_locking=True, enable_locking_so=True, ssd_type="ssv"):
         """
 
         Parameters
@@ -77,15 +77,31 @@ class SuperSegmentationObject(object):
         voxel_caching : bool
         mesh_caching : bool
         view_caching : bool
-        config :
+        config : bool
+            Locking flag for all SegmentationObjects (mitochondria, vesicle clouds, ...)
         nb_cpus : int
         enable_locking : bool
         ssd_type : str
         """
+
+        if version == "tmp":
+            self._object_caching = False
+            self._voxel_caching = False
+            self._mesh_caching = False
+            self._view_caching = False
+            self.enable_locking = False
+            create = False
+        else:
+            self.enable_locking = enable_locking
+            self._object_caching = object_caching
+            self._voxel_caching = voxel_caching
+            self._mesh_caching = mesh_caching
+            self._view_caching = view_caching
+
+        self.enable_locking_so = enable_locking_so
         self.nb_cpus = nb_cpus
         self._id = ssv_id
         self.attr_dict = {} # dict(mi=[], sj=[], vc=[], sv=[])
-        self.enable_locking = enable_locking
 
         self._type = ssd_type
         self._rep_coord = None
@@ -93,10 +109,6 @@ class SuperSegmentationObject(object):
         self._bounding_box = None
         self._config = config
 
-        self._object_caching = object_caching
-        self._voxel_caching = voxel_caching
-        self._mesh_caching = mesh_caching
-        self._view_caching = view_caching
         self._objects = {}
         self.skeleton = None
         self._voxels = None
@@ -252,9 +264,10 @@ class SuperSegmentationObject(object):
 
     @property
     def attr_dict_path(self):
+        if os.path.isfile(self.ssv_dir + "atrr_dict.pkl"):
+            return self.ssv_dir + "atrr_dict.pkl"
         # TODO: Change as soon as new SSD is created! Now kept for backwards compatibility
         return self.ssv_dir + "atrr_dict.pkl"
-        #return self.ssv_dir + "attr_dict.pkl"
 
     @property
     def skeleton_kzip_path(self):
@@ -536,7 +549,7 @@ class SuperSegmentationObject(object):
                                                working_dir=self.working_dir,
                                                create=False,
                                                scaling=self.scaling,
-                                               enable_locking=self.enable_locking)
+                                               enable_locking=self.enable_locking_so)
 
     def get_seg_dataset(self, obj_type):
         return segmentation.SegmentationDataset(obj_type,
@@ -576,7 +589,7 @@ class SuperSegmentationObject(object):
 
     def load_edgelist(self):
         g = self.load_sv_graph()
-        return g.edges()
+        return list(g.edges())
 
     def _load_obj_mesh(self, obj_type="sv", rewrite=False):
         if not rewrite and self.mesh_exists(obj_type) and not \
@@ -1079,9 +1092,9 @@ class SuperSegmentationObject(object):
                                                    nb_cpus=self.nb_cpus)
         return so_views_exist
 
-    def render_views(self, add_cellobjects=False,
+    def render_views(self, add_cellobjects=False, verbose=False,
                      qsub_pe=None, overwrite=False, cellobjects_only=False,
-                     woglia=True, skip_indexviews=False):
+                     woglia=True, skip_indexviews=False, qsub_co_jobs=100):
         """
         Renders views for each SV based on SSV context and stores them
         on SV level. Usually only used once: for initial glia or axoness
@@ -1100,6 +1113,8 @@ class SuperSegmentationObject(object):
         skip_indexviews : bool
             Index views will not be generated, import for e.g. initial SSV
             rendering prior to glia-splitting.
+        qsub_co_jobs : int
+            Number of parallel jobs if QSUB is used
         Returns
         -------
 
@@ -1122,7 +1137,7 @@ class SuperSegmentationObject(object):
             for k in part.keys():
                 val = part[k]
                 part[k] = [so.id for so in val]
-            params = part.values()
+            params = list(part.values())
             if qsub_pe is None:
                 params = [[self.svs[0].version, skip_indexviews] + list(p) for p in params]
                 sm.start_multiprocess_imap(multi_render_sampled_svidlist, params,
@@ -1139,18 +1154,18 @@ class SuperSegmentationObject(object):
                                  'skip_indexviews': skip_indexviews}
                 params = [[par, so_kwargs, render_kwargs] for par in params]
                 qu.QSUB_script(params, "render_views_partial", pe=qsub_pe, queue=None,
-                               script_folder=script_folder, n_max_co_processes=200)
+                               script_folder=script_folder, n_max_co_processes=qsub_co_jobs)
             else:
                 raise Exception("QSUB not available")
         else:
             # render raw data
             render_sampled_sso(self, add_cellobjects=add_cellobjects,
-                               verbose=False, overwrite=overwrite,
+                               verbose=verbose, overwrite=overwrite,
                                cellobjects_only=cellobjects_only, woglia=woglia)
             if skip_indexviews:
                 return
             # render index views
-            render_sampled_sso(self, verbose=False, overwrite=overwrite,
+            render_sampled_sso(self, verbose=verbose, overwrite=overwrite,
                                index_views=True)
 
     def _render_indexviews(self, nb_views=2, save=True, force_recompute=False):
@@ -1339,7 +1354,9 @@ class SuperSegmentationObject(object):
         list of array
             Sample coordinates for each SV in self.svs.
         """
-        if not force and self._sample_locations:
+        if self.version == 'tmp' and cache:
+            cache = False
+        if not force and self._sample_locations is not None:
             return self._sample_locations
         if not force:
             if self.attr_exists("sample_locations"):
@@ -1347,6 +1364,7 @@ class SuperSegmentationObject(object):
         if verbose:
             start = time.time()
         params = [[sv, {"force": force}] for sv in self.svs]
+
         # list of arrays
         locs = sm.start_multiprocess_obj("sample_locations", params,
                                          nb_cpus=self.nb_cpus)
@@ -1540,7 +1558,7 @@ class SuperSegmentationObject(object):
                                  preds, colors=colors, k=k)
         if dest_path is None or ply_fname is None:
             if not dest_path is None and ply_fname is None:
-                log_reps.warn("Specify 'ply_fanme' in order to save colored"
+                log_reps.warning("Specify 'ply_fanme' in order to save colored"
                               " mesh to k.zip.")
             return mesh[0], mesh[1], col
         else:
@@ -2038,7 +2056,7 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
         else:
             if np.all([sv.views_exist(woglia=woglia) for sv in sos]):
                 return
-    sso = SuperSegmentationObject(np.random.randint(0, sys.maxint),
+    sso = SuperSegmentationObject(sos[0].id,
                                   create=False, enable_locking=False,
                                   working_dir=sos[0].working_dir,
                                   version="tmp", scaling=sos[0].scaling)
@@ -2088,8 +2106,8 @@ def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
         views
     """
     # initilaize temporary SSO for cellobject mapping purposes
-    sso = SuperSegmentationObject(np.random.randint(0, sys.maxint),
-                                  create=False, enable_locking=False,
+    sso = SuperSegmentationObject(so.id,
+                                  create=False,
                                   working_dir=so.working_dir,
                                   version="tmp", scaling=so.scaling)
     sso._objects["sv"] = [so]

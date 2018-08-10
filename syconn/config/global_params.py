@@ -7,7 +7,8 @@
 
 # --------- Define global working directory
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5"
-wd = "/wholebrain/scratch/areaxfs3/"
+wd = "/wholebrain/songbird/j0126/areaxfs_v5/chunkdatasets"
+# wd = "/wholebrain/scratch/areaxfs3/"
 
 # --------- Define backend
 backend = "FS"

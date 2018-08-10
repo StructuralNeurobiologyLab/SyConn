@@ -11,9 +11,11 @@ from syconn.extraction import object_extraction_wrapper as oew
 from syconn.reps import segmentation as seg
 
 kd_seg_path = "/wholebrain/songbird/j0126/areaxfs_v5/knossosdatasets/"
-wd_dir = "/wholebrain/songbird/j0126/areaxfs_v5/"
-cd_dir = wd_dir + "chunkdatasets/sv/"
-sd_dir = wd_dir + "chunkdatasets/"
+wd = "/wholebrain/songbird/j0126/areaxfs_v5/"
+cd_dir = wd + "chunkdatasets/"
+
+# wd = "/wholebrain/songbird/j0126/areaxfs_v5/extract_combine_test"   # TODO: del
+# cd_dir = wd + "/chunkdatasets"  # TODO: del
 
 #### initializing and loading and chunk dataset from knossosdataset
 kd = knossosdataset.KnossosDataset()    # Sets initial values of object
@@ -25,13 +27,26 @@ cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
 
 chunky.save_dataset(cd)
 cd = chunky.load_dataset(cd_dir)
+# chunks = [i for i in range(1000)]   # TODO: del
+#########
+# extract_combine_test
+# oew.from_ids_to_objects(cd, None, hdf5names=["sv"],
+#                    n_folders_fs=10000,
+#                    overlaydataset_path=kd_seg_path,
+#                    chunk_list=chunks, suffix="", n_chunk_jobs=1000,
+#                    qsub_pe="openmp", qsub_queue=None,
+#                    n_max_co_processes=100)
+#########
 
 # Object extraction
-oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=5000,
-                        hdf5names=["sv"], n_max_co_processes=150, qsub_pe='openmp', n_folders_fs=10000)
+# oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=5000,
+#                         hdf5names=["sv"], n_max_co_processes=100, qsub_pe='openmp', n_folders_fs=10000)
 # Object Processing
-sd = seg.SegmentationDataset("sv", working_dir=sd_dir)
-sd_proc.dataset_analysis(sd, qsub_pe="openmp", n_max_co_processes=100)
+sd = seg.SegmentationDataset("sv", working_dir=wd)
+# sd_proc.dataset_analysis(sd, qsub_pe="openmp", n_max_co_processes=100)
+
+sd_proc.map_objects_to_sv(sd, "sj", kd_seg_path, nb_cpus=1,
+                          n_max_co_processes=100, stride=100)   # TODO: qsub_pe="openmp",
 
 ############################################################################################
 # ##### Cell object extraction #####
@@ -45,7 +60,7 @@ sd_proc.dataset_analysis(sd, qsub_pe="openmp", n_max_co_processes=100)
 # # ??The segmentation needs to be written to a KnossosDataset before running this
 # sd_proc.map_objects_to_sv(sj_sd, obj_type, kd_path,
 #                           qsub_pe=my_qsub_pe, nb_cpus=1,
-#                           n_max_co_processes=200)
+#                           n_max_co_processes=100)
 #
 # ##### SSD Assembly #####
 # # ??create SSD and mergelist (knossos)
