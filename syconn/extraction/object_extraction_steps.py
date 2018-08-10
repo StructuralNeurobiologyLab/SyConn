@@ -18,9 +18,8 @@ import time
 import itertools
 from collections import defaultdict
 from knossos_utils import knossosdataset, chunky
-
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-
+from ..handler import log_handler
 from ..mp import qsub_utils as qu, mp_utils as sm
 from ..proc.general import cut_array_in_one_dim
 from ..reps import segmentation, rep_helper as rh
@@ -136,6 +135,12 @@ def object_segmentation(cset, filename, hdf5names,
 
     stitch_overlap = np.array([1, 1, 1])
     if overlap == "auto":
+        # TODO: Check if overlap kwarg can actually be set independent of cset.overlap
+        if np.any(np.array(overlap) > np.array(cset.overlap)):
+            msg = "Untested behavior for overlap kwarg being bigger than cset.overlap." \
+                  " This might lead to stitching failures."
+            log_handler.critical(msg)
+            raise ValueError(msg)
         # Truncation of gaussian kernel is 4 per standard deviation
         # (per default). One overlap for matching of connected components
         if sigmas is None:
@@ -410,7 +415,6 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
         stitch_list = {}
         for hdf5_name in hdf5names:
             stitch_list[hdf5_name] = []
-
         for result in results:
             for hdf5_name in hdf5names:
                 elems = result[hdf5_name]
@@ -464,7 +468,7 @@ def _make_stitch_list_thread(args):
 
     map_dict = {}
     for nb_hdf5_name in range(len(hdf5names)):
-        map_dict[hdf5names[nb_hdf5_name]] = []
+        map_dict[hdf5names[nb_hdf5_name]] = set()
 
     for ii in range(3):
         if neighbours[ii] != -1:
@@ -527,14 +531,9 @@ def _make_stitch_list_thread(args):
                                 cc_area_to_compare[nb_hdf5_name][x, y, z]
                             if this_id != 0:
                                 if compare_id != 0:
-                                    try:
-                                        if map_dict[hdf5_name][-1] != \
-                                                (this_id, compare_id):
-                                            map_dict[hdf5_name].append(
-                                                (this_id, compare_id))
-                                    except:
-                                        map_dict[hdf5_name].append(
-                                            (this_id, compare_id))
+                                    map_dict[hdf5_name].add((this_id, compare_id))
+    for k, v in map_dict.items():
+        map_dict[k] = list(v)
     return map_dict
 
 
@@ -575,7 +574,6 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
             for id in this_cc:
                 merge_dict[hdf5_name][id] = this_cc[0]
                 merge_list_dict[hdf5_name][id] = this_cc[0]
-
     return merge_dict, merge_list_dict
 
 
