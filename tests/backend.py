@@ -46,7 +46,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
         pkl1 = CompressedStorage(test_p, read_only=False)
         pkl1[1] = np.ones((5, 5))
         time.sleep(3)
-        pkl1.save2pkl()
+        pkl1.push()
 
     def create_fail_expected_runtime_error_at_1s(a, b, q1):
         # logging.debug("Started worker to access file for 1s"
@@ -119,7 +119,7 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
         for i in range(100):
             ad[i] = {"glia_probability": np.ones((10, 2)).astype(np.uint8)}
         start = time.time()
-        ad.save2pkl()
+        ad.push()
         logging.debug("Saving AttributeDict took %0.4f." % (time.time() - start))
         logging.debug("AttributeDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del ad
@@ -155,7 +155,7 @@ def test_compression_and_decompression_for_mesh_dict():
         logging.debug("MeshDict arr size (zeros, uncompr.):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in md[1]]) / 1.e3))
         logging.debug("MeshDict arr size (zeros, uncompr.):\t%s" % ([a.shape for a in md[1]]))
 
-        md.save2pkl()
+        md.push()
 
     except Exception as e:
         logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 1 ' + str(e))
@@ -163,7 +163,7 @@ def test_compression_and_decompression_for_mesh_dict():
 
     # checks if lock release after saving works by saving a second time without acquiring lock
     try:
-        md.save2pkl()
+        md.push()
         logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 2 ' + str(e))
     except Exception as e:
         assert str(e) ==  "Unable to release an unacquired lock"
@@ -182,7 +182,7 @@ def test_compression_and_decompression_for_mesh_dict():
         "MeshDict arr size (random, uncompr.):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in md[1]]) / 1.e3))
     logging.debug("MeshDict arr size (random, uncompr.):\t%s" % (([a.shape for a in md[1]])))
 
-    md.save2pkl()
+    md.push()
     logging.debug("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
     del md
 
@@ -210,7 +210,7 @@ def test_compression_and_decompression_for_voxel_dict():
         logging.debug("VoxelDict arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
         start_comp = time.time()
         vd[8192734] = [voxel_masks, offsets]
-        vd.save2pkl()
+        vd.push()
         logging.debug("VoxelDict compression and file writing took %0.4fs." % (time.time() - start_comp))
         logging.debug("VoxelDict file size (zeros):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
@@ -238,7 +238,7 @@ def test_compression_and_decompression_for_voxel_dict():
         start_appending = time.time()
         for i_voxel_mask in range(len(voxel_masks)):
             vd.append(8192734, voxel_masks[i_voxel_mask], offsets[i_voxel_mask])
-        vd.save2pkl()
+        vd.push()
         logging.debug("VoxelDict appending, compression and file writing took %0.4fs." % (time.time() - start_comp))
         logging.debug("VoxelDict file size (zeros):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
@@ -257,7 +257,7 @@ def test_compression_and_decompression_for_voxel_dict():
                      (np.sum([a.__sizeof__() for a in voxel_masks]) / 1.e3))
         logging.debug("VoxelDict arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
         vd[8192734] = [voxel_masks, offsets]
-        vd.save2pkl()
+        vd.push()
         logging.debug("VoxelDict file size (random):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
         # tests decompressing
@@ -291,7 +291,7 @@ def test_compression_and_decompression_for_voxel_dictL():
         logging.debug("VoxelDictL arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
         start_comp = time.time()
         vd[8192734] = [voxel_masks, offsets]
-        vd.save2pkl()
+        vd.push()
         logging.debug("VoxelDictL compression and file writing took %0.4fs." % (time.time() - start_comp))
         logging.debug("VoxelDictL file size (zeros):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
@@ -318,7 +318,7 @@ def test_compression_and_decompression_for_voxel_dictL():
         start_appending = time.time()
         for i_voxel_mask in range(len(voxel_masks)):
             vd.append(8192734, voxel_masks[i_voxel_mask], offsets[i_voxel_mask])
-        vd.save2pkl()
+        vd.push()
         logging.debug("VoxelDictL appending, compression and file writing took %0.4fs." % (time.time() - start_comp))
         logging.debug("VoxelDictL file size (zeros):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
@@ -337,7 +337,7 @@ def test_compression_and_decompression_for_voxel_dictL():
         logging.debug("\nVoxelDictL arr size (random):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in voxel_masks]) / 1.e3))
         logging.debug("VoxelDictL arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
         vd[8192734] = [voxel_masks, offsets]
-        vd.save2pkl()
+        vd.push()
         logging.debug("VoxelDict file size (random):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
         # tests decompressing

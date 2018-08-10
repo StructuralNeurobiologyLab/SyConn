@@ -72,7 +72,7 @@ def save_voxels(so, bin_arr, offset, overwrite=False):
     else:
         voxel_dc[so.id] = [bin_arr], [offset]
 
-    voxel_dc.save2pkl(so.voxel_path)
+    voxel_dc.push(so.voxel_path)
 
 
 def load_voxels(so, voxel_dc=None):
@@ -242,7 +242,7 @@ def save_skeleton(so, overwrite=False):
     sv_skel = {"nodes": so.skeleton[0], "edges": so.skeleton[2],
                "diameters": so.skeleton[1]}
     skeleton_dc[so.id] = sv_skel
-    skeleton_dc.save2pkl()
+    skeleton_dc.push()
 
 
 def binary_closing(vx, n_iterations=13):

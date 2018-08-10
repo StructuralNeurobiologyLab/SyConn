@@ -6,11 +6,11 @@
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 
 from ..config.global_params import backend
-from .base import LZ4DictBase, BTBase
+from .base import FSBase, BTBase
 from ..handler.logger import initialize_logging
 # init backend
 if backend == 'FS':
-    StorageClass = LZ4DictBase
+    StorageClass = FSBase
 elif backend == 'BT':
     StorageClass = BTBase
 # init log

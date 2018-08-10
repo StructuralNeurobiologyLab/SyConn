@@ -58,7 +58,7 @@ def mesh_chunk(args):
                                      n_closings=MESH_CLOSING[obj_type])
         vertices *= scaling
         md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
-    md.save2pkl()
+    md.push()
 
 
 def mesh_proc_chunked(obj_type, working_dir):

@@ -186,9 +186,9 @@ def combine_and_split_cs_agg_helper(args):
             next_id += 100000
 
         if n_items_for_path > n_per_voxel_path:
-            voxel_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+            voxel_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                               "/voxel.pkl")
-            attr_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+            attr_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                              "/attr_dict.pkl")
 
             cur_path_id += 1
@@ -207,9 +207,9 @@ def combine_and_split_cs_agg_helper(args):
                                     read_only=False)
 
     if n_items_for_path > 0:
-        voxel_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+        voxel_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                           "/voxel.pkl")
-        attr_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+        attr_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                          "/attr_dict.pkl")
 
     print("done")
@@ -258,7 +258,7 @@ def map_objects_to_cs_thread(args):
 
             cs_obj.attr_dict.update(mapping_feats)
             this_attr_dc[cs_id] = cs_obj.attr_dict
-        this_attr_dc.save2pkl()
+        this_attr_dc.push()
 
 
 def map_objects_to_single_cs(cs_obj, ssd_version=None, max_map_dist_nm=2000,

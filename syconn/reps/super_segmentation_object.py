@@ -519,7 +519,7 @@ class SuperSegmentationObject(object):
             mesh_dc["axon"] = mesh_compartments["axon"]
             mesh_dc["dendrite"] = mesh_compartments["dendrite"]
             mesh_dc["soma"] = mesh_compartments["soma"]
-            mesh_dc.save2pkl()
+            mesh_dc.push()
         comp_meshes = {k: mesh_dc[k] for k in ["axon", "dendrite", "soma"]}
         self._meshes.update(comp_meshes)
 
@@ -608,7 +608,7 @@ class SuperSegmentationObject(object):
                 mesh_dc = MeshStorage(self.mesh_dc_path, read_only=False,
                                       disable_locking=not self.enable_locking)
                 mesh_dc[obj_type] = [ind, vert, normals]
-                mesh_dc.save2pkl()
+                mesh_dc.push()
         return np.array(ind, dtype=np.int), np.array(vert, dtype=np.int),\
                np.array(normals, dtype=np.float32)
 
@@ -1026,7 +1026,7 @@ class SuperSegmentationObject(object):
         view_dc = CompressedStorage(self.view_path, read_only=False,
                                     disable_locking=not self.enable_locking)
         view_dc[view_key] = views
-        view_dc.save2pkl()
+        view_dc.push()
 
     def load_views(self, view_key=None, woglia=True, raw_only=False, force_reload=False,
                    cache_default_views=False, nb_cpus=None, ignore_missing=False):
@@ -1083,7 +1083,7 @@ class SuperSegmentationObject(object):
                   "(raw_only: %d, woglia: %d; #views: %d)" % (self.id,
                   self.view_path, int(raw_only), int(woglia), len(views)))
             view_dc[view_key] = views
-            view_dc.save2pkl()
+            view_dc.push()
         return views
 
     def view_existence(self, woglia=True):
@@ -1290,7 +1290,7 @@ class SuperSegmentationObject(object):
         self.attr_dict["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)] = maj_vote
         ad = AttributeDict(self.attr_dict_path, read_only=False)
         ad["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)] = maj_vote
-        ad.save2pkl()
+        ad.push()
         # will cause collisions if this method is called multiple times for the same ssv during multiprocessing
         # self.save_attributes(["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)], [maj_vote])
         col = colors[maj_vote].astype(np.uint8)

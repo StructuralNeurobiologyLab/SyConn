@@ -25,7 +25,7 @@ if 1:
         lala[1] = np.ones((5, 5))
         print(lala[1])
         time.sleep(3)
-        lala.save2pkl()
+        lala.push()
 
     def create_fail():
         time.sleep(0)
@@ -87,7 +87,7 @@ if 1:
     for i in range(10000):
         ad[i] = {"glia_proba": np.ones((10, 2)).astype(np.uint8)}
     start = time.time()
-    ad.save2pkl()
+    ad.push()
     print("Saving AttributeDict took %0.4f." % (time.time() - start))
     print("AttributeDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
     del ad
@@ -118,11 +118,11 @@ if 1:
     md[1] = [np.ones(10000).astype(np.uint32), np.zeros(20000).astype(np.float32)]
     print("MeshDict arr size (zeros, uncompr.):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in md[1]]) / 1.e3))
     print("MeshDict arr size (zeros, uncompr.):\t%s" % (([a.shape for a in  md[1]])))
-    md.save2pkl()
+    md.push()
 
     #  check if lock release after saving works by saving a second time without acquiring lock
     try:
-        md.save2pkl()
+        md.push()
     except Exception as e:
         assert str(e) == "Unable to release an unacquired lock"
     print("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
@@ -138,7 +138,7 @@ if 1:
         pass
     print("MeshDict arr size (random, uncompr.):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in md[1]]) / 1.e3))
     print("MeshDict arr size (random, uncompr.):\t%s" % (([a.shape for a in  md[1]])))
-    md.save2pkl()
+    md.push()
     print("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
     del md
 
@@ -161,7 +161,7 @@ if 1:
     print("VoxelDict arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
     start_comp = time.time()
     vd[8192734] = [voxel_masks, offsets]
-    vd.save2pkl()
+    vd.push()
     print("VoxelDict compression and file writing took %0.4fs." % (time.time() - start_comp))
     print("VoxelDict file size (zeros):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
     del vd
@@ -184,7 +184,7 @@ if 1:
     start_appending = time.time()
     for i_voxel_mask in range(len(voxel_masks)):
         vd.append(8192734, voxel_masks[i_voxel_mask], offsets[i_voxel_mask])
-    vd.save2pkl()
+    vd.push()
     print("VoxelDict appending, compression and file writing took %0.4fs." % (time.time() - start_comp))
     print("VoxelDict file size (zeros):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
     del vd
@@ -198,7 +198,7 @@ if 1:
     print("\nVoxelDict arr size (random):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in voxel_masks]) / 1.e3))
     print("VoxelDict arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
     vd[8192734] = [voxel_masks, offsets]
-    vd.save2pkl()
+    vd.push()
     print("VoxelDict file size (random):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
     del vd
     # test decompressing
@@ -228,7 +228,7 @@ if 1:
     print("VoxelDictL arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
     start_comp = time.time()
     vd[8192734] = [voxel_masks, offsets]
-    vd.save2pkl()
+    vd.push()
     print("VoxelDictL compression and file writing took %0.4fs." % (time.time() - start_comp))
     print("VoxelDictL file size (zeros):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
     del vd
@@ -251,7 +251,7 @@ if 1:
     start_appending = time.time()
     for i_voxel_mask in range(len(voxel_masks)):
         vd.append(8192734, voxel_masks[i_voxel_mask], offsets[i_voxel_mask])
-    vd.save2pkl()
+    vd.push()
     print("VoxelDictL appending, compression and file writing took %0.4fs." % (time.time() - start_comp))
     print("VoxelDictL file size (zeros):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
     del vd
@@ -265,7 +265,7 @@ if 1:
     print("\nVoxelDictL arr size (random):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in voxel_masks]) / 1.e3))
     print("VoxelDictL arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
     vd[8192734] = [voxel_masks, offsets]
-    vd.save2pkl()
+    vd.push()
     print("VoxelDict file size (random):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
     del vd
     # test decompressing

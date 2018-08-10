@@ -205,7 +205,7 @@ class MeshStorage(StorageClass):
         ----------
         key : int/str
         mesh : list of np.array
-            [indices, vertices, optional: normals]
+            [indices, vertices, normals]
         """
         if len(mesh) == 2:
             mesh.append(np.zeros((0, ), dtype=np.float32))

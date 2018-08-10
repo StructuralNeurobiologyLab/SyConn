@@ -135,7 +135,7 @@ def _dataset_analysis_thread(args):
                 this_attr_dc[so_id] = so.attr_dict
 
             if recompute:
-                this_attr_dc.save2pkl()
+                this_attr_dc.push()
 
     return global_attr_dict
 
@@ -317,7 +317,7 @@ def _map_objects_thread(args):
                 this_attr_dc[so_id] = so.attr_dict
 
         if not readonly:
-            this_attr_dc.save2pkl()
+            this_attr_dc.push()
 
     return sv_id_dict
 
@@ -342,7 +342,7 @@ def _write_mapping_to_sv_thread(args):
             this_attr_dc[sv_id]["mapping_%s_ratios" % obj_type] = \
                 list(mapping_dict[sv_id].values())
 
-        this_attr_dc.save2pkl()
+        this_attr_dc.push()
 
 
 def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
@@ -396,7 +396,7 @@ def _binary_filling_cs_thread(args):
 
             this_vx_dc[so_id] = [filled_voxels], [so.bounding_box[0]]
 
-        this_vx_dc.save2pkl()
+        this_vx_dc.push()
 
 
 def init_sos(sos_dict):
@@ -655,5 +655,5 @@ def _extract_synapse_type_thread(args):
             so.attr_dict["syn_type_sym_ratio"] = sym_ratio
             this_attr_dc[so_id] = so.attr_dict
 
-        this_attr_dc.save2pkl()
+        this_attr_dc.push()
 

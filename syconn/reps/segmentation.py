@@ -683,7 +683,7 @@ class SegmentationObject(object):
             loc_dc = CompressedStorage(self.locations_path, read_only=False,
                                        disable_locking=not self.enable_locking)
             loc_dc[self.id] = coords.astype(np.float32)
-            loc_dc.save2pkl()
+            loc_dc.push()
             return coords.astype(np.float32)
 
     def save_voxels(self, bin_arr, offset, overwrite=False):
@@ -754,7 +754,7 @@ class SegmentationObject(object):
         mesh_dc = MeshStorage(self.mesh_path, read_only=False,
                               disable_locking=not self.enable_locking)
         mesh_dc[self.id] = [ind, vert, normals]
-        mesh_dc.save2pkl()
+        mesh_dc.push()
 
     def mesh2kzip(self, dest_path, ext_color=None, ply_name=""):
         """
@@ -831,7 +831,7 @@ class SegmentationObject(object):
                                               axis=1)
         else:
             view_dc[self.id] = views
-        view_dc.save2pkl()
+        view_dc.push()
 
     def load_attr_dict(self):
         try:
@@ -850,7 +850,7 @@ class SegmentationObject(object):
         else:
             orig_dc = self.attr_dict
         glob_attr_dc[self.id] = orig_dc
-        glob_attr_dc.save2pkl()
+        glob_attr_dc.push()
 
     def save_attributes(self, attr_keys, attr_values):
         """
@@ -874,7 +874,7 @@ class SegmentationObject(object):
                                      disable_locking=not self.enable_locking)
         for k, v in zip(attr_keys, attr_values):
             glob_attr_dc[self.id][k] = v
-        glob_attr_dc.save2pkl()
+        glob_attr_dc.push()
 
     def attr_exists(self, attr_key):
         if len(self.attr_dict) == 0:

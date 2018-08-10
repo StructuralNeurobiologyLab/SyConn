@@ -880,7 +880,7 @@ def _extract_voxels_thread(args):
 
                 if id_count > (cur_path_id + 1) * n_per_voxel_path and \
                         cur_path_id + 1 < len(voxel_paths):
-                    voxel_dc.save2pkl(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl")
+                    voxel_dc.push(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl")
                     cur_path_id += 1
                     voxel_dc = VoxelStorage(dataset_path + voxel_paths[cur_path_id],
                                             read_only=False,
@@ -891,7 +891,7 @@ def _extract_voxels_thread(args):
                 else:
                     next_id += n_folders_fs
 
-            voxel_dc.save2pkl(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl")
+            voxel_dc.push(dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl")
 
     return map_dict
 
@@ -1024,7 +1024,7 @@ def _combine_voxels_thread(args):
                 else:
                     voxel_dc.append(so_id, bin_arrs[0], block_offsets[0])
 
-        voxel_dc.save2pkl(segdataset.so_storage_path + voxel_rel_path +
+        voxel_dc.push(segdataset.so_storage_path + voxel_rel_path +
                           "/voxel.pkl")
 
 
@@ -1174,4 +1174,4 @@ def _extract_voxels_combined_thread(args):
                 else:
                     voxel_dc[sv_id] = [id_mask], [abs_offset]
 
-                voxel_dc.save2pkl(segdataset.so_storage_path + voxel_rel_path + "/voxel.pkl")
+                voxel_dc.push(segdataset.so_storage_path + voxel_rel_path + "/voxel.pkl")

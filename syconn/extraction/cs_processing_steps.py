@@ -167,9 +167,9 @@ def _combine_and_split_cs_agg_thread(args):
             next_id += 100000
 
         if n_items_for_path > n_per_voxel_path:
-            voxel_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+            voxel_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                               "/voxel.pkl")
-            attr_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+            attr_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                              "/attr_dict.pkl")
 
             cur_path_id += 1
@@ -191,9 +191,9 @@ def _combine_and_split_cs_agg_thread(args):
                                     read_only=False)
 
     if n_items_for_path > 0:
-        voxel_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+        voxel_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                           "/voxel.pkl")
-        attr_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+        attr_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                          "/attr_dict.pkl")
 
     print("done")
@@ -305,7 +305,7 @@ def _map_objects_to_cs_thread(args):
 
             cs_obj.attr_dict.update(mapping_feats)
             this_attr_dc[cs_id] = cs_obj.attr_dict
-        this_attr_dc.save2pkl()
+        this_attr_dc.push()
 
 
 def map_objects_to_single_cs(cs_obj, ssd_version=None, max_map_dist_nm=2000,
@@ -552,8 +552,8 @@ def _overlap_mapping_sj_to_cs_thread(args):
                 n_items_for_path += 1
 
         if n_items_for_path > 0:
-            voxel_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/voxel.pkl")
-            attr_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
+            voxel_dc.push(conn_sd.so_storage_path + rel_path + "/voxel.pkl")
+            attr_dc.push(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
 
 
 def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm=2000):
@@ -699,8 +699,8 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
 
                 next_conn_id += conn_sd.n_folders_fs
 
-        voxel_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/voxel.pkl")
-        attr_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
+        voxel_dc.push(conn_sd.so_storage_path + rel_path + "/voxel.pkl")
+        attr_dc.push(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
 
 
 def write_conn_gt_kzips(conn, n_objects, folder):
@@ -874,7 +874,7 @@ def _map_objects_to_conn_thread(args):
         conn_o.attr_dict.update(conn_feats)
         this_attr_dc[conn_id] = conn_o.attr_dict
 
-    this_attr_dc.save2pkl()
+    this_attr_dc.push()
 
 
 def map_objects_to_single_conn(conn_o, ssv, mi_sd, vc_sd,
@@ -987,7 +987,7 @@ def _classify_conn_objects_thread(args):
         conn_o.attr_dict.update({"syn_prob": syn_prob})
         this_attr_dc[conn_id] = conn_o.attr_dict
 
-    this_attr_dc.save2pkl()
+    this_attr_dc.push()
 
 
 def collect_axoness_from_ssv_partners(wd, conn_version=None,
@@ -1040,7 +1040,7 @@ def _collect_axoness_from_ssv_partners_thread(args):
             conn_o.attr_dict.update({"partner_axoness": axoness})
             this_attr_dc[conn_id] = conn_o.attr_dict
 
-        this_attr_dc.save2pkl()
+        this_attr_dc.push()
 
 
 def export_matrix(wd, conn_version=None, dest_name=None, syn_prob_t=.5):

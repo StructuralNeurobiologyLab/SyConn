@@ -51,6 +51,6 @@ for p in so_chunk_paths:
     ad = AttributeDict(attr_dc_p, disable_locking=True)
     for ii in range(len(sos)):
         ad[sos[ii].id][pred_key] = probas[ii]
-    ad.save2pkl()
+    ad.push()
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)
