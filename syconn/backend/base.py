@@ -131,11 +131,11 @@ class FSBase(StorageBase):
         self._dc_intern = {}
         self._path = inp_p
         if inp_p is not None:
-            if isinstance(inp_p, str):
+            if type(inp_p) is str:
                 self.pull(inp_p)
             else:
-                raise("Unsupported initialization type %s for LZ4Dict." %
-                      type(inp_p), NotImplementedError)
+                raise NotImplementedError("Unsupported initialization type %s for LZ4Dict." %
+                      type(inp_p))
 
     def __delitem__(self, key):
         try:
@@ -198,15 +198,16 @@ class FSBase(StorageBase):
             source = self._path
         fold, fname = os.path.split(source)
         lock_path = fold + "/." + fname + ".lk"
-        if not os.path.isfile(source):
-            self._dc_intern = {}
-            return
+        if not os.path.isdir(source):
+            try:
+                os.makedirs(os.path.split(source)[0])
+            except:  # if tqo jobs create the folder at the same time
+                pass
         # acquires lock until released when saving or after loading if self.read_only
         if not self.disable_locking:
-            gotten = False
+            self.a_lock = fasteners.InterProcessLock(lock_path)
             nb_attempts = 1
             while True:
-                self.a_lock = fasteners.InterProcessLock(lock_path)
                 start = time.time()
                 gotten = self.a_lock.acquire(blocking=True, delay=0.1,
                                              max_delay=self.max_delay,
@@ -218,13 +219,17 @@ class FSBase(StorageBase):
                     break
             if not gotten:
                 raise RuntimeError("Unable to acquire file lock for %s after"
-                               "%0.0fs." % (source, time.time()-start))
-        try:
-            self._dc_intern = load_pkl2obj(source)
-        except EOFError:
-            warnings.warn("Could not load LZ4Dict (%s). 'push' will"
-                          " overwrite broken .pkl file." % self._path,
-                          RuntimeWarning)
+                                   "%0.0fs." % (source, time.time()-start))
+        if os.path.isfile(source):
+            try:
+                self._dc_intern = load_pkl2obj(source)
+            except EOFError:
+                warnings.warn("Could not load LZ4Dict (%s). 'push' will"
+                              " overwrite broken .pkl file." % self._path,
+                              RuntimeWarning)
+                self._dc_intern = {}
+        else:
             self._dc_intern = {}
         if self.read_only and not self.disable_locking:
             self.a_lock.release()
+

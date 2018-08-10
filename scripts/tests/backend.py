@@ -11,7 +11,9 @@ from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorag
     VoxelStorage
 import os
 
-test_p = "/wholebrain/scratch/areaxfs/test.pkl"
+dir_path = os.path.dirname(os.path.realpath(__file__))
+
+test_p = str(dir_path + "/test.pkl")
 if os.path.isfile(test_p):
     os.remove(test_p)
 
@@ -21,7 +23,7 @@ if 1:
 
     def create_waite_close():
         print("Created blocking LZ4Dict for 3s.")
-        lala = CompressedStorage(test_p, read_only=False) # check if blocking times out after 0.5
+        lala = CompressedStorage(test_p, read_only=False)  # check if blocking times out after 0.5
         lala[1] = np.ones((5, 5))
         print(lala[1])
         time.sleep(3)
@@ -59,7 +61,6 @@ if 1:
         except Exception as e:
             print("\n%s\nStopped loading attempt after %0.1fs.\n" % (e, (time.time() - start)))
             raise (AssertionError)
-
     p = Process(target=create_waite_close)
     p.start()
     time.sleep(0.1)
