@@ -19,6 +19,7 @@ import os
 import warnings
 import time
 import shutil
+from ..extraction import log_extraction
 from ..handler.basics import write_obj2pkl, load_pkl2obj
 __all__ = ['FSBase', 'BTBase']
 # TODO: adapt to new class interface all-over syconn
@@ -134,14 +135,18 @@ class FSBase(StorageBase):
             if type(inp_p) is str:
                 self.pull(inp_p)
             else:
-                raise NotImplementedError("Unsupported initialization type %s for LZ4Dict." %
-                      type(inp_p))
+                msg = "Unsupported initialization type {} for LZ4Dict.".format(type(inp_p))
+                log_extraction.error(msg)
+                raise NotImplementedError(msg)
 
     def __delitem__(self, key):
         try:
             del self[key]
         except KeyError:
-            raise AttributeError("No such attribute: ", key)
+            msg = "No such attribute {} in dict at {}. Existing keys:" \
+                  " {}.".format(key, self._path, list(self.keys()))
+            log_extraction.error(msg)
+            raise AttributeError(msg)
 
     def __del__(self):
         if self.a_lock is not None and self.a_lock.acquired:
@@ -198,10 +203,13 @@ class FSBase(StorageBase):
             source = self._path
         fold, fname = os.path.split(source)
         lock_path = fold + "/." + fname + ".lk"
-        if not os.path.isdir(source):
+        if not os.path.isdir(fold):
             try:
-                os.makedirs(os.path.split(source)[0])
-            except:  # if tqo jobs create the folder at the same time
+                os.makedirs(fold)
+            except OSError as e:  # if to jobs create the folder at the same time
+                log_extraction.warning("Tried to create folder of dict {}, but it already existed. "
+                                       "Multiple jobs might work on same chunk almost"
+                                       " simultaneously. Error {}.".format(self._path, e))
                 pass
         # acquires lock until released when saving or after loading if self.read_only
         if not self.disable_locking:
@@ -218,15 +226,15 @@ class FSBase(StorageBase):
                 else:
                     break
             if not gotten:
-                raise RuntimeError("Unable to acquire file lock for %s after"
-                                   "%0.0fs." % (source, time.time()-start))
+                msg = "Unable to acquire file lock for %s after {:.0f}s.".format(source, time.time()-start)
+                log_extraction.warning(msg)
+                raise RuntimeError(msg)
         if os.path.isfile(source):
             try:
                 self._dc_intern = load_pkl2obj(source)
             except EOFError:
-                warnings.warn("Could not load LZ4Dict (%s). 'push' will"
-                              " overwrite broken .pkl file." % self._path,
-                              RuntimeWarning)
+                log_extraction.warning("Could not load LZ4Dict ({}). 'push' will"
+                                       " overwrite broken .pkl file.".format(self._path))
                 self._dc_intern = {}
         else:
             self._dc_intern = {}

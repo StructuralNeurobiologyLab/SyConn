@@ -1165,7 +1165,7 @@ def _extract_voxels_combined_thread(args):
                 voxel_rel_path = rh.subfold_from_ix(sv_id, n_folders_fs)
                 voxel_dc = VoxelStorageL(
                     segdataset.so_storage_path + voxel_rel_path + "/voxel.pkl",
-                    read_only=False)
+                    read_only=False, disable_locking=False)
 
                 if sv_id in voxel_dc:
                     voxel_dc.append(sv_id, id_mask, abs_offset)
