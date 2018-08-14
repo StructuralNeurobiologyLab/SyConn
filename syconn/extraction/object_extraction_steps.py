@@ -25,6 +25,7 @@ from ..proc.general import cut_array_in_one_dim
 from ..reps import segmentation, rep_helper as rh
 from ..handler import basics
 from syconn.backend.storage import VoxelStorageL, VoxelStorage
+from syconn.proc.image import multi_mop
 
 
 def gauss_threshold_connected_components(*args, **kwargs):
@@ -134,7 +135,7 @@ def object_segmentation(cset, filename, hdf5names,
                         "match!")
 
     stitch_overlap = np.array([1, 1, 1])
-    if overlap == "auto":
+    if overlap is "auto":
         # TODO: Check if overlap kwarg can actually be set independent of cset.overlap
         if np.any(np.array(overlap) > np.array(cset.overlap)):
             msg = "Untested behavior for overlap kwarg being bigger than cset.overlap." \
@@ -367,7 +368,7 @@ def _make_unique_labels_thread(args):
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                      overlap, debug, suffix="", qsub_pe=None, qsub_queue=None,
-                     n_max_co_processes=100, nb_cpus=1):
+                     n_max_co_processes=100, nb_cpus=1, n_erosion=0):
     """
     Creates a stitch list for the overlap region between chunks
 
@@ -396,9 +397,12 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
         qsub parallel environment
     qsub_queue: str or None
         qsub queue
+    n_erosion : int
+        Number of erosions applied to the segmentation of unique_components0 to avoid
+        segmentation artefacts caused by start location dependency in chunk data array.
 
-    Returns:
-    --------
+    Returns
+    -------
     stitch_list: list
         list of overlapping component ids
     """
@@ -406,7 +410,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
     multi_params = []
     for nb_chunk in chunk_list:
         multi_params.append([cset, nb_chunk, filename, hdf5names,
-                             stitch_overlap, overlap, suffix, chunk_list])
+                             stitch_overlap, overlap, suffix, chunk_list, n_erosion])
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess_imap(_make_stitch_list_thread,
@@ -456,20 +460,28 @@ def _make_stitch_list_thread(args):
     overlap = args[5]
     suffix = args[6]
     chunk_list = args[7]
+    n_erosion = args[8]
 
     chunk = cset.chunk_dict[nb_chunk]
     cc_data_list = basics.load_from_h5py(chunk.folder + filename +
                                          "_unique_components%s.h5"
                                          % suffix, hdf5names)
+    # erode segmentaiton once to avoid start location dependent segmentation artefacts
+    struct = np.zeros((3, 3, 3)).astype(np.bool)
+    mask = np.array([[0, 1, 0], [1, 1, 1], [0, 1, 0]]).astype(np.bool)
+    struct[:, :, 1] = mask  # only perform erosion in xy plane
+    for kk in range(len(cc_data_list)):
+        cc_data_list[kk] = multi_mop(scipy.ndimage.binary_erosion, cc_data_list[kk], n_iters=n_erosion,
+                                     use_find_objects=True, mop_kwargs={'structure': struct}, verbose=False)
     neighbours, pos = cset.get_neighbouring_chunks(chunk, chunklist=chunk_list,
                                                    con_mode=7)
-
     neighbours = neighbours[np.any(pos > 0, axis=1)]
 
     map_dict = {}
     for nb_hdf5_name in range(len(hdf5names)):
         map_dict[hdf5names[nb_hdf5_name]] = set()
-
+    # Compare only half of 6-neighborhood for every chunk which suffices to cover all overlap areas. Checking all
+    # neighbors for every chunk would lead to twice and redundant computational load
     for ii in range(3):
         if neighbours[ii] != -1:
             compare_chunk = cset.chunk_dict[neighbours[ii]]
@@ -477,10 +489,16 @@ def _make_stitch_list_thread(args):
                 basics.load_from_h5py(compare_chunk.folder + filename +
                                       "_unique_components%s.h5"
                                       % suffix, hdf5names)
+            # erode segmentaiton once to avoid start location dependent segmentation artefacts
+            for kk in range(len(cc_data_list_to_compare)):
+                cc_data_list_to_compare[kk] = multi_mop(scipy.ndimage.binary_erosion, cc_data_list_to_compare[kk],
+                                                        n_iters=n_erosion, use_find_objects=True,
+                                                        mop_kwargs={'structure': struct}, verbose=False)
 
             cc_area = {}
             cc_area_to_compare = {}
-            if ii < 3:
+            if ii > 3:  # would only cause redundant comparisons. Compare only half of 6-neighborhood for every chunk
+                id = ii - 3
                 for nb_hdf5_name in range(len(hdf5names)):
                     this_cc_data = cc_data_list[nb_hdf5_name]
                     this_cc_data_to_compare = \
@@ -489,19 +507,19 @@ def _make_stitch_list_thread(args):
                     cc_area[nb_hdf5_name] = \
                         cut_array_in_one_dim(
                             this_cc_data,
-                            overlap[ii] - stitch_overlap[ii],
-                            overlap[ii] + stitch_overlap[ii], ii)
+                            overlap[id] - stitch_overlap[id],
+                            overlap[id] + stitch_overlap[id], id)
 
                     cc_area_to_compare[nb_hdf5_name] = \
                         cut_array_in_one_dim(
                             this_cc_data_to_compare,
-                            this_cc_data_to_compare.shape[ii] - overlap[ii] -
-                            stitch_overlap[ii],
-                            this_cc_data_to_compare.shape[ii] - overlap[ii] +
-                            stitch_overlap[ii], ii)
+                            this_cc_data_to_compare.shape[id] - overlap[id] -
+                            stitch_overlap[id],
+                            this_cc_data_to_compare.shape[id] - overlap[id] +
+                            stitch_overlap[id], id)
 
             else:
-                id = ii - 3
+                id = ii
                 for nb_hdf5_name in range(len(hdf5names)):
                     this_cc_data = cc_data_list[nb_hdf5_name]
                     this_cc_data_to_compare = \
@@ -520,18 +538,24 @@ def _make_stitch_list_thread(args):
                             overlap[id] + stitch_overlap[id], id)
 
             for nb_hdf5_name in range(len(hdf5names)):
-                this_shape = cc_area[nb_hdf5_name].shape
-                for x in range(this_shape[0]):
-                    for y in range(this_shape[1]):
-                        for z in range(this_shape[2]):
-
-                            hdf5_name = hdf5names[nb_hdf5_name]
-                            this_id = cc_area[nb_hdf5_name][x, y, z]
-                            compare_id = \
-                                cc_area_to_compare[nb_hdf5_name][x, y, z]
-                            if this_id != 0:
-                                if compare_id != 0:
-                                    map_dict[hdf5_name].add((this_id, compare_id))
+                hdf5_name = hdf5names[nb_hdf5_name]
+                stitch_ixs = np.transpose(np.nonzero((cc_area[nb_hdf5_name] != 0) &
+                                                     (cc_area_to_compare[nb_hdf5_name])))
+                for stitch_pos in stitch_ixs:
+                    stitch_pos = tuple(stitch_pos)
+                    this_id = cc_area[nb_hdf5_name][stitch_pos]
+                    compare_id = cc_area_to_compare[nb_hdf5_name][stitch_pos]
+                    pair = tuple((this_id, compare_id))
+                    if pair not in map_dict[hdf5_name]:
+                        map_dict[hdf5_name].add(pair)
+                        obj_coord_intern = np.transpose(np.nonzero(cc_data_list[nb_hdf5_name] == this_id))
+                        obj_coord_intern_compare = np.transpose(np.nonzero(cc_data_list_to_compare[nb_hdf5_name] == compare_id))
+                        c1 = chunk.coordinates - chunk.overlap + obj_coord_intern + np.array([1, 1, 1])
+                        c2 = compare_chunk.coordinates - compare_chunk.overlap + obj_coord_intern_compare + np.array([1, 1, 1])
+                        if not np.all(c1[0] == c2[0]):
+                            msg = "(stitch ID 1, stitch ID 2), stitch location 1, stitch location 2:" \
+                                  " {}".format((pair, c1[0], c2[0]))
+                            log_handler.debug(msg)
     for k, v in map_dict.items():
         map_dict[k] = list(v)
     return map_dict

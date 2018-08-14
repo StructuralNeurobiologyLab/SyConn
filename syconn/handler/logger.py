@@ -13,7 +13,7 @@ __all__ = ['log_main', 'initialize_logging']
 def get_main_log():
     logger = logging.getLogger('syconn')
     coloredlogs.install(level='DEBUG', logger=logger)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     # create file handler which logs even debug messages
     log_dir = os.path.expanduser('~') + "/SyConn/logs/"
     # Python2 compat.
@@ -23,7 +23,7 @@ def get_main_log():
         if not os.path.isdir(log_dir):
             os.makedirs(log_dir)
     fh = logging.FileHandler(log_dir + 'syconn.log')
-    fh.setLevel(logging.INFO)
+    fh.setLevel(logging.DEBUG)
 
     # add the handlers to logger
     if os.path.isfile(log_dir + 'syconn.log'):
@@ -55,7 +55,7 @@ def initialize_logging(log_name):
                       " here: {}".format(predefined_lognames))
     logger = logging.getLogger(log_name)
     coloredlogs.install(level='DEBUG', logger=logger)
-    logger.setLevel(logging.INFO)
+    logger.setLevel(logging.DEBUG)
     # create file handler which logs even debug messages
     log_dir = os.path.expanduser('~') + "/SyConn/logs/"
     # Python2 compat.
@@ -65,7 +65,7 @@ def initialize_logging(log_name):
         if not os.path.isdir(log_dir):
             os.makedirs(log_dir)
     fh = logging.FileHandler(log_dir + log_name + ".log")
-    fh.setLevel(logging.INFO)
+    fh.setLevel(logging.DEBUG)
 
     # add the handlers to logger
     if os.path.isfile(log_dir + log_name + '.log'):

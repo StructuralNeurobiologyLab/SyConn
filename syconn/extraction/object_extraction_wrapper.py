@@ -64,7 +64,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                   transform_func=None,
                                   func_kwargs=None,
                                   nb_cpus=1,
-                                  workfolder=None):
+                                  workfolder=None,
+                                  n_erosion=0):
     """
     Main function for the object extraction step; combines all needed steps
     Parameters
@@ -130,6 +131,10 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         Number of cpus used if QSUB is disabled
     workfolder : str
         destination where SegmentationDataset will be stored
+    n_erosion : int
+        Number of erosions applied to the segmentation of unique_components0 to avoid
+        segmentation artefacts caused by start location dependency in chunk data array.
+
     """
     all_times = []
     step_names = []
@@ -186,6 +191,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     log_extraction.info("\nTime needed for connected components: %.3fs" % all_times[-1])
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/connected_components.pkl",
                          [cc_info_list, overlap_info])
+
     #
     # # --------------------------------------------------------------------------
     #
@@ -223,7 +229,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
     log_extraction.info("\nTime needed for unique labels: %.3fs" % all_times[-1])
-
     #
     # # --------------------------------------------------------------------------
     #
@@ -231,11 +236,12 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     stitch_list = oes.make_stitch_list(cset, filename, hdf5names, chunk_list,
                                        stitch_overlap, overlap, debug,
                                        suffix=suffix, qsub_pe=qsub_pe,
-                                       qsub_queue=qsub_queue,
+                                       qsub_queue=qsub_queue, n_erosion=n_erosion,
                                        n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
-    log_extraction.info("\nTime needed for stitch list: %.3fs" % all_times[-1])
+    log_extraction.info("\nTime needed for stitch list: %.3fs. Length of first key %s:"
+                        " %d" % (all_times[-1], hdf5names[0], len(stitch_list[hdf5names[0]])))
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/stitch_list.pkl",
                          [stitch_list])
     #
