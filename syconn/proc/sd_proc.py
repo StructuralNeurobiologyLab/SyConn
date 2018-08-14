@@ -19,7 +19,8 @@ import tqdm
 
 
 def dataset_analysis(sd, recompute=True, stride=100, qsub_pe=None,
-                     qsub_queue=None, nb_cpus=1, n_max_co_processes=100):
+                     qsub_queue=None, nb_cpus=1, n_max_co_processes=100,
+                     compute_mesharea=False):
     """ Analyses the whole dataset and extracts and caches key information
 
     :param sd: SegmentationDataset
@@ -37,6 +38,7 @@ def dataset_analysis(sd, recompute=True, stride=100, qsub_pe=None,
         number of cores per worker for qsub jobs
     :param n_max_co_processes: int
         max number of workers running at the same time when using qsub
+    :param compute_mesharea: bool
     """
 
     paths = sd.so_dir_paths
@@ -46,7 +48,7 @@ def dataset_analysis(sd, recompute=True, stride=100, qsub_pe=None,
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, sd.type, sd.version,
-                             sd.working_dir, recompute])
+                             sd.working_dir, recompute, compute_mesharea])
 
     # Running workers
 
@@ -93,6 +95,7 @@ def _dataset_analysis_thread(args):
     version = args[2]
     working_dir = args[3]
     recompute = args[4]
+    compute_mesharea = args[5]
 
     global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[],
                             mesh_area=[])
@@ -109,7 +112,6 @@ def _dataset_analysis_thread(args):
             else:
                 so_ids = list(this_attr_dc.keys())
 
-
             for so_id in so_ids:
                 global_attr_dict["id"].append(so_id)
                 so = segmentation.SegmentationObject(so_id, obj_type,
@@ -124,7 +126,8 @@ def _dataset_analysis_thread(args):
                     so.attr_dict["rep_coord"] = so.rep_coord
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
-                    so.attr_dict["mesh_area"] = so.mesh_area    # TODO try except SV
+                    if compute_mesharea:
+                        so.attr_dict["mesh_area"] = so.mesh_area    # TODO try except SV
 
                 for attribute in so.attr_dict.keys():
                     if attribute not in global_attr_dict:

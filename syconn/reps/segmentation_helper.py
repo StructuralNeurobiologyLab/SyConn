@@ -92,8 +92,8 @@ def load_voxels(so, voxel_dc=None):
         block_extents.append(np.array(bin_arrs[i_bin_arr].shape) +
                              block_offsets[i_bin_arr])
 
-    block_offsets = np.array(block_offsets)
-    block_extents = np.array(block_extents)
+    block_offsets = np.array(block_offsets, dtype=np.int)
+    block_extents = np.array(block_extents, dtype=np.int)
 
     so._bounding_box = np.array([block_offsets.min(axis=0),
                                  block_extents.max(axis=0)])
@@ -125,7 +125,7 @@ def load_voxel_list(so):
 
     if so._voxels is not None:
         voxel_list = np.transpose(np.nonzero(so.voxels)).astype(np.uint32) + \
-                     so.bounding_box[0]
+                     so.bounding_box[0].astype(np.int)
     else:
         voxel_dc = VoxelStorage(so.voxel_path, read_only=True)
         bin_arrs, block_offsets = voxel_dc[so.id]

@@ -22,6 +22,7 @@ from .compression import load_from_h5py, save_to_h5py
 from ..proc.image import normalize_img
 from .basics import read_txt_from_zip, get_filepaths_from_dir, parse_cc_dict_from_kzip
 from numba import jit
+from ..handler import log_handler
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
@@ -376,14 +377,13 @@ def parse_movement_area_from_zip(zip_fname):
 
 
 def pred_dataset(*args, **kwargs):
-    warnings.warn("'pred_dataset' will be replaced by 'predict_dataset' in"
-                  " the near future.")
+    log_handler.warning("'pred_dataset' will be replaced by 'predict_dataset' in"
+                        " the near future.")
     return pred_dataset(*args, **kwargs)
 
 
-
 def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
-                 mfp_active=False, gpu_ids=(0, ), overwrite=True):
+                    mfp_active=False, gpu_ids=(0, ), overwrite=True):
     """
     Runs prediction on the complete knossos dataset.
     Imposed patch size has to be given in Z, X, Y!
@@ -403,9 +403,9 @@ def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     mfp_active : bool
         activate max-fragment pooling (might be necessary to change patch_size)
     gpu_ids : tuple of int
-    |   the GPU/GPUs to be used
+        the GPU/GPUs to be used
     overwrite : bool
-    |   True: fresh predictions ; False: earlier prediction continues
+        True: fresh predictions ; False: earlier prediction continues
 
 
     Returns
@@ -421,9 +421,8 @@ def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
         _multi_gpu_ds_pred(kd_p, kd_pred_p, cd_p, model_p,imposed_patch_size, gpu_ids)
 
 
-
 def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
-                 mfp_active=False, gpu_id=0,overwrite=False, i=None, n=None):
+                  mfp_active=False, gpu_id=0, overwrite=False, i=None, n=None):
     """
     Helper function for dataset prediction. Runs prediction on whole or partial knossos dataset.
     Imposed patch size has to be given in Z, X, Y!
@@ -442,10 +441,10 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
         patch size (Z, X, Y) of the model
     mfp_active : bool
         activate max-fragment pooling (might be necessary to change patch_size)
-    gpu_ix : int
-    |   the GPU used
+    gpu_id : int
+        the GPU used
     overwrite : bool
-    |   True: fresh predictions ; False: earlier prediction continues
+        True: fresh predictions ; False: earlier prediction continues
         
 
     Returns
@@ -469,7 +468,7 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     cd.initialize(kd, kd.boundary, [512, 512, 256], cd_p, overlap=offset, box_coords=np.zeros(3), fit_box_size=True)
 
     ch_dc = cd.chunk_dict
-    print('Total number of chunks for GPU/GPUs:' , len(ch_dc.keys()))
+    print('Total number of chunks for GPU/GPUs:', len(ch_dc.keys()))
 
     if i is not None and n is not None:
         chunks = ch_dc.values()[i::n]

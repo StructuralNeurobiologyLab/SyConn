@@ -226,7 +226,7 @@ class FSBase(StorageBase):
                 else:
                     break
             if not gotten:
-                msg = "Unable to acquire file lock for %s after {:.0f}s.".format(source, time.time()-start)
+                msg = "Unable to acquire file lock for {} after {:.0f}s.".format(source, time.time()-start)
                 log_extraction.warning(msg)
                 raise RuntimeError(msg)
         if os.path.isfile(source):
