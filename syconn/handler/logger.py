@@ -7,7 +7,7 @@
 import logging
 import coloredlogs
 import os
-__all__ = ['log_main', 'initialize_logging']
+__all__ = ['initialize_logging']
 
 
 def get_main_log():
@@ -29,8 +29,8 @@ def get_main_log():
     if os.path.isfile(log_dir + 'syconn.log'):
         os.remove(log_dir + 'syconn.log')
     logger.addHandler(fh)
-    logger.info("Initialized logger '{}'. Log-files are stored at"
-                " {}.".format('syconn', log_dir + 'syconn.log'))
+    logger.info("Initialized logging. Log-files are stored at"
+                " {}.".format(log_dir))
     return logger
 
 
@@ -49,10 +49,10 @@ def initialize_logging(log_name):
     """
     predefined_lognames = ['mp', 'gate', 'proc', 'ui', 'skeleton', 'multiview',
                            'handler', 'cnn', 'extraction', 'reps',
-                           'object_extraction']
+                           'object_extraction', 'backend']
     if log_name not in predefined_lognames:
         log_main.warning("Please use logger names as specified"
-                      " here: {}".format(predefined_lognames))
+                         " here: {}".format(predefined_lognames))
     logger = logging.getLogger(log_name)
     coloredlogs.install(level='DEBUG', logger=logger)
     logger.setLevel(logging.DEBUG)
@@ -71,8 +71,6 @@ def initialize_logging(log_name):
     if os.path.isfile(log_dir + log_name + '.log'):
         os.remove(log_dir + log_name + '.log')
     logger.addHandler(fh)
-    log_main.info("Initialized logger '{}'. Log-files are stored at"
-                  " {}.".format(log_name, log_dir + log_name + ".log"))
     return logger
 
 

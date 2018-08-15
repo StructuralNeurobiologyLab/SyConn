@@ -16,7 +16,7 @@ from torch.distributions.cauchy import Cauchy
 from torch.distributions.normal import Normal
 
 # Dimension of latent space
-Z_DIM = 10
+Z_DIM = 3
 
 
 class RepresentationNetwork(nn.Module):
@@ -122,7 +122,7 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="ATN-Gauss-Z10-New", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="ATN-BimodalGauss-Z3-New", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
@@ -203,10 +203,10 @@ if __name__ == "__main__":
     # latent distribution
     # l_distr = Cauchy(torch.tensor([0.0]), torch.tensor([1.0]))
     # l_sample_func = lambda n, z: l_distr.rsample((n, z)).squeeze()
-    l_sample_func = lambda n, z: torch.randn(n, z)
+    # l_sample_func = lambda n, z: torch.randn(n, z)
     # bimodal normals
-    # l_distr = lambda : Normal(torch.tensor([-3.0]), torch.tensor([1.0])) if np.random.randint(2) else Normal(torch.tensor([3.0]), torch.tensor([1.0]))
-    # l_sample_func = lambda n, z: l_distr().rsample((n, z)).squeeze()
+    l_distr = lambda : Normal(torch.tensor([-3.0]), torch.tensor([1.0])) if np.random.randint(2) else Normal(torch.tensor([3.0]), torch.tensor([1.0]))
+    l_sample_func = lambda n, z: l_distr().rsample((n, z)).squeeze()
     # Create and run trainer
     trainer = TripletNetTrainer(
         model=[model, model_discr],
@@ -216,7 +216,7 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         valid_dataset=valid_dataset,
         batchsize=batch_size,
-        num_workers=6,
+        num_workers=8,
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched, "lr_discr": lr_discr_sched},
