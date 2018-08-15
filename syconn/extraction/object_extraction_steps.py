@@ -540,22 +540,14 @@ def _make_stitch_list_thread(args):
             for nb_hdf5_name in range(len(hdf5names)):
                 hdf5_name = hdf5names[nb_hdf5_name]
                 stitch_ixs = np.transpose(np.nonzero((cc_area[nb_hdf5_name] != 0) &
-                                                     (cc_area_to_compare[nb_hdf5_name])))
+                                                     (cc_area_to_compare[nb_hdf5_name] != 0)))
                 for stitch_pos in stitch_ixs:
                     stitch_pos = tuple(stitch_pos)
                     this_id = cc_area[nb_hdf5_name][stitch_pos]
                     compare_id = cc_area_to_compare[nb_hdf5_name][stitch_pos]
-                    pair = tuple((this_id, compare_id))
+                    pair = tuple(sorted([this_id, compare_id]))
                     if pair not in map_dict[hdf5_name]:
                         map_dict[hdf5_name].add(pair)
-                        obj_coord_intern = np.transpose(np.nonzero(cc_data_list[nb_hdf5_name] == this_id))
-                        obj_coord_intern_compare = np.transpose(np.nonzero(cc_data_list_to_compare[nb_hdf5_name] == compare_id))
-                        c1 = chunk.coordinates - chunk.overlap + obj_coord_intern + np.array([1, 1, 1])
-                        c2 = compare_chunk.coordinates - compare_chunk.overlap + obj_coord_intern_compare + np.array([1, 1, 1])
-                        if not np.all(c1[0] == c2[0]):
-                            msg = "(stitch ID 1, stitch ID 2), stitch location 1, stitch location 2:" \
-                                  " {}".format((pair, c1[0], c2[0]))
-                            log_handler.debug(msg)
     for k, v in map_dict.items():
         map_dict[k] = list(v)
     return map_dict
@@ -573,7 +565,7 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
         file
     stitch_list: dictionary
         Contains pairs of overlapping component ids for each hdf5name
-    max_labels dictionary
+    max_labels : dictionary
         Contains the number of different component ids for each hdf5name
 
     Returns
