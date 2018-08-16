@@ -65,7 +65,9 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                   func_kwargs=None,
                                   nb_cpus=1,
                                   workfolder=None,
-                                  n_erosion=0):
+                                  n_erosion=0,
+                                  overlap_thresh=0,
+                                  stitch_overlap=None):
     """
     Main function for the object extraction step; combines all needed steps
     Parameters
@@ -134,6 +136,11 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     n_erosion : int
         Number of erosions applied to the segmentation of unique_components0 to avoid
         segmentation artefacts caused by start location dependency in chunk data array.
+    overlap_thresh : float
+        Overlap fraction of object in different chunks to be considered stitched.
+        If zero this behavior is disabled.
+    stitch_overlap : np.array
+        volume evaluated during stitching procedure
 
     """
     all_times = []
@@ -183,8 +190,14 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         qsub_pe=qsub_pe, transform_func=transform_func, func_kwargs=func_kwargs,
         qsub_queue=qsub_queue,
         n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
-
-    stitch_overlap = overlap_info[1]
+    if stitch_overlap is None:
+        stitch_overlap = overlap_info[1]
+    else:
+        overlap_info[1] = stitch_overlap
+    if not np.all(stitch_overlap < overlap_info[0]):
+        msg = "Stitch overlap ({}) has to be smaller than chunk overlap ({}).".format(overlap_info[1], overlap_info[0])
+        log_extraction.error(msg)
+        raise ValueError(msg)
     overlap = overlap_info[0]
     all_times.append(time.time() - time_start)
     step_names.append("conneceted components")
@@ -237,7 +250,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                        stitch_overlap, overlap, debug,
                                        suffix=suffix, qsub_pe=qsub_pe,
                                        qsub_queue=qsub_queue, n_erosion=n_erosion,
-                                       n_max_co_processes=n_max_co_processes)
+                                       n_max_co_processes=n_max_co_processes,
+                                       overlap_thresh=overlap_thresh)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
     log_extraction.info("\nTime needed for stitch list: %.3fs. Length of first key %s:"

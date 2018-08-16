@@ -224,7 +224,8 @@ def load_from_h5py(path, hdf5_names=None, as_dict=False):
             else:
                 data.append(f[hdf5_name].value)
     except Exception as e:
-        msg = "Error at Path: {}, with labels: {}".format(path, hdf5_names)
+        msg = "Error ({}) raised when loading h5-file at path:" \
+              " {}, with labels: {}".format(e, path, hdf5_names)
         log_handler.error(msg)
         raise Exception(e)
     f.close()
@@ -268,7 +269,10 @@ def save_to_h5py(data, path, hdf5_names=None, overwrite=False, compression=True)
     else:
         if len(hdf5_names) != len(data):
             f.close()
-            raise ValueError("Not enough or too many hdf5-names given!")
+            msg = "Not enough or too many hdf5-names ({}) given when during" \
+                  " h5-file load attempt!".format(hdf5_names)
+            log_handler.error(msg)
+            raise ValueError(msg)
         for nb_data in range(len(data)):
             if compression:
                 f.create_dataset(hdf5_names[nb_data], data=data[nb_data],

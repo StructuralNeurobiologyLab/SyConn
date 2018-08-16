@@ -333,7 +333,7 @@ def normalize_vol(sv, edge_size, center_coord):
 
 
 def multi_dilation(overlay, n_dilations, use_find_objects=False,
-                   background_only=False):
+                   background_only=True):
     """
     Wrapper function for dilation
 
@@ -353,7 +353,7 @@ def multi_dilation(overlay, n_dilations, use_find_objects=False,
 
 
 def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
-              background_only=False, mop_kwargs=None, verbose=False):
+              background_only=True, mop_kwargs=None, verbose=False):
     """
     Generic function for binary morphological image operations with multi-label content.
 
@@ -363,7 +363,8 @@ def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
     overlay
     n_iters
     use_find_objects
-    background_only
+    background_only : bool
+        only works in combination with 'use_find_objects'
     mop_kwargs
     verbose
 
@@ -389,7 +390,7 @@ def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
     return overlay
 
 
-def _multi_mop_findobjects(mop_func, overlay, n_iters, background_only,
+def _multi_mop_findobjects(mop_func, overlay, n_iters, background_only=True,
                            verbose=False, mop_kwargs=None):
     """
     Generic function for binary morphological image operations with multi-label content
@@ -429,17 +430,22 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, background_only,
         binary_mask = (sub_vol == ix).astype(np.int)
         if verbose:
             nb_occ = np.sum(binary_mask)
-        if background_only:
-            binary_mask = mop_func(binary_mask, iterations=n_iters,
-                                   mask=overlay == 0, **mop_kwargs)  # only dilate into background
-        else:
-            binary_mask = mop_func(binary_mask, iterations=n_iters, **mop_kwargs)
+        res = mop_func(binary_mask, iterations=n_iters, **mop_kwargs)
         if verbose:
             if np.sum(binary_mask) == 0 and nb_occ != 0:
                 log_proc.debug("Object with ID={} and size={} is not present after"
                                " erosion with N={}.".format(ix, nb_occ, n_iters))
-        overlay[new_obj_slices][binary_mask == 0] = 0  # added this line to also add background during erosion
-        overlay[new_obj_slices][binary_mask == 1] = ix
+        # only dilate/erode background/the objects itself
+        if "erosion" in mop_func.__name__:
+            overlay[new_obj_slices][binary_mask == 1] = res[binary_mask == 1] * ix
+        elif "dilation" in mop_func.__name__:
+            proc_mask = (binary_mask == 1) | (sub_vol == 0)  # dilate only background
+            overlay[new_obj_slices][proc_mask] = res[proc_mask]
+        else:
+            msg = "Only erosion or dilation allowed. Attempted to use morphological " \
+                  "operation '{}'.".format(mop_func.__name__)
+            log_proc.error(msg)
+            raise NotImplementedError(msg)
     if verbose:
         pbar.close()
     return overlay
