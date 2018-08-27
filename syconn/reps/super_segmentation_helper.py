@@ -23,7 +23,7 @@ from ..mp.mp_utils import start_multiprocess, start_multiprocess_obj
 skeletopyze_available = False
 from ..reps import log_reps
 from scipy import spatial
-
+from ..proc.meshes import in_bounding_box
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
@@ -792,8 +792,15 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=2000,
             this_features.append(np.mean(obj_sizes))
             this_features.append(np.std(obj_sizes))
 
+        # box feature
+        edge_len = feature_context_nm * 2
+        bb = [ssv.skeleton["nodes"][this_i_node], np.array([edge_len,] * 3)]
+        vol_tot = feature_context_nm ** 3
+        node_density = np.sum(in_bounding_box(ssv.skeleton["nodes"], bb)) / vol_tot
+        this_features.append(node_density)
+
         features.append(np.array(this_features))
-    return features
+    return np.array(features)
 
 
 def associate_objs_with_skel_nodes(ssv, obj_types=("sj", "vc", "mi"),
@@ -904,7 +911,7 @@ def write_axpred(ssv, pred_key_appendix, dest_path=None, k=1):
 
 
 def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
-                                max_dist=10000,  return_res=False):
+                                max_dist=10000, return_res=False):
     """
     Averages the axoness prediction along skeleton with maximum path length
     of 'max_dist'. Therefore, view indices were mapped to every skeleton

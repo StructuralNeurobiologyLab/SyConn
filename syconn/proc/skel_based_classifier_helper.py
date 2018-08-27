@@ -9,6 +9,7 @@ import numpy as np
 from ..reps import super_segmentation as ss
 from ..reps import super_segmentation_helper as ssh
 import os
+from ..proc import log_proc
 
 
 def generate_clf_data_thread(args):
@@ -35,4 +36,6 @@ def generate_clf_data_thread(args):
                                   label_fname.replace("features", "labels")
                 np.save(label_save_path % (feature_context_nm, this_id), label_array)
         feats = sso.skel_features(feature_context_nm=feature_context_nm, overwrite=overwrite)
+        log_proc.debug('feature array shape {}; feature context {} nm;'
+                       ' SSV {}'.format(feats.shape, feature_context_nm, sso.id))
         np.save(save_path % (feature_context_nm, this_id), feats)

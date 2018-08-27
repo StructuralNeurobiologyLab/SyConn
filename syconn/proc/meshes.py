@@ -14,10 +14,13 @@ from skimage import measure
 from sklearn.decomposition import PCA
 from ..handler.basics import write_txt2kzip, texts2kzip
 from .image import apply_pca
+from ..proc import log_proc
 try:
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 except ImportError as e:
-    print(repr(e))
+    boundaryDistanceTransform, gaussianSmoothing = None, None
+    log_proc.error('ModuleNotFoundError. Could not import VIGRA. '
+                   'Mesh generation will not be possible.')
 from scipy.ndimage.morphology import binary_closing
 from ..proc import log_proc
 try:

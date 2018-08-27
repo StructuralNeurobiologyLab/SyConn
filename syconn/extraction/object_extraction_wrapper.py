@@ -79,7 +79,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         List of names/ labels to be extracted and processed from the prediction
         file
     object_names : list of str
-        list of names used for 'object_type' when creating SegmentationDataset. Must have same length as 'hdf5_names'.
+        list of names used for 'object_type' when creating SegmentationDataset.
+        Must have same length as 'hdf5_names'.
     overlap: str or np.array
         Defines the overlap with neighbouring chunks that is left for later
         processing steps; if 'auto' the overlap is calculated from the sigma and
@@ -195,13 +196,15 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     else:
         overlap_info[1] = stitch_overlap
     if not np.all(stitch_overlap < overlap_info[0]):
-        msg = "Stitch overlap ({}) has to be smaller than chunk overlap ({}).".format(overlap_info[1], overlap_info[0])
+        msg = "Stitch overlap ({}) has to be smaller than chunk overlap ({})." \
+              "".format(overlap_info[1], overlap_info[0])
         log_extraction.error(msg)
         raise ValueError(msg)
     overlap = overlap_info[0]
     all_times.append(time.time() - time_start)
     step_names.append("conneceted components")
-    log_extraction.info("Time needed for connected components: %.3fs" % all_times[-1])
+    log_extraction.info(
+        "Time needed for connected components: %.3fs" % all_times[-1])
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/connected_components.pkl",
                          [cc_info_list, overlap_info])
 
@@ -254,8 +257,10 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                        overlap_thresh=overlap_thresh)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
-    log_extraction.info("Time needed for stitch list: {:.3f}s. Length of stitch-lists for hdf5-names '{}':"
-                        " {}".format(all_times[-1], hdf5names, [len(stitch_list[key]) for key in hdf5names]))
+    log_extraction.info(
+        "Time needed for stitch list: {:.3f}s.\nLength of stitch-lists for"
+        " hdf5-names {}: {}".format(all_times[-1], hdf5names, [
+            len(stitch_list[key]) for key in hdf5names]))
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/stitch_list.pkl",
                          [stitch_list])
     #
@@ -306,12 +311,12 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     # print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
-    log_extraction.info("\nTime overview:")
+    log_extraction.info("Time overview:")
     for ii in range(len(all_times)):
         log_extraction.info("%s: %.3fs" % (step_names[ii], all_times[ii]))
     log_extraction.info("--------------------------")
     log_extraction.info("Total Time: %.1f min" % (np.sum(all_times) / 60))
-    log_extraction.info("--------------------------\n\n")
+    log_extraction.info("--------------------------")
 
 
 def from_probabilities_to_objects_parameter_sweeping(cset,

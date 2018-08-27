@@ -746,29 +746,27 @@ def get_semseg_spiness_model():
     return m
 
 
-def get_tripletnet_model_e3():
-    m = InferenceModel("/wholebrain/scratch/pschuber/e3training_August1st/ATN-Gauss-noAdv-#1/")
-    return m
-
-
-def get_tripletnet_model_e3():
-    m = InferenceModel("/wholebrain/u/pschuber/e3training/ATN-Cauchy-#1/")
-    return m
-
-
 def get_knn_tnet_embedding():
     tnet_eval_dir = "/wholebrain/scratch/pschuber/CNN_Training/" \
                     "nupa_cnn/t_net/ssv6_tripletnet_v9_backup/pred/"
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
+def get_tripletnet_model_e3():
+    m = InferenceModel("/wholebrain/scratch/pschuber/e3training_August1st/old/ATN-Gauss-noAdv-#1/")
+    # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_20Aug2018/ATN-Gauss-Z10-New/")
+    return m
+
+
 def get_knn_tnet_embedding_e3():
-    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_August1st/ATN-Gauss-noAdv-#1/pred/"
+    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_August1st/old/ATN-Gauss-noAdv-#1/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_20Aug2018/ATN-Gauss-Z10-New/pred/"
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
 def get_pca_tnet_embedding_e3():
-    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_August1st/ATN-Gauss-noAdv-#1/pred/"
+    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_August1st/old/ATN-Gauss-noAdv-#1/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_20Aug2018/ATN-Gauss-Z10-New/pred/"
     return pca_tnet_embedding(tnet_eval_dir)
 
 

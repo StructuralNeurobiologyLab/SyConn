@@ -35,7 +35,7 @@ feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",
                "Hist4", "Hist5", "Hist6", "Hist7", "Hist8", "Hist9", "Hist10",
                "Mean node degree", "N sj", "Mean size sj", "STD size sj",
                "N mi", "Mean size mi", "STD size mi", "N vc", "Mean size vc",
-               "STD size vc"]
+               "STD size vc", "node density"]
 
 colorVals = [[0.841, 0.138, 0.133, 1.],
              [0.35, 0.725, 0.106, 1.],

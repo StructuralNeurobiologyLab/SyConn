@@ -825,7 +825,6 @@ class SuperSegmentationObject(object):
         return np.sum([np.linalg.norm(
             self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
 
-
     def save_skeleton(self, to_kzip=False, to_object=True):
         if to_object:
             write_obj2pkl(self.skeleton, self.skeleton_path)
