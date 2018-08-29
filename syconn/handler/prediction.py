@@ -3,7 +3,7 @@ import numpy as np
 import os
 import sys
 import time
-import warnings
+from numba import jit
 import tqdm
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
@@ -14,10 +14,11 @@ import elektronn2
 from elektronn2.config import config as e2config
 from elektronn2.utils.gpu import initgpu
 from ..handler import log_handler
+from ..handler.logger import log_main
 try:
     from elektronn3.models.base import InferenceModel
 except Exception as e:  # ImportError as e:
-    log_handler.error(
+    log_main.error(
         "elektronn3 could not be imported ({}). Please see 'https://github."
         "com/ELEKTRONN/elektronn3' for more information.".format(e))
 from .compression import load_from_h5py, save_to_h5py
@@ -36,12 +37,13 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
     ----------
     zip_fname : str
     kd_p : str
-    raw_data_offset : int
+    raw_data_offset : int or np.array
         number of voxels used for additional raw offset, i.e. the offset for the
         raw data will be label_offset - raw_data_offset, while the raw data
         volume will be label_volume + 2*raw_data_offset. It will
         use 'kd.scaling' to account for dataset anisotropy if scalar or a
         list of length 3 hast to be provided for a custom x, y, z offset.
+    verbose : bool
 
     Returns
     -------
@@ -245,7 +247,7 @@ def zxy2xyz(vol):
 
 
 def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True,
-                        raw_data_offset=75):
+                        raw_data_offset=75, debug=False):
     """
     Create .h5 files for ELEKTRONN input. Only supports binary labels
      (0=background, 1=foreground).
@@ -266,15 +268,25 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True,
         volume will be label_volume + 2*raw_data_offset. It will
         use 'kd.scaling' to account for dataset anisotropy if scalar or a
         list of length 3 hast to be provided for a custom x, y, z offset.
+    debug : bool
+        if True, file will have an additional 'debug' suffix and
+        raw_data_offset is set to 0. Also their bit depths are adatped to be the
+        same
     """
     fname, ext = os.path.splitext(zip_fname)
     if fname[-2:] == ".k":
         fname = fname[:-2]
-    if os.path.isfile(fname + ".h5") and not overwrite:
-        print("File at {} already exists. Skipping.".format(fname))
+    if debug:
+        file_appendix = '_debug'
+        raw_data_offset = 0
+    else:
+        file_appendix = ''
+    fname_dest = fname + file_appendix + ".h5"
+    if os.path.isfile(fname_dest) and not overwrite:
+        print("File at {} already exists. Skipping.".format(fname_dest))
         return
     raw, label = load_gt_from_kzip(zip_fname, kd_p,
-                      raw_data_offset=raw_data_offset)
+                                   raw_data_offset=raw_data_offset)
     if foreground_ids is None:
         try:
             cc_dc = parse_cc_dict_from_kzip(zip_fname)
@@ -283,10 +295,10 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True,
             foreground_ids = []
         print("Foreground IDs not assigned. Inferring from "
               "'mergelist.txt' in k.zip.:", foreground_ids)
-    create_h5_gt_file(fname, raw, label, foreground_ids)
+    create_h5_gt_file(fname_dest, raw, label, foreground_ids, debug=debug)
 
 
-def create_h5_gt_file(fname, raw, label, foreground_ids=None):
+def create_h5_gt_file(fname, raw, label, foreground_ids=None, debug=False):
     """
     Create .h5 files for ELEKTRONN input from two arrays.
     Only supports binary labels (0=background, 1=foreground). E.g. for creating
@@ -303,9 +315,8 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None):
         ids which have to be converted to foreground, i.e. 1. Everything
         else is considered background (0). If None, everything except 0 is
         treated as foreground.
-    raw_overlap : int
-        number of voxels used for additional raw overlap. It will
-        use 'kd.scaling' to account for dataset anisotropy.
+    debug : bool
+        will store labels and raw as uint8 ranging from 0 to 255
     """
     print(os.path.split(fname)[1])
     label = binarize_labels(label, foreground_ids)
@@ -316,6 +327,9 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None):
     print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
     if not fname[-2:] == "h5":
         fname = fname + ".h5"
+    if debug:
+        raw = (raw * 255).astype(np.uint8)
+        label = label.astype(np.uint8) * 255
     save_to_h5py([raw, label], fname, hdf5_names=["raw", "label"])
 
 
