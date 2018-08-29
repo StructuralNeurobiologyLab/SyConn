@@ -7,13 +7,12 @@
 
 # --------- Define global working directory
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5"
-# wd = "/wholebrain/songbird/j0126/areaxfs_v5/chunkdatasets"
+# wd = "/wholebrain/songbird/j0126/areaxfs_v5/chunkdatasets/"
 wd = "/wholebrain/scratch/areaxfs3/"
 
 # --------- Define backend
 backend = "FS"
 
-# TODO: Add package config in addition to working directory config (-> example_config.ini)
 # --------------------------------------------------------------- GLIA PARAMETER
 # min. connected component size of glia nodes/SV after thresholding glia proba
 min_cc_size_glia = 8e3  # in nm; L1-norm on vertex bounding box

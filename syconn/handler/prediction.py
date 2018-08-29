@@ -13,16 +13,18 @@ from knossos_utils.knossosdataset import KnossosDataset
 import elektronn2
 from elektronn2.config import config as e2config
 from elektronn2.utils.gpu import initgpu
+from ..handler import log_handler
 try:
     from elektronn3.models.base import InferenceModel
-except ImportError:
-    print("elektronn3 could not be imported. Please see "
-          "'https://github.com/ELEKTRONN/elektronn3' for more information.")
+except Exception as e:  # ImportError as e:
+    log_handler.error(
+        "elektronn3 could not be imported ({}). Please see 'https://github."
+        "com/ELEKTRONN/elektronn3' for more information.".format(e))
 from .compression import load_from_h5py, save_to_h5py
 from ..proc.image import normalize_img
 from .basics import read_txt_from_zip, get_filepaths_from_dir, parse_cc_dict_from_kzip
 from numba import jit
-from ..handler import log_handler
+
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):

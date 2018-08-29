@@ -63,8 +63,9 @@ if __name__ == "__main__":
             new_G.add_edge(sso.get_seg_obj("sv", e[0]),
                            sso.get_seg_obj("sv", e[1]))
         sso._rag = new_G
-        sso.render_views(add_cellobjects=False, cellobjects_only=False, skip_indexviews=True,
-                         woglia=False, qsub_pe="openmp", overwrite=True)
+        sso.render_views(add_cellobjects=False, cellobjects_only=False,
+                         skip_indexviews=True, woglia=False,
+                         qsub_pe="openmp", overwrite=True)
 
     # render small SSV without overhead and single cpus on whole cluster
     multi_params = multi_params[nb_svs <= 5e3]

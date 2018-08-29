@@ -1681,16 +1681,17 @@ class SuperSegmentationObject(object):
         pred_key += pred_key_appendix
         try:
             predict_sos_views(model, self.svs, pred_key,
-                              nb_cpus=self.nb_cpus, verbose=True,
+                              nb_cpus=self.nb_cpus, verbose=verbose,
                               woglia=False, raw_only=True)
         except KeyError:
             self.render_views(add_cellobjects=False, woglia=False)
             predict_sos_views(model, self.svs, pred_key,
-                              nb_cpus=self.nb_cpus, verbose=True,
+                              nb_cpus=self.nb_cpus, verbose=verbose,
                               woglia=False, raw_only=True)
         end = time.time()
-        log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). %0.4fs/SV"
-                       "" % (len(self.svs), end - start, float(end - start) / len(self.svs)))
+        log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
+                       "%0.4fs/SV" % (len(self.svs), end - start,
+                                      float(end - start) / len(self.svs)))
 
     # ------------------------------------------------------------------ AXONESS
     def _load_skelfeatures(self, key):
@@ -1718,7 +1719,7 @@ class SuperSegmentationObject(object):
 
     def skel_features(self, feature_context_nm, overwrite=False):
         features = self._load_skelfeatures(feature_context_nm)
-        if not features or overwrite:
+        if features is None or overwrite:
             if not "assoc_sj" in self.skeleton:
                 ssh.associate_objs_with_skel_nodes(self)
             features = ssh.extract_skel_features(self, feature_context_nm=

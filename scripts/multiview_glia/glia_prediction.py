@@ -8,7 +8,7 @@ from syconn.config.global_params import wd
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.segmentation_helper import find_missing_sv_attributes
-from syconn.handler.prediction import get_glia_model
+from syconn.handler.prediction import get_glia_model, get_glia_model_v2
 from syconn.handler.basics import chunkify, parse_cc_dict_from_kml
 from syconn.config.global_params import get_dataset_scaling
 from syconn.mp import qsub_utils as qu
@@ -29,9 +29,8 @@ if __name__ == "__main__":
     # chunk them
     sd = SegmentationDataset("sv", working_dir=wd)
     multi_params = chunkify(sd.so_dir_paths, 75)
-
     # get model properties
-    m = get_glia_model()
+    m = get_glia_model_v2()
     model_kwargs = dict(model_path=m._path,
                         normalize_data=m.normalize_data,
                         imposed_batch_size=m.imposed_batch_size,

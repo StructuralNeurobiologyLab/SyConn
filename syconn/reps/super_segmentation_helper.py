@@ -738,7 +738,7 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
         plt.close()
 
-def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=2000,
+def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=1000,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
     node_degrees = np.array(list(dict(ssv.weighted_graph().degree()).values()),
                             dtype=np.int)
@@ -771,10 +771,9 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=2000,
         neigh_diameters = ssv.skeleton["diameters"][neighs]
         this_features.append(np.mean(neigh_diameters))
         this_features.append(np.std(neigh_diameters))
-        this_features += list(np.histogram(neigh_diameters,
-                                           bins=10,
-                                           range=(0, max_diameter),
-                                           normed=True)[0])
+        hist_feat = np.histogram(neigh_diameters,bins=10,range=(0, max_diameter))[0]
+        hist_feat = np.array(hist_feat) / hist_feat.sum()
+        this_features += list(hist_feat)
         this_features.append(np.mean(node_degrees[neighs]))
 
         for obj_type in obj_types:
@@ -966,7 +965,7 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
     avg_pred = []
 
     g = sso.weighted_graph()
-    for n in g.nodes():
+    for n in range(g.number_of_nodes()):
         paths = nx.single_source_dijkstra_path(g, n, max_dist)
         neighs = np.array(list(paths.keys()), dtype=np.int)
         unique_view_ixs = np.unique(view_ixs[neighs], return_counts=False)
