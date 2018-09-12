@@ -628,7 +628,11 @@ def make_ply_string(indices, vertices, normals, rgba_color):
     if len(rgba_color) != len(vertices) and len(rgba_color) == 4:
         rgba_color = [rgba_color for i in range(len(vertices))]
     else:
-        assert len(rgba_color) == len(vertices) and len(rgba_color[0]) == 4
+        if not (len(rgba_color) == len(vertices) and len(rgba_color[0]) == 4):
+            msg = 'Color array has to be RGBA and to provide a color value f' \
+                  'or every vertex!'
+            log_proc.error(msg)
+            raise ValueError(msg)
     if type(rgba_color) is list:
         rgba_color = np.array(rgba_color, dtype=np.uint8)
         log_proc.warn("Color input is list. It will now be converted "

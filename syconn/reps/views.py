@@ -64,7 +64,7 @@ class ViewContainer(object):
                                                            128, 256))
         return views
 
-    def plot(self, fig=None, view_nb=0):
+    def plot(self, fig=None, view_nb=0, perspective_nb=0):
         import matplotlib
         matplotlib.use("Agg", warn=False, force=True)
         import matplotlib.pyplot as plt
@@ -80,40 +80,40 @@ class ViewContainer(object):
         # plt.suptitle("%s" % str(self))
         colors = ['Greys_r', 'Blues_r', 'Greens_r', 'Reds_r']
         for k in range(4):
-            if len(np.unique(views[view_nb, k, 0])) == 1:
+            if len(np.unique(views[view_nb, k, perspective_nb])) == 1:
                 continue
             cm = plt.cm.get_cmap(colors[k], lut=256)
             cm._init()
             cm._lut[-20:, -1] = 0
             cm._lut[:-20, -1] = 0.7
-            plt.imshow(views[view_nb, k, 0], cmap=cm, interpolation='none')
+            plt.imshow(views[view_nb, k, perspective_nb], cmap=cm, interpolation='none')
         # ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
         # ax.yaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
         ax.tick_params(axis='x', which='major', labelsize=0, direction='out',
-                       length=4, width=3, right="off", top="off", pad=10,
-                       left="off", bottom="off")
+                       length=4, width=3, right=False, top=False, pad=10,
+                       left=False, bottom=False)
         ax.tick_params(axis='y', which='major', labelsize=0, direction='out',
-                       length=4, width=3, right="off", top="off", pad=10,
-                       left="off", bottom="off")
+                       length=4, width=3, right=False, top=False, pad=10,
+                       left=False, bottom=False)
 
         ax.tick_params(axis='x', which='minor', labelsize=0, direction='out',
-                       length=4, width=3, right="off", top="off", pad=10,
-                       left="off", bottom="off")
+                       length=4, width=3, right=False, top=False, pad=10,
+                       left=False, bottom=False)
         ax.tick_params(axis='y', which='minor', labelsize=0, direction='out',
-                       length=4, width=3, right="off", top="off", pad=10,
-                       left="off", bottom="off")
+                       length=4, width=3, right=False, top=False, pad=10,
+                       left=False, bottom=False)
         ax.spines['right'].set_visible(False)
         ax.spines['top'].set_visible(False)
         ax.spines['left'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
 
-    def write_single_plot(self, dest_path, view_nb, dpi=400):
+    def write_single_plot(self, dest_path, view_nb, perspective_nb=0, dpi=400):
         import matplotlib
         matplotlib.use("Agg", warn=False, force=True)
         import matplotlib.pyplot as plt
         plt.ioff()
         fig = plt.figure()
-        self.plot(fig=fig, view_nb=view_nb)
+        self.plot(fig=fig, view_nb=view_nb, perspective_nb=perspective_nb)
         plt.tight_layout()
         plt.savefig(dest_path, dpi=dpi)
         plt.close(fig)

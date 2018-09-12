@@ -27,7 +27,6 @@ from .basics import read_txt_from_zip, get_filepaths_from_dir, parse_cc_dict_fro
 from numba import jit
 
 
-
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
     """
     Loads ground truth from zip file, generated with Knossos. Corresponding
@@ -388,7 +387,7 @@ def parse_movement_area_from_zip(zip_fname):
     assert len(line) == 1
     line = line[0]
     bb_min = np.array([re.findall('min.\w="(\d+)"', line)], dtype=np.uint)
-    bb_max = np.array([re.findall('max.\w="(\d+)"', line)], dtype=np.uint) + 1 # upper bound is included
+    bb_max = np.array([re.findall('max.\w="(\d+)"', line)], dtype=np.uint)
     return np.concatenate([bb_min, bb_max])  # Movement area is stored with 0-indexing! No adjustment needed
 
 
@@ -770,19 +769,22 @@ def get_knn_tnet_embedding():
 
 def get_tripletnet_model_e3():
     m = InferenceModel("/wholebrain/scratch/pschuber/e3training_August1st/old/ATN-Gauss-noAdv-#1/")
-    # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_20Aug2018/ATN-Gauss-Z10-New/")
+    # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-noAdv-Compare2/")
+    # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-Compare2/")
     return m
 
 
 def get_knn_tnet_embedding_e3():
     tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_August1st/old/ATN-Gauss-noAdv-#1/pred/"
-    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_20Aug2018/ATN-Gauss-Z10-New/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-noAdv-Compare2/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-Compare2/pred/"
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
 def get_pca_tnet_embedding_e3():
     tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_August1st/old/ATN-Gauss-noAdv-#1/pred/"
-    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_20Aug2018/ATN-Gauss-Z10-New/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-noAdv-Compare2/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-Compare2/pred/"
     return pca_tnet_embedding(tnet_eval_dir)
 
 
@@ -917,9 +919,9 @@ def knn_clf_tnet_embedding(fold, fit_all=False):
     nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='auto', n_jobs=16,
                                 weights='uniform')
     if fit_all:
-        nbrs.fit(np.concatenate([train_d, valid_d]), np.concatenate([train_l, valid_l]))
+        nbrs.fit(np.concatenate([train_d, valid_d]), np.concatenate([train_l, valid_l]).ravel())
     else:
-        nbrs.fit(train_d, train_l)
+        nbrs.fit(train_d, train_l.ravel())
     return nbrs
 
 
