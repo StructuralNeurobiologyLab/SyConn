@@ -15,6 +15,8 @@ _in progress_
 
 # SyConn
 
+This version of SyConn is deprecated and should not be used anymore.
+
 Synaptic connectivity inference toolkit developed at the Max-Planck-Institute for Medical Research, Heidelberg and
 Max-Planck-Institute of Neurobiology, Munich <br />
 Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld <br />
