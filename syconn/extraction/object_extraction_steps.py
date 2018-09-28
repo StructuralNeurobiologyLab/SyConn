@@ -1052,7 +1052,7 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                    n_folders_fs=10000,
                    workfolder=None, overlaydataset_path=None,
                    chunk_list=None, suffix="", n_chunk_jobs=5000,
-                   use_work_dir=True, qsub_pe=None, qsub_queue=None,
+                   use_work_dir=True, qsub_pe=None, qsub_queue=None, qsub_slots=1,
                    n_max_co_processes=None, nb_cpus=1, object_names=None):
 
     if chunk_list is None:
@@ -1119,10 +1119,9 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
     elif qu.__QSUB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_voxels_combined",
-                                     pe=qsub_pe, queue=qsub_queue,
+                                     pe=qsub_pe, queue=qsub_queue, n_cores=qsub_slots,
                                      script_folder=script_folder,
-                                     n_max_co_processes=n_max_co_processes,
-                                     n_cores=nb_cpus)
+                                     n_max_co_processes=n_max_co_processes)
 
 
 def _extract_voxels_combined_thread(args):
