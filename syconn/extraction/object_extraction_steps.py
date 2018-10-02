@@ -1055,6 +1055,9 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                    use_work_dir=True, qsub_pe=None, qsub_queue=None, qsub_slots=1,
                    n_max_co_processes=None, nb_cpus=1, object_names=None):
 
+    if object_names is None:
+        object_names= hdf5names
+
     if chunk_list is None:
         chunk_list = [ii for ii in range(len(cset.chunk_dict))]
 
