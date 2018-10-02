@@ -4,6 +4,7 @@
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 import time
+from syconn.config import global_params
 
 from syconn.proc import sd_proc
 from syconn.proc import ssd_proc
@@ -43,7 +44,7 @@ cd = chunky.load_dataset(cd_dir)
 
 # Object extraction
 oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=5000,
-                        hdf5names=["sv"], n_max_co_processes=1000, qsub_pe='default', qsub_queue='all.q', qsub_slots=4,
+                        hdf5names=["sv"], n_max_co_processes=1000, qsub_pe='default', qsub_queue='all.q', qsub_slots=1,
                         n_folders_fs=10000)
 # Object Processing
 #sd = seg.SegmentationDataset("sv", working_dir=wd)

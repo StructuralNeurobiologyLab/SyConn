@@ -8,7 +8,7 @@
 # --------- Define global working directory
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5"
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5/chunkdatasets/"
-wd = "/wholebrain/scratch/areaxfs3/"
+wd = "/mnt/j0126/areaxfs_v10/"
 
 # --------- Define backend
 backend = "FS"
@@ -29,6 +29,8 @@ MESH_DOWNSAMPLING = {"sv": (8, 8, 4), "sj": (2, 2, 1), "vc": (4, 4, 2),
 MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0, "conn": 4}
 
 SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000} # in nm
+
+DISABLE_FILE_LOGGING = True
 
 
 def get_dataset_scaling():
