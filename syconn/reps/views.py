@@ -75,7 +75,7 @@ class ViewContainer(object):
         else:
             views = self.views
         if fig is None:
-            fig = plt.figure()
+            fig = plt.figure(frameon=False)
         ax = fig.add_subplot(111)
         # plt.suptitle("%s" % str(self))
         colors = ['Greys_r', 'Blues_r', 'Greens_r', 'Reds_r']
@@ -115,7 +115,7 @@ class ViewContainer(object):
         fig = plt.figure()
         self.plot(fig=fig, view_nb=view_nb, perspective_nb=perspective_nb)
         plt.tight_layout()
-        plt.savefig(dest_path, dpi=dpi)
+        plt.savefig(dest_path, dpi=dpi, bbox_inches='tight', pad_inches=0)
         plt.close(fig)
 
     def empty_view(self, strict=True):

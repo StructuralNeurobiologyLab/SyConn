@@ -17,11 +17,10 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from knossos_utils.skeleton_utils import loadj0126NML
-from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
+from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
 import re
 import signal
-#from smart_open import smart_open
+import io
 import logging
 
 __all__ = ["load_from_h5py", "save_to_h5py", "crop_bool_array",
@@ -29,11 +28,6 @@ __all__ = ["load_from_h5py", "save_to_h5py", "crop_bool_array",
            "write_data2kzip", "remove_from_zip", "chunkify", "flatten_list",
            "get_skelID_from_path", "write_txt2kzip", "switch_array_entries",
            "parse_cc_dict_from_kzip", "parse_cc_dict_from_kml"]
-
-
-def argsort(seq):
-    # http://stackoverflow.com/questions/3071415/efficient-method-to-calculate-the-rank-vector-of-a-list-in-python
-    return sorted(range(len(seq)), key=seq.__getitem__)
 
 
 def load_from_h5py(path, hdf5_names=None, as_dict=False):
@@ -324,7 +318,8 @@ def write_txt2kzip(kzip_path, text, fname_in_zip, force_overwrite=False):
         name of file when added to zip
     force_overwrite : bool
     """
-    texts2kzip(kzip_path, [text], [fname_in_zip], force_overwrite=force_overwrite)
+    texts2kzip(kzip_path, [text], [fname_in_zip],
+               force_overwrite=force_overwrite)
 
 
 def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
@@ -334,8 +329,8 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
     Parameters
     ----------
     kzip_path : str
-    texts : list of str
-    fnames_in_zip : list of str
+    texts : List[str]
+    fnames_in_zip : List[str]
         name of file when added to zip
     force_overwrite : bool
     """
@@ -343,15 +338,13 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
         if os.path.isfile(kzip_path):
             try:
                 if force_overwrite:
-                    with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED,
-                                         allowZip64=True) as zf:
+                    with zipfile.ZipFile(kzip_path, "wb", zipfile.ZIP_DEFLATED) as zf:
                         for i in range(len(texts)):
                             zf.writestr(fnames_in_zip[i], texts[i])
                 else:
                     for i in range(len(texts)):
                         remove_from_zip(kzip_path, fnames_in_zip[i])
-                    with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED,
-                                         allowZip64=True) as zf:
+                    with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED) as zf:
                         for i in range(len(texts)):
                             zf.writestr(fnames_in_zip[i], texts[i])
             except Exception as e:
@@ -359,8 +352,7 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
                       " overwriting." % kzip_path, e)
         else:
             try:
-                with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED,
-                                     allowZip64=True) as zf:
+                with zipfile.ZipFile(kzip_path, "wb", zipfile.ZIP_DEFLATED) as zf:
                     for i in range(len(texts)):
                         zf.writestr(fnames_in_zip[i], texts[i])
             except Exception as e:
@@ -395,7 +387,7 @@ def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
                                          allowZip64=True) as zf:
                         zf.write(fpath, file_name)
             except Exception as e:
-                print("Couldn't open file %s for reading and" \
+                print("Couldn't open file %s for reading and"
                       " overwriting." % kzip_path, e)
         else:
             try:

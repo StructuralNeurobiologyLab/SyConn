@@ -63,6 +63,7 @@ def nodes_in_pathlength(anno, max_path_len):
     Parameters
     ----------
     anno : AnnotationObject
+    anno : AnnotationObject
     max_path_len : float
         Maximum distance from source node
 
@@ -447,7 +448,8 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, mi
     sso.load_skeleton()
     scal = sso.scaling
     change = 1
-
+    if sso.skeleton is None:
+        sso.skeleton = dict()
 
     while change > 0:
         change = 0

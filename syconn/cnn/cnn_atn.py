@@ -16,7 +16,7 @@ from torch.distributions.cauchy import Cauchy
 from torch.distributions.normal import Normal
 
 # Dimension of latent space
-Z_DIM = 10
+Z_DIM = 25
 
 
 class RepresentationNetwork(nn.Module):
@@ -31,19 +31,19 @@ class RepresentationNetwork(nn.Module):
         self.dr = dr
         self.n_out_channels = n_out_channels
         self.conv = nn.Sequential(
-            nn.Conv2d(n_in_channels, 20, (5, 5)), nn.MaxPool2d((2, 2)), act(),
-            nn.Conv2d(20, 25, (5, 5)), nn.MaxPool2d((2, 2)), act(),
-            nn.Conv2d(25, 30, (4, 4)), DropOut(), act(),
-            nn.Conv2d(30, 35, (4, 4)), DropOut(), nn.MaxPool2d((2, 2)), act(),
-            nn.Conv2d(35, 40, (2, 2)), DropOut(), nn.MaxPool2d((2, 2)), act(),
-            nn.Conv2d(40, 45, (2, 2)), nn.MaxPool2d((2, 2)), act(),
-            nn.Conv2d(45, 45, 1), act(),
+            nn.Conv2d(n_in_channels, 13, (5, 5)), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(13, 19, (5, 5)), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(19, 25, (4, 4)), DropOut(), act(),
+            nn.Conv2d(25, 25, (4, 4)), DropOut(), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(25, 30, (2, 2)), DropOut(), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(30, 30, (2, 2)), nn.MaxPool2d((2, 2)), act(),
+            nn.Conv2d(30, 31, 1), act(),
         )
         self.fc = nn.Sequential(
-            nn.AdaptiveMaxPool1d(200),  # flexible to various input sizes
-            nn.Linear(200, 100), act(),  # 93 is hard-coded for this architecture and input size: 128, 256
-            DropOut(),
-            nn.Linear(100, n_out_channels)
+            # nn.AdaptiveMaxPool1d(200),  # flexible to various input sizes
+            nn.Linear(372, 50), act(),  # 93 is hard-coded for this architecture and input size: 128, 256
+            # DropOut(),
+            nn.Linear(50, n_out_channels)
         )
 
     def forward(self, x):
@@ -53,23 +53,6 @@ class RepresentationNetwork(nn.Module):
         x = x.view(x.size()[1:])
         return x  #.squeeze()  # get rid of auxiliary axis needed for AdaptiveMaxPool
 
-
-# # Discriminator
-# class D_net_gauss(nn.Module):
-#     """
-#     adapted from https://blog.paperspace.com/adversarial-autoencoders-with-pytorch/
-#     """
-#     # z_dim has to be equal to n_out_channels in TripletNet
-#     def __init__(self, z_dim):
-#         super().__init__()
-#         # factor 3 because it has to process the latent space of the triplet
-#         self.fc = nn.Sequential(nn.Linear(z_dim * 3, 200), nn.Dropout(p=0.1), nn.ReLU(),
-#                                 nn.Linear(200, 75), nn.Dropout(p=0.1), nn.ReLU(),
-#                                 nn.Linear(75, 1))
-#
-#     def forward(self, x):
-#         x = self.fc(x)
-#         return F.sigmoid(x)
 
 class D_net_gauss(nn.Module):
     """
@@ -115,14 +98,14 @@ class TripletNet(nn.Module):
 def get_model():
     device = torch.device('cuda')
     RepNet = RepresentationNetwork(n_in_channels=4, n_out_channels=Z_DIM, dr=0.1,
-                                   leaky_relu=True)
+                                   leaky_relu=False)
     return TripletNet(RepNet).to(device)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="ATN-Gauss-Z10-Compare2", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="ATN-25-Neighbors-8_run2", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
@@ -154,12 +137,12 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3training/')
 
     max_steps = args.max_steps
-    lr = 0.0005
+    lr = 0.0003
     lr_discr = 0.0001
     lr_stepsize = 500
-    lr_dec = 0.99
-    batch_size = 180
-    margin = 0.1
+    lr_dec = 0.985
+    batch_size = 200
+    margin = 0.2
     model = get_model()
     if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
@@ -176,19 +159,26 @@ if __name__ == "__main__":
 
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
-    train_dataset = MultiviewData_TNet_online(train=True, transform=transform)
-    valid_dataset = MultiviewData_TNet_online(train=False, transform=transform)
+    train_dataset = MultiviewData_TNet_online(train=True, transform=transform, allow_close_neigh=9)
+    valid_dataset = MultiviewData_TNet_online(train=False, transform=transform, allow_close_neigh=9)
     # Set up optimization
     optimizer = optim.Adam(
         model.parameters(),
-        weight_decay=0.5e-4,
+        weight_decay=0.5e-3,
         lr=lr,
         amsgrad=True
     )
+    #
+    # optimizer = optim.SGD(
+    #     model.parameters(),
+    #     weight_decay=0.5e-3,
+    #     lr=lr, momentum=0.9
+    # )
+
     # optim. for discriminator model - true distr. vs. fake distr.
     optimizer_disc = optim.Adam(
         model_discr.parameters(),
-        weight_decay=0.5e-4,
+        weight_decay=0.5e-3,
         lr=lr_discr,
         amsgrad=True
     )
@@ -203,7 +193,7 @@ if __name__ == "__main__":
     # latent distribution
     # l_distr = Cauchy(torch.tensor([0.0]), torch.tensor([1.0]))
     # l_sample_func = lambda n, z: l_distr.rsample((n, z)).squeeze()
-    l_sample_func = lambda n, z: torch.randn(n, z)
+    l_sample_func = lambda n, z: torch.randn(n, z) #+ torch.randn(1)  # make loss mean invariant
     # bimodal normals
     # l_distr = lambda : Normal(torch.tensor([-3.0]), torch.tensor([1.0])) if np.random.randint(2) else Normal(torch.tensor([3.0]), torch.tensor([1.0]))
     # l_sample_func = lambda n, z: l_distr().rsample((n, z)).squeeze()
@@ -221,7 +211,7 @@ if __name__ == "__main__":
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched, "lr_discr": lr_discr_sched},
         ipython_on_error=False,
-        alpha=1e-5, alpha2=0.1,  # Adv. regularization will make up (alpha2 * 100)% of the total loss
+        alpha=1e-6, alpha2=0.0,  # Adv. regularization will make up (alpha2 * 100)% of the total loss
         latent_distr=l_sample_func
     )
 

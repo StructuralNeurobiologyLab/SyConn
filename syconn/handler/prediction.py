@@ -768,21 +768,28 @@ def get_knn_tnet_embedding():
 
 
 def get_tripletnet_model_e3():
-    m = InferenceModel("/wholebrain/scratch/pschuber/e3training_August1st/old/ATN-Gauss-noAdv-#1/")
+    # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_newTNET_neighbors8/ATN-25-Neighbors-8/")
+    # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_newTNET_neighbors/ATN-25-Neighbors/")
+    m = InferenceModel("/wholebrain/scratch/pschuber/e3training_newTNET/TN-25/")
+    # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_August1st/old/ATN-Gauss-noAdv-#1/")
     # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-noAdv-Compare2/")
     # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-Compare2/")
     return m
 
 
 def get_knn_tnet_embedding_e3():
-    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_August1st/old/ATN-Gauss-noAdv-#1/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_newTNET_neighbors8/ATN-25-Neighbors-8/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_newTNET_neighbors/ATN-25-Neighbors/pred/"
+    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_newTNET/TN-25/pred/"
     # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-noAdv-Compare2/pred/"
     # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-Compare2/pred/"
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
 def get_pca_tnet_embedding_e3():
-    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_August1st/old/ATN-Gauss-noAdv-#1/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_newTNET_neighbors8/ATN-25-Neighbors-8/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_newTNET_neighbors/ATN-25-Neighbors/pred/"
+    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_newTNET/TN-25/pred/"
     # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-noAdv-Compare2/pred/"
     # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-Compare2/pred/"
     return pca_tnet_embedding(tnet_eval_dir)
@@ -830,6 +837,7 @@ def force_correct_norm_new(x):
 
     """
     import itertools
+    pbar = tqdm.tqdm(total=x.shape[0]*x.shape[1]*x.shape[2], miniters=1000)
     x = x.astype(np.float32)
     # iterate over view locations, view channels, view numbers: N, 4, 2
     for ii, jj, kk in itertools.product(np.arange(x.shape[0]), np.arange(x.shape[1]),
@@ -842,7 +850,10 @@ def force_correct_norm_new(x):
         elif np.max(curr_img) > 1.0:
             x[ii, jj, kk] = curr_img / 255.
         assert np.max(x[ii, jj, kk]) <= 1.0 and np.min(x[ii, jj, kk]) >= 0
-    return x - 0.5
+        pbar.update(1)
+        x[ii, jj, kk] -= 0.5
+    pbar.close()
+    return x
 
 
 def naive_view_normalization(d):
@@ -958,11 +969,11 @@ def pca_tnet_embedding(fold, n_components=3, fit_all=False):
     valid_d = np.concatenate(valid_d).astype(dtype=np.float32)
     valid_l = np.concatenate(valid_l).astype(dtype=np.uint16)
 
-    pca = PCA(n_components, random_state=0)
+    pca = PCA(n_components, whiten=True, random_state=0)
     if fit_all:
-        pca.fit(np.concatenate([train_d, valid_d]), np.concatenate([train_l, valid_l]))
+        pca.fit(np.concatenate([train_d, valid_d]))
     else:
-        pca.fit(train_d, train_l)
+        pca.fit(train_d)
     return pca
 
 

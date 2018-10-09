@@ -64,12 +64,11 @@ def initialize_logging(log_name):
     except TypeError:
         if not os.path.isdir(log_dir):
             os.makedirs(log_dir)
-    fh = logging.FileHandler(log_dir + log_name + ".log")
-    fh.setLevel(logging.DEBUG)
-
     # add the handlers to logger
     if os.path.isfile(log_dir + log_name + '.log'):
         os.remove(log_dir + log_name + '.log')
+    fh = logging.FileHandler(log_dir + log_name + ".log")
+    fh.setLevel(logging.DEBUG)
     logger.addHandler(fh)
     return logger
 

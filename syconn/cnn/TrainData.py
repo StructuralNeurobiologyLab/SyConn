@@ -24,6 +24,7 @@ from elektronn3.data import transforms
 import contextlib
 from typing import Callable
 import h5py
+from scipy import spatial
 import time
 # fix random seed.
 np.random.seed(0)
@@ -56,7 +57,7 @@ class MultiviewDataSpines(data.Dataset):
         self.inp = self.inp[:, :4].astype(np.float32) / 255.
         self.target = self.target_file[target_key].value.astype(np.int64)
         self.target = self.target[:, 0]
-        self.close_files()  # Using file contents from memory -> no need to keep the file open.
+        self.close_files()
         self.transform = transform
         print("Dataset ({}): {}\t{}".format(cube_id, self.inp.shape,
                                             np.unique(self.target,
@@ -82,32 +83,53 @@ class MultiviewData_TNet_online(data.Dataset):
     """
 
     def __init__(
-            self,
-            train=True, epoch_size=40000,
-            transform: Callable = transforms.Identity()
+            self, working_dir='/wholebrain/scratch/areaxfs3/',
+            train=True, epoch_size=40000, allow_close_neigh=0,
+            transform: Callable = transforms.Identity(),
     ):
         super().__init__()
         self.transform = transform
         self.epoch_size = epoch_size
         self.train = train
+        if 2 > allow_close_neigh > 0:
+            raise ValueError('allow_close_neigh must be at least 2.')
+        self.allow_close_neigh = allow_close_neigh
+        self.inp_locs = None
         # load GliaView Data and store all views in memory
         # inefficient because GV has to be loaded twice (train and valid)
         print("Loaded all data. Concatenating now.")
+        # use these classes to load label and splitting dicts
         AV = AxonViews(None, None, raw_only=False, nb_views=2,
                        naive_norm=False, load_data=False)
 
         CTV = CelltypeViews(load_data=False, naive_norm=False)
+        # now link actual data
+        self.ssd = SuperSegmentationDataset(working_dir, version='tnetgt')
+
         if train:
-            self.inp = [AV.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["train"]] + \
-                       [CTV.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["train"]]
+            self.inp = [self.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["train"]] + \
+                       [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["train"]]
+            self._inp_ssv_ids = self.inp.copy()
+            if self.allow_close_neigh:
+                self.inp_locs = []
+                for ssv in self.inp:
+                    ssv.load_attr_dict()
+                    self.inp_locs.append(np.concatenate(ssv.sample_locations(verbose=True)))
         else:
-            self.inp = [AV.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["valid"]] + \
-                       [CTV.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["valid"]]
+            self.inp = [self.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["valid"]] + \
+                       [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["valid"]]
+            self._inp_ssv_ids = self.inp.copy()
+            if self.allow_close_neigh:
+                self.inp_locs = []
+                for ssv in self.inp:
+                    ssv.load_attr_dict()
+                    self.inp_locs.append(np.concatenate(ssv.sample_locations(verbose=True)))
             self.inp = [ssv.load_views(view_key="raw2") for ssv in self.inp]
-        print("Concatenated all data. Normalizing now.")
         ixs = np.arange(len(self.inp))
         np.random.shuffle(ixs)
         self.inp = np.array(self.inp)[ixs]
+        if self.allow_close_neigh:
+            self.inp_locs = np.array(self.inp_locs)[ixs]
         print("Dataset: {}\t{}".format("train" if train else "valid",
                                        self.inp.shape))
         self._cache_use = 0
@@ -136,9 +158,10 @@ class MultiviewData_TNet_online(data.Dataset):
             # 50% more because of augmentations
             self._max_cache_usages = np.max([200, int(len(views) * 1.5)])
             # get random different SSV
-            views = naive_view_normalization_new(views)
             self._cache = views
             self._cached_ssv_ix = index
+            if self.allow_close_neigh:
+                self._cached_loc_tree = spatial.cKDTree(self.inp_locs[index])
         else:
             views = self._cache
             self._cache_use += 1
@@ -159,7 +182,6 @@ class MultiviewData_TNet_online(data.Dataset):
                 views_dist = ssv.load_views(view_key="raw2")
             else:
                 views_dist = self.inp[dist_ix]
-            views_dist = naive_view_normalization_new(views_dist)
             self._cache_dist = views_dist
             # fact 2 because only drawing 1 view, and additional 50% because of augmentations
             self._max_cache_usages_dist = np.max([200, len(views_dist) * 3])
@@ -175,6 +197,10 @@ class MultiviewData_TNet_online(data.Dataset):
         views_sim = views[mview_ix]
         views_sim = self.transform(views_sim, target=None)[0]
         views_sim = views_sim.swapaxes(1, 0)
+        if self.allow_close_neigh and np.random.rand(1)[0] > 0.25:  # only use neighbors as similar views with 0.25 chance
+            dists, close_neigh_ixs = self._cached_loc_tree.query(self.inp_locs[self._cached_ssv_ix][mview_ix], k=self.allow_close_neigh)  # itself and two others
+            neigh_ix = close_neigh_ixs[np.random.randint(1, self.allow_close_neigh)]  # only use neighbors not itself
+            views_sim[1] = views[neigh_ix, :, np.random.randint(0, 2)]  # chose any of the two views
 
         # single unsimilar view is from different SSV and randomly picked location
         mview_ix = np.random.randint(0, len(views_dist))
@@ -185,7 +211,7 @@ class MultiviewData_TNet_online(data.Dataset):
         if dtime_distant > 10 or dtime_similar > 10 or dtime_transf > 10:
             summary += "Transformation finished after {:.1}s.".format(dtime_transf)
             print(summary)
-        return np.concatenate([views_sim, view_dist])
+        return naive_view_normalization_new(np.concatenate([views_sim, view_dist]))
 
     def __len__(self):
         if self.train:
@@ -217,7 +243,6 @@ def temp_seed(seed):
         np.random.set_state(state)
 
 # -------------------------------------- ELEKTRONN2 ----------------------------
-
 class MultiViewData(Data):
     def __init__(self, working_dir, gt_type, nb_cpus=20,
                  label_dict=None, view_kwargs=None, naive_norm=True,
@@ -313,10 +338,10 @@ class AxonViews(MultiViewData):
         self.binary_views = binary_views
         self.raw_only = raw_only
         if self.raw_only and self.train_d.shape[1] > 1:
-            self.train_d = self.train_d[: ,:1]
-            self.valid_d = self.valid_d[: ,:1]
+            self.train_d = self.train_d[:, :1]
+            self.valid_d = self.valid_d[:, :1]
             if len(self.test_d) > 0:
-                self.test_d = self.test_d[: ,:1]
+                self.test_d = self.test_d[:, :1]
         self.example_shape = self.train_d[0].shape
 
     def getbatch(self, batch_size, source='train'):
