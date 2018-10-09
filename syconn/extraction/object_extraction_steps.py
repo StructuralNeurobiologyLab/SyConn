@@ -691,7 +691,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                    workfolder=None, overlaydataset_path=None,
                    chunk_list=None, suffix="", n_chunk_jobs=5000,
                    use_work_dir=True, qsub_pe=None, qsub_queue=None,
-                   n_max_co_processes=None, nb_cpus=2):  # TODO: nb_cpus=1 when memory consumption fixed
+                   n_max_co_processes=None, nb_cpus=1):  # TODO: nb_cpus=1 when memory consumption fixed
     """
     Extracts voxels for each component id
 
