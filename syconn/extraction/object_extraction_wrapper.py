@@ -425,7 +425,7 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
 
 def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
                         overlaydataset_path=None, chunk_list=None, offset=None,
-                        size=None, suffix="", qsub_pe=None, qsub_queue=None,
+                        size=None, suffix="", qsub_pe=None, qsub_queue=None, qsub_slots=None,
                         n_max_co_processes=None, n_chunk_jobs=5000):
     """
     Main function for the object extraction step; combines all needed steps
@@ -453,6 +453,11 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
         qsub parallel environment
     qsub_queue: str or None
         qsub queue
+    n_max_co_processes: int or None
+        Total number of parallel processes that should be running on the cluster.
+    n_chunk_jobs: int
+
+
     """
     assert overlaydataset_path is not None or hdf5names is not None
 
@@ -473,40 +478,40 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
     # TODO: Remove or make optional
     # # --------------------------------------------------------------------------
     #
-    # time_start = time.time()
-    # oes.extract_voxels(cset, filename, hdf5names,
-    #                    overlaydataset_path=overlaydataset_path,
-    #                    chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
-    #                    qsub_queue=qsub_queue,
-    #                    n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
-    #                    n_max_co_processes=n_max_co_processes)
-    # all_times.append(time.time() - time_start)
-    # step_names.append("voxel extraction")
-    # print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
-    #
-    # # --------------------------------------------------------------------------
-    #
-    # time_start = time.time()
-    # oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
-    #                    hdf5names, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-    #                    n_folders_fs=n_folders_fs,
-    #                    n_max_co_processes=n_max_co_processes)
-    # all_times.append(time.time() - time_start)
-    # step_names.append("combine voxels")
-    # print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
-    #
-    # # --------------------------------------------------------------------------
-
     time_start = time.time()
-    oes.extract_voxels_combined(cset, filename, hdf5names,
+    oes.extract_voxels(cset, filename, hdf5names,
                        overlaydataset_path=overlaydataset_path,
                        chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
                        qsub_queue=qsub_queue,
                        n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
                        n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
-    step_names.append("extract voxels combined")
-    print("\nTime needed for extracting voxels combined: %.3fs" % all_times[-1])
+    step_names.append("voxel extraction")
+    print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
+    #
+    # # --------------------------------------------------------------------------
+    #
+    time_start = time.time()
+    oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
+                       hdf5names, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+                       n_folders_fs=n_folders_fs,
+                       n_max_co_processes=n_max_co_processes)
+    all_times.append(time.time() - time_start)
+    step_names.append("combine voxels")
+    print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
+    #
+    # # --------------------------------------------------------------------------
+
+    # time_start = time.time()
+    # oes.extract_voxels_combined(cset, filename, hdf5names,
+    #                    overlaydataset_path=overlaydataset_path,
+    #                    chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
+    #                    qsub_queue=qsub_queue, qsub_slots=qsub_slots,
+    #                    n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
+    #                    n_max_co_processes=n_max_co_processes)
+    # all_times.append(time.time() - time_start)
+    # step_names.append("extract voxels combined")
+    # print("\nTime needed for extracting voxels combined: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 

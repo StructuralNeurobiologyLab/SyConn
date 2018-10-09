@@ -7,6 +7,8 @@
 import logging
 import coloredlogs
 import os
+from ..config import global_params
+
 __all__ = ['initialize_logging']
 
 
@@ -14,23 +16,26 @@ def get_main_log():
     logger = logging.getLogger('syconn')
     coloredlogs.install(level='DEBUG', logger=logger)
     logger.setLevel(logging.DEBUG)
-    # create file handler which logs even debug messages
-    log_dir = os.path.expanduser('~') + "/SyConn/logs/"
-    # Python2 compat.
-    try:
-        os.makedirs(log_dir, exist_ok=True)
-    except TypeError:
-        if not os.path.isdir(log_dir):
-            os.makedirs(log_dir)
-    fh = logging.FileHandler(log_dir + 'syconn.log')
-    fh.setLevel(logging.DEBUG)
 
-    # add the handlers to logger
-    if os.path.isfile(log_dir + 'syconn.log'):
-        os.remove(log_dir + 'syconn.log')
-    logger.addHandler(fh)
-    logger.info("Initialized logging. Log-files are stored at"
-                " {}.".format(log_dir))
+    if not global_params.DISABLE_FILE_LOGGING:
+        # create file handler which logs even debug messages
+        log_dir = os.path.expanduser('~') + "/SyConn/logs/"
+
+        try:
+            os.makedirs(log_dir, exist_ok=True)
+        except TypeError:
+            if not os.path.isdir(log_dir):
+                os.makedirs(log_dir)
+        fh = logging.FileHandler(log_dir + 'syconn.log')
+        fh.setLevel(logging.DEBUG)
+
+        # add the handlers to logger
+        if os.path.isfile(log_dir + 'syconn.log'):
+            os.remove(log_dir + 'syconn.log')
+        logger.addHandler(fh)
+        logger.info("Initialized file logging. Log-files are stored at"
+                    " {}.".format(log_dir))
+    logger.info("Initialized stdout logging.")
     return logger
 
 
@@ -56,20 +61,22 @@ def initialize_logging(log_name):
     logger = logging.getLogger(log_name)
     coloredlogs.install(level='DEBUG', logger=logger)
     logger.setLevel(logging.DEBUG)
-    # create file handler which logs even debug messages
-    log_dir = os.path.expanduser('~') + "/SyConn/logs/"
-    # Python2 compat.
-    try:
-        os.makedirs(log_dir, exist_ok=True)
-    except TypeError:
-        if not os.path.isdir(log_dir):
-            os.makedirs(log_dir)
-    # add the handlers to logger
-    if os.path.isfile(log_dir + log_name + '.log'):
-        os.remove(log_dir + log_name + '.log')
-    fh = logging.FileHandler(log_dir + log_name + ".log")
-    fh.setLevel(logging.DEBUG)
-    logger.addHandler(fh)
+
+    if not global_params.DISABLE_FILE_LOGGING:
+        # create file handler which logs even debug messages
+        log_dir = os.path.expanduser('~') + "/SyConn/logs/"
+
+        try:
+            os.makedirs(log_dir, exist_ok=True)
+        except TypeError:
+            if not os.path.isdir(log_dir):
+                os.makedirs(log_dir)
+        if os.path.isfile(log_dir + log_name + '.log'):
+            os.remove(log_dir + log_name + '.log')
+        # add the handlers to logger
+        fh = logging.FileHandler(log_dir + log_name + ".log")
+        fh.setLevel(logging.DEBUG)
+        logger.addHandler(fh)
     return logger
 
 

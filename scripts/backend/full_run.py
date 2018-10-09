@@ -1,6 +1,10 @@
+#import sys, os
+#sys.path.insert(0, os.path.abspath('..'))
+
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 import time
+from syconn.config import global_params
 
 from syconn.proc import sd_proc
 from syconn.proc import ssd_proc
@@ -10,8 +14,8 @@ from syconn.extraction import cs_processing_steps as cps
 from syconn.extraction import object_extraction_wrapper as oew
 from syconn.reps import segmentation as seg
 
-kd_seg_path = "/wholebrain/songbird/j0126/areaxfs_v5/knossosdatasets/"
-wd = "/wholebrain/songbird/j0126/areaxfs_v5/"
+kd_seg_path = "/mnt/j0126_cubed/"
+wd = "/mnt/j0126/areaxfs_v10/"
 cd_dir = wd + "chunkdatasets/"
 
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5/extract_combine_test"   # TODO: del
@@ -39,14 +43,15 @@ cd = chunky.load_dataset(cd_dir)
 #########
 
 # Object extraction
-# oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=5000,
-#                         hdf5names=["sv"], n_max_co_processes=100, qsub_pe='openmp', n_folders_fs=10000)
+oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=5000,
+                        hdf5names=["sv"], n_max_co_processes=5000, qsub_pe='default', qsub_queue='all.q', qsub_slots=1,
+                        n_folders_fs=10000)
 # Object Processing
-sd = seg.SegmentationDataset("sv", working_dir=wd)
+#sd = seg.SegmentationDataset("sv", working_dir=wd)
 # sd_proc.dataset_analysis(sd, qsub_pe="openmp", n_max_co_processes=100)
 
-sd_proc.map_objects_to_sv(sd, "sj", kd_seg_path, nb_cpus=1,
-                          n_max_co_processes=100, stride=100)   # TODO: qsub_pe="openmp",
+#sd_proc.map_objects_to_sv(sd, "sj", kd_seg_path, nb_cpus=1,
+#                          n_max_co_processes=100, stride=100)   # TODO: qsub_pe="openmp",
 
 ############################################################################################
 # ##### Cell object extraction #####

@@ -4,6 +4,8 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
+
 import errno
 import os
 import re
@@ -82,7 +84,10 @@ class SegmentationDataset(object):
 
         self._scaling = scaling
 
-        if version is None:
+        if create and (version is None):
+            version == 'new'
+
+        if version is None and create==False:
             try:
                 self._version = self.config.entries["Versions"][self.type]
             except:
