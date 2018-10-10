@@ -286,7 +286,7 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     summary_txt += "3D latent space results for %s:" % prefix
     summary_txt += "Captured variance: {}".format(pca.explained_variance_ratio_)
     summary_txt += classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names)
+                                target_names=target_names, digits=4)
     plt.figure()
     colors = []
     for i in range(len(target_names)):
@@ -312,7 +312,7 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     pred = rfc.predict_proba(valid_d)
     summary_txt += "Complete latent space results for %s using RFC:" % prefix
     summary_txt += str(classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names))
+                                target_names=target_names, digits=4))
 
     # kNN classification for whole latent space
     nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='kd_tree', n_jobs=16,
@@ -321,7 +321,7 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     pred = nbrs.predict_proba(valid_d)
     summary_txt += "Complete latent space results for %s using kNN:" % prefix
     summary_txt += str(classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names))
+                                target_names=target_names, digits=4))
 
     text_file = open(fold + '/%s_performance_summary.txt' % prefix, "w")
     text_file.write(summary_txt)
@@ -338,7 +338,6 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
         lines, = plt.plot(recall, precision, lw=3,
                           label='%s: %0.4f' % (target_names[i], auc))
         colors.append(lines.get_color())
-        print
     plt.xlabel('Recall')
     plt.ylabel('Precision')
     plt.ylim([0.0, 1.05])

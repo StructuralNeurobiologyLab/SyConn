@@ -447,7 +447,8 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, mi
     sso.load_skeleton()
     scal = sso.scaling
     change = 1
-
+    if sso.skeleton is None:
+        sso.skeleton = dict()
 
     while change > 0:
         change = 0

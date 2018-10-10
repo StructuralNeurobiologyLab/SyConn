@@ -382,7 +382,7 @@ def test_basics_write_txt2kzip():
 def test_basics_write_data2kzip():
 
     """
-    Checks the write_data2kzipfunction in syconnfs.handler.basics
+    Checks the write_data2kzipfunction in syconn.handler.basics
     Returns an assertion error if an exception is thrown
     -------
 
@@ -400,7 +400,6 @@ def test_basics_write_data2kzip():
         os.remove(dir_path + '/test.kzip')
     if os.path.isfile(dir_path + '/test.txt'):
         os.remove(dir_path + '/test.txt')
-
 
 
 def test_read_txt_from_zip():

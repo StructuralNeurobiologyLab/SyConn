@@ -267,7 +267,7 @@ class SuperSegmentationObject(object):
         if os.path.isfile(self.ssv_dir + "atrr_dict.pkl"):
             return self.ssv_dir + "atrr_dict.pkl"
         # TODO: Change as soon as new SSD is created! Now kept for backwards compatibility
-        return self.ssv_dir + "atrr_dict.pkl"
+        return self.ssv_dir + "attr_dict.pkl"
 
     @property
     def skeleton_kzip_path(self):
@@ -1197,7 +1197,7 @@ class SuperSegmentationObject(object):
         self.save_views(index_views, "index{}".format(nb_views))
 
     def _render_rawviews(self, nb_views=2, save=True, force_recompute=False,
-                         add_cellobjects=True):
+                         add_cellobjects=True, verbose=False):
         if not force_recompute:
             try:
                 views = self.load_views("raw{}".format(nb_views))
@@ -1208,12 +1208,12 @@ class SuperSegmentationObject(object):
                 pass
         locs = np.concatenate(self.sample_locations(cache=False))
         if self._rot_mat is None:
-            views, rot_mat = render_sso_coords(self, locs,  verbose=True,
+            views, rot_mat = render_sso_coords(self, locs,  verbose=verbose,
                                       add_cellobjects=add_cellobjects,
                                       nb_views=nb_views, return_rot_mat=True)
             self._rot_mat = rot_mat
         else:
-            views = render_sso_coords(self, locs, verbose=True,
+            views = render_sso_coords(self, locs, verbose=verbose,
                                       add_cellobjects=add_cellobjects,
                                       nb_views=nb_views, rot_mat=self._rot_mat)
         if save:
@@ -1428,23 +1428,24 @@ class SuperSegmentationObject(object):
         -------
 
         """
+        color = None
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
         if obj_type == "sv":
             mesh = self.mesh
-            color = None  # by far more convenient when color is not set explicitely (130, 130, 130, 160)
         elif obj_type == "sj":
             mesh = self.sj_mesh
-            color = np.array([int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255])
+            # color = np.array([int(0.849 * 255), int(0.138 * 255),
+            #                   int(0.133 * 255), 255])
         elif obj_type == "vc":
             mesh = self.vc_mesh
-            color = np.array([int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255])
+            # color = np.array([int(0.175 * 255), int(0.585 * 255),
+            #                   int(0.301 * 255), 255])
         elif obj_type == "mi":
             mesh = self.mi_mesh
-            color = np.array([0, 153, 255, 255])
+            # color = np.array([0, 153, 255, 255])
         else:
             mesh = self._meshes[obj_type]
-            color = None
         if ext_color is not None:
             if type(ext_color) is list:
                 ext_color = np.array(ext_color)
@@ -1469,6 +1470,20 @@ class SuperSegmentationObject(object):
                         ply_fname=obj_type + ".ply", nb_cpus=self.nb_cpus)
 
     def meshes2kzip(self, dest_path=None, sv_color=None):
+        """
+        Writes SV, mito, vesicle cloud and synaptic junction meshes to k.zip
+
+        Parameters
+        ----------
+        dest_path : str
+        sv_color : np.array
+            array with RGBA values or None to use default values
+            (see 'mesh2kzip')
+
+        Returns
+        -------
+
+        """
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
         for ot in ["sj", "vc", "mi",

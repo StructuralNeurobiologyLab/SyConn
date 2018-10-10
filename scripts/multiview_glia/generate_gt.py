@@ -60,7 +60,7 @@ if __name__ == "__main__":
     # save SSVs
     ssd_new.save_dataset_deep()
     gt_dir = "/wholebrain/scratch/areaxfs3//ssv_gliagt/"
-    label_dict = write_obj2pkl(gt_dir +"gliagt_labels.pkl", {k: 1 for k in
+    write_obj2pkl(gt_dir +"gliagt_labels.pkl", {k: 1 for k in
                                                              glia_ids})
     # Neuron GT is given by axon GT ...
     for ssv in ssd_new.ssvs:

@@ -169,8 +169,8 @@ class SyConn_backend(object):
         mesh = {'vertices': mesh[1],
                 'indices': mesh[0],
                 'normals': mesh[2] if len(mesh) == 2 else []}
-        dtime = start - time.time()
-        self.logger.info('Got ssv mesh {} after {:.0f}'.format(ssv_id, dtime))
+        dtime = time.time() - start
+        self.logger.info('Got ssv mesh {} after {:.2f}'.format(ssv_id, dtime))
         return mesh
 
     def ssv_ind(self, ssv_id):
@@ -183,9 +183,9 @@ class SyConn_backend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
-        dtime = start - time.time()
+        dtime = time.time() - start
         self.logger.info('Got ssv {} mesh indices after'
-                         ' {:.0f}'.format(ssv_id, dtime))
+                         ' {:.2f}'.format(ssv_id, dtime))
         return b"".join(mesh[0])
 
     def ssv_vert(self, ssv_id):
@@ -199,9 +199,9 @@ class SyConn_backend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
-        dtime = start - time.time()
+        dtime = time.time() - start
         self.logger.info('Got ssv {} mesh vertices after'
-                         ' {:.0f}'.format(ssv_id, dtime))
+                         ' {:.2f}'.format(ssv_id, dtime))
         return b"".join(mesh[1])
 
     def ssv_skeleton(self, ssv_id):
@@ -236,9 +236,9 @@ class SyConn_backend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
-        dtime = start - time.time()
+        dtime = time.time() - start
         self.logger.info('Got ssv {} mesh normals after'
-                         ' {:.0f}'.format(ssv_id, dtime))
+                         ' {:.2f}'.format(ssv_id, dtime))
         if len(mesh) == 2:
             return ""
         return b"".join(mesh[2])
@@ -293,9 +293,9 @@ class SyConn_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
-        dtime = start - time.time()
+        dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh indices after'
-                         ' {:.0f}'.format(ssv_id, obj_type, dtime))
+                         ' {:.2f}'.format(ssv_id, obj_type, dtime))
         return b"".join(mesh[0])
 
     def ssv_obj_vert(self, ssv_id, obj_type):
@@ -321,9 +321,9 @@ class SyConn_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
-        dtime = start - time.time()
+        dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh vertices after'
-                         ' {:.0f}'.format(ssv_id, obj_type, dtime))
+                         ' {:.2f}'.format(ssv_id, obj_type, dtime))
         return b"".join(mesh[1])
 
     def ssv_obj_norm(self, ssv_id, obj_type):
@@ -349,9 +349,9 @@ class SyConn_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
-        dtime = start - time.time()
+        dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh normals after'
-                         ' {:.0f}'.format(ssv_id, obj_type, dtime))
+                         ' {:.2f}'.format(ssv_id, obj_type, dtime))
         if len(mesh) == 2:
             return ""
         return b"".join(mesh[2])
@@ -466,8 +466,6 @@ class ServerState(object):
                                         logger=self.logger)
         self.logger.info('SyConn gate server running.')
         return
-
-
 
 
 class MyEncoder(json.JSONEncoder):
