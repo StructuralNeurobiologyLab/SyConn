@@ -14,6 +14,7 @@ import networkx as nx
 from scipy import spatial
 from knossos_utils import knossosdataset
 
+
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 try:
     default_wd_available = True
@@ -24,7 +25,7 @@ from ..config import parser
 from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
-from ..handler.basics import get_filepaths_from_dir, safe_copy, write_txt2kzip
+from ..handler.basics import get_filepaths_from_dir, safe_copy, write_txt2kzip, temp_seed
 from .segmentation_helper import *
 from ..proc import meshes
 from skimage.measure import mesh_surface_area
@@ -880,7 +881,7 @@ class SegmentationObject(object):
         for k, v in zip(attr_keys, attr_values):
             glob_attr_dc[self.id][k] = v
         glob_attr_dc.push()
-
+temp_seed
     def attr_exists(self, attr_key):
         if len(self.attr_dict) == 0:
             self.load_attr_dict()
@@ -934,29 +935,53 @@ class SegmentationObject(object):
         vx = bin_arrs[central_block_id].copy()
         central_block_offset = block_offsets[central_block_id]
 
-        vx = ndimage.morphology.distance_transform_edt(
-            np.pad(vx, 1, mode="constant", constant_values=0))[1:-1, 1:-1, 1:-1]
 
-        max_locs = np.where(vx == vx.max())
+        # Old and crazy inefficient implementation to find a multivariate "mean" which
+        # is inside of the object.
 
-        max_loc_id = int(len(max_locs[0]) / 2)
-        max_loc = np.array([max_locs[0][max_loc_id],
-                            max_locs[1][max_loc_id],
-                            max_locs[2][max_loc_id]])
+        #vx = ndimage.morphology.distance_transform_edt(
+        #    np.pad(vx, 1, mode="constant", constant_values=0))[1:-1, 1:-1, 1:-1]
 
-        if not fast:
-            vx = ndimage.gaussian_filter(vx, sigma=[15, 15, 7])
-            max_locs = np.where(vx == vx.max())
+        #max_locs = np.where(vx == vx.max())
 
-            max_loc_id = int(len(max_locs[0]) / 2)
-            better_loc = np.array([max_locs[0][max_loc_id],
-                                   max_locs[1][max_loc_id],
-                                   max_locs[2][max_loc_id]])
+        #max_loc_id = int(len(max_locs[0]) / 2)
+        #max_loc = np.array([max_locs[0][max_loc_id],
+        #                    max_locs[1][max_loc_id],
+        #                    max_locs[2][max_loc_id]])
 
-            if bin_arrs[central_block_id][better_loc[0], better_loc[1], better_loc[2]]:
-                max_loc = better_loc
+        #if not fast:
+        #    vx = ndimage.gaussian_filter(vx, sigma=[15, 15, 7])
+        #    max_locs = np.where(vx == vx.max())
 
-        self._rep_coord = max_loc + central_block_offset
+        #    max_loc_id = int(len(max_locs[0]) / 2)
+        #    better_loc = np.array([max_locs[0][max_loc_id],
+        #                           max_locs[1][max_loc_id],
+        #                           max_locs[2][max_loc_id]])
+
+        #    if bin_arrs[central_block_id][better_loc[0], better_loc[1], better_loc[2]]:
+        #        max_loc = better_loc
+
+
+        id_locs = np.where(vx == vx.max())
+        id_locs = np.array(id_locs)
+
+        # downsampling to ensure fast processing - this is deterministic!
+        if len(id_locs[0]) > 1e4:
+
+            with temp_seed(0):
+                idx = np.random.randint(0,len(id_locs[0]),int(1e4))
+            id_locs = np.array([id_locs[0][idx], id_locs[1][idx], id_locs[2][idx]])
+
+        # calculate COM
+        COM = np.mean(id_locs, axis=1)
+
+        # ensure that the point is contained inside of the object, i.e. use closest existing point to COM
+        kdtree_array = np.swapaxes(id_locs, 0, 1)
+        kdtree = spatial.cKDTree(kdtree_array)
+        dd, ii = kdtree.query(COM, k=1)
+        found_point = kdtree_array[ii, :]
+
+        self._rep_coord = found_point + central_block_offset
 
     def calculate_bounding_box(self):
         _ = load_voxels(self)

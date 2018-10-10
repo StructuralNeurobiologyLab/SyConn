@@ -18,7 +18,7 @@ from ..handler import basics
 import tqdm
 
 
-def dataset_analysis(sd, recompute=True, stride=100, qsub_pe=None,
+def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
                      qsub_queue=None, nb_cpus=1, n_max_co_processes=100,
                      compute_mesharea=False):
     """ Analyses the whole dataset and extracts and caches key information

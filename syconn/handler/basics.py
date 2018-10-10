@@ -23,6 +23,7 @@ import re
 import signal
 #from smart_open import smart_open
 import logging
+import contextlib
 
 __all__ = ["load_from_h5py", "save_to_h5py", "crop_bool_array",
            "get_filepaths_from_dir", "write_obj2pkl", "load_pkl2obj",
@@ -637,3 +638,23 @@ def parse_cc_dict_from_kzip(k_path):
     """
     txt = read_txt_from_zip(k_path, "mergelist.txt")
     return prase_cc_dict_from_txt(txt)
+
+
+@contextlib.contextmanager
+def temp_seed(seed):
+    """
+    From https://stackoverflow.com/questions/49555991/can-i-create-a-local-numpy-random-seed
+    Parameters
+    ----------
+    seed :
+
+    Returns
+    -------
+
+    """
+    state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        yield
+    finally:
+        np.random.set_state(state)
