@@ -8,8 +8,8 @@ is usually parallelized.
 Typically, the voxel storage of a  `SegmentationDatasets` is created first (eg. by the object extraction). 
 Please check the corresponding documentation to learn more about that.
 
-On a fundamental level, each `SegmentationObject` owns voxels, attributes, a sekelton and a mesh which 
-are stored in different dictionaries (`VoxelDict`, `AttributeDict`, `SkeletonDict`, `MeshDict`). 
+On a fundamental level, each `SegmentationObject` owns voxels, attributes, a skelton and a mesh which 
+are stored in different dictionaries (`VoxelDict`, `AttributeDict`, `SkeletonDict`, `MeshDict`; see section 'Backend'). 
 Each dictionary consists of the associated data from many objects and compresses it individually for
 efficient storage. The number of dictionaries per data type can be defined with `n_folders_fs` (only powers of 10). 
 Please note for the general way of creating `SegmentationDatasets` this has to be passed to the object extraction as well.

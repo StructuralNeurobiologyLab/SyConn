@@ -6,7 +6,6 @@ Subpackages
 
 .. toctree::
 
-    syconn.QSUB_scripts
     syconn.config
     syconn.extraction
     syconn.gate
@@ -16,6 +15,8 @@ Subpackages
     syconn.reps
     syconn.ui
     syconn.utils
+    syconn.QSUB_scripts
+
 
 Module contents
 ---------------

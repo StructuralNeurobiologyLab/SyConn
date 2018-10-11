@@ -33,24 +33,14 @@ def gauss_threshold_connected_components(*args, **kwargs):
     return object_segmentation(*args, **kwargs)
 
 
-def object_segmentation(cset, filename, hdf5names,
-                                         overlap="auto", sigmas=None,
-                                         thresholds=None,
-                                         chunk_list=None,
-                                         debug=False,
-                                         swapdata=False,
-                                         prob_kd_path_dict=None,
-                                         membrane_filename=None,
-                                         membrane_kd_path=None,
-                                         hdf5_name_membrane=None,
-                                         fast_load=False,
-                                         suffix="",
-                                         qsub_pe=None,
-                                         qsub_queue=None,
-                                         nb_cpus=1,
-                                         n_max_co_processes=100,
-                                         transform_func=None,
-                                         func_kwargs=None):
+def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
+                        thresholds=None, chunk_list=None, debug=False,
+                        swapdata=False, prob_kd_path_dict=None,
+                        membrane_filename=None, membrane_kd_path=None,
+                        hdf5_name_membrane=None, fast_load=False, suffix="",
+                        qsub_pe=None, qsub_queue=None, nb_cpus=1,
+                        n_max_co_processes=100, transform_func=None,
+                        transform_func_kwargs=None):
     """
     Extracts connected component from probability maps
     1. Gaussian filter (defined by sigma)
@@ -112,7 +102,7 @@ def object_segmentation(cset, filename, hdf5names,
         qsub queue
     transform_func: callable
         Segmentation method which is applied
-    func_kwargs : dict
+    transform_func_kwargs : dict
         key word arguments for transform_func
 
     Returns
@@ -151,10 +141,6 @@ def object_segmentation(cset, filename, hdf5names,
 
         overlap = np.ceil(max_sigma * 4) + stitch_overlap
 
-    # print("overlap:", overlap)
-
-    # print("thresholds:", thresholds)
-
     multi_params = []
     for nb_chunk in chunk_list:
         multi_params.append(
@@ -162,7 +148,7 @@ def object_segmentation(cset, filename, hdf5names,
              hdf5names, overlap,
              sigmas, thresholds, swapdata, prob_kd_path_dict,
              membrane_filename, membrane_kd_path,
-             hdf5_name_membrane, fast_load, suffix, func_kwargs])
+             hdf5_name_membrane, fast_load, suffix, transform_func_kwargs])
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess_imap(transform_func,
@@ -196,8 +182,24 @@ def object_segmentation(cset, filename, hdf5names,
 
 
 def _gauss_threshold_connected_components_thread(args):
-    """ Default worker of object_segmentation """
+    """
+    Default worker of object_segmentation. Performs a gaussian blur with
+     subsequent thresholding to extract connected components of a probability
+     map. Result summaries are returned and connected components are stored as
+     .h5 files.
+     TODO: Add generic '_segmentation_thread' to enable a clean support of
+     custom-made segmentation functions passed to 'object_segmentation' via
+     'transform_func'-kwargs
 
+    Parameters
+    ----------
+    args : list
+
+    Returns
+    -------
+    list of lists
+        Results of connected component analysis
+    """
     chunk = args[0]
     path_head_folder = args[1]
     filename = args[2]

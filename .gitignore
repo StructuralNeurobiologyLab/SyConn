@@ -60,13 +60,7 @@ target/
 
 #Ipython Notebook
 .ipynb_checkpoints
-/scripts/cmn_paper/
-/.gitignore
-/scripts/rendering/inversed_mapping.py
-/scripts/rendering/palette_example.py
-/scripts/rendering/gener_lab_views.py
-/scripts/rendering/pallete.py
-/scripts/rendering/rendering_example.py
 
 # PyCharm
 .idea/
+/.gitignore
