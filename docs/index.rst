@@ -13,7 +13,18 @@ Contents:
 
    GettingStarted
    installation
-   Examples
+
+Tutorials
+=============
+.. toctree::
+   :maxdepth: 1
+
+   _doc
+
+Documentation
+=============
+.. toctree::
+   :maxdepth: 1
 
    syconn
 

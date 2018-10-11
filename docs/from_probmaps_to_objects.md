@@ -1,4 +1,4 @@
-# From Probability maps to segmentation objects
+# Creation of segmentation objects
 
 Probability maps and segmentations are stored in `ChunkDatasets` (see `chunky.py` in `knossos_utils`) 
 and are transformed to `SegmentationDatasets` (see `segmentationdataset` in `syconn.reps`) in multiple steps. 

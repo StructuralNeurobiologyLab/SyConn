@@ -2,6 +2,8 @@
 View-related QSUB scripts are located at `SyConn/scripts/glia/` and `SyConn/scripts/multi_views/`.
 
 ## Glia removal
+_in progress_
+
 For generating the multi-views prior to glia removal run:
 `start_sso_rendering_glia_removal.py`
 
@@ -25,4 +27,4 @@ Run:
 
 
 # Groundtruth generation
-# TBD
+TBD

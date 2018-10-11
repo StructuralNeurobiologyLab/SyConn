@@ -881,7 +881,7 @@ class SegmentationObject(object):
         for k, v in zip(attr_keys, attr_values):
             glob_attr_dc[self.id][k] = v
         glob_attr_dc.push()
-temp_seed
+
     def attr_exists(self, attr_key):
         if len(self.attr_dict) == 0:
             self.load_attr_dict()
