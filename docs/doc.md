@@ -1,4 +1,4 @@
-Next, we will introduce the important bits of SyConn. For an example full run see [here](example_full_run.md).
+# Tutorials
 
 * [Working directory and config setup](config.md)
 
@@ -8,7 +8,7 @@ Next, we will introduce the important bits of SyConn. For an example full run se
 
 * [Mapping cellular organelles](object_mapping.md) to SSVs
 
-* [SSO](super_segmentation_objects.md) data class
+* Data class to store agglomerated super voxels [SSO](super_segmentation_objects.md)
 
 * [Skeletons](skeletons.md) of (super) super voxel
 
@@ -21,6 +21,9 @@ Next, we will introduce the important bits of SyConn. For an example full run se
 * [Identification of synapses](contact_site_classification.md)
 
 * [Synapse type](synapse_type.md) prediction
+
+
+For more detailed descriptions of parts of the analysis pipeline see [here](analysis_parts.md).
 
 
 

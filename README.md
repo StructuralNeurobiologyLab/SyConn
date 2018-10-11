@@ -1,9 +1,6 @@
 # SyConn v2
-Synaptic connectivity inference toolkit developed at Max-Planck-Institute of Neurobiology, Munich <br />
-Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld <br />
-
-Refactored (still an early stage construction) version of SyConn for automated synaptic connectivity inference based on dense EM segmentation data. 
-For the first version see branch 'dorkenwald2017nm'. 
+Refactored (still an early stage construction) version of SyConn for automated synaptic connectivity inference based on dense EM segmentation data.
+For v1 see the SyConn branch [dorkenwald2017nm](https://github.com/StructuralNeurobiologyLab/SyConn/tree/dorkenwald2017nm).
 
 Version 2 currently features:
 - introduction of supervoxel and agglomerated supervoxel classes
@@ -12,13 +9,11 @@ Version 2 currently features:
 - [glia identification and splitting](https://www.biorxiv.org/content/early/2018/07/06/364034)
 - generation of connectivity matrix
 
-
 ## System Requirements & Installation
-
 * Python 3.5
 * The whole pipeline was designed and tested on Linux systems (CentOS, Arch)
-* SyConn is based on the packages `elektronn <http://elektronn.org>`_, `knossos-utils <https://github.com/knossos-project/knossos_utils>`_
-* `KNOSSOS <http://knossostool.org/>`_ is used for visualization and annotation of 3D EM data sets.
+* SyConn is based on the packages [elektronn](http://elektronn.org)_, [knossos-utils](https://github.com/knossos-project/knossos_utils)
+ is used for visualization and annotation of 3D EM data sets.
 * [VIGRA](https://ukoethe.github.io/vigra/), e.g. ``conda install -c ukoethe vigra``
 * osmesa, e.g.: ``conda install -c menpo osmesa``
 
@@ -29,6 +24,13 @@ You can install SyConn using  ``git`` and  ``pip``:
     pip install -r requirements.txt
     pip install .
 
-## Documentation
+## Tutorials & Documentation
 
-For documentation see [here](docs/doc.md)
+For tutorials see [here](docs/doc.md).
+
+To build the documentation run `make html` in the `docs` folder.
+
+# The Team
+The Synaptic connectivity inference toolkit developed is developed at Max-Planck-Institute of Neurobiology, Munich.
+
+Authors: Philipp Schubert, Sven Dorkenwald, Rangoli Saxena, Joergen Kornfeld
