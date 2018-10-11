@@ -339,7 +339,7 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
         if os.path.isfile(kzip_path):
             try:
                 if force_overwrite:
-                    with zipfile.ZipFile(kzip_path, "wb", zipfile.ZIP_DEFLATED) as zf:
+                    with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                         for i in range(len(texts)):
                             zf.writestr(fnames_in_zip[i], texts[i])
                 else:
@@ -353,7 +353,7 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
                       " overwriting." % kzip_path, e)
         else:
             try:
-                with zipfile.ZipFile(kzip_path, "wb", zipfile.ZIP_DEFLATED) as zf:
+                with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                     for i in range(len(texts)):
                         zf.writestr(fnames_in_zip[i], texts[i])
             except Exception as e:

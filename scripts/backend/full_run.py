@@ -42,16 +42,36 @@ cd = chunky.load_dataset(cd_dir)
 #                    n_max_co_processes=100)
 #########
 
-# Object extraction
+# Object extraction - 2h
 #oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=5000,
 #                        hdf5names=["sv"], n_max_co_processes=5000, qsub_pe='default', qsub_queue='all.q', qsub_slots=1,
 #                        n_folders_fs=10000)
-# Object Processing
-sd = seg.SegmentationDataset("sv", working_dir=wd)
-sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q', stride=10, n_max_co_processes=5000)
 
-#sd_proc.map_objects_to_sv(sd, "sj", kd_seg_path, nb_cpus=1,
-#                          n_max_co_processes=100, stride=100)   # TODO: qsub_pe="openmp",
+# Object Processing - 0.5h
+sd = seg.SegmentationDataset("sv", working_dir=wd)
+#sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q', stride=10, n_max_co_processes=5000)
+
+# Map objects to sv's
+# About 0.2 h per object class
+#sd_proc.map_objects_to_sv(sd, "sj", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
+
+sd_proc.map_objects_to_sv(sd, "vc", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
+
+sd_proc.map_objects_to_sv(sd, "mi", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
+
+
+
+# Create SSD and incorporate RAG
+ssd = ss.SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/",
+                                  version="spgt", ssd_type="ssv",
+                                  sv_mapping="/wholebrain/scratch/areaxfs3/ssv_spgt/mergelist.txt")
+ssd.save_dataset_shallow()
+# generell dann
+# ssd.save_dataset_deep(qsub_pe="openmp", n_max_co_processes=100)
+# da das aber overkill ist (und der stride bei default auch zu gross ist fuer das mini dataset), reicht
+ssd.save_dataset_deep(nb_cpus=20, stride=5)
+
+
 
 ############################################################################################
 # ##### Cell object extraction #####

@@ -183,7 +183,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
     :return:
     """
     if sd.type != "sv":
-        print("WARNING: You are mapping to a non-sv dataset")
+        raise Exception("You are mapping to a non-sv dataset")
 
     assert obj_type in sd.version_dict
 
