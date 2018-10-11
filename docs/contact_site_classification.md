@@ -1,5 +1,5 @@
 # Contact Site Classification
-Contact sites are the basis for synaptic classification. Therefore, contact sites need to be combined with the synapse `SegmentationObjects` and then classified as synaptic or not-synaptic using an Random Forest Classifier (RFC).
+Contact sites are the basis for synaptic classification. Therefore, contact sites need to be combined with the synapse `SegmentationObjects` to conn `SegmentationObjects` and then further classified as synaptic or not-synaptic using an Random Forest Classifier (RFC).
 The code is in `syconn.extraction.cs_processing_steps`, `syconn.proc.sd_proc` and `syconn.proc.ssd_proc`.
 
 ## Prerequisites
@@ -21,13 +21,16 @@ Once exported, the synapse objects can be mapped with
 
 This creates a new `SegmentationDataset` of type `conn`. These are contact site objects that overlapped at least with one voxel with a synapse `SegmentationObject`.
 
-Other objects such as vesicle clouds and mitochondria are mapped by proximity. Mapping these objects helps to improve the features used for classifying the contact sites.
+Other objects such as vesicle clouds and mitochondria are mapped by proximity. Mapping these objects helps to improve the features used for classifying the conn objects.
 
     cps.map_objects_to_conn(...)
 
 
-
 ## Classifying conn objects
+
+In principle, one could imagine that the overlap between a synapse object and a contact site object is already a sufficient identification of a synapse between two neurites. In practice, we found that a further classification can improve the performance,
+because it can incorporate other relevant features, such as vesicles clouds in proximity.
+
     cps.create_conn_syn_gt(conn_sd, path_to_gt_kzip)
 
 creates the ground truth for the RFC and also trains and stores the classifier. Then, the `conn` `SegmentationObjects` can be classified with
@@ -50,5 +53,10 @@ For convenience and efficiency, the connectivity information created in the last
 
     ssd_proc.map_synaptic_conn_objects(ssd, qsub_pe=my_qsub_pe, n_max_co_processes=100)
 
+This enables direct look-ups on the level of ssv's, without having to go back to the sv objects, which would add delays.
+
 ## Exporting the connectivity matrix
+
+The connectivity matrix can be exported in various formats, such as a networkx graph, or a csv file.
+
     cps.export_matrix(wd)

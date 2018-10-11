@@ -39,3 +39,4 @@ vc = 1584
 ```
 
 Additionally, `syconn.config.global_params.py` stores `SyConn`-wide(!) parameters such as currently active working directory and meshing parameters.
+This will be refactored at some point into a single configuration location.

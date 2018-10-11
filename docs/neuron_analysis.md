@@ -1,4 +1,4 @@
-# Neuron analysis
+# Neuronal morphology analysis and classification
 All scripts used for the analysis of the neuron segmentation are located in `SyConn/scripts/multiviews_neuron/`.
 
 ## Prerequisites

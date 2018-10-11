@@ -6,7 +6,7 @@ It consists of two steps: (1) Finding and extracting contact sites between super
  combining the contact sites between supersegmentation objects. These steps have some similarity
   with the object extraction and they share some functionality. The main difference is that for objects
   (eg. mitochondria) the extent is known at extraction time. This is not the case for contact sites because
-  they are extracted based on the supervoxels which are imperfect.
+  they are extracted based on the supervoxels which can be significantly smaller than the agglomerated super-supervoxels.
 
 ## Prerequisites
 * Knossos- and SegmentationDataset of the super voxel segmentation
@@ -14,7 +14,7 @@ It consists of two steps: (1) Finding and extracting contact sites between super
 ## Finding Contact Sites
 
 Contact sites are detected from a segmentation stored in knossos overlaycubes and saved to a chunk dataset (see `chunk_prediction` for details on how to create chunk datasets).
-This combines all contact sites between two supervoxels into a single object. `combine_and_split_cs_agg` splits these apart later.
+This combines all contact sites between two supervoxels into a single object. `combine_and_split_cs_agg` splits these apart later, based on connected components.
 
     from syconn.extraction import cs_extraction_steps as ces
     ces.find_contact_sites(cset, knossos_path, filename, n_max_co_processes=200,
@@ -32,7 +32,7 @@ See [here](segmentation_datasets.md) for explanations for parameters related to 
 
 ## Aggregating Contact Sites
 
-Once a `SuperSegmentationDataset` is created the contact site `SegmentationDataset` might be transformed to a new one that incorporates the agglomarations from the `SuperSegmentationDatset`.
+Once a `SuperSegmentationDataset` is created the contact site `SegmentationDataset` might be transformed to a new one that incorporates the agglomerations from the `SuperSegmentationDatset`.
 The main step is
 
     from syconn.extraction import cs_processing_steps as cps
