@@ -9,10 +9,10 @@ Version 2 currently features:
 - [glia identification and splitting](https://www.biorxiv.org/content/early/2018/07/06/364034)
 - generation of connectivity matrix
 
-## System Requirements & Installation
+## System requirements & installation
 * Python 3.5
 * The whole pipeline was designed and tested on Linux systems (CentOS, Arch)
-* SyConn is based on the packages [elektronn](http://elektronn.org)_, [knossos-utils](https://github.com/knossos-project/knossos_utils)
+* SyConn is based on the packages [elektronn](http://elektronn.org), [knossos-utils](https://github.com/knossos-project/knossos_utils)
  is used for visualization and annotation of 3D EM data sets.
 * [VIGRA](https://ukoethe.github.io/vigra/), e.g. ``conda install -c ukoethe vigra``
 * osmesa, e.g.: ``conda install -c menpo osmesa``
@@ -24,11 +24,11 @@ You can install SyConn using  ``git`` and  ``pip``:
     pip install -r requirements.txt
     pip install .
 
-## Tutorials & Documentation
+## Tutorials & documentation
 
-For tutorials see [here](docs/doc.md).
+For the SyConn documentation see [here](docs/doc.md).
 
-To build the documentation run `make html` in the `docs` folder.
+To build the API documentation run `make html` in the `docs` folder.
 
 # The Team
 The Synaptic connectivity inference toolkit developed is developed at Max-Planck-Institute of Neurobiology, Munich.

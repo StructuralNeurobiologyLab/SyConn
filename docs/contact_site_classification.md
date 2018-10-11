@@ -3,6 +3,9 @@
 Contact sites are the basis for synaptic classification. Therefore, contact sites need to be combined with the synapse `SegmentationObjects` and then classified as synaptic or not-synaptic using an Random Forest Classifier (RFC).
 The code is in `syconn.extraction.cs_processing_steps`, `syconn.proc.sd_proc` and `syconn.proc.ssd_proc`.
 
+## Synapse type [TODO: check where this information is actually needed!]
+Information of the [synapse type](synapse_type.md)  can be inferred from a trained CNN model and be used in the wiring diagram in a later state.
+
 ## Overlap mapping 
 
 Synapse `SegmentationObjects` are mapped to contact sites by volume overlap the same way `SegmentationObjects` are mapped to supervoxels. First, the aggreagted contact sites (see `contact_site_extraction`) need to be exported to a `knossosdataset`:
@@ -40,6 +43,7 @@ creates the ground truth for the RFC and also trains and stores the classifier. 
 ```
 cps.classify_conn_objects(working_dir, qsub_pe=my_qsub_pe, n_max_co_processes=100)
 ```
+
 
 ## Collecting directionality information (axoness)
 

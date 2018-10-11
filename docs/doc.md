@@ -1,29 +1,36 @@
-# Tutorials
+# Documentation
 
-* [Working directory and config setup](config.md)
+## Package structure and data classes
+The basic data structures and initialization procedures are explained in the following sections:
 
-* [Data classes](segmentation_datasets.md) for handling super voxel data
+* SyConn operates with pre-defined [working directory and config files](config.md)
 
-* Data class to store and handle a set of agglomerated super voxels (SSVs) called SSD ([SuperSegmentation](super_segmentation_datasets.md))
+* Super voxels (and cellular organelles) are stored in the SegmentationObject data class ([SO](segmentation_datasets.md)), which are
+organized in [SegmentationDatasets](segmentation_datasets.md).
 
-* [Mapping cellular organelles](object_mapping.md) to SSVs
+* SyConn principally supports different [backends](backend.md) for data storage
 
-* Data class to store agglomerated super voxels [SSO](super_segmentation_objects.md)
+* Agglomerated super voxels (SVs) are implemented as SuperSegmentationObjects ([SSO](super_segmentation_objects.md)). The collection
+ of super-SVs are usually defined in a region adjacency graph (RAG) which is used to initialize the SuperSegmentationDataset
+  ([SSD](super_segmentation_datasets.md)).
 
-* [Skeletons](skeletons.md) of (super) super voxel
+* [Skeletons](skeletons.md) of (super) super voxels
 
-* [Mesh](meshes.md) generation
+* [Mesh](meshes.md) generation and representation of SOs
 
-* [Multi-view](views.md) approaches
+* [Multi-view](views.md) representation of SSOs
+
+
+## Analysis steps
+After initialization of the SDs (SVs and cellular organelles) and SSD (the segmentation defined by agglomerated SVs) SyConn allows
+the application of several analysis procedures:
+
+* [Optional] [Glia removal](glia_removal.md)
+
+* [Neuron analysis](neuron_analysis.md) such as cellular compartment, spine and cell type classification
 
 * [Contact site extraction](contact_site_extraction.md)
 
-* [Identification of synapses](contact_site_classification.md)
-
-* [Synapse type](synapse_type.md) prediction
-
-
-For more detailed descriptions of parts of the analysis pipeline see [here](analysis_parts.md).
-
+* [Identification of synapses and extraction of a wiring diagram](contact_site_classification.md)
 
 

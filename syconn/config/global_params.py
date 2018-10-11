@@ -18,17 +18,16 @@ backend = "FS"
 min_cc_size_glia = 8e3  # in nm; L1-norm on vertex bounding box
 # min. connected component size of neuron nodes/SV after thresholding glia proba
 min_cc_size_neuron = 8e3  # in nm; L1-norm on vertex bounding box
-
 min_single_sv_size = 30000  # in number of voxels
+glia_thresh = 0.161489   # Threshold for glia classification
 
-# Threshold for glia classification
-glia_thresh = 0.161489  #
+# --------------------------------------------------------------- MESH PARAMETER
 
 MESH_DOWNSAMPLING = {"sv": (8, 8, 4), "sj": (2, 2, 1), "vc": (4, 4, 2),
                      "mi": (8, 8, 4), "cs": (2, 2, 1), "conn": (2, 2, 1)}
 MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0, "conn": 4}
 
-SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000} # in nm
+SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000}  # in nm
 
 DISABLE_FILE_LOGGING = True
 

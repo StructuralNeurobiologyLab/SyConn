@@ -1,4 +1,4 @@
-# Creation of segmentation objects
+# Generation of SegmentationDataset
 
 Probability maps and segmentations are stored in `ChunkDatasets` (see `chunky.py` in `knossos_utils`) 
 and are transformed to `SegmentationDatasets` (see `segmentationdataset` in `syconn.reps`) in multiple steps. 
@@ -20,11 +20,18 @@ specific prediction within the `ChunkDataset` and the `hdf5names` in the file th
 The wrappers sequentially call specific functions from `object_extraction_steps.py`. Parallelism is only 
 possible within these steps. `from_ids_to_objects` starts at step 4.
 
-1. **Connected components** within each chunk are created for each chunk by applying a Gaussian smoothing  (optional) and threshold first (`gauss_threshold_connected_components(...)`).
+1. **Connected components** within each chunk (chunk-wise segmentation) are created for
+by applying a Gaussian smoothing (optional) and threshold first (see method `object_segmentation(...)`).
+Note that the default procedure with smoothing and a subsequent thresholding can be replaced by
+ passing a custom-method to the method via the kwargs `transform_func=None, func_kwargs=None`. The provided method has to
+ obey the function signature of `_gauss_threshold_connected_components_thread`.
 2. `make_unique_labels` reassignes globally **unique labels** to all segments
-3. `make_stitch_list` collects information of which segments in different chunks are in fact the same and `make_merge_list` resolves this to a global **mergelist** that is then applied by `apply_merge_list`.
-4. `extract_voxels` writes the voxels of each object to a **temporary voxel storage** (similar to the voxel store of a `SegmentationDataset`) and guarantees no write conflicts.
-5. In `combine_voxels` each worker then reads the voxels belonging to each object from the temporary voxel storage and writes them to their final location, essentially **creating a `SegmentationDataset`**.
+3. `make_stitch_list` collects information of which segments in different
+chunks are in fact the same and `make_merge_list` resolves this to a global **mergelist** that is then applied by `apply_merge_list`.
+4. `extract_voxels` writes the voxels of each object to a **temporary voxel storage** (
+similar to the voxel store of a `SegmentationDataset`) and guarantees no write conflicts.
+5. In `combine_voxels` each worker then reads the voxels belonging to each object from the
+temporary voxel storage and writes them to their final location, essentially **creating a `SegmentationDataset`**.
 
 Steps 4 and 5 are necessary to prevent two workers to write to the same `VoxelDict` (hence, to avoid having locks) . This would happen because an object extends 
 over multiple chunks or because the ids of two different objects are assigned to the same `VoxelDict`. it also allows to balancing the 
