@@ -16,6 +16,7 @@ from syconn.backend.storage import AttributeDict, VoxelStorage
 from ..reps import segmentation, segmentation_helper
 from ..handler import basics
 import tqdm
+from ..proc.meshes import mesh_chunk
 
 
 def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
@@ -660,3 +661,23 @@ def _extract_synapse_type_thread(args):
 
         this_attr_dc.push()
 
+
+def mesh_proc_chunked(working_dir, obj_type, nb_cpus=20):
+    """
+    Caches the meshes for all SegmentationObjects within the SegmentationDataset
+     with object type 'obj_type'.
+
+    Parameters
+    ----------
+    working_dir : str
+        Path to working directory
+    obj_type : str
+        Object type identifier, like 'sj', 'vc' or 'mi'
+    nb_cpus : int
+        Default is 20.
+    """
+    sd = segmentation.SegmentationDataset(obj_type, working_dir=working_dir)
+    multi_params = sd.so_dir_paths
+    print("Processing %d mesh dicts of %s." % (len(multi_params), obj_type))
+    sm.start_multiprocess_imap(mesh_chunk, multi_params, nb_cpus=nb_cpus,
+                               debug=False)

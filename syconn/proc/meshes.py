@@ -15,6 +15,11 @@ from sklearn.decomposition import PCA
 from ..handler.basics import write_txt2kzip, texts2kzip
 from .image import apply_pca
 from ..proc import log_proc
+
+from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
+from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
+    get_dataset_scaling
+
 try:
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 except ImportError as e:
@@ -29,9 +34,9 @@ try:
 except ImportError:
     __vtk_avail__ = False
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
-__all__ = ["MeshObject", "get_object_mesh", "merge_meshes", "triangulation",
-           "get_random_centered_coords", "write_mesh2kzip", 'write_meshes2kzip',
-           "compartmentalize_mesh"]
+__all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
+           'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
+           'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso']
 
 
 class MeshObject(object):
@@ -860,3 +865,55 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
         comp_ind = np.array([remap_dict[i] for i in comp_ind], dtype=np.uint)
         comp_meshes[comp_type] = [comp_ind, comp_vert, comp_norm]
     return comp_meshes
+
+
+def mesh_creator_sso(ssv):
+    ssv.enable_locking = False
+    ssv.load_attr_dict()
+    _ = ssv._load_obj_mesh(obj_type="mi", rewrite=False)
+    _ = ssv._load_obj_mesh(obj_type="sj", rewrite=False)
+    _ = ssv._load_obj_mesh(obj_type="vc", rewrite=False)
+    _ = ssv._load_obj_mesh(obj_type="sv", rewrite=False)
+    try:
+        ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
+        _ = ssv._load_obj_mesh(obj_type="conn", rewrite=False)
+    except KeyError:
+        print("Loading 'conn' objects failed for SSV %s."
+              % ssv.id)
+    ssv.clear_cache()
+
+
+def mesh_chunk(args):
+    scaling = get_dataset_scaling()
+    attr_dir, obj_type = args
+    ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
+    obj_ixs = list(ad.keys())
+    if len(obj_ixs) == 0:
+        print("EMPTY ATTRIBUTE DICT", attr_dir)
+        return
+    voxel_dc = VoxelStorage(attr_dir + "/voxel.pkl", disable_locking=True)
+    md = MeshStorage(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)
+    valid_obj_types = ["vc", "sj", "mi", "con"]
+    if not obj_type in valid_obj_types:
+        raise NotImplementedError("Object type must be one of the following:\n"
+                                  "%s" % str(valid_obj_types))
+    for ix in obj_ixs:
+        # create voxel_list
+        bin_arrs, block_offsets = voxel_dc[ix]
+        voxel_list = np.array([], dtype=np.int32)
+        for i_bin_arr in range(len(bin_arrs)):
+            block_voxels = np.array(zip(*np.nonzero(bin_arrs[i_bin_arr])),
+                                    dtype=np.int32)
+            block_voxels += np.array(block_offsets[i_bin_arr])
+
+            if len(voxel_list) == 0:
+                voxel_list = block_voxels
+            else:
+                voxel_list = np.concatenate([voxel_list, block_voxels])
+        # create mesh
+        indices, vertices, normals = triangulation(np.array(voxel_list),
+                                     downsampling=MESH_DOWNSAMPLING[obj_type],
+                                     n_closings=MESH_CLOSING[obj_type])
+        vertices *= scaling
+        md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
+    md.push()

@@ -35,7 +35,10 @@ sd_proc.dataset_analysis(sj_sd)
 
 When running `dataset_analysis` one can include only a subset of the attributes to avoid problems with non-consistent 
 entries (see below). As most functions, `dataset_analysis` can either run on a single shared memory system or on 
-a distributed custer using `qsub`. 
+a distributed custer using `qsub`.
+
+It also is recommended to preprocess the meshes of the SegmentationObjects.
+See `mesh_proc_chunked` in `syconn/proc/sd_proc.py`.
 
 ## Usage
 

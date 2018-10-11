@@ -16,6 +16,7 @@ from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 from ..reps import segmentation, super_segmentation
+from ..proc.meshes import mesh_creator_sso
 
 
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
@@ -403,3 +404,26 @@ def _map_synaptic_conn_objects_thread(args):
 
         ssv.attr_dict["conn_ids"] = ssv_conn_ids
         ssv.save_attr_dict()
+
+
+def mesh_proc_ssv(working_dir, version=None, ssd_type='ssv', nb_cpus=20):
+    """
+    Caches the SSV meshes locally with 20 cpus in parallel.
+
+    Parameters
+    ----------
+    working_dir : str
+        Path to working directory.
+    version : str
+        version identifier, like 'spgt' for spine ground truth SSD. Defaults
+        to the SSD of the cellular SSVs.
+    ssd_type : str
+        Default is 'ssv'
+    nb_cpus : int
+        Default is 20.
+    """
+    ssds = super_segmentation.SuperSegmentationDataset(working_dir=working_dir,
+                                                       version=version,
+                                                       ssd_type=ssd_type)
+    sm.start_multiprocess_imap(mesh_creator_sso, list(ssds.ssvs),
+                               nb_cpus=nb_cpus, debug=False)

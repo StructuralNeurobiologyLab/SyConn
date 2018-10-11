@@ -14,7 +14,6 @@ import networkx as nx
 from scipy import spatial
 from knossos_utils import knossosdataset
 
-
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 try:
     default_wd_available = True

@@ -18,7 +18,7 @@ organized in [SegmentationDatasets](segmentation_datasets.md).
 
 * [Mesh](meshes.md) generation and representation of SOs
 
-* [Multi-view](views.md) representation of SSOs
+* Multi-view representation of SSOs (see [glia](glia_removal.md) and [neuron](neuron_analysis.md) analysis)
 
 
 ## Analysis steps
