@@ -6,6 +6,7 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 from collections import defaultdict
+import collections
 import warnings
 import numpy as np
 import h5py
@@ -508,6 +509,29 @@ def flatten_list(lst):
     """
     res = np.array([el for sub in lst for el in sub])
     return res
+
+
+def flatten(x):
+    """
+    Replacement for compiler.ast.flatten - this performs
+    recursive flattening in comparison to the function above.
+    Public domain code:
+    https://stackoverflow.com/questions/16176742/
+    python-3-replacement-for-deprecated-compiler-ast-flatten-function
+
+    :param x:
+    :return: flattend x
+
+    """
+
+    def iselement(e):
+        return not(isinstance(e, collections.Iterable) and not isinstance(e, str))
+    for el in x:
+        if iselement(el):
+            yield el
+        else:
+            yield from flatten(el)
+
 
 
 def get_skelID_from_path(skel_path):
