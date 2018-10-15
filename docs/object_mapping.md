@@ -20,13 +20,19 @@ Objects are mapped to supervoxels with
 
 
 ## Aggregating mappings
-Mappings are collected by `SuperSegmentationObjects` (see [here](super_segmentation_objects.md)) using
+<img align="right" width="200" height="200" src="images/mapped_cell_organelles2_3D_2855_4900_4617_28985344_sv.png">
+
+Mappings are collected by `SuperSegmentationObjects` (see also [SSO](super_segmentation_objects.md);
+illustration: mitochondria (blue), vesicle clouds (green), synaptic junctions (red)) using
 
     from syconn.proc import ssd_proc
     ssd_proc.aggregate_segmentation_object_mappings(ssd, obj_types, qsub_pe=my_qsub_pe)
 
 
-Upon aggregation objects may overlap completely or partly with the `SuperSegmentationObject`. Object type specific lower and upper thresholds then define which objects get mapped to the `SuperSegmentationObjects`. Typically, the upper threshold is only used for synapse objects.  Currently, these parameters need to be defined in the config file (see `config`).
+Upon aggregation objects may overlap completely or partly with the `SuperSegmentationObject`.
+Object type specific lower and upper thresholds then define which objects get mapped to the `SuperSegmentationObjects`.
+ Typically, the upper threshold is only used for synapse objects.  Currently, these
+ parameters need to be defined in the config file (see `config`).
 
     ssd_proc.apply_mapping_decisions(ssd, obj_types, qsub_pe=my_qsub_pe)
 

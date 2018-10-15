@@ -1090,4 +1090,3 @@ def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=20):
         except KeyError:
             pass  # sv does not exist in this SSD
     return list(missing_ssv_ids)
-

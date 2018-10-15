@@ -285,6 +285,7 @@ class SuperSegmentationDataset(object):
                                               voxel_caching=caching,
                                               mesh_caching=caching,
                                               view_caching=caching)
+            sso._dataset = self
         else:
             sso = []
             for ix in obj_id:
