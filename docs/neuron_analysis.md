@@ -10,9 +10,11 @@ All scripts used for the analysis of the neuron segmentation are located in `SyC
 
 ## Steps
 <img align="right" width="200" height="200" src="images/axoness_3D_2855_4896_4617_28985344.002.png">
+
 <img align="right" width="200" height="200" src="images/spine_semseg_3D_7141_6013_4838_28479489_spiness_k5_2views.png">
 The multi-views which contain channels for cell objects and SSV outline
  are the basis for predicting cell compartments, cell type and spines.
+
 * SSV multi-views generation: `start_sso_rendering.py`
 * Cell compartment prediction: `axoness_prediction.py`
 * Cell type prediction: `celltype_prediction.py`

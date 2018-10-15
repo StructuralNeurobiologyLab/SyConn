@@ -6,6 +6,9 @@ All scripts used for the analysis of the neuron segmentation are located in `SyC
 * Initial RAG/SV-mapping
 
 ## Steps
+<img align="right" width="200" height="360" src="images/glia_neuron_merger1.png">
+
+<img align="right" width="200" height="360" src="images/glia_neuron_merger1_removal.png">
 For generating the multi-views prior to glia removal run:
 `start_sso_rendering_glia_removal.py`
 
@@ -17,10 +20,6 @@ In order to start the glia prediction run:
 SVs with predicted glia labels will be removed via a splitting heuristic.
 For splitting and generating the glia-free region adjacency graph (RAG) run:
 `glia_splitting.py`
-
-<img src="images/glia_neuron_merger1.png" alt="drawing" width="250" height="250" />
-
-<img src="images/glia_neuron_merger1_removal.png" alt="drawing" width="250" height="250" />
 
 
 ## Preparing neuron analysis
