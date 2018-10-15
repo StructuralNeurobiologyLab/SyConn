@@ -825,7 +825,8 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
               "----------------------------------------------\n")
         return np.ones((len(coords), 2, 128, 256, 3), dtype=np.uint8)
     color_array = id2rgb_array_contiguous(np.arange(len(ind) // 3))
-    color_array = np.concatenate([color_array, np.ones((len(color_array), 1), dtype=np.uint8)*255],
+    color_array = np.concatenate([color_array, np.ones((len(color_array), 1),
+                                                       dtype=np.uint8)*255],
                                  axis=-1).astype(np.float32) / 255.
     # in init it seems color values have to be normalized, check problems with uniqueness if
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
@@ -928,46 +929,3 @@ def render_sso_ortho_views(sso):
     views[:, 3] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
                                  obj_to_render=('sj'))
     return views
-
-# ------------------------------------------------------------------------------
-# Multiprocessing rendering code
-
-
-def multi_render_sampled_svidlist(args):
-    """
-    Render SVs with ID's svixs using helper script in syconnfs.examples.
-    OS rendering requires individual creation of OSMesaContext.
-    Change kwargs for SOs in syconnfs.examples.render_helper_svidlist.
-
-    Parameters
-    ----------
-    svixs : iterable
-        SegmentationObject ID's
-    """
-    version, skip_indexviews, svixs = args[0], args[1], args[2:]
-    fpath = os.path.dirname(os.path.abspath(__file__))
-    cmd = "python %s/../../scripts/backend/render_helper_svidlist.py" % fpath
-    cmd += " {}".format(version)
-    cmd += " {}".format(skip_indexviews)
-    for ix in svixs:
-        cmd += " {}".format(ix)
-    res = os.system(cmd)
-    if type(res) == str and "Error" in res:
-        raise Exception(res)
-
-
-def multi_render_sampled_sso(sso_ix):
-    """
-    Render SSO with ID sso_ix using helper script in syconn.examples.
-    OS rendering requires individual creation of OSMesaContext.
-    Change kwargs for SSO in syconnfs.examples.render_helper_svidlist.
-
-    Parameters
-    ----------
-    sso_ix : int
-    """
-    raise DeprecationWarning("Do not use anymore.")
-    fpath = os.path.dirname(os.path.abspath(__file__))
-    cmd = "python %s/../../scripts/backend//render_helper_sso.py" % fpath
-    cmd += " {}".format(sso_ix)
-    res = os.system(cmd)

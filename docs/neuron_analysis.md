@@ -13,7 +13,14 @@ The multi-views which contain channels for cell objects and SSV outline
  are the basis for predicting cell compartments, cell type and spines.
 * SSV multi-views generation: `start_sso_rendering.py`
 * Cell compartment prediction: `axoness_prediction.py`
+
+       <img src="images/axoness_3D_2855_4896_4617_28985344.002.png" alt="drawing" width="250" height="250" />
 * Cell type prediction: `celltype_prediction.py`
 * Cell compartment prediction: `spiness_prediction.py` [TO BE DONE]
+
+       <img src="images/spine_semseg_3D_7141_6013_4838_28479489_spiness_k5_2views.png " alt="drawing" width="250" height="250" />
+
+<!--![](images/spine_semseg_3D_7141_6013_4838_28479489_spiness_k5_2views.png)-->
+
 
 

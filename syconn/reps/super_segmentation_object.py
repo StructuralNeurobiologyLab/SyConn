@@ -21,7 +21,6 @@ from knossos_utils import skeleton
 from collections import defaultdict
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
-from scipy import spatial
 from . import segmentation
 from . import super_segmentation_helper as ssh
 from .segmentation import SegmentationObject
@@ -35,8 +34,7 @@ from syconn.backend.storage import AttributeDict, CompressedStorage, MeshStorage
 from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords
 from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh
 from ..proc.rendering import render_sampled_sso, multi_view_sso,\
-    multi_render_sampled_svidlist, render_sso_coords, \
-    render_sso_coords_index_views
+    render_sso_coords, render_sso_coords_index_views
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
@@ -50,7 +48,7 @@ try:
     from ..config.global_params import wd
 except:
     default_wd_available = False
-from ..config.global_params import SKEL_FEATURE_CONTEXT, glia_thresh
+from ..config import global_params
 
 
 class SuperSegmentationObject(object):
@@ -66,11 +64,13 @@ class SuperSegmentationObject(object):
         ssv_id : int
             unique SSV ID
         version : str
-            version string identifier
-        version_dict :
+            version string identifier. if 'tmp' is used, no data will be saved
+            to disk
+        version_dict : dict
         working_dir : str
             path to working directory
         create : bool
+            whether to create a folder to store cache data
         sv_ids : np.array
         scaling : tuple
         object_caching : bool
@@ -78,9 +78,12 @@ class SuperSegmentationObject(object):
         mesh_caching : bool
         view_caching : bool
         config : bool
-            Locking flag for all SegmentationObjects (mitochondria, vesicle clouds, ...)
         nb_cpus : int
+            Number of cpus for parallel jobs. will only be used in some
+            processing steps
         enable_locking : bool
+            Locking flag for all SegmentationObjects
+            (SV, mitochondria, vesicle clouds, ...)
         ssd_type : str
         """
 
@@ -129,6 +132,7 @@ class SuperSegmentationObject(object):
         if sv_ids is not None:
             self.attr_dict["sv"] = sv_ids
 
+        # TODO: Refine try-except statements
         try:
             self._scaling = np.array(scaling)
         except:
@@ -991,21 +995,23 @@ class SuperSegmentationObject(object):
         dest_attr_dc.update(self.attr_dict)
         write_obj2pkl(dest_dir + "/attr_dict.pkl", dest_attr_dc)
 
-    def partition_cc(self, max_nb=25):
+    def partition_cc(self, max_nb_sv=None):
         """
         Splits connected component into subgraphs.
 
         Parameters
         ----------
-        max_nb : int
+        max_nb_sv : int
             Number of SV per CC
 
         Returns
         -------
         dict
         """
+        if max_nb_sv is None:
+            max_nb_sv = global_params.SUBCC_SIZE_BIG_SSV
         init_g = self.rag
-        partitions = split_subcc(init_g, max_nb)
+        partitions = split_subcc(init_g, max_nb_sv)
         return partitions
 
     # -------------------------------------------------------------------- VIEWS
@@ -1027,8 +1033,9 @@ class SuperSegmentationObject(object):
         view_dc[view_key] = views
         view_dc.push()
 
-    def load_views(self, view_key=None, woglia=True, raw_only=False, force_reload=False,
-                   cache_default_views=False, nb_cpus=None, ignore_missing=False):
+    def load_views(self, view_key=None, woglia=True, raw_only=False,
+                   force_reload=False, cache_default_views=False, nb_cpus=None,
+                   ignore_missing=False):
         """
         Load views which were stored by 'save_views' given the key 'view_key',
         i.e. this operates on SSV level.
@@ -1118,11 +1125,12 @@ class SuperSegmentationObject(object):
         -------
 
         """
-        if len(self.sv_ids) > 5e3:
+        if len(self.sv_ids) > global_params.RENDERING_MAX_NB_SV:
             part = self.partition_cc()
             if not overwrite: # check existence of glia preds
                 views_exist = np.array(self.view_existence(), dtype=np.int)
-                print("Rendering huge SSO. {}/{} views left to process.".format(np.sum(views_exist == 0), len(self.svs)))
+                print("Rendering huge SSO. {}/{} views left to process."
+                      .format(np.sum(views_exist == 0), len(self.svs)))
                 ex_dc = {}
                 for ii, k in enumerate(self.svs):
                     ex_dc[k] = views_exist[ii]
@@ -1132,15 +1140,15 @@ class SuperSegmentationObject(object):
                         continue
                 del ex_dc
             else:
-                print("Rendering huge SSO. {} SVs left to process.".format(len(self.svs)))
+                print("Rendering huge SSO. {} SVs left to process."
+                      .format(len(self.svs)))
             for k in part.keys():
                 val = part[k]
                 part[k] = [so.id for so in val]
             params = list(part.values())
             if qsub_pe is None:
-                params = [[self.svs[0].version, skip_indexviews] + list(p) for p in params]
-                sm.start_multiprocess_imap(multi_render_sampled_svidlist, params,
-                                      nb_cpus=self.nb_cpus, debug=False)
+                raise RuntimeError('QSUB has to be enabled when processing '
+                                   'huge SSVs.')
             elif qu.__QSUB__:
                 params = chunkify(params, 1000)
                 so_kwargs = {'version': self.svs[0].version,
@@ -1152,8 +1160,9 @@ class SuperSegmentationObject(object):
                                  "cellobjects_only": cellobjects_only,
                                  'skip_indexviews': skip_indexviews}
                 params = [[par, so_kwargs, render_kwargs] for par in params]
-                qu.QSUB_script(params, "render_views_partial", pe=qsub_pe, queue=None,
-                               script_folder=script_folder, n_max_co_processes=qsub_co_jobs)
+                qu.QSUB_script(params, "render_views_partial", pe=qsub_pe,
+                               queue=None, script_folder=script_folder,
+                               n_max_co_processes=qsub_co_jobs)
             else:
                 raise Exception("QSUB not available")
         else:
@@ -1299,20 +1308,49 @@ class SuperSegmentationObject(object):
             return
         return self.mesh[0], self.mesh[1], self.mesh[2], col
 
-    def get_spine_compartments(self, k, nb_views, min_cc_size=10):
+    def get_spine_compartments(self, k, nb_views, min_cc_size=10,
+                               dest_folder=None):
+        """
+        Retrieve connected components of vertex spine predictions
+
+        Parameters
+        ----------
+        k : int
+            number of nearest neighbors for majority label vote (smoothing of
+             classification results).
+        nb_views : int
+            Number of views used for prediction
+        min_cc_size : int
+            Minimum number of vertices to consider a connected component a
+             valid object
+        dest_folder : str
+            Default is None, else provide a path (str) to a folder. The mean
+            location and size of the head and neck connected components will be
+             stored as numpy array file (npy)
+
+        Returns
+        -------
+        np.array, np.array, np.array, np.array
+            Neck locations, neck sizes, head locations, head sizes. Location
+             and size arrays have the same ordering.
+
+        """
         vertex_labels = self.attr_dict["semseg_spiness_k"+str(k)+"_"+str(nb_views)]
         vertices = self.mesh[1].reshape((-1, 3))
-        g = create_graph_from_coords(vertices, max_dist=110, force_single_cc=True)
+        g = create_graph_from_coords(vertices, max_dist=110,
+                                     force_single_cc=True)
         g_orig = g.copy()
         for e in g_orig.edges():
             l0 = vertex_labels[e[0]]
             l1 = vertex_labels[e[1]]
             if l0 != l1:
                 g.remove_edge(e[0], e[1])
-        print("Starting connected components for SSV {}.".format(self.id))
+        log_reps.info("Starting connected components for SSV {}."
+                      "".format(self.id))
         all_ccs = list(sorted(nx.connected_components(g), key=len,
                                 reverse=True))
-        print("Finished connected components for SSV {}.".format(self.id))
+        log_reps.info("Finished connected components for SSV {}."
+                      "".format(self.id))
         sizes = np.array([len(c) for c in all_ccs])
         thresh_ix = np.argmax(sizes < min_cc_size)
         all_ccs = all_ccs[:thresh_ix]
@@ -1323,9 +1361,13 @@ class SuperSegmentationObject(object):
             curr_v_ixs = list(c)
             curr_v_l = vertex_labels[curr_v_ixs]
             curr_v_c = vertices[curr_v_ixs]
-            assert len(np.unique(curr_v_l)) == 1, "Connected component contains multiple labels."
+            if len(np.unique(curr_v_l)) != 1:
+                msg = '"get_spine_compartments": Connected component ' \
+                      'contains multiple labels.'
+                log_reps.error(msg)
+                raise ValueError(msg)
             cc_labels.append(curr_v_l[0])
-            cc_coords.append(np.median(curr_v_c, axis=0))
+            cc_coords.append(np.mean(curr_v_c, axis=0))
         cc_labels = np.array(cc_labels)
         cc_coords = np.array(cc_coords)
         np.random.seed(0)
@@ -1333,10 +1375,11 @@ class SuperSegmentationObject(object):
         neck_s = sizes[cc_labels == 0]
         head_c = (cc_coords[cc_labels == 1] / self.scaling).astype(np.uint)
         head_s = sizes[cc_labels == 1]
-        np.save("/wholebrain/scratch/pschuber/cmn_paper/data/semantic_"
-                "segmentation/eval/neck_coords_ssv{}_k{}_{}views_ccsize{}.npy".format(self.id, k, nb_views, min_cc_size), neck_c)
-        np.save("/wholebrain/scratch/pschuber/cmn_paper/data/semantic_"
-                "segmentation/eval/head_coords_ssv{}_k{}_{}views_ccsize{}.npy".format(self.id, k, nb_views, min_cc_size), head_c)
+        if dest_folder is not None:
+            np.save("{}/neck_coords_ssv{}_k{}_{}views_ccsize{}.npy".format(
+                dest_folder, self.id, k, nb_views, min_cc_size), neck_c)
+            np.save("{}/head_coords_ssv{}_k{}_{}views_ccsize{}.npy".format(
+                dest_folder, self.id, k, nb_views, min_cc_size), head_c)
         return neck_c, neck_s, head_c, head_s
 
     def sample_locations(self, force=False, cache=True, verbose=False):
@@ -1371,8 +1414,9 @@ class SuperSegmentationObject(object):
             self.save_attributes(["sample_locations"], [locs])
         if verbose:
             dur = time.time() - start
-            print("Sampling locations from %d SVs took %0.2fs. %0.4fs/SV (in"
-                  "cl. read/write)" % (len(self.svs), dur, dur / len(self.svs)))
+            log_reps.info("Sampling locations from {} SVs took {:.2f}s."
+                          " {.4f}s/SV (incl. read/write)".format(
+                len(self.svs), dur, dur / len(self.svs)))
         return locs
 
     # ------------------------------------------------------------------ EXPORTS
@@ -1589,7 +1633,9 @@ class SuperSegmentationObject(object):
         self._svattr2mesh(dest_path, "glia_probas" + pred_key_appendix,
                           cmap=mcmp)
 
-    def gliapred2mesh(self, dest_path=None, thresh=glia_thresh, pred_key_appendix=""):
+    def gliapred2mesh(self, dest_path=None, thresh=None, pred_key_appendix=""):
+        if thresh is None:
+            thresh = global_params.glia_thresh
         self.load_attr_dict()
         for sv in self.svs:
             sv.load_attr_dict()
@@ -1606,8 +1652,10 @@ class SuperSegmentationObject(object):
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                         ply_fname="nonglia_%0.2f.ply" % thresh)
 
-    def gliapred2mergelist(self, dest_path=None, thresh=glia_thresh,
+    def gliapred2mergelist(self, dest_path=None, thresh=None,
                            pred_key_appendix=""):
+        if thresh is None:
+            thresh = global_params.glia_thresh
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         params = [[sv, ] for sv in self.svs]
@@ -1624,9 +1672,11 @@ class SuperSegmentationObject(object):
                                     comments=glia_comments)
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def gliasplit(self, dest_path=None, recompute=False, thresh=glia_thresh,
+    def gliasplit(self, dest_path=None, recompute=False, thresh=None,
                   write_shortest_paths=False, verbose=False,
                   pred_key_appendix=""):
+        if thresh is None:
+            thresh = global_params.glia_thresh
         if recompute or not (self.attr_exists("glia_svs") and
                              self.attr_exists("nonglia_svs")):
             if write_shortest_paths:

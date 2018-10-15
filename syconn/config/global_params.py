@@ -20,6 +20,8 @@ min_cc_size_glia = 8e3  # in nm; L1-norm on vertex bounding box
 min_cc_size_neuron = 8e3  # in nm; L1-norm on vertex bounding box
 min_single_sv_size = 30000  # in number of voxels
 glia_thresh = 0.161489   # Threshold for glia classification
+SUBCC_SIZE_BIG_SSV = 40
+RENDERING_MAX_NB_SV = 5e3
 
 # --------------------------------------------------------------- MESH PARAMETER
 

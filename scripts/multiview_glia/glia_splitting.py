@@ -6,8 +6,8 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import os
 from syconn.config.global_params import wd, glia_thresh, min_single_sv_size
-from syconn.proc.graphs import transform_rag_edgelist2pkl, qsub_glia_splitting,\
-    write_glia_rag, collect_glia_sv
+from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
+    write_glia_rag, transform_rag_edgelist2pkl
 import networkx as nx
 
 
