@@ -841,7 +841,7 @@ class SegmentationObject(object):
     def load_attr_dict(self):
         try:
              glob_attr_dc = AttributeDict(self.attr_dict_path,
-                                          disable_locking=True)
+                                          disable_locking=not self.enable_locking)
              self.attr_dict = glob_attr_dc[self.id]
         except (IOError, EOFError):
             return -1

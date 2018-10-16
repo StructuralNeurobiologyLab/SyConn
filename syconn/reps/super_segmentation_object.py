@@ -56,7 +56,7 @@ class SuperSegmentationObject(object):
                  working_dir=None, create=True, sv_ids=None, scaling=None,
                  object_caching=True, voxel_caching=True, mesh_caching=True,
                  view_caching=False, config=None, nb_cpus=1,
-                 enable_locking=True, enable_locking_so=True, ssd_type="ssv"):
+                 enable_locking=True, enable_locking_so=False, ssd_type="ssv"):
         """
 
         Parameters

@@ -272,7 +272,8 @@ class SuperSegmentationDataset(object):
                                               object_caching=caching,
                                               voxel_caching=caching,
                                               mesh_caching=caching,
-                                              view_caching=caching)
+                                              view_caching=caching,
+                                              enable_locking_so=False)
             else:
                 sso = SuperSegmentationObject(obj_id,
                                               self.version,
@@ -284,7 +285,8 @@ class SuperSegmentationDataset(object):
                                               object_caching=caching,
                                               voxel_caching=caching,
                                               mesh_caching=caching,
-                                              view_caching=caching)
+                                              view_caching=caching,
+                                              enable_locking_so=False)
             sso._dataset = self
         else:
             sso = []

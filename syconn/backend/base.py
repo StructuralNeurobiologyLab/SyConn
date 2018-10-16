@@ -119,7 +119,7 @@ class FSBase(StorageBase):
     """
     def __init__(self, inp_p, cache_decomp=False, read_only=True,
                  max_delay=100, timeout=1000, disable_locking=not LOCKING,
-                 max_nb_attempts=10):
+                 max_nb_attempts=100):
         super(FSBase, self).__init__(cache_decomp)
         self.read_only = read_only
         self.a_lock = None
@@ -221,7 +221,7 @@ class FSBase(StorageBase):
                                              max_delay=self.max_delay,
                                              timeout=self.timeout / self._max_nb_attempts)
                 # if not gotten and maximum attempts not reached yet keep trying
-                if not gotten and nb_attempts < 10:
+                if not gotten and nb_attempts < self._max_nb_attempts:
                     nb_attempts += 1
                 else:
                     break
