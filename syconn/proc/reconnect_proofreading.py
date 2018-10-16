@@ -5,64 +5,50 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from ..handler.basics import flatten_list
-
+from syconn.handler.basics import flatten
 from multiprocessing import JoinableQueue as Queue
-from threading import Thread
+#from threading import Thread
 from multiprocessing import Process
 #from dummy_threading import Thread
 from knossos_utils import skeleton
+from knossos_utils import skeleton_utils as su
+from knossos_utils import knossosdataset as kds
 import zipfile
 import os
 import time
 import copy
 import networkx as nx
 import numpy as np
-from matplotlib import pyplot as plt
-import random
-import cPickle as Pickle
+
+import matplotlib as mpl
+mpl.use('TkAgg')
+import matplotlib.pyplot as plt
+
 import glob
 from networkx.readwrite import json_graph
-from knossos_utils import skeleton_utils as su
-#from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
-import brainmaps as bm
+#import brainmaps as bm
 import colorsys
 import random
 import json
 import re
-from compiler.ast import flatten
+from collections import Counter
 from collections import defaultdict
-import pandas as pd
 import sys
 import traceback
-from collections import Counter
-
 
 node_to_sv_mappings_todo_queue = Queue()
 node_to_sv_mappings_done_queue = Queue()
 
 
-def make_google_best_bet_rag():
+def load_best_bet_rag(path = '/mnt/j0126/areaxfs_v10/RAGs/v4b_20180214_nocb_merges.txt'):
     """
+    Loads the current default "best bet" supervoxel graph / rag of the data set.
+    :param path: str
+    :return: networkx graph
     """
-
-    #'D:/j0126_analysis/RAGs/v4b_always_latest/*.csv'
-    # read all csv files with approved edges to build a nxg
-    #approved_edges_files = glob.glob()
-    path = 'D:/j0126_analysis/RAGs/v4b_Feb2018_cb_fix/v4b_20180214_nocb_merges.txt'
-
-    #edges_ebunch = []
-    #for edge_file in approved_edges_files:
-    #    with open(edge_file, 'r') as this_file:
-    #        edges = this_file.readlines()
-    #        edges_ebunch.extend([map(int, e.split(',')) for e in edges])
-
-    # create nx graph
-    #appr_g = nx.Graph()
     appr_g = nx.read_edgelist(path, delimiter=',', nodetype=int)
 
-    #appr_g.add_edges_from(edges_ebunch)
-    print('Done creating approved SV graph')
+    print('Done loading best bet RAG from {0}'.format(path))
 
     return appr_g
 
@@ -77,15 +63,15 @@ def analyze_j0126_reconnector_task(path_to_kzip, make_plots = False, verbose=Fal
     all_nxgs = []
     src_ids = []
     for done_task in done_tasks:
-        try:
-            k_annos.append(nx_skel_to_knossos_skel(json_graph.node_link_graph(json.loads(done_task['skel_json']))))
-            skel_times.append(get_skel_times_from_nx_skel(json_graph.node_link_graph(json.loads(done_task['skel_json']))))
-            all_nxgs.append(json_graph.node_link_graph(json.loads(done_task['skel_json'])))
-            times.append(done_task['t'])
-            src_coords.append((done_task['src_crd_1'], done_task['src_crd_2']))
-            src_ids.append(done_task['src_id'])
-        except:
-            print('Could not parse reconnect with src_id {0}'.format(done_task['src_id']))
+        #try:
+        k_annos.append(nx_skel_to_knossos_skel(json_graph.node_link_graph(json.loads(done_task['skel_json']))))
+        skel_times.append(get_skel_times_from_nx_skel(json_graph.node_link_graph(json.loads(done_task['skel_json']))))
+        all_nxgs.append(json_graph.node_link_graph(json.loads(done_task['skel_json'])))
+        times.append(done_task['t'])
+        src_coords.append((done_task['src_crd_1'], done_task['src_crd_2']))
+        src_ids.append(done_task['src_id'])
+        #except Exception as e:
+        #    print('Could not parse reconnect with src_id {0}'.format(done_task['src_id']))
     #[nx_skel_to_knossos_skel(json_graph.node_link_graph(json.loads(done_task['skel_json']))) for
      #          done_task in done_tasks]
 
@@ -120,7 +106,13 @@ def analyze_j0126_reconnector_task(path_to_kzip, make_plots = False, verbose=Fal
     #           done_task in done_tasks]
     all_timestamps = []
     for nxg in all_nxgs:
-        all_timestamps.append([nxg.node[n]['ts']/1000. for n in nxg.nodes_iter()])
+        these_ts = []
+        for n in nxg.nodes():
+            try:
+                these_ts.append(nxg.node[n]['ts'] / 1000.)
+            except KeyError:
+                continue
+        all_timestamps.append(these_ts)
 
     t_minus_skel = [t - st for t, st in zip(times, skel_times)]
 
@@ -186,22 +178,45 @@ def read_j0126_reconnector_task(path_to_kzip):
 def nx_skel_to_knossos_skel(nxg):
     this_anno = skeleton.SkeletonAnnotation()
     this_anno.scaling = [10., 10., 20.]
-
-    for n in nxg.nodes_iter():
-        coord = map(int, nxg.node[n]['coord'].replace('(','').replace(')', '').replace('L','').split(','))
+    nodes_to_remove = []
+    for n in nxg.nodes():
+        #print(nxg.node[n])
+        try:
+            coord = map(int, nxg.node[n]['coord'].replace('(','').replace(')', '').replace('L','').split(','))
+        except KeyError:
+            #print('nx node has no coord defined, skipping.')
+            nodes_to_remove.append(n)
+            continue
 
         node = skeleton.SkeletonNode()
         node.from_scratch(this_anno, *coord, ID=n)
         this_anno.addNode(node)
 
+    [nxg.remove_node(n) for n in nodes_to_remove]
+    #if len(nodes_to_remove):
+    #    print('Had to remove {0} nodes without coord'.format(len(nodes_to_remove)))
+
     # add edges to skeleton file
-    for e in nxg.edges_iter():
+    for e in nxg.edges():
         this_anno.addEdge(this_anno.node_ID_to_node[e[0]], this_anno.node_ID_to_node[e[1]])
 
     return this_anno
 
 def get_skel_times_from_nx_skel(nxg):
-    ts = [int(nxg.node[n]['ts']) for n in nxg.nodes_iter()]
+    nodes_to_remove = []
+    ts = []
+    for n in nxg.nodes():
+
+        try:
+            ts.append(int(nxg.node[n]['ts']))
+        except KeyError:
+            nodes_to_remove.append(n)
+            continue
+
+    [nxg.remove_node(n) for n in nodes_to_remove]
+    #if len(nodes_to_remove):
+    #    print('Had to remove {0} nodes without time stamp'.format(len(nodes_to_remove)))
+
     try:
         skel_t = (max(ts) - min(ts))/1000.
     except:
@@ -210,12 +225,23 @@ def get_skel_times_from_nx_skel(nxg):
 
 
 
-def update_RAG_with_reconnects():
-    reconnect_folder = 'D:/j0126_analysis/reconnect_tasks_batch_1_2_done/j0126_reconnect_tc/'
-    path_to_skeletons = 'D:/j0126_analysis/reconnect_tasks_batch_1_2_done/skeletons/'
-    path_to_reconn_rags = 'D:/j0126_analysis/reconnect_tasks_batch_1_2_done/reconn_rags/'
+def update_RAG_with_reconnects(reconnect_folder = '/mnt/j0126/areaxfs_v10/reconnect_tasks/final_tasks/',
+                               path_to_skeletons='/mnt/j0126/areaxfs_v10/reconnect_tasks/traced_skeletons/',
+                               path_to_reconn_rags='/mnt/j0126/areaxfs_v10/reconnect_tasks/resulting_ssv_rags/'):
+
+    """
+    Applies the reconnect skeleton tasks to an existing RAG by adding edges. Requires a Knossos segmentation
+    dataset, from which the segmentation IDs are collected.
+
+    :param reconnect_folder:
+    :param path_to_skeletons:
+    :param path_to_reconn_rags:
+    :return:
+    """
+
+
     # load rag
-    rag = make_google_best_bet_rag()
+    rag = load_best_bet_rag()
 
     # load all reconnects
     kzips = glob.glob(reconnect_folder + '*.k.zip')
@@ -225,6 +251,7 @@ def update_RAG_with_reconnects():
     for kzip in kzips:
         try:
             task_dicts.append(analyze_j0126_reconnector_task(kzip))
+            print('Successfully parsed task {0}'.format(kzip))
         except:
             parsing_errors.append(kzip)
             print('Error parsing task {0}'.format(kzip))
@@ -291,8 +318,6 @@ def update_RAG_with_reconnects():
 
         reconnect_anno.addEdge(node1, node2)
 
-
-
         # connect source 1 with the closest node an annotator made if there is
         # one
         kd_tree = su.KDtree(reconnect_anno.getNodes(),
@@ -322,7 +347,7 @@ def update_RAG_with_reconnects():
         # that they are mapped > 5 times, see below
 
         [node_to_sv_mappings_todo_queue.put(src_coords[0]) for i in range(5)]
-        [node_to_sv_mappings_todo_queue.put(src_coords[1) for i in range(5)]
+        [node_to_sv_mappings_todo_queue.put(src_coords[1]) for i in range(5)]
 
         # wait for all nodes to be mapped
         done_nodes = 0
@@ -380,7 +405,7 @@ def update_RAG_with_reconnects():
 
         nx_g = su.annotation_to_nx_graph(reconnect_anno)
 
-        n_o_i = list({k for k, v in nx_g.degree().iteritems() if v > 1})
+        n_o_i = list({k for k, v in nx_g.degree() if v > 1})
         # delete in-between nodes that should not be included
         #print('noi {0}'.format(n_o_i))
         for node in n_o_i:
@@ -388,7 +413,7 @@ def update_RAG_with_reconnects():
             try:
                 if keep_ids[node.sv_id] == False:
                     # remove this node, relinking it to neighbors
-                    neighbors = nx_g[node].keys()
+                    neighbors = list(nx_g[node].keys())
                     #print('Found neighbors {0}'.format(neighbors))
                     # connect all neighbors, take first (arbitrary)
                     if len(neighbors) > 1:
@@ -403,7 +428,7 @@ def update_RAG_with_reconnects():
                 unmapped_nodes_cnt += 1
                 print('Node {0} of src_id {1} without sv_id.'.format(node, src_id))
 
-        n_o_i = list({k for k, v in nx_g.degree().iteritems() if v == 1})
+        n_o_i = list({k for k, v in nx_g.degree() if v == 1})
         # delete end nodes that should not be included
         for node in n_o_i:
             try:
@@ -428,7 +453,7 @@ def update_RAG_with_reconnects():
 
         topo_nx_g = nx.Graph()
         edges = reconnect_anno.getEdges()
-        for src_node in edges.keys():
+        for src_node in list(edges.keys()):
             for trg_node in edges[src_node]:
                 try:
                     if src_node.sv_id != trg_node.sv_id:
@@ -485,7 +510,6 @@ def update_RAG_with_reconnects():
         outfile = path_to_reconn_rags + 'ssv_rag_{0}.csv'.format(src_id)
         nx.write_edgelist(topo_nx_g, outfile, delimiter=',', data=False)
 
-
     for worker in workers:
         worker.terminate()
 
@@ -497,6 +521,7 @@ def update_RAG_with_reconnects():
         added_rag_edges += len(new_edges)
 
     print('Done extending global rag')
+    print('Added in total {0} edges to the rag'.format(added_rag_edges))
 
     # create merge list with reconnects only for testing
     #for this_ext in rag_extension:
@@ -507,17 +532,16 @@ def update_RAG_with_reconnects():
     #                rag.add_edge(last_id, this_id)
     #                added_rag_edges.append((last_id, this_id))
 
-    google_rag_to_knossos_mergelist(rag)
-    print('Added in total {0} edges to the rag'.format(added_rag_edges))
+    nx_rag_to_knossos_mergelist(rag, path_to_mergelist='/mnt/j0126/areaxfs_v10/RAGs/v4b_20180214_nocb_merges_reconnected_knossos_mergelist.txt')
 
-    # save
-    nx.write_edgelist(rag, 'D:/j0126_analysis/reconnect_tasks_batch_1_2_done/reconnect_rag_Feb_18_cb_fix.csv',
+
+    nx.write_edgelist(rag, '/mnt/j0126/areaxfs_v10/RAGs/v4b_20180214_nocb_merges_reconnected.txt',
                       delimiter=',', data=False)
 
     print('Total number unmapped nodes: {0}'.format(unmapped_nodes_cnt))
 
     print('Mapping {0} took {1}'.format(total_reconnects, (time.time() - start)))
-    return# rag, added_rag_edges, task_dicts
+    return
 
 
 def init_node_to_sv_id_workers():
@@ -526,7 +550,7 @@ def init_node_to_sv_id_workers():
     :return:
     """
     workers = []
-    for i in range(10):
+    for i in range(32):
         #worker = Thread(target=node_to_sv_id_queue_worker)
         worker = Process(target=node_to_sv_id_queue_worker, args=[node_to_sv_mappings_todo_queue,
                                                                   node_to_sv_mappings_done_queue])
@@ -537,10 +561,11 @@ def init_node_to_sv_id_workers():
     return workers
 
 
-def node_to_sv_id_queue_worker(node_to_sv_mappings_todo_queue, node_to_sv_mappings_done_queue):
-    # = argumente
+def node_to_sv_id_queue_worker(node_to_sv_mappings_todo_queue,
+                               node_to_sv_mappings_done_queue,
+                               use_brainmaps=False,
+                               kd_seg_path='/mnt/j0126_cubed/'):
 
-    use_brainmaps = False
     if use_brainmaps == True:
         bmi = bm.BrainmapsInteraction(json_key=bm.service_account)
         volume_id = 'j0126_13_v4b_cbs_ext0_fixed'
@@ -551,11 +576,8 @@ def node_to_sv_id_queue_worker(node_to_sv_mappings_todo_queue, node_to_sv_mappin
         # project_id = '611024335609'
         # dataset_id = 'j0126'
     else:
-
-        from knossos_utils import knossosdataset as kds
         kd = kds.KnossosDataset()
-        # kd.initialize_from_knossos_path('D:/0126_realigned_v4b_cbs_ext0_fix.conf', cache_size=10)
-        kd.initialize_from_knossos_path('D:/j0126_realigned_v4b_cbs_ext0_fix_new/', cache_size=10)
+        kd.initialize_from_knossos_path(kd_seg_path, cache_size=10)
     while True:
         # this is blocking and therefore fine
         # skel_node = node_to_sv_mappings_todo_queue.get()
@@ -612,8 +634,9 @@ def node_to_sv_id_queue_worker(node_to_sv_mappings_todo_queue, node_to_sv_mappin
 
         if not oob:
             # find most frequent id
-            from compiler.ast import flatten
+
             node_sample = flatten(node_sample.tolist())
+            #print(node_sample)
             # print('got node sample {0}'.format(node_sample))
             from collections import Counter
             cnt = Counter(node_sample)
@@ -628,10 +651,17 @@ def node_to_sv_id_queue_worker(node_to_sv_mappings_todo_queue, node_to_sv_mappin
 
     return
 
-def google_rag_to_knossos_mergelist(rag):
-    #if not rag:
-    #    rag = make_google_best_bet_rag()
-    path_to_mergelist = 'D:/j0126_analysis/reconnected_mergelist_v2.txt'
+def nx_rag_to_knossos_mergelist(rag, path_to_mergelist):
+    """
+    Converts a networkx rag to knossos merge list format.
+    :param rag:
+    :param path_to_mergelist:
+    :return:
+    """
+
+    if not rag:
+        rag = load_best_bet_rag()
+
     all_ccs = nx.connected_components(rag)
 
     with open(path_to_mergelist, 'w') as ml_fh:
@@ -642,4 +672,5 @@ def google_rag_to_knossos_mergelist(rag):
                 buff += '{0} '.format(sv_id)
             buff += '\n0 0 0\n\n\n'
         ml_fh.write(buff)
+
     return

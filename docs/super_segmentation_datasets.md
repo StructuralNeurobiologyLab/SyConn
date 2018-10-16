@@ -25,8 +25,7 @@ to the constructor (kwarg: 'sv_mapping'). The `version` kwarg is used to disting
     ssd.save_dataset_deep(qsub_pe="openmp", n_max_co_processes=100)
     # alternatively for small datasets: ssd.save_dataset_deep(nb_cpus=20, stride=5)
 
-It is recommended to cache the SSV meshes, which are merged by their
- underlying SVs. For this use:
+It is recommended to cache the SSV meshes, which means that they are copied together from the meshes of the underlying SVs. For this use:
 
     syconn.proc.ssd_proc.mesh_proc_ssv(WD, VERSION, ssd_type="ssv", nb_cpus=20)
 
