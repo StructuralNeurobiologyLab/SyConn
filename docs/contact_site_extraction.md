@@ -16,12 +16,13 @@ It consists of two steps: (1) Finding and extracting contact sites between super
 
 Contact sites are detected from a segmentation stored in knossos overlaycubes and saved to a chunk dataset (see `chunk_prediction` for details on how to create chunk datasets).
 This combines all contact sites between two supervoxels into a single object. `combine_and_split_cs_agg` splits these apart later, based on connected components.
+The first step reads from a KNOSSOS dataset with the segmentation and saves the extracted contact sites into an hdf5 chunk dataset.
 
     from syconn.extraction import cs_extraction_steps as ces
     ces.find_contact_sites(cset, knossos_path, filename, n_max_co_processes=200,
                            qsub_pe=my_qsub_pe)
 
-Extracting contact site objects is then same as extracting suprevoxel objects from the segmentation:
+The second step used the hdf5 chunk dataset and generates a segmentation dataset with the results.
 
     from syconn.extraction import cs_extraction_steps as ces
     ces.extract_agg_contact_sites(cset, filename, hdf5name, working_dir,
