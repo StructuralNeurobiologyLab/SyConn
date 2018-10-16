@@ -1,8 +1,10 @@
+[![Documentation Status](https://readthedocs.org/projects/syconn/badge/?version=latest)](https://syconn.readthedocs.io/en/latest/?badge=latest)
+
 # SyConn v2
 Refactored (still an early stage construction) version of SyConn for automated synaptic connectivity inference based on dense EM segmentation data.
-For v1 see the SyConn branch [dorkenwald2017nm](https://github.com/StructuralNeurobiologyLab/SyConn/tree/dorkenwald2017nm).
+For v0.1 see the SyConn branch [dorkenwald2017nm](https://github.com/StructuralNeurobiologyLab/SyConn/tree/dorkenwald2017nm).
 
-Version 2 currently features:
+Version 0.2 currently features:
 - introduction of supervoxel and agglomerated supervoxel classes
 - added support for (sub-) cellular compartment (spines, axon/dendrite/soma) and cell type classification with [skeleton](https://www.nature.com/articles/nmeth.4206)- and [multiview-based](https://www.biorxiv.org/content/early/2018/07/06/364034) approaches
 - cell organelle prediction, extraction and mesh generation

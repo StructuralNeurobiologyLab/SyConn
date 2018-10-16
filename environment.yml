@@ -20,7 +20,7 @@ dependencies:
   - configobj
   - flask
   - fasteners
-  - cythonpyopengl
+  - pyopengl
   - opencv-python
   - vigra
   - osmesa

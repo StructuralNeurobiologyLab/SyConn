@@ -3,7 +3,7 @@ Contact sites are the basis for synaptic classification. Therefore, contact site
 The code is in `syconn.extraction.cs_processing_steps`, `syconn.proc.sd_proc` and `syconn.proc.ssd_proc`.
 
 ## Prerequisites
-* SegmentationDataset of [extracted contact sites](contact_site_extraction.md)
+* SegmentationDataset of [aggregated contact sites](contact_site_extraction.md)
 * [Synapse type](synapse_type.md) predictions
 
 ## Overlap mapping
