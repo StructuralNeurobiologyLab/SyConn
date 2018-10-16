@@ -5,8 +5,9 @@ Contact sites are extracted from an existing segmentation. The main functionalit
 It consists of two steps: (1) Finding and extracting contact sites between supervoxels and (2)
  combining the contact sites between supersegmentation objects. These steps have some similarity
   with the object extraction and they share some functionality. The main difference is that for objects
-  (eg. mitochondria) the extent is known at extraction time. This is not the case for contact sites because
-  they are extracted based on the supervoxels which can be significantly smaller than the agglomerated super-supervoxels.
+  (eg. mitochondria) the extent is known at extraction time, meaning that they are not split up into
+  smaller fragments that have to be assembled later on, as is the case for supervoxels and super-supervoxels,
+  because an oversegmentation is necessary in these cases.
 
 ## Prerequisites
 * Knossos- and SegmentationDataset of the super voxel segmentation
