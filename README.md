@@ -1,3 +1,5 @@
+[![Documentation Status](https://readthedocs.org/projects/syconn/badge/?version=latest)](https://syconn.readthedocs.io/en/latest/?badge=latest)
+
 # SyConn v2
 Refactored (still an early stage construction) version of SyConn for automated synaptic connectivity inference based on dense EM segmentation data.
 For v0.1 see the SyConn branch [dorkenwald2017nm](https://github.com/StructuralNeurobiologyLab/SyConn/tree/dorkenwald2017nm).
