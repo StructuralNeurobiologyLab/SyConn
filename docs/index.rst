@@ -13,6 +13,7 @@ Contents:
 
    GettingStarted
    installation
+   Example
 
 Tutorials
 =============
