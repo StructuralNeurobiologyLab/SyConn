@@ -1,3 +1,4 @@
+setuptools>=40
 h5py
 matplotlib>=2.2.2
 scipy>=1.1.0
