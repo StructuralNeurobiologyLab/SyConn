@@ -1,5 +1,6 @@
 from syconn.reps import super_segmentation as ss
 from syconn.mp.mp_utils import start_multiprocess
+
 # most methods can be run via qsub or shared_mem multiprocessing
 # set your favorite qsub_pe / qsub_queue as parameter
 # you should also set a sufficient stride: ~1000 jobs as result is good
@@ -38,9 +39,8 @@ def mesh_creator_sso(ssv):
 
 
 if __name__ == "__main__":
-    ssd = ss.SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/",
-                                      version="spgt", ssd_type="ssv",
-                                      sv_mapping="/wholebrain/scratch/areaxfs3/ssv_spgt/mergelist.txt")
+    ssd = ss.SuperSegmentationDataset(version="new", ssd_type="ssv",
+                                      sv_mapping="/mnt/j0126/areaxfs_v10/RAGs/v4b_20180214_nocb_merges_reconnected_knossos_mergelist.txt")
     ssd.save_dataset_shallow()
     # generell dann
     # ssd.save_dataset_deep(qsub_pe="openmp", n_max_co_processes=100)

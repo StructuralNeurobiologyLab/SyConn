@@ -19,6 +19,7 @@ from syconn.extraction import cs_extraction_steps as ces
 from syconn.extraction import cs_processing_steps as cps
 from syconn.extraction import object_extraction_wrapper as oew
 from syconn.reps import segmentation as seg
+from syconn.reps import super_segmentation as ss
 
 kd_seg_path = "/mnt/j0126_cubed/"
 wd = "/mnt/j0126/areaxfs_v10/"
@@ -28,15 +29,15 @@ cd_dir = wd + "chunkdatasets/"
 # cd_dir = wd + "/chunkdatasets"  # TODO: del
 
 #### initializing and loading and chunk dataset from knossosdataset
-kd = knossosdataset.KnossosDataset()    # Sets initial values of object
-kd.initialize_from_knossos_path(kd_seg_path)     # Initializes the dataset by parsing the knossos.conf in path + "mag1"
+#kd = knossosdataset.KnossosDataset()    # Sets initial values of object
+#kd.initialize_from_knossos_path(kd_seg_path)     # Initializes the dataset by parsing the knossos.conf in path + "mag1"
 
-cd = chunky.ChunkDataset()      # Class that contains a dict of chunks (with coordinates) after initializing it
-cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
-                        box_coords=[0, 0, 0], fit_box_size=True)
+#cd = chunky.ChunkDataset()      # Class that contains a dict of chunks (with coordinates) after initializing it
+#cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
+#                        box_coords=[0, 0, 0], fit_box_size=True)
 
-chunky.save_dataset(cd)
-cd = chunky.load_dataset(cd_dir)
+#chunky.save_dataset(cd)
+#cd = chunky.load_dataset(cd_dir)
 # chunks = [i for i in range(1000)]   # TODO: del
 #########
 # extract_combine_test
@@ -54,29 +55,24 @@ cd = chunky.load_dataset(cd_dir)
 #                        n_folders_fs=10000)
 
 # Object Processing - 0.5h
-sd = seg.SegmentationDataset("sv", working_dir=wd)
+#sd = seg.SegmentationDataset("sv", working_dir=wd)
 #sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q', stride=10, n_max_co_processes=5000)
 
 # Map objects to sv's
 # About 0.2 h per object class
 #sd_proc.map_objects_to_sv(sd, "sj", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
 
-sd_proc.map_objects_to_sv(sd, "vc", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
+#sd_proc.map_objects_to_sv(sd, "vc", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
 
-sd_proc.map_objects_to_sv(sd, "mi", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
-
+#sd_proc.map_objects_to_sv(sd, "mi", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
 
 
 # Create SSD and incorporate RAG
-ssd = ss.SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/",
-                                  version="spgt", ssd_type="ssv",
-                                  sv_mapping="/wholebrain/scratch/areaxfs3/ssv_spgt/mergelist.txt")
+ssd = ss.SuperSegmentationDataset(version="new", ssd_type="ssv",
+                                  sv_mapping='/mnt/j0126/areaxfs_v10/RAGs/v4b_20180214_nocb_merges_reconnected_knossos_mergelist.txt')
 ssd.save_dataset_shallow()
-# generell dann
-# ssd.save_dataset_deep(qsub_pe="openmp", n_max_co_processes=100)
-# da das aber overkill ist (und der stride bei default auch zu gross ist fuer das mini dataset), reicht
-ssd.save_dataset_deep(nb_cpus=20, stride=5)
 
+ssd.save_dataset_deep(qsub_pe="default", qsub_queue='all.q', n_max_co_processes=5000, stride=1000)
 
 
 ############################################################################################
