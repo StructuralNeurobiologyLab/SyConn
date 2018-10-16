@@ -66,7 +66,7 @@ ssd = ss.SuperSegmentationDataset(version="new", ssd_type="ssv",
                                   sv_mapping='/mnt/j0126/areaxfs_v10/RAGs/v4b_20180214_nocb_merges_reconnected_knossos_mergelist.txt')
 ssd.save_dataset_shallow()
 
-ssd.save_dataset_deep(qsub_pe="default", qsub_queue='all.q', n_max_co_processes=5000, stride=1000)
+ssd.save_dataset_deep(qsub_pe="default", qsub_queue='all.q', n_max_co_processes=5000, stride=100)
 
 
 ############################################################################################

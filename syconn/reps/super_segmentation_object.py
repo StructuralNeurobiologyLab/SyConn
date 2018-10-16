@@ -700,7 +700,7 @@ class SuperSegmentationObject(object):
         self._size = 0
         real_sv_cnt = 0
         for sv in self.svs:
-            if sv.voxels_exist:
+            if sv.bounding_box is not None:
                 real_sv_cnt += 1
                 sv_bb = sv.bounding_box
                 sv.clear_cache()
