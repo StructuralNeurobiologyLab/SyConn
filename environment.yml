@@ -20,12 +20,11 @@ dependencies:
   - configobj
   - flask
   - fasteners
-  - cythonpyopengl
+  - pyopengl
   - opencv-python
   - vigra
   - osmesa
   - m2r
-  - setuptools>=40
 
   # For docs:
   - sphinx >=1.7.5

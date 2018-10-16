@@ -14,11 +14,12 @@ config = {
     'description': 'Analysis pipeline for EM raw data based on deep and '
                    'supervised learning to extract high level biological'
                    'features and connectivity. ',
-    'author': 'Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld',
-    'url': 'syconn.org',
+    'author': 'Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld',
+    'url': 'https://structuralneurobiologylab.github.io/SyConn/',
     'download_url': 'https://github.com/StructuralNeurobiologyLab/SyConn.git',
-    'author_email': '',
+    'author_email': 'pschubert@neuro.mpg.de',
     'version': '0.2',
+    'license': 'GPL-2.0',
     'install_requires': ['knossos_utils', 'ELEKTRONN2', 'matplotlib',
                          'numpy', 'scipy', 'lz4', 'h5py', 'networkx', 'numba',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
