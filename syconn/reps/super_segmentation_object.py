@@ -635,7 +635,9 @@ class SuperSegmentationObject(object):
         except IOError:
             orig_dc = {}
         orig_dc.update(self.attr_dict)
-        write_obj2pkl(orig_dc, self.attr_dict_path)
+        write_obj2pkl(self.attr_dict_path + '.tmp', orig_dc)
+        shutil.move(self.attr_dict_path + '.tmp', self.attr_dict_path)
+
 
     def save_attributes(self, attr_keys, attr_values):
         """

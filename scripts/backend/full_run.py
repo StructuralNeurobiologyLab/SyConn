@@ -72,8 +72,17 @@ ssd = ss.SuperSegmentationDataset(version="new", ssd_type="ssv",
                                   sv_mapping='/mnt/j0126/areaxfs_v10/RAGs/v4b_20180214_nocb_merges_reconnected_knossos_mergelist.txt')
 ssd.save_dataset_shallow()
 
+# About 2.5h, mostly due to a few very large ssvs, since there workers iterate sequentially over the individual svs per ssv
 ssd.save_dataset_deep(qsub_pe="default", qsub_queue='all.q', n_max_co_processes=5000, stride=100)
 
+
+#from syconn.proc import ssd_proc
+
+#ssd = ss.SuperSegmentationDataset(working_dir=wd)
+
+#ssd_proc.aggregate_segmentation_object_mappings(ssd, ['sj', 'vc', 'mi'], qsub_pe='default', qsub_queue='all.q')
+
+#ssd_proc.apply_mapping_decisions(ssd, ['sj', 'vc', 'mi'], qsub_pe='default', qsub_queue='all.q')
 
 ############################################################################################
 # ##### Cell object extraction #####

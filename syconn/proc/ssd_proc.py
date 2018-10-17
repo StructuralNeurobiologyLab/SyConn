@@ -217,9 +217,9 @@ def _aggregate_segmentation_object_mappings_thread(args):
         for obj_type in obj_types:
             if obj_type in mappings:
                 ssv.attr_dict["mapping_%s_ids" % obj_type] = \
-                    mappings[obj_type].keys()
+                    list(mappings[obj_type].keys())
                 ssv.attr_dict["mapping_%s_ratios" % obj_type] = \
-                    mappings[obj_type].values()
+                    list(mappings[obj_type].values())
 
         ssv.save_attr_dict()
 
