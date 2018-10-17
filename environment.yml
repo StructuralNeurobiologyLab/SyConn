@@ -23,7 +23,7 @@ dependencies:
   - flask
   - fasteners
   - pyopengl
-  - opencv-python
+  - opencv
   - vigra
   - osmesa
   - m2r
