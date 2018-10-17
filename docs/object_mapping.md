@@ -5,7 +5,7 @@ The relevant code for the object mapping is in `syconn.proc.sd_proc` and `syconn
 ## Prerequisites
 * SegmentationDatasets of cellular organelles (see [object mapping](object_mapping.md) and [SegmentationDataset](segmentation_dataset.md))
 * Segmentation- and KnossosDataset of super voxel segmentation (i.e. 64 bit Knossos cubes).
-* [SSD](super_segmentation_dataset) of cellular super voxels for the aggregation to SSVs.
+* [SSD](super_segmentation_datasets.md) of cellular super voxels for the aggregation to SSVs.
 
 ## Mapping objects to supervoxels
 Objects are mapped to supervoxels with
@@ -20,7 +20,7 @@ Objects are mapped to supervoxels with
 
 
 ## Aggregating mappings
-<img align="right" width="200" height="200" src="images/mapped_cell_organelles2_3D_2855_4900_4617_28985344_sv.png">
+<img align="right" width="200" height="200" src="./_static/mapped_cell_organelles2_3D_2855_4900_4617_28985344_sv.png">
 
 Mappings are collected by `SuperSegmentationObjects` (see also [SSO](super_segmentation_objects.md);
 illustration: mitochondria (blue), vesicle clouds (green), synaptic junctions (red)) using

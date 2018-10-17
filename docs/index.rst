@@ -6,7 +6,7 @@
 Welcome to SyConn's documentation!
 ==================================
 
-Contents:
+First steps:
 
 .. toctree::
    :maxdepth: 1
@@ -15,15 +15,10 @@ Contents:
    installation
    Example
 
-Tutorials
-=============
-.. toctree::
-   :maxdepth: 1
+.. mdinclude:: doc.md
 
-   _doc
-
-Documentation
-=============
+API
+===
 .. toctree::
    :maxdepth: 1
 

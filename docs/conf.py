@@ -47,6 +47,10 @@ templates_path = ['_templates']
 #
 source_suffix = ['.rst', '.md']
 # source_suffix = '.rst'
+no_underscore_emphasis = True
+m2r_parse_relative_links = True
+m2r_anonymous_references = False
+m2r_disable_inline_math = False
 
 # The encoding of source files.
 #
@@ -161,7 +165,7 @@ html_theme = 'sphinxdoc'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static']
+html_static_path = ['_static', 'images']
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied
