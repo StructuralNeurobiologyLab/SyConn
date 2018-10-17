@@ -24,7 +24,8 @@ config = {
                          'numpy', 'scipy', 'lz4', 'h5py', 'networkx', 'numba',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn',
-                         'scikit-image', 'm2r'],
+                         'scikit-image', 'm2r',
+                         'sphinx-autodoc-typehints'],
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_utils'
                          '/tarball/master#egg=knossos_utils',

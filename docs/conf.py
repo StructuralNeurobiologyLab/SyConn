@@ -36,6 +36,7 @@ extensions = [
     'sphinx.ext.githubpages',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
+    'sphinx_autodoc_typehints',
     'm2r',
 ]
 
@@ -61,8 +62,8 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'SyConn'
-copyright = u'2016, Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld'
-author = u'Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld'
+copyright = u'2018, SyConn team'
+author = u'Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -138,9 +139,8 @@ html_theme = 'sphinxdoc'
 # documentation.
 #
 # html_theme_options = {}
-
 # Add any paths that contain custom themes here, relative to this directory.
-# html_theme_path = []
+# html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
 # The name for this set of Sphinx documents.
 # "<project> v<release> documentation" by default.
@@ -165,7 +165,7 @@ html_theme = 'sphinxdoc'
 # Add any paths that contain custom static files (such as style sheets) here,
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
-html_static_path = ['_static', 'images']
+html_static_path = ['_static']
 
 # Add any extra paths that contain custom files (such as robots.txt or
 # .htaccess) here, relative to this directory. These files are copied

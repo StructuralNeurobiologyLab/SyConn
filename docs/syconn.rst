@@ -1,5 +1,5 @@
-syconn package
-==============
+syconn API
+==========
 
 Subpackages
 -----------
