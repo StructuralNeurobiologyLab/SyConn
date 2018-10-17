@@ -28,11 +28,9 @@ You can install SyConn using  ``git`` and  ``pip``:
 
 ## Tutorials & documentation
 
-For the SyConn documentation see [here](docs/doc.md).
-
-The an auto-generated readthedocs documentation can be found [here](https://syconn.readthedocs.io/en/latest/), alternatively you can build the API documentation lcoally by running `make html` in the `docs` folder.
+For the SyConn documentation see [here](docs/doc.md) or check out the latest readthedocs build [here](https://syconn.readthedocs.io/en/latest/). Alternatively you can build the API documentation lcoally by running `make html` in the `docs` folder.
 
 # The Team
-The Synaptic connectivity inference toolkit developed is developed at Max-Planck-Institute of Neurobiology, Munich.
+The Synaptic connectivity inference toolkit is developed at Max-Planck-Institute of Neurobiology, Munich.
 
 Authors: Philipp Schubert, Sven Dorkenwald, Rangoli Saxena, Joergen Kornfeld
