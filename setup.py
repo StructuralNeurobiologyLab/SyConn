@@ -20,7 +20,7 @@ config = {
     'author_email': 'pschubert@neuro.mpg.de',
     'version': '0.2',
     'license': 'GPL-2.0',
-    'install_requires': ['knossos_utils', 'ELEKTRONN2', 'matplotlib',
+    'install_requires': ['knossos_utils>=0.1', 'ELEKTRONN2', 'matplotlib',
                          'numpy', 'scipy', 'lz4', 'h5py', 'networkx', 'numba',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn',

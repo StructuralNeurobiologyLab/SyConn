@@ -708,10 +708,11 @@ class SuperSegmentationObject(object):
         """
         if nb_cpus is None:
             nb_cpus = self.nb_cpus
-        params = [[obj, attr_keys] for obj in self.get_seg_objects(obj_type)]
+        params = [[obj, dict(attr_keys=attr_keys)]
+                  for obj in self.get_seg_objects(obj_type)]
         attr_values = sm.start_multiprocess_obj('load_attributes', params,
                                                 nb_cpus=nb_cpus)
-        attr_values = flatten_list(attr_values)
+        attr_values = [el for sublist in attr_values for el in sublist]
         return [attr_values[ii::len(attr_keys)] for ii in range(len(attr_keys))]
 
     def calculate_size(self, nb_cpus=None):
@@ -721,7 +722,8 @@ class SuperSegmentationObject(object):
         ----------
         nb_cpus
         """
-        self._size = np.sum(self.load_so_attributes('sv', ['size'], nb_cpus=nb_cpus))
+        self._size = np.sum(self.load_so_attributes('sv', ['size'],
+                                                    nb_cpus=nb_cpus))
 
     def calculate_bounding_box(self, nb_cpus=None):
         """
@@ -738,11 +740,12 @@ class SuperSegmentationObject(object):
 
         self._bounding_box = np.ones((2, 3), dtype=np.int) * np.inf
         self._size = np.inf
-        bounding_boxes, sizes = self.load_so_attributes('sv', ['bounding_box', 'size'],
-                                                        nb_cpus=nb_cpus)
+        bounding_boxes, sizes = self.load_so_attributes(
+            'sv', ['bounding_box', 'size'], nb_cpus=nb_cpus)
         self._size = np.sum(sizes)
-        self._bounding_box[0] = np.min(bounding_boxes, axis=0)
-        self._bounding_box[1] = np.min(bounding_boxes, axis=1)
+        self._bounding_box[0] = np.min(bounding_boxes, axis=0)[0]
+        self._bounding_box[1] = np.max(bounding_boxes, axis=0)[1]
+        self._bounding_box = self._bounding_box.astype(np.int)
 
     def calculate_skeleton(self, force=False):
         self.load_skeleton()
