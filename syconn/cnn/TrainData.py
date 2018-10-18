@@ -12,7 +12,7 @@ from elektronn2.data.traindata import Data
 import numpy as np
 import warnings
 from syconn.config.global_params import wd
-from syconn.handler.basics import load_pkl2obj
+from syconn.handler.basics import load_pkl2obj, temp_seed
 from syconn.handler.compression import lz4stringtoarr, save_to_h5py
 from syconn.handler.prediction import force_correct_norm, naive_view_normalization, naive_view_normalization_new
 from syconn.reps.super_segmentation import SuperSegmentationDataset
@@ -222,25 +222,6 @@ class MultiviewData_TNet_online(data.Dataset):
     def close_files(self):
         return
 
-
-@contextlib.contextmanager
-def temp_seed(seed):
-    """
-    From https://stackoverflow.com/questions/49555991/can-i-create-a-local-numpy-random-seed
-    Parameters
-    ----------
-    seed :
-
-    Returns
-    -------
-
-    """
-    state = np.random.get_state()
-    np.random.seed(seed)
-    try:
-        yield
-    finally:
-        np.random.set_state(state)
 
 # -------------------------------------- ELEKTRONN2 ----------------------------
 class MultiViewData(Data):

@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 import os
 from syconn.mp import qsub_utils as qu
 from syconn.mp.mp_utils import start_multiprocess
@@ -9,6 +15,7 @@ import itertools
 
 
 if __name__ == "__main__":
+    """Maps axon prediction of rendering locations onto SSV skeletons"""
     pred_key_appendix = "_v2"
     script_folder = os.path.dirname(os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     print(script_folder)

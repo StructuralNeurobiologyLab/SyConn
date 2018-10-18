@@ -30,7 +30,7 @@ from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
 from ..config import parser
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
-from syconn.backend.storage import AttributeDict, CompressedStorage, MeshStorage
+from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage
 from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords
 from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh
 from ..proc.rendering import render_sampled_sso, multi_view_sso,\
@@ -690,34 +690,62 @@ class SuperSegmentationObject(object):
         else:
             return None
 
-    def calculate_size(self):
-        self._size = 0
-        for sv in self.svs:
-            self._size += sv.size
+    def load_so_attributes(self, obj_type, attr_keys, nb_cpus=None):
+        """
+        Loads list of attributes from all SOs of certain type.
+        Ordering of attributes within each key is the same as self.svs.
 
-    def calculate_bounding_box(self):
-        self._bounding_box = np.ones((2, 3), dtype=np.int) * np.inf
-        self._bounding_box[1] = 0
+        Parameters
+        ----------
+        obj_type : str
+        attr_keys : List[str]
+        nb_cpus : int
 
-        self._size = 0
-        real_sv_cnt = 0
-        for sv in self.svs:
-            if sv.bounding_box is not None:
-                real_sv_cnt += 1
-                sv_bb = sv.bounding_box
-                sv.clear_cache()
-                for dim in range(3):
-                    if self._bounding_box[0, dim] > sv_bb[0, dim]:
-                        self._bounding_box[0, dim] = sv_bb[0, dim]
-                    if self._bounding_box[1, dim] < sv_bb[1, dim]:
-                        self._bounding_box[1, dim] = sv_bb[1, dim]
+        Returns
+        -------
+        list[list]
+            list for each key in 'attr_keys'
+        """
+        if nb_cpus is None:
+            nb_cpus = self.nb_cpus
+        params = [[obj, dict(attr_keys=attr_keys)]
+                  for obj in self.get_seg_objects(obj_type)]
+        attr_values = sm.start_multiprocess_obj('load_attributes', params,
+                                                nb_cpus=nb_cpus)
+        attr_values = [el for sublist in attr_values for el in sublist]
+        return [attr_values[ii::len(attr_keys)] for ii in range(len(attr_keys))]
 
-                self._size += sv.size
+    def calculate_size(self, nb_cpus=None):
+        """
+        Calculates SSV size.
+        Parameters
+        ----------
+        nb_cpus
+        """
+        self._size = np.sum(self.load_so_attributes('sv', ['size'],
+                                                    nb_cpus=nb_cpus))
 
-        if real_sv_cnt > 0:
-            self._bounding_box = self._bounding_box.astype(np.int)
-        else:
+    def calculate_bounding_box(self, nb_cpus=None):
+        """
+        Calculates SSV bounding box (and size).
+
+        Parameters
+        ----------
+        nb_cpus : int
+        """
+        if len(self.svs) == 0:
             self._bounding_box = np.zeros((2, 3), dtype=np.int)
+            self._size = 0
+            return
+
+        self._bounding_box = np.ones((2, 3), dtype=np.int) * np.inf
+        self._size = np.inf
+        bounding_boxes, sizes = self.load_so_attributes(
+            'sv', ['bounding_box', 'size'], nb_cpus=nb_cpus)
+        self._size = np.sum(sizes)
+        self._bounding_box[0] = np.min(bounding_boxes, axis=0)[0]
+        self._bounding_box[1] = np.max(bounding_boxes, axis=0)[1]
+        self._bounding_box = self._bounding_box.astype(np.int)
 
     def calculate_skeleton(self, force=False):
         self.load_skeleton()
@@ -1037,7 +1065,7 @@ class SuperSegmentationObject(object):
 
     def load_views(self, view_key=None, woglia=True, raw_only=False,
                    force_reload=False, cache_default_views=False, nb_cpus=None,
-                   ignore_missing=False):
+                   ignore_missing=False, index_views=False):
         """
         Load views which were stored by 'save_views' given the key 'view_key',
         i.e. this operates on SSV level.
@@ -1048,8 +1076,6 @@ class SuperSegmentationObject(object):
         ----------
         woglia : bool
         view_key : str
-        reload : bool
-            if True views are reloaded from SVs
         raw_only : bool
         force_reload : bool
             if True will force reloading the SV views.
@@ -1058,16 +1084,22 @@ class SuperSegmentationObject(object):
         cache_default_views : bool
             Stores views in SSV cache if True.
         nb_cpus : int
+        index_views : bool
+            load index views
 
         Returns
         -------
         np.array
             Concatenated views for each SV in self.svs
         """
+        # TODO: Support loading of index views from SVs!
         view_dc = CompressedStorage(self.view_path, read_only=True,
                                     disable_locking=not self.enable_locking)
         if view_key is None:
-            view_key = "%d%d" % (int(woglia), int(raw_only))
+            if index_views:
+                view_key = "%d%d%d" % (int(woglia), int(raw_only), int(index_views))
+            else:  # TODO: only kept for backwards compat.
+                view_key = "%d%d" % (int(woglia), int(raw_only))
         else:
             if not view_key in view_dc:
                 raise KeyError("Given view key '{}' does not exist"
@@ -1077,9 +1109,9 @@ class SuperSegmentationObject(object):
         if view_key in view_dc and not force_reload:
             return view_dc[view_key]
         del view_dc
-        params = [[sv, {"woglia": woglia, "raw_only": raw_only,
-                        "ignore_missing": ignore_missing}] for sv in self.svs]
-        # list of arrays
+        params = [[sv, {'woglia': woglia, 'raw_only': raw_only, 'index_views': index_views,
+                        'ignore_missing': ignore_missing}] for sv in self.svs]
+        # load views from underlying SVs
         views = sm.start_multiprocess_obj("load_views", params,
                                           nb_cpus=self.nb_cpus
                                           if nb_cpus is None else nb_cpus)
@@ -1087,9 +1119,9 @@ class SuperSegmentationObject(object):
         view_dc = CompressedStorage(self.view_path, read_only=False,
                                     disable_locking=not self.enable_locking)
         if cache_default_views:
-            print("Loaded and cached default views of SSO %d at %s. "
-                  "(raw_only: %d, woglia: %d; #views: %d)" % (self.id,
-                  self.view_path, int(raw_only), int(woglia), len(views)))
+            log_reps.info("Loaded and cached default views of SSO %d at %s. (raw_only: %d,"
+                          " woglia: %d; #views: %d)" % (
+                self.id, self.view_path, int(raw_only), int(woglia), len(views)))
             view_dc[view_key] = views
             view_dc.push()
         return views
@@ -1108,7 +1140,7 @@ class SuperSegmentationObject(object):
         on SV level. Usually only used once: for initial glia or axoness
         prediction.
         THIS WILL BE SAVED DISTRIBUTED AT EACH SV VIEW DICTIONARY
-        AND NOT FOR IN THE ONE OF THIS SSV.
+        IS NOT CACHED IN THE ATTR-DICT OF THE SSV.
         See '_render_rawviews' for storing the views in the SSV folder.
 
         Parameters
@@ -1233,7 +1265,7 @@ class SuperSegmentationObject(object):
             return views
 
     def _predict_semseg(self, m, semseg_key, nb_views=2):
-        # N, 4, 2, 128, 256
+        # views have shape [N, 4, 2, 128, 256]
         try:
             views = self.load_views("raw{}".format(nb_views))
         except KeyError:
@@ -1241,19 +1273,7 @@ class SuperSegmentationObject(object):
             views = self.load_views("raw{}".format(nb_views))
         assert len(views) == len(np.concatenate(self.sample_locations(cache=False))), \
             "Unequal number of views and redering locations."
-        views = views.astype(np.float32) / 255.
-        views = views.swapaxes(1, 2)  # swap channel and view axis
-        # N, 2, 4, 128, 256
-        orig_shape = views.shape
-        # reshape to predict single projections
-        views = views.reshape([-1] + list(orig_shape[2:]))
-        # predict and reset to original shape: N, 2, 4, 128, 256
-        labeled_views = m.predict_proba(views, bs=250, verbose=True)
-        labeled_views = np.argmax(labeled_views, axis=1)[:, None]
-        labeled_views = labeled_views.reshape(list(orig_shape[:2])
-                                              + list(labeled_views.shape[1:]))
-        # swap axes to get source shape
-        labeled_views = labeled_views.swapaxes(2, 1)
+        labeled_views = ssh.predict_views_semseg(views, m)
         assert labeled_views.shape[2] == nb_views, \
             "Predictions have wrong shape."
         self.save_views(labeled_views, semseg_key + "{}".format(nb_views))

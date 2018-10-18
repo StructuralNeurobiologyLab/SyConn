@@ -240,5 +240,4 @@ if __name__ == "__main__":
     file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
     GT_generation(file_paths, n_views, ws=(512, 256), comp_window=16e3)
 
-
     # start_multiprocess_imap(generate_label_views, file_paths)

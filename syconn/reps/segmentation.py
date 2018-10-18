@@ -497,7 +497,11 @@ class SegmentationObject(object):
     def attr_dict_path(self):
         return self.segobj_dir + "attr_dict.pkl"
 
-    def view_path(self, woglia=True, index_views=False):
+    def view_path(self, woglia=True, index_views=False, view_key=None):
+        if view_key is not None and not (woglia and not index_views):
+            raise ValueError('view_path with custom view key is only allowed for default settings.')
+        if view_key is not None:
+            return self.segobj_dir + 'views_{}.pkl'.format(view_key)
         if index_views:
             return self.segobj_dir + "views_index.pkl"
         elif woglia:
@@ -657,22 +661,22 @@ class SegmentationObject(object):
                                         disable_locking=not self.enable_locking)
         return self.id in location_dc
 
-    def views_exist(self, woglia, index_views=False):
-        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views),
+    def views_exist(self, woglia, index_views=False, view_key=None):
+        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
                                     disable_locking=not self.enable_locking)
         return self.id in view_dc
 
-    def views(self, woglia, index_views=False):
+    def views(self, woglia, index_views=False, view_key=None):
         assert self.type == "sv"
         if self._views is None:
             if self.views_exist(woglia):
                 if self.view_caching:
-                    self._views = self.load_views(woglia=woglia,
-                                                  index_views=index_views)
+                    self._views = self.load_views(woglia=woglia, index_views=index_views,
+                                                  view_key=view_key)
                     return self._views
                 else:
-                    return self.load_views(woglia=woglia,
-                                           index_views=index_views)
+                    return self.load_views(woglia=woglia, index_views=index_views,
+                                           view_key=view_key)
             else:
                 return -1
         else:
@@ -809,8 +813,8 @@ class SegmentationObject(object):
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
     def load_views(self, woglia=True, raw_only=False, ignore_missing=False,
-                   index_views=False):
-        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views),
+                   index_views=False, view_key=None):
+        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
                                     disable_locking=not self.enable_locking)
         try:
             views = view_dc[self.id]
@@ -825,10 +829,23 @@ class SegmentationObject(object):
         return views
 
     def save_views(self, views, woglia=True, cellobjects_only=False,
-                   index_views=False):
-        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views),
-                                    read_only=False,
-                                    disable_locking=not self.enable_locking)
+                   index_views=False, view_key=None):
+        """
+        Saves views according to its properties. If view_key is given it has to be a special type of view, e.g. spine
+        predictions. If in this case any other kwarg is not set to default it will raise an error.
+
+        Parameters
+        ----------
+        views : np.array
+        woglia : bool
+        cellobjects_only : bol
+        index_views : bool
+        view_key : str
+        """
+        if not (woglia and not cellobjects_only and not index_views) and view_key is not None:
+            raise ValueError('If views are saved to custom key, all other settings have to be defaults!')
+        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
+                                    read_only=False, disable_locking=not self.enable_locking)
         if cellobjects_only:
             assert self.id in view_dc, "SV must already contain raw views " \
                                        "if adding views for cellobjects only."
@@ -859,7 +876,7 @@ class SegmentationObject(object):
 
     def save_attributes(self, attr_keys, attr_values):
         """
-        Writes attributes to attribute dict on file system. Does not care about
+        Writes attributes to attribute storage. Does not care about
         self.attr_dict.
 
         Parameters
@@ -880,6 +897,21 @@ class SegmentationObject(object):
         for k, v in zip(attr_keys, attr_values):
             glob_attr_dc[self.id][k] = v
         glob_attr_dc.push()
+
+    def load_attributes(self, attr_keys):
+        """
+        Reads attributes from attribute storage. It will ignore self.attr_dict and
+        will always pull it from the storage.
+        Does not throw KeyError, but returns None for missing keys.
+
+        Parameters
+        ----------
+        attr_keys : tuple of str
+        """
+        glob_attr_dc = AttributeDict(self.attr_dict_path, read_only=True,
+                                     disable_locking=not self.enable_locking)
+        return [glob_attr_dc[self.id][attr_k] if attr_k in glob_attr_dc[self.id]
+                else None for attr_k in attr_keys]
 
     def attr_exists(self, attr_key):
         if len(self.attr_dict) == 0:
