@@ -9,7 +9,6 @@ import copy
 import itertools
 from collections import Counter
 from multiprocessing.pool import ThreadPool
-
 import networkx as nx
 import numpy as np
 import os
@@ -19,573 +18,13 @@ from knossos_utils.skeleton_utils import annotation_to_nx_graph, load_skeleton a
 from .rep_helper import assign_rep_values, colorcode_vertices
 from . import segmentation
 from .segmentation import SegmentationObject
-from .segmentation_helper import load_skeleton
-from ..mp.shared_mem import start_multiprocess, start_multiprocess_obj
+from .segmentation_helper import load_skeleton, find_missing_sv_views, find_missing_sv_attributes, find_missing_sv_skeletons
+from ..mp.mp_utils import start_multiprocess, start_multiprocess_obj
 skeletopyze_available = False
-# try:
-#     import skeletopyze
-#     skeletopyze_available = True
-# except:
-#     print("skeletopyze not found - you won't be able to compute skeletons. "
-#           "Install skeletopyze from https://github.com/funkey/skeletopyze")
+from ..reps import log_reps
 from scipy import spatial
-
+from ..proc.meshes import in_bounding_box
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-
-
-def reskeletonize_plain(volume, coord_scaling=(2, 2, 1), node_offset=0):
-    assert skeletopyze_available
-    params = skeletopyze.Parameters()
-    params.min_segment_length_ratio = .01
-    params.min_segment_length = 10
-    params.max_num_segments = 1000
-    params.skip_explained_nodes = True
-    params.explanation_weight = .1
-    # params.boundary_weight = 1
-
-    skeletopyze.setLogLevel(skeletopyze.LogLevel.All)
-    skel = skeletopyze.get_skeleton_graph(volume, params)
-
-    nodes = []
-    edges = []
-    diameters = []
-
-    for n in skel.nodes():
-        nodes.append(np.array([skel.locations(n).z() * coord_scaling[0],
-                               skel.locations(n).y() * coord_scaling[1],
-                               skel.locations(n).x() * coord_scaling[2]],
-                              dtype=np.int))
-
-        diameters.append(skel.diameters(n) * np.mean(coord_scaling))
-
-    for e in skel.edges():
-        edges.append(np.array([e.u + node_offset,
-                               e.v + node_offset], dtype=np.int))
-
-    return nodes, edges, diameters
-
-
-def cleanup_skeleton(skeleton, scaling):
-    scaling = np.array(scaling)
-
-    edge_lengths = []
-    for e in skeleton["edges"]:
-        edge_lengths.append(np.linalg.norm(skeleton["nodes"][e[1]] - skeleton["nodes"][e[0]]))
-
-    edge_lengths = np.array(edge_lengths)
-    print(np.mean(edge_lengths), np.std(edge_lengths))
-
-    edges = skeleton["edges"][edge_lengths < np.median(edge_lengths) + np.std(edge_lengths)].tolist()
-
-    graph = nx.from_edgelist(edges)
-    cc = nx.connected_components(graph)
-
-    i_cc = 0
-    block_ids = np.ones(len(skeleton["nodes"]), dtype=np.int) * -1
-    for this_cc in cc:
-        block_ids[list(this_cc)] = i_cc
-        i_cc += 1
-    block_ids[block_ids < 0] = np.max(block_ids) + \
-                               np.arange(np.sum([block_ids < 0]))
-
-    print("N unique blocks:", len(np.unique(block_ids)))
-
-    # node_ids, node_degrees = np.unique(edges, return_counts=True)
-    # end_nodes = node_ids[node_degrees <= 1].tolist()
-
-    node_ids, node_count = np.unique(edges, return_counts=True)
-
-    node_degrees = np.zeros(len(skeleton["nodes"]), dtype=np.int)
-    node_degrees[node_ids] = node_count
-
-    end_nodes = np.argwhere(node_degrees <= 1).squeeze()
-
-    distances = spatial.distance.cdist(skeleton["nodes"] * scaling,
-                                             skeleton["nodes"] * scaling)
-
-    max_dist = np.max(distances)
-    distances[np.triu_indices_from(distances)] = max_dist + 1
-
-    min_locs = np.dstack(np.unravel_index(np.argsort(distances.ravel()),
-                                          distances.shape))[0]
-    for min_loc in min_locs:
-        if len(np.unique(block_ids)) == 1:
-            break
-
-        if block_ids[min_loc[0]] != block_ids[min_loc[1]]:
-            edges.append(np.array([min_loc[0], min_loc[1]], dtype=np.int))
-            block_ids[block_ids == block_ids[min_loc[0]]] = block_ids[min_loc[1]]
-
-
-
-    # kdtree = scipy.spatial.cKDTree(skeleton["nodes"] * scaling)
-    # max_dist = 0
-    # while len(np.unique(block_ids)) > 1:
-    #     max_dist += 5
-    #     print "N unique blocks:", len(np.unique(block_ids))
-    #
-    #     node_ids, node_count = np.unique(edges, return_counts=True)
-    #
-    #     node_degrees = np.zeros(len(skeleton["nodes"]), dtype=np.int)
-    #     node_degrees[node_ids] = node_count
-    #
-    #     end_nodes = np.argwhere(node_degrees <= 1).squeeze()
-    #
-    #     # kdtree = scipy.spatial.cKDTree(skeleton["nodes"][end_nodes] * scaling)
-    #     for end_node in end_nodes:
-    #         coord = skeleton["nodes"][end_node] * scaling
-    #         ns = np.array(kdtree.query_ball_point(coord, max_dist),
-    #                       dtype=np.int)
-    #         ns = ns[block_ids[ns] != block_ids[end_node]]
-    #         if len(ns) > 0:
-    #             partner_id = ns[np.argmin(np.linalg.norm(
-    #                 skeleton["nodes"][ns] - coord, axis=1))]
-    #             edges.append(np.array([partner_id, end_node], dtype=np.int))
-    #
-    #             graph = nx.from_edgelist(edges)
-    #             cc = nx.connected_components(graph)
-    #
-    #             i_cc = 0
-    #             block_ids = np.ones(len(skeleton["nodes"]), dtype=np.int) * -1
-    #             for this_cc in cc:
-    #                 block_ids[list(this_cc)] = i_cc
-    #                 i_cc += 1
-    #             block_ids[block_ids < 0] = np.max(block_ids) +\
-    #                                        np.arange(np.sum([block_ids < 0]))
-
-    skeleton["edges"] = np.array(edges)
-    return skeleton
-
-
-def reskeletonize_block(block, coord_scaling=(2, 2, 1), node_offset=0,
-                        block_offset=0):
-    assert skeletopyze_available
-
-    cc_block, n_cc = scipy.ndimage.label(block)
-
-    nodes = []
-    edges = []
-    diameters = []
-    block_ids = []
-
-    for i_cc in range(1, n_cc+1):
-        this_nodes, this_edges, this_diameters = \
-            reskeletonize_plain(cc_block == i_cc, coord_scaling=coord_scaling,
-                                node_offset=node_offset)
-
-        nodes += this_nodes
-        edges += this_edges
-        diameters += this_diameters
-        block_ids += [block_offset] * len(this_nodes)
-
-        node_offset += len(this_nodes)
-        block_offset += 1
-
-    return nodes, edges, diameters, block_ids
-
-
-def reskeltetonize_super_chunk(volume, chunk_size, overlap, coord_scaling):
-    g_nodes = []
-    g_edges = []
-    g_diameters = []
-    g_crossing_edge_nodes = []
-
-    sc_chunk_size = chunk_size / coord_scaling
-    sc_overlap = overlap / coord_scaling
-
-    volume_shape = np.array(volume.shape)
-    n_steps = np.ceil((volume_shape - 2 * sc_overlap) / sc_chunk_size.astype(np.float)).astype(np.int)
-    steps = itertools.product(*[range(n_steps[i]) for i in range(3)])
-
-    for step in steps:
-        step = np.array(step, dtype=np.int)
-
-        start = sc_chunk_size * step
-        end = sc_overlap * 2 + sc_chunk_size * (step + 1)
-
-        this_offset = start * coord_scaling - overlap
-
-        this_volume = volume[start[0]: end[0],
-                             start[1]: end[1],
-                             start[2]: end[2]]
-
-        v_sh = this_volume.shape
-        if np.sum(this_volume[
-                  sc_overlap[0]: v_sh[0]-sc_overlap[0],
-                  sc_overlap[1]: v_sh[1]-sc_overlap[1],
-                  sc_overlap[2]: v_sh[2]-sc_overlap[2]]) == 0:
-            continue
-
-        reskel = reskeletonize_block(this_volume,
-                                     coord_scaling=coord_scaling)
-
-        nodes = np.array(reskel[0])
-        edges = np.array(reskel[1])
-        diameters = np.array(reskel[2])
-
-        if len(nodes) == 0 or len(edges) == 0:
-            continue
-
-        mask = np.all((nodes-overlap) >= 0, axis=1)
-
-        new_ids = np.ones(len(nodes), dtype=np.int) * (-1)
-        new_ids[mask] = np.array(range(int(np.sum(mask))), dtype=np.int)
-
-        nodes = nodes[mask]
-
-        if len(nodes) == 0:
-            continue
-
-        edges = new_ids[edges]
-        diameters = diameters[mask]
-        # block_ids = block_ids[mask]
-
-        mask = np.all((nodes-overlap-chunk_size) < 0, axis=1)
-
-        new_ids = np.ones(len(nodes), dtype=np.int) * (-1)
-        new_ids[mask] = np.array(range(int(np.sum(mask))), dtype=np.int)
-        new_ids = np.array(new_ids.tolist() + [-1])
-
-        nodes = nodes[mask]
-
-        if len(nodes) == 0:
-            continue
-
-        edges = new_ids[edges]
-
-        crossing_edge_nodes = edges[np.any(edges == -1, axis=1)]
-        crossing_edge_nodes = np.max(crossing_edge_nodes[~np.all(
-            crossing_edge_nodes == -1, axis=1)], axis=1)
-
-        edges = edges[np.all(edges >= 0, axis=1)]
-        diameters = diameters[mask]
-
-        g_crossing_edge_nodes += list(crossing_edge_nodes + len(g_nodes))
-
-        nodes += this_offset
-        g_edges += list(edges + len(g_nodes))
-        g_nodes += nodes.tolist()
-        g_diameters += list(diameters)
-
-    return g_nodes, g_edges, g_diameters, g_crossing_edge_nodes
-
-
-def reskeletonize_chunked(obj_id, volume_shape, volume_offset, scaling,
-                          kd=None, voxels=None, coord_scaling=(2, 2, 1),
-                          chunk_step_stride=4, max_con_dist_nm=100,
-                          nb_threads=1):
-    def _reskel_thread(args):
-        chunk_id = args[0]
-
-        this_offset = np.array([chunk_id[i_dim] * chunk_size[i_dim]
-                                for i_dim in range(3)])
-
-        if voxels is None and kd is not None:
-            this_offset -= overlap
-            chunk_volume = kd.from_overlaycubes_to_matrix(size=this_size,
-                                                          offset=this_offset +
-                                                                 volume_offset,
-                                                          datatype=np.uint32,
-                                                          mirror_oob=True,
-                                                          nb_threads=4,
-                                                          show_progress=False)
-
-            chunk_volume = chunk_volume[::coord_scaling[0],
-                           ::coord_scaling[1],
-                           ::coord_scaling[2]]
-            chunk_volume = chunk_volume == obj_id
-        else:
-            start = this_offset / coord_scaling
-            end = start + chunk_step_stride * sc_chunk_size + 2 * sc_overlap
-
-            chunk_volume = voxels[start[0]: end[0],
-                           start[1]: end[1],
-                           start[2]: end[2]]
-        cv_sh = chunk_volume.shape
-        sum_volume = np.sum(
-            chunk_volume[sc_overlap[0]: cv_sh[0] - sc_overlap[0],
-            sc_overlap[1]: cv_sh[1] - sc_overlap[1],
-            sc_overlap[2]: cv_sh[2] - sc_overlap[2]])
-
-        if sum_volume == 0:
-            print("Discarded")
-            return [[]], this_offset
-        else:
-            reskel = reskeltetonize_super_chunk(chunk_volume,
-                                                chunk_size,
-                                                overlap,
-                                                coord_scaling)
-            return reskel, this_offset
-
-    scaling = np.array(scaling)
-    coord_scaling = np.array(coord_scaling)
-    volume_offset = np.array(volume_offset)
-
-    chunk_size = np.array([160, 160, 80], dtype=np.int)
-    n_chunks = np.ceil(volume_shape / chunk_size.astype(np.float)).astype(np.int)
-    chunk_ids = itertools.product(*[range(0, n_chunks[i], chunk_step_stride) for i in range(3)])
-
-    multi_params = []
-    for chunk_id in chunk_ids:
-        multi_params.append([chunk_id])
-
-    # overlap = chunk_size / 2
-    overlap = np.array([120, 120, 60], dtype=np.int)
-
-    g_nodes = []
-    g_edges = []
-    g_diameters = []
-    g_crossing_edge_nodes = []
-
-    this_size = chunk_size * chunk_step_stride + overlap * 2
-
-    sc_overlap = overlap / coord_scaling
-    sc_chunk_size = chunk_size / coord_scaling
-    if voxels is not None:
-        voxels = np.pad(voxels, zip(sc_overlap, sc_overlap), mode="constant",
-                        constant_values=False)
-
-    if nb_threads > 1:
-        pool = ThreadPool(nb_threads)
-        results = pool.map(_reskel_thread, multi_params)
-        pool.close()
-        pool.join()
-    else:
-        results = map(_reskel_thread, multi_params)
-
-    for result in results:
-        reskel, this_offset = result
-        if len(reskel[0]) > 0:
-            edges = np.array(reskel[1]) + len(g_nodes)
-            g_edges += edges.tolist()
-            nodes = np.array(reskel[0]) + this_offset + volume_offset
-            g_nodes += nodes.tolist()
-            g_diameters += reskel[2]
-            g_crossing_edge_nodes += reskel[3]
-
-
-
-    # def reskeletonize_chunked(obj_id, volume_shape, volume_offset, scaling,
-#                           kd=None, voxels=None, coord_scaling=(2, 2, 1),
-#                           chunk_step_stride=4, max_con_dist_nm=100):
-#     scaling = np.array(scaling)
-#     coord_scaling = np.array(coord_scaling)
-#     volume_offset = np.array(volume_offset)
-#
-#     chunk_size = np.array([160, 160, 80], dtype=np.int)
-#     n_chunks = np.ceil(volume_shape / chunk_size.astype(np.float)).astype(np.int)
-#     chunk_ids = itertools.product(*[range(0, n_chunks[i], chunk_step_stride) for i in range(3)])
-#
-#     # overlap = chunk_size / 2
-#     overlap = np.array([120, 120, 60], dtype=np.int)
-#
-#     g_nodes = []
-#     g_edges = []
-#     g_diameters = []
-#     g_crossing_edge_nodes = []
-#
-#     this_size = chunk_size * chunk_step_stride + overlap * 2
-#
-#     sc_overlap = overlap / coord_scaling
-#     sc_chunk_size = chunk_size / coord_scaling
-#     if voxels is not None:
-#         voxels = np.pad(voxels, zip(sc_overlap, sc_overlap), mode="constant",
-#                         constant_values=False)
-#
-#     for chunk_id in chunk_ids:
-#         print chunk_id, "of", n_chunks - 1
-#         this_offset = np.array([chunk_id[i_dim] * chunk_size[i_dim]
-#                                 for i_dim in range(3)])
-#
-#         if voxels is None and kd is not None:
-#             this_offset -= overlap
-#             chunk_volume = kd.from_overlaycubes_to_matrix(size=this_size,
-#                                                           offset=this_offset +
-#                                                                  volume_offset,
-#                                                           datatype=np.uint32,
-#                                                           mirror_oob=True,
-#                                                           nb_threads=4,
-#                                                           show_progress=False)
-#
-#             chunk_volume = chunk_volume[::coord_scaling[0],
-#                                         ::coord_scaling[1],
-#                                         ::coord_scaling[2]]
-#             chunk_volume = chunk_volume == obj_id
-#         else:
-#             start = this_offset / coord_scaling
-#             end = start + chunk_step_stride * sc_chunk_size + 2 * sc_overlap
-#
-#             chunk_volume = voxels[start[0]: end[0],
-#                                   start[1]: end[1],
-#                                   start[2]: end[2]]
-#         cv_sh = chunk_volume.shape
-#         sum_volume = np.sum(chunk_volume[sc_overlap[0]: cv_sh[0]-sc_overlap[0],
-#                                          sc_overlap[1]: cv_sh[1]-sc_overlap[1],
-#                                          sc_overlap[2]: cv_sh[2]-sc_overlap[2]])
-#
-#         if sum_volume == 0:
-#             print "Discarded"
-#             continue
-#         else:
-#             print "Keep", sum_volume
-#
-#         reskel = reskeltetonize_super_chunk(chunk_volume,
-#                                             chunk_size,
-#                                             overlap,
-#                                             coord_scaling)
-#
-#         if len(reskel[0]) > 0:
-#             edges = np.array(reskel[1]) + len(g_nodes)
-#             g_edges += edges.tolist()
-#             nodes = np.array(reskel[0]) + this_offset + volume_offset
-#             g_nodes += nodes.tolist()
-#             g_diameters += reskel[2]
-#             g_crossing_edge_nodes += reskel[3]
-
-    graph = nx.from_edgelist(g_edges)
-    cc = nx.connected_components(graph)
-
-    i_cc = 0
-    g_block_ids = np.zeros(len(g_nodes), dtype=np.int)
-    for this_cc in cc:
-        g_block_ids[list(this_cc)] = i_cc
-        i_cc += 1
-
-    g_nodes = np.array(g_nodes)
-    g_diameters = np.array(g_diameters)
-
-    print("N unique blocks:", len(np.unique(g_block_ids)))
-    print("N candidate nodes:", len(g_crossing_edge_nodes))
-
-    # PHASE 1 - candidate nodes:
-
-    # if len(g_crossing_edge_nodes) > 0:
-    #     g_crossing_edge_nodes = np.array(g_crossing_edge_nodes, dtype=np.int)
-    #     g_block_ids = np.array(g_block_ids, dtype=np.int)
-    #
-    #     candidate_nodes = g_nodes[g_crossing_edge_nodes]
-    #     candidate_block_ids = g_block_ids[g_crossing_edge_nodes]
-    #
-    #     distances = scipy.spatial.distance.cdist(candidate_nodes * scaling,
-    #                                              candidate_nodes * scaling)
-    #
-    #     distances[np.triu_indices_from(distances)] = max_con_dist_nm + 1
-    #     distances[distances > max_con_dist_nm] = max_con_dist_nm + 1
-    #
-    #     new_edges = set()
-    #
-    #     min_locs = np.dstack(np.unravel_index(np.argsort(distances.ravel()),
-    #                                           distances.shape))[0]
-    #     next_loc = 0
-    #     max_loc = np.sum(range(len(candidate_nodes)))
-    #     while len(np.unique(candidate_block_ids)) > 1 and next_loc < max_loc:
-    #         n1, n2 = min_locs[next_loc]
-    #         if distances[n1, n2] > max_con_dist_nm:
-    #             break
-    #
-    #         if candidate_block_ids[n1] != candidate_block_ids[n2]:
-    #             print "unique", np.unique(candidate_block_ids), "edges", \
-    #                 len(new_edges)
-    #
-    #             new_edges.add(tuple([n1, n2]))
-    #
-    #             g_block_ids[g_block_ids == candidate_block_ids[n1]] = \
-    #                 candidate_block_ids[n2]
-    #
-    #             candidate_block_ids[candidate_block_ids ==
-    #                                 candidate_block_ids[n1]] =\
-    #                 candidate_block_ids[n2]
-    #
-    #         next_loc += 1
-    #
-    #     if len(np.unique(candidate_block_ids)) > 1:
-    #         print "Failed", len(np.unique(candidate_block_ids)),\
-    #             len(np.unique(g_block_ids))
-    #
-    #     for edge in new_edges:
-    #         g_edges.append(np.array([g_crossing_edge_nodes[edge[0]],
-    #                                  g_crossing_edge_nodes[edge[1]]],
-    #                                 dtype=np.int))
-
-    # PHASE 2 - end nodes:
-
-    if len(g_edges) == 0:
-        return g_nodes, g_edges, g_diameters
-
-    max_dist_step = np.linalg.norm(overlap * scaling) / 4
-
-    node_ids, node_degrees_ex = np.unique(g_edges, return_counts=True)
-    print("Remove lonely nodes")
-    node_degrees = np.zeros(len(g_nodes), dtype=np.int)
-    node_degrees[node_ids] = node_degrees_ex
-
-    mask = node_degrees > 0
-    new_ids = np.ones(len(g_nodes), dtype=np.int)
-    new_ids[mask] = np.array(range(int(np.sum(mask))), dtype=np.int)
-    new_ids = np.array(new_ids.tolist())
-
-    g_nodes = g_nodes[mask]
-    g_diameters = g_diameters[mask]
-    g_block_ids = g_block_ids[mask]
-    g_edges = new_ids[np.array(g_edges)].tolist()
-
-    node_ids, node_degrees = np.unique(g_edges, return_counts=True)
-    end_nodes = node_ids[node_degrees == 1]
-
-    kdtree = spatial.cKDTree(g_nodes * scaling)
-    distances = spatial.distance.cdist(g_nodes[end_nodes] * scaling,
-                                             g_nodes[end_nodes] * scaling)
-
-    distances[np.triu_indices_from(distances)] = max_dist_step + 1
-    distances[distances > max_dist_step] = max_dist_step + 1
-
-    min_locs = np.dstack(np.unravel_index(np.argsort(distances.ravel()),
-                                          distances.shape))[0]
-    for min_loc in min_locs:
-        if distances[min_loc[0], min_loc[1]] > max_dist_step:
-            break
-
-        if g_block_ids[end_nodes[min_loc[0]]] != \
-                g_block_ids[end_nodes[min_loc[1]]]:
-            g_edges.append(np.array([end_nodes[min_loc[0]],
-                                     end_nodes[min_loc[1]]], dtype=np.int))
-
-            g_block_ids[g_block_ids == g_block_ids[end_nodes[min_loc[0]]]] = \
-                g_block_ids[end_nodes[min_loc[1]]]
-
-    # PHASE 3 - rest end nodes:
-
-    max_dist = 0
-    while len(np.unique(g_block_ids)) > 1:
-        max_dist += max_dist_step
-        print("N unique blocks:", len(np.unique(g_block_ids)))
-
-        node_ids, node_degrees = np.unique(g_edges, return_counts=True)
-        end_nodes = node_ids[node_degrees <= 1].tolist()
-
-        for end_node in end_nodes:
-            coord = g_nodes[end_node] * scaling
-            ns = np.array(kdtree.query_ball_point(coord, max_dist),
-                          dtype=np.int)
-            ns = ns[g_block_ids[ns] != g_block_ids[end_node]]
-            if len(ns) > 0:
-                partner_id = ns[np.argmin(np.linalg.norm(g_nodes[ns] - coord,
-                                                         axis=1))]
-                g_edges.append(np.array([partner_id, end_node], dtype=np.int))
-
-                graph = nx.from_edgelist(g_edges)
-                cc = nx.connected_components(graph)
-
-                i_cc = 0
-                g_block_ids = np.zeros(len(g_nodes), dtype=np.int)
-                for this_cc in cc:
-                    g_block_ids[list(this_cc)] = i_cc
-                    i_cc += 1
-
-    print("N unique blocks:", len(np.unique(g_block_ids)))
-
-    g_nodes = g_nodes.tolist()
-    return g_nodes, g_edges, g_diameters
 
 
 def majority_vote(anno, prop, max_dist):
@@ -651,14 +90,14 @@ def nodes_in_pathlength(anno, max_path_len):
 def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
     sso.load_attr_dict()
     if not overwrite and "celltype_cnn" in sso.attr_dict:
-        print("Prediciton already exists (SSV %d)." % sso.id)
         return
     out_d = sso_views_to_modelinput(sso, nb_views)
     res = model.predict_proba(out_d)
     clf = np.argmax(res, axis=1)
-    pred = np.argmax(np.array([np.sum(clf==0), np.sum(clf==1), np.sum(clf==2),
-                     np.sum(clf == 3)]))
+    ls, cnts = np.unique(clf, return_counts=True)
+    pred = ls[np.argmax(cnts)]
     sso.save_attributes(["celltype_cnn"], [pred])
+    sso.save_attributes(["celltype_cnn_probas"], [res])
 
 
 def sso_views_to_modelinput(sso, nb_views):
@@ -673,7 +112,6 @@ def sso_views_to_modelinput(sso, nb_views):
         rand_ixs = np.random.choice(np.arange(views.shape[1]),
                                     nb_views - views.shape[1])
         views = np.append(views, views[:, rand_ixs], axis=1)
-        print(rand_ixs, views.shape)
     nb_samples = np.floor(views.shape[1] / nb_views)
     assert nb_samples > 0
     out_d = views[:, :int(nb_samples * nb_views)]
@@ -920,7 +358,7 @@ def convert_coord(coord_list, scal):
     return np.array([coord_list[1] + 1, coord_list[0] + 1, coord_list[2] + 1]) * np.array(scal)
 
 
-def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annotations=True):
+def prune_stub_branches(sso=None, nx_g=None, scal=[10, 10, 20], len_thres=1000, preserve_annotations=True):
     """
     Removes short stub branches, that are often added by annotators but
     hardly represent true morphology.
@@ -938,42 +376,55 @@ def prune_stub_branches(nx_g, scal=[10, 10, 20], len_thres=1000, preserve_annota
     pruned network kx graph
     """
 
+    pruning_complete = False
+
     if preserve_annotations:
         new_nx_g = nx_g.copy()
     else:
         new_nx_g = nx_g
 
     # find all tip nodes in an anno, ie degree 1 nodes
-    end_nodes = list({k for k, v in dict(nx_g.degree()).iteritems() if v == 1})
+    while not pruning_complete:
 
-    # DFS to first branch node
-    for end_node in end_nodes:
-        prune_nodes = []
-        for curr_node in nx.traversal.dfs_preorder_nodes(nx_g, end_node):
-            if nx_g.degree(curr_node) > 2:
-                loc_end = convert_coord(nx_g.node[end_node]['position'], scal)
-                loc_curr = convert_coord(nx_g.node[curr_node]['position'], scal)
-                b_len = np.linalg.norm(loc_end - loc_curr)
-                if b_len < len_thres:
-                    # remove this stub, i.e. prune the nodes that were
-                    # collected on our way to the branch point
-                    for prune_node in prune_nodes:
-                        new_nx_g.remove_node(prune_node)
-                        # print('this got removed', prune_node, len(prune_nodes))
-                    break
-                else:
-                    break
-            # add this node to the list of nodes that MAY get removed
-            # in case a stub is detected later in the loop
-            prune_nodes.append(curr_node)
+        nx_g = new_nx_g.copy()
+
+        end_nodes = list({k for k, v in dict(nx_g.degree()).items() if v == 1})
+
+        # DFS to first branch node
+        for end_node in end_nodes:
+            prune_nodes = []
+            for curr_node in nx.traversal.dfs_preorder_nodes(nx_g, end_node):
+                if nx_g.degree(curr_node) > 2:
+                    loc_end = convert_coord(nx_g.node[end_node]['position'], scal)
+                    loc_curr = convert_coord(nx_g.node[curr_node]['position'], scal)
+                    b_len = np.linalg.norm(loc_end - loc_curr)
+
+                    if b_len < len_thres:
+                        # remove this stub, i.e. prune the nodes that were
+                        # collected on our way to the branch point
+                        for prune_node in prune_nodes:
+                            new_nx_g.remove_node(prune_node)
+                            # print('this got removed', prune_node, len(prune_nodes))
+                        break
+                    else:
+                        break
+                prune_nodes.append(curr_node)
+
+        if len(new_nx_g.nodes) == len(nx_g.nodes):
+            pruning_complete = True
 
     # Important assert. Please don't remove
     assert nx.number_connected_components(new_nx_g) == 1
 
-    return new_nx_g
+    print('NUMber of comp after pruning',nx.number_connected_components(new_nx_g) )
+
+    if sso is not None:
+        sso = from_netkx_to_sso(sso, new_nx_g)
+
+    return sso, new_nx_g
 
 
-def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_thresh=50):
+def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_thresh=50):
     """
     Reduces nodes in the skeleton. (from dense stacking to sparsed stacking)
 
@@ -982,6 +433,7 @@ def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_th
     sso : Super Segmentation Object
     dot_prod_thresh : float
         the 'straightness' of the edges
+    skel_nx : networkx graph of the sso skel
     max_dist_thresh : int
         maximum distance desired between every node
     min_dist_thresh : int
@@ -993,52 +445,38 @@ def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_th
     """
 
     sso.load_skeleton()
-    ssv_skel = sso.skeleton
     scal = sso.scaling
-
-    skel_G = nx.Graph()
-    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
-
-    for inx, single_node in enumerate(new_nodes):
-        skel_G.add_node(inx, position=single_node)
-
-    new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
-    new_edges = [tuple(ix) for ix in new_edges]
-    skel_G.add_edges_from(new_edges)
     change = 1
-    run_cnt = 0
-    # orig_node_cnt = len(new_nodes)
+    if sso.skeleton is None:
+        sso.skeleton = dict()
+
     while change > 0:
-        # run_cnt += 1
         change = 0
-        visiting_nodes = list({k for k, v in dict(skel_G.degree()).iteritems() if v == 2})
+        visiting_nodes = list({k for k, v in dict(skel_nx.degree()).items() if v == 2})
         for visiting_node in visiting_nodes:
-            neighbours = [n for n in skel_G.neighbors(visiting_node)]
-            if skel_G.degree(visiting_node) == 2:
+            neighbours = [n for n in skel_nx.neighbors(visiting_node)]
+            if skel_nx.degree(visiting_node) == 2:
                 left_node = neighbours[0]
                 right_node = neighbours[1]
-                vector_left_node = np.array([int(skel_G.node[left_node]['position'][ix]) - int(skel_G.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
-                vector_right_node =np.array([int(skel_G.node[right_node]['position'][ix]) - int(skel_G.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+                vector_left_node = np.array([int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+                vector_right_node =np.array([int(skel_nx.node[right_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
 
                 dot_prod = np.dot(vector_left_node/ np.linalg.norm(vector_left_node),vector_right_node/ np.linalg.norm(vector_right_node))
-                dist = np.linalg.norm([int(skel_G.node[right_node]['position'][ix]*scal[ix]) - int(skel_G.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
+                dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix]*scal[ix]) - int(skel_nx.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
 
                 # print('dots', dot_prod, 'dist', dist)
 
                 if (abs(dot_prod) > dot_prod_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
-                    skel_G.remove_node(visiting_node)
-                    skel_G.add_edge(left_node,right_node)
-                    change += 1
-                    # print('this got removed', visiting_node)
-                # if change == 0:
-                #     change = -1
-    # print("Removed %d nodes after %d iterations." %
-    #       (orig_node_cnt-len(skel_G.nodes()), run_cnt))
 
-    sso.skeleton['nodes'] = np.array([skel_G.node[ix]['position'] for ix in skel_G.nodes()], dtype=np.uint32)
+                    skel_nx.remove_node(visiting_node)
+                    skel_nx.add_edge(left_node,right_node)
+                    change += 1
+
+    # print('number of connected comp sparsification' , nx.number_connected_components(skel_nx))
+    sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.uint32)
     sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
 
-    temp_edges = np.array(skel_G.edges()).reshape(-1)
+    temp_edges = np.array(skel_nx.edges()).reshape(-1)
     temp_edges_sorted = np.unique(np.sort(temp_edges))
     temp_edges_dict = {}
 
@@ -1046,18 +484,154 @@ def sparsify_skeleton(sso, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_th
         temp_edges_dict[ix] = ii
     temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
 
-    temp_edges = np.array(temp_edges).reshape([-1, 2])
+    sso.skeleton['edges'] = np.array(temp_edges).reshape([-1, 2])
 
+    nx_g = nx.Graph()
+    for inx, single_node in enumerate(sso.skeleton['nodes']):
+        nx_g.add_node(inx, position=single_node)
+
+    nx_g.add_edges_from(np.array(temp_edges).reshape([-1, 2]))
+
+    return sso,nx_g
+
+
+
+
+def smooth_skeleton(skel_nx, scal=[10,10,20]):
+    visiting_nodes = list({k for k, v in dict(skel_nx.degree()).items() if v == 2})
+
+    for index, visiting_node in enumerate(visiting_nodes):
+
+        neighbours = [n for n in skel_nx.neighbors(visiting_node)]
+
+        if skel_nx.degree(visiting_node) == 2:
+            left_node = neighbours[0]
+            right_node = neighbours[1]
+
+        if skel_nx.degree(left_node) == 2 and skel_nx.degree(right_node)==2:
+                vector_left_node = np.array(
+                    [int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in
+                     range(3)]) * scal
+                vector_right_node = np.array(
+                    [int(skel_nx.node[right_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix
+                     in range(3)]) * scal
+
+                dot_prod = np.dot(vector_left_node / np.linalg.norm(vector_left_node),
+                                  vector_right_node / np.linalg.norm(vector_right_node))
+                dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix] * scal[ix]) - int(
+                    skel_nx.node[left_node]['position'][ix] * scal[ix]) for ix in range(3)])
+
+                print(dot_prod)
+                if abs(dot_prod) < 0.3:
+
+                    x_dist = np.linalg.norm([int(skel_nx.node[visiting_node]['position'][ix] * scal[ix]) - int(
+                        skel_nx.node[left_node]['position'][ix] * scal[ix]) for ix in range(3)])
+
+                    y_dist = np.linalg.norm([int(skel_nx.node[visiting_node]['position'][ix] * scal[ix]) - int(
+                        skel_nx.node[right_node]['position'][ix] * scal[ix]) for ix in range(3)])
+
+
+                    p = [(int(skel_nx.node[right_node]['position'][ix] + int(skel_nx.node[left_node]['position'][ix]))*x_dist/(x_dist +y_dist)) for ix in range(3)]
+
+                    final_node = (1*p + skel_nx.node[visiting_node]['position']*99)/100
+                    print ('original ' , skel_nx.node[visiting_node]['position'], 'final ',final_node)
+
+                    skel_nx.node[visiting_node]['position'] = np.array(final_node, dtype = np.int)
+
+
+    return skel_nx
+#
+
+def from_netkx_to_sso(sso, skel_nx):
+
+    sso.skeleton = {}
+    sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.uint32)
+    sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
+
+    assert nx.number_connected_components(skel_nx) == 1
+
+    # Important bit, please don't remove (needed after pruning)
+    temp_edges = np.array(skel_nx.edges()).reshape(-1)
+    temp_edges_sorted = np.unique(np.sort(temp_edges))
+    temp_edges_dict = {}
+
+    for ii, ix in enumerate(temp_edges_sorted):
+        temp_edges_dict[ix] = ii
+
+    temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
+
+    temp_edges = np.array(temp_edges, dtype=np.uint).reshape([-1, 2])
     sso.skeleton['edges'] = temp_edges
 
-    # Estimating the radii
-    # print("Starting radius correction.")
-    sso.skeleton = radius_correction_found_vertices(sso)
-
     return sso
-    # print("Exporting kzip")
-    # sso.save_skeleton_to_kzip("/wholebrain/scratch/pschuber/skelG_sparsed_exp_3_%d_v6.k.zip" % sso.id)
 
+def from_sso_to_netkx(sso):
+
+    skel_nx = nx.Graph()
+    sso.load_attr_dict()
+    ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
+
+    for sv_id in sso.sv_ids:
+        nodes, diameters, edges = create_new_skeleton(sv_id, sso)
+
+        ssv_skel['edges'] = np.concatenate(
+            (ssv_skel['edges'], [(ix + (len(ssv_skel['nodes'])) / 3) for ix in edges]), axis=0)
+        ssv_skel['nodes'] = np.concatenate((ssv_skel['nodes'], nodes), axis=0)
+
+        ssv_skel['diameters'] = np.concatenate((ssv_skel['diameters'], diameters), axis=0)
+
+
+    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
+    if len(new_nodes) == 0:
+        sso.skeleton = ssv_skel
+        return
+
+    for inx, single_node in enumerate(new_nodes):
+        skel_nx.add_node(inx, position=single_node)
+
+    new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
+    new_edges = [tuple(ix) for ix in new_edges]
+    skel_nx.add_edges_from(new_edges)
+
+
+    return skel_nx
+
+
+def stitch_skel_nx(skel_nx):
+
+    no_of_seg = nx.number_connected_components(skel_nx)
+
+    skel_nx_nodes = [ii['position'] for ix, ii in skel_nx.node.items()]
+
+    new_nodes = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.uint32)
+    while no_of_seg != 1:
+
+        rest_nodes = []
+        current_set_of_nodes = []
+
+        list_of_comp = np.array([c for c in sorted(nx.connected_components(skel_nx), key=len, reverse=True)])
+
+        for single_rest_graph in list_of_comp[1:]:
+            rest_nodes = rest_nodes + [skel_nx_nodes[int(ix)] for ix in single_rest_graph]
+
+        for single_rest_graph in list_of_comp[:1]:
+            current_set_of_nodes = current_set_of_nodes + [skel_nx_nodes[int(ix)] for ix in
+                                                           single_rest_graph]
+
+        tree = spatial.cKDTree(rest_nodes, 1)
+        thread_lengths, indices = tree.query(current_set_of_nodes)
+
+        start_thread_index = np.argmin(thread_lengths)
+        stop_thread_index = indices[start_thread_index]
+
+        start_thread_node = \
+        np.where(np.sum(np.subtract(new_nodes, current_set_of_nodes[start_thread_index]), axis=1) == 0)[0][0]
+        stop_thread_node = np.where(np.sum(np.subtract(new_nodes, rest_nodes[stop_thread_index]), axis=1) == 0)[0][0]
+
+        skel_nx.add_edge(start_thread_node, stop_thread_node)
+        no_of_seg -= 1
+
+    return skel_nx
 
 def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     """
@@ -1076,99 +650,26 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
 
     """
 
-    # Fetching Super voxel Skeletons
+    # Creating network kx graph from sso skel
+    skel_nx = from_sso_to_netkx(sso)
 
-    sso.load_attr_dict()
-    ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
-
-    for sv_id in sso.sv_ids:
-        nodes, diameters, edges = create_new_skeleton(sv_id, sso)
-
-        ssv_skel['edges'] = np.concatenate(
-            (ssv_skel['edges'], [(ix + (len(ssv_skel['nodes'])) / 3) for ix in edges]), axis=0)
-        ssv_skel['nodes'] = np.concatenate((ssv_skel['nodes'], nodes), axis=0)
-
-        ssv_skel['diameters'] = np.concatenate((ssv_skel['diameters'], diameters), axis=0)
-
-    skel_G = nx.Graph()
-    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
-    if len(new_nodes) == 0:
-        sso.skeleton = ssv_skel
-        return
-
-    for inx, single_node in enumerate(new_nodes):
-        skel_G.add_node(inx, position=single_node)
-
-    new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
-    new_edges = [tuple(ix) for ix in new_edges]
-    skel_G.add_edges_from(new_edges)
-
-    new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
-
-    # Stitching Super Voxel Skeletons
-    no_of_seg = nx.number_connected_components(skel_G)
-
-    skel_G_nodes = [ii['position'] for ix, ii in skel_G.node.iteritems()]
-
-
-    while no_of_seg != 1:
-
-        rest_nodes = []
-        current_set_of_nodes = []
-
-        list_of_comp = np.array([c for c in sorted(nx.connected_components(skel_G), key=len, reverse=True)])
-
-        for single_rest_graph in list_of_comp[1:]:
-
-            rest_nodes = rest_nodes + [skel_G_nodes[int(ix)] for ix in single_rest_graph]
-
-        for single_rest_graph in list_of_comp[:1]:
-
-            current_set_of_nodes = current_set_of_nodes + [skel_G_nodes[int(ix)] for ix in
-                                                           single_rest_graph]
-
-        tree = spatial.cKDTree(rest_nodes, 1)
-        thread_lengths, indices = tree.query(current_set_of_nodes)
-
-        start_thread_index = np.argmin(thread_lengths)
-        stop_thread_index = indices[start_thread_index]
-
-
-        start_thread_node = np.where(np.sum(np.subtract(new_nodes, current_set_of_nodes[start_thread_index]), axis=1) == 0)[0][0]
-        stop_thread_node = np.where(np.sum(np.subtract(new_nodes, rest_nodes[stop_thread_index]), axis=1) == 0)[0][0]
-
-        skel_G.add_edge(start_thread_node, stop_thread_node)
-        no_of_seg -= 1
-
-
-    # Pruning the stitched Super Super Voxel Skeletons
-    if pruning_thresh !=0:
-        skel_G = prune_stub_branches(skel_G, len_thres=pruning_thresh)
-
-    sso.skeleton = {}
-    sso.skeleton['nodes'] = np.array([skel_G.node[ix]['position'] for ix in skel_G.nodes()], dtype=np.uint32)
-    sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
-
-    # Important bit, please don't remove (needed after pruning)
-    temp_edges = np.array(skel_G.edges()).reshape(-1)
-    temp_edges_sorted = np.unique(np.sort(temp_edges))
-    temp_edges_dict = {}
-
-    for ii, ix in enumerate(temp_edges_sorted):
-        temp_edges_dict[ix] = ii
-
-    temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
-
-    temp_edges = np.array(temp_edges, dtype=np.uint).reshape([-1, 2])
-    sso.skeleton['edges'] = temp_edges
-
-
-    #sparsifying the stacked nodes
     if sparsify:
-        sso = sparsify_skeleton(sso)
+        sso, skel_nx = sparsify_skeleton(sso,skel_nx)
+
+    # Stitching sso skeletons
+    skel_nx = stitch_skel_nx(skel_nx)
+
+    # Sparse again after stitching. Inexpensive.
+    if sparsify:
+        sso, skel_nx = sparsify_skeleton(sso, skel_nx)
+
+    # Pruning the stitched sso skeletons
+    sso, skel_nx = prune_stub_branches(sso, skel_nx, len_thres=pruning_thresh)
 
     # Estimating the radii
     sso.skeleton = radius_correction_found_vertices(sso)
+
+    return sso
 
 
 def glia_pred_exists(so):
@@ -1196,9 +697,8 @@ def get_pca_view_hists(sso, t_net, pca):
 
 def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(),
                        special_markers=(), special_kwargs=()):
-    if "matplotlib" not in globals():
-        import matplotlib
-        matplotlib.use("agg")
+    import matplotlib
+    matplotlib.use("Agg", warn=False, force=True)
     import matplotlib.pyplot as plt
     import matplotlib.ticker as ticker
     views = sso.load_views()
@@ -1239,9 +739,9 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
         plt.close()
 
-def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
+def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=1000,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
-    node_degrees = np.array(ssv.weighted_graph().degree().values(),
+    node_degrees = np.array(list(dict(ssv.weighted_graph().degree()).values()),
                             dtype=np.int)
 
     sizes = {}
@@ -1267,15 +767,14 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
         paths = nx.single_source_dijkstra_path(ssv.weighted_graph(),
                                                this_i_node,
                                                feature_context_nm)
-        neighs = np.array(paths.keys(), dtype=np.int)
+        neighs = np.array(list(paths.keys()), dtype=np.int)
 
         neigh_diameters = ssv.skeleton["diameters"][neighs]
         this_features.append(np.mean(neigh_diameters))
         this_features.append(np.std(neigh_diameters))
-        this_features += list(np.histogram(neigh_diameters,
-                                           bins=10,
-                                           range=(0, max_diameter),
-                                           normed=True)[0])
+        hist_feat = np.histogram(neigh_diameters,bins=10,range=(0, max_diameter))[0]
+        hist_feat = np.array(hist_feat) / hist_feat.sum()
+        this_features += list(hist_feat)
         this_features.append(np.mean(node_degrees[neighs]))
 
         for obj_type in obj_types:
@@ -1293,8 +792,15 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
             this_features.append(np.mean(obj_sizes))
             this_features.append(np.std(obj_sizes))
 
+        # box feature
+        edge_len = feature_context_nm * 2
+        bb = [ssv.skeleton["nodes"][this_i_node], np.array([edge_len,] * 3)]
+        vol_tot = feature_context_nm ** 3
+        node_density = np.sum(in_bounding_box(ssv.skeleton["nodes"], bb)) / vol_tot
+        this_features.append(node_density)
+
         features.append(np.array(this_features))
-    return features
+    return np.array(features)
 
 
 def associate_objs_with_skel_nodes(ssv, obj_types=("sj", "vc", "mi"),
@@ -1371,7 +877,7 @@ def label_array_for_sso_skel(sso, comment_converter):
     cd = skelnode_comment_dict(sso)
     label_array = np.ones(len(sso.skeleton["nodes"]), dtype=np.int) * -1
     for ii, n in enumerate(sso.skeleton["nodes"]):
-        comment = cd[frozenset(n)].lower()
+        comment = cd[frozenset(n.astype(np.int))].lower()
         try:
             label_array[ii] = comment_converter[comment]
         except KeyError:
@@ -1404,10 +910,11 @@ def write_axpred(ssv, pred_key_appendix, dest_path=None, k=1):
     ssv._pred2mesh(pred_coords, preds, "axoness.ply", dest_path=dest_path, k=k)
 
 
-def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
+def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
+                                max_dist=10000, return_res=False):
     """
     Averages the axoness prediction along skeleton with maximum path length
-    of 'avg_window'. Therefore, view indices were mapped to every skeleton
+    of 'max_dist'. Therefore, view indices were mapped to every skeleton
     node and collected while traversing the skeleton. The majority of the
     set of their predictions will be assigned to the source node.
 
@@ -1415,15 +922,22 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
     ----------
     sso : SuperSegmentationObject
     axoness_pred_key : str
-    avg_window : int
+    max_dist : int
+    return_res : bool
     """
     if sso.skeleton is None:
         sso.load_skeleton()
     if len(sso.skeleton["edges"]) == 0:
         print("Zero edges in skeleton of SSV %d. Skipping averaging." % sso.id)
         return
-    pred_key = "axoness_preds_cnn%s" % pred_key_appendix
-    if not sso.attr_exists(pred_key):
+    if pred_key is None:
+        pred_key = "axoness_preds_cnn%s" % pred_key_appendix
+    elif len(pred_key_appendix) > 0:
+        raise ValueError("Only one of the two may be given: 'pred_key' or"
+                         "'pred_key_appendix', but not both.")
+    if type(pred_key) != str:
+        raise ValueError("'pred_key' has to be of type str.")
+    if not sso.attr_exists(pred_key) and ("axoness_preds_cnn" not in pred_key):
         if len(pred_key_appendix) > 0:
             print("Couldn't find specified axoness prediction. Falling back to "
                   "default (-> per SV stored multi-view prediction "
@@ -1439,50 +953,47 @@ def _average_node_axoness_views(sso, pred_key_appendix="", avg_window=10000):
     else:
         preds = sso.lookup_in_attribute_dict(pred_key)
     loc_coords = np.concatenate(sso.sample_locations())
-    assert len(loc_coords) == len(preds), "Number of view coordinates is" \
-                                          "different from number of view" \
+    assert len(loc_coords) == len(preds), "Number of view coordinates is " \
+                                          "different from number of view " \
                                           "predictions. SSO %d" % sso.id
     if "view_ixs" not in sso.skeleton.keys():
         print("View indices were not yet assigned to skeleton nodes. "
               "Running now '_cnn_axonness2skel(sso, "
               "pred_key_appendix=pred_key_appendix, k=1)'")
-        _cnn_axonness2skel(sso, pred_key_appendix=pred_key_appendix, k=1)
+        _cnn_axonness2skel(sso, pred_key_appendix=pred_key_appendix, k=1,
+                           save_sso=not return_res)
     view_ixs = np.array(sso.skeleton["view_ixs"])
     avg_pred = []
 
     g = sso.weighted_graph()
-    for n in g.nodes():
-        paths = nx.single_source_dijkstra_path(g, n, avg_window)
-        neighs = np.array(paths.keys(), dtype=np.int)
+    for n in range(g.number_of_nodes()):
+        paths = nx.single_source_dijkstra_path(g, n, max_dist)
+        neighs = np.array(list(paths.keys()), dtype=np.int)
         unique_view_ixs = np.unique(view_ixs[neighs], return_counts=False)
         cls, cnts = np.unique(preds[unique_view_ixs], return_counts=True)
         c = cls[np.argmax(cnts)]
         avg_pred.append(c)
-
-    sso.skeleton["%s_views_avg%d" % (pred_key, avg_window)] = avg_pred
+    if return_res:
+        return avg_pred
+    sso.skeleton["%s_views_avg%d" % (pred_key, max_dist)] = avg_pred
     sso.save_skeleton()
 
 
-def _cnn_axonness2skel(sso, pred_key_appendix="", k=1):
-    if k > 1:
-        print(DeprecationWarning("Using k>1 is deprecated. Use k=1 followed by"
-                                 "'_average_node_axoness_views'."))
+def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False,
+                       save_sso=True):
+    if k != 1:
+        log_reps.warn("Parameter 'k' is deprecated but was set to {}. "
+                      "It is not longer used in this method.".format(k))
     if sso.skeleton is None:
         sso.load_skeleton()
     proba_key = "axoness_probas_cnn%s" % pred_key_appendix
     pred_key = "axoness_preds_cnn%s" % pred_key_appendix
-    if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key):
-        if len(pred_key_appendix) > 0:
-            print("Couldn't find specified axoness prediction. Falling back to "
-                  "default (-> per SV stored multi-view prediction including SSV context; RAG: 4b_fix).")
-        preds = np.array(start_multiprocess_obj("axoness_preds",
-                                                   [[sv, {
-                                                       "pred_key_appendix": pred_key_appendix}]
+    if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key) or reload:
+        preds = np.array(start_multiprocess_obj("axoness_preds", [[sv, {"pred_key_appendix": pred_key_appendix}]
                                                     for sv in sso.svs],
                                                    nb_cpus=sso.nb_cpus))
         probas = np.array(start_multiprocess_obj("axoness_probas",
-                                                    [[sv, {
-                                                        "pred_key_appendix": pred_key_appendix}]
+                                                    [[sv, {"pred_key_appendix": pred_key_appendix}]
                                                      for sv in sso.svs],
                                                     nb_cpus=sso.nb_cpus))
         preds = np.concatenate(preds)
@@ -1497,32 +1008,23 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1):
     assert len(loc_coords) == len(preds), "Number of view coordinates is" \
                                           "different from number of view" \
                                           "predictions. SSO %d" % sso.id
-    # find kNN in loc_coords for every skeleton node and use their majority
+    # find NN in loc_coords for every skeleton node and use their majority
     # prediction
     node_preds = colorcode_vertices(sso.skeleton["nodes"] * sso.scaling,
-                                    loc_coords, preds, colors=[0, 1, 2], k=k)
-
-    if k != 1:
-        node_probas = assign_rep_values(
-            sso.skeleton["nodes"] * sso.scaling,
-            loc_coords, probas, colors=[0, 1, 2], k=k)
-        sso.skeleton["axoness_cnn_k%d%s" % (k, pred_key_appendix)] = node_preds
-        sso.skeleton["axoness_cnn_k%d%s_probas" % (
-            k, pred_key_appendix)] = node_probas
-    else:
-        node_probas, ixs = assign_rep_values(
-            sso.skeleton["nodes"] * sso.scaling,
-            loc_coords, probas, colors=[0, 1, 2], k=k,
-            return_ixs=True)
-        assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
-                                               "coordinates is bigger than length of sample coordinates."
-        sso.skeleton["axoness"] = node_preds
-        sso.skeleton["axoness_probas"] = node_probas
-        sso.skeleton["view_ixs"] = ixs
-    sso.save_skeleton()
+                                    loc_coords, preds, colors=[0, 1, 2], k=1)
+    node_probas, ixs = assign_rep_values(sso.skeleton["nodes"] * sso.scaling,
+                                         loc_coords, probas, return_ixs=True)
+    assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
+                                           "coordinates is bigger than " \
+                                           "length of sample coordinates."
+    sso.skeleton["axoness%s" % pred_key_appendix] = node_preds
+    sso.skeleton["axoness_probas%s" % pred_key_appendix] = node_probas
+    sso.skeleton["view_ixs"] = ixs
+    if save_sso:
+        sso.save_skeleton()
 
 
-def majority_vote_compartments(sso, ax_pred_key="axoness_preds_cnn_views_avg10000"):
+def majority_vote_compartments(sso, ax_pred_key):
     g = sso.weighted_graph(add_node_attr=(ax_pred_key, ))
     soma_free_g = g.copy()
     for n, d in g.nodes_iter(data=True):
@@ -1534,6 +1036,10 @@ def majority_vote_compartments(sso, ax_pred_key="axoness_preds_cnn_views_avg1000
         preds = [d[ax_pred_key] for n, d in cc.nodes_iter(data=True)]
         cls, cnts = np.unique(preds, return_counts=True)
         majority = cls[np.argmax(cnts)]
+        probas = np.array(cnts, dtype=np.float32) / np.sum(cnts)
+        # positively bias dendrite assignment
+        if (majority == 1) and (probas[cls == 1] < 0.66):
+            majority = 0
         for n in cc.nodes_iter():
             new_axoness_dc[n] = majority
     nx.set_node_attributes(g, ax_pred_key, new_axoness_dc)
@@ -1544,4 +1050,115 @@ def majority_vote_compartments(sso, ax_pred_key="axoness_preds_cnn_views_avg1000
     sso.save_skeleton()
 
 
+def find_incomplete_ssv_views(ssd, woglia, n_cores=20):
+    sd = ssd.get_segmentationdataset("sv")
+    incomplete_sv_ids = find_missing_sv_views(sd, woglia, n_cores)
+    missing_ssv_ids = set()
+    for sv_id in incomplete_sv_ids:
+        try:
+            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            missing_ssv_ids.add(ssv_id)
+        except KeyError:
+            pass  # sv does not exist in this SSD
+    return list(missing_ssv_ids)
 
+
+def find_incomplete_ssv_skeletons(ssd, n_cores=20):
+    svs = np.concatenate([list(ssv.svs) for ssv in ssd.ssvs])
+    incomplete_sv_ids = find_missing_sv_skeletons(svs, n_cores)
+    missing_ssv_ids = set()
+    for sv_id in incomplete_sv_ids:
+        try:
+            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            missing_ssv_ids.add(ssv_id)
+        except KeyError:
+            pass  # sv does not exist in this SSD
+    return list(missing_ssv_ids)
+
+
+def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=20):
+    sd = ssd.get_segmentationdataset("sv")
+    incomplete_sv_ids = find_missing_sv_attributes(sd, attr_key, n_cores)
+    missing_ssv_ids = set()
+    for sv_id in incomplete_sv_ids:
+        try:
+            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            missing_ssv_ids.add(ssv_id)
+        except KeyError:
+            pass  # sv does not exist in this SSD
+    return list(missing_ssv_ids)
+
+
+def predict_views_semseg(views, model, batch_size=250):
+    """
+    Predicts a view array of shape [N_LOCS, N_CH, N_VIEWS, X, Y] with
+    N_LOCS locations each with N_VIEWS perspectives, N_CH different channels
+    (e.g. shape of cell, mitochondria, synaptic junctions and vesicle clouds).
+
+    Parameters
+    ----------
+    views : np.array
+        shape of [N_LOCS, N_CH, N_VIEWS, X, Y]
+    model : pytorch model
+    batch_size : int
+
+    Returns
+    -------
+
+    """
+    views = views.astype(np.float32) / 255.
+    views = views.swapaxes(1, 2)  # swap channel and view axis
+    # N, 2, 4, 128, 256
+    orig_shape = views.shape
+    # reshape to predict single projections
+    views = views.reshape([-1] + list(orig_shape[2:]))
+    # predict and reset to original shape: N, 2, 4, 128, 256
+    labeled_views = model.predict_proba(views, bs=batch_size, verbose=False)
+    labeled_views = np.argmax(labeled_views, axis=1)[:, None]
+    labeled_views = labeled_views.reshape(list(orig_shape[:2])
+                                          + list(labeled_views.shape[1:]))
+    # swap axes to get source shape
+    labeled_views = labeled_views.swapaxes(2, 1)
+    return labeled_views
+
+
+def pred_and_save_semseg_svs(model, views, pred_key=None, svs=None, return_pred=False,
+                             nb_cpus=1):
+    """
+    Predicts views of a list of SVs and saves them via SV.save_views.
+    Efficient helper function for chunked predictions, therefore requires pre-loaded views.
+
+    Parameters
+    ----------
+    model :
+    views : np.array
+        [N_SV, N_LOCS, N_CH, N_VIEWS, X, Y]
+    pred_key : str
+    nb_cpus : int
+        number CPUs for saving the SV views
+        svs : list[SegmentationObject]
+    svs : Optional[list[SegmentationObject]]
+    return_pred : Optional[bool]
+
+    Returns
+    -------
+    list[np.array]
+        if 'return_pred=True' it returns the label views of input
+    """
+    if not return_pred and (svs is None or pred_key is None):
+        raise ValueError('SV objects and "pred_key" have to be given if predictions should be'
+                         ' saved at SV view storages.')
+    part_views = np.cumsum([0] + [len(v) for v in views])
+    assert len(part_views) == len(views) + 1
+    views = np.concatenate(views)  # merge axis 0, i.e. N_SV and N_LOCS to N_SV*N_LOCS
+    label_views = predict_views_semseg(views, model)
+    svs_labelviews = []
+    for ii in range(len(part_views[:-1])):
+        sv_label_views = label_views[part_views[ii]:part_views[ii + 1]]
+        svs_labelviews.append(sv_label_views)
+    assert len(part_views) == len(svs_labelviews) + 1
+    if return_pred:
+        return svs_labelviews
+    params = [[sv, dict(views=views, index_views=False, woglia=True, view_key=pred_key)]
+              for sv, views in zip(svs, svs_labelviews)]
+    start_multiprocess_obj('save_views', params, nb_cpus=nb_cpus)

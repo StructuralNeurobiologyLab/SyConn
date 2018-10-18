@@ -1,0 +1,13 @@
+build:
+  image: latest
+
+requirements_file: requirements.txt
+
+python:
+  pip_install: false
+  version: 3.5
+
+#conda:
+#  file: environment.yml
+
+formats: []

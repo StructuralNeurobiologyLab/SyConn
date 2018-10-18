@@ -2,8 +2,8 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 
 import glob
 import networkx as nx
@@ -11,61 +11,44 @@ import numpy as np
 import os
 import re
 import scipy.spatial
-import seaborn as sns
 import shutil
 import sys
 import time
 import warnings
 from collections import Counter
-
 from scipy.misc import imsave
-from knossos_utils import skeleton, knossosdataset
-
+from knossos_utils import skeleton
+from collections import defaultdict
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
-
-from scipy import spatial
 from . import segmentation
 from . import super_segmentation_helper as ssh
 from .segmentation import SegmentationObject
 from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
-    knossos_ml_from_svixs, subfold_from_ix, subfold_from_ix_SSO, assign_rep_values
+    knossos_ml_from_svixs, subfold_from_ix_SSO
 from ..config import parser
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
-from ..handler.compression import AttributeDict, MeshDict, LZ4Dict
-from ..proc.image import single_conn_comp_img
-from ..proc.graphs import split_glia, split_subcc, create_mst_skeleton
+from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage
+from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords
 from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh
-from ..proc.rendering import render_sampled_sso, comp_window, \
-    multi_render_sampled_svidlist, render_sso_coords, multi_view_sso
-if "matplotlib" not in globals():
-    import matplotlib
-    matplotlib.use("agg")
+from ..proc.rendering import render_sampled_sso, multi_view_sso,\
+    render_sso_coords, render_sso_coords_index_views
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
-skeletopyze_available = False
-attempted_skeletopyze_import = False
-try:
-    import skeletopyze
-    skeletopyze_available = True
-except:
-    skeletopyze_available = False
-    # print "skeletopyze not found - you won't be able to compute skeletons. " \
-    #       "Install skeletopyze from https://github.com/funkey/skeletopyze"
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-
+from ..reps import log_reps
 try:
     default_wd_available = True
     from ..config.global_params import wd
 except:
     default_wd_available = False
-from ..config.global_params import SKEL_FEATURE_CONTEXT, glia_thresh
+from ..config import global_params
 
 
 class SuperSegmentationObject(object):
@@ -73,31 +56,55 @@ class SuperSegmentationObject(object):
                  working_dir=None, create=True, sv_ids=None, scaling=None,
                  object_caching=True, voxel_caching=True, mesh_caching=True,
                  view_caching=False, config=None, nb_cpus=1,
-                 enable_locking=True, ssd_type="ssv"):
+                 enable_locking=True, enable_locking_so=False, ssd_type="ssv"):
         """
 
         Parameters
         ----------
-        ssv_id :
-        version :
-        version_dict :
-        working_dir :
-        create :
-        sv_ids :
-        scaling :
-        object_caching :
-        voxel_caching :
-        mesh_caching :
-        view_caching :
-        config :
-        nb_cpus :
+        ssv_id : int
+            unique SSV ID
+        version : str
+            version string identifier. if 'tmp' is used, no data will be saved
+            to disk
+        version_dict : dict
+        working_dir : str
+            path to working directory
+        create : bool
+            whether to create a folder to store cache data
+        sv_ids : np.array
+        scaling : tuple
+        object_caching : bool
+        voxel_caching : bool
+        mesh_caching : bool
+        view_caching : bool
+        config : bool
+        nb_cpus : int
+            Number of cpus for parallel jobs. will only be used in some
+            processing steps
         enable_locking : bool
-        ssd_type :
+            Locking flag for all SegmentationObjects
+            (SV, mitochondria, vesicle clouds, ...)
+        ssd_type : str
         """
+
+        if version == "tmp":
+            self._object_caching = False
+            self._voxel_caching = False
+            self._mesh_caching = False
+            self._view_caching = False
+            self.enable_locking = False
+            create = False
+        else:
+            self.enable_locking = enable_locking
+            self._object_caching = object_caching
+            self._voxel_caching = voxel_caching
+            self._mesh_caching = mesh_caching
+            self._view_caching = view_caching
+
+        self.enable_locking_so = enable_locking_so
         self.nb_cpus = nb_cpus
         self._id = ssv_id
         self.attr_dict = {} # dict(mi=[], sj=[], vc=[], sv=[])
-        self.enable_locking = enable_locking
 
         self._type = ssd_type
         self._rep_coord = None
@@ -105,10 +112,6 @@ class SuperSegmentationObject(object):
         self._bounding_box = None
         self._config = config
 
-        self._object_caching = object_caching
-        self._voxel_caching = voxel_caching
-        self._mesh_caching = mesh_caching
-        self._view_caching = view_caching
         self._objects = {}
         self.skeleton = None
         self._voxels = None
@@ -124,10 +127,12 @@ class SuperSegmentationObject(object):
         self._dataset = None
         self._weighted_graph = None
         self._sample_locations = None
+        self._rot_mat = None
 
         if sv_ids is not None:
             self.attr_dict["sv"] = sv_ids
 
+        # TODO: Refine try-except statements
         try:
             self._scaling = np.array(scaling)
         except:
@@ -178,7 +183,6 @@ class SuperSegmentationObject(object):
         else:
             if isinstance(version_dict, dict):
                 self.version_dict = version_dict
-            # TODO @Sven: only valid for SSDS!
             elif isinstance(version_dict, str) and version_dict == "load":
                 if self.version_dict_exists:
                     self.load_version_dict()
@@ -264,10 +268,9 @@ class SuperSegmentationObject(object):
 
     @property
     def attr_dict_path(self):
-        return self.ssv_dir + "atrr_dict.pkl"
-
-    @property
-    def attr_dict_path_new(self):
+        if os.path.isfile(self.ssv_dir + "atrr_dict.pkl"):
+            return self.ssv_dir + "atrr_dict.pkl"
+        # TODO: Change as soon as new SSD is created! Now kept for backwards compatibility
         return self.ssv_dir + "attr_dict.pkl"
 
     @property
@@ -457,8 +460,8 @@ class SuperSegmentationObject(object):
         return os.path.isfile(self.attr_dict_path)
 
     def mesh_exists(self, obj_type):
-        mesh_dc = MeshDict(self.mesh_dc_path,
-                           disable_locking=not self.enable_locking)
+        mesh_dc = MeshStorage(self.mesh_dc_path,
+                              disable_locking=not self.enable_locking)
         return obj_type in mesh_dc
 
     @property
@@ -513,14 +516,14 @@ class SuperSegmentationObject(object):
         return {k: self._meshes[k] for k in ["axon", "dendrite", "soma"]}
 
     def _load_mesh_compartments(self, rewrite=False):
-        mesh_dc = MeshDict(self.mesh_dc_path,
-                           disable_locking=not self.enable_locking)
+        mesh_dc = MeshStorage(self.mesh_dc_path,
+                              disable_locking=not self.enable_locking)
         if not "axon" in mesh_dc or rewrite:
             mesh_compartments = compartmentalize_mesh(self)
             mesh_dc["axon"] = mesh_compartments["axon"]
             mesh_dc["dendrite"] = mesh_compartments["dendrite"]
             mesh_dc["soma"] = mesh_compartments["soma"]
-            mesh_dc.save2pkl()
+            mesh_dc.push()
         comp_meshes = {k: mesh_dc[k] for k in ["axon", "dendrite", "soma"]}
         self._meshes.update(comp_meshes)
 
@@ -550,7 +553,7 @@ class SuperSegmentationObject(object):
                                                working_dir=self.working_dir,
                                                create=False,
                                                scaling=self.scaling,
-                                               enable_locking=self.enable_locking)
+                                               enable_locking=self.enable_locking_so)
 
     def get_seg_dataset(self, obj_type):
         return segmentation.SegmentationDataset(obj_type,
@@ -569,8 +572,19 @@ class SuperSegmentationObject(object):
 
     def load_sv_graph(self):
         # TODO: store edgelist as attribute during ssv SSD generation
-        raise NotImplementedError("Graph functionality not yet supported.")
-        G = nx.read_edgelist(self.edgelist_path, nodetype=int)
+        if os.path.isfile(self.edgelist_path):
+            G = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
+        else:
+            if os.path.isfile(self.working_dir + "neuron_rag.bz2"):
+                G_glob = nx.read_edgelist(self.working_dir + "neuron_rag.bz2", nodetype=np.uint)
+                G = nx.Graph()
+                cc = nx.node_connected_component(G_glob, self.sv_ids[0])
+                assert len(set(cc).difference(set(self.sv_ids))) == 0, \
+                    "SV IDs in graph differ from SSV SVs."
+                for e in G_glob.edges(cc):
+                    G.add_edge(*e)
+            else:
+                raise ValueError("Could not find graph data for SSV {}.".format(self.id))
         new_G = nx.Graph()
         for e in G.edges_iter():
             new_G.add_edge(self.get_seg_obj("sv", e[0]),
@@ -579,13 +593,13 @@ class SuperSegmentationObject(object):
 
     def load_edgelist(self):
         g = self.load_sv_graph()
-        return g.edges()
+        return list(g.edges())
 
     def _load_obj_mesh(self, obj_type="sv", rewrite=False):
         if not rewrite and self.mesh_exists(obj_type) and not \
                         self.version == "tmp":
-            mesh_dc = MeshDict(self.mesh_dc_path,
-                               disable_locking=not self.enable_locking)
+            mesh_dc = MeshStorage(self.mesh_dc_path,
+                                  disable_locking=not self.enable_locking)
             if len(mesh_dc[obj_type]) == 3:
                 ind, vert, normals = mesh_dc[obj_type]
             else:
@@ -595,16 +609,16 @@ class SuperSegmentationObject(object):
             ind, vert, normals = merge_someshes(self.get_seg_objects(obj_type),
                                       nb_cpus=self.nb_cpus)
             if not self.version == "tmp":
-                mesh_dc = MeshDict(self.mesh_dc_path, read_only=False,
-                                   disable_locking=not self.enable_locking)
+                mesh_dc = MeshStorage(self.mesh_dc_path, read_only=False,
+                                      disable_locking=not self.enable_locking)
                 mesh_dc[obj_type] = [ind, vert, normals]
-                mesh_dc.save2pkl()
+                mesh_dc.push()
         return np.array(ind, dtype=np.int), np.array(vert, dtype=np.int),\
                np.array(normals, dtype=np.float32)
 
     def _load_obj_mesh_compr(self, obj_type="sv"):
-        mesh_dc = MeshDict(self.mesh_dc_path,
-                           disable_locking=not self.enable_locking)
+        mesh_dc = MeshStorage(self.mesh_dc_path,
+                              disable_locking=not self.enable_locking)
         return mesh_dc._dc_intern[obj_type]
 
     def load_svixs(self):
@@ -621,7 +635,9 @@ class SuperSegmentationObject(object):
         except IOError:
             orig_dc = {}
         orig_dc.update(self.attr_dict)
-        write_obj2pkl(orig_dc, self.attr_dict_path)
+        write_obj2pkl(self.attr_dict_path + '.tmp', orig_dc)
+        shutil.move(self.attr_dict_path + '.tmp', self.attr_dict_path)
+
 
     def save_attributes(self, attr_keys, attr_values):
         """
@@ -674,93 +690,70 @@ class SuperSegmentationObject(object):
         else:
             return None
 
-    def calculate_size(self):
-        self._size = 0
-        for sv in self.svs:
-            self._size += sv.size
+    def load_so_attributes(self, obj_type, attr_keys, nb_cpus=None):
+        """
+        Loads list of attributes from all SOs of certain type.
+        Ordering of attributes within each key is the same as self.svs.
 
-    def calculate_bounding_box(self):
-        self._bounding_box = np.ones((2, 3), dtype=np.int) * np.inf
-        self._bounding_box[1] = 0
+        Parameters
+        ----------
+        obj_type : str
+        attr_keys : List[str]
+        nb_cpus : int
 
-        self._size = 0
-        real_sv_cnt = 0
-        for sv in self.svs:
-            if sv.voxels_exist:
-                real_sv_cnt += 1
-                sv_bb = sv.bounding_box
-                sv.clear_cache()
-                for dim in range(3):
-                    if self._bounding_box[0, dim] > sv_bb[0, dim]:
-                        self._bounding_box[0, dim] = sv_bb[0, dim]
-                    if self._bounding_box[1, dim] < sv_bb[1, dim]:
-                        self._bounding_box[1, dim] = sv_bb[1, dim]
+        Returns
+        -------
+        list[list]
+            list for each key in 'attr_keys'
+        """
+        if nb_cpus is None:
+            nb_cpus = self.nb_cpus
+        params = [[obj, dict(attr_keys=attr_keys)]
+                  for obj in self.get_seg_objects(obj_type)]
+        attr_values = sm.start_multiprocess_obj('load_attributes', params,
+                                                nb_cpus=nb_cpus)
+        attr_values = [el for sublist in attr_values for el in sublist]
+        return [attr_values[ii::len(attr_keys)] for ii in range(len(attr_keys))]
 
-                self._size += sv.size
+    def calculate_size(self, nb_cpus=None):
+        """
+        Calculates SSV size.
+        Parameters
+        ----------
+        nb_cpus
+        """
+        self._size = np.sum(self.load_so_attributes('sv', ['size'],
+                                                    nb_cpus=nb_cpus))
 
-        if real_sv_cnt > 0:
-            self._bounding_box = self._bounding_box.astype(np.int)
-        else:
+    def calculate_bounding_box(self, nb_cpus=None):
+        """
+        Calculates SSV bounding box (and size).
+
+        Parameters
+        ----------
+        nb_cpus : int
+        """
+        if len(self.svs) == 0:
             self._bounding_box = np.zeros((2, 3), dtype=np.int)
+            self._size = 0
+            return
 
-    # def calculate_skeleton(self, size_threshold=1e20, kd=None,
-    #                        coord_scaling=(8, 8, 4), plain=False, cleanup=True,
-    #                        nb_threads=1):
-    #     if np.product(self.shape) < size_threshold:
-    #         # vx = self.load_voxels_downsampled(coord_scaling)
-    #         # vx = self.voxels[::coord_scaling[0],
-    #         #                  ::coord_scaling[1],
-    #         #                  ::coord_scaling[2]]
-    #         vx = self.load_voxels_downsampled(downsampling=coord_scaling)
-    #         vx = scipy.ndimage.morphology.binary_closing(
-    #             np.pad(vx, 3, mode="constant", constant_values=0), iterations=3)
-    #         vx = vx[3: -3, 3: -3, 3:-3]
-    #
-    #         if plain:
-    #             nodes, edges, diameters = \
-    #                 ssh.reskeletonize_plain(vx, coord_scaling=coord_scaling)
-    #             nodes = np.array(nodes, dtype=np.int) + self.bounding_box[0]
-    #         else:
-    #             nodes, edges, diameters = \
-    #                 ssh.reskeletonize_chunked(self.id, self.shape,
-    #                                           self.bounding_box[0],
-    #                                           self.scaling,
-    #                                           voxels=vx,
-    #                                           coord_scaling=coord_scaling,
-    #                                           nb_threads=nb_threads)
-    #
-    #     elif kd is not None:
-    #         nodes, edges, diameters = \
-    #             ssh.reskeletonize_chunked(self.id, self.shape,
-    #                                       self.bounding_box[0], self.scaling,
-    #                                       kd=kd, coord_scaling=coord_scaling,
-    #                                       nb_threads=nb_threads)
-    #     else:
-    #         return
-    #
-    #     nodes = np.array(nodes, dtype=np.int)
-    #     edges = np.array(edges, dtype=np.int)
-    #     diameters = np.array(diameters, dtype=np.float)
-    #
-    #     self.skeleton = {}
-    #     self.skeleton["edges"] = edges
-    #     self.skeleton["nodes"] = nodes
-    #     self.skeleton["diameters"] = diameters
-    #
-    #     if cleanup:
-    #         for i in range(2):
-    #             if len(self.skeleton["edges"]) > 2:
-    #                 self.skeleton = ssh.cleanup_skeleton(self.skeleton,
-    #                                                      coord_scaling)
+        self._bounding_box = np.ones((2, 3), dtype=np.int) * np.inf
+        self._size = np.inf
+        bounding_boxes, sizes = self.load_so_attributes(
+            'sv', ['bounding_box', 'size'], nb_cpus=nb_cpus)
+        self._size = np.sum(sizes)
+        self._bounding_box[0] = np.min(bounding_boxes, axis=0)[0]
+        self._bounding_box[1] = np.max(bounding_boxes, axis=0)[1]
+        self._bounding_box = self._bounding_box.astype(np.int)
+
     def calculate_skeleton(self, force=False):
         self.load_skeleton()
         if self.skeleton is not None and len(self.skeleton["nodes"]) != 0\
                 and not force:
             return
         ssh.create_sso_skeleton(self)
-        if len(self.skeleton["nodes"]) != 0:
-            ssh.sparsify_skeleton(self)
-        else:
+        if len(self.skeleton["nodes"]) == 0:
             print("%s has zero nodes." % repr(self))
         self.save_skeleton()
 
@@ -806,7 +799,7 @@ class SuperSegmentationObject(object):
                 dest_path = self.skeleton_kzip_path
             write_skeleton_kzip(dest_path, [a])
         except Exception as e:
-            print("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, e))
+            print("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, repr(e)))
 
     def save_objects_to_kzip_sparse(self, obj_types=("sj", "mi", "vc"),
                                     dest_path=None):
@@ -855,9 +848,16 @@ class SuperSegmentationObject(object):
         for obj_type in obj_types:
             so_objs = self.get_seg_objects(obj_type)
             for so_obj in so_objs:
-                print(so_obj.id)
                 so_obj.save_kzip(path=self.objects_dense_kzip_path,
                                  write_id=self.dense_kzip_ids[obj_type])
+
+    def total_edge_length(self):
+        if self.skeleton is None:
+            self.load_skeleton()
+        nodes = self.skeleton["nodes"]
+        edges = self.skeleton["edges"]
+        return np.sum([np.linalg.norm(
+            self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
 
     def save_skeleton(self, to_kzip=False, to_object=True):
         if to_object:
@@ -869,6 +869,9 @@ class SuperSegmentationObject(object):
     def load_skeleton(self):
         try:
             self.skeleton = load_pkl2obj(self.skeleton_path)
+            # stored as uint32, if used for computations
+            # e.g. edge length then it will overflow
+            self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
         except:
             return False
@@ -889,9 +892,9 @@ class SuperSegmentationObject(object):
         for obj_type in obj_types:
             if obj_type in mappings:
                 self.attr_dict["mapping_%s_ids" % obj_type] = \
-                    mappings[obj_type].keys()
+                    list(mappings[obj_type].keys())
                 self.attr_dict["mapping_%s_ratios" % obj_type] = \
-                    mappings[obj_type].values()
+                    list(mappings[obj_type].values())
 
         if save:
             self.save_attr_dict()
@@ -1015,28 +1018,30 @@ class SuperSegmentationObject(object):
                 print("Skipped", fnames[i], str(e))
                 pass
         self.load_attr_dict()
-        if os.path.isfile(dest_dir + "/atrr_dict.pkl"):
-            dest_attr_dc = load_pkl2obj(dest_dir + "/atrr_dict.pkl")
+        if os.path.isfile(dest_dir + "/attr_dict.pkl"):
+            dest_attr_dc = load_pkl2obj(dest_dir + "/attr_dict.pkl")
         else:
             dest_attr_dc = {}
         dest_attr_dc.update(self.attr_dict)
-        write_obj2pkl(dest_dir + "/atrr_dict.pkl", dest_attr_dc)
+        write_obj2pkl(dest_dir + "/attr_dict.pkl", dest_attr_dc)
 
-    def partition_cc(self, max_nb=25):
+    def partition_cc(self, max_nb_sv=None):
         """
         Splits connected component into subgraphs.
 
         Parameters
         ----------
-        max_nb : int
+        max_nb_sv : int
             Number of SV per CC
 
         Returns
         -------
         dict
         """
+        if max_nb_sv is None:
+            max_nb_sv = global_params.SUBCC_SIZE_BIG_SSV
         init_g = self.rag
-        partitions = split_subcc(init_g, max_nb)
+        partitions = split_subcc(init_g, max_nb_sv)
         return partitions
 
     # -------------------------------------------------------------------- VIEWS
@@ -1053,13 +1058,14 @@ class SuperSegmentationObject(object):
         -------
 
         """
-        view_dc = LZ4Dict(self.view_path, read_only=False,
-                          disable_locking=not self.enable_locking)
+        view_dc = CompressedStorage(self.view_path, read_only=False,
+                                    disable_locking=not self.enable_locking)
         view_dc[view_key] = views
-        view_dc.save2pkl()
+        view_dc.push()
 
-    def load_views(self, view_key=None, woglia=True, raw_only=False, force_reload=False,
-                   cache_default_views=False, nb_cpus=None, ignore_missing=False):
+    def load_views(self, view_key=None, woglia=True, raw_only=False,
+                   force_reload=False, cache_default_views=False, nb_cpus=None,
+                   ignore_missing=False, index_views=False):
         """
         Load views which were stored by 'save_views' given the key 'view_key',
         i.e. this operates on SSV level.
@@ -1070,8 +1076,6 @@ class SuperSegmentationObject(object):
         ----------
         woglia : bool
         view_key : str
-        reload : bool
-            if True views are reloaded from SVs
         raw_only : bool
         force_reload : bool
             if True will force reloading the SV views.
@@ -1080,37 +1084,46 @@ class SuperSegmentationObject(object):
         cache_default_views : bool
             Stores views in SSV cache if True.
         nb_cpus : int
+        index_views : bool
+            load index views
 
         Returns
         -------
         np.array
             Concatenated views for each SV in self.svs
         """
-        view_dc = LZ4Dict(self.view_path, read_only=False,
-                          disable_locking=not self.enable_locking)
+        # TODO: Support loading of index views from SVs!
+        view_dc = CompressedStorage(self.view_path, read_only=True,
+                                    disable_locking=not self.enable_locking)
         if view_key is None:
-            view_key = "%d%d" % (int(woglia), int(raw_only))
+            if index_views:
+                view_key = "%d%d%d" % (int(woglia), int(raw_only), int(index_views))
+            else:  # TODO: only kept for backwards compat.
+                view_key = "%d%d" % (int(woglia), int(raw_only))
         else:
             if not view_key in view_dc:
-                raise KeyError("Given view key '%s' does not exist"
-                                        " in view dictionary of SSV %d. "
-                               "Existing keys: %s\n" % (view_key, self.id, str(view_dc.keys())))
+                raise KeyError("Given view key '{}' does not exist"
+                               " in view dictionary of SSV {} at"
+                               "{}. Existing keys: {}\n".format(view_key, self.id, self.view_path,
+                                                                str(view_dc.keys())))
         if view_key in view_dc and not force_reload:
             return view_dc[view_key]
-
-        params = [[sv, {"woglia": woglia, "raw_only": raw_only,
-                        "ignore_missing": ignore_missing}] for sv in self.svs]
-        # list of arrays
+        del view_dc
+        params = [[sv, {'woglia': woglia, 'raw_only': raw_only, 'index_views': index_views,
+                        'ignore_missing': ignore_missing}] for sv in self.svs]
+        # load views from underlying SVs
         views = sm.start_multiprocess_obj("load_views", params,
                                           nb_cpus=self.nb_cpus
                                           if nb_cpus is None else nb_cpus)
         views = np.concatenate(views)
+        view_dc = CompressedStorage(self.view_path, read_only=False,
+                                    disable_locking=not self.enable_locking)
         if cache_default_views:
-            print("Loaded and cached default views of SSO %d at %s. "
-                  "(raw_only: %d, woglia: %d; #views: %d)" % (self.id,
-                  self.view_path, int(raw_only), int(woglia), len(views)))
+            log_reps.info("Loaded and cached default views of SSO %d at %s. (raw_only: %d,"
+                          " woglia: %d; #views: %d)" % (
+                self.id, self.view_path, int(raw_only), int(woglia), len(views)))
             view_dc[view_key] = views
-            view_dc.save2pkl()
+            view_dc.push()
         return views
 
     def view_existence(self, woglia=True):
@@ -1119,70 +1132,277 @@ class SuperSegmentationObject(object):
                                                    nb_cpus=self.nb_cpus)
         return so_views_exist
 
-    def render_views(self, add_cellobjects=False, random_processing=True,
+    def render_views(self, add_cellobjects=False, verbose=False,
                      qsub_pe=None, overwrite=False, cellobjects_only=False,
-                     woglia=True):
+                     woglia=True, skip_indexviews=False, qsub_co_jobs=100):
         """
         Renders views for each SV based on SSV context and stores them
         on SV level. Usually only used once: for initial glia or axoness
         prediction.
+        THIS WILL BE SAVED DISTRIBUTED AT EACH SV VIEW DICTIONARY
+        IS NOT CACHED IN THE ATTR-DICT OF THE SSV.
+        See '_render_rawviews' for storing the views in the SSV folder.
 
         Parameters
         ----------
-        add_cellobjects :
-        random_processing :
-        qsub_pe :
-        overwrite :
-        cellobjects_only :
-        woglia :
-
+        add_cellobjects : bool
+        qsub_pe : str
+        overwrite : bool
+        cellobjects_only : bool
+        woglia : bool
+        skip_indexviews : bool
+            Index views will not be generated, import for e.g. initial SSV
+            rendering prior to glia-splitting.
+        qsub_co_jobs : int
+            Number of parallel jobs if QSUB is used
         Returns
         -------
 
         """
-        if 0:  # len(self.sv_ids) > 5e3:
+        if len(self.sv_ids) > global_params.RENDERING_MAX_NB_SV:
             part = self.partition_cc()
-            if 0:#not overwrite: # check existence of glia preds
+            if not overwrite: # check existence of glia preds
                 views_exist = np.array(self.view_existence(), dtype=np.int)
-                print("Rendering huge SSO. %d/%d views left to process." \
-                      % (np.sum(~views_exist), len(self.svs)))
+                print("Rendering huge SSO. {}/{} views left to process."
+                      .format(np.sum(views_exist == 0), len(self.svs)))
                 ex_dc = {}
                 for ii, k in enumerate(self.svs):
                     ex_dc[k] = views_exist[ii]
                 for k in part.keys():
-                    if ex_dc[k]: # delete SO's with existing pred
+                    if ex_dc[k]: # delete SO's with existing views
                         del part[k]
                         continue
                 del ex_dc
             else:
-                print("Rendering huge SSO. %d views left to process." \
-                      % len(self.svs))
+                print("Rendering huge SSO. {} SVs left to process."
+                      .format(len(self.svs)))
             for k in part.keys():
                 val = part[k]
                 part[k] = [so.id for so in val]
-            params = part.values()
-            if random_processing:
-                np.random.seed(int(time.time() * 1e4 % 1e6))
-                np.random.shuffle(params)
+            params = list(part.values())
             if qsub_pe is None:
-                raise DeprecationWarning("Single node multiprocessing "
-                                         "for view-rendering does not yet "
-                                         "support SSD parameter adjustments.")
-                sm.start_multiprocess(multi_render_sampled_svidlist, params,
-                                      nb_cpus=self.nb_cpus, debug=False)
+                raise RuntimeError('QSUB has to be enabled when processing '
+                                   'huge SSVs.')
             elif qu.__QSUB__:
-                params = chunkify(params, 700)
-                params = [[par, {"overwrite": overwrite,
+                params = chunkify(params, 1000)
+                so_kwargs = {'version': self.svs[0].version,
+                             'working_dir': self.working_dir,
+                             'obj_type': self.svs[0].type}
+                render_kwargs = {"overwrite": overwrite, 'woglia': woglia,
                                  "render_first_only": True,
-                                 "cellobjects_only": cellobjects_only}] for par in params]
-                qu.QSUB_script(params, "render_views_partial", pe=qsub_pe, queue=None,
-                               script_folder=script_folder, n_max_co_processes=100)
+                                 'add_cellobjects':add_cellobjects,
+                                 "cellobjects_only": cellobjects_only,
+                                 'skip_indexviews': skip_indexviews}
+                params = [[par, so_kwargs, render_kwargs] for par in params]
+                qu.QSUB_script(params, "render_views_partial", pe=qsub_pe,
+                               queue=None, script_folder=script_folder,
+                               n_max_co_processes=qsub_co_jobs)
             else:
                 raise Exception("QSUB not available")
         else:
+            # render raw data
             render_sampled_sso(self, add_cellobjects=add_cellobjects,
-                               verbose=False, overwrite=overwrite,
+                               verbose=verbose, overwrite=overwrite,
                                cellobjects_only=cellobjects_only, woglia=woglia)
+            if skip_indexviews:
+                return
+            # render index views
+            render_sampled_sso(self, verbose=verbose, overwrite=overwrite,
+                               index_views=True)
+
+    def _render_indexviews(self, nb_views=2, save=True, force_recompute=False):
+        if not force_recompute:
+            try:
+                views = self.load_views("index{}".format(nb_views))
+                if not save:
+                    return views
+                else:
+                    return
+            except KeyError:
+                pass
+        locs = np.concatenate(self.sample_locations(cache=False))
+        start = time.time()
+        if self._rot_mat is None:
+            index_views, rot_mat = render_sso_coords_index_views(
+                self, locs, nb_views=nb_views, verbose=True,
+                return_rot_matrices=True)
+            self._rot_mat = rot_mat
+        else:
+            index_views = render_sso_coords_index_views(self, locs,
+                        nb_views=nb_views, verbose=True, rot_mat=self._rot_mat)
+        end_ix_views = time.time()
+        print("Rendering views took {:.2f} s. {:.2f} views/s".format(
+            end_ix_views - start, len(index_views) / (end_ix_views - start)))
+        print("Mapping rgb values to vertex indices took {:.2f}s.".format(
+            time.time() - end_ix_views))
+        if not save:
+            return index_views
+        self.save_views(index_views, "index{}".format(nb_views))
+
+    def _render_rawviews(self, nb_views=2, save=True, force_recompute=False,
+                         add_cellobjects=True, verbose=False):
+        if not force_recompute:
+            try:
+                views = self.load_views("raw{}".format(nb_views))
+                if not save:
+                    return views
+                return
+            except KeyError:
+                pass
+        locs = np.concatenate(self.sample_locations(cache=False))
+        if self._rot_mat is None:
+            views, rot_mat = render_sso_coords(self, locs,  verbose=verbose,
+                                      add_cellobjects=add_cellobjects,
+                                      nb_views=nb_views, return_rot_mat=True)
+            self._rot_mat = rot_mat
+        else:
+            views = render_sso_coords(self, locs, verbose=verbose,
+                                      add_cellobjects=add_cellobjects,
+                                      nb_views=nb_views, rot_mat=self._rot_mat)
+        if save:
+            self.save_views(views, "raw{}".format(nb_views))
+        else:
+            return views
+
+    def _predict_semseg(self, m, semseg_key, nb_views=2):
+        # views have shape [N, 4, 2, 128, 256]
+        try:
+            views = self.load_views("raw{}".format(nb_views))
+        except KeyError:
+            self._render_rawviews(nb_views)
+            views = self.load_views("raw{}".format(nb_views))
+        assert len(views) == len(np.concatenate(self.sample_locations(cache=False))), \
+            "Unequal number of views and redering locations."
+        labeled_views = ssh.predict_views_semseg(views, m)
+        assert labeled_views.shape[2] == nb_views, \
+            "Predictions have wrong shape."
+        self.save_views(labeled_views, semseg_key + "{}".format(nb_views))
+
+    def _semseg2mesh(self, semseg_key, nb_views=2, dest_path=None, k=1):
+        i_views = self.load_views("index{}".format(nb_views)).flatten()
+        spiness_views = self.load_views(semseg_key + "{}".format(nb_views)).flatten()
+        ind = self.mesh[0]
+        dc = defaultdict(list)
+        background_id = np.max(i_views)
+        for ii in range(len(i_views)):
+            triangle_ix = i_views[ii]
+            if triangle_ix == background_id:
+                continue
+            l = spiness_views[ii] # triangle label
+            # get vertex ixs from triangle ixs via:
+            vertex_ix = triangle_ix * 3
+            dc[ind[vertex_ix]].append(l)
+            dc[ind[vertex_ix+1]].append(l)
+            dc[ind[vertex_ix+2]].append(l)
+        vertex_labels = np.ones((len(self.mesh[1]) // 3), dtype=np.uint8) * 5
+        for ix, v in dc.items():
+            l, cnts = np.unique(v, return_counts=True)
+            vertex_labels[ix] = l[np.argmax(cnts)]
+        if k == 0:  # map actual prediction situation / coverage
+            # keep unpredicted vertices and vertices with background labels
+            predicted_vertices = self.mesh[1].reshape(-1, 3)
+            predictions = vertex_labels
+            # [neck, head, shaft, other, background, unpredicted]
+            colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
+                      [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]]
+        else:
+            predicted_vertices = self.mesh[1].reshape(-1, 3)[vertex_labels != 5]
+            predictions = vertex_labels[vertex_labels != 5]
+            # remove background class
+            predicted_vertices = predicted_vertices[predictions != 4]
+            predictions = predictions[predictions != 4]
+            # [neck, head, shaft, other, background]
+            colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
+                      [0.05, 0.6, 0.6, 1]]
+        colors = np.array(colors) * 255
+        maj_vote = colorcode_vertices(self.mesh[1].reshape((-1, 3)), predicted_vertices,
+                                 predictions, colors=colors, k=k, return_color=False)
+        self.attr_dict["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)] = maj_vote
+        ad = AttributeDict(self.attr_dict_path, read_only=False)
+        ad["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)] = maj_vote
+        ad.push()
+        # will cause collisions if this method is called multiple times for the same ssv during multiprocessing
+        # self.save_attributes(["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)], [maj_vote])
+        col = colors[maj_vote].astype(np.uint8)
+        if dest_path is not None:
+            write_mesh2kzip(dest_path, self.mesh[0], self.mesh[1], self.mesh[2], col,
+                            ply_fname=semseg_key+".ply")
+            return
+        return self.mesh[0], self.mesh[1], self.mesh[2], col
+
+    def get_spine_compartments(self, k, nb_views, min_cc_size=10,
+                               dest_folder=None):
+        """
+        Retrieve connected components of vertex spine predictions
+
+        Parameters
+        ----------
+        k : int
+            number of nearest neighbors for majority label vote (smoothing of
+             classification results).
+        nb_views : int
+            Number of views used for prediction
+        min_cc_size : int
+            Minimum number of vertices to consider a connected component a
+             valid object
+        dest_folder : str
+            Default is None, else provide a path (str) to a folder. The mean
+            location and size of the head and neck connected components will be
+             stored as numpy array file (npy)
+
+        Returns
+        -------
+        np.array, np.array, np.array, np.array
+            Neck locations, neck sizes, head locations, head sizes. Location
+             and size arrays have the same ordering.
+
+        """
+        vertex_labels = self.attr_dict["semseg_spiness_k"+str(k)+"_"+str(nb_views)]
+        vertices = self.mesh[1].reshape((-1, 3))
+        g = create_graph_from_coords(vertices, max_dist=110,
+                                     force_single_cc=True)
+        g_orig = g.copy()
+        for e in g_orig.edges():
+            l0 = vertex_labels[e[0]]
+            l1 = vertex_labels[e[1]]
+            if l0 != l1:
+                g.remove_edge(e[0], e[1])
+        log_reps.info("Starting connected components for SSV {}."
+                      "".format(self.id))
+        all_ccs = list(sorted(nx.connected_components(g), key=len,
+                                reverse=True))
+        log_reps.info("Finished connected components for SSV {}."
+                      "".format(self.id))
+        sizes = np.array([len(c) for c in all_ccs])
+        thresh_ix = np.argmax(sizes < min_cc_size)
+        all_ccs = all_ccs[:thresh_ix]
+        sizes = sizes[:thresh_ix]
+        cc_labels = []
+        cc_coords = []
+        for c in all_ccs:
+            curr_v_ixs = list(c)
+            curr_v_l = vertex_labels[curr_v_ixs]
+            curr_v_c = vertices[curr_v_ixs]
+            if len(np.unique(curr_v_l)) != 1:
+                msg = '"get_spine_compartments": Connected component ' \
+                      'contains multiple labels.'
+                log_reps.error(msg)
+                raise ValueError(msg)
+            cc_labels.append(curr_v_l[0])
+            cc_coords.append(np.mean(curr_v_c, axis=0))
+        cc_labels = np.array(cc_labels)
+        cc_coords = np.array(cc_coords)
+        np.random.seed(0)
+        neck_c = (cc_coords[cc_labels == 0] / self.scaling).astype(np.uint)
+        neck_s = sizes[cc_labels == 0]
+        head_c = (cc_coords[cc_labels == 1] / self.scaling).astype(np.uint)
+        head_s = sizes[cc_labels == 1]
+        if dest_folder is not None:
+            np.save("{}/neck_coords_ssv{}_k{}_{}views_ccsize{}.npy".format(
+                dest_folder, self.id, k, nb_views, min_cc_size), neck_c)
+            np.save("{}/head_coords_ssv{}_k{}_{}views_ccsize{}.npy".format(
+                dest_folder, self.id, k, nb_views, min_cc_size), head_c)
+        return neck_c, neck_s, head_c, head_s
 
     def sample_locations(self, force=False, cache=True, verbose=False):
         """
@@ -1198,14 +1418,17 @@ class SuperSegmentationObject(object):
         list of array
             Sample coordinates for each SV in self.svs.
         """
-        if not force and self._sample_locations:
+        if self.version == 'tmp' and cache:
+            cache = False
+        if not force and self._sample_locations is not None:
             return self._sample_locations
-        if verbose:
-            start = time.time()
         if not force:
             if self.attr_exists("sample_locations"):
                 return self.attr_dict["sample_locations"]
+        if verbose:
+            start = time.time()
         params = [[sv, {"force": force}] for sv in self.svs]
+
         # list of arrays
         locs = sm.start_multiprocess_obj("sample_locations", params,
                                          nb_cpus=self.nb_cpus)
@@ -1213,8 +1436,9 @@ class SuperSegmentationObject(object):
             self.save_attributes(["sample_locations"], [locs])
         if verbose:
             dur = time.time() - start
-            print("Sampling locations from %d SVs took %0.2fs. %0.4fs/SV (in" \
-                  "cl. read/write)" % (len(self.svs), dur, dur / len(self.svs)))
+            log_reps.info("Sampling locations from {} SVs took {:.2f}s."
+                          " {.4f}s/SV (incl. read/write)".format(
+                len(self.svs), dur, dur / len(self.svs)))
         return locs
 
     # ------------------------------------------------------------------ EXPORTS
@@ -1252,32 +1476,80 @@ class SuperSegmentationObject(object):
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
     def mesh2kzip(self, dest_path=None, obj_type="sv", ext_color=None):
+        """
+        Writes mesh of SSV to kzip as .ply file.
+        Parameters
+        ----------
+        dest_path :
+        obj_type : str
+            'sv' for cell surface, 'mi': mitochondria, 'vc': vesicle clouds,
+            'sj': synaptic junctions
+        ext_color : np.array of scalar
+            If scalar, it has to be an integer between 0 and 255.
+            If array, it has to be of type uint/int and of shape (N, 4) while N
+            is the number of vertices of the SSV cell surface mesh:
+            N = len(self.mesh[1].reshape((-1, 3)))
+
+        Returns
+        -------
+
+        """
+        color = None
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
         if obj_type == "sv":
             mesh = self.mesh
-            color = (130, 130, 130, 160)
         elif obj_type == "sj":
             mesh = self.sj_mesh
-            color = (int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255)
+            # color = np.array([int(0.849 * 255), int(0.138 * 255),
+            #                   int(0.133 * 255), 255])
         elif obj_type == "vc":
             mesh = self.vc_mesh
-            color = (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)
+            # color = np.array([int(0.175 * 255), int(0.585 * 255),
+            #                   int(0.301 * 255), 255])
         elif obj_type == "mi":
             mesh = self.mi_mesh
-            color = (0, 153, 255, 255)
+            # color = np.array([0, 153, 255, 255])
         else:
             mesh = self._meshes[obj_type]
-            color = None
         if ext_color is not None:
-            if ext_color == 0:
+            if type(ext_color) is list:
+                ext_color = np.array(ext_color)
+            if np.isscalar(ext_color) and ext_color == 0:
                 color = None
-            else:
+            elif np.isscalar(ext_color):
                 color = ext_color
+            elif type(ext_color) is np.ndarray:
+                if ext_color.ndim != 2:
+                    msg = "'ext_color' is numpy array of dimension {}." \
+                          " Only 2D arrays are allowed.".format(ext_color.ndim)
+                    log_reps.error(msg)
+                    raise ValueError(msg)
+                if ext_color.shape[1] == 3:
+                    # add alpha channel
+                    alpha_sh = (len(ext_color), 1)
+                    alpha_arr = (np.ones(alpha_sh) * 255).astype(ext_color.dtype)
+                    ext_color = np.concatenate([ext_color, alpha_arr], axis=1)
+                color = ext_color
+
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
-                        ply_fname=obj_type + ".ply")
+                        ply_fname=obj_type + ".ply", nb_cpus=self.nb_cpus)
 
     def meshes2kzip(self, dest_path=None, sv_color=None):
+        """
+        Writes SV, mito, vesicle cloud and synaptic junction meshes to k.zip
+
+        Parameters
+        ----------
+        dest_path : str
+        sv_color : np.array
+            array with RGBA values or None to use default values
+            (see 'mesh2kzip')
+
+        Returns
+        -------
+
+        """
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
         for ot in ["sj", "vc", "mi",
@@ -1346,7 +1618,7 @@ class SuperSegmentationObject(object):
         Parameters
         ----------
         pred_coords : np.array
-            N x 3
+            N x 3; scaled to nm
         preds : np.array
             N x 1
         ply_fname : str
@@ -1359,13 +1631,15 @@ class SuperSegmentationObject(object):
         -------
         None or [np.array, np.array, np.array]
         """
+        if not ply_fname.endswith(".ply"):
+            ply_fname += ".ply"
         mesh = self.mesh
         col = colorcode_vertices(mesh[1].reshape((-1, 3)), pred_coords,
                                  preds, colors=colors, k=k)
         if dest_path is None or ply_fname is None:
             if not dest_path is None and ply_fname is None:
-                print("Specify 'ply_fanme' in order to save colored mesh"
-                      " to k.zip.")
+                log_reps.warning("Specify 'ply_fanme' in order to save colored"
+                              " mesh to k.zip.")
             return mesh[0], mesh[1], col
         else:
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], col,
@@ -1375,12 +1649,15 @@ class SuperSegmentationObject(object):
     def gliaprobas2mesh(self, dest_path=None, pred_key_appendix=""):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
+        import seaborn as sns
         mcmp = sns.diverging_palette(250, 15, s=99, l=60, center="dark",
                                      as_cmap=True)
         self._svattr2mesh(dest_path, "glia_probas" + pred_key_appendix,
                           cmap=mcmp)
 
-    def gliapred2mesh(self, dest_path=None, thresh=glia_thresh, pred_key_appendix=""):
+    def gliapred2mesh(self, dest_path=None, thresh=None, pred_key_appendix=""):
+        if thresh is None:
+            thresh = global_params.glia_thresh
         self.load_attr_dict()
         for sv in self.svs:
             sv.load_attr_dict()
@@ -1397,8 +1674,10 @@ class SuperSegmentationObject(object):
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                         ply_fname="nonglia_%0.2f.ply" % thresh)
 
-    def gliapred2mergelist(self, dest_path=None, thresh=glia_thresh,
+    def gliapred2mergelist(self, dest_path=None, thresh=None,
                            pred_key_appendix=""):
+        if thresh is None:
+            thresh = global_params.glia_thresh
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         params = [[sv, ] for sv in self.svs]
@@ -1415,25 +1694,24 @@ class SuperSegmentationObject(object):
                                     comments=glia_comments)
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
-    def gliasplit(self, dest_path=None, recompute=False, thresh=glia_thresh,
+    def gliasplit(self, dest_path=None, recompute=False, thresh=None,
                   write_shortest_paths=False, verbose=False,
                   pred_key_appendix=""):
+        if thresh is None:
+            thresh = global_params.glia_thresh
         if recompute or not (self.attr_exists("glia_svs") and
                              self.attr_exists("nonglia_svs")):
             if write_shortest_paths:
                 shortest_paths_dir = os.path.split(dest_path)[0]
             else:
                 shortest_paths_dir = None
-            if verbose:
-                print("Splitting glia in SSV %d with %d SV's." %
-                      (self.id, len(self.svs)))
-                start = time.time()
+            log_reps.debug("Splitting glia in SSV {} with {} SV's.".format(self.id, len(self.svs)))
+            start = time.time()
             nonglia_ccs, glia_ccs = split_glia(self, thresh=thresh,
                         pred_key_appendix=pred_key_appendix,
                         shortest_paths_dest_dir=shortest_paths_dir)
-            if verbose:
-                print("Splitting glia in SSV %d with %d SV's finished after "
-                      "%.4gs." % (self.id, len(self.svs), time.time() - start))
+            log_reps.debug("Splitting glia in SSV %d with %d SV's finished after "
+                           "%.4gs." % (self.id, len(self.svs), time.time() - start))
             non_glia_ccs_ixs = [[so.id for so in nonglia] for nonglia in
                                 nonglia_ccs]
             glia_ccs_ixs = [[so.id for so in glia] for glia in
@@ -1485,24 +1763,22 @@ class SuperSegmentationObject(object):
 
     def predict_views_gliaSV(self, model, verbose=True,
                              pred_key_appendix=""):
-        if verbose:
-            start = time.time()
+        start = time.time()
         pred_key = "glia_probas"
         pred_key += pred_key_appendix
         try:
             predict_sos_views(model, self.svs, pred_key,
-                              nb_cpus=self.nb_cpus, verbose=True,
+                              nb_cpus=self.nb_cpus, verbose=verbose,
                               woglia=False, raw_only=True)
         except KeyError:
             self.render_views(add_cellobjects=False, woglia=False)
             predict_sos_views(model, self.svs, pred_key,
-                              nb_cpus=self.nb_cpus, verbose=True,
+                              nb_cpus=self.nb_cpus, verbose=verbose,
                               woglia=False, raw_only=True)
-        if verbose:
-            end = time.time()
-            print("Prediction of %d SV's took %0.2fs (incl. read/write). "
-                  "%0.4fs/SV" % (len(self.svs), end - start,
-                                 float(end - start) / len(self.svs)))
+        end = time.time()
+        log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
+                       "%0.4fs/SV" % (len(self.svs), end - start,
+                                      float(end - start) / len(self.svs)))
 
     # ------------------------------------------------------------------ AXONESS
     def _load_skelfeatures(self, key):
@@ -1516,25 +1792,27 @@ class SuperSegmentationObject(object):
         else:
             return None
 
-    def _save_skelfeatures(self, key, features, overwrite=False):
+    def _save_skelfeatures(self, k, features, overwrite=False):
         if not self.skeleton:
             self.load_skeleton()
         assert self.skeleton is not None, "Skeleton does not exist."
-        if key in self.skeleton and not overwrite:
-            raise ValueError("Key %s already exists in skeleton feature dict.")
-        self.skeleton[key] = features
-        assert len(self.skeleton["nodes"]) == len(self.skeleton[key]), \
+        if k in self.skeleton and not overwrite:
+            raise ValueError("Key {} already exists in skeleton"
+                             " feature dict.".format(k))
+        self.skeleton[k] = features
+        assert len(self.skeleton["nodes"]) == len(self.skeleton[k]), \
             "Length of skeleton features is not equal to number of nodes."
         self.save_skeleton()
 
     def skel_features(self, feature_context_nm, overwrite=False):
         features = self._load_skelfeatures(feature_context_nm)
-        if not "assoc_sj" in self.skeleton:
-            ssh.associate_objs_with_skel_nodes(self)
-        if not features or overwrite:
+        if features is None or overwrite:
+            if not "assoc_sj" in self.skeleton:
+                ssh.associate_objs_with_skel_nodes(self)
             features = ssh.extract_skel_features(self, feature_context_nm=
             feature_context_nm)
-            self._save_skelfeatures(feature_context_nm, features)
+            self._save_skelfeatures(feature_context_nm, features,
+                                    overwrite=True)
         return features
 
     def write_axpred_rfc(self, dest_path=None, k=1):
@@ -1546,7 +1824,6 @@ class SuperSegmentationObject(object):
             axoness = self.skeleton["axoness"].copy()
             axoness[self.skeleton["axoness"] == 1] = 0
             axoness[self.skeleton["axoness"] == 0] = 1
-            print(np.unique(axoness, return_counts=True))
             self._pred2mesh(self.skeleton["nodes"] * self.scaling, axoness,
                             k=k, dest_path=dest_path)
 
@@ -1560,7 +1837,7 @@ class SuperSegmentationObject(object):
                         ply_fname=key+".ply")
 
     def predict_nodes(self, sc, clf_name="rfc", feature_context_nm=None,
-                      avg_window=0, leave_out_classes=()):
+                      max_dist=0, leave_out_classes=()):
         """
         Predicting class c
         Parameters
@@ -1574,7 +1851,7 @@ class SuperSegmentationObject(object):
 
         feature_context_nm : int
 
-        avg_window : int
+        max_dist : int
             Defines the maximum path length from a source node for collecting
             neighboring nodes to calculate an average prediction for
             the source node.
@@ -1590,47 +1867,59 @@ class SuperSegmentationObject(object):
                                  leave_out_classes=leave_out_classes)
         probas = clf.predict_proba(self.skel_features(feature_context_nm))
         pred = []
-        if avg_window == 0:
+        if max_dist == 0:
             pred = np.argmax(probas, axis=1)
         else:
             for i_node in range(len(self.skeleton["nodes"])):
                 paths = nx.single_source_dijkstra_path(self.weighted_graph(), i_node,
-                                                       avg_window)
-                neighs = np.array(paths.keys(), dtype=np.int)
+                                                       max_dist)
+                neighs = np.array(list(paths.keys()), dtype=np.int)
                 c = np.argmax(np.sum(probas[neighs], axis=0))
                 pred.append(c)
 
         pred_key = "%s_fc%d_avgwind%d" % (sc.target_type, feature_context_nm,
-                                          avg_window)
+                                          max_dist)
         self.skeleton[pred_key] = np.array(pred, dtype=np.int)
         self.skeleton[pred_key+"_proba"] = np.array(probas, dtype=np.float32)
         self.save_skeleton(to_object=True, to_kzip=False)
 
-
     def axoness_for_coords(self, coords, radius_nm=4000, pred_type="axoness"):
         coords = np.array(coords)
-
         self.load_skeleton()
+        if self.skeleton is None or len(self.skeleton["nodes"]) == 0:
+            log_reps.warn("Skeleton did not exist for SSV {} (size: {}; rep. coord.: "
+                          "{}).".format(self.id, self.size, self.rep_coord))
+            return [-1]
+        if pred_type not in self.skeleton:  # for glia SSV this does not exist.
+            return [-1]
         kdtree = scipy.spatial.cKDTree(self.skeleton["nodes"] * self.scaling)
         close_node_ids = kdtree.query_ball_point(coords * self.scaling,
                                                  radius_nm)
-
         axoness_pred = []
         for i_coord in range(len(coords)):
+            curr_close_node_ids = close_node_ids[i_coord]
+            if len(curr_close_node_ids) == 0:
+                dist, curr_close_node_ids = kdtree.query(coords * self.scaling)
+                log_reps.info(
+                    "Couldn't find skeleton nodes within {} nm. Using nearest "
+                    "one with distance {} nm. SSV ID {}, coordinate at {}."
+                    "".format(radius_nm, dist[0], self.id, coords[i_coord]))
             cls, cnts = np.unique(
-                np.array(self.skeleton[pred_type])[np.array(close_node_ids[i_coord])],
+                np.array(self.skeleton[pred_type])[np.array(curr_close_node_ids)],
                 return_counts=True)
             if len(cls) > 0:
                 axoness_pred.append(cls[np.argmax(cnts)])
             else:
+                log_reps.info("Did not find any skeleton node within {} nm at {}."
+                      " SSV {} (size: {}; rep. coord.: {}).".format(
+                    radius_nm, i_coord, self.id, self.size, self.rep_coord))
                 axoness_pred.append(-1)
 
         return np.array(axoness_pred)
 
-    def predict_views_axoness(self, model, verbose=True,
-                             pred_key_appendix=""):
-        if verbose:
-            start = time.time()
+    def predict_views_axoness(self, model, verbose=False,
+                              pred_key_appendix=""):
+        start = time.time()
         pred_key = "axoness_probas"
         pred_key += pred_key_appendix
         try:
@@ -1638,15 +1927,14 @@ class SuperSegmentationObject(object):
                               nb_cpus=self.nb_cpus, verbose=verbose,
                               woglia=True, raw_only=False)
         except KeyError:
-            print("Skipping SSV %d, because views are missing." % self.id)
-            return
-            self.render_views(add_cellobjects=True, woglia=True)
+            log_reps.error("Re-rendering SSV %d (%d SVs), because views are missing."
+                  % (self.id, len(self.sv_ids)))
+            self.render_views(add_cellobjects=True, woglia=True, overwrite=True)
             predict_sos_views(model, self.svs, pred_key,
                               nb_cpus=self.nb_cpus, verbose=verbose,
                               woglia=True, raw_only=False)
-        if verbose:
-            end = time.time()
-            print("Prediction of %d SV's took %0.2fs (incl. read/write). "
+        end = time.time()
+        log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
                   "%0.4fs/SV" % (len(self.svs), end - start,
                                  float(end - start) / len(self.svs)))
 
@@ -1708,13 +1996,16 @@ class SuperSegmentationObject(object):
             if os.path.isfile(dest_path):
                 return
             locs = np.concatenate(self.sample_locations())
-            edge_list = create_mst_skeleton(locs)
+            g = create_graph_from_coords(locs, mst=True)
+            edge_list = np.array(g.edges())
+            del g
             self.skeleton = {}
             self.skeleton["nodes"] = locs / np.array(self.scaling)
             self.skeleton["edges"] = edge_list
             self.skeleton["diameters"] = np.ones(len(locs))
             ax_probas = np.array(sm.start_multiprocess_obj("axoness_probas",
-                                 [[sv, {"pred_key_appendix": pred_key_appendix}] for sv in self.svs], nb_cpus=self.nb_cpus))
+                                 [[sv, {"pred_key_appendix": pred_key_appendix}]
+                                  for sv in self.svs], nb_cpus=self.nb_cpus))
             ax_probas = np.concatenate(ax_probas)
             # first stage averaging
             curr_ax_preds = np.argmax(ax_probas, axis=1)
@@ -1722,13 +2013,14 @@ class SuperSegmentationObject(object):
             for i_node in range(len(self.skeleton["nodes"])):
                 paths = nx.single_source_dijkstra_path(self.weighted_graph(), i_node,
                                                        30000)
-                neighs = np.array(paths.keys(), dtype=np.int)
+                neighs = np.array(list(paths.keys()), dtype=np.int)
                 cnt = Counter(curr_ax_preds[neighs])
                 loc_average = np.zeros((3, ))
                 for k, v in cnt.items():
                     loc_average[k] = v
                 loc_average /= float(len(neighs))
-                if (curr_ax_preds[i_node] == 2 and loc_average[2] >= 0.20) or (loc_average[2] >= 0.98):
+                if (curr_ax_preds[i_node] == 2 and loc_average[2] >= 0.20) or \
+                        (loc_average[2] >= 0.98):
                     ax_preds[i_node] = 2
                 else:
                     ax_preds[i_node] = np.argmax(loc_average[:2])
@@ -1756,7 +2048,7 @@ class SuperSegmentationObject(object):
             self.save_skeleton_to_kzip(dest_path=dest_path)
         except Exception as e:
             if "null graph" in str(e) and len(self.sv_ids) == 2:
-                print("Null graph error with 2 nodes, falling back to " \
+                print("Null graph error with 2 nodes, falling back to "
                       "original classification and one edge.")
                 locs = np.concatenate(self.sample_locations())
                 self.skeleton = {}
@@ -1791,13 +2083,41 @@ class SuperSegmentationObject(object):
         else:
             return views
 
+    def majority_vote(self, prop_key, max_dist):
+        """
+        Smoothes (average using sliding window of 2 times max_dist and majority
+        vote) property prediction in annotation, whereas for axoness somata are
+        untouched.
+
+        Parameters
+        ----------
+        prop_key : str
+            which property to average
+        max_dist : int
+            maximum distance (in nm) for sliding window used in majority voting
+        """
+        assert prop_key in self.skeleton, "Given key does not exist in self.skeleton"
+        prop_array = self.skeleton[prop_key]
+        assert prop_array.squeeze().ndim == 1, "Property array has to be 1D."
+        maj_votes = np.zeros_like(prop_array)
+        for ii in range(len(self.skeleton["nodes"])):
+            paths = nx.single_source_dijkstra_path(self.weighted_graph(),
+                                                   ii, max_dist)
+            neighs = np.array(list(paths.keys()), dtype=np.int)
+            labels, cnts = np.unique(prop_array[neighs], return_counts=True)
+            maj_label = labels[np.argmax(cnts)]
+            maj_votes[ii] = maj_label
+        return maj_votes
+
+
+
 # ------------------------------------------------------------------------------
 # SO rendering code
 
 def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
                           render_first_only=False, add_cellobjects=True,
                           overwrite=False, cellobjects_only=False,
-                          return_views=True):
+                          index_views=False):
     """
     Renders for each SV views at sampled locations (number is dependent on
     SV mesh size with scaling fact) from combined mesh of all SV.
@@ -1816,15 +2136,15 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
     # initilaize temporary SSO
     if not overwrite:
         if render_first_only:
-            if sos[0].views_exist:
+            if sos[0].views_exist(woglia=woglia):
                 sys.stdout.write("\r%d" % sos[0].id)
                 sys.stdout.flush()
                 return
         else:
-            if np.all([sv.views_exist for sv in sos]):
+            if np.all([sv.views_exist(woglia=woglia) for sv in sos]):
                 return
-    sso = SuperSegmentationObject(np.random.randint(0, sys.maxint),
-                                  create=False,
+    sso = SuperSegmentationObject(sos[0].id,
+                                  create=False, enable_locking=False,
                                   working_dir=sos[0].working_dir,
                                   version="tmp", scaling=sos[0].scaling)
     sso._objects["sv"] = sos
@@ -1833,18 +2153,24 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
     else:
         coords = sso.sample_locations(cache=False)
     if add_cellobjects:
-        sso._map_cellobjects()
+        sso._map_cellobjects(save=False)
     part_views = np.cumsum([0] + [len(c) for c in coords])
-    views = render_sso_coords(sso, flatten_list(coords), add_cellobjects=add_cellobjects,
-                              ws=ws, verbose=verbose, cellobjects_only=cellobjects_only)
+    if index_views:
+        views = render_sso_coords_index_views(sso, flatten_list(coords),
+                                  ws=ws, verbose=verbose)
+    else:
+        views = render_sso_coords(sso, flatten_list(coords),
+                                  add_cellobjects=add_cellobjects,
+                                  ws=ws, verbose=verbose,
+                                  cellobjects_only=cellobjects_only)
     for i in range(len(coords)):
         v = views[part_views[i]:part_views[i+1]]
         if np.sum(v) == 0 or np.sum(v) == np.prod(v.shape):
             warnings.warn("Empty views detected after rendering.",
                           RuntimeWarning)
         sv_obj = sos[i]
-        sv_obj.save_views(views=v, woglia=woglia, cellobjects_only=cellobjects_only)
-        print(sv_obj.segobj_dir)
+        sv_obj.save_views(views=v, woglia=woglia, index_views=index_views,
+                          cellobjects_only=cellobjects_only)
 
 
 def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
@@ -1867,7 +2193,7 @@ def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
         views
     """
     # initilaize temporary SSO for cellobject mapping purposes
-    sso = SuperSegmentationObject(np.random.randint(0, sys.maxint),
+    sso = SuperSegmentationObject(so.id,
                                   create=False,
                                   working_dir=so.working_dir,
                                   version="tmp", scaling=so.scaling)
@@ -1880,3 +2206,10 @@ def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):
     return views
 
 
+def merge_axis02(arr):
+    arr = arr.swapaxes(1, 2)  # swap channel and view axis
+    # N, 2, 4, 128, 256
+    orig_shape = arr.shape
+    # reshape to predict single projections
+    arr = arr.reshape([-1] + list(orig_shape[2:]))
+    return arr

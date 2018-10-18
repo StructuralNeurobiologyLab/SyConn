@@ -2,17 +2,19 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
+
 
 try:
     import cPickle as pkl
-except:
+except ImportError:
     import pickle as pkl
 import getpass
 import glob
 import numpy as np
 import os
+import io
 import re
 import shutil
 import string
@@ -100,7 +102,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         path_to_scripts = path_to_scripts_default
 
     if os.path.exists(qsub_work_folder+"/%s_folder%s/" % (name, suffix)):
-        shutil.rmtree(qsub_work_folder+"/%s_folder%s/" % (name, suffix))
+        shutil.rmtree(qsub_work_folder+"/%s_folder%s/" % (name, suffix), ignore_errors=True)
 
     path_to_script = path_to_scripts + "/QSUB_%s.py" % (name)
     path_to_storage = qsub_work_folder+"/%s_folder%s/storage/" % (name, suffix)
@@ -218,7 +220,7 @@ def number_of_running_processes(job_name):
     process = subprocess.Popen("qstat -u %s" % username,
                                shell=True, stdout=subprocess.PIPE)
     nb_lines = 0
-    for line in iter(process.stdout.readline, ''):
+    for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
         if job_name[:10] in line:
             nb_lines += 1
     return nb_lines

@@ -6,7 +6,7 @@ import os
 import syconn
 
 save_path = '~/CNN_Training/SyConn/tripletnet_local/'
-save_name = "g0_v0"
+save_name = "areaxfs3_v0"
 
 # preview_data_path = None
 # preview_kwargs    = dict(export_class='all', max_z_pred=5)

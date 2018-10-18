@@ -1,8 +1,13 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
-    import Pickle as pkl
+except ImportError:
+    import pickle as pkl
 import numpy as np
 import time
 import os
@@ -105,7 +110,7 @@ def trafo_objects_to_kd(realign_map, obj_ids=None, label_id=3,
     kd.initialize_from_knossos_path(kd_path)
 
     if obj_ids is None:
-        obj_ids = obj_map.keys()
+        obj_ids = list(obj_map.keys())
 
     time_start = time.time()
     for i_obj_id, obj_id in enumerate(obj_ids):
@@ -153,7 +158,7 @@ def trafo_objects_to_sd(realign_map, sd_obj_type, working_dir,
                                                   create=True)
 
     if obj_ids is None:
-        obj_ids = np.array(obj_map.keys())
+        obj_ids = np.array(list(obj_map.keys()))
 
     sub_fold_ids = np.array([int(rh.subfold_from_ix(obj_id, 10000).replace('/', '')) for obj_id in obj_ids])
     obj_id_order = np.argsort(sub_fold_ids)

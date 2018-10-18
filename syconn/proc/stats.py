@@ -1,12 +1,12 @@
-# NeuroPatch
-# Copyright (c) 2016 Philipp J. Schubert
-# All rights reserved
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import numpy as np
-import os
-import seaborn as sns
-if "matplotlib" not in globals():
-    import matplotlib
-    matplotlib.use("agg")
+import matplotlib
+matplotlib.use("Agg", warn=False, force=True)
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.ticker as ticker
@@ -58,25 +58,30 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
         text_file.close()
         prec, rec, fs, supp = precision_recall_fscore_support(labels, np.argmax(proba, axis=1))
         np.save(model_dir + '/prec_rec_%s.npy' % prefix, [prec, rec, fs])
-        # plt.savefig(model_dir + '/prec_rec_%s.png' % prefix)
+        plt.savefig(model_dir + '/prec_rec_%s.png' % prefix)
     plt.close()
 
 
-def model_performance_predonly(pred, labels, model_dir=None, prefix="", target_names=None):
-    header = "-------------------------------\n\t\t%s\n" % prefix
+def model_performance_predonly(y_pred, y_true, model_dir=None, prefix="",
+                               target_names=None, labels=None):
+    y_pred = np.array(y_pred, dtype=np.int)
+    y_true = np.array(y_true, dtype=np.int)
+    header = "----------------------------------------------------\n\t\t" \
+             "%s\n" % prefix
     if target_names is None:
         target_names = ["Dendrite", "Axon", "Soma"]
-    header += classification_report(labels, pred, digits=4,
-                                target_names=target_names)
-    header += "acc.: %0.4f" % accuracy_score(labels, pred)
-    header += "\n-------------------------------\n"
+    header += classification_report(y_true, y_pred, digits=4,
+                                target_names=target_names, labels=labels)
+    header += "acc.: {:.4f} -- {} wrongly predicted samples." \
+              "".format(accuracy_score(y_true, y_pred), np.sum(y_true != y_pred))
+    header += "\n-------------------------------------------------\n"
     print(header)
     if model_dir is not None:
         text_file = open(model_dir + '/prec_rec_%s.txt' % prefix, "w")
         text_file.write(header)
         text_file.close()
-        prec, rec, fs, supp = precision_recall_fscore_support(labels, pred)
-        np.save(model_dir + '/prec_rec_%s.npy' % prefix, [prec, rec, fs])
+        # prec, rec, fs, supp = precision_recall_fscore_support(labels, pred)
+        # np.save(model_dir + '/prec_rec_%s.npy' % prefix, [prec, rec, fs])
     plt.close()
 
 
@@ -267,16 +272,21 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
         bin_labels = np.hstack((bin_labels, 1 - bin_labels))
     else:
         raise()
+    if pca is None:
+        pca = PCA(n_components=3, whiten=True, random_state=0)
+        pca.fit(train_d)
 
-    # kNN classification with 2D latent space
+    summary_txt = ""
+    # kNN classification with 3D latent space
     nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='kd_tree', n_jobs=16,
                                 weights="uniform")
     nbrs.fit(pca.transform(train_d), train_l.ravel())
     joblib.dump(nbrs, fold + "/knn_embedding_%s.sav" % prefix)
     pred = nbrs.predict_proba(pca.transform(valid_d))
-    print "2D latent space results for %s:" % prefix
-    print classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names)
+    summary_txt += "3D latent space results for %s:" % prefix
+    summary_txt += "Captured variance: {}".format(pca.explained_variance_ratio_)
+    summary_txt += classification_report(valid_l, np.argmax(pred, axis=1),
+                                target_names=target_names, digits=4)
     plt.figure()
     colors = []
     for i in range(len(target_names)):
@@ -286,7 +296,6 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
         # Plot Precision-Recall curve
         lines, = plt.plot(recall, precision, lw=3, label='%s: %0.4f' % (target_names[i], auc))
         colors.append(lines.get_color())
-        print
     plt.xlabel('Recall')
     plt.ylabel('Precision')
     plt.ylim([0.0, 1.05])
@@ -294,43 +303,32 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
     plt.title('Precision-Recall')
     plt.legend(loc="lower left")
     plt.show(block=False)
-    plt.savefig(fold + "/%s_valid_prec_rec_2d.png" % prefix)
+    plt.savefig(fold + "/%s_valid_prec_rec_3d.png" % prefix)
     plt.close()
 
-    # kNN classification for whole latent space
+    # RFC performance on pca latent space
     rfc = RandomForestClassifier(n_estimators=1000, oob_score=True, class_weight="balanced")
     rfc.fit(train_d, train_l.ravel())
     pred = rfc.predict_proba(valid_d)
+    summary_txt += "Complete latent space results for %s using RFC:" % prefix
+    summary_txt += str(classification_report(valid_l, np.argmax(pred, axis=1),
+                                target_names=target_names, digits=4))
 
-    print "Complete latent space results for %s using RFC:" % prefix
-    print classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names)
-
-    plt.figure()
-    text_file = open(fold + '/%s_performance_summary_rfc.txt' % prefix, "w")
-    summary_txt = str(classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names))
-    text_file.write(summary_txt)
-    text_file.close()
-
-
+    # kNN classification for whole latent space
     nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='kd_tree', n_jobs=16,
                                 weights="uniform")
     nbrs.fit(train_d, train_l.ravel())
     pred = nbrs.predict_proba(valid_d)
+    summary_txt += "Complete latent space results for %s using kNN:" % prefix
+    summary_txt += str(classification_report(valid_l, np.argmax(pred, axis=1),
+                                target_names=target_names, digits=4))
 
-    print "Complete latent space results for %s using kNN:" % prefix
-    print classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names)
-
-    plt.figure()
     text_file = open(fold + '/%s_performance_summary.txt' % prefix, "w")
-    summary_txt = str(classification_report(valid_l, np.argmax(pred, axis=1),
-                                target_names=target_names))
     text_file.write(summary_txt)
     text_file.close()
 
     colors = []
+    plt.figure()
     for i in range(len(target_names)):
         precision, recall, thresh = precision_recall_curve(bin_labels[:, i],
                                                            pred[:, i])
@@ -340,13 +338,12 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
         lines, = plt.plot(recall, precision, lw=3,
                           label='%s: %0.4f' % (target_names[i], auc))
         colors.append(lines.get_color())
-        print
     plt.xlabel('Recall')
     plt.ylabel('Precision')
     plt.ylim([0.0, 1.05])
     plt.xlim([0.0, 1.05])
     plt.title('Precision-Recall')
-    lgnd = plt.legend(loc="lower left")
+    plt.legend(loc="lower left")
     plt.show(block=False)
     plt.savefig(fold + "/%s_valid_prec_rec.png" % prefix)
     plt.close()
@@ -358,8 +355,8 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
                          prefix, pca=pca, colors=colors, target_names=target_names)
     tsne_kwargs = {"n_components": 2, "random_state": 0,
                    "perplexity": 20, "n_iter": 10000}
-    projection_tSNE(train_d, train_l,
-                      fold + "/%s_train_kde_tsne.png" % prefix, colors=colors, target_names=target_names, **tsne_kwargs)
+    # projection_tSNE(train_d, train_l, fold + "/%s_train_kde_tsne.png" % prefix,
+    #                 colors=colors, target_names=target_names, **tsne_kwargs)
     if return_valid_pred:
         return pred
 
@@ -379,7 +376,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
     pca: PCA
         prefitted PCA object to use to prject data of ds_d
     """
-    print "Starting pca visualisation."
+    print("Starting pca visualisation.")
     # pca vis
     paper_rc = {'lines.linewidth': 1, 'lines.markersize': 1}
     sns.set_context(rc=paper_rc)
@@ -387,7 +384,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         ds_l = ds_l[:, 0]
     nb_labels = np.unique(ds_l)
     if pca is None:
-        pca = PCA(3, whiten=True)
+        pca = PCA(3, whiten=True, random_state=0)
         pca.fit(ds_d)
     res = pca.transform(ds_d)
     # density plot 1st and 2nd PC
@@ -399,12 +396,10 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
     if target_names is None:
         target_names = ["%d" % i for i in nb_labels]
     for i in nb_labels:
-        # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
-        # print "KDE input shape:", res[ds_l == i].shape
         cur_pal = sns.light_palette(colors[i], as_cmap=True)
-        ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 1])][: ,0], shade=False, cmap=cur_pal,
-                         alpha=0.6, shade_lowest=False, label="%d" % i
-                         , gridsize=100, ls=0.6, lw=0.6)
+        d0, d1 = res[ds_l == i][:, 0], res[ds_l == i][:, 1]
+        ax = sns.kdeplot(d0, d1, shade=False, cmap=cur_pal,
+                         alpha=0.6, shade_lowest=False, gridsize=100)
         ax.patch.set_facecolor('white')
         ax.collections[0].set_alpha(0)
         plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 1],
@@ -425,12 +420,10 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         if target_names is None:
             target_names = ["%d" % i for i in nb_labels]
         for i in nb_labels:
-            # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
-            # print "KDE input shape:", res[ds_l == i].shape
             cur_pal = sns.light_palette(colors[i], as_cmap=True)
-            ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 2])][: ,0], shade=False, cmap=cur_pal,
-                             alpha=0.6, shade_lowest=False, label="%d" % i
-                             , gridsize=100, ls=0.6, lw=0.6)
+            d0, d2 = res[ds_l == i][:, 0], res[ds_l == i][:, 2]
+            ax = sns.kdeplot(d0, d2, shade=False, cmap=cur_pal,
+                             alpha=0.6, shade_lowest=False, gridsize=100)
             ax.patch.set_facecolor('white')
             ax.collections[0].set_alpha(0)
             plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 2],
@@ -451,12 +444,10 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
         if target_names is None:
             target_names = ["%d" % i for i in nb_labels]
         for i in nb_labels:
-            # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
-            # print "KDE input shape:", res[ds_l == i].shape
             cur_pal = sns.light_palette(colors[i], as_cmap=True)
-            ax = sns.kdeplot(res[ds_l == i][:, np.ix_([1, 2])][: ,0], shade=False, cmap=cur_pal,
-                             alpha=0.6, shade_lowest=False, label="%d" % i
-                             , gridsize=100, ls=0.6, lw=0.6)
+            d1, d2 = res[ds_l == i][:, 1], res[ds_l == i][:, 2]
+            ax = sns.kdeplot(d1, d2, shade=False, cmap=cur_pal,
+                             alpha=0.6, shade_lowest=False, gridsize=100)
             ax.patch.set_facecolor('white')
             ax.collections[0].set_alpha(0)
             plt.scatter(res[ds_l == i][:, 1], res[ds_l == i][:, 2],
@@ -486,7 +477,7 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
         prefitted PCA object to use to prject data of ds_d
     """
     # tsne vis
-    print "Starting tSNE visualisation."
+    print("Starting tSNE visualisation.")
     paper_rc = {'lines.linewidth': 1, 'lines.markersize': 1}
     sns.set_context(rc=paper_rc)
     if ds_l.ndim == 2:
@@ -514,7 +505,8 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
         target_names = ["%d" % i for i in nb_labels]
     for i in nb_labels:
         cur_pal = sns.light_palette(colors[i], as_cmap=True)
-        ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 1])][: ,0], shade=False, cmap=cur_pal,
+        d0, d1 = res[ds_l == i][:, 0], res[ds_l == i][:, 1]
+        ax = sns.kdeplot(d0, d1, shade=False, cmap=cur_pal,
                          alpha=0.75, shade_lowest=False, label="%d" % i,
                          n_levels=15, gridsize=100, ls=1, lw=1)
         ax.patch.set_facecolor('white')
@@ -538,10 +530,9 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
         if target_names is None:
             target_names = ["%d" % i for i in nb_labels]
         for i in nb_labels:
-            # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
-            # print "KDE input shape:", res[ds_l == i].shape
             cur_pal = sns.light_palette(colors[i], as_cmap=True)
-            ax = sns.kdeplot(res[ds_l == i][:, np.ix_([0, 2])][: ,0], shade=False, cmap=cur_pal,
+            d0, d2 = res[ds_l == i][:, 0], res[ds_l == i][:, 2]
+            ax = sns.kdeplot(d0, d2, shade=False, cmap=cur_pal,
                              alpha=0.6, shade_lowest=False, label="%d" % i
                              , gridsize=100, ls=0.6, lw=0.6)
             ax.patch.set_facecolor('white')
@@ -565,10 +556,9 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
         if target_names is None:
             target_names = ["%d" % i for i in nb_labels]
         for i in nb_labels:
-            # print "Current label: %d\t #samples: %d" % (i, len(res[ds_l == i]))
-            # print "KDE input shape:", res[ds_l == i].shape
             cur_pal = sns.light_palette(colors[i], as_cmap=True)
-            ax = sns.kdeplot(res[ds_l == i][:, np.ix_([1, 2])][: ,0], shade=False, cmap=cur_pal,
+            d1, d2 = res[ds_l == i][:, 1], res[ds_l == i][:, 2]
+            ax = sns.kdeplot(d1, d2, shade=False, cmap=cur_pal,
                              alpha=0.6, shade_lowest=False, label="%d" % i
                              , gridsize=100, ls=0.6, lw=0.6)
             ax.patch.set_facecolor('white')

@@ -1,12 +1,14 @@
-# SyConnMP
-# All rights reserved
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 
 import sys
-import numpy as np
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 import time
 # get paths to job handling directories
@@ -24,5 +26,5 @@ with open(path_storage_file) as f:
 
 numbers = args[0]
 for n in numbers:
-    print n
+    print(n)
     time.sleep(0.2)

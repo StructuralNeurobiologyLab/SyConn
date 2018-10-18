@@ -5,20 +5,55 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-import numpy as np
 from scipy import spatial
 import networkx as nx
+import numpy as np
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
+import tqdm
+from ..mp.mp_utils import start_multiprocess_obj
+from ..config.global_params import min_cc_size_glia, min_cc_size_neuron,\
+    get_dataset_scaling, glia_thresh
+from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 import itertools
-import sys
-from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess
-from ..config.global_params import min_cc_size_glia, min_cc_size_neuron, glia_thresh
+
+
+def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
+    """
+    Smooth vertex labels by applying a majority vote on a
+    BFS subset of nodes for every node in the graph
+    Parameters
+    ----------
+    vertices : np.array
+        N, 3
+    vertex_labels : np.array
+        N, 1
+    max_edge_length : float
+        maximum distance between vertices to consider them connected in the
+        graph
+    n_voting : int
+        Number of collected nodes during BFS used for majority vote
+    Returns
+    -------
+    np.array
+        smoothed vertex labels
+    """
+    G = create_graph_from_coords(vertices, max_dist=max_edge_length, mst=False,
+                                 force_single_cc=False)
+    # create BFS subset
+    bfs_nn = split_subcc(G, max_nb=n_voting, verbose=False)
+    new_vertex_labels = np.zeros_like(vertex_labels)
+    for ii in range(len(vertex_labels)):
+        curr_labels = vertex_labels[bfs_nn[ii]]
+        labels, counts = np.unique(curr_labels, return_counts=True)
+        majority_label = labels[np.argmax(counts)]
+        new_vertex_labels[ii] = majority_label
+    return new_vertex_labels
 
 
 def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     """
-    Creates subgraph for each node consisting of nodes within distance
-    threshold.
+    Creates subgraph for each node consisting of nodes until maximum number of
+    nodes is reached.
 
     Parameters
     ----------
@@ -33,18 +68,14 @@ def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     dict
     """
     subnodes = {}
-    nb_nodes = len(g.nodes())
-    cnt = 0
+    if verbose:
+        nb_nodes = g.number_of_nodes()
+        pbar = tqdm.tqdm(total=nb_nodes)
     if start_nodes is None:
-        iter_ixs = g.nodes_iter()
+        iter_ixs = g.nodes()
     else:
         iter_ixs = start_nodes
     for n in iter_ixs:
-        if verbose:
-            if cnt % 100 == 0:
-                sys.stdout.write("\r%0.6f" % (cnt / float(nb_nodes)))
-                sys.stdout.flush()
-            cnt += 1
         n_subgraph = [n]
         nb_edges = 0
         for e in nx.bfs_edges(g, n):
@@ -53,6 +84,10 @@ def split_subcc(g, max_nb, verbose=False, start_nodes=None):
             if nb_edges == max_nb:
                 break
         subnodes[n] = n_subgraph
+        if verbose:
+            pbar.update(1)
+    if verbose:
+        pbar.close()
     return subnodes
 
 
@@ -190,7 +225,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
     if np.all(neuron2ccsize_dict.values() <= min_cc_size_neuron): # no significant neuron SV
         if return_removed_nodes:
-            return [], g.nodes()
+            return [], list(g.nodes())
         return []
 
     # get glia type connected component sizes
@@ -201,7 +236,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
     glia2ccsize_dict = create_ccsize_dict(g_glia, size_dict)
     if np.all(glia2ccsize_dict.values() <= min_cc_size_glia): # no significant glia SV
         if return_removed_nodes:
-            return g.nodes(), []
+            return list(g.nodes()), []
         return []
 
     tiny_glia_fragments = []
@@ -307,10 +342,10 @@ def glia_path_length(glia_path, glia_dict, write_paths=None):
     if write_paths is not None:
         shortest_path = nx.dijkstra_path(g, start_ix, end_ix, weight="weights")
         anno = coordpath2anno([all_vert[ix] for ix in shortest_path])
-        anno.setComment("%0.4f" % shortest_path_length)
+        anno.setComment("{0:.4}".format(shortest_path_length))
         skel = Skeleton()
         skel.add_annotation(anno)
-        skel.to_kzip("%s/%0.4f_vertpath.k.zip" % (write_paths, shortest_path_length))
+        skel.to_kzip("{{}/{0:.4}_vertpath.k.zip".format(write_paths, shortest_path_length))
     return shortest_path_length
 
 
@@ -422,7 +457,8 @@ def coordpath2anno(coords):
     return anno
 
 
-def create_mst_skeleton(coords, max_dist=6000, force_single_cc=True):
+def create_graph_from_coords(coords, max_dist=6000, force_single_cc=True,
+                            mst=False):
     """
     Generate skeleton from sample locations by adding edges between points
     with a maximum distance and then pruning the skeleton using MST.
@@ -443,27 +479,24 @@ def create_mst_skeleton(coords, max_dist=6000, force_single_cc=True):
     """
     kd_t = spatial.cKDTree(coords)
     pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
+    if force_single_cc:
+        while not len(np.unique(pairs)) == len(coords):
+            max_dist += max_dist / 3
+            print("Generated skeleton is not a single connected component. "
+                  "Increasing maximum node distance to {}".format(max_dist))
+            pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
     g = nx.Graph()
-    weights = np.array([np.linalg.norm(coords[p[0]]-coords[p[1]]) for p in pairs])
+    g.add_nodes_from(np.arange(len(coords)))
+    weights = np.linalg.norm(coords[pairs[:, 0]]-coords[pairs[:, 1]], axis=1)#np.array([np.linalg.norm(coords[p[0]]-coords[p[1]]) for p in pairs])
+    # this is slow, but there seems no way to add weights from an array with the same ordering as edges, so one loop is needed..
     g.add_weighted_edges_from([[pairs[i][0], pairs[i][1], weights[i]] for i in range(len(pairs))])
-    while not (nx.is_connected(g) and len(g.nodes()) == len(coords)):
-        if not force_single_cc:
-            break
-        max_dist += 2e3
-        print("Generated skeleton is not a single connected component. " \
-              "Increasing maximum node distance to %0.0f" % (max_dist))
-        pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
-        g = nx.Graph()
-        weights = np.array(
-            [np.linalg.norm(coords[p[0]] - coords[p[1]]) for p in pairs])
-        g.add_weighted_edges_from(
-            [[int(pairs[i][0]), int(pairs[i][1]), weights[i]] for i in range(len(pairs))])
-    g = nx.minimum_spanning_tree(g)
-    return np.array(g.edges())
+    if mst:
+        g = nx.minimum_spanning_tree(g)
+    return g
 
 
-def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None,
-                    glia_key="glia_probas", node_size_cap=np.inf, mcmp=None):
+def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150,
+                    glia_key="glia_probas", node_size_cap=np.inf, mcmp=None, pos=None):
     """
     Draw graph with nodes colored in red (glia) and blue) depending on their
     class. Writes drawing to dest_path.
@@ -499,11 +532,36 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None,
     n_size[n_size > node_size_cap] = node_size_cap
     col = np.array([glianess[n] for n in G.nodes()])
     col = col[n_size >= min_sv_size]
-    nodelist = list(np.array(G.nodes())[n_size > min_sv_size])
+    nodelist = list(np.array(list(G.nodes()))[n_size > min_sv_size])
     n_size = n_size[n_size >= min_sv_size]
     n_size = n_size / np.max(n_size) * 25.
-    pos = nx.spring_layout(G, weight="weight", iterations=150)
+    if pos is None:
+        pos = nx.spring_layout(G, weight="weight", iterations=iterations)
     nx.draw(G, nodelist=nodelist, node_color=col, node_size=n_size,
             cmap=mcmp, width=0.15, pos=pos, linewidths=0)
     plt.savefig(dest_path)
     plt.close()
+    return pos
+
+
+def nxGraph2kzip(g, coords, kzip_path):
+    import tqdm
+    scaling = get_dataset_scaling()
+    coords = coords / scaling
+    skel = Skeleton()
+    anno = SkeletonAnnotation()
+    anno.scaling = scaling
+    node_mapping = {}
+    pbar = tqdm.tqdm(total=len(coords) + len(g.edges()))
+    for v in g.nodes():
+        c = coords[v]
+        n = SkeletonNode().from_scratch(anno, c[0], c[1], c[2])
+        node_mapping[v] = n
+        anno.addNode(n)
+        pbar.update(1)
+    for e in g.edges():
+        anno.addEdge(node_mapping[e[0]], node_mapping[e[1]])
+        pbar.update(1)
+    skel.add_annotation(anno)
+    skel.to_kzip(kzip_path)
+    pbar.close()

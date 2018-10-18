@@ -1,8 +1,13 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
-    import Pickle as pkl
+except ImportError:
+    import pickle as pkl
 import glob
 import numpy as np
 import os
@@ -11,7 +16,7 @@ import time
 from knossos_utils import chunky, knossosdataset
 from ..reps import segmentation
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 
 from ..handler import compression
 from ..proc.general import crop_bool_array
@@ -39,7 +44,7 @@ def find_contact_sites(cset, knossos_path, filename, n_max_co_processes=None,
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
     else:
         raise Exception("QSUB not available")
@@ -196,7 +201,7 @@ def process_block_nonzero(edges, arr, stencil=(7, 7, 3)):
 
     arr_shape = np.array(arr.shape)
     out = np.zeros(arr_shape - stencil + 1, dtype=np.uint64)
-    offset = stencil / 2
+    offset = stencil // 2 # int division!
     nze = np.nonzero(edges[offset[0]: -offset[0], offset[1]: -offset[1], offset[2]: -offset[2]])
     for x, y, z in zip(nze[0], nze[1], nze[2]):
         center_id = arr[x + offset[0], y + offset[1], z + offset[2]]

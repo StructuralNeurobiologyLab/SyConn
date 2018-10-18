@@ -36,6 +36,8 @@ extensions = [
     'sphinx.ext.githubpages',
     'sphinx.ext.napoleon',
     'sphinx.ext.viewcode',
+    'sphinx_autodoc_typehints',
+    'm2r',
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -44,8 +46,12 @@ templates_path = ['_templates']
 # The suffix(es) of source filenames.
 # You can specify multiple suffix as a list of string:
 #
-# source_suffix = ['.rst', '.md']
-source_suffix = '.rst'
+source_suffix = ['.rst', '.md']
+# source_suffix = '.rst'
+no_underscore_emphasis = True
+m2r_parse_relative_links = True
+m2r_anonymous_references = False
+m2r_disable_inline_math = False
 
 # The encoding of source files.
 #
@@ -56,8 +62,8 @@ master_doc = 'index'
 
 # General information about the project.
 project = u'SyConn'
-copyright = u'2016, Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld'
-author = u'Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld'
+copyright = u'2018, SyConn team'
+author = u'Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld'
 
 # The version info for the project you're documenting, acts as replacement for
 # |version| and |release|, also used in various other places throughout the
@@ -133,9 +139,8 @@ html_theme = 'sphinxdoc'
 # documentation.
 #
 # html_theme_options = {}
-
 # Add any paths that contain custom themes here, relative to this directory.
-# html_theme_path = []
+# html_theme_path = [sphinx_rtd_theme.get_html_theme_path()]
 
 # The name for this set of Sphinx documents.
 # "<project> v<release> documentation" by default.
@@ -267,7 +272,7 @@ latex_elements = {
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
     (master_doc, 'SyConn.tex', u'SyConn Documentation',
-     u'Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld', 'manual'),
+     u'Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of

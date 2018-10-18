@@ -1,12 +1,17 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
-    import Pickle as pkl
+except ImportError:
+    import pickle as pkl
 import glob
 import os
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 from.checking_helper import find_missing_overlaycubes_thread
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../multi_proc/")
 
@@ -37,7 +42,7 @@ def find_missing_overlaycubes(path, stride=100, qsub_pe=None, qsub_queue=None,
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
 
     else:

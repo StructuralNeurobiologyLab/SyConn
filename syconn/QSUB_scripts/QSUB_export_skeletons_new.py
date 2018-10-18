@@ -9,8 +9,7 @@ import sys
 
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation_helper import create_sso_skeleton, sparsify_skeleton, extract_skel_features, associate_objs_with_skel_nodes
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
@@ -18,12 +17,12 @@ from syconn.reps.super_segmentation_object import SuperSegmentationObject
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
 
-with open(path_storage_file) as f:
+with open(path_storage_file, 'rb') as f:
     args = []
     while True:
         try:
             args.append(pkl.load(f))
-        except:
+        except EOFError:
             break
 
 
@@ -45,3 +44,6 @@ for ix in ssv_ixs:
                 sso._save_skelfeatures(ctx, features, overwrite=True)
     except Exception as e:
         print("Error occurred with SSO ", sso.id, str(e))
+
+with open(path_out_file, "wb") as f:
+    pkl.dump("0", f)

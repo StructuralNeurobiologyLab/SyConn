@@ -1,17 +1,36 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import re
-from .basics import read_txt_from_zip
-from collections import Counter
-from knossos_utils.chunky import ChunkDataset, save_dataset
-from knossos_utils.knossosdataset import KnossosDataset
-from elektronn2.config import config as e2config
-from elektronn2.utils.gpu import initgpu
-from .compression import load_from_h5py, save_to_h5py
 import numpy as np
 import os
 import sys
 import time
-import warnings
+from numba import jit
 import tqdm
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.decomposition import PCA
+from collections import Counter
+from knossos_utils.chunky import ChunkDataset, save_dataset
+from knossos_utils.knossosdataset import KnossosDataset
+import elektronn2
+from elektronn2.config import config as e2config
+from elektronn2.utils.gpu import initgpu
+from ..handler import log_handler
+from ..handler.logger import log_main
+try:
+    from elektronn3.models.base import InferenceModel
+except Exception as e:  # ImportError as e:
+    log_main.error(
+        "elektronn3 could not be imported ({}). Please see 'https://github."
+        "com/ELEKTRONN/elektronn3' for more information.".format(e))
+from .compression import load_from_h5py, save_to_h5py
+from ..proc.image import normalize_img
+from .basics import read_txt_from_zip, get_filepaths_from_dir, parse_cc_dict_from_kzip
+from numba import jit
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
@@ -23,9 +42,13 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
     ----------
     zip_fname : str
     kd_p : str
-    raw_data_offset : int
-        additional offset for raw data to use full label volume, i.e. raw cube shape will be the shape of the labels
-        plus 2 times raw_data_offset
+    raw_data_offset : int or np.array
+        number of voxels used for additional raw offset, i.e. the offset for the
+        raw data will be label_offset - raw_data_offset, while the raw data
+        volume will be label_volume + 2*raw_data_offset. It will
+        use 'kd.scaling' to account for dataset anisotropy if scalar or a
+        list of length 3 hast to be provided for a custom x, y, z offset.
+    verbose : bool
 
     Returns
     -------
@@ -40,20 +63,22 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
     if np.isscalar(raw_data_offset):
         raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling)
         if verbose:
-            print('Using scale adapted raw offset:', np.array([75, 75,  6]))
+            print('Using scale adapted raw offset:', raw_data_offset)
     elif len(raw_data_offset) != 3:
         raise ValueError("Offset for raw cubes has to have length 3.")
+    else:
+        raw_data_offset = np.array(raw_data_offset)
     raw = kd.from_raw_cubes_to_matrix(size + 2 * raw_data_offset,
                                       offset - raw_data_offset, nb_threads=2,
                                       mag=1, show_progress=False)
     try:
-        label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
-                                       verbose=False, show_progress=False)
-        label = label.astype(np.uint16)
-    except Exception as e:
-        print("\nError occured for file " + zip_fname + repr(e) +
-              "\nLabels are set to zeros (background).")
-        label = np.zeros_like(raw).astype(np.uint16)
+        _ = parse_cc_dict_from_kzip(zip_fname)
+    except:  # mergelist.txt does not exist
+        label = np.zeros(size).astype(np.uint16)
+        return raw.astype(np.float32) / 255., label
+    label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
+                                   verbose=False, show_progress=False)
+    label = label.astype(np.uint16)
     return raw.astype(np.float32) / 255., label
 
 
@@ -145,6 +170,8 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     if not data_is_zxy:
         raw = xyz2zxy(raw)
     initgpu(gpu_ix)
+    if raw.dtype.kind in ('u', 'i'):
+        raw = raw.astype(np.float32) / 255.
     from elektronn2.neuromancer.model import modelload
     m = modelload(m_path, imposed_patch_size=list(imposed_patch_size)
     if isinstance(imposed_patch_size, tuple) else imposed_patch_size,
@@ -224,7 +251,8 @@ def zxy2xyz(vol):
     return vol
 
 
-def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None):
+def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True,
+                        raw_data_offset=75, debug=False):
     """
     Create .h5 files for ELEKTRONN input. Only supports binary labels
      (0=background, 1=foreground).
@@ -237,15 +265,45 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None):
         ids which have to be converted to foreground, i.e. 1. Everything
         else is considered background (0). If None, everything except 0 is
         treated as foreground.
+    overwrite : bool
+        If True, will overwrite existing .h5 files
+    raw_data_offset : int
+        number of voxels used for additional raw offset, i.e. the offset for the
+        raw data will be label_offset - raw_data_offset, while the raw data
+        volume will be label_volume + 2*raw_data_offset. It will
+        use 'kd.scaling' to account for dataset anisotropy if scalar or a
+        list of length 3 hast to be provided for a custom x, y, z offset.
+    debug : bool
+        if True, file will have an additional 'debug' suffix and
+        raw_data_offset is set to 0. Also their bit depths are adatped to be the
+        same
     """
-    raw, label = load_gt_from_kzip(zip_fname, kd_p)
     fname, ext = os.path.splitext(zip_fname)
     if fname[-2:] == ".k":
         fname = fname[:-2]
-    create_h5_gt_file(fname, raw, label, foreground_ids)
+    if debug:
+        file_appendix = '_debug'
+        raw_data_offset = 0
+    else:
+        file_appendix = ''
+    fname_dest = fname + file_appendix + ".h5"
+    if os.path.isfile(fname_dest) and not overwrite:
+        print("File at {} already exists. Skipping.".format(fname_dest))
+        return
+    raw, label = load_gt_from_kzip(zip_fname, kd_p,
+                                   raw_data_offset=raw_data_offset)
+    if foreground_ids is None:
+        try:
+            cc_dc = parse_cc_dict_from_kzip(zip_fname)
+            foreground_ids = np.concatenate(list(cc_dc.values()))
+        except:  # mergelist.txt does not exist
+            foreground_ids = []
+        print("Foreground IDs not assigned. Inferring from "
+              "'mergelist.txt' in k.zip.:", foreground_ids)
+    create_h5_gt_file(fname_dest, raw, label, foreground_ids, debug=debug)
 
 
-def create_h5_gt_file(fname, raw, label, foreground_ids=None):
+def create_h5_gt_file(fname, raw, label, foreground_ids=None, debug=False):
     """
     Create .h5 files for ELEKTRONN input from two arrays.
     Only supports binary labels (0=background, 1=foreground). E.g. for creating
@@ -262,6 +320,8 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None):
         ids which have to be converted to foreground, i.e. 1. Everything
         else is considered background (0). If None, everything except 0 is
         treated as foreground.
+    debug : bool
+        will store labels and raw as uint8 ranging from 0 to 255
     """
     print(os.path.split(fname)[1])
     label = binarize_labels(label, foreground_ids)
@@ -272,6 +332,9 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None):
     print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
     if not fname[-2:] == "h5":
         fname = fname + ".h5"
+    if debug:
+        raw = (raw * 255).astype(np.uint8)
+        label = label.astype(np.uint8) * 255
     save_to_h5py([raw, label], fname, hdf5_names=["raw", "label"])
 
 
@@ -331,18 +394,17 @@ def parse_movement_area_from_zip(zip_fname):
     line = line[0]
     bb_min = np.array([re.findall('min.\w="(\d+)"', line)], dtype=np.uint)
     bb_max = np.array([re.findall('max.\w="(\d+)"', line)], dtype=np.uint)
-    return np.concatenate([bb_min, bb_max]) - 1  # correct for 1-indexing of knossos
+    return np.concatenate([bb_min, bb_max])  # Movement area is stored with 0-indexing! No adjustment needed
 
 
 def pred_dataset(*args, **kwargs):
-    warnings.warn("'pred_dataset' will be replaced by 'predict_dataset' in"
-                  " the near future.")
+    log_handler.warning("'pred_dataset' will be replaced by 'predict_dataset' in"
+                        " the near future.")
     return pred_dataset(*args, **kwargs)
 
 
-
 def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
-                 mfp_active=False, gpu_ids=(0, ), overwrite=True):
+                    mfp_active=False, gpu_ids=(0, ), overwrite=True):
     """
     Runs prediction on the complete knossos dataset.
     Imposed patch size has to be given in Z, X, Y!
@@ -362,9 +424,9 @@ def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     mfp_active : bool
         activate max-fragment pooling (might be necessary to change patch_size)
     gpu_ids : tuple of int
-    |   the GPU/GPUs to be used
+        the GPU/GPUs to be used
     overwrite : bool
-    |   True: fresh predictions ; False: earlier prediction continues
+        True: fresh predictions ; False: earlier prediction continues
 
 
     Returns
@@ -380,9 +442,8 @@ def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
         _multi_gpu_ds_pred(kd_p, kd_pred_p, cd_p, model_p,imposed_patch_size, gpu_ids)
 
 
-
 def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
-                 mfp_active=False, gpu_id=0,overwrite=False, i=None, n=None):
+                  mfp_active=False, gpu_id=0, overwrite=False, i=None, n=None):
     """
     Helper function for dataset prediction. Runs prediction on whole or partial knossos dataset.
     Imposed patch size has to be given in Z, X, Y!
@@ -401,10 +462,10 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
         patch size (Z, X, Y) of the model
     mfp_active : bool
         activate max-fragment pooling (might be necessary to change patch_size)
-    gpu_ix : int
-    |   the GPU used
+    gpu_id : int
+        the GPU used
     overwrite : bool
-    |   True: fresh predictions ; False: earlier prediction continues
+        True: fresh predictions ; False: earlier prediction continues
         
 
     Returns
@@ -428,7 +489,7 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     cd.initialize(kd, kd.boundary, [512, 512, 256], cd_p, overlap=offset, box_coords=np.zeros(3), fit_box_size=True)
 
     ch_dc = cd.chunk_dict
-    print('Total number of chunks for GPU/GPUs:' , len(ch_dc.keys()))
+    print('Total number of chunks for GPU/GPUs:', len(ch_dc.keys()))
 
     if i is not None and n is not None:
         chunks = ch_dc.values()[i::n]
@@ -543,10 +604,12 @@ def chunk_pred(ch, model, debug=False):
 
 class NeuralNetworkInterface(object):
     """
-    Experimental and almost deprecated interface class
+    Inference class for elektronn2 models, support will end at some point.
+    Switching to 'InferenceModel' in elektronn3.model.base in the long run.
     """
     def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
-                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2):
+                 channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2,
+                 normalize_data=False, normalize_func=None, init_gpu=None):
         self.imposed_batch_size = imposed_batch_size
         self.channels_to_load = channels_to_load
         self.arch = arch
@@ -554,9 +617,14 @@ class NeuralNetworkInterface(object):
         self._fname = os.path.split(model_path)[1]
         self.nb_labels = nb_labels
         self.normal = normal
+        self.normalize_data = normalize_data
+        self.normalize_func = normalize_func
+        if init_gpu is None:
+            init_gpu = 'auto'
         if e2config.device is None:
             from elektronn2.utils.gpu import initgpu
-            initgpu(0)
+            initgpu(init_gpu)
+        elektronn2.logger.setLevel("ERROR")
         from elektronn2.neuromancer.model import modelload
         self.model = modelload(model_path, replace_bn='const',
                                imposed_batch_size=imposed_batch_size)
@@ -565,19 +633,26 @@ class NeuralNetworkInterface(object):
 
     def predict_proba(self, x, verbose=False):
         x = x.astype(np.float32)
+        if self.normalize_data:
+            if self.normalize_func is not None:
+                x = self.normalize_func(x)
+            else:
+                x = naive_view_normalization(x)
         bs = self.imposed_batch_size
+        # using floor now and remaining samples are treated later
         if self.arch == "rec_view":
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(x.shape[1] / bs)]
+                       range(int(np.floor(x.shape[1] / bs)))]
             proba = np.ones((x.shape[1], 4, self.nb_labels))
         elif self.arch == "triplet":
+            x = views2tripletinput(x)
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(len(x) / bs)]
+                       range(int(np.floor(len(x) / bs)))]
             # nb_labels represents latent space dim.; 3 -> view triplet
             proba = np.ones((len(x), self.nb_labels, 3))
         else:
             batches = [np.arange(i * bs, (i + 1) * bs) for i in
-                       range(len(x) / bs)]
+                       range(int(np.floor(len(x) / bs)))]
             proba = np.ones((len(x), self.nb_labels))
         if verbose:
             cnt = 0
@@ -605,9 +680,11 @@ class NeuralNetworkInterface(object):
             end = time.time()
             sys.stdout.write("\r%0.2f\n" % 1.0)
             sys.stdout.flush()
-            print "Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
-                  (len(x), end-start, (end-start)/len(x))
+            print("Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
+                  (len(x), end-start, (end-start)/len(x)))
             pbar.close()
+        if self.arch == "triplet":
+            return proba[..., 0]
         return proba
 
 
@@ -615,17 +692,38 @@ def get_axoness_model_V2():
     """
     Retrained with GP dendrites. May 2018.
     """
-    m = NeuralNetworkInterface("/wholebrain/u/pschuber/CNN_Training/SyConn/axon_views/g1_v2/g1_v2-FINAL.mdl",
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/SyConn/axon_views/g1_v3/g1_v3-FINAL.mdl",
                                   imposed_batch_size=200,
-                                  nb_labels=3)
+                                  nb_labels=3, normalize_data=True)
     _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
     return m
 
 
+def get_glia_model_v2():
+    """
+    Retrained with GP dendrites. May 2018.
+    """
+    m = NeuralNetworkInterface("/wholebrain/u/pschuber/CNN_Training/SyConn/glia_views/g0_v0/g0_v0-FINAL.mdl",
+                                  imposed_batch_size=200,
+                                  nb_labels=2, normalize_data=True)
+    _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
+    return m
+
+
+def get_celltype_model_v2(init_gpu=None):
+    # this model was trained with 'naive_view_normalization'
+    m = NeuralNetworkInterface("/wholebrain/u/pschuber/CNN_Training/SyConn/celltype/g1_20views_v3/g1_20views_v3-FINAL.mdl",
+                               imposed_batch_size=2, nb_labels=4, normalize_data=True,
+                               init_gpu=init_gpu)
+    _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
+    return m
+
+
+# Old models, were trained on old views without normalization
 def get_axoness_model():
     m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/axoness/g5_axoness_v0_all_run2/g5_axoness_v0_all_run2-FINAL.mdl",
-                                  imposed_batch_size=200,
-                                  nb_labels=3)
+                                  imposed_batch_size=200,  normalize_data=True,
+                                  nb_labels=3, normalize_func=force_correct_norm)
     _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
     return m
 
@@ -640,26 +738,153 @@ def get_glia_model():
 
 def get_tripletnet_model():
     m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/t_net/ssv6_tripletnet_v9/ssv6_tripletnet_v9-FINAL.mdl",
-                                  imposed_batch_size=12,
-                                  nb_labels=25, arch="triplet")
+                                  imposed_batch_size=12, normalize_data=True,
+                                  nb_labels=25, arch="triplet", )#normalize_func=force_correct_norm)
     _ = m.predict_proba(np.zeros((1, 4, 3, 128, 256)))
     return m
 
 
 def get_tripletnet_model_ortho():
     # final model diverged...
-    m = NeuralNetworkInterface("/wholebrain/u/pschuber/CNN_Training/SyConn/triplet_net_SSV/wholecell_orthoviews_v4/Backup/wholecell_orthoviews_v4-180k.mdl",
+    m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/SyConn/triplet_net_SSV/wholecell_orthoviews_v4/Backup/wholecell_orthoviews_v4-180k.mdl",
                                   imposed_batch_size=6,
                                   nb_labels=10, arch="triplet")
     _ = m.predict_proba(np.zeros((1, 4, 3, 512, 512)))
     return m
 
 
-def get_celltype_model():
+def get_celltype_model(init_gpu=None):
+    # normalize images between 0 and 1 (naive_view_normalization normalizes between -0.5 and 0.5)
     m = NeuralNetworkInterface("/wholebrain/scratch/pschuber/CNN_Training/nupa_cnn/celltypes/g1_20views_v3/g1_20views_v3-FINAL.mdl",
-                               imposed_batch_size=5, nb_labels=4)
-    _ = m.predict_proba(np.zeros((5, 4, 20, 128, 256)))
+                               imposed_batch_size=2, nb_labels=4, normalize_data=True, normalize_func=force_correct_norm,
+                               init_gpu=init_gpu)
+    _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
     return m
+
+
+def get_semseg_spiness_model():
+    path = "/wholebrain/scratch/pschuber/e3training_August1st/FCN--VG13/"
+    m = InferenceModel()
+    m._path = path
+    return m
+
+
+def get_knn_tnet_embedding():
+    tnet_eval_dir = "/wholebrain/scratch/pschuber/CNN_Training/" \
+                    "nupa_cnn/t_net/ssv6_tripletnet_v9_backup/pred/"
+    return knn_clf_tnet_embedding(tnet_eval_dir)
+
+
+def get_tripletnet_model_e3():
+    # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_newTNET_neighbors8/ATN-25-Neighbors-8/")
+    # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_newTNET_neighbors/ATN-25-Neighbors/")
+    m = InferenceModel("/wholebrain/scratch/pschuber/e3training_newTNET/TN-25/")
+    # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_August1st/old/ATN-Gauss-noAdv-#1/")
+    # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-noAdv-Compare2/")
+    # m = InferenceModel("/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-Compare2/")
+    return m
+
+
+def get_knn_tnet_embedding_e3():
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_newTNET_neighbors8/ATN-25-Neighbors-8/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_newTNET_neighbors/ATN-25-Neighbors/pred/"
+    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_newTNET/TN-25/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-noAdv-Compare2/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-Compare2/pred/"
+    return knn_clf_tnet_embedding(tnet_eval_dir)
+
+
+def get_pca_tnet_embedding_e3():
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_newTNET_neighbors8/ATN-25-Neighbors-8/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_newTNET_neighbors/ATN-25-Neighbors/pred/"
+    tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_newTNET/TN-25/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-noAdv-Compare2/pred/"
+    # tnet_eval_dir = "/wholebrain/scratch/pschuber/e3training_24Aug2018/ATN-Gauss-Z10-Compare2/pred/"
+    return pca_tnet_embedding(tnet_eval_dir)
+
+
+def force_correct_norm(x):
+    """
+    For e.g. models trained on views normalized between 0 and 1, whereas empty
+    images are set to 1 / 255. New models trained on old views
+    Parameters
+    ----------
+    x :
+
+    Returns
+    -------
+
+    """
+    import itertools
+    x = x.astype(np.float32)
+    # iterate over view locations, view channels, view numbers: N, 4, 2
+    for ii, jj, kk in itertools.product(np.arange(x.shape[0]), np.arange(x.shape[1]),
+                      np.arange(x.shape[2])):
+        curr_img = x[ii, jj, kk]
+        if np.all(curr_img[0, 0] == curr_img):
+            x[ii, jj, kk] = 1. / 255
+        elif np.max(curr_img) <= 1.0 and np.min(curr_img) >= 0:
+            pass
+        elif np.max(curr_img) > 1.0:
+            x[ii, jj, kk] = curr_img / 255.
+        x[ii, jj, kk] = normalize_img(x[ii, jj, kk], max_val=1.0)
+        assert np.max(x[ii, jj, kk]) <= 1.0 and np.min(x[ii, jj, kk]) >= 0
+    return x
+
+
+def force_correct_norm_new(x):
+    """
+    For e.g. models trained on views normalized between 0 and 1, whereas empty
+    images are set to 1 / 255. New models trained on old views
+    Parameters
+    ----------
+    x :
+
+    Returns
+    -------
+
+    """
+    import itertools
+    pbar = tqdm.tqdm(total=x.shape[0]*x.shape[1]*x.shape[2], miniters=1000)
+    x = x.astype(np.float32)
+    # iterate over view locations, view channels, view numbers: N, 4, 2
+    for ii, jj, kk in itertools.product(np.arange(x.shape[0]), np.arange(x.shape[1]),
+                      np.arange(x.shape[2])):
+        curr_img = x[ii, jj, kk]
+        if np.all(curr_img[0, 0] == curr_img): # everything is the same value / empty view
+            x[ii, jj, kk] = 1.
+        elif np.max(curr_img) <= 1.0 and np.min(curr_img) >= 0:
+            pass
+        elif np.max(curr_img) > 1.0:
+            x[ii, jj, kk] = curr_img / 255.
+        assert np.max(x[ii, jj, kk]) <= 1.0 and np.min(x[ii, jj, kk]) >= 0
+        pbar.update(1)
+        x[ii, jj, kk] -= 0.5
+    pbar.close()
+    return x
+
+
+def naive_view_normalization(d):
+    # TODO: Remove with new dataset, only necessary for backwards compat.
+    d = d.astype(np.float32)
+    # perform pseudo-normalization
+    # (proper normalization: how to store mean and std for inference?)
+    if not (np.min(d) >= 0 and np.max(d) <= 1.0):
+        for ii in range(len(d)):
+            curr_view = d[ii]
+            if 0 <= np.max(curr_view) <= 1.0:
+                curr_view = curr_view - 0.5
+            else:
+                curr_view = curr_view / 255. - 0.5
+            d[ii] = curr_view
+    else:
+        d = d - 0.5
+    return d
+
+
+def naive_view_normalization_new(d):
+    return d.astype(np.float32) / 255. - 0.5
+
 
 def _multi_gpu_ds_pred(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size=None, gpu_ids=(0, 1)):
 
@@ -676,3 +901,94 @@ def _multi_gpu_ds_pred(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size=None, gpu_
         t = threading.Thread(target=start_partial_pred, args=(kd_p,kd_pred_p,cd_p,model_p,imposed_patch_size,gi,ii, len(gpu_ids)))
         t.daemon = True
         t.start()
+
+
+def knn_clf_tnet_embedding(fold, fit_all=False):
+    """
+    Currently it assumes embedding for GT views has been created already in 'fold'
+    and put into l_train_%d.npy / l_valid_%d.npy files
+    Parameters
+    ----------
+    fold :
+
+    Returns
+    -------
+
+    """
+    train_fnames = get_filepaths_from_dir(fold, fname_includes=["l_axoness_train"], ending=".npy")
+    valid_fnames = get_filepaths_from_dir(fold, fname_includes=["l_axoness_valid"], ending=".npy")
+
+    train_d = []
+    train_l = []
+    valid_d = []
+    valid_l = []
+    for tf in train_fnames:
+        train_l.append(np.load(tf))
+        tf = tf.replace("l_axoness_train", "ls_axoness_train")
+        train_d.append(np.load(tf))
+    for tf in valid_fnames:
+        valid_l.append(np.load(tf))
+        tf = tf.replace("l_axoness_valid", "ls_axoness_valid")
+        valid_d.append(np.load(tf))
+
+    train_d = np.concatenate(train_d).astype(dtype=np.float32)
+    train_l = np.concatenate(train_l).astype(dtype=np.uint16)
+    valid_d = np.concatenate(valid_d).astype(dtype=np.float32)
+    valid_l = np.concatenate(valid_l).astype(dtype=np.uint16)
+
+    nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='auto', n_jobs=16,
+                                weights='uniform')
+    if fit_all:
+        nbrs.fit(np.concatenate([train_d, valid_d]), np.concatenate([train_l, valid_l]).ravel())
+    else:
+        nbrs.fit(train_d, train_l.ravel())
+    return nbrs
+
+
+def pca_tnet_embedding(fold, n_components=3, fit_all=False):
+    """
+    Currently it assumes embedding for GT views has been created already in 'fold'
+    and put into l_train_%d.npy / l_valid_%d.npy files
+    Parameters
+    ----------
+    fold :
+
+    Returns
+    -------
+
+    """
+    train_fnames = get_filepaths_from_dir(fold, fname_includes=["l_axoness_train"], ending=".npy")
+    valid_fnames = get_filepaths_from_dir(fold, fname_includes=["l_axoness_valid"], ending=".npy")
+
+    train_d = []
+    train_l = []
+    valid_d = []
+    valid_l = []
+    for tf in train_fnames:
+        train_l.append(np.load(tf))
+        tf = tf.replace("l_axoness_train", "ls_axoness_train")
+        train_d.append(np.load(tf))
+    for tf in valid_fnames:
+        valid_l.append(np.load(tf))
+        tf = tf.replace("l_axoness_valid", "ls_axoness_valid")
+        valid_d.append(np.load(tf))
+
+    train_d = np.concatenate(train_d).astype(dtype=np.float32)
+    train_l = np.concatenate(train_l).astype(dtype=np.uint16)
+    valid_d = np.concatenate(valid_d).astype(dtype=np.float32)
+    valid_l = np.concatenate(valid_l).astype(dtype=np.uint16)
+
+    pca = PCA(n_components, whiten=True, random_state=0)
+    if fit_all:
+        pca.fit(np.concatenate([train_d, valid_d]))
+    else:
+        pca.fit(train_d)
+    return pca
+
+
+def views2tripletinput(views):
+    views = views[:, :, :1] # use first view only
+    out_d = np.concatenate([views,
+                            np.ones_like(views),
+                            np.ones_like(views)], axis=2)
+    return out_d.astype(np.float32)

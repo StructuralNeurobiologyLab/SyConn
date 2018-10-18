@@ -2,8 +2,8 @@ import pytest
 import numpy as np
 import time
 from multiprocessing import Process, Queue
-from syconn.handler.compression import LZ4Dict, MeshDict, VoxelDict,\
-    VoxelDictL, AttributeDict
+from syconn.backend.storage import AttributeDict, CompressedStorage, VoxelStorageL, MeshStorage, \
+    VoxelStorage
 from syconn.handler.basics import write_txt2kzip,write_data2kzip,\
     read_txt_from_zip, remove_from_zip
 import os
@@ -14,12 +14,10 @@ import sys
 
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-parent_path = os.path.abspath(os.path.join(dir_path, os.pardir))
-logging.basicConfig(filename=parent_path + '/logs/unit_tests.log',
+logging.basicConfig(filename=dir_path + '/unit_tests.log',
                     level=logging.DEBUG, filemode='w')
 
-
-test_p = "/wholebrain/scratch/areaxfs/test.pkl"
+test_p = dir_path + "/test.pkl"
 if os.path.isfile(test_p):
     os.remove(test_p)
 
@@ -45,18 +43,18 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
     def create_LZ4Dict_wait_for_3s_then_close():
 
         #created and locked LZ4Dict for 3s
-        pkl1 = LZ4Dict(test_p, read_only=False)
+        pkl1 = CompressedStorage(test_p, read_only=False)
         pkl1[1] = np.ones((5, 5))
         time.sleep(3)
-        pkl1.save2pkl()
+        pkl1.push()
 
     def create_fail_expected_runtime_error_at_1s(a, b, q1):
         # logging.debug("Started worker to access file for 1s"
         time.sleep(0)
         start = time.time()
         try:
-            pkl2 = LZ4Dict(test_p, read_only=True, timeout=1,
-                           max_delay=1)  # timeout sets the maximum time before failing, not max_delay
+            pkl2 = CompressedStorage(test_p, read_only=True, timeout=1,
+                                     max_delay=1)  # timeout sets the maximum time before failing, not max_delay
 
             logging.warning('FAILED: create_fail_expected_runtime_error_at_1s')
             q1.put(1)
@@ -69,7 +67,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
         time.sleep(0)
         start = time.time()
         try:
-            pkl2 = LZ4Dict(test_p, read_only=True, timeout=2)
+            pkl2 = CompressedStorage(test_p, read_only=True, timeout=2)
             logging.warning('FAILED: create_fail_expected_runtime_error_at_2s')
             q2.put(1)
         except RuntimeError as e:
@@ -81,7 +79,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
         start = time.time()
 
         try:
-            pkl2 = LZ4Dict(test_p, read_only=True, timeout=1)
+            pkl2 = CompressedStorage(test_p, read_only=True, timeout=1)
             logging.info('PASSED: create_success_expected')
             q3.put(0)
         except RuntimeError as e:
@@ -121,7 +119,7 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
         for i in range(100):
             ad[i] = {"glia_probability": np.ones((10, 2)).astype(np.uint8)}
         start = time.time()
-        ad.save2pkl()
+        ad.push()
         logging.debug("Saving AttributeDict took %0.4f." % (time.time() - start))
         logging.debug("AttributeDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del ad
@@ -133,14 +131,14 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
         start = time.time()
         ad = AttributeDict(test_p, read_only=True)
         logging.debug("Loading AttributeDict took %0.4f." % (time.time() - start))
-        assert len(ad.keys()) == 100
+        assert len(list(ad.keys())) == 100
         assert np.all(ad[0]["glia_probability"] == np.ones((10, 2)).astype(np.uint8))
         ad.update({100: "b"})
         assert 100 in ad
         start = time.time()
         dc_constr = ad.copy_intern()
         logging.debug("Copying dict from AttributeDict took %0.4f." % (time.time() - start))
-        assert len(dc_constr.keys()) == 101
+        assert len(list(dc_constr.keys())) == 101
         del ad
         os.remove(test_p)
         logging.info('PASSED: test_loading_and_copying_process_for_Attribute_dict')
@@ -151,13 +149,13 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
 def test_compression_and_decompression_for_mesh_dict():
 
     try:
-        md = MeshDict(test_p, read_only=False)
+        md = MeshStorage(test_p, read_only=False)
         md[1] = [np.ones(100).astype(np.uint32), np.zeros(200).astype(np.float32)]
 
         logging.debug("MeshDict arr size (zeros, uncompr.):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in md[1]]) / 1.e3))
         logging.debug("MeshDict arr size (zeros, uncompr.):\t%s" % ([a.shape for a in md[1]]))
 
-        md.save2pkl()
+        md.push()
 
     except Exception as e:
         logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 1 ' + str(e))
@@ -165,14 +163,14 @@ def test_compression_and_decompression_for_mesh_dict():
 
     # checks if lock release after saving works by saving a second time without acquiring lock
     try:
-        md.save2pkl()
+        md.push()
         logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 2 ' + str(e))
-    except Exception, e:
+    except Exception as e:
         assert str(e) ==  "Unable to release an unacquired lock"
     logging.debug("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
 
     # checks mesh dict compression with highest entropy data
-    md = MeshDict(test_p, read_only=False)
+    md = MeshStorage(test_p, read_only=False)
     mesh = [np.random.randint(0, 100, 1000).astype(np.uint32), np.random.rand(2000, ).astype(np.float32)]
     md[1] = mesh
     try:
@@ -184,13 +182,13 @@ def test_compression_and_decompression_for_mesh_dict():
         "MeshDict arr size (random, uncompr.):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in md[1]]) / 1.e3))
     logging.debug("MeshDict arr size (random, uncompr.):\t%s" % (([a.shape for a in md[1]])))
 
-    md.save2pkl()
+    md.push()
     logging.debug("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
     del md
 
     # checks decompression
     try:
-        md = MeshDict(test_p, read_only=True)
+        md = MeshStorage(test_p, read_only=True)
         assert np.allclose(md[1][0], mesh[0])
         assert np.allclose(md[1][1], mesh[1])
         os.remove(test_p)
@@ -204,7 +202,7 @@ def test_compression_and_decompression_for_voxel_dict():
     try:
         # tests least entropy data
         start = time.time()
-        vd = VoxelDict(test_p, read_only=False, cache_decomp=True)
+        vd = VoxelStorage(test_p, read_only=False, cache_decomp=True)
         voxel_masks = [np.zeros((512, 512, 256)).astype(np.uint8),
                        np.zeros((300, 400, 200)).astype(np.uint8)] * 5
         offsets = np.random.randint(0, 1000, (10, 3))
@@ -212,7 +210,7 @@ def test_compression_and_decompression_for_voxel_dict():
         logging.debug("VoxelDict arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
         start_comp = time.time()
         vd[8192734] = [voxel_masks, offsets]
-        vd.save2pkl()
+        vd.push()
         logging.debug("VoxelDict compression and file writing took %0.4fs." % (time.time() - start_comp))
         logging.debug("VoxelDict file size (zeros):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
@@ -223,7 +221,7 @@ def test_compression_and_decompression_for_voxel_dict():
     # tests decompressing
     try:
         start_loading = time.time()
-        vd = VoxelDict(test_p, read_only=True, cache_decomp=True)
+        vd = VoxelStorage(test_p, read_only=True, cache_decomp=True)
         logging.debug("Finished loading of compressed VoxelDict after %0.4fs." % (time.time() - start_loading))
         start = time.time()
         _ = vd[8192734]
@@ -240,7 +238,7 @@ def test_compression_and_decompression_for_voxel_dict():
         start_appending = time.time()
         for i_voxel_mask in range(len(voxel_masks)):
             vd.append(8192734, voxel_masks[i_voxel_mask], offsets[i_voxel_mask])
-        vd.save2pkl()
+        vd.push()
         logging.debug("VoxelDict appending, compression and file writing took %0.4fs." % (time.time() - start_comp))
         logging.debug("VoxelDict file size (zeros):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
@@ -251,7 +249,7 @@ def test_compression_and_decompression_for_voxel_dict():
 
     # checks high entropy data
     try:
-        vd = VoxelDict(test_p, read_only=False)
+        vd = VoxelStorage(test_p, read_only=False)
         voxel_masks = [np.random.randint(0, 1, (512, 512, 256)).astype(np.uint8),
                        np.random.randint(0, 1, (300, 400, 200)).astype(np.uint8)] * 5
         offsets = np.random.randint(0, 1000, (10, 3))
@@ -259,11 +257,11 @@ def test_compression_and_decompression_for_voxel_dict():
                      (np.sum([a.__sizeof__() for a in voxel_masks]) / 1.e3))
         logging.debug("VoxelDict arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
         vd[8192734] = [voxel_masks, offsets]
-        vd.save2pkl()
+        vd.push()
         logging.debug("VoxelDict file size (random):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
         # tests decompressing
-        vd = VoxelDict(test_p, read_only=True, cache_decomp=True)
+        vd = VoxelStorage(test_p, read_only=True, cache_decomp=True)
         start = time.time()
         _ = vd[8192734]
         logging.debug("Finished decompression of VoxelDict after %0.4fs." % (time.time() - start))
@@ -285,7 +283,7 @@ def test_compression_and_decompression_for_voxel_dictL():
     # tests least entropy data
     try:
         start = time.time()
-        vd = VoxelDictL(test_p, read_only=False, cache_decomp=True)
+        vd = VoxelStorageL(test_p, read_only=False, cache_decomp=True)
         voxel_masks = [np.zeros((512, 512, 256)).astype(np.uint8),
                        np.zeros((300, 400, 200)).astype(np.uint8)] * 5
         offsets = np.random.randint(0, 1000, (10, 3))
@@ -293,7 +291,7 @@ def test_compression_and_decompression_for_voxel_dictL():
         logging.debug("VoxelDictL arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
         start_comp = time.time()
         vd[8192734] = [voxel_masks, offsets]
-        vd.save2pkl()
+        vd.push()
         logging.debug("VoxelDictL compression and file writing took %0.4fs." % (time.time() - start_comp))
         logging.debug("VoxelDictL file size (zeros):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
@@ -304,7 +302,7 @@ def test_compression_and_decompression_for_voxel_dictL():
     # tests decompressing
     try:
         start_loading = time.time()
-        vd = VoxelDictL(test_p, read_only=True, cache_decomp=True)
+        vd = VoxelStorageL(test_p, read_only=True, cache_decomp=True)
         logging.debug("Finished loading of compressed VoxelDictL after %0.4fs." % (time.time() - start_loading))
         start = time.time()
         _ = vd[8192734]
@@ -320,7 +318,7 @@ def test_compression_and_decompression_for_voxel_dictL():
         start_appending = time.time()
         for i_voxel_mask in range(len(voxel_masks)):
             vd.append(8192734, voxel_masks[i_voxel_mask], offsets[i_voxel_mask])
-        vd.save2pkl()
+        vd.push()
         logging.debug("VoxelDictL appending, compression and file writing took %0.4fs." % (time.time() - start_comp))
         logging.debug("VoxelDictL file size (zeros):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
@@ -332,18 +330,18 @@ def test_compression_and_decompression_for_voxel_dictL():
 
     # checks high entropy data
     try:
-        vd = VoxelDictL(test_p, read_only=False)
+        vd = VoxelStorageL(test_p, read_only=False)
         voxel_masks = [np.random.randint(0, 1, (512, 512, 256)).astype(np.uint8),
                        np.random.randint(0, 1, (300, 400, 200)).astype(np.uint8)] * 5
         offsets = np.random.randint(0, 1000, (10, 3))
         logging.debug("\nVoxelDictL arr size (random):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in voxel_masks]) / 1.e3))
         logging.debug("VoxelDictL arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
         vd[8192734] = [voxel_masks, offsets]
-        vd.save2pkl()
+        vd.push()
         logging.debug("VoxelDict file size (random):\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
         del vd
         # tests decompressing
-        vd = VoxelDictL(test_p, read_only=True, cache_decomp=True)
+        vd = VoxelStorageL(test_p, read_only=True, cache_decomp=True)
         start = time.time()
         _ = vd[8192734]
         logging.debug("Finished decompression of VoxelDictL after %0.4fs." % (time.time() - start))
@@ -384,7 +382,7 @@ def test_basics_write_txt2kzip():
 def test_basics_write_data2kzip():
 
     """
-    Checks the write_data2kzipfunction in syconnfs.handler.basics
+    Checks the write_data2kzipfunction in syconn.handler.basics
     Returns an assertion error if an exception is thrown
     -------
 
@@ -402,7 +400,6 @@ def test_basics_write_data2kzip():
         os.remove(dir_path + '/test.kzip')
     if os.path.isfile(dir_path + '/test.txt'):
         os.remove(dir_path + '/test.txt')
-
 
 
 def test_read_txt_from_zip():

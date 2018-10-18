@@ -2,13 +2,12 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
+except ImportError:
     import pickle as pkl
 
 import numpy as np
@@ -19,19 +18,18 @@ from collections import Counter
 from multiprocessing.pool import ThreadPool
 
 from knossos_utils import knossosdataset
-
-from ..reps import segmentation
+from . import segmentation  # TODO: del
+# from ..reps import segmentation
 from ..config import parser
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
-
 from ..proc.ssd_assembly import assemble_from_mergelist
 from ..mp import qsub_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 try:
     default_wd_available = True
@@ -55,7 +53,7 @@ class SuperSegmentationDataset(object):
         """
         self.ssv_dict = {}
         self.mapping_dict = {}
-        self.reversed_mapping_dict = {}
+        self._mapping_dict_reversed = None
 
         self._type = ssd_type
         self._id_changer = []
@@ -153,16 +151,16 @@ class SuperSegmentationDataset(object):
         return os.path.exists(self.mapping_dict_path)
 
     @property
-    def reversed_mapping_dict_exists(self):
-        return os.path.exists(self.reversed_mapping_dict_path)
+    def mapping_dict_reversed_exists(self):
+        return os.path.exists(self.mapping_dict_reversed_path)
 
     @property
     def mapping_dict_path(self):
         return self.path + "/mapping_dict.pkl"
 
     @property
-    def reversed_mapping_dict_path(self):
-        return self.path + "/reversed_mapping_dict.pkl"
+    def mapping_dict_reversed_path(self):
+        return self.path + "/mapping_dict_reversed.pkl"
 
     @property
     def id_changer_path(self):
@@ -177,25 +175,35 @@ class SuperSegmentationDataset(object):
         return os.path.exists(self.id_changer_path)
 
     @property
+    def mapping_dict_reversed(self):
+        if self._mapping_dict_reversed is None:
+            if self.mapping_dict_reversed_exists:
+                self.load_mapping_dict_reversed()
+            else:
+                self._mapping_dict_reversed = {}
+                self.load_mapping_dict()
+                for k, v in self.mapping_dict.items():
+                    for ix in v:
+                        self._mapping_dict_reversed[ix] = k
+                self.save_mapping_dict_reversed()
+        return self._mapping_dict_reversed
+
+
+    @property
     def ssv_ids(self):
         if self._ssv_ids is None:
             if len(self.mapping_dict) > 0:
-                return self.mapping_dict.keys()
-            elif len(self.ssv_dict) > 0:
-                return self.ssv_dict.keys()
+                self._ssv_ids = np.array(list(self.mapping_dict.keys()))
             elif self.mapping_dict_exists:
                 self.load_mapping_dict()
-                return self.mapping_dict.keys()
+                self._ssv_ids = np.array(list(self.mapping_dict.keys()))
             elif os.path.exists(self.path + "/ids.npy"):
                 self._ssv_ids = np.load(self.path + "/ids.npy")
-                return self._ssv_ids
             else:
                 paths = glob.glob(self.path + "/so_storage/*/*/*/")
                 self._ssv_ids = np.array([int(os.path.basename(p.strip("/")))
-                                          for p in paths], dtype=np.int)
-                return self._ssv_ids
-        else:
-            return self._ssv_ids
+                                          for p in paths], dtype=np.uint)
+        return self._ssv_ids
 
     @property
     def ssvs(self):
@@ -206,7 +214,14 @@ class SuperSegmentationDataset(object):
             ix += 1
 
     @property
+    def sv_ids(self):
+        self.load_mapping_dict()
+        return np.concatenate(self.mapping_dict.values())
+
+    @property
     def id_changer(self):
+        # TODO: Understand reason for 'id_changer' and
+        # replace it by 'mapping_dict_reversed'
         if len(self._id_changer) == 0:
             self.load_id_changer()
         return self._id_changer
@@ -230,31 +245,55 @@ class SuperSegmentationDataset(object):
 
     def get_super_segmentation_object(self, obj_id, new_mapping=False,
                                       caching=True, create=False):
-        if new_mapping:
-            sso = SuperSegmentationObject(obj_id,
-                                          self.version,
-                                          self.version_dict,
-                                          self.working_dir,
-                                          ssd_type=self.type,
-                                          create=create,
-                                          sv_ids=self.mapping_dict[obj_id],
-                                          scaling=self.scaling,
-                                          object_caching=caching,
-                                          voxel_caching=caching,
-                                          mesh_caching=caching,
-                                          view_caching=caching)
+        """
+        SuperSegmentationObject factory method for single ID or list of IDs.
+
+        Parameters
+        ----------
+        obj_id : int or list of int
+        new_mapping : bool
+        caching : bool
+        create : bool
+
+        Returns
+        -------
+        SuperSegmentationObject or list of SuperSegmentationObject
+        """
+        if np.isscalar(obj_id):
+            if new_mapping:
+                sso = SuperSegmentationObject(obj_id,
+                                              self.version,
+                                              self.version_dict,
+                                              self.working_dir,
+                                              ssd_type=self.type,
+                                              create=create,
+                                              sv_ids=self.mapping_dict[obj_id],
+                                              scaling=self.scaling,
+                                              object_caching=caching,
+                                              voxel_caching=caching,
+                                              mesh_caching=caching,
+                                              view_caching=caching,
+                                              enable_locking_so=False)
+            else:
+                sso = SuperSegmentationObject(obj_id,
+                                              self.version,
+                                              self.version_dict,
+                                              self.working_dir,
+                                              ssd_type=self.type,
+                                              create=create,
+                                              scaling=self.scaling,
+                                              object_caching=caching,
+                                              voxel_caching=caching,
+                                              mesh_caching=caching,
+                                              view_caching=caching,
+                                              enable_locking_so=False)
+            sso._dataset = self
         else:
-            sso = SuperSegmentationObject(obj_id,
-                                          self.version,
-                                          self.version_dict,
-                                          self.working_dir,
-                                          ssd_type=self.type,
-                                          create=create,
-                                          scaling=self.scaling,
-                                          object_caching=caching,
-                                          voxel_caching=caching,
-                                          mesh_caching=caching,
-                                          view_caching=caching)
+            sso = []
+            for ix in obj_id:
+                # call it with scalar input recursively
+                sso.append(self.get_super_segmentation_object(ix, create=create,
+                           new_mapping=new_mapping, caching=caching))
         return sso
 
     def save_dataset_shallow(self):
@@ -264,39 +303,12 @@ class SuperSegmentationDataset(object):
 
     def save_dataset_deep(self, extract_only=False, attr_keys=(), stride=1000,
                           qsub_pe=None, qsub_queue=None, nb_cpus=1,
-                          n_max_co_processes=None):
+                          n_max_co_processes=None, new_mapping=True):
         save_dataset_deep(self, extract_only=extract_only,
                           attr_keys=attr_keys, stride=stride,
                           qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-                          nb_cpus=nb_cpus,
+                          nb_cpus=nb_cpus, new_mapping=new_mapping,
                           n_max_co_processes=n_max_co_processes)
-
-    # def export_to_knossosdataset(self, kd, stride=1000, qsub_pe=None,
-    #                              qsub_queue=None, nb_cpus=10):
-    #     ssd.export_to_knossosdataset(self, kd, stride=stride, qsub_pe=qsub_pe,
-    #                                              qsub_queue=qsub_queue, nb_cpus=nb_cpus)
-
-    # def convert_knossosdataset(self, sv_kd_path, ssv_kd_path,
-    #                            stride=256, qsub_pe=None, qsub_queue=None,
-    #                            nb_cpus=None):
-    #     ssd.convert_knossosdataset(self, sv_kd_path, ssv_kd_path,
-    #                                            stride=stride, qsub_pe=qsub_pe,
-    #                                            qsub_queue=qsub_queue, nb_cpus=nb_cpus)
-
-    # def aggregate_segmentation_object_mappings(self, obj_types,
-    #                                            stride=1000, qsub_pe=None,
-    #                                            qsub_queue=None, nb_cpus=1):
-    #     ssd.aggregate_segmentation_object_mappings(self, obj_types,
-    #                                               stride=stride,
-    #                                               qsub_pe=qsub_pe,
-    #                                               qsub_queue=qsub_queue,
-    #                                               nb_cpus=nb_cpus)
-
-    # def apply_mapping_decisions(self, obj_types, stride=1000, qsub_pe=None,
-    #                             qsub_queue=None, nb_cpus=1):
-    #     ssd.apply_mapping_decisions(self, obj_types, stride=stride,
-    #                                qsub_pe=qsub_pe, qsub_queue=qsub_pe,
-    #                                nb_cpus=nb_cpus)
 
     def reskeletonize_objects(self, stride=200, small=True, big=True,
                               qsub_pe=None, qsub_queue=None, nb_cpus=1,
@@ -365,7 +377,7 @@ class SuperSegmentationDataset(object):
             out_files = glob.glob(path_to_out + "/*")
             no_skel_cnt = 0
             for out_file in out_files:
-                with open(out_file) as f:
+                with open(out_file, 'rb') as f:
                     no_skel_cnt += np.sum(pkl.load(f))
 
         else:
@@ -456,18 +468,18 @@ class SuperSegmentationDataset(object):
         if len(self.mapping_dict) > 0:
             write_obj2pkl(self.mapping_dict_path, self.mapping_dict)
 
-    def save_reversed_mapping_dict(self):
-        if len(self.reversed_mapping_dict) > 0:
-            write_obj2pkl(self.reversed_mapping_dict_path,
-                          self.reversed_mapping_dict)
+    def save_mapping_dict_reversed(self):
+        if len(self.mapping_dict_reversed) > 0:
+            write_obj2pkl(self.mapping_dict_reversed_path,
+                          self._mapping_dict_reversed)
 
     def load_mapping_dict(self):
         assert self.mapping_dict_exists
         self.mapping_dict = load_pkl2obj(self.mapping_dict_path)
 
-    def load_reversed_mapping_dict(self):
-        assert self.reversed_mapping_dict_exists
-        self.reversed_mapping_dict = load_pkl2obj(self.reversed_mapping_dict_path)
+    def load_mapping_dict_reversed(self):
+        assert self.mapping_dict_reversed_exists
+        self._mapping_dict_reversed = load_pkl2obj(self.mapping_dict_reversed_path)
 
     def save_id_changer(self):
         if len(self._id_changer) > 0:
@@ -478,123 +490,9 @@ class SuperSegmentationDataset(object):
         self._id_changer = np.load(self.id_changer_path)
 
 
-# # UTILITIES
-# # TODO: Refactoring needed, move as much utilities to proc module
-# #  exists partially in ssd_proc, whats the difference of ssd_assembly, ssd_proc?
-# def aggregate_segmentation_object_mappings(ssd, obj_types,
-#                                            stride=1000, qsub_pe=None,
-#                                            qsub_queue=None, nb_cpus=1):
-#     for obj_type in obj_types:
-#         assert obj_type in ssd.version_dict
-#     assert "sv" in ssd.version_dict
-#
-#     multi_params = []
-#     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-#                          for i in
-#                          range(0, len(ssd.ssv_ids), stride)]:
-#         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-#                              ssd.working_dir, obj_types])
-#
-#     if qsub_pe is None and qsub_queue is None:
-#         results = sm.start_multiprocess(
-#             _aggregate_segmentation_object_mappings_thread,
-#             multi_params, nb_cpus=nb_cpus)
-#
-#     elif qu.__QSUB__:
-#         path_to_out = qu.QSUB_script(multi_params,
-#                                      "aggregate_segmentation_object_mappings",
-#                                      pe=qsub_pe, queue=qsub_queue,
-#                                      script_folder=script_folder)
-#
-#     else:
-#         raise Exception("QSUB not available")
-#
-#
-# def _aggregate_segmentation_object_mappings_thread(args):
-#     ssv_obj_ids = args[0]
-#     version = args[1]
-#     version_dict = args[2]
-#     working_dir = args[3]
-#     obj_types = args[4]
-#
-#     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-#     ssd.load_mapping_dict()
-#
-#     for ssv_id in ssv_obj_ids:
-#         ssv = ssd.get_super_segmentation_object(ssv_id, True)
-#         mappings = dict((obj_type, Counter()) for obj_type in obj_types)
-#
-#         for sv in ssv.svs:
-#             sv.load_attr_dict()
-#             for obj_type in obj_types:
-#                 if "mapping_%s_ids" % obj_type in sv.attr_dict:
-#                     keys = sv.attr_dict["mapping_%s_ids" % obj_type]
-#                     values = sv.attr_dict["mapping_%s_ratios" % obj_type]
-#                     mappings[obj_type] += Counter(dict(zip(keys, values)))
-#
-#         ssv.load_attr_dict()
-#         for obj_type in obj_types:
-#             if obj_type in mappings:
-#                 ssv.attr_dict["mapping_%s_ids" % obj_type] = \
-#                     mappings[obj_type].keys()
-#                 ssv.attr_dict["mapping_%s_ratios" % obj_type] = \
-#                     mappings[obj_type].values()
-#
-#         ssv.save_attr_dict()
-#
-#
-# def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
-#                             qsub_queue=None, nb_cpus=1):
-#     for obj_type in obj_types:
-#         assert obj_type in ssd.version_dict
-#
-#     multi_params = []
-#     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-#                          for i in
-#                          range(0, len(ssd.ssv_ids), stride)]:
-#         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-#                              ssd.working_dir, obj_types])
-#
-#     if qsub_pe is None and qsub_queue is None:
-#         results = sm.start_multiprocess(_apply_mapping_decisions_thread,
-#                                         multi_params, nb_cpus=nb_cpus)
-#
-#     elif qu.__QSUB__:
-#         path_to_out = qu.QSUB_script(multi_params,
-#                                      "apply_mapping_decisions",
-#                                      pe=qsub_pe, queue=qsub_queue,
-#                                      script_folder=script_folder)
-#
-#     else:
-#         raise Exception("QSUB not available")
-#
-#
-# def _apply_mapping_decisions_thread(args):
-#     ssv_obj_ids = args[0]
-#     version = args[1]
-#     version_dict = args[2]
-#     working_dir = args[3]
-#     obj_types = args[4]
-#
-#     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-#     ssd.load_mapping_dict()
-#
-#     for ssv_id in ssv_obj_ids:
-#         ssv = ssd.get_super_segmentation_object(ssv_id, True)
-#         for obj_type in obj_types:
-#             if obj_type == "sj":
-#                 correct_for_background = True
-#             else:
-#                 correct_for_background = False
-#
-#             ssv.apply_mapping_decision(obj_type,
-#                                        correct_for_background=correct_for_background,
-#                                        save=True)
-#
-#
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
                       qsub_pe=None, qsub_queue=None, nb_cpus=1,
-                      n_max_co_processes=None):
+                      n_max_co_processes=None, new_mapping=True):
     ssd.save_dataset_shallow()
 
     multi_params = []
@@ -602,7 +500,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
                          for i in range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, extract_only, attr_keys,
-                             ssd._type])
+                             ssd._type, new_mapping])
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(
@@ -620,7 +518,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
     else:
         raise Exception("QSUB not available")
@@ -644,6 +542,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
         else:
             np.save(ssd.path + "/%ss.npy" % attribute,
                     attr_dict[attribute])
+
 #
 #
 def _write_super_segmentation_dataset_thread(args):
@@ -654,6 +553,7 @@ def _write_super_segmentation_dataset_thread(args):
     extract_only = args[4]
     attr_keys = args[5]
     ssd_type = args[6]
+    new_mapping = args[7]
 
     ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
                                    ssd_type=ssd_type, version_dict=version_dict)
@@ -667,9 +567,8 @@ def _write_super_segmentation_dataset_thread(args):
     attr_dict = dict(id=[])
 
     for ssv_obj_id in ssv_obj_ids:
-        print(ssv_obj_id)
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
-                                                    new_mapping=True,
+                                                    new_mapping=new_mapping,
                                                     create=True)
         if ssv_obj.attr_dict_exists:
             ssv_obj.load_attr_dict()
@@ -721,7 +620,7 @@ def _write_super_segmentation_dataset_thread(args):
 
                 attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
 
-                ssv_obj.save_attr_dict()
+            ssv_obj.save_attr_dict()
     return attr_dict
 
 
@@ -888,7 +787,7 @@ def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
         out_files = glob.glob(path_to_out + "/*")
         no_skel_cnt = 0
         for out_file in out_files:
-            with open(out_file) as f:
+            with open(out_file, 'rb') as f:
                 no_skel_cnt += np.sum(pkl.load(f))
 
     else:
@@ -1142,62 +1041,6 @@ def convert_knossosdataset_thread(args):
                                     nb_threads=nb_threads)
 
 
-def aggregate_segmentation_object_mappings_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        mappings = dict((obj_type, Counter()) for obj_type in obj_types)
-
-        for sv in ssv.svs:
-            sv.load_attr_dict()
-            for obj_type in obj_types:
-                if "mapping_%s_ids" % obj_type in sv.attr_dict:
-                    keys = sv.attr_dict["mapping_%s_ids" % obj_type]
-                    values = sv.attr_dict["mapping_%s_ratios" % obj_type]
-                    mappings[obj_type] += Counter(dict(zip(keys, values)))
-
-        ssv.load_attr_dict()
-        for obj_type in obj_types:
-            if obj_type in mappings:
-                ssv.attr_dict["mapping_%s_ids" % obj_type] = \
-                    mappings[obj_type].keys()
-                ssv.attr_dict["mapping_%s_ratios" % obj_type] = \
-                    mappings[obj_type].values()
-
-        ssv.save_attr_dict()
-
-
-def apply_mapping_decisions_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        for obj_type in obj_types:
-            if obj_type == "sj":
-                correct_for_background = True
-            else:
-                correct_for_background = False
-
-            ssv.apply_mapping_decision(obj_type,
-                                       correct_for_background=correct_for_background,
-                                       save=True)
-
-
 def reskeletonize_objects_small_ones_thread(args):
     ssv_obj_ids = args[0]
     version = args[1]
@@ -1319,3 +1162,37 @@ def write_super_segmentation_dataset_thread(args):
                 ssv_obj.save_attr_dict()
 
     return attr_dict
+
+
+def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1):
+    """
+    Creates a new SSD specified with 'version' with a copy of the given SSVs.
+    Usually used for generating distinct GT SSDs. Based on the common supervoxel
+    dataset.
+
+    Parameters
+    ----------
+    ssvs : list of SuperSegmentationObject
+        source SuperSegmentationObjects
+    new_version : str
+        version of the new SSV SuperSegmentationDataset
+    target_wd :
+        path to working directory. If None, the one set in gloabal_prams is used
+    n_jobs : int
+    """
+    if target_wd is None:
+        if not default_wd_available:
+            raise ValueError("Global working directory not set, 'target_wd' "
+                             "has to be given.")
+        target_wd = wd
+    scaling = ssvs[0].scaling
+    new_ssd = SuperSegmentationDataset(working_dir=target_wd, version=new_version,
+                                       scaling=scaling)
+    for old_ssv in ssvs:
+        new_ssv = SuperSegmentationObject(old_ssv.id, version=new_version,
+                                          working_dir=target_wd, sv_ids=old_ssv.sv_ids,
+                                          scaling=old_ssv.scaling)
+        old_ssv.copy2dir(dest_dir=new_ssv.ssv_dir)
+    print("Saving dataset deep.")
+    new_ssd.save_dataset_deep(new_mapping=False, nb_cpus=n_jobs)
+

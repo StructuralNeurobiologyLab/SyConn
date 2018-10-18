@@ -23,12 +23,11 @@ history_freq = 300
 monitor_batch_size = 240
 optimiser = 'Adam'
 data_batch_args = {}
-data_init_kwargs = {"channels_to_load": (0, ), "nb_views": 2, "glia_only": True,
-                    "augmentation": False, "clahe": False, "reduce_context": 96,
-                    "reduce_context_fact": 1, "squeeze": True}
+data_init_kwargs = {"nb_views": 2, "reduce_context": 0,
+                    "reduce_context_fact": 1}
 optimiser_params = dict(lr=10e-4, mom=0.9, wd=0.5e-3, beta2=0.99)
 batch_size = 40
-schedules = {'lr': {'updates': [(10000, 8e-4), (40000, 7e-4), (100000, 6e-4), (180000, 4e-4), (300000, 2e-4)]}}
+schedules = {"lr": {"dec": 0.99}}#{'lr': {'updates': [(10000, 8e-4), (40000, 7e-4), (100000, 6e-4), (180000, 4e-4), (300000, 2e-4)]}}
 dr = 0.1
 
 x = 128
@@ -46,30 +45,28 @@ if data_init_kwargs["reduce_context_fact"] > 1:
 
 def create_model():
     from elektronn2 import neuromancer
-    import theano
 
     act = 'relu'
-    in_sh = (batch_size, len(data_init_kwargs["channels_to_load"]),
-             data_init_kwargs["nb_views"], int(x), int(y))
+    in_sh = (batch_size, 1, data_init_kwargs["nb_views"], int(x), int(y))
     inp = neuromancer.Input(in_sh, 'b,f,z,y,x', name='raw')
 
     out0 = neuromancer.Conv(inp, 13, (1, 5, 5), (1, 2, 2), activation_func=act, dropout_rate=dr)
-    out0 = neuromancer.Conv(out0, 19, (1, 5, 5), (1, 2, 2), activation_func=act, dropout_rate=dr)
-    # out0 = neuromancer.Conv(out0, 25, (1, 4, 4), (1, 2, 2), activation_func=act, dropout_rate=dr)
-    # out0 = neuromancer.Conv(out0, 25, (1, 4, 4), (1, 2, 2), activation_func=act, dropout_rate=dr)
-    out0 = neuromancer.Conv(out0, 30, (1, 2, 2), (1, 2, 2), activation_func=act, dropout_rate=dr)
-    # out0 = neuromancer.Conv(out0, 30, (1, 1, 1), (1, 2, 2), activation_func=act, dropout_rate=dr)
+    out0 = neuromancer.Conv(out0, 17, (1, 5, 5), (1, 2, 2), activation_func=act, dropout_rate=dr)
+    out0 = neuromancer.Conv(out0, 21, (1, 4, 4), (1, 2, 2), activation_func=act, dropout_rate=dr)
+    out0 = neuromancer.Conv(out0, 25, (1, 4, 4), (1, 2, 2), activation_func=act, dropout_rate=dr)
+    out0 = neuromancer.Conv(out0, 29, (1, 2, 2), (1, 2, 2), activation_func=act, dropout_rate=dr)
+    out0 = neuromancer.Conv(out0, 30, (1, 1, 1), (1, 2, 2), activation_func=act, dropout_rate=dr)
     out = neuromancer.Conv(out0, 31, (1, 1, 1), (1, 1, 1), activation_func=act, dropout_rate=dr)
 
     out = neuromancer.Perceptron(out, 50, flatten=True, dropout_rate=dr)
     out = neuromancer.Perceptron(out, 30, flatten=True, dropout_rate=dr)
-    out = neuromancer.Perceptron(out, 2 if data_init_kwargs["glia_only"] else 4,
-                                 activation_func='lin')
+    out = neuromancer.Perceptron(out, 2, activation_func='lin')
     out = neuromancer.Softmax(out)
     target = neuromancer.Input_like(out, override_f=1, name='target')
-    weights = neuromancer.ValueNode((2 if data_init_kwargs["glia_only"] else 4,), 'f', value=(1, 4) if data_init_kwargs["glia_only"] else (5, 1, 4, 2))
+    weights = neuromancer.ValueNode((2, ), 'f', value=(4, 1))
     loss = neuromancer.MultinoulliNLL(out, target, name='nll_',
-                                      target_is_sparse=True,class_weights=weights)
+                                      target_is_sparse=True,
+                                      class_weights=weights)
     # Objective
     loss = neuromancer.AggregateLoss(loss)
     # Monitoring  / Debug outputs

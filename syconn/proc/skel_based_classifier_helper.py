@@ -2,13 +2,14 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 
 import numpy as np
-from syconn.reps import super_segmentation as ss
-import syconn.reps.super_segmentation_helper as ssh
+from ..reps import super_segmentation as ss
+from ..reps import super_segmentation_helper as ssh
 import os
+from ..proc import log_proc
 
 
 def generate_clf_data_thread(args):
@@ -18,6 +19,7 @@ def generate_clf_data_thread(args):
     feature_contexts_nm = args[3]
     save_path = args[4]
     comment_converter = args[5]
+    overwrite = args[6]
 
     ssd = ss.SuperSegmentationDataset(working_dir, version=ssd_version)
     sso = ssd.get_super_segmentation_object(this_id)
@@ -28,9 +30,12 @@ def generate_clf_data_thread(args):
         if os.path.isfile(sso.skeleton_kzip_path):
             label_array = ssh.label_array_for_sso_skel(sso, comment_converter)
             if not np.all(label_array == -1):
+                print("Found node-wise annotations in {}.".format(sso.skeleton_kzip_path))
                 label_dir, label_fname = os.path.split(save_path)
                 label_save_path = label_dir + "/" + \
                                   label_fname.replace("features", "labels")
                 np.save(label_save_path % (feature_context_nm, this_id), label_array)
-        feats = sso.skel_features(feature_context_nm=feature_context_nm)
+        feats = sso.skel_features(feature_context_nm=feature_context_nm, overwrite=overwrite)
+        log_proc.debug('feature array shape {}; feature context {} nm;'
+                       ' SSV {}'.format(feats.shape, feature_context_nm, sso.id))
         np.save(save_path % (feature_context_nm, this_id), feats)

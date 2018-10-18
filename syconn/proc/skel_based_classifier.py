@@ -7,9 +7,8 @@
 
 try:
     import cPickle as pkl
-# TODO: switch to Python3 at some point and remove above
-except Exception:
-    import Pickle as pkl
+except ImportError:
+    import pickle as pkl
 import glob
 import numpy as np
 import os
@@ -18,23 +17,25 @@ from collections import Counter
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, AdaBoostClassifier
 from sklearn.externals import joblib
 from sklearn.metrics import precision_recall_fscore_support, precision_recall_curve
-if "matplotlib" not in globals():
-    import matplotlib
-    matplotlib.use("agg")
+import matplotlib
+matplotlib.use("Agg", warn=False, force=True)
 from matplotlib import pyplot as plt
 
-import skel_based_classifier_helper as sbch
+from . import skel_based_classifier_helper as sbch
+from ..handler.basics import load_pkl2obj
+from ..handler.logger import initialize_logging
 from ..reps import super_segmentation as ss
 from ..proc.stats import model_performance
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
+from ..config.global_params import wd
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-
+logger_skel = initialize_logging('skeleton')
 feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",
                "Hist4", "Hist5", "Hist6", "Hist7", "Hist8", "Hist9", "Hist10",
                "Mean node degree", "N sj", "Mean size sj", "STD size sj",
                "N mi", "Mean size mi", "STD size mi", "N vc", "Mean size vc",
-               "STD size vc"]
+               "STD size vc", "node density"]
 
 colorVals = [[0.841, 0.138, 0.133, 1.],
              [0.35, 0.725, 0.106, 1.],
@@ -64,13 +65,15 @@ class SkelClassifier(object):
         elif target_type == "spiness":
             ssd_version = "spgt"
         else:
-            raise NotImplementedError
+            raise ValueError("'target_type' has to be one of "
+                             "['axoness', 'spiness']")
         self._target_type = target_type
         self._ssd_version = ssd_version
         self._working_dir = working_dir
         self._clf = None
         self._ssd = None
         self.label_dict = None
+        self.splitting_dict = None
 
         if create and not os.path.exists(self.path):
             os.makedirs(self.path)
@@ -97,8 +100,7 @@ class SkelClassifier(object):
 
     @property
     def splitting_fname(self):
-        return self.working_dir + "/ssv_%s/%s_splitting.pkl"\
-               % (self.ssd_version, self.ssd_version)
+        return self.working_dir + "/ssv_{}/{}_splitting.pkl".format(self.ssd_version, self.ssd_version)
 
     @property
     def label_dict_fname(self):
@@ -107,8 +109,8 @@ class SkelClassifier(object):
 
     @property
     def path(self):
-        return self.working_dir + "/skel_clf_%s_%s" % \
-              (self.target_type, self.ssd_version)
+        return self.working_dir + "/skel_clf_{}_{}".format(
+            self.target_type, self.ssd_version)
 
     @property
     def labels_path(self):
@@ -135,7 +137,7 @@ class SkelClassifier(object):
         return self._ssd
 
     def avail_feature_contexts(self, clf_name):
-        paths = glob.glob(self.clf_path + "/*%s*.pkl" % clf_name)
+        paths = glob.glob(self.clf_path + "/*{}*.pkl".format(clf_name))
         feature_contexts = set()
         for path in paths:
             fc = int(re.findall("[\d]+", os.path.basename(path))[-1])
@@ -146,24 +148,34 @@ class SkelClassifier(object):
     def load_label_dict(self):
         if self.label_dict is None:
             if self.ssd_version in ["axgt", "spgt", "ctgt"]:
-                with open(self.label_dict_fname, "r") as f:
+                with open(self.label_dict_fname, "rb") as f:
                     self.label_dict = pkl.load(f)
             else:
-                raise()
+                msg = "SSD version wrong."
+                logger_skel.critical(msg)
+                raise ValueError(msg)
+
+    def load_splitting_dict(self):
+        if self.splitting_dict is None:
+            assert os.path.isfile(self.splitting_fname)
+            self.splitting_dict = load_pkl2obj(self.splitting_fname)
 
     def generate_data(self, feature_contexts_nm=(500, 1000, 2000, 4000, 8000), stride=10,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=1):
+                      qsub_pe=None, qsub_queue=None, nb_cpus=1, overwrite=True):
         self.load_label_dict()
-
+        self.load_splitting_dict()
         multi_params = []
+        sso_ids = np.concatenate(list(self.splitting_dict.values())).astype(
+            np.int)
         for fc_block in [feature_contexts_nm[i:i + stride]
-                         for i in xrange(0, len(feature_contexts_nm), stride)]:
-            for this_id in self.label_dict.keys():
+                         for i in range(0, len(feature_contexts_nm), stride)]:
+
+            for this_id in sso_ids:
                 multi_params.append([this_id, self.ssd_version,
                                      self.working_dir,
                                      fc_block,
                                      self.feat_path + "/features_%d_%d.npy",
-                                    comment_converter[self.ssd_version]])
+                                    comment_converter[self.ssd_version], overwrite])
 
         if qsub_pe is None and qsub_queue is None:
             results = sm.start_multiprocess(sbch.generate_clf_data_thread,
@@ -175,7 +187,9 @@ class SkelClassifier(object):
                                          pe=qsub_pe, queue=qsub_queue,
                                          script_folder=script_folder)
         else:
-            raise Exception("QSUB not available")
+            msg = "QSUB not available"
+            logger_skel.critical(msg)
+            raise Exception(msg)
 
     def classifier_production(self, clf_name="rfc", n_estimators=2000,
                               feature_contexts_nm=(500, 1000, 2000, 4000, 8000), qsub_pe=None,
@@ -198,7 +212,9 @@ class SkelClassifier(object):
                                          script_folder=script_folder)
 
         else:
-            raise Exception("QSUB not available")
+            msg = "QSUB not available"
+            logger_skel.critical(msg)
+            raise Exception(msg)
 
     def create_splitting(self, ratios=(.6, .2, .2)):
         assert not os.path.isfile(self.splitting_fname), "Splitting file exists."
@@ -209,7 +225,7 @@ class SkelClassifier(object):
 
         id_bin_dict = {"train": [], "valid": [], "test": []}
         for this_class in unique_classes:
-            sso_ids = np.array(self.label_dict.keys())[classes == this_class]
+            sso_ids = np.array(list(self.label_dict.keys()), dtype=np.uint)[classes == this_class]
 
             weights = []
             for sso_id in sso_ids:
@@ -229,15 +245,17 @@ class SkelClassifier(object):
             id_bin_dict["valid"] += list(sso_ids[valid_mask])
             id_bin_dict["test"] += list(sso_ids[test_mask])
 
-        with open(self.splitting_fname, "w") as f:
+        with open(self.splitting_fname, "wb") as f:
             pkl.dump(id_bin_dict, f)
 
     def id_bins(self):
-        if not os.path.exists(self.splitting_fname):
+        if not os.path.exists(self.splitting_fname) and self.splitting_dict is None:
             self.create_splitting()
 
-        with open(self.splitting_fname, "r") as f:
-            part_dict = pkl.load(f)
+        if self.splitting_dict is None:
+            part_dict = load_pkl2obj(self.splitting_fname)
+        else:
+            part_dict = self.splitting_dict
 
         id_bin_dict = {}
         for key in part_dict.keys():
@@ -246,20 +264,21 @@ class SkelClassifier(object):
         return id_bin_dict
 
     def load_data(self, feature_context_nm, ratio=(0.7, .15, .15)):
+        self.load_splitting_dict()
         self.load_label_dict()
 
         id_bin_dict = self.id_bins()
 
         feature_dict = {}
         labels_dict = {}
-        for sso_id in self.label_dict.keys():
+        sso_ids = np.concatenate(list(self.splitting_dict.values())).astype(np.int)
+        for sso_id in sso_ids:
             if not sso_id in id_bin_dict:
                 continue
-
             this_feats = np.load(self.feat_path +
-                                 "/features_%d_%d.npy" % (feature_context_nm, sso_id))
+                                 "/features_{}_{}.npy".format(feature_context_nm, sso_id))
             labels_fname = self.feat_path +\
-                            "/labels_%d_%d.npy" % (feature_context_nm, sso_id)
+                            "/labels_{}_{}.npy".format(feature_context_nm, sso_id)
             if not os.path.isfile(labels_fname):
                 this_labels = [self.label_dict[sso_id]] * len(this_feats)
             else:
@@ -273,8 +292,7 @@ class SkelClassifier(object):
                     this_labels[this_labels == 2] = 0
                 this_labels = this_labels.tolist()
                 cnt = Counter(this_labels)
-                print("Found node specific labels in SSV %d. %s" %
-                      (sso_id, cnt))
+                print("Found node specific labels in SSV {}. {}".format(sso_id, cnt))
             if id_bin_dict[sso_id] in feature_dict:
                 feature_dict[id_bin_dict[sso_id]] = \
                     np.concatenate([feature_dict[id_bin_dict[sso_id]],
@@ -303,7 +321,7 @@ class SkelClassifier(object):
 
     def score(self, probs, labels, balanced=True):
         pred = np.argmax(probs, axis=1)
-        labels = np.array(labels)
+        labels = np.array(labels, dtype=np.int)
         classes = np.unique(labels)
         if balanced:
             weights = 1.e8/np.unique(labels, return_counts=True)[1]
@@ -317,7 +335,7 @@ class SkelClassifier(object):
 
         overall_score = np.sum((pred == labels) * label_weights) / \
                         float(np.sum(label_weights))
-        print("Overall acc: %.5f\n" % overall_score)
+        print("Overall acc: {0:.5}\n".format(overall_score))
 
         score_dict = {}
         for i_class in range(len(classes)):
@@ -330,13 +348,13 @@ class SkelClassifier(object):
             recall = true_pos / (false_neg + true_pos)
             if precision + recall == 0:
                 f_score = 0
-                raise()
+                ValueError("F-Score is 0.")
             else:
                 f_score = 2 * precision * recall / (recall + precision)
             score_dict[this_class] = [precision, recall, f_score]
 
-            print("class: %d: p: %.4f, r: %.4f, f: %.4f" % \
-                  (this_class, precision, recall, f_score))
+            print("class: {}: p: {:.4}, r: {:.4}, f: "
+                  "{:.4}".format(this_class, precision, recall, f_score))
         return score_dict, label_weights
 
     def train_clf(self, name, n_estimators=2000, feature_context_nm=4000,
@@ -347,9 +365,12 @@ class SkelClassifier(object):
         elif name == "ext":
             clf = self.create_ext(n_estimators=n_estimators)
         else:
-            raise()
+            msg = "Unsupported classifier selected. Please chosse either" \
+                  " 'ext' or 'rfc'."
+            logger_skel.critical(msg)
+            raise ValueError(msg)
 
-        print("\n --- %s ---\n" % name)
+        print("\n --- {} ---\n".format(name))
         tr_feats, tr_labels, v_feats, v_labels, te_feats, te_labels = \
             self.load_data(feature_context_nm=feature_context_nm)
 
@@ -406,9 +427,9 @@ class SkelClassifier(object):
             sample_weights[tr_labels == unique_labels[i_label]] = 1. / labels_cnt[i_label]
 
         clf.fit(tr_feats, tr_labels, sample_weight=sample_weights)
-
+        summary_str = ""
         if name in ["rfc", "ext"]:
-            print("OOB score (train set): %.10f" % clf.oob_score_)
+            summary_str += "OOB score (train set): %.10f" % clf.oob_score_
         #
         # print "Label occ.:", np.unique(v_labels, return_counts=True)
         #
@@ -430,16 +451,17 @@ class SkelClassifier(object):
         feat_set = np.array(feature_set)[sorting]
         feat_imps = feat_imps[sorting]
 
-        print("\nFEATURE IMPORTANCES" +
-              "--------------------\n")
+        summary_str += "\nFEATURE IMPORTANCES--------------------\n"
         for i_feat in range(np.min([5, len(feat_imps)])):#len(feat_imps)):
-            print("%s: %.5f" % (feat_set[i_feat], feat_imps[i_feat]))
-
+            summary_str += "%s: %.5f" % (feat_set[i_feat], feat_imps[i_feat])
+        print("{}".format(summary_str))
         if save:
             prefix = "%s" % repr(leave_out_classes) if \
                 len(leave_out_classes) > 0 else ""
             self.save_classifier(clf, name, feature_context_nm,
                                  production=production, prefix=prefix)
+            with open(self.plots_path + prefix + "_summary.txt", 'w') as f:
+                      f.write(summary_str)
         if not production:
             v_proba = clf.predict_proba(v_feats)
             if len(te_feats) > 0:
@@ -447,7 +469,7 @@ class SkelClassifier(object):
             else:
                 te_proba = np.zeros((0, v_proba.shape[-1]))
             self.eval_performance(v_proba, v_labels, te_proba, te_labels, leave_out_classes,
-                                  [name, str(n_estimators), str(feature_context_nm)])
+                                  [name, str(n_estimators), str(feature_context_nm), str(leave_out_classes)])
 
     def create_rfc(self, n_estimators=2000):
         rfc = RandomForestClassifier(warm_start=False, oob_score=True,
@@ -569,7 +591,7 @@ class SkelClassifier(object):
 
     def get_curves(self, probs, labels):
         classes = np.unique(labels)
-        labels = np.array(labels)
+        labels = np.array(labels, dtype=np.int)
         weights = 1.e8/np.unique(labels, return_counts=True)[1]
         labels = labels.copy()
         label_weights = np.zeros_like(labels, dtype=np.float)
@@ -577,7 +599,7 @@ class SkelClassifier(object):
             this_class = classes[i_class]
             label_weights[labels == this_class] = weights[this_class]
 
-        labels = np.array(labels)
+        labels = np.array(labels, dtype=np.int)
         curves = []
         for i_class in range(probs.shape[1]):
             # curves.append(precision_recall_curve(labels==i_class, probs[:, i_class], sample_weight=label_weights))
@@ -640,9 +662,8 @@ def classifier_production_thread(args):
     production = args[5]
 
     sc = SkelClassifier(target_type, working_dir=working_dir,
-                        create=False)
+                        create=True)
 
     sc.train_clf(name=clf_name, n_estimators=n_estimators,
                  feature_context_nm=feature_context_nm, production=production,
                  save=True)
-
