@@ -2,7 +2,7 @@ build:
   image: latest
 
 python:
-  pip_install: false
+  pip_install: true
   version: 3.5
 
 conda:
