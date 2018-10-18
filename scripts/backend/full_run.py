@@ -25,29 +25,15 @@ kd_seg_path = "/mnt/j0126_cubed/"
 wd = "/mnt/j0126/areaxfs_v10/"
 cd_dir = wd + "chunkdatasets/"
 
-# wd = "/wholebrain/songbird/j0126/areaxfs_v5/extract_combine_test"   # TODO: del
-# cd_dir = wd + "/chunkdatasets"  # TODO: del
 
 #### initializing and loading and chunk dataset from knossosdataset
-#kd = knossosdataset.KnossosDataset()    # Sets initial values of object
-#kd.initialize_from_knossos_path(kd_seg_path)     # Initializes the dataset by parsing the knossos.conf in path + "mag1"
+kd = knossosdataset.KnossosDataset()    # Sets initial values of object
+kd.initialize_from_knossos_path(kd_seg_path)     # Initializes the dataset by parsing the knossos.conf in path + "mag1"
 
-#cd = chunky.ChunkDataset()      # Class that contains a dict of chunks (with coordinates) after initializing it
-#cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
-#                        box_coords=[0, 0, 0], fit_box_size=True)
+cd = chunky.ChunkDataset()      # Class that contains a dict of chunks (with coordinates) after initializing it
+cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
+                        box_coords=[0, 0, 0], fit_box_size=True)
 
-#chunky.save_dataset(cd)
-#cd = chunky.load_dataset(cd_dir)
-# chunks = [i for i in range(1000)]   # TODO: del
-#########
-# extract_combine_test
-# oew.from_ids_to_objects(cd, None, hdf5names=["sv"],
-#                    n_folders_fs=10000,
-#                    overlaydataset_path=kd_seg_path,
-#                    chunk_list=chunks, suffix="", n_chunk_jobs=1000,
-#                    qsub_pe="openmp", qsub_queue=None,
-#                    n_max_co_processes=100)
-#########
 
 # Object extraction - 2h
 #oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=5000,
@@ -68,21 +54,31 @@ cd_dir = wd + "chunkdatasets/"
 
 
 # Create SSD and incorporate RAG
-ssd = ss.SuperSegmentationDataset(version="new", ssd_type="ssv",
-                                  sv_mapping='/mnt/j0126/areaxfs_v10/RAGs/v4b_20180214_nocb_merges_reconnected_knossos_mergelist.txt')
-ssd.save_dataset_shallow()
+#ssd = ss.SuperSegmentationDataset(version="new", ssd_type="ssv",
+#                                  sv_mapping='/mnt/j0126/areaxfs_v10/RAGs/v4b_20180214_nocb_merges_reconnected_knossos_mergelist.txt')
+#ssd.save_dataset_shallow()
 
 # About 2.5h, mostly due to a few very large ssvs, since there workers iterate sequentially over the individual svs per ssv
-ssd.save_dataset_deep(qsub_pe="default", qsub_queue='all.q', n_max_co_processes=5000, stride=100)
+#ssd.save_dataset_deep(qsub_pe="default", qsub_queue='all.q', n_max_co_processes=5000, stride=100)
 
 
+# Map objects to SSVs
 #from syconn.proc import ssd_proc
 
 #ssd = ss.SuperSegmentationDataset(working_dir=wd)
 
+# First step: Took 3.5h, but only on two workers
 #ssd_proc.aggregate_segmentation_object_mappings(ssd, ['sj', 'vc', 'mi'], qsub_pe='default', qsub_queue='all.q')
 
+# Second step: 1h
 #ssd_proc.apply_mapping_decisions(ssd, ['sj', 'vc', 'mi'], qsub_pe='default', qsub_queue='all.q')
+
+# Extract contact sites
+
+from syconn.extraction import cs_extraction_steps as ces
+ces.find_contact_sites(cd, kd_seg_path, 'cs', n_max_co_processes=5000,
+                       qsub_pe='default', qsub_queue='all.q')
+
 
 ############################################################################################
 # ##### Cell object extraction #####

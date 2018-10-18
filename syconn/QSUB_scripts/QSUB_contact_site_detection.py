@@ -11,7 +11,7 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconnproc.cs_extraction import extraction_steps as es
+from syconn.extraction import cs_extraction_steps as es
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
