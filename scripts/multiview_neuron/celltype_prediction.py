@@ -33,7 +33,6 @@ def celltype_predictor(args):
     return missing_ssvs
 
 
-
 if __name__ == "__main__":
     ssd = SuperSegmentationDataset(working_dir=wd)
     # shuffle SV IDs

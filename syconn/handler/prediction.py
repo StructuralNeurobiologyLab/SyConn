@@ -763,7 +763,9 @@ def get_celltype_model(init_gpu=None):
 
 
 def get_semseg_spiness_model():
-    m = InferenceModel("/wholebrain/scratch/pschuber/e3training_August1st/FCN--VG13/")
+    path = "/wholebrain/scratch/pschuber/e3training_August1st/FCN--VG13/"
+    m = InferenceModel()
+    m._path = path
     return m
 
 
@@ -863,6 +865,7 @@ def force_correct_norm_new(x):
 
 
 def naive_view_normalization(d):
+    # TODO: Remove with new dataset, only necessary for backwards compat.
     d = d.astype(np.float32)
     # perform pseudo-normalization
     # (proper normalization: how to store mean and std for inference?)

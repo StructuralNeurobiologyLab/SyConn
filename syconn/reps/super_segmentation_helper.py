@@ -989,14 +989,11 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False,
     proba_key = "axoness_probas_cnn%s" % pred_key_appendix
     pred_key = "axoness_preds_cnn%s" % pred_key_appendix
     if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key) or reload:
-        preds = np.array(start_multiprocess_obj("axoness_preds",
-                                                   [[sv, {
-                                                       "pred_key_appendix": pred_key_appendix}]
+        preds = np.array(start_multiprocess_obj("axoness_preds", [[sv, {"pred_key_appendix": pred_key_appendix}]
                                                     for sv in sso.svs],
                                                    nb_cpus=sso.nb_cpus))
         probas = np.array(start_multiprocess_obj("axoness_probas",
-                                                    [[sv, {
-                                                        "pred_key_appendix": pred_key_appendix}]
+                                                    [[sv, {"pred_key_appendix": pred_key_appendix}]
                                                      for sv in sso.svs],
                                                     nb_cpus=sso.nb_cpus))
         preds = np.concatenate(preds)
@@ -1090,3 +1087,78 @@ def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=20):
         except KeyError:
             pass  # sv does not exist in this SSD
     return list(missing_ssv_ids)
+
+
+def predict_views_semseg(views, model, batch_size=250):
+    """
+    Predicts a view array of shape [N_LOCS, N_CH, N_VIEWS, X, Y] with
+    N_LOCS locations each with N_VIEWS perspectives, N_CH different channels
+    (e.g. shape of cell, mitochondria, synaptic junctions and vesicle clouds).
+
+    Parameters
+    ----------
+    views : np.array
+        shape of [N_LOCS, N_CH, N_VIEWS, X, Y]
+    model : pytorch model
+    batch_size : int
+
+    Returns
+    -------
+
+    """
+    views = views.astype(np.float32) / 255.
+    views = views.swapaxes(1, 2)  # swap channel and view axis
+    # N, 2, 4, 128, 256
+    orig_shape = views.shape
+    # reshape to predict single projections
+    views = views.reshape([-1] + list(orig_shape[2:]))
+    # predict and reset to original shape: N, 2, 4, 128, 256
+    labeled_views = model.predict_proba(views, bs=batch_size, verbose=False)
+    labeled_views = np.argmax(labeled_views, axis=1)[:, None]
+    labeled_views = labeled_views.reshape(list(orig_shape[:2])
+                                          + list(labeled_views.shape[1:]))
+    # swap axes to get source shape
+    labeled_views = labeled_views.swapaxes(2, 1)
+    return labeled_views
+
+
+def pred_and_save_semseg_svs(model, views, pred_key=None, svs=None, return_pred=False,
+                             nb_cpus=1):
+    """
+    Predicts views of a list of SVs and saves them via SV.save_views.
+    Efficient helper function for chunked predictions, therefore requires pre-loaded views.
+
+    Parameters
+    ----------
+    model :
+    views : np.array
+        [N_SV, N_LOCS, N_CH, N_VIEWS, X, Y]
+    pred_key : str
+    nb_cpus : int
+        number CPUs for saving the SV views
+        svs : list[SegmentationObject]
+    svs : Optional[list[SegmentationObject]]
+    return_pred : Optional[bool]
+
+    Returns
+    -------
+    list[np.array]
+        if 'return_pred=True' it returns the label views of input
+    """
+    if not return_pred and (svs is None or pred_key is None):
+        raise ValueError('SV objects and "pred_key" have to be given if predictions should be'
+                         ' saved at SV view storages.')
+    part_views = np.cumsum([0] + [len(v) for v in views])
+    assert len(part_views) == len(views) + 1
+    views = np.concatenate(views)  # merge axis 0, i.e. N_SV and N_LOCS to N_SV*N_LOCS
+    label_views = predict_views_semseg(views, model)
+    svs_labelviews = []
+    for ii in range(len(part_views[:-1])):
+        sv_label_views = label_views[part_views[ii]:part_views[ii + 1]]
+        svs_labelviews.append(sv_label_views)
+    assert len(part_views) == len(svs_labelviews) + 1
+    if return_pred:
+        return svs_labelviews
+    params = [[sv, dict(views=views, index_views=False, woglia=True, view_key=pred_key)]
+              for sv, views in zip(svs, svs_labelviews)]
+    start_multiprocess_obj('save_views', params, nb_cpus=nb_cpus)
