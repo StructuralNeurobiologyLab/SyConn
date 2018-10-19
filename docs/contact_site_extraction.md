@@ -19,13 +19,14 @@ This combines all contact sites between two supervoxels into a single object. `c
 The first step reads from a KNOSSOS dataset with the segmentation and saves the extracted contact sites into an hdf5 chunk dataset.
 
     from syconn.extraction import cs_extraction_steps as ces
-    ces.find_contact_sites(cset, knossos_path, filename, n_max_co_processes=200,
+    ces.find_contact_sites(cset, knossos_path, n_max_co_processes=200,
                            qsub_pe=my_qsub_pe)
+                           
 
 The second step used the hdf5 chunk dataset and generates a segmentation dataset with the results.
 
     from syconn.extraction import cs_extraction_steps as ces
-    ces.extract_agg_contact_sites(cset, filename, hdf5name, working_dir,
+    ces.extract_agg_contact_sites(cset, working_dir,
                                   n_folders_fs=10000, suffix="",
                                   n_max_co_processes=200, qsub_pe=my_qsub_pe)
 
@@ -39,7 +40,7 @@ The main step is
 
     from syconn.extraction import cs_processing_steps as cps
     cps.combine_and_split_cs_agg(working_dir, cs_gap_nm=300,
-                                 stride=100, qsub_pemyqsub_pe,
+                                 stride=100, qsub_pe=myqsub_pe,
                                  n_max_co_processes=200)
 
 It combines contact sites between the same supersupervoxels and splits them based on a maximal voxel distance of `cs_gap_nm`.

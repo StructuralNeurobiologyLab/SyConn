@@ -478,7 +478,7 @@ class main_class(QtGui.QDialog):
 
         #print('self.ids_selected {0}'.format(self.ids_selected))
 
-        if len(self.ids_selected) < 3:
+        if len(self.ids_selected) < 10:
 
             # create a 'fake' knossos tree for each obj mesh category;
             # this is very hacky since it can generate nasty ID collisions.
