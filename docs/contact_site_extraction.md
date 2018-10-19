@@ -40,7 +40,7 @@ The main step is
 
     from syconn.extraction import cs_processing_steps as cps
     cps.combine_and_split_cs_agg(working_dir, cs_gap_nm=300,
-                                 stride=100, qsub_pemyqsub_pe,
+                                 stride=100, qsub_pe=myqsub_pe,
                                  n_max_co_processes=200)
 
 It combines contact sites between the same supersupervoxels and splits them based on a maximal voxel distance of `cs_gap_nm`.
