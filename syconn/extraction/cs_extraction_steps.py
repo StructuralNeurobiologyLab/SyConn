@@ -25,7 +25,7 @@ from . import object_extraction_steps as oes
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
-def find_contact_sites(cset, knossos_path, filename, n_max_co_processes=None,
+def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
                        qsub_pe=None, qsub_queue=None):
     multi_params = []
     for chunk in cset.chunk_dict.values():
@@ -79,7 +79,7 @@ def find_contact_sites(cset, knossos_path, filename, n_max_co_processes=None,
 #         raise Exception("QSUB not available")
 
 
-def extract_agg_contact_sites(cset, filename, hdf5name, working_dir,
+def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
                               n_folders_fs=10000, suffix="",
                               n_max_co_processes=None, qsub_pe=None,
                               qsub_queue=None, nb_cpus=1):
@@ -101,7 +101,7 @@ def extract_agg_contact_sites(cset, filename, hdf5name, working_dir,
     # --------------------------------------------------------------------------
 
     time_start = time.time()
-    oes.combine_voxels(working_dir, 'cs_agg',
+    oes.combine_voxels(working_dir, ['cs_agg'],
                        n_folders_fs=n_folders_fs, qsub_pe=qsub_pe,
                        qsub_queue=qsub_queue,
                        n_max_co_processes=n_max_co_processes,

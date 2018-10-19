@@ -66,7 +66,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
     block_steps = np.linspace(0, len(voxel_rel_paths),
                               int(np.ceil(float(len(rel_cs_to_cs_agg_ids)) / stride)) + 1).astype(np.int)
 
-    cs = segmentation.SegmentationDataset("cs", working_dir=wd, version="new",
+    cs = segmentation.SegmentationDataset("cs_ssv", working_dir=wd, version="new",
                                           create=True)
 
     for p in voxel_rel_paths_2stage:
@@ -99,7 +99,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
 def map_objects_to_cs(wd, cs_version=None, ssd_version=None, max_map_dist_nm=2000,
                       obj_types=("sj", "mi", "vc"), stride=1000, qsub_pe=None,
                       qsub_queue=None, nb_cpus=1, n_max_co_processes=100):
-    cs_dataset = segmentation.SegmentationDataset("cs", version=cs_version,
+    cs_dataset = segmentation.SegmentationDataset("cs_ssv", version=cs_version,
                                                   working_dir=wd)
     paths = glob.glob(cs_dataset.so_storage_path + "/*/*/*")
 
@@ -132,7 +132,7 @@ def combine_and_split_cs_agg_helper(args):
     scaling = args[5]
     cs_gap_nm = args[6]
 
-    cs = segmentation.SegmentationDataset("cs", working_dir=wd,
+    cs = segmentation.SegmentationDataset("cs_ssv", working_dir=wd,
                                           version=cs_version)
 
     cs_agg = segmentation.SegmentationDataset("cs_agg", working_dir=wd,
@@ -223,7 +223,7 @@ def map_objects_to_cs_thread(args):
     working_dir = args[4]
     max_map_dist_nm = args[5]
 
-    cs_dataset = segmentation.SegmentationDataset("cs", version=cs_version,
+    cs_dataset = segmentation.SegmentationDataset("cs_ssv", version=cs_version,
                                                   working_dir=working_dir)
 
     ssd = ss.SuperSegmentationDataset(version=ssd_version,

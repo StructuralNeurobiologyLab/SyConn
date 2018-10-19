@@ -74,11 +74,20 @@ cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
 #ssd_proc.apply_mapping_decisions(ssd, ['sj', 'vc', 'mi'], qsub_pe='default', qsub_queue='all.q')
 
 # Extract contact sites
-
+# About 2h
 from syconn.extraction import cs_extraction_steps as ces
-ces.find_contact_sites(cd, kd_seg_path, 'cs', n_max_co_processes=5000,
-                       qsub_pe='default', qsub_queue='all.q')
+#ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=5000,
+#                       qsub_pe='default', qsub_queue='all.q')
 
+ces.extract_agg_contact_sites(cd, wd,
+                              n_folders_fs=10000, suffix="",
+                              n_max_co_processes=5000, qsub_pe='default', qsub_queue='all.q')
+
+
+#from syconn.extraction import cs_processing_steps as cps
+cps.combine_and_split_cs_agg(wd, cs_gap_nm=300,
+                             stride=100, qsub_pe='default', qsub_queue='all.q',
+                             n_max_co_processes=200)
 
 ############################################################################################
 # ##### Cell object extraction #####
