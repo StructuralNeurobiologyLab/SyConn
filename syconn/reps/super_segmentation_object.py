@@ -18,7 +18,6 @@ import warnings
 from collections import Counter
 from scipy.misc import imsave
 from knossos_utils import skeleton
-from collections import defaultdict
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
 from . import segmentation
@@ -183,9 +182,6 @@ class SuperSegmentationObject(object):
         else:
             if isinstance(version_dict, dict):
                 self.version_dict = version_dict
-            elif isinstance(version_dict, str) and version_dict == "load":
-                if self.version_dict_exists:
-                    self.load_version_dict()
             else:
                 raise Exception("No version dict specified in config")
 
@@ -268,9 +264,9 @@ class SuperSegmentationObject(object):
 
     @property
     def attr_dict_path(self):
+        # Kept for backwards compatibility, remove if not needed anymore
         if os.path.isfile(self.ssv_dir + "atrr_dict.pkl"):
             return self.ssv_dir + "atrr_dict.pkl"
-        # TODO: Change as soon as new SSD is created! Now kept for backwards compatibility
         return self.ssv_dir + "attr_dict.pkl"
 
     @property
@@ -283,27 +279,33 @@ class SuperSegmentationObject(object):
 
     @property
     def objects_dense_kzip_path(self):
+        """Identifier of cell organell overlays"""
         return self.ssv_dir + "objects_overlay.k.zip"
 
     @property
     def skeleton_path(self):
+        """Identifier of SSV skeleton"""
         return self.ssv_dir + "skeleton.pkl"
 
     @property
-    def skeleton_path_views(self):
-        return self.ssv_dir + "skeleton_views.pkl"
-
-    @property
     def edgelist_path(self):
+        """Identifier of SSV graph"""
         return self.ssv_dir + "edge_list.bz2"
 
     @property
     def view_path(self):
+        """Identifier of view storage"""
         return self.ssv_dir + "views.pkl"
 
     @property
     def mesh_dc_path(self):
+        """Identifier of mesh storage"""
         return self.ssv_dir + "mesh_dc.pkl"
+
+    @property
+    def vlabel_dc_path(self):
+        """Identifier of vertex label storage"""
+        return self.ssv_dir + "vlabel_dc.pkl"
 
     #                                                                        IDS
 
@@ -370,6 +372,13 @@ class SuperSegmentationObject(object):
     @property
     def mi_mesh(self):
         return self.load_mesh("mi")
+
+    def label_dict(self, data_type='vertex'):
+        if data_type == 'vertex':
+            return CompressedStorage(self.vlabel_dc_path)
+        else:
+            raise ValueError('Label dict for data type "{}" not supported.'
+                             ''.format(data_type))
     #                                                                 PROPERTIES
 
     @property
@@ -395,7 +404,8 @@ class SuperSegmentationObject(object):
         -------
         nx.Graph
         """
-        if self._weighted_graph is None or np.any([len(nx.get_node_attributes(self._weighted_graph, k)) == 0 for k in add_node_attr]):
+        if self._weighted_graph is None or np.any([len(nx.get_node_attributes(
+                self._weighted_graph, k)) == 0 for k in add_node_attr]):
             if self.skeleton is None:
                 self.load_skeleton()
 
@@ -410,7 +420,7 @@ class SuperSegmentationObject(object):
                  ii in range(len(weights))])
             for k in add_node_attr:
                 dc = {}
-                for n in self._weighted_graph.nodes_iter():
+                for n in self._weighted_graph.nodes():
                     dc[n] = self.skeleton[k][n]
                 nx.set_node_attributes(self._weighted_graph, k, dc)
         return self._weighted_graph
@@ -576,7 +586,8 @@ class SuperSegmentationObject(object):
             G = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
         else:
             if os.path.isfile(self.working_dir + "neuron_rag.bz2"):
-                G_glob = nx.read_edgelist(self.working_dir + "neuron_rag.bz2", nodetype=np.uint)
+                G_glob = nx.read_edgelist(self.working_dir + "neuron_rag.bz2",
+                                          nodetype=np.uint)
                 G = nx.Graph()
                 cc = nx.node_connected_component(G_glob, self.sv_ids[0])
                 assert len(set(cc).difference(set(self.sv_ids))) == 0, \
@@ -584,7 +595,8 @@ class SuperSegmentationObject(object):
                 for e in G_glob.edges(cc):
                     G.add_edge(*e)
             else:
-                raise ValueError("Could not find graph data for SSV {}.".format(self.id))
+                raise ValueError("Could not find graph data for SSV {}."
+                                 "".format(self.id))
         new_G = nx.Graph()
         for e in G.edges_iter():
             new_G.add_edge(self.get_seg_obj("sv", e[0]),
@@ -596,6 +608,19 @@ class SuperSegmentationObject(object):
         return list(g.edges())
 
     def _load_obj_mesh(self, obj_type="sv", rewrite=False):
+        """
+        TODO: Currently does not support color array!
+
+        Parameters
+        ----------
+        obj_type : str
+        rewrite : bool
+
+        Returns
+        -------
+        np.array, np.array, np.array
+            ind, vert, normals
+        """
         if not rewrite and self.mesh_exists(obj_type) and not \
                         self.version == "tmp":
             mesh_dc = MeshStorage(self.mesh_dc_path,
@@ -613,7 +638,8 @@ class SuperSegmentationObject(object):
                                       disable_locking=not self.enable_locking)
                 mesh_dc[obj_type] = [ind, vert, normals]
                 mesh_dc.push()
-        return np.array(ind, dtype=np.int), np.array(vert, dtype=np.int),\
+        # Changed vertex dtype to float32, as they actually should. PS, 22Oct2018
+        return np.array(ind, dtype=np.int), np.array(vert, dtype=np.float32),\
                np.array(normals, dtype=np.float32)
 
     def _load_obj_mesh_compr(self, obj_type="sv"):
@@ -637,7 +663,6 @@ class SuperSegmentationObject(object):
         orig_dc.update(self.attr_dict)
         write_obj2pkl(self.attr_dict_path + '.tmp', orig_dc)
         shutil.move(self.attr_dict_path + '.tmp', self.attr_dict_path)
-
 
     def save_attributes(self, attr_keys, attr_values):
         """
@@ -1090,25 +1115,25 @@ class SuperSegmentationObject(object):
         Returns
         -------
         np.array
-            Concatenated views for each SV in self.svs
+            Concatenated views for each SV in self.svs with shape
+             [N_LOCS, N_CH, N_VIEWS, X, Y]
         """
-        # TODO: Support loading of index views from SVs!
         view_dc = CompressedStorage(self.view_path, read_only=True,
                                     disable_locking=not self.enable_locking)
         if view_key is None:
             if index_views:
                 view_key = "%d%d%d" % (int(woglia), int(raw_only), int(index_views))
-            else:  # TODO: only kept for backwards compat.
+            else:  # only kept for backwards compat.
                 view_key = "%d%d" % (int(woglia), int(raw_only))
         else:
             if not view_key in view_dc:
-                raise KeyError("Given view key '{}' does not exist"
-                               " in view dictionary of SSV {} at"
-                               "{}. Existing keys: {}\n".format(view_key, self.id, self.view_path,
-                                                                str(view_dc.keys())))
+                raise KeyError("Given view key '{}' does not exist in view di"
+                               "ctionary of SSV {} at{}. Existing keys: {}\n"
+                               "".format(view_key, self.id, self.view_path,
+                                         str(view_dc.keys())))
         if view_key in view_dc and not force_reload:
             return view_dc[view_key]
-        del view_dc
+        del view_dc  # delete previose initialized view dictionary
         params = [[sv, {'woglia': woglia, 'raw_only': raw_only, 'index_views': index_views,
                         'ignore_missing': ignore_missing}] for sv in self.svs]
         # load views from underlying SVs
@@ -1211,9 +1236,24 @@ class SuperSegmentationObject(object):
                                index_views=True)
 
     def _render_indexviews(self, nb_views=2, save=True, force_recompute=False):
+        """
+        Render SSV raw views in case non-default number of views is required.
+        Will be stored in SSV view dict. Default raw/index/prediction views are
+        stored decentralized in corresponding SVs.
+
+        Parameters
+        ----------
+        nb_views : int
+        save : bool
+        force_recompute : bool
+
+        Returns
+        -------
+        np.array
+        """
         if not force_recompute:
             try:
-                views = self.load_views("index{}".format(nb_views))
+                views = self.load_views('index{}'.format(nb_views))
                 if not save:
                     return views
                 else:
@@ -1241,9 +1281,26 @@ class SuperSegmentationObject(object):
 
     def _render_rawviews(self, nb_views=2, save=True, force_recompute=False,
                          add_cellobjects=True, verbose=False):
+        """
+        Render SSV raw views in case non-default number of views is required.
+        Will be stored in SSV view dict. Default raw/index/prediction views are
+        stored decentralized in corresponding SVs.
+
+        Parameters
+        ----------
+        nb_views : int
+        save : bool
+        force_recompute : bool
+        add_cellobjects : bool
+        verbose : bool
+
+        Returns
+        -------
+        np.array
+        """
         if not force_recompute:
             try:
-                views = self.load_views("raw{}".format(nb_views))
+                views = self.load_views('raw{}'.format(nb_views))
                 if not save:
                     return views
                 return
@@ -1264,85 +1321,80 @@ class SuperSegmentationObject(object):
         else:
             return views
 
-    def _predict_semseg(self, m, semseg_key, nb_views=2):
+    def predict_semseg(self, m, semseg_key, nb_views=None):
         # views have shape [N, 4, 2, 128, 256]
-        try:
-            views = self.load_views("raw{}".format(nb_views))
-        except KeyError:
-            self._render_rawviews(nb_views)
-            views = self.load_views("raw{}".format(nb_views))
-        assert len(views) == len(np.concatenate(self.sample_locations(cache=False))), \
-            "Unequal number of views and redering locations."
-        labeled_views = ssh.predict_views_semseg(views, m)
-        assert labeled_views.shape[2] == nb_views, \
-            "Predictions have wrong shape."
-        self.save_views(labeled_views, semseg_key + "{}".format(nb_views))
-
-    def _semseg2mesh(self, semseg_key, nb_views=2, dest_path=None, k=1):
-        i_views = self.load_views("index{}".format(nb_views)).flatten()
-        spiness_views = self.load_views(semseg_key + "{}".format(nb_views)).flatten()
-        ind = self.mesh[0]
-        dc = defaultdict(list)
-        background_id = np.max(i_views)
-        for ii in range(len(i_views)):
-            triangle_ix = i_views[ii]
-            if triangle_ix == background_id:
-                continue
-            l = spiness_views[ii] # triangle label
-            # get vertex ixs from triangle ixs via:
-            vertex_ix = triangle_ix * 3
-            dc[ind[vertex_ix]].append(l)
-            dc[ind[vertex_ix+1]].append(l)
-            dc[ind[vertex_ix+2]].append(l)
-        vertex_labels = np.ones((len(self.mesh[1]) // 3), dtype=np.uint8) * 5
-        for ix, v in dc.items():
-            l, cnts = np.unique(v, return_counts=True)
-            vertex_labels[ix] = l[np.argmax(cnts)]
-        if k == 0:  # map actual prediction situation / coverage
-            # keep unpredicted vertices and vertices with background labels
-            predicted_vertices = self.mesh[1].reshape(-1, 3)
-            predictions = vertex_labels
-            # [neck, head, shaft, other, background, unpredicted]
-            colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
-                      [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]]
+        if nb_views is not None and nb_views != global_params.NB_VIEWS:
+            # treat as special view rendering
+            try:
+                views = self.load_views('raw{}'.format(nb_views))
+            except KeyError:
+                self._render_rawviews(nb_views)
+                views = self.load_views('raw{}'.format(nb_views))
+            if len(views) != len(np.concatenate(self.sample_locations(cache=False))):
+                raise ValueError("Unequal number of views and redering locations.")
+            labeled_views = ssh.predict_views_semseg(views, m)
+            assert labeled_views.shape[2] == nb_views, \
+                "Predictions have wrong shape."
+            self.save_views(labeled_views, semseg_key)
         else:
-            predicted_vertices = self.mesh[1].reshape(-1, 3)[vertex_labels != 5]
-            predictions = vertex_labels[vertex_labels != 5]
-            # remove background class
-            predicted_vertices = predicted_vertices[predictions != 4]
-            predictions = predictions[predictions != 4]
-            # [neck, head, shaft, other, background]
-            colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
-                      [0.05, 0.6, 0.6, 1]]
-        colors = np.array(colors) * 255
-        maj_vote = colorcode_vertices(self.mesh[1].reshape((-1, 3)), predicted_vertices,
-                                 predictions, colors=colors, k=k, return_color=False)
-        self.attr_dict["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)] = maj_vote
-        ad = AttributeDict(self.attr_dict_path, read_only=False)
-        ad["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)] = maj_vote
-        ad.push()
-        # will cause collisions if this method is called multiple times for the same ssv during multiprocessing
-        # self.save_attributes(["semseg_"+semseg_key+"_k"+str(k)+"_"+str(nb_views)], [maj_vote])
-        col = colors[maj_vote].astype(np.uint8)
-        if dest_path is not None:
-            write_mesh2kzip(dest_path, self.mesh[0], self.mesh[1], self.mesh[2], col,
-                            ply_fname=semseg_key+".ply")
-            return
-        return self.mesh[0], self.mesh[1], self.mesh[2], col
+            # treat as default view rendering
+            views = self.load_views()
+            assert len(views) == len(
+                np.concatenate(self.sample_locations(cache=False))), \
+                "Unequal number of views and redering locations."
+            # re-order number of views according to SV rendering locations
+            # TODO: move view reordering to 'pred_svs_semseg', check other usages before!
+            locs = self.sample_locations()
+            reordered_views = []
+            cumsum = np.cumsum([0] + [len(el) for el in locs])
+            for ii in range(len(locs[:-1])):
+                sv_views = views[cumsum[ii]:cumsum[ii+1]]
+                reordered_views.append(sv_views)
+            ssh.pred_svs_semseg(m, reordered_views, semseg_key, self.svs,
+                                nb_cpus=self.nb_cpus)
 
-    def get_spine_compartments(self, k, nb_views, min_cc_size=10,
-                               dest_folder=None):
+    def semseg2mesh(self, semseg_key, nb_views=None, dest_path=None, k=1):
+        """
+        Default situation:
+            semseg_key = 'spiness', nb_views=None
+            This will load the index and label views stored at the SSV's SVs.
+        Non-default:
+            semseg_key = 'spiness4', nb_views=4
+            semseg_key = 'spiness4', nb_views=4
+            This requires to run 'self._render_rawviews(nb_views=4)',
+            'self._render_indexviews(nb_views=4)' and 'predict_semseg(MODEL,
+            'spiness4', nb_views=4)
+            This method then has to be called like:
+                'self.semseg2mesh('spiness4', nb_views=4)'
+
+        Parameters
+        ----------
+        semseg_key : str
+        nb_views : Optional[int]
+        dest_path : str
+        k : int
+        """
+        if 'spiness' in semseg_key:
+            # colors are only needed if dest_path is given
+            cols = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
+                    [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]]
+            ssh.semseg2mesh(self, semseg_key, nb_views, dest_path, k, cols)
+        else:
+            raise ValueError('Sematic segmentation of "" is not supported.'
+                             ''.format(semseg_key))
+
+    def get_spine_compartments(self, semseg_key='spiness', k=1,
+                               min_spine_cc_size=None, dest_folder=None):
         """
         Retrieve connected components of vertex spine predictions
 
         Parameters
         ----------
+        semseg_key : str
         k : int
             number of nearest neighbors for majority label vote (smoothing of
              classification results).
-        nb_views : int
-            Number of views used for prediction
-        min_cc_size : int
+        min_spine_cc_size : int
             Minimum number of vertices to consider a connected component a
              valid object
         dest_folder : str
@@ -1357,9 +1409,11 @@ class SuperSegmentationObject(object):
              and size arrays have the same ordering.
 
         """
-        vertex_labels = self.attr_dict["semseg_spiness_k"+str(k)+"_"+str(nb_views)]
+        if min_spine_cc_size is None:
+            min_spine_cc_size = global_params.min_spine_cc_size
+        vertex_labels = self.label_dict('vertex')[semseg_key]
         vertices = self.mesh[1].reshape((-1, 3))
-        g = create_graph_from_coords(vertices, max_dist=110,
+        g = create_graph_from_coords(vertices, max_dist=global_params.min_edge_dist_spine_graph,
                                      force_single_cc=True)
         g_orig = g.copy()
         for e in g_orig.edges():
@@ -1370,11 +1424,11 @@ class SuperSegmentationObject(object):
         log_reps.info("Starting connected components for SSV {}."
                       "".format(self.id))
         all_ccs = list(sorted(nx.connected_components(g), key=len,
-                                reverse=True))
+                              reverse=True))
         log_reps.info("Finished connected components for SSV {}."
                       "".format(self.id))
         sizes = np.array([len(c) for c in all_ccs])
-        thresh_ix = np.argmax(sizes < min_cc_size)
+        thresh_ix = np.argmax(sizes < min_spine_cc_size)
         all_ccs = all_ccs[:thresh_ix]
         sizes = sizes[:thresh_ix]
         cc_labels = []
@@ -1398,10 +1452,10 @@ class SuperSegmentationObject(object):
         head_c = (cc_coords[cc_labels == 1] / self.scaling).astype(np.uint)
         head_s = sizes[cc_labels == 1]
         if dest_folder is not None:
-            np.save("{}/neck_coords_ssv{}_k{}_{}views_ccsize{}.npy".format(
-                dest_folder, self.id, k, nb_views, min_cc_size), neck_c)
-            np.save("{}/head_coords_ssv{}_k{}_{}views_ccsize{}.npy".format(
-                dest_folder, self.id, k, nb_views, min_cc_size), head_c)
+            np.save("{}/neck_coords_ssv{}_k{}_{}_ccsize{}.npy".format(
+                dest_folder, self.id, k, semseg_key, min_spine_cc_size), neck_c)
+            np.save("{}/head_coords_ssv{}_k{}_{}_ccsize{}.npy".format(
+                dest_folder, self.id, k, semseg_key, min_spine_cc_size), head_c)
         return neck_c, neck_s, head_c, head_s
 
     def sample_locations(self, force=False, cache=True, verbose=False):
@@ -1531,7 +1585,6 @@ class SuperSegmentationObject(object):
                     alpha_arr = (np.ones(alpha_sh) * 255).astype(ext_color.dtype)
                     ext_color = np.concatenate([ext_color, alpha_arr], axis=1)
                 color = ext_color
-
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
                         ply_fname=obj_type + ".ply", nb_cpus=self.nb_cpus)
 
@@ -1861,7 +1914,7 @@ class SuperSegmentationObject(object):
 
         """
         if feature_context_nm is None:
-            feature_context_nm = SKEL_FEATURE_CONTEXT[sc.target_type]
+            feature_context_nm = global_params.SKEL_FEATURE_CONTEXT[sc.target_type]
         assert sc.target_type in ["axoness", "spiness"]
         clf = sc.load_classifier(clf_name, feature_context_nm, production=True,
                                  leave_out_classes=leave_out_classes)
@@ -1871,8 +1924,8 @@ class SuperSegmentationObject(object):
             pred = np.argmax(probas, axis=1)
         else:
             for i_node in range(len(self.skeleton["nodes"])):
-                paths = nx.single_source_dijkstra_path(self.weighted_graph(), i_node,
-                                                       max_dist)
+                paths = nx.single_source_dijkstra_path(
+                    self.weighted_graph(), i_node, max_dist)
                 neighs = np.array(list(paths.keys()), dtype=np.int)
                 c = np.argmax(np.sum(probas[neighs], axis=0))
                 pred.append(c)

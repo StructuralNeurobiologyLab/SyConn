@@ -172,6 +172,19 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
 
 
 def load_mesh(so, recompute=False):
+    """
+    Load mesh of SegmentationObject.
+    TODO: Currently ignores potential color/label array
+
+    Parameters
+    ----------
+    so : SegmentationObject
+    recompute : bool
+
+    Returns
+    -------
+
+    """
     if not recompute and so.mesh_exists:
         try:
             mesh = MeshStorage(so.mesh_path,
@@ -179,8 +192,11 @@ def load_mesh(so, recompute=False):
             if len(mesh) == 2:
                 indices, vertices = mesh
                 normals = np.zeros((0, ), dtype=np.float32)
-            else:
+            elif len(mesh) == 3:
                 indices, vertices, normals = mesh
+                col = np.zeros(0, dtype=np.uint8)
+            elif len(mesh) == 4:
+                indices, vertices, normals, col = mesh
         except Exception as e:
             print("\n---------------------------------------------------\n"
                   "\n%s\nException occured when loading mesh.pkl of SO (%s)"
@@ -195,6 +211,7 @@ def load_mesh(so, recompute=False):
                   "-------------------------\n" % so.id)
             return np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))
         indices, vertices, normals = so._mesh_from_scratch()
+        col = np.zeros(0, dtype=np.uint8)
         try:
             so._save_mesh(indices, vertices, normals)
         except Exception as e:
@@ -204,6 +221,7 @@ def load_mesh(so, recompute=False):
     vertices = np.array(vertices, dtype=np.int)
     indices = np.array(indices, dtype=np.int)
     normals = np.array(normals, dtype=np.float32)
+    col = np.array(col, dtype=np.uint8)
     return indices, vertices, normals
 
 

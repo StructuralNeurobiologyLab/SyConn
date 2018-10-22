@@ -150,7 +150,8 @@ def test_compression_and_decompression_for_mesh_dict():
 
     try:
         md = MeshStorage(test_p, read_only=False)
-        md[1] = [np.ones(100).astype(np.uint32), np.zeros(200).astype(np.float32)]
+        md[1] = [np.ones(100).astype(np.uint32), np.zeros(200).astype(np.float32),
+                 np.zeros(200).astype(np.float32), np.zeros((200)).astype(np.uint8)]
 
         logging.debug("MeshDict arr size (zeros, uncompr.):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in md[1]]) / 1.e3))
         logging.debug("MeshDict arr size (zeros, uncompr.):\t%s" % ([a.shape for a in md[1]]))

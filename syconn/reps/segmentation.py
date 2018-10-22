@@ -85,7 +85,7 @@ class SegmentationDataset(object):
         self._scaling = scaling
 
         if create and (version is None):
-            version == 'new'
+            version = 'new'
 
         if version is None and create==False:
             try:
@@ -142,7 +142,6 @@ class SegmentationDataset(object):
             if len(ps) == 0:
                 raise Exception("No storage folder found and no number of "
                                 "subfolders specified (n_folders_fs))")
-
 
             bp = os.path.basename(ps[0].strip('/'))
             for p in ps:
@@ -208,7 +207,7 @@ class SegmentationDataset(object):
     def so_dir_paths(self):
         depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
-
+        # TODO: do not perform a glob. all possible paths are determined by 'n_folders_fs' -> much faster, less IO
         return glob.glob(p)
 
     @property
@@ -297,8 +296,11 @@ class SegmentationDataset(object):
         write_obj2pkl(self.version_dict_path, self.version_dict)
 
     def load_version_dict(self):
-        assert self.version_dict_exists
-        self.version_dict = load_pkl2obj(self.version_dict_path)
+        try:
+            self.version_dict = load_pkl2obj(self.version_dict_path)
+        except Exception as e:
+            raise FileNotFoundError('Version dictionary of SegmentationDataset'
+                                    ' not found.')
 
 
 class SegmentationObject(object):

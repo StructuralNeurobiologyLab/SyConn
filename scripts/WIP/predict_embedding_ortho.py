@@ -122,7 +122,7 @@ if __name__ == "__main__":
             _ = projection_pca(latent, labels, fold + "/ctgt_{}_kde_pca.tif".format(os.path.split(m_p)[1][:-4]),
                                pca=None, colors=None,target_names=["EA", "MSN", "GP", "INT"])
         except ValueError:
-            print "Skipped", m_p
+            print("Skipped", m_p)
         # tsne_kwargs = {"n_components": 3, "random_state": 0,
         #                "perplexity": 20, "n_iter": 10000}
         # projection_tSNE(latent, labels,fold + "/ctgt_%d_kde_tsne.png" % ii,

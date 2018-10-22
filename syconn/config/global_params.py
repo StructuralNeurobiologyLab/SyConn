@@ -7,8 +7,11 @@
 
 # --------- Define global working directory
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5"
+wd = "/wholebrain/scratch/areaxfs3/"
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5/chunkdatasets/"
-wd = "/mnt/j0126/areaxfs_v10/"
+# wd = '/mnt/j0126/areaxfs_v10/'
+
+model_dir = wd + '/models/'
 
 # --------- Define backend
 backend = "FS"
@@ -24,14 +27,27 @@ SUBCC_SIZE_BIG_SSV = 40
 RENDERING_MAX_NB_SV = 5e3
 
 # --------------------------------------------------------------- MESH PARAMETER
-
 MESH_DOWNSAMPLING = {"sv": (8, 8, 4), "sj": (2, 2, 1), "vc": (4, 4, 2),
                      "mi": (8, 8, 4), "cs": (2, 2, 1), "conn": (2, 2, 1)}
 MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0, "conn": 4}
-
 SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000}  # in nm
-
 DISABLE_FILE_LOGGING = True
+
+# classification models
+mpath_tnet = '{}/TN-10-Neighbors/'.format(model_dir)
+mpath_spiness = '{}/FCN-VGG13--Lovasz--NewGT/'.format(model_dir)
+mpath_celltype = '{}/celltype_g1_20views_v3/g1_20views_v3-FINAL.mdl'
+mpath_axoness = '{}/axoness_g1_v3/g1_v3-FINAL.mdl'
+mpath_glia = '{}/glia_g0_v0/g0_v0-FINAL.mdl'
+
+
+# --------------------------------------------------------------- VIEW PARAMETER
+NB_VIEWS = 2
+
+
+# -------------------------------------------------------------- SPINE PARAMETER
+min_spine_cc_size = 10
+min_edge_dist_spine_graph = 110
 
 
 def get_dataset_scaling():
