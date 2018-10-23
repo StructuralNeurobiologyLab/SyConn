@@ -1240,3 +1240,17 @@ def preproc_sso_skelfeature_thread(args):
             except IndexError as e:
                 print("Error at SSO %d (context: %d).\n%s" % (
                       ssv.id, feat_ctx_nm, e))
+
+
+def map_ssv_semseg(args):
+    ssv_obj_ids = args[0]
+    version = args[1]
+    version_dict = args[2]
+    working_dir = args[3]
+    kwargs_semseg2mesh = args[4]
+
+    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
+
+    for ssv_id in ssv_obj_ids:
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv.semseg2mesh(**kwargs_semseg2mesh)

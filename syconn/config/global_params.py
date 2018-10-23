@@ -11,8 +11,6 @@
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5/chunkdatasets/"
 wd = '/mnt/j0126/areaxfs_v10/'
 
-model_dir = wd + '/models/'
-
 # --------- Define backend
 backend = "FS"
 
@@ -33,24 +31,25 @@ MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0, "conn": 4}
 SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000}  # in nm
 DISABLE_FILE_LOGGING = True
 
-# classification models
+# -------------------------------------------------------- CLASSIFICATION MODELS
+model_dir = wd + '/models/'
 mpath_tnet = '{}/TN-10-Neighbors/'.format(model_dir)
 mpath_spiness = '{}/FCN-VGG13--Lovasz--NewGT/'.format(model_dir)
-mpath_celltype = '{}/celltype_g1_20views_v3/g1_20views_v3-FINAL.mdl'
-mpath_axoness = '{}/axoness_g1_v3/g1_v3-FINAL.mdl'
-mpath_glia = '{}/glia_g0_v0/g0_v0-FINAL.mdl'
-
+mpath_celltype = '{}/celltype_g1_20views_v3/g1_20views_v3-FINAL.mdl'.format(model_dir)
+mpath_axoness = '{}/axoness_g1_v3/g1_v3-FINAL.mdl'.format(model_dir)
+mpath_glia = '{}/glia_g0_v0/g0_v0-FINAL.mdl'.format(model_dir)
 
 # --------------------------------------------------------------- VIEW PARAMETER
 NB_VIEWS = 2
-
 
 # -------------------------------------------------------------- SPINE PARAMETER
 min_spine_cc_size = 10
 min_edge_dist_spine_graph = 110
 
-
+# -------------------------------------------------------- COMPARTMENT PARAMETER
 DIST_AXONESS_AVERAGING = 10000
+
+# ----------------------------------------------------------- CELLTYPE PARAMETER
 
 
 def get_dataset_scaling():
