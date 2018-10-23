@@ -23,7 +23,7 @@ The first step reads from a KNOSSOS dataset with the segmentation and saves the 
                            qsub_pe=my_qsub_pe)
                            
 
-The second step used the hdf5 chunk dataset and generates a segmentation dataset with the results.
+The second step used the hdf5 chunk dataset and generates a segmentation dataset with the results. This step is currently quite expensive computationally and could be sped-up with cython.
 
     from syconn.extraction import cs_extraction_steps as ces
     ces.extract_agg_contact_sites(cset, working_dir,
