@@ -1136,7 +1136,7 @@ def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=20):
     return list(missing_ssv_ids)
 
 
-def predict_views_semseg(views, model, batch_size=250):
+def predict_views_semseg(views, model, batch_size=50):
     """
     Predicts a view array of shape [N_LOCS, N_CH, N_VIEWS, X, Y] with
     N_LOCS locations each with N_VIEWS perspectives, N_CH different channels
@@ -1293,7 +1293,6 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1, colors=None
         indices, vertices, normals, color
     """
     colors = np.array(colors) * 255
-    # TODO: refactor load_views!
     if nb_views is None:
         # load default
         i_views = sso.load_views("index").flatten()
