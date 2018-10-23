@@ -75,7 +75,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
     for p in voxel_rel_paths_2stage:
         os.makedirs(cs.so_storage_path + p)
 
-    rel_cs_to_cs_agg_ids_items = rel_cs_to_cs_agg_ids.items()
+    rel_cs_to_cs_agg_ids_items = list(rel_cs_to_cs_agg_ids.items())
     i_block = 0
     multi_params = []
     for block in [rel_cs_to_cs_agg_ids_items[i:i + stride]
