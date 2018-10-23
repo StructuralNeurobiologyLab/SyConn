@@ -131,18 +131,6 @@ def crop_bool_array(arr):
             in_mask_indices[2].min()]
 
 
-def negative_to_zero(a):
-    """
-    Sets negative values of array a to zero.
-    :param a: numpy array
-    :return: array a with non negativ values.
-    """
-    if a > 0:
-        return a
-    else:
-        return 0
-
-
 def group_ids_to_so_storage(ids, params, significant_digits=5):
     id_dict = defaultdict(list)
     param_dicts = [defaultdict(list) for _ in range(len(params))]

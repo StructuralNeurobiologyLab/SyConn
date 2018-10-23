@@ -1235,7 +1235,8 @@ class SuperSegmentationObject(object):
             render_sampled_sso(self, verbose=verbose, overwrite=overwrite,
                                index_views=True)
 
-    def _render_indexviews(self, nb_views=2, save=True, force_recompute=False):
+    def _render_indexviews(self, nb_views=2, save=True, force_recompute=False,
+                           verbose=False):
         """
         Render SSV raw views in case non-default number of views is required.
         Will be stored in SSV view dict. Default raw/index/prediction views are
@@ -1246,6 +1247,7 @@ class SuperSegmentationObject(object):
         nb_views : int
         save : bool
         force_recompute : bool
+        verbose : bool
 
         Returns
         -------
@@ -1264,12 +1266,12 @@ class SuperSegmentationObject(object):
         start = time.time()
         if self._rot_mat is None:
             index_views, rot_mat = render_sso_coords_index_views(
-                self, locs, nb_views=nb_views, verbose=True,
+                self, locs, nb_views=nb_views, verbose=verbose,
                 return_rot_matrices=True)
             self._rot_mat = rot_mat
         else:
             index_views = render_sso_coords_index_views(self, locs,
-                        nb_views=nb_views, verbose=True, rot_mat=self._rot_mat)
+                        nb_views=nb_views, verbose=verbose, rot_mat=self._rot_mat)
         end_ix_views = time.time()
         print("Rendering views took {:.2f} s. {:.2f} views/s".format(
             end_ix_views - start, len(index_views) / (end_ix_views - start)))
@@ -1321,7 +1323,28 @@ class SuperSegmentationObject(object):
         else:
             return views
 
-    def predict_semseg(self, m, semseg_key, nb_views=None):
+    def predict_semseg(self, m, semseg_key, nb_views=None, verbose=False):
+        """
+        Generates label views based on input model and stores it under the key
+        'semseg_key', either within the SSV's SVs or in an extra view-storage
+        according to input parameters:
+        Default situation:
+            semseg_key = 'spiness', nb_views=None
+            This will load the raw views stored at the SSV's SVs.
+        Non-default:
+            semseg_key = 'spiness4', nb_views=4
+            This requires to run 'self._render_rawviews(nb_views=4)'
+            This method then has to be called like:
+                'self.predict_semseg('spiness4', nb_views=4)'
+
+        Parameters
+        ----------
+        semseg_key : str
+        nb_views : Optional[int]
+        dest_path : str
+        k : int
+        verbose : bool
+        """
         # views have shape [N, 4, 2, 128, 256]
         if nb_views is not None and nb_views != global_params.NB_VIEWS:
             # treat as special view rendering
@@ -1332,7 +1355,7 @@ class SuperSegmentationObject(object):
                 views = self.load_views('raw{}'.format(nb_views))
             if len(views) != len(np.concatenate(self.sample_locations(cache=False))):
                 raise ValueError("Unequal number of views and redering locations.")
-            labeled_views = ssh.predict_views_semseg(views, m)
+            labeled_views = ssh.predict_views_semseg(views, m, verbose=verbose)
             assert labeled_views.shape[2] == nb_views, \
                 "Predictions have wrong shape."
             self.save_views(labeled_views, semseg_key)
@@ -1351,15 +1374,16 @@ class SuperSegmentationObject(object):
                 sv_views = views[cumsum[ii]:cumsum[ii+1]]
                 reordered_views.append(sv_views)
             ssh.pred_svs_semseg(m, reordered_views, semseg_key, self.svs,
-                                nb_cpus=self.nb_cpus)
+                                nb_cpus=self.nb_cpus, verbose=verbose)
 
     def semseg2mesh(self, semseg_key, nb_views=None, dest_path=None, k=1):
         """
+        Generates vertex labels and stores it in the SSV's label storage under
+        the key 'semseg_key'.
         Default situation:
             semseg_key = 'spiness', nb_views=None
             This will load the index and label views stored at the SSV's SVs.
         Non-default:
-            semseg_key = 'spiness4', nb_views=4
             semseg_key = 'spiness4', nb_views=4
             This requires to run 'self._render_rawviews(nb_views=4)',
             'self._render_indexviews(nb_views=4)' and 'predict_semseg(MODEL,
@@ -1898,12 +1922,8 @@ class SuperSegmentationObject(object):
         sc : SkelClassifier
             Classifier to predict "axoness" or "spiness" for every node on
             self.skeleton["nodes"]. Target type is defined in SkelClassifier
-
         clf_name : str
-
-
         feature_context_nm : int
-
         max_dist : int
             Defines the maximum path length from a source node for collecting
             neighboring nodes to calculate an average prediction for
@@ -2010,39 +2030,10 @@ class SuperSegmentationObject(object):
         return res
 
     # --------------------------------------------------------------- CELL TYPES
-    # def predict_cell_type(self, ssd_version="ctgt", clf_name="rfc",
-    #                       feature_context_nm=25000):
-    #     # TODO: outsource to sbc module
-    #     sc = sbc.SkelClassifier(working_dir=self.working_dir,
-    #                             ssd_version=ssd_version,
-    #                             create=False)
-    #
-    #     # if feature_context_nm is None:
-    #     #     if np.linalg.norm(self.shape * self.scaling) > 24000:
-    #     #         radius = 12000
-    #     #     else:
-    #     #         radius = nx.diameter(self.weighted_graph) / 2
-    #     #
-    #     #     if radius > 12000:
-    #     #         radius = 12000
-    #     #     elif radius < 2000:
-    #     #         radius = 2000
-    #     #
-    #     #     avail_fc = sc.avail_feature_contexts(clf_name)
-    #     #     feature_context_nm = avail_fc[np.argmin(np.abs(avail_fc - radius))]
-    #
-    #     features = ssh.extract_skel_features(feature_context_nm=
-    #                                         feature_context_nm,
-    #                                         downsample_to=200)
-    #     clf = sc.load_classifier(clf_name, feature_context_nm)
-    #
-    #     probs = clf.predict_proba(features)
-    #
-    #     ratios = np.sum(probs, axis=0)
-    #     ratios /= np.sum(ratios)
-    #
-    #     self.attr_dict["cell_type_ratios"] = ratios
-    #     self.save_attr_dict()
+    def predict_cell_type(self, ssd_version="ctgt", clf_name="rfc",
+                          feature_context_nm=25000):
+        raise DeprecationWarning('This method is deprecated. Use '
+                                 '"predict_nodes" instead!')
 
     def gen_skel_from_sample_locs(self, dest_path, pred_key_appendix=""):
         try:
@@ -2161,7 +2152,6 @@ class SuperSegmentationObject(object):
             maj_label = labels[np.argmax(cnts)]
             maj_votes[ii] = maj_label
         return maj_votes
-
 
 
 # ------------------------------------------------------------------------------

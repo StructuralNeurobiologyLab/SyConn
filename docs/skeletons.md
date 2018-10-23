@@ -1,12 +1,17 @@
 # Skeletons
-Skeletons are a sparse representation of the segmentation underlying a `SegmentationObjects` or `SuperSegmentationObjects`. Currently base-skeleton are stored on
-`SegmentationObject`-level and then stitched and pruned when they are combined for a `SuperSegmentationObject` (see section 'Reskeletonization'). Skeletons can serve as basis for
-collecting skeleton-node based statistics/features to classifiy spines, cell compartments and cell types (see section 'Skeleton-based classification')
+Skeletons are a sparse representation of the segmentation underlying a `SegmentationObjects` (usually cellular SV) or `SuperSegmentationObjects` (usually cellular SSVs).
+Currently base-skeleton are stored on `SegmentationObject`-level and then stitched and pruned when they are combined for a
+ `SuperSegmentationObject` (see section 'Skeletonization'). Skeletons can serve as basis for
+collecting skeleton-node based statistics/features to classifiy spines, cell
+compartments and cell types (see section 'Skeleton-based classification')
 
-## Reskeletonization
-In order to reskeletonize SuperSuperVoxel (SSV), which are created
-as `SuperSegmentationObjects` with the corresponding working directory
-(PATH_TO_WORKING_DIR) and their unique ID (SSV_ID).
+## Skeletonization of SSVs
+### Prerequisites
+* Initialized SuperSegmentationDataset ([SSD](super_segmentation_datasets.md) of SVs)
+* SV skeletons (TODO: add reskeletonization workflow)
+
+[SSVs](super_segmentation_objects.md) can be initialized by calling `SuperSegmentationObjects` with the corresponding working directory
+(PATH_TO_WORKING_DIR) and their unique ID (SSV_ID)
 
 Based on these and given the skeletons for every SV part of it,
 one can reskeletonize this SSV by calling:
@@ -19,31 +24,18 @@ create_sso_skeleton(sso)
 The object `sso` then has a attribute `sso.skeleton` which stores nodes, edges
 and possible properties in a dictionary.
 
-For precomputing skeltons of all SSV use the QSUB script `QSUB_export_skeletons_new`,
-which can be found in the `QSUB_scripts` folder inside `syconn`. For running
-QSUB scripts in a cluster use for example
- (identify the folder of `QSUB_export_skeletons_new`: FOLDER_OF_QSUB_SCRIPT):
-```
-import os
-from syconn.mp import qsub_utils as qu
-from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
-from syconn.handler.basics import chunkify
-import numpy as np
-
-if __name__ == "__main__":
-    ssds = SuperSegmentationDataset(working_dir=PATH_TO_WORKING_DIR)
-    multi_params = ssds.ssv_ids
-    np.random.shuffle(multi_params)
-    multi_params = chunkify(multi_params, 4000)
-    path_to_out = qu.QSUB_script(multi_params, "export_skeletons_new",
-                                 n_max_co_processes=200, pe="openmp", queue=None,
-                                 script_folder=PATH_TO_QSUB_SCRIPT, suffix="")
-```
-This is already available as a runnable script in `SyConn/scripts/mp/start_sso_process`.
-Note that you have to insert the correct name of the QSUB script file, e.g.
-'export_skeletons_new' for running 'QSUB_export_skeletons_new'.
+In order to precompute the skeletons of all SSV, the QSUB script `QSUB_export_skeletons_new`
+in the `QSUB_scripts` folder inside `syconn` is used by calling the
+script `generation.py` in `scripts/skeletons/`.
 
 ## Skeleton-based classification
+**TODO: add runnable scripts for dataset predictions; elaborate on GT generation**
+
+### Prerequisites
+* SSV skeletons
+* Mapped cellular organelles, see [here](object_mapping.md)
+* Task-specific ground truth SuperSegmentationDataset
+
 Skeleton-based features can be extracted by calling `sso.skel_features(ctx)` of
 a SuperSegmentationObject instance. Note that this is already precomputed
 for two context windiws when running the 'QSUB_export_skeletons_new' script.

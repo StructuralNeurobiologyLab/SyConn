@@ -635,6 +635,7 @@ def stitch_skel_nx(skel_nx):
 
     return skel_nx
 
+
 def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     """
     Creates the super super voxel skeleton
@@ -1136,7 +1137,7 @@ def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=20):
     return list(missing_ssv_ids)
 
 
-def predict_views_semseg(views, model, batch_size=50):
+def predict_views_semseg(views, model, batch_size=50, verbose=False):
     """
     Predicts a view array of shape [N_LOCS, N_CH, N_VIEWS, X, Y] with
     N_LOCS locations each with N_VIEWS perspectives, N_CH different channels
@@ -1148,20 +1149,30 @@ def predict_views_semseg(views, model, batch_size=50):
         shape of [N_LOCS, N_CH, N_VIEWS, X, Y]
     model : pytorch model
     batch_size : int
+    verbose : bool
 
     Returns
     -------
 
     """
+    if verbose:
+        log_reps.info('Reshaping view array with shape {}.'
+                      ''.format(views.shape))
     views = views.astype(np.float32) / 255.
     views = views.swapaxes(1, 2)  # swap channel and view axis
     # N, 2, 4, 128, 256
     orig_shape = views.shape
     # reshape to predict single projections
     views = views.reshape([-1] + list(orig_shape[2:]))
+    if verbose:
+        log_reps.info('Predicting view array with shape {}.'
+                      ''.format(views.shape))
     # predict and reset to original shape: N, 2, 4, 128, 256
-    labeled_views = model.predict_proba(views, bs=batch_size, verbose=False)
+    labeled_views = model.predict_proba(views, bs=batch_size, verbose=verbose)
     labeled_views = np.argmax(labeled_views, axis=1)[:, None]
+    if verbose:
+        log_reps.info('Finished prediction of view array with shape {}.'
+                      ''.format(views.shape))
     labeled_views = labeled_views.reshape(list(orig_shape[:2])
                                           + list(labeled_views.shape[1:]))
     # swap axes to get source shape
@@ -1170,7 +1181,7 @@ def predict_views_semseg(views, model, batch_size=50):
 
 
 def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
-                    nb_cpus=1):
+                    nb_cpus=1, verbose=False):
     """
     Predicts views of a list of SVs and saves them via SV.save_views.
     Efficient helper function for chunked predictions,
@@ -1187,6 +1198,7 @@ def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
         svs : list[SegmentationObject]
     svs : Optional[list[SegmentationObject]]
     return_pred : Optional[bool]
+    verbose : bool
 
     Returns
     -------
@@ -1199,7 +1211,7 @@ def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
     part_views = np.cumsum([0] + [len(v) for v in views])
     assert len(part_views) == len(views) + 1
     views = np.concatenate(views)  # merge axis 0, i.e. N_SV and N_LOCS to N_SV*N_LOCS
-    label_views = predict_views_semseg(views, model)
+    label_views = predict_views_semseg(views, model, verbose=verbose)
     svs_labelviews = []
     for ii in range(len(part_views[:-1])):
         sv_label_views = label_views[part_views[ii]:part_views[ii + 1]]
@@ -1266,7 +1278,8 @@ def pred_sv_chunk_semseg(args):
         label_vd.push()
 
 
-def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1, colors=None):
+def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
+                colors=None):
     """
     Maps semantic segmentation to SSV mesh.
 

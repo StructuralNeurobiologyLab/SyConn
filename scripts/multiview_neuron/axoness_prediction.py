@@ -20,13 +20,14 @@ def axoness_pred_exists(sv):
 
 
 if __name__ == "__main__":
+    # TODO: currently working directory has to be set globally in global_params and is not adjustable here because all qsub jobs will start a script referring to 'global_params.wd'
     ssd = SuperSegmentationDataset(working_dir=wd)
     sd = ssd.get_segmentationdataset("sv")
     # sv_ids = ssd.sv_ids
     # np.random.shuffle(sv_ids)
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 75)
-    pred_key = "axoness_probas_v2"
+    pred_key = "axoness_probas"
     # get model properties
     m = get_axoness_model()
     model_kwargs = dict(model_path=m._path, normalize_data=m.normalize_data,

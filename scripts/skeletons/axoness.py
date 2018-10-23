@@ -1,6 +1,9 @@
-# SyConn
-# Copyright (c) 2016 Philipp J. Schubert
-# All rights reserved
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 from syconn.proc.skel_based_classifier import SkelClassifier
 from syconn.config.global_params import wd
 from syconn.handler.basics import load_pkl2obj

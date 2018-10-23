@@ -7,9 +7,9 @@
 
 # --------- Define global working directory
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5"
-wd = "/wholebrain/scratch/areaxfs3/"
+# wd = "/wholebrain/scratch/areaxfs3/"
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5/chunkdatasets/"
-# wd = '/mnt/j0126/areaxfs_v10/'
+wd = '/mnt/j0126/areaxfs_v10/'
 
 model_dir = wd + '/models/'
 
@@ -48,6 +48,9 @@ NB_VIEWS = 2
 # -------------------------------------------------------------- SPINE PARAMETER
 min_spine_cc_size = 10
 min_edge_dist_spine_graph = 110
+
+
+DIST_AXONESS_AVERAGING = 10000
 
 
 def get_dataset_scaling():

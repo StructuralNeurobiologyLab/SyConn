@@ -11,7 +11,7 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconnfs.representations import super_segmentation_helper as ssh
+from syconn.reps.super_segmentation_dataset import predict_cell_type_skelbased_thread
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -24,7 +24,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = ssh.predict_cell_type_thread(args)
+out = predict_cell_type_skelbased_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

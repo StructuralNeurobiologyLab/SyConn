@@ -1,6 +1,9 @@
-# SyConn
-# Copyright (c) 2018 Philipp J. Schubert, J. Kornfeld
-# All rights reserved
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 import os
 from syconn.config.global_params import wd
 from syconn.mp import qsub_utils as qu
@@ -11,6 +14,7 @@ import numpy as np
 
 
 if __name__ == "__main__":
+    # TODO: currently working directory has to be set globally in global_params and is not adjustable here because all qsub jobs will start a script referring to 'global_params.wd'
     # view rendering prior to glia removal, choose SSD accordingly
     ssd = SuperSegmentationDataset(working_dir=wd)
     multi_params = ssd.ssv_ids

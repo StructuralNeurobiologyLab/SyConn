@@ -5,16 +5,14 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 from syconn.config.global_params import wd, mpath_spiness
-from syconn.handler.prediction import get_semseg_spiness_model
 from syconn.handler.basics import chunkify
 from syconn.reps.super_segmentation import SuperSegmentationDataset
-from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_ssv
 from syconn.mp import qsub_utils as qu
-import numpy as np
 import os
 
 
 if __name__ == "__main__":
+    # TODO: currently working directory has to be set globally in global_params and is not adjustable here because all qsub jobs will start a script referring to 'global_params.wd'
     ssd = SuperSegmentationDataset(working_dir=wd)
     sd = ssd.get_segmentationdataset("sv")
     # sv_ids = ssd.sv_ids
