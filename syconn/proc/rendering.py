@@ -13,14 +13,15 @@ import numpy as np
 import time
 import sys
 import warnings
+from ..config import global_params
 from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
-from ..handler.multiviews import generate_palette, remap_rgb_labelviews, rgb2id_array
+from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
+    rgb2id_array, id2rgb_array_contiguous
 from .meshes import merge_meshes, get_random_centered_coords, \
     MeshObject, calc_rot_matrices, flag_empty_spaces
 import os
 import tqdm
-from syconn.handler.multiviews import id2rgb_array_contiguous
 
 try:
     import os
@@ -397,7 +398,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                            ws=(256, 128), views_key="raw", nb_simplices=3,
                            depth_map=True, clahe=False, smooth_shade=True,
                            verbose=False, wire_frame=False,
-                           nb_views=2, triangulation=True):
+                           nb_views=None, triangulation=True):
     """
     Same as multi_view_mesh_coords but without creating gl context.
     Parameters
@@ -426,6 +427,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     np.array
         Returns array of views, else None
     """
+    if nb_views is None:
+        nb_views = global_params.NB_VIEWS
     # center data
     assert isinstance(edge_lengths, np.ndarray)
     assert nb_simplices in [3, 4]
@@ -576,7 +579,7 @@ def render_mesh_coords(coords, ind, vert, **kwargs):
 def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                         rot_matrices=None, views_key="raw",
                         return_rot_matrices=False, depth_map=True,
-                        smooth_shade=True, wire_frame=False, nb_views=2,
+                        smooth_shade=True, wire_frame=False, nb_views=None,
                         triangulation=True, comp_window=8e3):
     """
     Render raw views located at given coordinates in mesh
@@ -604,6 +607,8 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
     numpy.array
         views at each coordinate
     """
+    if nb_views is None:
+        nb_views = global_params.NB_VIEWS
     if np.isscalar(comp_window):
         edge_lengths = np.array([comp_window, comp_window / 2, comp_window])
     else:
@@ -710,8 +715,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
 
 
 def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=False,
-                      ws=(256,128), cellobjects_only=False, wire_frame=False,
-                      nb_views=2, comp_window=8e3, rot_mat=None, return_rot_mat=False):
+                      ws=(256, 128), cellobjects_only=False, wire_frame=False,
+                      nb_views=None, comp_window=8e3, rot_mat=None, return_rot_mat=False):
     """
     Render views of SuperSegmentationObject at given coordinates.
     
@@ -735,6 +740,8 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     -------
     np.array
     """
+    if nb_views is None:
+        nb_views = global_params.NB_VIEWS
     mesh = sso.mesh
     if len(mesh[1]) == 0:
         print("----------------------------------------------\n"
@@ -744,7 +751,8 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
                                 "cellobjects only."
-        raw_views = np.ones((len(coords), nb_views, 128, 256), dtype=np.uint8) * 255
+        raw_views = np.ones((len(coords), nb_views, 128, 256), dtype=np.uint8) \
+                    * 255
         edge_lengths = np.array([comp_window, comp_window / 2, comp_window])
         mo = MeshObject("raw", mesh[0], mesh[1])
         mo._colors = None
@@ -799,7 +807,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
 
 
 def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
-                                  rot_mat=None, nb_views=2,
+                                  rot_mat=None, nb_views=None,
                                   comp_window=8e3, return_rot_matrices=False):
     """
 
@@ -818,6 +826,8 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     -------
 
     """
+    if nb_views is None:
+        nb_views = global_params.NB_VIEWS
     ind, vert, norm = sso.mesh
     if len(vert) == 0:
         print("----------------------------------------------\n"
@@ -859,10 +869,11 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
 
 
 def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
-                                  ws=(256, 128), rot_mat=None, nb_views=2,
+                                  ws=(256, 128), rot_mat=None, nb_views=None,
                                   comp_window=8e3, return_rot_matrices=False):
     """
     Render views with vertex colors corresponding to vertex labels.
+
     Parameters
     ----------
     sso :
@@ -881,6 +892,8 @@ def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
     -------
 
     """
+    if nb_views is None:
+        nb_views = global_params.NB_VIEWS
     ind, vert, _ = sso.mesh
     if len(vertex_labels) != len(vert) // 3:
         raise ValueError("Length of vertex labels and vertices "

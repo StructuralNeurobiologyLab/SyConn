@@ -24,7 +24,7 @@ from elektronn3.training.loss import BlurryBoarderLoss, DiceLoss, LovaszLoss
 
 def get_model():
     vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
-    model = FCNs(base_net=vgg_model, n_class=5)
+    model = FCNs(pretrained_net=vgg_model, n_class=5)
     return model
 
 

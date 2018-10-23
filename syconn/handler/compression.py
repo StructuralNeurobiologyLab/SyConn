@@ -22,7 +22,7 @@ import os
 import warnings
 __all__ = ['arrtolz4string', 'lz4stringtoarr', 'load_lz4_compressed',
            'save_lz4_compressed', 'load_compressed', 'load_from_h5py',
-           'save_to_h5py', 'lz4string_listtoarr' 'arrtolz4string_list']
+           'save_to_h5py', 'lz4string_listtoarr', 'arrtolz4string_list']
 
 
 def arrtolz4string(arr):
@@ -35,7 +35,7 @@ def arrtolz4string(arr):
 
     Returns
     -------
-    str
+    byte
         lz4 compressed string
     """
     if isinstance(arr, list):
@@ -58,8 +58,8 @@ def lz4stringtoarr(string, dtype=np.float32, shape=None):
 
     Parameters
     ----------
-    string : str
-    dtype : np.dtype
+    string : byte
+    dtype : type
     shape : tuple
 
     Returns
@@ -111,8 +111,8 @@ def lz4string_listtoarr(str_lst, dtype=np.float32, shape=None):
 
     Parameters
     ----------
-    str_lst : list of str
-    dtype : np.dtype
+    str_lst : List[str]
+    dtype : type
     shape : tuple
 
     Returns
@@ -173,7 +173,7 @@ def load_lz4_compressed(p, shape=(-1, 20, 2, 128, 256), dtype=np.float32):
     ----------
     p : path to lz4 file
     shape : tuple
-    dtype : np.dtype
+    dtype : type
 
     Returns
     -------
@@ -242,7 +242,7 @@ def save_to_h5py(data, path, hdf5_names=None, overwrite=False, compression=True)
         if list, hdf5_names has to be set.
     path: str
         forward-slash separated path to file
-    hdf5_names: list of str
+    hdf5_names: List[str]
         has to be the same length as data
     overwrite : bool
         determines whether existing files are overwritten

@@ -168,7 +168,8 @@ class MeshStorage(StorageClass):
     additionally (save decompressing time).
     """
 
-    def __init__(self, inp, **kwargs):
+    def __init__(self, inp, load_colarr=False, **kwargs):
+        self.load_colarr = load_colarr
         super(MeshStorage, self).__init__(inp, **kwargs)
 
     def __getitem__(self, item):
@@ -180,8 +181,8 @@ class MeshStorage(StorageClass):
 
         Returns
         -------
-        list of np.arrays
-            [indices, vertices]
+        List[np.arrays]
+            [indices, vertices, normals, colors/labels]
         """
         try:
             return self._cache_dc[item]
@@ -191,9 +192,15 @@ class MeshStorage(StorageClass):
         # if no normals were given in file / cache append empty array
         if len(mesh) == 2:
             mesh.append([""])
+        # if no colors/labels were given in file / cache append empty array
+        if len(mesh) == 3:
+            mesh.append([""])
         decomp_arrs = [lz4string_listtoarr(mesh[0], dtype=np.uint32),
                        lz4string_listtoarr(mesh[1], dtype=np.float32),
-                       lz4string_listtoarr(mesh[2], dtype=np.float32)]
+                       lz4string_listtoarr(mesh[2], dtype=np.float32),
+                       lz4string_listtoarr(mesh[3], dtype=np.uint8)]
+        if not self.load_colarr:
+            decomp_arrs = decomp_arrs[:3]
         if self._cache_decomp:
             self._cache_dc[item] = decomp_arrs
         return decomp_arrs
@@ -204,17 +211,29 @@ class MeshStorage(StorageClass):
         Parameters
         ----------
         key : int/str
-        mesh : list of np.array
-            [indices, vertices, normals]
+        mesh : List[np.array]
+            [indices, vertices, normals, colors/labels]
         """
         if len(mesh) == 2:
             mesh.append(np.zeros((0, ), dtype=np.float32))
+        if len(mesh) == 3:
+            mesh.append(np.zeros((0, ), dtype=np.uint8))
         if self._cache_decomp:
             self._cache_dc[key] = mesh
+        if len(mesh[2]) > 0 and len(mesh[1]) != len(mesh[2]):
+            log_backend.warning('Lengths of vertex array and length of normal'
+                                ' array differ!')
+        # test if lengths of vertex and color array are identical or test
+        # if vertex array length is equal to 3x label array length. Arrays are flattened.
+        if len(mesh[3]) > 0 and not (len(mesh[1]) == len(mesh[3]) or
+                                     len(mesh[1]) == len(mesh[3]) * 3):
+            log_backend.warning('Lengths of vertex array and length of color/'
+                                'label array differ!')
         comp_ind = arrtolz4string_list(mesh[0].astype(dtype=np.uint32))
         comp_vert = arrtolz4string_list(mesh[1].astype(dtype=np.float32))
         comp_norm = arrtolz4string_list(mesh[2].astype(dtype=np.float32))
-        self._dc_intern[key] = [comp_ind, comp_vert, comp_norm]
+        comp_col = arrtolz4string_list(mesh[3].astype(dtype=np.uint8))
+        self._dc_intern[key] = [comp_ind, comp_vert, comp_norm, comp_col]
 
 
 class VoxelStorage(VoxelStorageL):
