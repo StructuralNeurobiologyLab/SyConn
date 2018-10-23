@@ -79,15 +79,15 @@ from syconn.extraction import cs_extraction_steps as ces
 #ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=5000,
 #                       qsub_pe='default', qsub_queue='all.q')
 
-ces.extract_agg_contact_sites(cd, wd,
-                              n_folders_fs=10000, suffix="",
-                              n_max_co_processes=5000, qsub_pe='default', qsub_queue='all.q')
+#ces.extract_agg_contact_sites(cd, wd,
+#                              n_folders_fs=10000, suffix="",
+#                              n_max_co_processes=5000, qsub_pe='default', qsub_queue='all.q')
 
 
-#from syconn.extraction import cs_processing_steps as cps
+from syconn.extraction import cs_processing_steps as cps
 cps.combine_and_split_cs_agg(wd, cs_gap_nm=300,
                              stride=100, qsub_pe='default', qsub_queue='all.q',
-                             n_max_co_processes=200)
+                             n_max_co_processes=5000)
 
 ############################################################################################
 # ##### Cell object extraction #####
