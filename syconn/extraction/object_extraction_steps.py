@@ -705,7 +705,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
     hdf5names: list of str
         List of names/ labels to be extracted and processed from the prediction
         file
-    chunk_list: list of int
+    chunk_list: List[int] or None
         Selective list of chunks for which this function should work on. If None
         all chunks are used.
     debug: boolean
