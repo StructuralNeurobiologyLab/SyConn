@@ -26,10 +26,19 @@ from ..handler.basics import chunkify
 
 
 def filter_relevant_cs_agg(cs_agg, ssd):
+    """
+    This function filters (likely ;) ) the intra-ssv contact
+    sites (inside of a ssv, not between ssvs) that do not need to be agglomerated.
+
+    :param cs_agg:
+    :param ssd:
+    :return:
+    """
     sv_ids = ch.sv_id_to_partner_ids_vec(cs_agg.ids)
 
     cs_agg_ids = cs_agg.ids.copy()
 
+    # this might mean that all cs between svs with IDs>max(np.uint32) are discarded
     sv_ids[sv_ids >= len(ssd.id_changer)] = -1
     mapped_sv_ids = ssd.id_changer[sv_ids]
 
@@ -37,6 +46,7 @@ def filter_relevant_cs_agg(cs_agg, ssd):
     cs_agg_ids = cs_agg_ids[mask]
     filtered_mapped_sv_ids = mapped_sv_ids[mask]
 
+    # this identifies all inter-ssv contact sites
     mask = filtered_mapped_sv_ids[:, 0] - filtered_mapped_sv_ids[:, 1] != 0
     cs_agg_ids = cs_agg_ids[mask]
     relevant_cs_agg = filtered_mapped_sv_ids[mask]
