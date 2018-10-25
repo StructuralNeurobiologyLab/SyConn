@@ -17,18 +17,15 @@ import scipy.ndimage
 from knossos_utils.skeleton_utils import annotation_to_nx_graph, load_skeleton as load_skeleton_kzip
 from .rep_helper import assign_rep_values, colorcode_vertices
 from . import segmentation
+from ..backend.storage import MeshStorage
 from .segmentation import SegmentationObject
-from .segmentation_helper import load_skeleton, find_missing_sv_views, find_missing_sv_attributes
-from ..mp.shared_mem import start_multiprocess, start_multiprocess_obj
+from .segmentation_helper import load_skeleton, find_missing_sv_views, find_missing_sv_attributes, find_missing_sv_skeletons
+from ..mp.mp_utils import start_multiprocess, start_multiprocess_obj
 skeletopyze_available = False
-# try:
-#     import skeletopyze
-#     skeletopyze_available = True
-# except:
-#     print("skeletopyze not found - you won't be able to compute skeletons. "
-#           "Install skeletopyze from https://github.com/funkey/skeletopyze")
+from ..reps import log_reps
 from scipy import spatial
-
+from ..proc.meshes import in_bounding_box, write_mesh2kzip
+from collections import defaultdict
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
@@ -452,7 +449,8 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, mi
     sso.load_skeleton()
     scal = sso.scaling
     change = 1
-
+    if sso.skeleton is None:
+        sso.skeleton = dict()
 
     while change > 0:
         change = 0
@@ -637,6 +635,7 @@ def stitch_skel_nx(skel_nx):
 
     return skel_nx
 
+
 def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     """
     Creates the super super voxel skeleton
@@ -743,9 +742,9 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
         plt.close()
 
-def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
+def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=1000,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
-    node_degrees = np.array(dict(ssv.weighted_graph().degree()).values(),
+    node_degrees = np.array(list(dict(ssv.weighted_graph().degree()).values()),
                             dtype=np.int)
 
     sizes = {}
@@ -771,15 +770,14 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
         paths = nx.single_source_dijkstra_path(ssv.weighted_graph(),
                                                this_i_node,
                                                feature_context_nm)
-        neighs = np.array(paths.keys(), dtype=np.int)
+        neighs = np.array(list(paths.keys()), dtype=np.int)
 
         neigh_diameters = ssv.skeleton["diameters"][neighs]
         this_features.append(np.mean(neigh_diameters))
         this_features.append(np.std(neigh_diameters))
-        this_features += list(np.histogram(neigh_diameters,
-                                           bins=10,
-                                           range=(0, max_diameter),
-                                           normed=True)[0])
+        hist_feat = np.histogram(neigh_diameters,bins=10,range=(0, max_diameter))[0]
+        hist_feat = np.array(hist_feat) / hist_feat.sum()
+        this_features += list(hist_feat)
         this_features.append(np.mean(node_degrees[neighs]))
 
         for obj_type in obj_types:
@@ -797,8 +795,15 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=500,
             this_features.append(np.mean(obj_sizes))
             this_features.append(np.std(obj_sizes))
 
+        # box feature
+        edge_len = feature_context_nm * 2
+        bb = [ssv.skeleton["nodes"][this_i_node], np.array([edge_len,] * 3)]
+        vol_tot = feature_context_nm ** 3
+        node_density = np.sum(in_bounding_box(ssv.skeleton["nodes"], bb)) / vol_tot
+        this_features.append(node_density)
+
         features.append(np.array(this_features))
-    return features
+    return np.array(features)
 
 
 def associate_objs_with_skel_nodes(ssv, obj_types=("sj", "vc", "mi"),
@@ -875,7 +880,7 @@ def label_array_for_sso_skel(sso, comment_converter):
     cd = skelnode_comment_dict(sso)
     label_array = np.ones(len(sso.skeleton["nodes"]), dtype=np.int) * -1
     for ii, n in enumerate(sso.skeleton["nodes"]):
-        comment = cd[frozenset(n)].lower()
+        comment = cd[frozenset(n.astype(np.int))].lower()
         try:
             label_array[ii] = comment_converter[comment]
         except KeyError:
@@ -909,7 +914,7 @@ def write_axpred(ssv, pred_key_appendix, dest_path=None, k=1):
 
 
 def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
-                                max_dist=10000,  return_res=False):
+                                max_dist=10000, return_res=False):
     """
     Averages the axoness prediction along skeleton with maximum path length
     of 'max_dist'. Therefore, view indices were mapped to every skeleton
@@ -951,8 +956,8 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
     else:
         preds = sso.lookup_in_attribute_dict(pred_key)
     loc_coords = np.concatenate(sso.sample_locations())
-    assert len(loc_coords) == len(preds), "Number of view coordinates is" \
-                                          "different from number of view" \
+    assert len(loc_coords) == len(preds), "Number of view coordinates is " \
+                                          "different from number of view " \
                                           "predictions. SSO %d" % sso.id
     if "view_ixs" not in sso.skeleton.keys():
         print("View indices were not yet assigned to skeleton nodes. "
@@ -964,9 +969,9 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
     avg_pred = []
 
     g = sso.weighted_graph()
-    for n in g.nodes():
+    for n in range(g.number_of_nodes()):
         paths = nx.single_source_dijkstra_path(g, n, max_dist)
-        neighs = np.array(paths.keys(), dtype=np.int)
+        neighs = np.array(list(paths.keys()), dtype=np.int)
         unique_view_ixs = np.unique(view_ixs[neighs], return_counts=False)
         cls, cnts = np.unique(preds[unique_view_ixs], return_counts=True)
         c = cls[np.argmax(cnts)]
@@ -979,22 +984,19 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
 
 def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False,
                        save_sso=True):
-    if k > 1:
-        print(DeprecationWarning("Using k>1 is deprecated. Use k=1 followed by"
-                                 "'_average_node_axoness_views'."))
+    if k != 1:
+        log_reps.warn("Parameter 'k' is deprecated but was set to {}. "
+                      "It is not longer used in this method.".format(k))
     if sso.skeleton is None:
         sso.load_skeleton()
     proba_key = "axoness_probas_cnn%s" % pred_key_appendix
     pred_key = "axoness_preds_cnn%s" % pred_key_appendix
     if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key) or reload:
-        preds = np.array(start_multiprocess_obj("axoness_preds",
-                                                   [[sv, {
-                                                       "pred_key_appendix": pred_key_appendix}]
+        preds = np.array(start_multiprocess_obj("axoness_preds", [[sv, {"pred_key_appendix": pred_key_appendix}]
                                                     for sv in sso.svs],
                                                    nb_cpus=sso.nb_cpus))
         probas = np.array(start_multiprocess_obj("axoness_probas",
-                                                    [[sv, {
-                                                        "pred_key_appendix": pred_key_appendix}]
+                                                    [[sv, {"pred_key_appendix": pred_key_appendix}]
                                                      for sv in sso.svs],
                                                     nb_cpus=sso.nb_cpus))
         preds = np.concatenate(preds)
@@ -1009,27 +1011,63 @@ def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False,
     assert len(loc_coords) == len(preds), "Number of view coordinates is" \
                                           "different from number of view" \
                                           "predictions. SSO %d" % sso.id
-    # find kNN in loc_coords for every skeleton node and use their majority
+    # find NN in loc_coords for every skeleton node and use their majority
     # prediction
     node_preds = colorcode_vertices(sso.skeleton["nodes"] * sso.scaling,
-                                    loc_coords, preds, colors=[0, 1, 2], k=k)
+                                    loc_coords, preds, colors=[0, 1, 2], k=1)
+    node_probas, ixs = assign_rep_values(sso.skeleton["nodes"] * sso.scaling,
+                                         loc_coords, probas, return_ixs=True)
+    assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
+                                           "coordinates is bigger than " \
+                                           "length of sample coordinates."
+    sso.skeleton["axoness%s" % pred_key_appendix] = node_preds
+    sso.skeleton["axoness_probas%s" % pred_key_appendix] = node_probas
+    sso.skeleton["view_ixs"] = ixs
+    if save_sso:
+        sso.save_skeleton()
 
+
+def _cnn_spiness2skel(sso, pred_key_appendix="", k=1, reload=False,
+                      save_sso=True):
     if k != 1:
-        node_probas = assign_rep_values(
-            sso.skeleton["nodes"] * sso.scaling,
-            loc_coords, probas, colors=[0, 1, 2], k=k)
-        sso.skeleton["axoness_cnn_k%d%s" % (k, pred_key_appendix)] = node_preds
-        sso.skeleton["axoness_cnn_k%d%s_probas" % (k, pred_key_appendix)] = node_probas
+        log_reps.warn("Parameter 'k' is deprecated but was set to {}. "
+                      "It is not longer used in this method.".format(k))
+    if sso.skeleton is None:
+        sso.load_skeleton()
+    proba_key = "axoness_probas_cnn%s" % pred_key_appendix
+    pred_key = "axoness_preds_cnn%s" % pred_key_appendix
+    if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key) or reload:
+        preds = np.array(start_multiprocess_obj("axoness_preds", [[sv, {"pred_key_appendix": pred_key_appendix}]
+                                                    for sv in sso.svs],
+                                                   nb_cpus=sso.nb_cpus))
+        probas = np.array(start_multiprocess_obj("axoness_probas",
+                                                    [[sv, {"pred_key_appendix": pred_key_appendix}]
+                                                     for sv in sso.svs],
+                                                    nb_cpus=sso.nb_cpus))
+        preds = np.concatenate(preds)
+        probas = np.concatenate(probas)
+        sso.attr_dict[proba_key] = probas
+        sso.attr_dict[pred_key] = preds
+        sso.save_attributes([proba_key, pred_key], [probas, preds])
     else:
-        node_probas, ixs = assign_rep_values(
-            sso.skeleton["nodes"] * sso.scaling,
-            loc_coords, probas, colors=[0, 1, 2], k=k,
-            return_ixs=True)
-        assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
-                                               "coordinates is bigger than length of sample coordinates."
-        sso.skeleton["axoness%s" % pred_key_appendix] = node_preds
-        sso.skeleton["axoness_probas%s" % pred_key_appendix] = node_probas
-        sso.skeleton["view_ixs"] = ixs
+        preds = sso.lookup_in_attribute_dict(pred_key)
+        probas = sso.lookup_in_attribute_dict(proba_key)
+    loc_coords = np.concatenate(sso.sample_locations())
+    assert len(loc_coords) == len(preds), "Number of view coordinates is" \
+                                          "different from number of view" \
+                                          "predictions. SSO %d" % sso.id
+    # find NN in loc_coords for every skeleton node and use their majority
+    # prediction
+    node_preds = colorcode_vertices(sso.skeleton["nodes"] * sso.scaling,
+                                    loc_coords, preds, colors=[0, 1, 2], k=1)
+    node_probas, ixs = assign_rep_values(sso.skeleton["nodes"] * sso.scaling,
+                                         loc_coords, probas, return_ixs=True)
+    assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
+                                           "coordinates is bigger than " \
+                                           "length of sample coordinates."
+    sso.skeleton["axoness%s" % pred_key_appendix] = node_preds
+    sso.skeleton["axoness_probas%s" % pred_key_appendix] = node_probas
+    sso.skeleton["view_ixs"] = ixs
     if save_sso:
         sso.save_skeleton()
 
@@ -1073,6 +1111,19 @@ def find_incomplete_ssv_views(ssd, woglia, n_cores=20):
     return list(missing_ssv_ids)
 
 
+def find_incomplete_ssv_skeletons(ssd, n_cores=20):
+    svs = np.concatenate([list(ssv.svs) for ssv in ssd.ssvs])
+    incomplete_sv_ids = find_missing_sv_skeletons(svs, n_cores)
+    missing_ssv_ids = set()
+    for sv_id in incomplete_sv_ids:
+        try:
+            ssv_id = ssd.mapping_dict_reversed[sv_id]
+            missing_ssv_ids.add(ssv_id)
+        except KeyError:
+            pass  # sv does not exist in this SSD
+    return list(missing_ssv_ids)
+
+
 def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=20):
     sd = ssd.get_segmentationdataset("sv")
     incomplete_sv_ids = find_missing_sv_attributes(sd, attr_key, n_cores)
@@ -1085,3 +1136,227 @@ def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=20):
             pass  # sv does not exist in this SSD
     return list(missing_ssv_ids)
 
+
+def predict_views_semseg(views, model, batch_size=50, verbose=False):
+    """
+    Predicts a view array of shape [N_LOCS, N_CH, N_VIEWS, X, Y] with
+    N_LOCS locations each with N_VIEWS perspectives, N_CH different channels
+    (e.g. shape of cell, mitochondria, synaptic junctions and vesicle clouds).
+
+    Parameters
+    ----------
+    views : np.array
+        shape of [N_LOCS, N_CH, N_VIEWS, X, Y]
+    model : pytorch model
+    batch_size : int
+    verbose : bool
+
+    Returns
+    -------
+
+    """
+    if verbose:
+        log_reps.info('Reshaping view array with shape {}.'
+                      ''.format(views.shape))
+    views = views.astype(np.float32) / 255.
+    views = views.swapaxes(1, 2)  # swap channel and view axis
+    # N, 2, 4, 128, 256
+    orig_shape = views.shape
+    # reshape to predict single projections
+    views = views.reshape([-1] + list(orig_shape[2:]))
+    if verbose:
+        log_reps.info('Predicting view array with shape {}.'
+                      ''.format(views.shape))
+    # predict and reset to original shape: N, 2, 4, 128, 256
+    labeled_views = model.predict_proba(views, bs=batch_size, verbose=verbose)
+    labeled_views = np.argmax(labeled_views, axis=1)[:, None]
+    if verbose:
+        log_reps.info('Finished prediction of view array with shape {}.'
+                      ''.format(views.shape))
+    labeled_views = labeled_views.reshape(list(orig_shape[:2])
+                                          + list(labeled_views.shape[1:]))
+    # swap axes to get source shape
+    labeled_views = labeled_views.swapaxes(2, 1)
+    return labeled_views
+
+
+def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
+                    nb_cpus=1, verbose=False):
+    """
+    Predicts views of a list of SVs and saves them via SV.save_views.
+    Efficient helper function for chunked predictions,
+    therefore requires pre-loaded views.
+
+    Parameters
+    ----------
+    model :
+    views : List[np.array]
+        N_SV each with np.array of shape [N_LOCS, N_CH, N_VIEWS, X, Y]
+    pred_key : str
+    nb_cpus : int
+        number CPUs for saving the SV views
+        svs : list[SegmentationObject]
+    svs : Optional[list[SegmentationObject]]
+    return_pred : Optional[bool]
+    verbose : bool
+
+    Returns
+    -------
+    list[np.array]
+        if 'return_pred=True' it returns the label views of input
+    """
+    if not return_pred and (svs is None or pred_key is None):
+        raise ValueError('SV objects and "pred_key" have to be given if'
+                         ' predictions should be saved at SV view storages.')
+    part_views = np.cumsum([0] + [len(v) for v in views])
+    assert len(part_views) == len(views) + 1
+    views = np.concatenate(views)  # merge axis 0, i.e. N_SV and N_LOCS to N_SV*N_LOCS
+    label_views = predict_views_semseg(views, model, verbose=verbose)
+    svs_labelviews = []
+    for ii in range(len(part_views[:-1])):
+        sv_label_views = label_views[part_views[ii]:part_views[ii + 1]]
+        svs_labelviews.append(sv_label_views)
+    assert len(part_views) == len(svs_labelviews) + 1
+    if return_pred:
+        return svs_labelviews
+    params = [[sv, dict(views=views, index_views=False, woglia=True,
+                        view_key=pred_key)]
+              for sv, views in zip(svs, svs_labelviews)]
+    start_multiprocess_obj('save_views', params, nb_cpus=nb_cpus)
+
+
+def pred_sv_chunk_semseg(args):
+    """
+
+    Parameters
+    ----------
+    args :
+
+    Returns
+    -------
+
+    """
+    from syconn.proc.sd_proc import sos_dict_fact, init_sos
+    from syconn.handler.prediction import InferenceModel
+    from syconn.backend.storage import CompressedStorage
+    so_chunk_paths = args[0]
+    model_kwargs = args[1]
+    so_kwargs = args[2]
+    pred_kwargs = args[3]
+
+    # By default use views after glia removal
+    if 'woglia' in pred_kwargs:
+        woglia = pred_kwargs["woglia"]
+        del pred_kwargs["woglia"]
+    else:
+        woglia = True
+    pred_key = pred_kwargs["pred_key"]
+    if 'raw_only' in pred_kwargs:
+        raw_only = pred_kwargs['raw_only']
+        del pred_kwargs['raw_only']
+    else:
+        raw_only = False
+
+    model = InferenceModel(**model_kwargs)
+    for p in so_chunk_paths:
+        # get raw views
+        view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
+        view_dc = CompressedStorage(view_dc_p, disable_locking=True)
+        svixs = list(view_dc.keys())
+        views = list(view_dc.values())
+        if raw_only:
+            views = views[:, :1]
+        sd = sos_dict_fact(svixs, **so_kwargs)
+        svs = init_sos(sd)
+        label_views = pred_svs_semseg(model, views, svs, return_pred=True)
+        # choose any SV to get a path constructor for the v
+        # iew storage (is the same for all SVs of this chunk)
+        lview_dc_p = svs[0].view_path(woglia, view_key=pred_key)
+        label_vd = CompressedStorage(lview_dc_p, disable_locking=True)
+        for ii in range(len(svs)):
+            label_vd[svs[ii].id] = label_views[ii]
+        label_vd.push()
+
+
+def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
+                colors=None):
+    """
+    Maps semantic segmentation to SSV mesh.
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    semseg_key : str
+    nb_views : int
+    dest_path : Optional[str]
+        Colored mesh will be written to k.zip and not returned.
+    k : int
+        Number of nearest vertices to average over. If k=0 unpredicted vertices
+         will be treated as 'unpredicted' class.
+    colors : Optional[Tuple[list]]
+        If it is None, the majority label according to kNN will be returned
+        instead. Note to add a color for unpredicted vertices if k==0; here
+        illustrated with by the spine prediction example:
+        if k=0: [neck, head, shaft, other, background, unpredicted]
+        else: [neck, head, shaft, other, background]
+
+    Returns
+    -------
+    np.array, np.array, np.array, np.array
+        indices, vertices, normals, color
+    """
+    colors = np.array(colors) * 255
+    if nb_views is None:
+        # load default
+        i_views = sso.load_views("index").flatten()
+    else:
+        # load special views
+        i_views = sso.load_views("index{}".format(nb_views)).flatten()
+    spiness_views = sso.load_views(semseg_key).flatten()
+    ind = sso.mesh[0]
+    dc = defaultdict(list)
+    background_id = np.max(i_views)
+    for ii in range(len(i_views)):
+        triangle_ix = i_views[ii]
+        if triangle_ix == background_id:
+            continue
+        l = spiness_views[ii]  # triangle label
+        # get vertex ixs from triangle ixs via:
+        vertex_ix = triangle_ix * 3
+        dc[ind[vertex_ix]].append(l)
+        dc[ind[vertex_ix + 1]].append(l)
+        dc[ind[vertex_ix + 2]].append(l)
+    vertex_labels = np.ones((len(sso.mesh[1]) // 3), dtype=np.uint8) * 5
+    for ix, v in dc.items():
+        l, cnts = np.unique(v, return_counts=True)
+        vertex_labels[ix] = l[np.argmax(cnts)]
+    if k == 0:  # map actual prediction situation / coverage
+        # keep unpredicted vertices and vertices with background labels
+        predicted_vertices = sso.mesh[1].reshape(-1, 3)
+        predictions = vertex_labels
+    else:
+        # remove unpredicted vertices
+        predicted_vertices = sso.mesh[1].reshape(-1, 3)[vertex_labels != 5]
+        predictions = vertex_labels[vertex_labels != 5]
+        # remove background class
+        predicted_vertices = predicted_vertices[predictions != 4]
+        predictions = predictions[predictions != 4]
+    maj_vote = colorcode_vertices(
+        sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
+        return_color=False)
+    # add prediction to mesh storage
+    ld = sso.label_dict('vertex')
+    ld[semseg_key] = maj_vote
+    ld.push()
+    if colors is not None:
+        col = colors[maj_vote].astype(np.uint8)
+    else:
+        col = maj_vote
+    if dest_path is not None:
+        if colors is None:
+            col = None  # set to None, because write_mesh2kzip only supports
+            # RGBA colors and no labels
+        write_mesh2kzip(dest_path, sso.mesh[0], sso.mesh[1], sso.mesh[2],
+                        col, ply_fname=semseg_key + ".ply")
+        return
+    return sso.mesh[0], sso.mesh[1], sso.mesh[2], col

@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 try:
     import cPickle as pkl
 except ImportError:
@@ -10,15 +16,18 @@ from collections import defaultdict
 from .image import single_conn_comp_img
 from knossos_utils import knossosdataset
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-from ..handler.compression import VoxelDict, AttributeDict
+from syconn.backend.storage import AttributeDict, VoxelStorage
 from ..reps import segmentation, segmentation_helper
 from ..handler import basics
+import tqdm
+from ..proc.meshes import mesh_chunk
 
 
-def dataset_analysis(sd, recompute=True, stride=100, qsub_pe=None,
-                     qsub_queue=None, nb_cpus=1, n_max_co_processes=100):
+def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
+                     qsub_queue=None, nb_cpus=1, n_max_co_processes=100,
+                     compute_mesharea=False):
     """ Analyses the whole dataset and extracts and caches key information
 
     :param sd: SegmentationDataset
@@ -36,6 +45,7 @@ def dataset_analysis(sd, recompute=True, stride=100, qsub_pe=None,
         number of cores per worker for qsub jobs
     :param n_max_co_processes: int
         max number of workers running at the same time when using qsub
+    :param compute_mesharea: bool
     """
 
     paths = sd.so_dir_paths
@@ -45,7 +55,7 @@ def dataset_analysis(sd, recompute=True, stride=100, qsub_pe=None,
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, sd.type, sd.version,
-                             sd.working_dir, recompute])
+                             sd.working_dir, recompute, compute_mesharea])
 
     # Running workers
 
@@ -92,6 +102,7 @@ def _dataset_analysis_thread(args):
     version = args[2]
     working_dir = args[3]
     recompute = args[4]
+    compute_mesharea = args[5]
 
     global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[],
                             mesh_area=[])
@@ -101,14 +112,12 @@ def _dataset_analysis_thread(args):
             os.rmdir(p)
         else:
             this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                         read_only=not recompute, timeout=3600)
+                                         read_only=not recompute)
             if recompute:
-                this_vx_dc = VoxelDict(p + "/voxel.pkl",
-                                       read_only=True, timeout=3600)
-                so_ids = this_vx_dc.keys()
+                this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True)
+                so_ids = list(this_vx_dc.keys())
             else:
-                so_ids = this_attr_dc.keys()
-
+                so_ids = list(this_attr_dc.keys())
 
             for so_id in so_ids:
                 global_attr_dict["id"].append(so_id)
@@ -124,7 +133,8 @@ def _dataset_analysis_thread(args):
                     so.attr_dict["rep_coord"] = so.rep_coord
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
-                    so.attr_dict["mesh_area"] = so.mesh_area    # TODO try except SV
+                    if compute_mesharea:
+                        so.attr_dict["mesh_area"] = so.mesh_area    # TODO try except SV
 
                 for attribute in so.attr_dict.keys():
                     if attribute not in global_attr_dict:
@@ -135,7 +145,7 @@ def _dataset_analysis_thread(args):
                 this_attr_dc[so_id] = so.attr_dict
 
             if recompute:
-                this_attr_dc.save2pkl()
+                this_attr_dc.push()
 
     return global_attr_dict
 
@@ -179,8 +189,8 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
         max number of workers running at the same time when using qsub
     :return:
     """
-    if sd.version != "sv":
-        print("WARNING: You are mapping to a non-sv dataset")
+    if sd.type != "sv":
+        raise Exception("You are mapping to a non-sv dataset")
 
     assert obj_type in sd.version_dict
 
@@ -192,8 +202,8 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, obj_type,
-                             sd.version_dict[obj_type], sd.working_dir,
-                             kd_path, readonly])
+                            sd.version_dict[obj_type], sd.working_dir,
+                            kd_path, readonly])
 
     # Running workers - Extracting mapping
 
@@ -224,7 +234,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
             sv_obj_map_dict[sv_key].update(value)
 
     mapping_dict_path = seg_dataset.path + "/sv_%s_mapping_dict.pkl" % sd.version
-    with open(mapping_dict_path, "w") as f:
+    with open(mapping_dict_path, "wb") as f:
         pkl.dump(sv_obj_map_dict, f)
 
     paths = sd.so_dir_paths
@@ -274,9 +284,8 @@ def _map_objects_thread(args):
 
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=readonly, timeout=3600)
-        this_vx_dc = VoxelDict(p + "/voxel.pkl", read_only=True,
-                               timeout=3600)
+                                     read_only=readonly)
+        this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True)
 
         for so_id in this_vx_dc.keys():
             so = seg_dataset.get_segmentation_object(so_id)
@@ -318,7 +327,7 @@ def _map_objects_thread(args):
                 this_attr_dc[so_id] = so.attr_dict
 
         if not readonly:
-            this_attr_dc.save2pkl()
+            this_attr_dc.push()
 
     return sv_id_dict
 
@@ -330,20 +339,20 @@ def _write_mapping_to_sv_thread(args):
     obj_type = args[1]
     mapping_dict_path = args[2]
 
-    with open(mapping_dict_path, "r") as f:
+    with open(mapping_dict_path, "rb") as f:
         mapping_dict = pkl.load(f)
 
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=False, timeout=3600)
+                                     read_only=False)
 
         for sv_id in this_attr_dc.keys():
             this_attr_dc[sv_id]["mapping_%s_ids" % obj_type] = \
-                mapping_dict[sv_id].keys()
+                list(mapping_dict[sv_id].keys())
             this_attr_dc[sv_id]["mapping_%s_ratios" % obj_type] = \
-                mapping_dict[sv_id].values()
+                list(mapping_dict[sv_id].values())
 
-        this_attr_dc.save2pkl()
+        this_attr_dc.push()
 
 
 def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
@@ -386,8 +395,7 @@ def _binary_filling_cs_thread(args):
                                              working_dir=working_dir)
 
     for p in paths:
-        this_vx_dc = VoxelDict(p + "/voxel.pkl", read_only=False,
-                               timeout=3600)
+        this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=False)
 
         for so_id in this_vx_dc.keys():
             so = cs_sd.get_segmentation_object(so_id)
@@ -398,7 +406,7 @@ def _binary_filling_cs_thread(args):
 
             this_vx_dc[so_id] = [filled_voxels], [so.bounding_box[0]]
 
-        this_vx_dc.save2pkl()
+        this_vx_dc.push()
 
 
 def init_sos(sos_dict):
@@ -422,18 +430,24 @@ def sos_dict_fact(svixs, version=None, scaling=None, obj_type="sv",
 def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
                       verbose=False, raw_only=False, single_cc_only=False,
                       return_proba=False):
-    nb_chunks = np.max([1, len(sos) / 75])
+    nb_chunks = np.max([1, len(sos) // 200])
     so_chs = basics.chunkify(sos, nb_chunks)
     all_probas = []
+    if verbose:
+        pbar = tqdm.tqdm(total=len(sos))
     for ch in so_chs:
         views = sm.start_multiprocess_obj("load_views", [[sv, {"woglia": woglia,
                                           "raw_only": raw_only}]
                                           for sv in ch], nb_cpus=nb_cpus)
-        proba = predict_views(model, views, ch, pred_key, verbose=verbose,
+        proba = predict_views(model, views, ch, pred_key, verbose=False,
                              single_cc_only=single_cc_only,
                              return_proba=return_proba, nb_cpus=nb_cpus)
+        if verbose:
+            pbar.update(len(ch))
         if return_proba:
             all_probas.append(np.concatenate(proba))
+    if verbose:
+        pbar.close()
     if return_proba:
         return np.concatenate(all_probas)
 
@@ -619,8 +633,7 @@ def _extract_synapse_type_thread(args):
 
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=False, timeout=3600,
-                                     disable_locking=True)
+                                     read_only=False, disable_locking=True)
 
         for so_id in this_attr_dc.keys():
             so = seg_dataset.get_segmentation_object(so_id)
@@ -652,5 +665,25 @@ def _extract_synapse_type_thread(args):
             so.attr_dict["syn_type_sym_ratio"] = sym_ratio
             this_attr_dc[so_id] = so.attr_dict
 
-        this_attr_dc.save2pkl()
+        this_attr_dc.push()
 
+
+def mesh_proc_chunked(working_dir, obj_type, nb_cpus=20):
+    """
+    Caches the meshes for all SegmentationObjects within the SegmentationDataset
+     with object type 'obj_type'.
+
+    Parameters
+    ----------
+    working_dir : str
+        Path to working directory
+    obj_type : str
+        Object type identifier, like 'sj', 'vc' or 'mi'
+    nb_cpus : int
+        Default is 20.
+    """
+    sd = segmentation.SegmentationDataset(obj_type, working_dir=working_dir)
+    multi_params = sd.so_dir_paths
+    print("Processing %d mesh dicts of %s." % (len(multi_params), obj_type))
+    sm.start_multiprocess_imap(mesh_chunk, multi_params, nb_cpus=nb_cpus,
+                               debug=False)

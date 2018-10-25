@@ -1,12 +1,15 @@
-import os
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import sys
-import numpy as np
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconn.reps.super_segmentation import render_sampled_sos_cc
 from syconn.proc.sd_proc import sos_dict_fact, init_sos, predict_sos_views
 from syconn.handler.prediction import NeuralNetworkInterface
 path_storage_file = sys.argv[1]

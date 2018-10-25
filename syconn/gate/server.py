@@ -1,24 +1,18 @@
 # -*- coding: utf-8 -*-
 # SyConn - Synaptic connectivity inference toolkit
-# SyConn Gate is a thin flask server that allows clients
-# over a RESTful HTTP API to interact with a SyConn dataset
+#
 # Copyright (c) 2016 - now
-# Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import sys
 import copy
-import logging
 import time
-
-# temporary for easier development
-#sys.path.append('/u/jkor/repos/SyConn/')
-#sys.path.append('/u/jkor/repos/knossos_utils')
-#sys.path.append('..')
 import numpy as np
 from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
 from flask import Flask
 import json
+from..gate import log_gate
 
 app = Flask(__name__)
 
@@ -119,7 +113,7 @@ def route_hello():
     return json.dumps({'Welcome to': 'SyConnGate'}, cls=MyEncoder)
 
 
-class SyConnFS_backend(object):
+class SyConn_backend(object):
     def __init__(self, syconnfs_path='', logger=None):
         """
         Initializes a SyConnFS backend for operation.
@@ -175,8 +169,8 @@ class SyConnFS_backend(object):
         mesh = {'vertices': mesh[1],
                 'indices': mesh[0],
                 'normals': mesh[2] if len(mesh) == 2 else []}
-        dtime = start - time.time()
-        self.logger.info('Got ssv mesh {} after {:.0f}'.format(ssv_id, dtime))
+        dtime = time.time() - start
+        self.logger.info('Got ssv mesh {} after {:.2f}'.format(ssv_id, dtime))
         return mesh
 
     def ssv_ind(self, ssv_id):
@@ -189,9 +183,9 @@ class SyConnFS_backend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
-        dtime = start - time.time()
+        dtime = time.time() - start
         self.logger.info('Got ssv {} mesh indices after'
-                         ' {:.0f}'.format(ssv_id, dtime))
+                         ' {:.2f}'.format(ssv_id, dtime))
         return b"".join(mesh[0])
 
     def ssv_vert(self, ssv_id):
@@ -205,9 +199,9 @@ class SyConnFS_backend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
-        dtime = start - time.time()
+        dtime = time.time() - start
         self.logger.info('Got ssv {} mesh vertices after'
-                         ' {:.0f}'.format(ssv_id, dtime))
+                         ' {:.2f}'.format(ssv_id, dtime))
         return b"".join(mesh[1])
 
     def ssv_skeleton(self, ssv_id):
@@ -242,9 +236,9 @@ class SyConnFS_backend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
-        dtime = start - time.time()
+        dtime = time.time() - start
         self.logger.info('Got ssv {} mesh normals after'
-                         ' {:.0f}'.format(ssv_id, dtime))
+                         ' {:.2f}'.format(ssv_id, dtime))
         if len(mesh) == 2:
             return ""
         return b"".join(mesh[2])
@@ -299,9 +293,9 @@ class SyConnFS_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
-        dtime = start - time.time()
+        dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh indices after'
-                         ' {:.0f}'.format(ssv_id, obj_type, dtime))
+                         ' {:.2f}'.format(ssv_id, obj_type, dtime))
         return b"".join(mesh[0])
 
     def ssv_obj_vert(self, ssv_id, obj_type):
@@ -327,9 +321,9 @@ class SyConnFS_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
-        dtime = start - time.time()
+        dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh vertices after'
-                         ' {:.0f}'.format(ssv_id, obj_type, dtime))
+                         ' {:.2f}'.format(ssv_id, obj_type, dtime))
         return b"".join(mesh[1])
 
     def ssv_obj_norm(self, ssv_id, obj_type):
@@ -355,9 +349,9 @@ class SyConnFS_backend(object):
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
-        dtime = start - time.time()
+        dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh normals after'
-                         ' {:.0f}'.format(ssv_id, obj_type, dtime))
+                         ' {:.2f}'.format(ssv_id, obj_type, dtime))
         if len(mesh) == 2:
             return ""
         return b"".join(mesh[2])
@@ -463,40 +457,15 @@ class SyConnFS_backend(object):
 
 
 class ServerState(object):
-    def __init__(self, log_file='/wholebrain/scratch/areaxfs3/gate/server_log'):
+    def __init__(self):
 
-        self.logger = initialize_logging(log_file)
+        self.logger = log_gate
 
         self.logger.info('SyConn gate server starting up.')
-        self.backend = SyConnFS_backend('/wholebrain/scratch/areaxfs3/',
+        self.backend = SyConn_backend('/wholebrain/scratch/areaxfs3/',
                                         logger=self.logger)
         self.logger.info('SyConn gate server running.')
         return
-
-
-def initialize_logging(log_file):
-    logger = logging.getLogger('gate_logger')
-
-    logger.setLevel(logging.INFO)
-
-    # create file handler which logs even debug messages
-    fh = logging.FileHandler(log_file)
-    fh.setLevel(logging.INFO)
-
-    # create console handler with a higher log level
-    ch = logging.StreamHandler()
-    ch.setLevel(logging.INFO)
-
-    # create formatter and add it to the handlers
-    formatter = logging.Formatter('%(asctime)s %(message)s')
-
-    ch.setFormatter(formatter)
-    fh.setFormatter(formatter)
-    # add the handlers to logger
-    logger.addHandler(ch)
-    logger.addHandler(fh)
-
-    return logger
 
 
 class MyEncoder(json.JSONEncoder):

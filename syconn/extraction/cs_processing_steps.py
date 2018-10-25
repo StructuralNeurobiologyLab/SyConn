@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 from collections import defaultdict
 import networkx as nx
 import numpy as np
@@ -10,20 +16,29 @@ from sklearn import ensemble, cross_validation, externals
 from knossos_utils import knossosdataset, skeleton_utils, skeleton
 
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold
-from ..handler.compression import VoxelDict, AttributeDict
+from ..backend.storage import AttributeDict, VoxelStorage
 from ..handler.basics import chunkify
 
 
 def filter_relevant_cs_agg(cs_agg, ssd):
+    """
+    This function filters (likely ;) ) the intra-ssv contact
+    sites (inside of a ssv, not between ssvs) that do not need to be agglomerated.
+
+    :param cs_agg:
+    :param ssd:
+    :return:
+    """
     sv_ids = ch.sv_id_to_partner_ids_vec(cs_agg.ids)
 
     cs_agg_ids = cs_agg.ids.copy()
 
+    # this might mean that all cs between svs with IDs>max(np.uint32) are discarded
     sv_ids[sv_ids >= len(ssd.id_changer)] = -1
     mapped_sv_ids = ssd.id_changer[sv_ids]
 
@@ -31,6 +46,7 @@ def filter_relevant_cs_agg(cs_agg, ssd):
     cs_agg_ids = cs_agg_ids[mask]
     filtered_mapped_sv_ids = mapped_sv_ids[mask]
 
+    # this identifies all inter-ssv contact sites
     mask = filtered_mapped_sv_ids[:, 0] - filtered_mapped_sv_ids[:, 1] != 0
     cs_agg_ids = cs_agg_ids[mask]
     relevant_cs_agg = filtered_mapped_sv_ids[mask]
@@ -63,13 +79,13 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
     block_steps = np.linspace(0, len(voxel_rel_paths),
                               int(np.ceil(float(len(rel_cs_to_cs_agg_ids)) / stride)) + 1).astype(np.int)
 
-    cs = segmentation.SegmentationDataset("cs", working_dir=wd, version="new",
+    cs = segmentation.SegmentationDataset("cs_ssv", working_dir=wd, version="new",
                                           create=True, n_folders_fs=100000)
 
     for p in voxel_rel_paths_2stage:
         os.makedirs(cs.so_storage_path + p)
 
-    rel_cs_to_cs_agg_ids_items = rel_cs_to_cs_agg_ids.items()
+    rel_cs_to_cs_agg_ids_items = list(rel_cs_to_cs_agg_ids.items())
     i_block = 0
     multi_params = []
     for block in [rel_cs_to_cs_agg_ids_items[i:i + stride]
@@ -104,7 +120,7 @@ def _combine_and_split_cs_agg_thread(args):
     scaling = args[5]
     cs_gap_nm = args[6]
 
-    cs = segmentation.SegmentationDataset("cs", working_dir=wd,
+    cs = segmentation.SegmentationDataset("cs_ssv", working_dir=wd,
                                           version=cs_version)
 
     cs_agg = segmentation.SegmentationDataset("cs_agg", working_dir=wd,
@@ -119,10 +135,10 @@ def _combine_and_split_cs_agg_thread(args):
         os.makedirs(cs.so_storage_path + voxel_rel_paths[cur_path_id])
     except:
         pass
-    voxel_dc = VoxelDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                         "/voxel.pkl", read_only=False, timeout=3600)
+    voxel_dc = VoxelStorage(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+                         "/voxel.pkl", read_only=False)
     attr_dc = AttributeDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                            "/attr_dict.pkl", read_only=False, timeout=3600)
+                            "/attr_dict.pkl", read_only=False)
 
     p_parts = voxel_rel_paths[cur_path_id].strip("/").split("/")
     next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]),
@@ -167,9 +183,9 @@ def _combine_and_split_cs_agg_thread(args):
             next_id += 100000
 
         if n_items_for_path > n_per_voxel_path:
-            voxel_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+            voxel_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                               "/voxel.pkl")
-            attr_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+            attr_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                              "/attr_dict.pkl")
 
             cur_path_id += 1
@@ -184,16 +200,16 @@ def _combine_and_split_cs_agg_thread(args):
             except:
                 pass
 
-            voxel_dc = VoxelDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                                 "voxel.pkl", read_only=False, timeout=3600)
+            voxel_dc = VoxelStorage(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+                                 "voxel.pkl", read_only=False)
             attr_dc = AttributeDict(cs.so_storage_path +
                                     voxel_rel_paths[cur_path_id] + "attr_dict.pkl",
-                                    read_only=False, timeout=3600)
+                                    read_only=False)
 
     if n_items_for_path > 0:
-        voxel_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+        voxel_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                           "/voxel.pkl")
-        attr_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+        attr_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                          "/attr_dict.pkl")
 
     print("done")
@@ -238,7 +254,7 @@ def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000):
 def map_objects_to_cs(wd, cs_version=None, ssd_version=None, max_map_dist_nm=2000,
                       obj_types=("sj", "mi", "vc"), stride=1000, qsub_pe=None,
                       qsub_queue=None, nb_cpus=1, n_max_co_processes=100):
-    cs_dataset = segmentation.SegmentationDataset("cs", version=cs_version,
+    cs_dataset = segmentation.SegmentationDataset("cs_ssv", version=cs_version,
                                                   working_dir=wd)
     paths = glob.glob(cs_dataset.so_storage_path + "/*/*/*")
 
@@ -270,7 +286,7 @@ def _map_objects_to_cs_thread(args):
     working_dir = args[4]
     max_map_dist_nm = args[5]
 
-    cs_dataset = segmentation.SegmentationDataset("cs", version=cs_version,
+    cs_dataset = segmentation.SegmentationDataset("cs_ssv", version=cs_version,
                                                   working_dir=working_dir)
 
     ssd = super_segmentation.SuperSegmentationDataset(version=ssd_version,
@@ -287,9 +303,8 @@ def _map_objects_to_cs_thread(args):
 
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=False, timeout=3600)
-        this_vx_dc = VoxelDict(p + "/voxel.pkl", read_only=True,
-                               timeout=3600)
+                                     read_only=False)
+        this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True)
 
         for cs_id in this_vx_dc.keys():
             print(cs_id)
@@ -306,7 +321,7 @@ def _map_objects_to_cs_thread(args):
 
             cs_obj.attr_dict.update(mapping_feats)
             this_attr_dc[cs_id] = cs_obj.attr_dict
-        this_attr_dc.save2pkl()
+        this_attr_dc.push()
 
 
 def map_objects_to_single_cs(cs_obj, ssd_version=None, max_map_dist_nm=2000,
@@ -503,7 +518,7 @@ def _overlap_mapping_sj_to_cs_thread(args):
     sj_sd = segmentation.SegmentationDataset("sj", working_dir=wd,
                                              version=sj_sd_version,
                                              create=False)
-    cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd,
+    cs_sd = segmentation.SegmentationDataset("cs_ssv", working_dir=wd,
                                              version=cs_sd_version,
                                              create=False)
 
@@ -515,12 +530,10 @@ def _overlap_mapping_sj_to_cs_thread(args):
 
         rel_path = subfold_from_ix(i_cs_start_id + block_start, conn_sd.n_folders_fs)
 
-        voxel_dc = VoxelDict(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
-                             read_only=False,
-                             timeout=3600)
+        voxel_dc = VoxelStorage(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
+                                read_only=False)
         attr_dc = AttributeDict(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl",
-                                read_only=False,
-                                timeout=3600)
+                                read_only=False)
 
         next_conn_id = i_cs_start_id + block_start
         n_items_for_path = 0
@@ -555,8 +568,8 @@ def _overlap_mapping_sj_to_cs_thread(args):
                 n_items_for_path += 1
 
         if n_items_for_path > 0:
-            voxel_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/voxel.pkl")
-            attr_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
+            voxel_dc.push(conn_sd.so_storage_path + rel_path + "/voxel.pkl")
+            attr_dc.push(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
 
 
 def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm=2000):
@@ -643,7 +656,7 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
     sj_sd = segmentation.SegmentationDataset("sj", working_dir=wd,
                                              version=sj_sd_version,
                                              create=False)
-    cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd,
+    cs_sd = segmentation.SegmentationDataset("cs_ssv", working_dir=wd,
                                              version=cs_sd_version,
                                              create=False)
 
@@ -655,12 +668,10 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
     for i_sj_id_block, sj_id_block in enumerate(sj_id_blocks):
         rel_path = voxel_rel_paths[i_sj_id_block]
 
-        voxel_dc = VoxelDict(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
-                             read_only=False,
-                             timeout=3600)
+        voxel_dc = VoxelStorage(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
+                                read_only=False)
         attr_dc = AttributeDict(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl",
-                                read_only=False,
-                                timeout=3600)
+                                read_only=False)
 
         next_conn_id = ix_from_subfold(rel_path,
                                        conn_sd.n_folders_fs)
@@ -704,8 +715,8 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
 
                 next_conn_id += conn_sd.n_folders_fs
 
-        voxel_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/voxel.pkl")
-        attr_dc.save2pkl(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
+        voxel_dc.push(conn_sd.so_storage_path + rel_path + "/voxel.pkl")
+        attr_dc.push(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl")
 
 
 def write_conn_gt_kzips(conn, n_objects, folder):
@@ -860,7 +871,7 @@ def _map_objects_to_conn_thread(args):
                                              version=vc_version)
 
     this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
-                                 read_only=False, timeout=3600)
+                                 read_only=False)
 
     for conn_id in this_attr_dc.keys():
         conn_o = conn_sd.get_segmentation_object(conn_id)
@@ -879,7 +890,7 @@ def _map_objects_to_conn_thread(args):
         conn_o.attr_dict.update(conn_feats)
         this_attr_dc[conn_id] = conn_o.attr_dict
 
-    this_attr_dc.save2pkl()
+    this_attr_dc.push()
 
 
 def map_objects_to_single_conn(conn_o, ssv, mi_sd, vc_sd,
@@ -980,7 +991,7 @@ def _classify_conn_objects_thread(args):
     rfc = externals.joblib.load(conn_sd.path + "/conn_syn_rfc/rfc")
 
     this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
-                                 read_only=False, timeout=3600)
+                                 read_only=False)
 
     for conn_id in this_attr_dc.keys():
         conn_o = conn_sd.get_segmentation_object(conn_id)
@@ -992,7 +1003,7 @@ def _classify_conn_objects_thread(args):
         conn_o.attr_dict.update({"syn_prob": syn_prob})
         this_attr_dc[conn_id] = conn_o.attr_dict
 
-    this_attr_dc.save2pkl()
+    this_attr_dc.push()
 
 
 def collect_axoness_from_ssv_partners(wd, conn_version=None,
@@ -1030,7 +1041,7 @@ def _collect_axoness_from_ssv_partners_thread(args):
                                                version=conn_version)
     for so_dir_path in so_dir_paths:
         this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
-                                     read_only=False, timeout=3600)
+                                     read_only=False)
 
         for conn_id in this_attr_dc.keys():
             conn_o = conn_sd.get_segmentation_object(conn_id)
@@ -1039,13 +1050,12 @@ def _collect_axoness_from_ssv_partners_thread(args):
             axoness = []
             for ssv_partner_id in conn_o.attr_dict["ssv_partners"]:
                 ssv_o = ssv.get_super_segmentation_object(ssv_partner_id)
-                axoness.append(ssv_o.axoness_for_coords([conn_o.rep_coord],
-                                                        pred_type='axoness_preds_cnn_v2_views_avg10000')[0])
+                axoness.append(ssv_o.axoness_for_coords([conn_o.rep_coord], pred_type='axoness_preds_cnn_views_avg10000')[0])
 
             conn_o.attr_dict.update({"partner_axoness": axoness})
             this_attr_dc[conn_id] = conn_o.attr_dict
 
-        this_attr_dc.save2pkl()
+        this_attr_dc.push()
 
 
 def export_matrix(wd, conn_version=None, dest_name=None, syn_prob_t=.5):

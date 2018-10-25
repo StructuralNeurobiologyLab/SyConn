@@ -2,16 +2,18 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
+
+
 import errno
 import os
 import re
-import shutil
 import networkx as nx
 
-from scipy import ndimage, spatial
+from scipy import spatial
 from knossos_utils import knossosdataset
+
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 try:
     default_wd_available = True
@@ -20,11 +22,9 @@ except:
     default_wd_available = False
 from ..config import parser
 from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING
-from ..handler.compression import LZ4Dict
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
-from ..handler.basics import get_filepaths_from_dir, safe_copy, write_txt2kzip
-import warnings
+from ..handler.basics import get_filepaths_from_dir, safe_copy, write_txt2kzip, temp_seed
 from .segmentation_helper import *
 from ..proc import meshes
 from skimage.measure import mesh_surface_area
@@ -84,7 +84,10 @@ class SegmentationDataset(object):
 
         self._scaling = scaling
 
-        if version is None:
+        if create and (version is None):
+            version = 'new'
+
+        if version is None and create==False:
             try:
                 self._version = self.config.entries["Versions"][self.type]
             except:
@@ -139,7 +142,6 @@ class SegmentationDataset(object):
             if len(ps) == 0:
                 raise Exception("No storage folder found and no number of "
                                 "subfolders specified (n_folders_fs))")
-
 
             bp = os.path.basename(ps[0].strip('/'))
             for p in ps:
@@ -205,7 +207,7 @@ class SegmentationDataset(object):
     def so_dir_paths(self):
         depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
-
+        # TODO: do not perform a glob. all possible paths are determined by 'n_folders_fs' -> much faster, less IO
         return glob.glob(p)
 
     @property
@@ -294,8 +296,11 @@ class SegmentationDataset(object):
         write_obj2pkl(self.version_dict_path, self.version_dict)
 
     def load_version_dict(self):
-        assert self.version_dict_exists
-        self.version_dict = load_pkl2obj(self.version_dict_path)
+        try:
+            self.version_dict = load_pkl2obj(self.version_dict_path)
+        except Exception as e:
+            raise FileNotFoundError('Version dictionary of SegmentationDataset'
+                                    ' not found.')
 
 
 class SegmentationObject(object):
@@ -480,7 +485,7 @@ class SegmentationObject(object):
                                subfold_from_ix(self.id, self.n_folders_fs))
         else:
             return "%s/%s/" % (self.so_storage_path,
-                               subfold_from_ix(self.id, self.n_folders_fs, old_version=True))
+                               subfold_from_ix(self.id, self.n_folders_fs, old_version=True))   # TODO: why True?
 
     @property
     def mesh_path(self):
@@ -494,7 +499,11 @@ class SegmentationObject(object):
     def attr_dict_path(self):
         return self.segobj_dir + "attr_dict.pkl"
 
-    def view_path(self, woglia=True, index_views=False):
+    def view_path(self, woglia=True, index_views=False, view_key=None):
+        if view_key is not None and not (woglia and not index_views):
+            raise ValueError('view_path with custom view key is only allowed for default settings.')
+        if view_key is not None:
+            return self.segobj_dir + 'views_{}.pkl'.format(view_key)
         if index_views:
             return self.segobj_dir + "views_index.pkl"
         elif woglia:
@@ -564,8 +573,8 @@ class SegmentationObject(object):
 
     @property
     def voxels_exist(self):
-        voxel_dc = VoxelDict(self.voxel_path, read_only=True,
-                             disable_locking=True)
+        voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
+                                disable_locking=True)
         return self.id in voxel_dc
 
 
@@ -593,14 +602,14 @@ class SegmentationObject(object):
 
     @property
     def mesh_exists(self):
-        mesh_dc = MeshDict(self.mesh_path,
-                           disable_locking=not self.enable_locking)
+        mesh_dc = MeshStorage(self.mesh_path,
+                              disable_locking=not self.enable_locking)
         return self.id in mesh_dc
 
     @property
     def skeleton_exists(self):
-        skeleton_dc = SkeletonDict(self.skeleton_path,
-                           disable_locking=not self.enable_locking)
+        skeleton_dc = SkeletonStorage(self.skeleton_path,
+                                      disable_locking=not self.enable_locking)
         return self.id in skeleton_dc
 
     @property
@@ -650,27 +659,26 @@ class SegmentationObject(object):
 
     @property
     def sample_locations_exist(self):
-        location_dc = LZ4Dict(self.locations_path,
-                              disable_locking=not self.enable_locking)
+        location_dc = CompressedStorage(self.locations_path,
+                                        disable_locking=not self.enable_locking)
         return self.id in location_dc
 
-
-    def views_exist(self, woglia, index_views=False):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia, index_views=index_views),
-                          disable_locking=not self.enable_locking)
+    def views_exist(self, woglia, index_views=False, view_key=None):
+        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
+                                    disable_locking=not self.enable_locking)
         return self.id in view_dc
 
-    def views(self, woglia, index_views=False):
+    def views(self, woglia, index_views=False, view_key=None):
         assert self.type == "sv"
         if self._views is None:
             if self.views_exist(woglia):
                 if self.view_caching:
-                    self._views = self.load_views(woglia=woglia,
-                                                  index_views=index_views)
+                    self._views = self.load_views(woglia=woglia, index_views=index_views,
+                                                  view_key=view_key)
                     return self._views
                 else:
-                    return self.load_views(woglia=woglia,
-                                           index_views=index_views)
+                    return self.load_views(woglia=woglia, index_views=index_views,
+                                           view_key=view_key)
             else:
                 return -1
         else:
@@ -679,14 +687,14 @@ class SegmentationObject(object):
     def sample_locations(self, force=False):
         assert self.type == "sv"
         if self.sample_locations_exist and not force:
-            return LZ4Dict(self.locations_path,
-                           disable_locking=not self.enable_locking)[self.id]
+            return CompressedStorage(self.locations_path,
+                                     disable_locking=not self.enable_locking)[self.id]
         else:
             coords = surface_samples(self.mesh[1].reshape(-1, 3))
-            loc_dc = LZ4Dict(self.locations_path, read_only=False,
-                             disable_locking=not self.enable_locking)
+            loc_dc = CompressedStorage(self.locations_path, read_only=False,
+                                       disable_locking=not self.enable_locking)
             loc_dc[self.id] = coords.astype(np.float32)
-            loc_dc.save2pkl()
+            loc_dc.push()
             return coords.astype(np.float32)
 
     def save_voxels(self, bin_arr, offset, overwrite=False):
@@ -728,7 +736,7 @@ class SegmentationObject(object):
         if not pred_key in self.attr_dict:
             msg = "WARNING: Requested axoness {} for SV {} is "\
                   "not available. Existing keys: {}".format(
-                pred_key, self.id, str(self.attr_dict.keys()))
+                pred_key, self.id, self.attr_dict.keys())
             raise ValueError(msg)
             # return np.array([[0, 1, 0] * len(self.sample_locations())]).reshape((-1, 3))
         return self.attr_dict[pred_key]
@@ -754,10 +762,10 @@ class SegmentationObject(object):
         return meshes.get_object_mesh(self, downsampling, n_closings=n_closings)
 
     def _save_mesh(self, ind, vert, normals):
-        mesh_dc = MeshDict(self.mesh_path, read_only=False,
-                           disable_locking=not self.enable_locking)
+        mesh_dc = MeshStorage(self.mesh_path, read_only=False,
+                              disable_locking=not self.enable_locking)
         mesh_dc[self.id] = [ind, vert, normals]
-        mesh_dc.save2pkl()
+        mesh_dc.push()
 
     def mesh2kzip(self, dest_path, ext_color=None, ply_name=""):
         """
@@ -807,9 +815,9 @@ class SegmentationObject(object):
         write_txt2kzip(dest_path, kml, "mergelist.txt")
 
     def load_views(self, woglia=True, raw_only=False, ignore_missing=False,
-                   index_views=False):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia, index_views=index_views),
-                          disable_locking=not self.enable_locking)
+                   index_views=False, view_key=None):
+        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
+                                    disable_locking=not self.enable_locking)
         try:
             views = view_dc[self.id]
         except KeyError as e:
@@ -823,10 +831,23 @@ class SegmentationObject(object):
         return views
 
     def save_views(self, views, woglia=True, cellobjects_only=False,
-                   index_views=False):
-        view_dc = LZ4Dict(self.view_path(woglia=woglia, index_views=index_views),
-                          read_only=False,
-                          disable_locking=not self.enable_locking)
+                   index_views=False, view_key=None):
+        """
+        Saves views according to its properties. If view_key is given it has to be a special type of view, e.g. spine
+        predictions. If in this case any other kwarg is not set to default it will raise an error.
+
+        Parameters
+        ----------
+        views : np.array
+        woglia : bool
+        cellobjects_only : bol
+        index_views : bool
+        view_key : str
+        """
+        if not (woglia and not cellobjects_only and not index_views) and view_key is not None:
+            raise ValueError('If views are saved to custom key, all other settings have to be defaults!')
+        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
+                                    read_only=False, disable_locking=not self.enable_locking)
         if cellobjects_only:
             assert self.id in view_dc, "SV must already contain raw views " \
                                        "if adding views for cellobjects only."
@@ -834,12 +855,12 @@ class SegmentationObject(object):
                                               axis=1)
         else:
             view_dc[self.id] = views
-        view_dc.save2pkl()
+        view_dc.push()
 
     def load_attr_dict(self):
         try:
              glob_attr_dc = AttributeDict(self.attr_dict_path,
-                                          disable_locking=True)
+                                          disable_locking=not self.enable_locking)
              self.attr_dict = glob_attr_dc[self.id]
         except (IOError, EOFError):
             return -1
@@ -853,11 +874,11 @@ class SegmentationObject(object):
         else:
             orig_dc = self.attr_dict
         glob_attr_dc[self.id] = orig_dc
-        glob_attr_dc.save2pkl()
+        glob_attr_dc.push()
 
     def save_attributes(self, attr_keys, attr_values):
         """
-        Writes attributes to attribute dict on file system. Does not care about
+        Writes attributes to attribute storage. Does not care about
         self.attr_dict.
 
         Parameters
@@ -877,7 +898,22 @@ class SegmentationObject(object):
                                      disable_locking=not self.enable_locking)
         for k, v in zip(attr_keys, attr_values):
             glob_attr_dc[self.id][k] = v
-        glob_attr_dc.save2pkl()
+        glob_attr_dc.push()
+
+    def load_attributes(self, attr_keys):
+        """
+        Reads attributes from attribute storage. It will ignore self.attr_dict and
+        will always pull it from the storage.
+        Does not throw KeyError, but returns None for missing keys.
+
+        Parameters
+        ----------
+        attr_keys : tuple of str
+        """
+        glob_attr_dc = AttributeDict(self.attr_dict_path, read_only=True,
+                                     disable_locking=not self.enable_locking)
+        return [glob_attr_dc[self.id][attr_k] if attr_k in glob_attr_dc[self.id]
+                else None for attr_k in attr_keys]
 
     def attr_exists(self, attr_key):
         if len(self.attr_dict) == 0:
@@ -898,8 +934,8 @@ class SegmentationObject(object):
 
     def calculate_rep_coord(self, voxel_dc=None, fast=False):
         if voxel_dc is None:
-           voxel_dc = VoxelDict(self.voxel_path, read_only=True,
-                                disable_locking=True)
+           voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
+                                   disable_locking=True)
 
         if not self.id in voxel_dc:
             self._bounding_box = np.array([[-1, -1, -1], [-1, -1, -1]])
@@ -915,7 +951,7 @@ class SegmentationObject(object):
                 sizes.append(np.sum(bin_arrs[i_bin_arr]))
 
             self._size = np.sum(sizes)
-            block_offsets = np.array(block_offsets)
+
             sizes = np.array(sizes)
             center_of_gravity = [np.mean(block_offsets[:, 0] * sizes) / self.size,
                                  np.mean(block_offsets[:, 1] * sizes) / self.size,
@@ -932,29 +968,53 @@ class SegmentationObject(object):
         vx = bin_arrs[central_block_id].copy()
         central_block_offset = block_offsets[central_block_id]
 
-        vx = ndimage.morphology.distance_transform_edt(
-            np.pad(vx, 1, mode="constant", constant_values=0))[1:-1, 1:-1, 1:-1]
 
-        max_locs = np.where(vx == vx.max())
+        # Old and crazy inefficient implementation to find a multivariate "mean" which
+        # is inside of the object.
 
-        max_loc_id = int(len(max_locs[0]) / 2)
-        max_loc = np.array([max_locs[0][max_loc_id],
-                            max_locs[1][max_loc_id],
-                            max_locs[2][max_loc_id]])
+        #vx = ndimage.morphology.distance_transform_edt(
+        #    np.pad(vx, 1, mode="constant", constant_values=0))[1:-1, 1:-1, 1:-1]
 
-        if not fast:
-            vx = ndimage.gaussian_filter(vx, sigma=[15, 15, 7])
-            max_locs = np.where(vx == vx.max())
+        #max_locs = np.where(vx == vx.max())
 
-            max_loc_id = int(len(max_locs[0]) / 2)
-            better_loc = np.array([max_locs[0][max_loc_id],
-                                   max_locs[1][max_loc_id],
-                                   max_locs[2][max_loc_id]])
+        #max_loc_id = int(len(max_locs[0]) / 2)
+        #max_loc = np.array([max_locs[0][max_loc_id],
+        #                    max_locs[1][max_loc_id],
+        #                    max_locs[2][max_loc_id]])
 
-            if bin_arrs[central_block_id][better_loc[0], better_loc[1], better_loc[2]]:
-                max_loc = better_loc
+        #if not fast:
+        #    vx = ndimage.gaussian_filter(vx, sigma=[15, 15, 7])
+        #    max_locs = np.where(vx == vx.max())
 
-        self._rep_coord = max_loc + central_block_offset
+        #    max_loc_id = int(len(max_locs[0]) / 2)
+        #    better_loc = np.array([max_locs[0][max_loc_id],
+        #                           max_locs[1][max_loc_id],
+        #                           max_locs[2][max_loc_id]])
+
+        #    if bin_arrs[central_block_id][better_loc[0], better_loc[1], better_loc[2]]:
+        #        max_loc = better_loc
+
+
+        id_locs = np.where(vx == vx.max())
+        id_locs = np.array(id_locs)
+
+        # downsampling to ensure fast processing - this is deterministic!
+        if len(id_locs[0]) > 1e4:
+
+            with temp_seed(0):
+                idx = np.random.randint(0,len(id_locs[0]),int(1e4))
+            id_locs = np.array([id_locs[0][idx], id_locs[1][idx], id_locs[2][idx]])
+
+        # calculate COM
+        COM = np.mean(id_locs, axis=1)
+
+        # ensure that the point is contained inside of the object, i.e. use closest existing point to COM
+        kdtree_array = np.swapaxes(id_locs, 0, 1)
+        kdtree = spatial.cKDTree(kdtree_array)
+        dd, ii = kdtree.query(COM, k=1)
+        found_point = kdtree_array[ii, :]
+
+        self._rep_coord = found_point + central_block_offset
 
     def calculate_bounding_box(self):
         _ = load_voxels(self)

@@ -2,8 +2,9 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 
 import sys
 
@@ -11,7 +12,7 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconnfs.representations import connectivity_helper as ch
+from syconn.reps import connectivity_helper as ch
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]

@@ -1,15 +1,24 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
+from typing import Iterable, List, Tuple
 import glob
 import numpy as np
 import os
 from collections import Counter
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
+from ..reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
 from ..reps import segmentation, super_segmentation
+from ..proc.meshes import mesh_creator_sso
 
 
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
@@ -208,9 +217,9 @@ def _aggregate_segmentation_object_mappings_thread(args):
         for obj_type in obj_types:
             if obj_type in mappings:
                 ssv.attr_dict["mapping_%s_ids" % obj_type] = \
-                    mappings[obj_type].keys()
+                    list(mappings[obj_type].keys())
                 ssv.attr_dict["mapping_%s_ratios" % obj_type] = \
-                    mappings[obj_type].values()
+                    list(mappings[obj_type].values())
 
         ssv.save_attr_dict()
 
@@ -397,3 +406,72 @@ def _map_synaptic_conn_objects_thread(args):
 
         ssv.attr_dict["conn_ids"] = ssv_conn_ids
         ssv.save_attr_dict()
+
+
+def mesh_proc_ssv(working_dir, version=None, ssd_type='ssv', nb_cpus=20):
+    """
+    Caches the SSV meshes locally with 20 cpus in parallel.
+
+    Parameters
+    ----------
+    working_dir : str
+        Path to working directory.
+    version : str
+        version identifier, like 'spgt' for spine ground truth SSD. Defaults
+        to the SSD of the cellular SSVs.
+    ssd_type : str
+        Default is 'ssv'
+    nb_cpus : int
+        Default is 20.
+    """
+    ssds = super_segmentation.SuperSegmentationDataset(working_dir=working_dir,
+                                                       version=version,
+                                                       ssd_type=ssd_type)
+    sm.start_multiprocess_imap(mesh_creator_sso, list(ssds.ssvs),
+                               nb_cpus=nb_cpus, debug=False)
+
+
+def split_ssv(ssv: SuperSegmentationObject, splitted_sv_ids: Iterable[int])\
+        -> Tuple[SuperSegmentationObject, SuperSegmentationObject]:
+    """Splits an SuperSegmentationObject into two."""
+
+    if ssv._dataset is None:
+        raise ValueError('SSV dataset has to be defined. Use "get_superseg'
+                         'mentation_object" method to instantiate SSO objects,'
+                         ' or assign "_dataset" yourself accordingly.')
+    ssd = ssv._dataset
+    orig_ids = set(ssv.sv_ids)
+    # TODO: Support ssv.rag splitting
+    splitted_sv_ids = set(splitted_sv_ids)
+    if splitted_sv_ids.issubset(orig_ids):
+        raise ValueError('All splitted SV IDs have to be part of the SSV.')
+    set1 = orig_ids.difference(set(splitted_sv_ids))
+    set2 = splitted_sv_ids
+    # TODO: run SSD modification methods, e.g. cached numpy arrays holding SSV attributes
+    # TODO: run contactsite modification methods, e.g. change all contactsites which SSV partners contain ssv.id etc.
+    # TODO: run all classification models
+    new_id1, new_id2 = list(get_available_ssv_ids(ssd, n=2))
+    ssv1 = init_ssv(new_id1, list(set1), ssd=ssd)
+    ssv2 = init_ssv(new_id2, list(set2), ssd=ssd)
+    # TODO: add ignore flag or destroy original SSV in its SSD.
+    return ssv1, ssv2
+
+
+def init_ssv(ssv_id: int, sv_ids: List[int], ssd: SuperSegmentationDataset)\
+        -> SuperSegmentationObject:
+    """Initializes an SuperSegmentationObject and caches all relevant data.
+    Cell organelles and supervoxel SegmentationDatasets must be initialized."""
+    ssv = SuperSegmentationObject(ssv_id, sv_ids=sv_ids, version=ssd.version,
+                                  create=True, working_dir=ssd.working_dir)
+    ssv.preprocess()
+    return ssv
+
+
+def get_available_ssv_ids(ssd, n=2):
+    cnt = 0
+    for ii in range(np.max(ssd.ssv_ids) + n):
+        if cnt == n:
+            break
+        if not ii in ssd.ssv_ids:
+            cnt += 1
+            yield ii

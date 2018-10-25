@@ -11,9 +11,9 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconn.reps.super_segmentation_helper import sparsify_skeleton, create_sso_skeleton, majority_vote_compartments
+from syconn.reps.super_segmentation_helper import majority_vote_compartments
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
-from syconn.config.global_params import wd
+from syconn.config import global_params
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -28,12 +28,12 @@ with open(path_storage_file, 'rb') as f:
 
 ssv_ixs = args[0]
 pred_key_appendix = args[1]
-max_dist = 10000
+max_dist = global_params.DIST_AXONESS_AVERAGING
 for ix in ssv_ixs:
-    sso = SuperSegmentationObject(ix, working_dir=wd)
+    sso = SuperSegmentationObject(ix, working_dir=global_params.wd)
     sso.load_skeleton()
     if sso.skeleton is None or len(sso.skeleton["nodes"]) < 2:
-        print("Skeleton of SSV %d has zero nodes." % ix)
+        print("Skeleton of SSV %d has zero or less than two nodes." % ix)
         continue
     try:
         for k in [1]:
@@ -48,7 +48,8 @@ for ix in ssv_ixs:
     except Exception as e:
         print(str(e) + " SSV averaging error " + str(sso.id) )
         continue
-    pred_key = "axoness_preds_cnn{}_views_avg{}".format(pred_key_appendix, max_dist)
+    pred_key = "axoness_preds_cnn{}_views_avg{}".format(pred_key_appendix,
+                                                        max_dist)
     majority_vote_compartments(sso, pred_key)
 
 

@@ -1,6 +1,16 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
+#import sys, os
+#sys.path.insert(0, os.path.abspath('..'))
+
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 import time
+from syconn.config import global_params
 
 from syconn.proc import sd_proc
 from syconn.proc import ssd_proc
@@ -9,11 +19,12 @@ from syconn.extraction import cs_extraction_steps as ces
 from syconn.extraction import cs_processing_steps as cps
 from syconn.extraction import object_extraction_wrapper as oew
 from syconn.reps import segmentation as seg
+from syconn.reps import super_segmentation as ss
 
-kd_seg_path = "/wholebrain/songbird/j0126/areaxfs_v5/knossosdatasets/"
-wd_dir = "/wholebrain/songbird/j0126/areaxfs_v5/"
-cd_dir = wd_dir + "chunkdatasets/sv/"
-sd_dir = wd_dir + "chunkdatasets/"
+kd_seg_path = "/mnt/j0126_cubed/"
+wd = "/mnt/j0126/areaxfs_v10/"
+cd_dir = wd + "chunkdatasets/"
+
 
 #### initializing and loading and chunk dataset from knossosdataset
 kd = knossosdataset.KnossosDataset()    # Sets initial values of object
@@ -23,15 +34,60 @@ cd = chunky.ChunkDataset()      # Class that contains a dict of chunks (with coo
 cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
                         box_coords=[0, 0, 0], fit_box_size=True)
 
-chunky.save_dataset(cd)
-cd = chunky.load_dataset(cd_dir)
 
-# Object extraction
-oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=5000,
-                        hdf5names=["sv"], n_max_co_processes=150, qsub_pe='openmp', n_folders_fs=10000)
-# Object Processing
-sd = seg.SegmentationDataset("sv", working_dir=sd_dir)
-sd_proc.dataset_analysis(sd, qsub_pe="openmp", n_max_co_processes=100)
+# Object extraction - 2h
+#oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=5000,
+#                        hdf5names=["sv"], n_max_co_processes=5000, qsub_pe='default', qsub_queue='all.q', qsub_slots=1,
+#                        n_folders_fs=10000)
+
+# Object Processing - 0.5h
+#sd = seg.SegmentationDataset("sv", working_dir=wd)
+#sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q', stride=10, n_max_co_processes=5000)
+
+# Map objects to sv's
+# About 0.2 h per object class
+#sd_proc.map_objects_to_sv(sd, "sj", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
+
+#sd_proc.map_objects_to_sv(sd, "vc", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
+
+#sd_proc.map_objects_to_sv(sd, "mi", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
+
+
+# Create SSD and incorporate RAG
+#ssd = ss.SuperSegmentationDataset(version="new", ssd_type="ssv",
+#                                  sv_mapping='/mnt/j0126/areaxfs_v10/RAGs/v4b_20180214_nocb_merges_reconnected_knossos_mergelist.txt')
+#ssd.save_dataset_shallow()
+
+# About 2.5h, mostly due to a few very large ssvs, since there workers iterate sequentially over the individual svs per ssv
+#ssd.save_dataset_deep(qsub_pe="default", qsub_queue='all.q', n_max_co_processes=5000, stride=100)
+
+
+# Map objects to SSVs
+#from syconn.proc import ssd_proc
+
+#ssd = ss.SuperSegmentationDataset(working_dir=wd)
+
+# First step: Took 3.5h, but only on two workers
+#ssd_proc.aggregate_segmentation_object_mappings(ssd, ['sj', 'vc', 'mi'], qsub_pe='default', qsub_queue='all.q')
+
+# Second step: 1h
+#ssd_proc.apply_mapping_decisions(ssd, ['sj', 'vc', 'mi'], qsub_pe='default', qsub_queue='all.q')
+
+# Extract contact sites
+# About 2h
+from syconn.extraction import cs_extraction_steps as ces
+#ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=5000,
+#                       qsub_pe='default', qsub_queue='all.q')
+
+ces.extract_agg_contact_sites(cd, wd,
+                              n_folders_fs=10000, suffix="",
+                              n_max_co_processes=5000, qsub_pe='default', qsub_queue='all.q')
+
+
+from syconn.extraction import cs_processing_steps as cps
+cps.combine_and_split_cs_agg(wd, cs_gap_nm=300,
+                             stride=100, qsub_pe='default', qsub_queue='all.q',
+                             n_max_co_processes=5000)
 
 ############################################################################################
 # ##### Cell object extraction #####
@@ -45,7 +101,7 @@ sd_proc.dataset_analysis(sd, qsub_pe="openmp", n_max_co_processes=100)
 # # ??The segmentation needs to be written to a KnossosDataset before running this
 # sd_proc.map_objects_to_sv(sj_sd, obj_type, kd_path,
 #                           qsub_pe=my_qsub_pe, nb_cpus=1,
-#                           n_max_co_processes=200)
+#                           n_max_co_processes=100)
 #
 # ##### SSD Assembly #####
 # # ??create SSD and mergelist (knossos)

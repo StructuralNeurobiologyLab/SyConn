@@ -12,12 +12,12 @@ from ..reps import segmentation, connectivity_helper as ch, \
     super_segmentation as ss, rep_helper
 
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 from collections import defaultdict
 import networkx as nx
 import os
 import scipy.spatial
-from ..handler.compression import VoxelDict, AttributeDict
+from syconn.backend.storage import AttributeDict, VoxelStorage
 
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
@@ -66,7 +66,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
     block_steps = np.linspace(0, len(voxel_rel_paths),
                               int(np.ceil(float(len(rel_cs_to_cs_agg_ids)) / stride)) + 1).astype(np.int)
 
-    cs = segmentation.SegmentationDataset("cs", working_dir=wd, version="new",
+    cs = segmentation.SegmentationDataset("cs_ssv", working_dir=wd, version="new",
                                           create=True)
 
     for p in voxel_rel_paths_2stage:
@@ -99,7 +99,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
 def map_objects_to_cs(wd, cs_version=None, ssd_version=None, max_map_dist_nm=2000,
                       obj_types=("sj", "mi", "vc"), stride=1000, qsub_pe=None,
                       qsub_queue=None, nb_cpus=1, n_max_co_processes=100):
-    cs_dataset = segmentation.SegmentationDataset("cs", version=cs_version,
+    cs_dataset = segmentation.SegmentationDataset("cs_ssv", version=cs_version,
                                                   working_dir=wd)
     paths = glob.glob(cs_dataset.so_storage_path + "/*/*/*")
 
@@ -132,7 +132,7 @@ def combine_and_split_cs_agg_helper(args):
     scaling = args[5]
     cs_gap_nm = args[6]
 
-    cs = segmentation.SegmentationDataset("cs", working_dir=wd,
+    cs = segmentation.SegmentationDataset("cs_ssv", working_dir=wd,
                                           version=cs_version)
 
     cs_agg = segmentation.SegmentationDataset("cs_agg", working_dir=wd,
@@ -144,10 +144,10 @@ def combine_and_split_cs_agg_helper(args):
     cur_path_id = 0
 
     os.makedirs(cs.so_storage_path + voxel_rel_paths[cur_path_id])
-    voxel_dc = VoxelDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                         "/voxel.pkl", read_only=False, timeout=3600)
+    voxel_dc = VoxelStorage(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+                         "/voxel.pkl", read_only=False)
     attr_dc = AttributeDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                            "/attr_dict.pkl", read_only=False, timeout=3600)
+                            "/attr_dict.pkl", read_only=False)
 
     p_parts = voxel_rel_paths[cur_path_id].strip("/").split("/")
     next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]),
@@ -186,9 +186,9 @@ def combine_and_split_cs_agg_helper(args):
             next_id += 100000
 
         if n_items_for_path > n_per_voxel_path:
-            voxel_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+            voxel_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                               "/voxel.pkl")
-            attr_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+            attr_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                              "/attr_dict.pkl")
 
             cur_path_id += 1
@@ -200,16 +200,16 @@ def combine_and_split_cs_agg_helper(args):
 
             os.makedirs(cs.so_storage_path + voxel_rel_paths[cur_path_id])
 
-            voxel_dc = VoxelDict(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
-                                 "voxel.pkl", read_only=False, timeout=3600)
+            voxel_dc = VoxelStorage(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+                                 "voxel.pkl", read_only=False)
             attr_dc = AttributeDict(cs.so_storage_path +
                                     voxel_rel_paths[cur_path_id] + "attr_dict.pkl",
-                                    read_only=False, timeout=3600)
+                                    read_only=False)
 
     if n_items_for_path > 0:
-        voxel_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+        voxel_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                           "/voxel.pkl")
-        attr_dc.save2pkl(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
+        attr_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                          "/attr_dict.pkl")
 
     print("done")
@@ -223,7 +223,7 @@ def map_objects_to_cs_thread(args):
     working_dir = args[4]
     max_map_dist_nm = args[5]
 
-    cs_dataset = segmentation.SegmentationDataset("cs", version=cs_version,
+    cs_dataset = segmentation.SegmentationDataset("cs_ssv", version=cs_version,
                                                   working_dir=working_dir)
 
     ssd = ss.SuperSegmentationDataset(version=ssd_version,
@@ -240,9 +240,8 @@ def map_objects_to_cs_thread(args):
 
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=False, timeout=3600)
-        this_vx_dc = VoxelDict(p + "/voxel.pkl", read_only=True,
-                               timeout=3600)
+                                     read_only=False)
+        this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True)
 
         for cs_id in this_vx_dc.keys():
             print(cs_id)
@@ -259,7 +258,7 @@ def map_objects_to_cs_thread(args):
 
             cs_obj.attr_dict.update(mapping_feats)
             this_attr_dc[cs_id] = cs_obj.attr_dict
-        this_attr_dc.save2pkl()
+        this_attr_dc.push()
 
 
 def map_objects_to_single_cs(cs_obj, ssd_version=None, max_map_dist_nm=2000,

@@ -1,94 +1,121 @@
 import numpy as np
 import time
 from collections import defaultdict as ddict
-from functools import partial
-
+import itertools
+import csv
+from random import randint
 from knossos_utils import knossosdataset
 from syconn.handler import basics
+import multiprocessing
 
 
-def new_extraction(this_segmentation):
+def new_extraction(result_queue, params):
+    this_segmentation = params[0]
+    subvol_size = params[1]
+    offset = params[2]
 
-    start = time.time()
-    alist = this_segmentation.tolist()
-    uniqueID_coords_dict = ddict(list)  # {sv_id: [(x1,y1,z1),(x2,y2,z2),...]}
-    extracted_voxels_dict = ddict(list)
-    len_0 = len(this_segmentation)
-    len_1 = len(this_segmentation[0])
-    len_2 = len(this_segmentation[0][0])
-    for x in range(len_0):         # faster than np.enumerate() and np.ndindex()
-        for y in range(len_1):
-            for z in range(len_2):
-                sv_id = alist[x][y][z]
-                if sv_id == 0:
-                    continue
-                uniqueID_coords_dict[sv_id].append((x, y, z))
-    print("first block: ", time.time() - start)
+    try:
+        start = time.time()
+        uniqueID_coords_dict = ddict(list)  # {sv_id: [(x0,y0,z0),(x1,y1,z1),...]}
+        extracted_voxels_dict = ddict(list)
 
-    start2 = time.time()
+        dims = this_segmentation.shape
+        indices = itertools.product(range(dims[0]), range(dims[1]), range(dims[2]))
+        for idx in indices:
+            sv_id = this_segmentation[idx]
+            uniqueID_coords_dict[sv_id].append(idx)
 
-    for sv_id in uniqueID_coords_dict.keys():
-        sv_coords = uniqueID_coords_dict[sv_id]
-        mask_offset = np.min(sv_coords, axis=0)
-        mask_coords = sv_coords - mask_offset
-        size = np.max(sv_coords, axis=0) - mask_offset + (1, 1, 1)
-        mask_coords = np.transpose(mask_coords)
-        mask = np.zeros(tuple(size), dtype=bool)
-        mask[mask_coords[0, :], mask_coords[1, :], mask_coords[2, :]] = True
-        extracted_voxels_dict[sv_id] = mask, mask_offset
+        for sv_id in uniqueID_coords_dict:
+            if sv_id == 0:
+                continue
 
-    end = time.time()
-    print("second block: ", end - start2)
-    print("New extraction: Processing %d objects took %ds" % (len(uniqueID_coords_dict.keys()), end - start))
+            sv_coords = uniqueID_coords_dict[sv_id]
+            sv_mask_offset = np.min(sv_coords, axis=0)
 
-    return extracted_voxels_dict
+            sv_mask_coords = sv_coords - sv_mask_offset
+            size = np.max(sv_coords, axis=0) - sv_mask_offset + (1, 1, 1)
+            sv_mask_coords = np.transpose(sv_mask_coords)
+            sv_mask = np.zeros(tuple(size), dtype=bool)
+            sv_mask[sv_mask_coords[0, :], sv_mask_coords[1, :], sv_mask_coords[2, :]] = True
+            extracted_voxels_dict[sv_id] = sv_mask, sv_mask_offset
+
+        total_time = time.time() - start
+        print(subvol_size, offset, 'new returned')
+        result_queue.put(['new', subvol_size, offset, len(list(extracted_voxels_dict.keys())), total_time])
+    except:
+        print(subvol_size, offset, 'new failed')
+        result_queue.put(['new', subvol_size, offset, 0, -1])
 
 
-def old_extraction_modified(this_segmentation):
+def old_extraction_modified(result_queue, params):
+    this_segmentation = params[0]
+    subvol_size = params[1]
+    offset = params[2]
 
-    start = time.time()
-    unique_ids = np.unique(this_segmentation)
-    extracted_voxels_dict = {}
-    for i_unique_id in range(len(unique_ids)):
-        unique_id = unique_ids[i_unique_id]
+    try:
+        start = time.time()
+        unique_ids = np.unique(this_segmentation)
+        extracted_voxels_dict = {}
+        for i_unique_id in range(len(unique_ids)):
+            unique_id = unique_ids[i_unique_id]
 
-        if unique_id == 0:
-            continue
+            if unique_id == 0:
+                continue
 
-        id_mask = this_segmentation == unique_id
-        id_mask, in_chunk_offset = basics.crop_bool_array(id_mask)
-        extracted_voxels_dict[unique_id] = id_mask, in_chunk_offset
+            id_mask = this_segmentation == unique_id
+            id_mask, in_chunk_offset = basics.crop_bool_array(id_mask)
+            extracted_voxels_dict[unique_id] = id_mask, in_chunk_offset
 
-    end = time.time()
-    print("Old extraction: Processing %d objects took %ds" % (len(extracted_voxels_dict.keys()), end - start))
-    # import pdb; pdb.set_trace()
-    return extracted_voxels_dict
+        total_time = time.time() - start
+        print(subvol_size, offset, 'old returned')
+        result_queue.put(['old', subvol_size, offset, len(list(extracted_voxels_dict.keys())), total_time])
+    except:
+        print(subvol_size, offset, 'old failed')
+        result_queue.put(['old', subvol_size, offset, 0, -1])
 
 
 if __name__ == '__main__':
-    # set parameters
-    # subvol_size = [512, 512, 512]
-    # subvol_size = [300, 300, 300]
-    # subvol_size = [256, 256, 256]
-    # subvol_size = [126, 126, 126]
-    subvol_size = [16, 16, 16]
-    # subvol_offset = [500, 500, 100]
-    # subvol_offset = [300, 300, 300]
-    subvol_offset = [0, 0, 0]
 
-    kd_seg_path = "/wholebrain/scratch/areaxfs_example/1k_cube/"
-    sd_path = "/wholebrain/scratch/jmark/oe_test/"
+    kd_seg_path = "/wholebrain/songbird/j0126/areaxfs_v5/knossosdatasets"
 
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(kd_seg_path)
 
-    try:
-        this_segmentation = kd.from_overlaycubes_to_matrix(subvol_size,     # return np.ndarray
-                                                           subvol_offset)
-    except:
-        this_segmentation = kd.from_overlaycubes_to_matrix(subvol_size,
-                                                           subvol_offset,
-                                                           datatype=np.uint32)
+    subvol_sizes = [[16, 16, 16], [32, 32, 32], [64, 64, 64], [128, 128, 128], [192, 192, 192], [256, 256, 256],
+                          [384, 384, 384], [512, 512, 512]]
+    subvol_offsets = [[4516, 9397, 173], [5556, 5216, 1423], [3650, 7744, 1220], [8895, 1951, 987], [6856, 7058, 3227],
+                    [4354, 7764, 3268], [4167, 8257, 2793]]  # , [6397, 6916, 293], [203, 7004, 2585], [714, 7767, 2538]]
 
-    new = new_extraction(this_segmentation)
-    old = old_extraction_modified(this_segmentation)
+    result_queue = multiprocessing.Queue()
+
+    params = []
+    for size in subvol_sizes:
+        for offset in subvol_offsets:
+            this_segmentation = kd.from_overlaycubes_to_matrix(size, offset)
+            params.append([this_segmentation, size, offset])
+
+
+    # size = [512, 512, 512]
+    # for offset in subvol_offsets:
+    #     this_segmentation = kd.from_overlaycubes_to_matrix(size, offset)
+    #     params.append([this_segmentation, size, offset])
+
+    processes = []
+    for param in params:
+        p_new = multiprocessing.Process(target=new_extraction, args=(result_queue, param))
+        p_old = multiprocessing.Process(target=old_extraction_modified, args=(result_queue, param))
+        processes.append(p_new)
+        processes.append(p_old)
+        p_new.start()
+        p_old.start()
+
+    for p in processes:
+        p.join()
+
+    results = [['extraction_type', 'subvolume_size', 'offset', 'no_of_objects', 'extraction_time']]
+    while result_queue.empty() == False:
+        results.append(result_queue.get())
+
+    with open('/wholebrain/u/jmark/extraction_benchmark_all_runs_07_offsets.csv', 'w') as f:
+        writer = csv.writer(f)
+        writer.writerows(results)

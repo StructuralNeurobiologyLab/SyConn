@@ -13,14 +13,15 @@ import numpy as np
 import time
 import sys
 import warnings
+from ..config import global_params
 from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
-from ..handler.multiviews import generate_palette, remap_rgb_labelviews, rgb2id_array
+from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
+    rgb2id_array, id2rgb_array_contiguous
 from .meshes import merge_meshes, get_random_centered_coords, \
     MeshObject, calc_rot_matrices, flag_empty_spaces
 import os
 import tqdm
-from syconn.handler.multiviews import id2rgb_array_contiguous
 
 try:
     import os
@@ -48,14 +49,14 @@ record_len = 10 * float_size
 
 def init_object(indices, vertices, normals, colors, ws):
     """
-    Initialize objects for rendering.
+    Initialize objects for rendering from N triangles and M vertices
 
     Parameters
     ----------
-    indices : np.array [N, 1]
-    vertices : np.array [N, 1]
-    normals : np.array [N, 1]
-    colors : np.array [N, 1]
+    indices : np.array [3N, 1]
+    vertices : np.array [3M, 1]
+    normals : np.array [3M, 1]
+    colors : np.array [4M, 1]
     ws : tuple
 
     Returns
@@ -64,8 +65,10 @@ def init_object(indices, vertices, normals, colors, ws):
     """
     global ind_cnt, vertex_cnt
     indices = indices.astype(np.uint32)
-    vertices = vertices.astype(np.float32).reshape(-1, 3)  # create individual vertices for each triangle
-    colors = colors.reshape(-1, 4)  # adapt color array
+    # create individual vertices for each triangle
+    vertices = vertices.astype(np.float32).reshape(-1, 3)
+    # adapt color array
+    colors = colors.reshape(-1, 4)
     ind_cnt = len(indices)
     vertex_cnt = len(vertices)
     normals = normals.astype(np.float32).reshape(-1, 3)
@@ -142,10 +145,10 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE)
         data = Image.frombuffer("L", (ws[0], ws[1]), data, 'raw', 'L', 0, 1) #(mode, size, data, 'raw', mode, 0, 1)
-        data = np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM)).astype(np.uint8)
+        data = np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM))
+        data = normalize_img(data, max_val=255).astype(np.uint8)
         if clahe:
             data = apply_clahe(data)
-        data = gaussian_filter(data, .7)
         if np.sum(data) == 0:
             data = np.ones_like(data) * 255
     elif colored:
@@ -395,7 +398,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                            ws=(256, 128), views_key="raw", nb_simplices=3,
                            depth_map=True, clahe=False, smooth_shade=True,
                            verbose=False, wire_frame=False,
-                           nb_views=2, triangulation=True):
+                           nb_views=None, triangulation=True):
     """
     Same as multi_view_mesh_coords but without creating gl context.
     Parameters
@@ -424,6 +427,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     np.array
         Returns array of views, else None
     """
+    if nb_views is None:
+        nb_views = global_params.NB_VIEWS
     # center data
     assert isinstance(edge_lengths, np.ndarray)
     assert nb_simplices in [3, 4]
@@ -473,13 +478,6 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         glMatrixMode(GL_MODELVIEW)
 
         transformed_c = mesh.transform_external_coords([c])[0]
-        # glPushMatrix()
-        # glRotate(360. / 4 * 0, edge_lengths[0], 0, 0)
-        # glMultMatrixf(rot_mat)
-        # glTranslate(-transformed_c[0], -transformed_c[1], -transformed_c[2])
-        # light_position = [1., 1., 2., 0.]
-        # glLightfv(GL_LIGHT0, GL_POSITION, light_position)
-        # glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
         # dummy rendering, somehow first screenshot is always black
         _ = screen_shot(ws, colored=colored, depth_map=depth_map, clahe=clahe,
                         triangulation=triangulation)
@@ -488,7 +486,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         glMatrixMode(GL_MODELVIEW)
         for m in range(0, nb_views):
             if nb_views == 2:
-                rot_angle = 360. / 4 * m  # views are orthogonal
+                rot_angle = (-1)**(m+1)*25# views are orthogonal
             else:
                 rot_angle = 360. / nb_views * m  # views are equi-angular
             glPushMatrix()
@@ -513,11 +511,11 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                                   % (views_key, len(mesh.vert_resh)),
                                   RuntimeWarning)
                     found_empty_view = True
-            if found_empty_view:
-                print("View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
-                      "'%s'-mesh with %d vertices." %\
-                      (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
-                       views_key, len(mesh.vertices)))
+        if found_empty_view:
+            print("View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
+                  "'%s'-mesh with %d vertices. Location: %s" %
+                  (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
+                   views_key, len(mesh.vertices), repr(c)))
     if verbose:
         pbar.close()
     return res
@@ -534,8 +532,8 @@ def draw_scale(size):
     glLineWidth(5)
     glBegin(GL_LINES)
     glColor(0,0,0, 1)
-    glVertex2f(1 - 0.1 - size,1 - 0.1)
-    glVertex2f(1 - 0.1,1 - 0.1)
+    glVertex2f(1 - 0.1 - size, 1 - 0.1)
+    glVertex2f(1 - 0.1, 1 - 0.1)
     glEnd()
 
 
@@ -579,10 +577,10 @@ def render_mesh_coords(coords, ind, vert, **kwargs):
 
 
 def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
-                        rot_matrices=None, views_key="raw", return_rot_matrices=False,
-                        depth_map=True, smooth_shade=True, wire_frame=False,
-                        nb_views=2, triangulation=True,
-                        comp_window=8e3):
+                        rot_matrices=None, views_key="raw",
+                        return_rot_matrices=False, depth_map=True,
+                        smooth_shade=True, wire_frame=False, nb_views=None,
+                        triangulation=True, comp_window=8e3):
     """
     Render raw views located at given coordinates in mesh
      Returns ViewContainer list if dest_dir is None, else writes
@@ -602,34 +600,43 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
     depth_map : bool
     wire_frame : bool
     comp_window : float
-        window length along main p.c. for mesh view
+        window length in NM along main p.c. for mesh view
 
     Returns
     -------
     numpy.array
         views at each coordinate
     """
-    edge_lengths = np.array([comp_window, comp_window / 2, comp_window / 2])
+    if nb_views is None:
+        nb_views = global_params.NB_VIEWS
+    if np.isscalar(comp_window):
+        edge_lengths = np.array([comp_window, comp_window / 2, comp_window])
+    else:
+        edge_lengths = comp_window
     if verbose:
         start = time.time()
+    querybox_edgelength = np.max(edge_lengths)
     if rot_matrices is None:
         rot_matrices = calc_rot_matrices(mesh.transform_external_coords(coords),
-                                         mesh.vert_resh, edge_lengths / mesh.max_dist)
+                                         mesh.vert_resh,
+                                         querybox_edgelength / mesh.max_dist)
         local_rot_mat = rot_matrices
     else:
-        empty_locs = flag_empty_spaces(coords, mesh.vertices_scaled.reshape((-1, 3)),
-                                       edge_lengths)
+        empty_locs = flag_empty_spaces(
+            coords, mesh.vertices_scaled.reshape((-1, 3)), querybox_edgelength)
         local_rot_mat = np.array(rot_matrices)
         local_rot_mat[empty_locs] = 0
     if verbose:
-        print("Calculation of rotation matrices took", time.time() - start)
+        print("Calculation of rotation matrices / flagging empty views"
+              " took", time.time() - start)
         print("Starting local rendering at %d locations (%s)." %
               (len(coords), views_key))
     ctx = init_ctx(ws)
     mviews = multi_view_mesh_coords(mesh, coords, local_rot_mat, edge_lengths,
                                     clahe=clahe, views_key=views_key, ws=ws,
                                     depth_map=depth_map, verbose=verbose,
-                                    smooth_shade=smooth_shade, triangulation=triangulation,
+                                    smooth_shade=smooth_shade,
+                                    triangulation=triangulation,
                                     wire_frame=wire_frame, nb_views=nb_views)
     if verbose:
         end = time.time()
@@ -670,7 +677,7 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
     # get coordinates for N SV's in SSO
     if verbose:
         start = time.time()
-    coords = sso.sample_locations()
+    coords = sso.sample_locations(cache=False)
     if not overwrite:
         missing_sv_ixs = np.array([not so.views_exist(woglia=woglia)
                                    for so in sso.svs],
@@ -708,8 +715,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
 
 
 def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=False,
-                      ws=(256,128), cellobjects_only=False, wire_frame=False,
-                      nb_views=2, comp_window=8e3, rot_mat=None, return_rot_mat=False):
+                      ws=(256, 128), cellobjects_only=False, wire_frame=False,
+                      nb_views=None, comp_window=8e3, rot_mat=None, return_rot_mat=False):
     """
     Render views of SuperSegmentationObject at given coordinates.
     
@@ -723,11 +730,18 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     ws : tuple of int
     cellobjects_only : bool
     wire_frame : bool
-
+    nb_views : int
+    comp_window : int, float
+        window size in nm. the clipping box during rendering will have an extent
+         of [comp_window, comp_window / 2, comp_window]
+    rot_mat : np.array
+    return_rot_mat : bool
     Returns
     -------
     np.array
     """
+    if nb_views is None:
+        nb_views = global_params.NB_VIEWS
     mesh = sso.mesh
     if len(mesh[1]) == 0:
         print("----------------------------------------------\n"
@@ -737,41 +751,43 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
                                 "cellobjects only."
-        raw_views = np.ones((len(coords), nb_views, 128, 256), dtype=np.uint8) * 255
-        edge_lengths = np.array([comp_window, comp_window / 2, comp_window / 2])
+        raw_views = np.ones((len(coords), nb_views, 128, 256), dtype=np.uint8) \
+                    * 255
+        edge_lengths = np.array([comp_window, comp_window / 2, comp_window])
         mo = MeshObject("raw", mesh[0], mesh[1])
         mo._colors = None
         if rot_mat is None:
+            querybox_edgelength = np.max(edge_lengths) / mo.max_dist
             rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
-                                        mo.vert_resh, edge_lengths / mo.max_dist)
+                                        mo.vert_resh, querybox_edgelength)
     else:
-        raw_views, rot_mat = render_mesh_coords(coords, mesh[0], mesh[1], clahe=clahe,
-                                                verbose=verbose, return_rot_matrices=True,
-                                                ws=ws, wire_frame=wire_frame, rot_matrices=rot_mat,
-                                                nb_views=nb_views, comp_window=comp_window)
+        raw_views, rot_mat = render_mesh_coords(
+            coords, mesh[0], mesh[1], clahe=clahe, verbose=verbose,
+            return_rot_matrices=True, ws=ws, wire_frame=wire_frame,
+            rot_matrices=rot_mat, nb_views=nb_views, comp_window=comp_window)
     if add_cellobjects:
         mesh = sso.mi_mesh
         if len(mesh[1]) != 0:
-            mi_views = render_mesh_coords(coords, mesh[0], mesh[1], clahe=clahe,
-                                          verbose=verbose, rot_matrices=rot_mat,
-                                          views_key="mi", ws=ws, wire_frame=wire_frame,
-                                          nb_views=nb_views, comp_window=comp_window)
+            mi_views = render_mesh_coords(
+                coords, mesh[0], mesh[1], clahe=clahe, verbose=verbose,
+                rot_matrices=rot_mat, views_key="mi", ws=ws, nb_views=nb_views,
+                wire_frame=wire_frame, comp_window=comp_window)
         else:
             mi_views = np.ones_like(raw_views) * 255
         mesh = sso.vc_mesh
         if len(mesh[1]) != 0:
-            vc_views = render_mesh_coords(coords, mesh[0], mesh[1], clahe=clahe,
-                                          verbose=verbose, rot_matrices=rot_mat,
-                                          views_key="vc", ws=ws, wire_frame=wire_frame,
-                                          nb_views=nb_views, comp_window=comp_window)
+            vc_views = render_mesh_coords(
+                coords, mesh[0], mesh[1], clahe=clahe, verbose=verbose,
+                rot_matrices=rot_mat, views_key="vc", ws=ws, nb_views=nb_views,
+                wire_frame=wire_frame, comp_window=comp_window)
         else:
             vc_views = np.ones_like(raw_views) * 255
         mesh = sso.sj_mesh
         if len(mesh[1]) != 0:
-            sj_views = render_mesh_coords(coords, mesh[0], mesh[1], clahe=clahe,
-                                          verbose=verbose, rot_matrices=rot_mat,
-                                          views_key="sj", ws=ws, wire_frame=wire_frame,
-                                          nb_views=nb_views, comp_window=comp_window)
+            sj_views = render_mesh_coords(
+                coords, mesh[0], mesh[1], clahe=clahe, verbose=verbose,
+                rot_matrices=rot_mat, views_key="sj", ws=ws,nb_views=nb_views,
+                wire_frame=wire_frame, comp_window=comp_window)
         else:
             sj_views = np.ones_like(raw_views) * 255
         if cellobjects_only:
@@ -791,7 +807,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
 
 
 def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
-                                  rot_mat=None, nb_views=2,
+                                  rot_mat=None, nb_views=None,
                                   comp_window=8e3, return_rot_matrices=False):
     """
 
@@ -803,11 +819,15 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     ws :
     rot_mat :
     comp_window : float
-
+        window size in nm. the clipping box during rendering will have an extent
+         of [comp_window, comp_window / 2, comp_window]
+    return_rot_matrices : bool
     Returns
     -------
 
     """
+    if nb_views is None:
+        nb_views = global_params.NB_VIEWS
     ind, vert, norm = sso.mesh
     if len(vert) == 0:
         print("----------------------------------------------\n"
@@ -815,41 +835,45 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
               "----------------------------------------------\n")
         return np.ones((len(coords), 2, 128, 256, 3), dtype=np.uint8)
     color_array = id2rgb_array_contiguous(np.arange(len(ind) // 3))
-    color_array = np.concatenate([color_array, np.ones((len(color_array), 1), dtype=np.uint8)*255],
-                                 axis=-1).astype(np.float32) / 255. # in init it seems color values have to be normalized, check problems with uniqueness if
+    color_array = np.concatenate([color_array, np.ones((len(color_array), 1),
+                                                       dtype=np.uint8)*255],
+                                 axis=-1).astype(np.float32) / 255.
+    # in init it seems color values have to be normalized, check problems with uniqueness if
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
     # backwards compatibility with other color-dependent rendering methods
     # Create mesh object
     if rot_mat is None:
-        edge_lengths = np.array([comp_window, comp_window / 2, comp_window / 2])
+        querybox_edgelength = comp_window
         mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
         rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
-                                    mo.vert_resh, edge_lengths / mo.max_dist)
-    vert = vert.reshape(-1, 3)[ind].flatten()  # create redundant vertices to enable per-face colors
+                                    mo.vert_resh, querybox_edgelength)
+    # create redundant vertices to enable per-face colors
+    vert = vert.reshape(-1, 3)[ind].flatten()
     ind = np.arange(len(vert) // 3)
     color_array = np.repeat(color_array, 3, axis=0)
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
     if return_rot_matrices:
-        ix_views, rot_mat = _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
-                               depth_map=False, rot_matrices=rot_mat,
-                               smooth_shade=False, views_key="index",
-                               nb_views=nb_views, comp_window=comp_window,
-                               return_rot_matrices=return_rot_matrices)
+        ix_views, rot_mat = _render_mesh_coords(
+            coords, mo, verbose=verbose, ws=ws, depth_map=False,
+            rot_matrices=rot_mat, smooth_shade=False, views_key="index",
+            nb_views=nb_views, comp_window=comp_window,
+            return_rot_matrices=return_rot_matrices)
         ix_views = rgb2id_array(ix_views)[:, None]
         return ix_views, rot_mat
     ix_views = _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
-                           depth_map=False, rot_matrices=rot_mat,
-                           smooth_shade=False, views_key="index",
-                           nb_views=nb_views, comp_window=comp_window,
-                           return_rot_matrices=return_rot_matrices)
+                                   depth_map=False, rot_matrices=rot_mat,
+                                   smooth_shade=False, views_key="index",
+                                   nb_views=nb_views, comp_window=comp_window,
+                                   return_rot_matrices=return_rot_matrices)
     return rgb2id_array(ix_views)[:, None]
 
 
 def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
-                                  ws=(256, 128), rot_mat=None, nb_views=2,
+                                  ws=(256, 128), rot_mat=None, nb_views=None,
                                   comp_window=8e3, return_rot_matrices=False):
     """
     Render views with vertex colors corresponding to vertex labels.
+
     Parameters
     ----------
     sso :
@@ -868,6 +892,8 @@ def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
     -------
 
     """
+    if nb_views is None:
+        nb_views = global_params.NB_VIEWS
     ind, vert, _ = sso.mesh
     if len(vertex_labels) != len(vert) // 3:
         raise ValueError("Length of vertex labels and vertices "
@@ -906,10 +932,6 @@ def get_sso_view_dc(sso, verbose=False):
 def render_sso_ortho_views(sso):
     views = np.zeros((3, 4, 1024, 1024))
     # init MeshObject to calculate rotation into PCA frame
-    mesh = MeshObject("raw", sso.mesh[0], sso.mesh[1], sso.mesh[2])
-    coords = np.array([0, 0, 0])[None,]  # cell center as view location
-    # rot_matrices = calc_rot_matrices(mesh.transform_external_coords(coords),
-    #                                  mesh.vert_resh, np.ones((3,)))[0]
 
     views[:, 0] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
                                  obj_to_render=('sv'), )
@@ -920,46 +942,3 @@ def render_sso_ortho_views(sso):
     views[:, 3] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
                                  obj_to_render=('sj'))
     return views
-
-# ------------------------------------------------------------------------------
-# Multiprocessing rendering code
-
-
-def multi_render_sampled_svidlist(args):
-    """
-    Render SVs with ID's svixs using helper script in syconnfs.examples.
-    OS rendering requires individual creation of OSMesaContext.
-    Change kwargs for SOs in syconnfs.examples.render_helper_svidlist.
-
-    Parameters
-    ----------
-    svixs : iterable
-        SegmentationObject ID's
-    """
-    version, skip_indexviews, svixs = args[0], args[1], args[2:]
-    fpath = os.path.dirname(os.path.abspath(__file__))
-    cmd = "python %s/../../scripts/backend/render_helper_svidlist.py" % fpath
-    cmd += " {}".format(version)
-    cmd += " {}".format(skip_indexviews)
-    for ix in svixs:
-        cmd += " {}".format(ix)
-    res = os.system(cmd)
-    if type(res) == str and "Error" in res:
-        raise()
-
-
-def multi_render_sampled_sso(sso_ix):
-    """
-    Render SSO with ID sso_ix using helper script in syconn.examples.
-    OS rendering requires individual creation of OSMesaContext.
-    Change kwargs for SSO in syconnfs.examples.render_helper_svidlist.
-
-    Parameters
-    ----------
-    sso_ix : int
-    """
-    raise DeprecationWarning("Do not use anymore.")
-    fpath = os.path.dirname(os.path.abspath(__file__))
-    cmd = "python %s/../../scripts/backend//render_helper_sso.py" % fpath
-    cmd += " {}".format(sso_ix)
-    res = os.system(cmd)

@@ -2,14 +2,13 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 
 import numpy as np
-import re
-from ..handler.basics import read_txt_from_zip
 from scipy import spatial
 from collections import Counter
+from ..reps import log_reps
 
 
 def knossos_ml_from_svixs(sv_ixs, coords=None, comments=None):
@@ -51,10 +50,10 @@ def knossos_ml_from_ccs(cc_ixs, ccs, coords=None, comments=None):
 
     Parameters
     ----------
-    cc_ixs : list of int
-    ccs : list of lists of int
-    coords : list of np.array
-    comments : list of lists of str
+    cc_ixs : List[int]
+    ccs : List[List[int]]
+    coords : List[np.array]
+    comments : List[List[str]]
 
     Returns
     -------
@@ -117,18 +116,6 @@ def knossos_ml_from_sso(sso, comment=None):
     return txt
 
 
-def negative_to_zero(a):
-    """
-    Sets negative values of array a to zero.
-    :param a: numpy array
-    :return: array a with non negativ values.
-    """
-    if a > 0:
-        return a
-    else:
-        return 0
-
-
 def get_rel_path(obj_name, filename, suffix=""):
     """
     Returns path from ChunkDataset folder to SegmentationDataset folder.
@@ -154,24 +141,9 @@ def get_rel_path(obj_name, filename, suffix=""):
            filename + suffix + "/"
 
 
-# def subfold_from_ix(ix, n_folders=0):
-#     """
-#
-#     Parameters
-#     ----------
-#     ix : int
-#
-#     Returns
-#     -------
-#     str
-#     """
-#     id_str = "00000" + str(ix)
-#     subfold = "/%d/%d/%d/" % \
-#            (int(id_str[-5:-3]), int(id_str[-3:-1]), int(id_str[-1]))
-#     return subfold
-
 def subfold_from_ix(ix, n_folders, old_version=False):
     """
+    # TODO: remove 'old_version' as soon as possible, currently there is one usage
 
     Parameters
     ----------
@@ -194,30 +166,10 @@ def subfold_from_ix(ix, n_folders, old_version=False):
         idx = len(id_str) - order + f_order
         subfold += "%s/" % id_str[idx: idx + 2]
 
-    # if order % 2 == 1:
-    #     subfold += "%s/" % id_str[-order]
-
     if old_version:
         subfold = subfold.replace('/0', '/').replace('//', '/0/')
 
     return subfold
-
-
-def subfold_from_ix_2nd_stage(ix):
-    """
-
-    Parameters
-    ----------
-    ix : int
-
-    Returns
-    -------
-    str
-    """
-    raise ImportError('Check correct functionality before using it')
-    # return "/%d/%d/%d/" % ((ix // 1e3) % 1e2, (ix // 1e1) % 1e2, ix % 10)
-    id_str = "00000" + str(ix)
-    return "/%d/%d/" % (int(id_str[-4:-2]), int(id_str[-2:]))
 
 
 def ix_from_subfold(subfold, n_folders):
@@ -261,7 +213,9 @@ def subfold_from_ix_SSO(ix):
 def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
                        nb_cpus=-1, k=1, return_color=True):
     """
-
+    Assigns all vertices the kNN majority label from rep_coords/rep_values and
+    if return_color is True assigns those a color. Helper function to colorcode
+    a set of coordinates (vertices) by known labels (rep_coords, rep_values).
     Parameters
     ----------
     vertices : np.array
@@ -291,7 +245,11 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
         if np.max(colors) <= 1.0:
             colors = np.array(colors) * 255
         colors = np.array(colors, dtype=np.uint)
-    assert len(colors) >= np.max(rep_values) + 1
+        if len(colors) < np.max(rep_values) + 1:
+            msg = 'Length of colors has to be equal to "np.max(rep_values)+1"' \
+                  '. Note that currently only consecutive labels are supported.'
+            log_reps.error(msg)
+            raise ValueError(msg)
     hull_tree = spatial.cKDTree(rep_coords)
     dists, ixs = hull_tree.query(vertices, n_jobs=nb_cpus, k=k)
     hull_rep = np.zeros((len(vertices)), dtype=np.int)
@@ -307,9 +265,11 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     return vert_col
 
 
-def assign_rep_values(target_coords, rep_coords, rep_values, colors=None,
-                       nb_cpus=-1, k=1, return_ixs=False):
+def assign_rep_values(target_coords, rep_coords, rep_values,
+                      nb_cpus=-1, return_ixs=False):
     """
+    Assigns values corresponding to representative coordinates to every target
+    coordinate.
 
     Parameters
     ----------
@@ -318,32 +278,28 @@ def assign_rep_values(target_coords, rep_coords, rep_values, colors=None,
     rep_coords : np.array
         [M ,3]
     rep_values : np.array
-        [M, 1] int values to be color coded for each vertex; used as indices
-        for colors
-    colors : list
-        color for each rep_value
+        [M, Z] any type of values for each rep_coord.
     nb_cpus : int
-    k : int
-        Number of nearest neighbors (average prediction)
     return_ixs : bool
         returns indices of k-closest rep_coord for every target coordinate
 
     Returns
     -------
-    np. array [N, 4]
-        rgba values for every vertex from 0 to 255
+    np. array [N, Z]
+        representation values for every vertex
     """
-    if colors is None:
-        colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
-                           [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
-    else:
-        colors = np.array(colors, dtype=np.uint)
-    assert len(colors) >= np.max(rep_values) + 1
+    if not type(rep_values) is np.ndarray:
+        rep_values = np.array(rep_values)
+    if not rep_values.ndim == 2:
+        msg = "Number of dimensions of representation values " \
+              "have to be exactly 2."
+        log_reps.exception(msg)
+        raise ValueError(msg)
     hull_tree = spatial.cKDTree(rep_coords)
-    dists, ixs = hull_tree.query(target_coords, n_jobs=nb_cpus, k=k)
-    hull_rep = [None] * len(target_coords)
+    dists, ixs = hull_tree.query(target_coords, n_jobs=nb_cpus, k=1)
+    hull_rep = np.zeros((len(target_coords), rep_values.shape[1]))
     for i in range(len(ixs)):
-        curr_reps = np.array(rep_values)[ixs[i]]
+        curr_reps = rep_values[ixs[i]]
         hull_rep[i] = curr_reps
     if return_ixs:
         return hull_rep, ixs

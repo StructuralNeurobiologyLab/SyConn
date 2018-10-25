@@ -5,15 +5,16 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
-import numpy as np
 from scipy import spatial
 import networkx as nx
+import numpy as np
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
-import itertools
-import sys
 import tqdm
-from ..mp.shared_mem import start_multiprocess_obj, start_multiprocess
-from ..config.global_params import min_cc_size_glia, min_cc_size_neuron, glia_thresh, get_dataset_scaling
+from ..mp.mp_utils import start_multiprocess_obj
+from ..config.global_params import min_cc_size_glia, min_cc_size_neuron,\
+    get_dataset_scaling, glia_thresh
+from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
+import itertools
 
 
 def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):

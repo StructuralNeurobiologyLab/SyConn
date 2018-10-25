@@ -1,6 +1,9 @@
-# SyConn
-# Copyright (c) 2016 Philipp J. Schubert
-# All rights reserved
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.handler.basics import write_obj2pkl
 # ------------------------------------------------------------------------------
@@ -57,7 +60,7 @@ if __name__ == "__main__":
     # save SSVs
     ssd_new.save_dataset_deep()
     gt_dir = "/wholebrain/scratch/areaxfs3//ssv_gliagt/"
-    label_dict = write_obj2pkl(gt_dir +"gliagt_labels.pkl", {k: 1 for k in
+    write_obj2pkl(gt_dir +"gliagt_labels.pkl", {k: 1 for k in
                                                              glia_ids})
     # Neuron GT is given by axon GT ...
     for ssv in ssd_new.ssvs:

@@ -1,6 +1,10 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import numpy as np
-
-
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
@@ -24,7 +28,7 @@ def assemble_from_mergelist(ssd, mergelist):
     for sv_id in mergelist.values():
         ssd.mapping_dict[sv_id] = []
 
-    ssd._id_changer = np.ones(np.max(mergelist.keys()) + 1,
+    ssd._id_changer = np.ones(np.max(list(mergelist.keys())) + 1,
                               dtype=np.int) * (-1)
 
     for sv_id in mergelist.keys():

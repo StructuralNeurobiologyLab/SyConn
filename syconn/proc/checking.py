@@ -1,3 +1,9 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 try:
     import cPickle as pkl
 except ImportError:
@@ -5,7 +11,7 @@ except ImportError:
 import glob
 import os
 from ..mp import qsub_utils as qu
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 from.checking_helper import find_missing_overlaycubes_thread
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../multi_proc/")
 

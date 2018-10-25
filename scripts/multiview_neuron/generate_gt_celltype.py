@@ -80,18 +80,18 @@ ssv_labels = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 if __name__ == "__main__":
     ssd_new = SuperSegmentationDataset(
         working_dir="/wholebrain/scratch/areaxfs3/", version="ctgt")
-    # ssd_all = SuperSegmentationDataset(
-    #     working_dir="/wholebrain/scratch/areaxfs/")
-    # orig_ssvs = ssd_all.get_super_segmentation_object(ssv_ids)
-    # for ssv in orig_ssvs:
-    #     assert os.path.isfile(ssv.attr_dict_path)
-    # copy_ssvs2new_SSD_simple(orig_ssvs, new_version="ctgt",
-    #                          target_wd="/wholebrain/scratch/areaxfs3/")
-    # ssd_new.save_dataset_deep()
+    ssd_all = SuperSegmentationDataset(
+        working_dir="/wholebrain/scratch/areaxfs/")
+    orig_ssvs = ssd_all.get_super_segmentation_object(ssv_ids)
+    for ssv in orig_ssvs:
+        assert os.path.isfile(ssv.attr_dict_path)
+    copy_ssvs2new_SSD_simple(orig_ssvs, new_version="ctgt",
+                             target_wd="/wholebrain/scratch/areaxfs3/")
+    ssd_new.save_dataset_deep()
     for ii, ssv_id in enumerate(ssv_ids):
         ssv = ssd_new.get_super_segmentation_object(ssv_id)
         ssv.save_attributes(["cellttype_gt"], [ssv_labels[ii]])
         ssv._render_rawviews(2)
-    gt_dir = "/wholebrain/scratch/areaxfs3//ssv_gliagt/"
-    label_dict = write_obj2pkl(gt_dir +"gliagt_labels.pkl",
+    gt_dir = "/wholebrain/scratch/areaxfs3//ssv_ctgt/"
+    write_obj2pkl(gt_dir +"ctgt_labels.pkl",
                  {ssv_ids[kk]: ssv_labels[kk] for kk in range(len(ssv_ids))})

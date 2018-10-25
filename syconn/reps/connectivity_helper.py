@@ -2,8 +2,8 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import time
 import numpy as np
 from ..reps import super_segmentation as ss
@@ -50,7 +50,7 @@ def extract_connectivity_information(sj, ssd):
     if not "connectivity" in sj.attr_dict:
         return
 
-    ss_con_ids = ssd.id_changer[np.array(sj.attr_dict["connectivity"].keys(),
+    ss_con_ids = ssd.id_changer[np.array(list(sj.attr_dict["connectivity"].keys()),
                                          dtype=np.int)]
     if len(ss_con_ids) == 0:
         return

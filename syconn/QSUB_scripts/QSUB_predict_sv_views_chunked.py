@@ -1,15 +1,19 @@
-import os
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import sys
-import numpy as np
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconn.reps.super_segmentation import render_sampled_sos_cc
 from syconn.proc.sd_proc import sos_dict_fact, init_sos, predict_views
 from syconn.handler.prediction import NeuralNetworkInterface
-from syconn.handler.compression import LZ4Dict, AttributeDict
+from syconn.backend.storage import AttributeDict, CompressedStorage
+
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
 
@@ -38,18 +42,20 @@ else:
 model = NeuralNetworkInterface(**model_kwargs)
 for p in so_chunk_paths:
     view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
-    view_dc = LZ4Dict(view_dc_p, disable_locking=True)
-    svixs = view_dc.keys()
-    views = view_dc.values()
+    view_dc = CompressedStorage(view_dc_p, disable_locking=True)
+    svixs = list(view_dc.keys())
+    views = list(view_dc.values())
     if raw_only:
         views = views[:, :1]
     sd = sos_dict_fact(svixs, **so_kwargs)
     sos = init_sos(sd)
-    probas = predict_views(model, views, sos, return_proba=True, **pred_kwargs)
+    probas = predict_views(model, views, sos, return_proba=True,
+                           **pred_kwargs)
     attr_dc_p = p + "/attr_dict.pkl"
     ad = AttributeDict(attr_dc_p, disable_locking=True)
     for ii in range(len(sos)):
         ad[sos[ii].id][pred_key] = probas[ii]
-    ad.save2pkl()
+    ad.push()
+
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

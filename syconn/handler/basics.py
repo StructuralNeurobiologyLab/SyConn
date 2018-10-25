@@ -2,10 +2,11 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 
 from collections import defaultdict
+import collections
 import warnings
 import numpy as np
 import h5py
@@ -17,23 +18,18 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from knossos_utils.skeleton_utils import loadj0126NML
-from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
+from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
 import re
 import signal
-#from smart_open import smart_open
+import io
 import logging
+import contextlib
 
 __all__ = ["load_from_h5py", "save_to_h5py", "crop_bool_array",
            "get_filepaths_from_dir", "write_obj2pkl", "load_pkl2obj",
            "write_data2kzip", "remove_from_zip", "chunkify", "flatten_list",
            "get_skelID_from_path", "write_txt2kzip", "switch_array_entries",
            "parse_cc_dict_from_kzip", "parse_cc_dict_from_kml"]
-
-
-def argsort(seq):
-    # http://stackoverflow.com/questions/3071415/efficient-method-to-calculate-the-rank-vector-of-a-list-in-python
-    return sorted(range(len(seq)), key=seq.__getitem__)
 
 
 def load_from_h5py(path, hdf5_names=None, as_dict=False):
@@ -133,18 +129,6 @@ def crop_bool_array(arr):
            [in_mask_indices[0].min(),
             in_mask_indices[1].min(),
             in_mask_indices[2].min()]
-
-
-def negative_to_zero(a):
-    """
-    Sets negative values of array a to zero.
-    :param a: numpy array
-    :return: array a with non negativ values.
-    """
-    if a > 0:
-        return a
-    else:
-        return 0
 
 
 def group_ids_to_so_storage(ids, params, significant_digits=5):
@@ -324,7 +308,8 @@ def write_txt2kzip(kzip_path, text, fname_in_zip, force_overwrite=False):
         name of file when added to zip
     force_overwrite : bool
     """
-    texts2kzip(kzip_path, [text], [fname_in_zip], force_overwrite=force_overwrite)
+    texts2kzip(kzip_path, [text], [fname_in_zip],
+               force_overwrite=force_overwrite)
 
 
 def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
@@ -334,8 +319,8 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
     Parameters
     ----------
     kzip_path : str
-    texts : list of str
-    fnames_in_zip : list of str
+    texts : List[str]
+    fnames_in_zip : List[str]
         name of file when added to zip
     force_overwrite : bool
     """
@@ -343,15 +328,13 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
         if os.path.isfile(kzip_path):
             try:
                 if force_overwrite:
-                    with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED,
-                                         allowZip64=True) as zf:
+                    with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                         for i in range(len(texts)):
                             zf.writestr(fnames_in_zip[i], texts[i])
                 else:
                     for i in range(len(texts)):
                         remove_from_zip(kzip_path, fnames_in_zip[i])
-                    with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED,
-                                         allowZip64=True) as zf:
+                    with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED) as zf:
                         for i in range(len(texts)):
                             zf.writestr(fnames_in_zip[i], texts[i])
             except Exception as e:
@@ -359,8 +342,7 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
                       " overwriting." % kzip_path, e)
         else:
             try:
-                with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED,
-                                     allowZip64=True) as zf:
+                with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                     for i in range(len(texts)):
                         zf.writestr(fnames_in_zip[i], texts[i])
             except Exception as e:
@@ -395,7 +377,7 @@ def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
                                          allowZip64=True) as zf:
                         zf.write(fpath, file_name)
             except Exception as e:
-                print("Couldn't open file %s for reading and" \
+                print("Couldn't open file %s for reading and"
                       " overwriting." % kzip_path, e)
         else:
             try:
@@ -515,6 +497,29 @@ def flatten_list(lst):
     """
     res = np.array([el for sub in lst for el in sub])
     return res
+
+
+def flatten(x):
+    """
+    Replacement for compiler.ast.flatten - this performs
+    recursive flattening in comparison to the function above.
+    Public domain code:
+    https://stackoverflow.com/questions/16176742/
+    python-3-replacement-for-deprecated-compiler-ast-flatten-function
+
+    :param x:
+    :return: flattend x
+
+    """
+
+    def iselement(e):
+        return not(isinstance(e, collections.Iterable) and not isinstance(e, str))
+    for el in x:
+        if iselement(el):
+            yield el
+        else:
+            yield from flatten(el)
+
 
 
 def get_skelID_from_path(skel_path):
@@ -637,3 +642,23 @@ def parse_cc_dict_from_kzip(k_path):
     """
     txt = read_txt_from_zip(k_path, "mergelist.txt")
     return prase_cc_dict_from_txt(txt)
+
+
+@contextlib.contextmanager
+def temp_seed(seed):
+    """
+    From https://stackoverflow.com/questions/49555991/can-i-create-a-local-numpy-random-seed
+    Parameters
+    ----------
+    seed :
+
+    Returns
+    -------
+
+    """
+    state = np.random.get_state()
+    np.random.seed(seed)
+    try:
+        yield
+    finally:
+        np.random.set_state(state)

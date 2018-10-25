@@ -1,9 +1,9 @@
-# -*- coding: utf-8 -*-_aggregate_segmentation_object_mappings_thread
+# -*- coding: utf-8 -*-
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import sys
 try:

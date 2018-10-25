@@ -2,14 +2,15 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-
+from syconn.reps.super_segmentation_helper import create_sso_skeleton, extract_skel_features, associate_objs_with_skel_nodes
+from syconn.reps.super_segmentation_object import SuperSegmentationObject
 import numpy as np
 import re
 import glob
@@ -18,7 +19,8 @@ from collections import Counter
 from multiprocessing.pool import ThreadPool
 
 from knossos_utils import knossosdataset
-from ..reps import segmentation
+from . import segmentation  # TODO: del
+# from ..reps import segmentation
 from ..config import parser
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 try:
@@ -28,7 +30,7 @@ except ImportError:
 from ..proc.ssd_assembly import assemble_from_mergelist
 from ..mp import qsub_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
-from ..mp import shared_mem as sm
+from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 try:
     default_wd_available = True
@@ -271,7 +273,8 @@ class SuperSegmentationDataset(object):
                                               object_caching=caching,
                                               voxel_caching=caching,
                                               mesh_caching=caching,
-                                              view_caching=caching)
+                                              view_caching=caching,
+                                              enable_locking_so=False)
             else:
                 sso = SuperSegmentationObject(obj_id,
                                               self.version,
@@ -283,7 +286,9 @@ class SuperSegmentationDataset(object):
                                               object_caching=caching,
                                               voxel_caching=caching,
                                               mesh_caching=caching,
-                                              view_caching=caching)
+                                              view_caching=caching,
+                                              enable_locking_so=False)
+            sso._dataset = self
         else:
             sso = []
             for ix in obj_id:
@@ -406,7 +411,7 @@ class SuperSegmentationDataset(object):
         else:
             raise Exception("QSUB not available")
 
-    def predict_axoness(self, stride=1000, qsub_pe=None, qsub_queue=None,
+    def predict_axoness_skelbased(self, stride=1000, qsub_pe=None, qsub_queue=None,
                         nb_cpus=1):
         multi_params = []
         for ssv_id_block in [self.ssv_ids[i:i + stride]
@@ -417,19 +422,19 @@ class SuperSegmentationDataset(object):
 
         if qsub_pe is None and qsub_queue is None:
             results = sm.start_multiprocess(
-                predict_axoness_thread,
+                predict_axoness_skelbased_thread,
                 multi_params, nb_cpus=nb_cpus)
 
         elif qu.__QSUB__:
             path_to_out = qu.QSUB_script(multi_params,
-                                         "predict_axoness",
+                                         "predict_axoness_skelbased",
                                          n_cores=nb_cpus,
                                          pe=qsub_pe, queue=qsub_queue,
                                          script_folder=script_folder)
         else:
             raise Exception("QSUB not available")
 
-    def predict_cell_types(self, stride=1000, qsub_pe=None, qsub_queue=None,
+    def predict_cell_types_skelbased(self, stride=1000, qsub_pe=None, qsub_queue=None,
                            nb_cpus=1):
         multi_params = []
         for ssv_id_block in [self.ssv_ids[i:i + stride]
@@ -440,12 +445,12 @@ class SuperSegmentationDataset(object):
 
         if qsub_pe is None and qsub_queue is None:
             results = sm.start_multiprocess(
-                predict_cell_type_thread,
+                predict_cell_type_skelbased_thread,
                 multi_params, nb_cpus=nb_cpus)
 
         elif qu.__QSUB__:
             path_to_out = qu.QSUB_script(multi_params,
-                                         "predict_cell_type",
+                                         "predict_cell_type_skelbased",
                                          n_cores=nb_cpus,
                                          pe=qsub_pe, queue=qsub_queue,
                                          script_folder=script_folder)
@@ -616,7 +621,7 @@ def _write_super_segmentation_dataset_thread(args):
 
                 attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
 
-                ssv_obj.save_attr_dict()
+            ssv_obj.save_attr_dict()
     return attr_dict
 
 
@@ -852,6 +857,7 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
 
 
 def associate_objs_with_skel_nodes_thread(args):
+    # TODO: check functionality and whether this is deprecated, use 'skel_features'!
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -867,7 +873,9 @@ def associate_objs_with_skel_nodes_thread(args):
             ssv.associate_objs_with_skel_nodes(obj_types)
 
 
-def predict_axoness_thread(args):
+def predict_axoness_skelbased_thread(args):
+    """Skeleton-based axoness prediction"""
+    # TODO: check functionality, use 'predict_nodes'!
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -892,7 +900,9 @@ def predict_axoness_thread(args):
                 pass
 
 
-def predict_cell_type_thread(args):
+def predict_cell_type_skelbased_thread(args):
+    """Skeleton-based celltype prediction"""
+    # TODO: check functionality, use 'predict_nodes'!
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -1192,3 +1202,55 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1):
     print("Saving dataset deep.")
     new_ssd.save_dataset_deep(new_mapping=False, nb_cpus=n_jobs)
 
+
+def create_sso_skeletons_thread(args):
+    ssv_obj_ids = args[0]
+    version = args[1]
+    version_dict = args[2]
+    working_dir = args[3]
+
+    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
+
+    for ssv_id in ssv_obj_ids:
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv.load_skeleton()
+        create_sso_skeleton(ssv)
+        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
+            continue
+        ssv.save_skeleton()
+
+
+def preproc_sso_skelfeature_thread(args):
+    ssv_obj_ids = args[0]
+    version = args[1]
+    version_dict = args[2]
+    working_dir = args[3]
+
+    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
+
+    for ssv_id in ssv_obj_ids:
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv.load_skeleton()
+        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) <= 1:
+            print("Skeleton of SSV %d has zero nodes." % ssv_id)
+            continue
+        for feat_ctx_nm in [500, 1000, 2000, 4000, 8000]:
+            try:
+                _ = ssv.skel_features(feat_ctx_nm)
+            except IndexError as e:
+                print("Error at SSO %d (context: %d).\n%s" % (
+                      ssv.id, feat_ctx_nm, e))
+
+
+def map_ssv_semseg(args):
+    ssv_obj_ids = args[0]
+    version = args[1]
+    version_dict = args[2]
+    working_dir = args[3]
+    kwargs_semseg2mesh = args[4]
+
+    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
+
+    for ssv_id in ssv_obj_ids:
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv.semseg2mesh(**kwargs_semseg2mesh)

@@ -18,6 +18,8 @@ except ImportError as e:
 import warnings
 from scipy import spatial, sparse, ndimage
 from sklearn.decomposition import PCA
+import tqdm
+from ..proc import log_proc
 
 
 def find_contactsite(coords_a, coords_b, max_hull_dist=1):
@@ -328,3 +330,175 @@ def normalize_vol(sv, edge_size, center_coord):
     sv = sv + translation    # centralize
     sv = remove_outlier(sv, edge_size)
     return sv.astype(np.uint)
+
+
+def multi_dilation(overlay, n_dilations, use_find_objects=False,
+                   background_only=True):
+    """
+    Wrapper function for dilation
+
+    Parameters
+    ----------
+    overlay
+    n_dilations
+    use_find_objects
+    background_only
+
+    Returns
+    -------
+
+    """
+    return multi_mop(ndimage.binary_dilation, overlay, n_dilations,
+                     use_find_objects, background_only)
+
+
+def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
+              background_only=True, mop_kwargs=None, verbose=False):
+    """
+    Generic function for binary morphological image operations with multi-label content.
+
+    Parameters
+    ----------
+    mop_func
+    overlay
+    n_iters
+    use_find_objects
+    background_only : bool
+        only works in combination with 'use_find_objects'
+    mop_kwargs
+    verbose
+
+    Returns
+    -------
+
+    """
+    if mop_kwargs is None:
+        mop_kwargs = {}
+    # TODO: Currently mop_kwargs are not generic because of explicit 'iterations' kwarg in mop_func call
+    if n_iters == 0:
+        return overlay
+    if use_find_objects:
+        return _multi_mop_findobjects(mop_func, overlay, n_iters, background_only,
+                                      mop_kwargs=mop_kwargs, verbose=verbose)
+    unique_ixs = np.unique(overlay)
+    for ix in unique_ixs:
+        if ix == 0:
+            continue
+        binary_mask = (overlay == ix).astype(np.int)
+        binary_mask = mop_func(binary_mask, iterations=n_iters, **mop_kwargs)
+        overlay[binary_mask == 1] = ix
+    return overlay
+
+
+def _multi_mop_findobjects(mop_func, overlay, n_iters, background_only=True,
+                           verbose=False, mop_kwargs=None):
+    """
+    Generic function for binary morphological image operations with multi-label content
+    using 'find_objects' from scipy.ndimage to reduce processed volume.
+
+    Parameters
+    ----------
+    mop_func : func
+        e.g. binary_dilation, binary_erosion etc
+    overlay
+    n_iters
+    background_only
+    verbose
+    mop_kwargs
+
+    Returns
+    -------
+
+    """
+    if mop_kwargs is None:
+        mop_kwargs = {}
+    # TODO: Currently mop_kwargs are not generic because of explicit 'iterations' kwarg in mop_func call
+    objslices = ndimage.find_objects(overlay)
+    unique_ixs = np.unique(overlay[overlay != 0])
+    if verbose:
+        pbar = tqdm.tqdm(total=len(unique_ixs))
+    for ix in unique_ixs:
+        if verbose:
+            pbar.update(1)
+        obj_slice = objslices[ix-1]
+        new_obj_slices = []
+        for sl in obj_slice:
+            new_start = sl.start - n_iters if sl.start >= 0 + n_iters else sl.start
+            new_end = sl.stop + n_iters
+            new_obj_slices.append(slice(new_start, new_end, None))
+        sub_vol = overlay[new_obj_slices]
+        binary_mask = (sub_vol == ix).astype(np.int)
+        if verbose:
+            nb_occ = np.sum(binary_mask)
+        res = mop_func(binary_mask, iterations=n_iters, **mop_kwargs)
+        if verbose:
+            if np.sum(binary_mask) == 0 and nb_occ != 0:
+                log_proc.debug("Object with ID={} and size={} is not present after"
+                               " erosion with N={}.".format(ix, nb_occ, n_iters))
+        # only dilate/erode background/the objects itself
+        if "erosion" in mop_func.__name__:
+            overlay[new_obj_slices][binary_mask == 1] = res[binary_mask == 1] * ix
+        elif "dilation" in mop_func.__name__:
+            proc_mask = (binary_mask == 1) | (sub_vol == 0)  # dilate only background
+            overlay[new_obj_slices][proc_mask] = res[proc_mask]
+        else:
+            msg = "Only erosion or dilation allowed. Attempted to use morphological " \
+                  "operation '{}'.".format(mop_func.__name__)
+            log_proc.error(msg)
+            raise NotImplementedError(msg)
+    if verbose:
+        pbar.close()
+    return overlay
+
+
+def _multi_dilation_findobjects(overlay, n_dilations, background_only,
+                                verbose=False):
+    """
+    Wrapper function for dilation
+
+    Parameters
+    ----------
+    overlay
+    n_dilations
+    background_only
+    verbose
+
+    Returns
+    -------
+
+    """
+    return _multi_mop_findobjects(ndimage.binary_dilation, overlay, n_dilations,
+                                  background_only, verbose)
+
+
+def multi_dilation_backgroundonly(overlay, n_dilations):
+    """
+    Same as 'multi_dilation' but only dilates regions into global background
+
+    Parameters
+    ----------
+    overlay
+    n_dilations
+
+    Returns
+    -------
+
+    """
+    return multi_mop_backgroundonly(ndimage.binary_dilation, overlay, n_dilations)
+
+
+def multi_mop_backgroundonly(mop_func, overlay, n_dilations):
+    """
+    Same as 'multi_mop' but only dilates regions into global background
+
+    Parameters
+    ----------
+    mop_func
+    overlay
+    n_dilations
+
+    Returns
+    -------
+
+    """
+    return _multi_mop_findobjects(mop_func, overlay, n_dilations, background_only=True)

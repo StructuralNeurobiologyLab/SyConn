@@ -1,18 +1,23 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 import os
+import numpy as np
 from syconn.mp import qsub_utils as qu
-from syconn.mp.shared_mem import start_multiprocess
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.handler.basics import chunkify
-from syconn.proc.mapping import map_glia_fraction
-import numpy as np
-import itertools
+from syconn.config import global_params
 
 
 if __name__ == "__main__":
-    pred_key_appendix = "_v2"
+    """Maps axon prediction of rendering locations onto SSV skeletons"""
+    # TODO: currently working directory has to be set globally in global_params and is not adjustable here because all qsub jobs will start a script referring to 'global_params.wd'
+    pred_key_appendix = ""
     script_folder = os.path.dirname(os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
-    print(script_folder)
-    ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/")
+    ssds = SuperSegmentationDataset(working_dir=global_params.wd)
     multi_params = ssds.ssv_ids
     np.random.shuffle(multi_params)
     multi_params = chunkify(multi_params, 2000)

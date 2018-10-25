@@ -1,8 +1,11 @@
-# SyConn
-# Copyright (c) 2018 Philipp J. Schubert, J. Kornfeld
-# All rights reserved
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 from syconn.config.global_params import wd
-from syconn.handler.prediction import get_axoness_model_V2
+from syconn.handler.prediction import get_axoness_model
 from syconn.handler.basics import chunkify
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_ssv
@@ -13,19 +16,18 @@ import os
 
 def axoness_pred_exists(sv):
     sv.load_attr_dict()
-    return 'axoness_probas_v2' in sv.attr_dict
+    return 'axoness_probas' in sv.attr_dict
 
 
 if __name__ == "__main__":
+    # TODO: currently working directory has to be set globally in global_params and is not adjustable here because all qsub jobs will start a script referring to 'global_params.wd'
     ssd = SuperSegmentationDataset(working_dir=wd)
     sd = ssd.get_segmentationdataset("sv")
-    # sv_ids = ssd.sv_ids
-    # np.random.shuffle(sv_ids)
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 75)
-    pred_key = "axoness_probas_v2"
+    pred_key = "axoness_probas"  # leave this fixed because it is used all over
     # get model properties
-    m = get_axoness_model_V2()
+    m = get_axoness_model()
     model_kwargs = dict(model_path=m._path, normalize_data=m.normalize_data,
                         imposed_batch_size=m.imposed_batch_size, nb_labels=m.nb_labels,
                         channels_to_load=m.channels_to_load)
