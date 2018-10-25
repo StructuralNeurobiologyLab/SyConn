@@ -1,13 +1,17 @@
-# Contact Site Classification
-Contact sites are the basis for synaptic classification. Therefore, contact sites need to be combined with the synapse `SegmentationObjects` to conn `SegmentationObjects` and then further classified as synaptic or not-synaptic using an Random Forest Classifier (RFC).
+# Extracting connectivity
+Contact sites are the basis for synaptic classification. Therefore, contact sites need to be
+combined with the synapse `SegmentationObjects` to conn `SegmentationObjects` and then further
+ classified as synaptic or not-synaptic using an Random Forest Classifier (RFC).
 The code is in `syconn.extraction.cs_processing_steps`, `syconn.proc.sd_proc` and `syconn.proc.ssd_proc`.
 
 ## Prerequisites
 * SegmentationDataset of [aggregated contact sites](contact_site_extraction.md)
 * [Synapse type](synapse_type.md) predictions
+* Labelled cellular compartments (see [neuron analysis](neuron_analysis.md))
 
-## Overlap mapping
-Synapse `SegmentationObjects` are mapped to contact sites by volume overlap the same way `SegmentationObjects` are mapped to supervoxels. First, the aggreagted contact sites (see `contact_site_extraction`) need to be exported to a `knossosdataset`:
+## Generating conn objects
+Synapse `SegmentationObjects` are mapped to contact sites by volume overlap the same way `SegmentationObjects` are mapped to supervoxels.
+First, the aggreagted contact sites (see [`contact_site_extraction`](contact_site_extraction.md)) need to be exported to a `knossosdataset`:
 
     from syconn.proc import sd_proc
     sd_proc.export_sd_to_knossosdataset(cs_sd, cs_kd, block_edge_length=512,
@@ -45,7 +49,7 @@ a judgement about the direction of the synapse. To collect this information from
 
     cps.collect_axoness_from_ssv_partners(wd, qsub_pe=my_qsub_pe, n_max_co_processes=100)
 
-The axoness prediction version used her can currently only be changed in the code directly (see `cps._collect_axoness_from_ssv_partners_thread`).
+The axoness prediction key used here can currently only be changed in the code directly (see `cps._collect_axoness_from_ssv_partners_thread`).
 
 
 ## Writing the connectivity information to the SuperSegmentationDataset

@@ -19,12 +19,12 @@ organized in [SegmentationDatasets](segmentation_datasets.md).
 
 * [Mesh](meshes.md) generation and representation of SOs
 
-* Multi-view representation of SSOs (see [glia](glia_removal.md) and [neuron](neuron_analysis.md) analysis) (see https://www.biorxiv.org/content/early/2018/07/06/364034)
+* Multi-view representation of SSOs (see docs for [glia](glia_removal.md) and [neuron](neuron_analysis.md) analysis; [preprint](https://www.biorxiv.org/content/early/2018/07/06/364034) on biorXiv)
 
 
 ## Analysis steps
-After initialization of the SDs (SVs and cellular organelles) and SSD (the segmentation defined by agglomerated SVs) SyConn allows
-the application of several analysis procedures:
+After initialization of the SDs (SVs and cellular organelles) and the SSD
+containing the agglomerated SVs, several analysis steps can be applied:
 
 * [Optional] [Glia removal](glia_removal.md)
 
