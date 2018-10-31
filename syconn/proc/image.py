@@ -355,7 +355,8 @@ def multi_dilation(overlay, n_dilations, use_find_objects=False,
 def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
               background_only=True, mop_kwargs=None, verbose=False):
     """
-    Generic function for binary morphological image operations with multi-label content.
+    Generic function for binary morphological image operations with multi-label
+     content.
 
     Parameters
     ----------
@@ -440,7 +441,7 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, background_only=True,
             overlay[new_obj_slices][binary_mask == 1] = res[binary_mask == 1] * ix
         elif "dilation" in mop_func.__name__:
             proc_mask = (binary_mask == 1) | (sub_vol == 0)  # dilate only background
-            overlay[new_obj_slices][proc_mask] = res[proc_mask]
+            overlay[new_obj_slices][proc_mask] = res[proc_mask] * ix
         else:
             msg = "Only erosion or dilation allowed. Attempted to use morphological " \
                   "operation '{}'.".format(mop_func.__name__)

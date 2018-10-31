@@ -25,7 +25,7 @@ config = {
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn',
                          'scikit-image', 'm2r', 'plyfile', 'vtkInterface',
-                         'sphinx-autodoc-typehints'],
+                         'sphinx-autodoc-typehints', 'openmesh'],
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_utils'
                          '/tarball/master#egg=knossos_utils',
