@@ -771,7 +771,7 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
         ind = inds[i]
         norm = norms[i]
         color = colors[i]
-        ply_fname = ply_fnames[ii]
+        ply_fname = ply_fnames[i]
         tmp_dest_p = '{}_{}'.format(k_path, ply_fname)
         if len(vert) == 0:
             raise ValueError("Mesh with zero-length vertex array.")
