@@ -273,6 +273,12 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
                              axis=1)
         mesh = vtkInterface.PolyData(verts, ind.flatten()).TriFilter()
         decimated_mesh = mesh.Decimate(decimate_mesh, volume_preservation=True)
+        if decimated_mesh is None:  # maybe vtkInterface API changes and operates in-place -> TODO: check version differences and require one of them
+            decimated_mesh = mesh
+            if len(decimated_mesh.faces.reshape((-1, 4))[:, 1:]) == len(ind):
+                log_proc.error(
+                    "'triangulation': Mesh-sparsification could not sparsify"
+                    " mesh.")
         # remove face sizes again
         ind = decimated_mesh.faces.reshape((-1, 4))[:, 1:]
         verts = decimated_mesh.points
@@ -945,6 +951,5 @@ def mesh2obj_file(dest_path, mesh, color=None, center=None):
                       vert_openmesh[f[2]]]
         mesh_obj.add_face(f_openmesh)
     result = openmesh.write_mesh(mesh_obj, dest_path, options)
-    raise()
     if not result:
         log_proc.error("Error occured when writing mesh to .obj file.")
