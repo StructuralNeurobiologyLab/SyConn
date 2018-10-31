@@ -722,7 +722,8 @@ def make_ply_string_wocolor(dest_path, indices, vertices):
              PlyElement.describe(indices, 'face')]).write(dest_path)
 
 
-def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
+def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
+                    force_overwrite=False):
     """
     Writes mesh as .ply's to k.zip file.
 
@@ -746,7 +747,8 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
         make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color)
     else:
         make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32))
-    write_data2kzip(k_path, tmp_dest_p, ply_fname)
+    write_data2kzip(k_path, tmp_dest_p, ply_fname,
+                    force_overwrite=force_overwrite)
 
 
 def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
