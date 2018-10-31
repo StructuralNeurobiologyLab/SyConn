@@ -12,7 +12,7 @@ from numba import jit
 from scipy import spatial, ndimage
 from skimage import measure
 from sklearn.decomposition import PCA
-from ..handler.basics import write_txt2kzip, texts2kzip, write_data2kzip
+from ..handler.basics import write_data2kzip, data2kzip
 from .image import apply_pca
 from ..proc import log_proc
 import openmesh
@@ -766,6 +766,7 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
     ply_fnames : list of str
     force_overwrite : bool
     """
+    tmp_paths = []
     for i in range(len(inds)):
         vert = verts[i]
         ind = inds[i]
@@ -779,8 +780,8 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
             make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color)
         else:
             make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32))
-        write_data2kzip(k_path, tmp_dest_p, ply_fname,
-                        force_overwrite=force_overwrite)
+        tmp_paths.append(tmp_dest_p)
+    data2kzip(k_path, tmp_paths, ply_fnames, force_overwrite=force_overwrite)
 
 
 def get_bb_size(coords):

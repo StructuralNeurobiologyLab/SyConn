@@ -22,6 +22,7 @@ from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
 import re
 import signal
 import io
+import sys
 import logging
 import contextlib
 
@@ -361,21 +362,44 @@ def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
         name of file when added to zip
     force_overwrite : bool
     """
-    file_name = os.path.split(fpath)[1]
-    if fname_in_zip is not None:
-        file_name = fname_in_zip
+    data2kzip(kzip_path, [fpath], [fname_in_zip], force_overwrite)
+
+
+def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=False):
+    """
+    Write files to k.zip.
+
+    Parameters
+    ----------
+    kzip_path : str
+    fpaths : List[str]
+    fnames_in_zip : List[str]
+        name of file when added to zip
+    force_overwrite : bool
+    """
+    nb_files = len(fpaths)
     with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
         if os.path.isfile(kzip_path):
             try:
                 if force_overwrite:
                     with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED,
                                          allowZip64=True) as zf:
-                        zf.write(fpath, file_name)
+                        for ii in range(nb_files):
+                            file_name = os.path.split(fpaths[ii])[1]
+                            if fnames_in_zip[ii] is not None:
+                                file_name = fnames_in_zip[ii]
+                            zf.write(fpaths[ii], file_name)
+                            os.remove(fpaths[ii])
                 else:
-                    remove_from_zip(kzip_path, file_name)
                     with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED,
                                          allowZip64=True) as zf:
-                        zf.write(fpath, file_name)
+                        for ii in range(nb_files):
+                            file_name = os.path.split(fpaths[ii])[1]
+                            if fnames_in_zip[ii] is not None:
+                                file_name = fnames_in_zip[ii]
+                            remove_from_zip(kzip_path, file_name)
+                            zf.write(fpaths[ii], file_name)
+                            os.remove(fpaths[ii])
             except Exception as e:
                 print("Couldn't open file %s for reading and"
                       " overwriting." % kzip_path, e)
@@ -383,10 +407,14 @@ def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
             try:
                 with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED,
                                      allowZip64=True) as zf:
-                    zf.write(fpath, file_name)
+                    for ii in range(nb_files):
+                        file_name = os.path.split(fpaths[ii])[1]
+                        if fnames_in_zip[ii] is not None:
+                            file_name = fnames_in_zip[ii]
+                        zf.write(fpaths[ii], file_name)
+                        os.remove(fpaths[ii])
             except Exception as e:
                 print("Couldn't open file %s for writing." % kzip_path, e)
-        os.remove(fpath)
 
 
 def remove_from_zip(zipfname, *filenames):
@@ -518,7 +546,10 @@ def flatten(x):
         if iselement(el):
             yield el
         else:
-            yield from flatten(el)
+            # py2 compat
+            # yield from flatten(el)
+            for subel in flatten(el):
+                yield subel
 
 
 def get_skelID_from_path(skel_path):
