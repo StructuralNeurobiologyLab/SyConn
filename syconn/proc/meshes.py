@@ -771,7 +771,7 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
         ind = inds[i]
         norm = norms[i]
         color = colors[i]
-        ply_fname = ply_fnames[ii]
+        ply_fname = ply_fnames[i]
         tmp_dest_p = '{}_{}'.format(k_path, ply_fname)
         if len(vert) == 0:
             raise ValueError("Mesh with zero-length vertex array.")
@@ -824,7 +824,8 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
     pred_coords = np.concatenate(locs)
     assert pred_coords.ndim == 2, "Sample locations of ssv have wrong shape."
     assert pred_coords.shape[1] == 3, "Sample locations of ssv have wrong shape."
-    ind, vert, axoness = ssv._pred2mesh(pred_coords, preds, k=3, colors=(0, 1, 2))
+    ind, vert, axoness = ssv._pred2mesh(pred_coords, preds, k=3,
+                                        colors=(0, 1, 2))
     # get axoness of each vertex where indices are pointing to
     ind_comp = axoness[ind]
     ind = ind.reshape(-1, 3)
