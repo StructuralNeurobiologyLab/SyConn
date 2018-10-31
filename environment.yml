@@ -27,6 +27,7 @@ dependencies:
   - vigra
   - osmesa
   - m2r
+  - openmesh
 
   # For docs:
   - sphinx >=1.7.5

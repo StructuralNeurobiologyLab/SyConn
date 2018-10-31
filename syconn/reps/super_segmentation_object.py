@@ -31,7 +31,8 @@ from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, 
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage
 from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords
-from ..proc.meshes import write_mesh2kzip, merge_someshes, compartmentalize_mesh
+from ..proc.meshes import write_mesh2kzip, merge_someshes, \
+    compartmentalize_mesh, mesh2obj_file
 from ..proc.rendering import render_sampled_sso, multi_view_sso,\
     render_sso_coords, render_sso_coords_index_views
 try:
@@ -1608,9 +1609,9 @@ class SuperSegmentationObject(object):
                     alpha_sh = (len(ext_color), 1)
                     alpha_arr = (np.ones(alpha_sh) * 255).astype(ext_color.dtype)
                     ext_color = np.concatenate([ext_color, alpha_arr], axis=1)
-                color = ext_color
+                color = ext_color.flatten()
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
-                        ply_fname=obj_type + ".ply", nb_cpus=self.nb_cpus)
+                        ply_fname=obj_type + ".ply")
 
     def meshes2kzip(self, dest_path=None, sv_color=None):
         """
@@ -1633,6 +1634,22 @@ class SuperSegmentationObject(object):
                    "sv"]:  # determins rendering order in KNOSSOS
             self.mesh2kzip(obj_type=ot, dest_path=dest_path, ext_color=sv_color if
             ot == "sv" else None)
+
+    def mesh2file(self, dest_path=None, center=None, color=None):
+        """
+        Writes mesh to file (e.g. .ply, .stl, .obj) via the 'openmesh' library.
+        If possible, writes it as binary.
+
+        Parameters
+        ----------
+        dest_path : str
+        center : np.array
+            scaled center coordinates (in nm)
+        color: np.array
+            Either single color (will be applied to all vertices) or
+            per-vertex color array
+        """
+        mesh2obj_file(dest_path, self.mesh, center=center, color=color)
 
     def export_kzip(self, dest_path=None, sv_color=None):
         """

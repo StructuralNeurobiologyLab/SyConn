@@ -12,10 +12,11 @@ from numba import jit
 from scipy import spatial, ndimage
 from skimage import measure
 from sklearn.decomposition import PCA
-from ..handler.basics import write_txt2kzip, texts2kzip
+from ..handler.basics import write_txt2kzip, texts2kzip, write_data2kzip
 from .image import apply_pca
 from ..proc import log_proc
-
+import openmesh
+from plyfile import PlyData, PlyElement
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
 from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
     get_dataset_scaling
@@ -629,7 +630,7 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     return all_ind, all_vert, all_norm
 
 
-def make_ply_string(indices, vertices, normals, rgba_color):
+def make_ply_string(dest_path, indices, vertices, rgba_color):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -637,16 +638,17 @@ def make_ply_string(indices, vertices, normals, rgba_color):
 
     Parameters
     ----------
-    indices : iterable of indices (int)
-    vertices : iterable of vertices (int)
-    normals : iterable of normals (float)
-    rgba_color : 4-tuple (uint8)
+    indices : np.array
+    vertices : np.array
+    rgba_color : Tuple[uint8] or np.array
 
     Returns
     -------
     str
     """
     # create header
+    if not rgba_color.ndim == 2:
+        rgba_color = np.array(rgba_color, dtype=np.int).reshape((-1, 4))
     if not indices.ndim == 2:
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
@@ -671,36 +673,24 @@ def make_ply_string(indices, vertices, normals, rgba_color):
         log_proc.warn("Color array is not of type integer or unsigned integer."
                       " It will now be converted automatically, data will be "
                       "unusable if not normalized between 0 and 255."
-                      "min/max of data: {}, {}".format(rgba_color.min(), rgba_color.max()))
+                      "min/max of data: {}, {}".format(rgba_color.min(),
+                                                       rgba_color.max()))
         rgba_color = np.array(rgba_color, dtype=np.uint8)
-    ply_str = 'ply\nformat ascii 1.0\nelement vertex {0}\nproperty float x\nproperty float y\nproperty float z\n'\
-    'property uint8 red\nproperty uint8 green\nproperty uint8 blue\nproperty uint8 alpha\n'\
-    'element face {1}\nproperty list uint8 uint vertex_indices\nend_header\n'.format(len(vertices), len(indices))
-    for i in range(len(vertices)):
-        v = vertices[i]
-        curr_rgba = rgba_color[i]
-        ply_str += '{0} {1} {2} {3} {4} {5} {6}\n'.format(v[0], v[1], v[2],
-                    curr_rgba[0], curr_rgba[1], curr_rgba[2], curr_rgba[3])
-    for face in indices:
-        ply_str += '3 {0} {1} {2}\n'.format(face[0], face[1], face[2])
-    return ply_str.encode()
+    # ply file requires 1D object arrays,
+    vertices = np.concatenate([vertices.astype(np.object),
+                               rgba_color.astype(np.object)], axis=1)
+    vertices = np.array([tuple(el) for el in vertices],
+                        dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4'),
+                               ('red', 'u1'), ('green', 'u1'), ('blue', 'u1'),
+                               ('alpha', 'u1')])
+    # ply file requires 1D object arrays.
+    indices = np.array([tuple([el], ) for el in indices],
+                       dtype=[('vertex_indices', 'i4', (3,))])
+    PlyData([PlyElement.describe(vertices, 'vertex'),
+             PlyElement.describe(indices, 'face')]).write(dest_path)
 
 
-def ply_vertex_generator(vertices):
-    ply_str = ""
-    for v in vertices:
-        ply_str += '{0} {1} {2}\n'.format(v[0], v[1], v[2])
-    return ply_str
-
-
-def ply_index_generator(indices):
-    ply_str = ""
-    for face in indices:
-        ply_str += '3 {0} {1} {2}\n'.format(face[0], face[1], face[2])
-    return ply_str
-
-
-def make_ply_string_wocolor(indices, vertices, normals, nb_cpus=1):
+def make_ply_string_wocolor(dest_path, indices, vertices):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -710,7 +700,6 @@ def make_ply_string_wocolor(indices, vertices, normals, nb_cpus=1):
     ----------
     indices : iterable of indices (int)
     vertices : iterable of vertices (int)
-    normals : iterable of normals (float)
 
     Returns
     -------
@@ -721,20 +710,13 @@ def make_ply_string_wocolor(indices, vertices, normals, nb_cpus=1):
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
-    ply_str = 'ply\nformat ascii 1.0\nelement vertex {0}\nproperty float x\nproperty float y\nproperty float z\n'\
-    'element face {1}\nproperty list uint8 uint vertex_indices\nend_header\n'.format(len(vertices), len(indices))
-    params = np.array_split(vertices, 100)
-    res = start_multiprocess_imap(ply_vertex_generator, params, nb_cpus=nb_cpus)
-    for el in res:
-        ply_str += el
-    params = np.array_split(indices, 100)
-    res = start_multiprocess_imap(ply_index_generator, params, nb_cpus=nb_cpus)
-    for el in res:
-        ply_str += el
-    return ply_str.encode()
+    vertices = np.array([tuple(el) for el in vertices], dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
+    indices = np.array([tuple([el], ) for el in indices],dtype=[('vertex_indices', 'i4', (3,))])
+    PlyData([PlyElement.describe(vertices, 'vertex'),
+             PlyElement.describe(indices, 'face')]).write(dest_path)
 
 
-def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname, nb_cpus=1):
+def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
     """
     Writes mesh as .ply's to k.zip file.
 
@@ -753,12 +735,12 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname, nb_cpus=1):
         log_proc.warn("'write_mesh2kzip' call with empty vertex array. Did not"
                       " write data to kzip.")
         return
+    tmp_dest_p = '{}_{}'.format(k_path, ply_fname)
     if color is not None:
-        ply_str = make_ply_string(ind, vert.astype(np.float32), norm, color)
+        make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color)
     else:
-        ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm,
-                                          nb_cpus=nb_cpus)
-    write_txt2kzip(k_path, ply_str, ply_fname)
+        make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32))
+    write_data2kzip(k_path, tmp_dest_p, ply_fname)
 
 
 def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
@@ -778,20 +760,21 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
     ply_fnames : list of str
     force_overwrite : bool
     """
-    ply_strs = []
     for i in range(len(inds)):
         vert = verts[i]
         ind = inds[i]
         norm = norms[i]
         color = colors[i]
+        ply_fname = ply_fnames[ii]
+        tmp_dest_p = '{}_{}'.format(k_path, ply_fname)
         if len(vert) == 0:
             raise ValueError("Mesh with zero-length vertex array.")
         if color is not None:
-            ply_str = make_ply_string(ind, vert.astype(np.float32), norm, color)
+            make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color)
         else:
-            ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm)
-        ply_strs.append(ply_str)
-    texts2kzip(k_path, ply_strs, ply_fnames, force_overwrite=force_overwrite)
+            make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32))
+        write_data2kzip(k_path, tmp_dest_p, ply_fname,
+                        force_overwrite=force_overwrite)
 
 
 def get_bb_size(coords):
@@ -917,3 +900,51 @@ def mesh_chunk(args):
         vertices *= scaling
         md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
     md.push()
+
+
+def mesh2obj_file(dest_path, mesh, color=None, center=None):
+    """
+    Writes mesh to .obj file.
+
+    Parameters
+    ----------
+    mesh : List[np.array]
+     flattend arrays of indices (triangle faces), vertices and normals
+    center : np.array
+
+
+    Returns
+    -------
+
+    """
+    options = openmesh.Options()
+    options += openmesh.Options.Binary
+    mesh_obj = openmesh.TriMesh()
+    ind, vert, norm = mesh
+    if vert.ndim == 1:
+        vert = vert.reshape(-1 ,3)
+    if ind.ndim == 1:
+        ind = ind.reshape(-1 ,3)
+    if center is not None:
+        vert -= center
+    vert_openmesh = []
+    if color is not None:
+        mesh_obj.request_vertex_colors()
+        options += openmesh.Options.VertexColor
+        if color.ndim == 1:
+            color = np.array([color] * len(vert))
+        color = color.astype(np.float64)  # required by openmesh
+    for ii, v in enumerate(vert):
+        v = v.astype(np.float64)  # Point requires double
+        v_openmesh = mesh_obj.add_vertex(openmesh.TriMesh.Point(v[0], v[1], v[2]))
+        if color is not None:
+            mesh_obj.set_color(v_openmesh, openmesh.TriMesh.Color(*color[ii]))
+        vert_openmesh.append(v_openmesh)
+    for f in ind:
+        f_openmesh = [vert_openmesh[f[0]], vert_openmesh[f[1]],
+                      vert_openmesh[f[2]]]
+        mesh_obj.add_face(f_openmesh)
+    result = openmesh.write_mesh(mesh_obj, dest_path, options)
+    raise()
+    if not result:
+        log_proc.error("Error occured when writing mesh to .obj file.")

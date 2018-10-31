@@ -521,7 +521,6 @@ def flatten(x):
             yield from flatten(el)
 
 
-
 def get_skelID_from_path(skel_path):
     """
     Parse skeleton ID from filename.
