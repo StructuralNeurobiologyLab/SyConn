@@ -20,7 +20,7 @@ from plyfile import PlyData, PlyElement
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
 from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
     get_dataset_scaling
-
+import tqdm
 try:
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 except ImportError as e:
@@ -248,11 +248,11 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
     dt = boundaryDistanceTransform(volume, boundary="InterpixelBoundary")
     dt[volume == 1] *= -1
     volume = gaussianSmoothing(dt, 1)
-    if np.sum(volume < 0) == 0 or  np.sum(volume > 0) == 0:  # less smoothing
+    if np.sum(volume < 0) == 0 or np.sum(volume > 0) == 0:  # less smoothing
         volume = gaussianSmoothing(dt, 0.5)
     try:
         verts, ind, norm, _ = measure.marching_cubes_lewiner(
-            volume, 0, gradient_direction="descent")
+            volume, 0, gradient_direction="ascent")  # November, 25th, 2018 -> adapt to KNOSSOS convention
     except Exception as e:
         print(e)
         raise RuntimeError
@@ -752,7 +752,7 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
 
 
 def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
-                      force_overwrite=False):
+                      force_overwrite=False, verbose=True):
     """
     Writes meshes as .ply's to k.zip file.
 
@@ -767,8 +767,12 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
         rgba between 0 and 255
     ply_fnames : list of str
     force_overwrite : bool
+    verbose : bool
     """
     tmp_paths = []
+    if verbose:
+        log_proc.info('Generating ply files.')
+        pbar = tqdm.tqdm(total=len(inds))
     for i in range(len(inds)):
         vert = verts[i]
         ind = inds[i]
@@ -783,7 +787,12 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
         else:
             make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32))
         tmp_paths.append(tmp_dest_p)
-    data2kzip(k_path, tmp_paths, ply_fnames, force_overwrite=force_overwrite)
+        if verbose:
+            pbar.update(1)
+    if verbose:
+        pbar.close()
+    data2kzip(k_path, tmp_paths, ply_fnames, force_overwrite=force_overwrite,
+              verbose=verbose)
 
 
 def get_bb_size(coords):
