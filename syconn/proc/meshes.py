@@ -187,7 +187,7 @@ class MeshObject(object):
 
 
 def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
-                  single_cc=False, decimate_mesh=0):
+                  single_cc=False, decimate_mesh=0, gradient_direction='ascent'):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
     by building dense matrix (in case of a point cloud) and applying marching
@@ -207,6 +207,8 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
     decimate_mesh : float
         Percentage of mesh size reduction, i.e. 0.1 will leave 90% of the
         vertices
+    gradient_direction : str
+        defines orientation of triangle indices. 'ascent' is needed for KNOSSOS compatibility.
 
     Returns
     -------
@@ -234,14 +236,17 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
     else:
         volume = pts
         if np.any(np.array(downsampling) != 1):
-            volume = measure.block_reduce(volume, downsampling, np.max)
+            # volume = measure.block_reduce(volume, downsampling, np.max)
+            ndimage.zoom(volume, downsampling, order=0)
         offset = np.array([0, 0, 0])
     # volume = multiBinaryErosion(volume, 1).astype(np.float32)
     if n_closings > 0:
         volume = binary_closing(volume, iterations=n_closings).astype(np.float32)
+    else:
+        volume = volume.astype(np.float32)
     if single_cc:
         labeled, nb_cc = ndimage.label(volume)
-        cnt = Counter(labeled.flatten())
+        cnt = Counter(labeled[labeled != 0])
         l, occ = cnt.most_common(1)[0]
         volume = np.array(labeled == l, dtype=np.float32)
     # InterpixelBoundary, OuterBoundary, InnerBoundary
@@ -252,7 +257,7 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
         volume = gaussianSmoothing(dt, 0.5)
     try:
         verts, ind, norm, _ = measure.marching_cubes_lewiner(
-            volume, 0, gradient_direction="ascent")  # November, 25th, 2018 -> adapt to KNOSSOS convention
+            volume, 0, gradient_direction=gradient_direction)
     except Exception as e:
         print(e)
         raise RuntimeError
