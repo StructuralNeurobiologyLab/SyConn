@@ -757,7 +757,7 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
 
 
 def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
-                      force_overwrite=False, verbose=True):
+                      force_overwrite=True, verbose=True):
     """
     Writes meshes as .ply's to k.zip file.
 
@@ -774,6 +774,8 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
     force_overwrite : bool
     verbose : bool
     """
+    if not force_overwrite:
+        raise NotImplementedError('Currently modification of data in existing kzip is not implemented.')
     tmp_paths = []
     if verbose:
         log_proc.info('Generating ply files.')

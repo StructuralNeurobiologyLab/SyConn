@@ -366,7 +366,7 @@ def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
     data2kzip(kzip_path, [fpath], [fname_in_zip], force_overwrite)
 
 
-def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=False,
+def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
               verbose=False):
     """
     Write files to k.zip.
@@ -380,6 +380,8 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=False,
     verbose : bool
     force_overwrite : bool
     """
+    if not force_overwrite:
+        raise NotImplementedError('Currently modification of data in existing kzip is not implemented.')
     nb_files = len(fpaths)
     if verbose:
         log_handler.info('Writing {} files to .zip.'.format(nb_files))
