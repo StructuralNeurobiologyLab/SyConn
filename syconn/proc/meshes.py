@@ -12,7 +12,7 @@ from numba import jit
 from scipy import spatial, ndimage
 from skimage import measure
 from sklearn.decomposition import PCA
-from ..handler.basics import write_txt2kzip, texts2kzip, write_data2kzip
+from ..handler.basics import write_data2kzip, data2kzip
 from .image import apply_pca
 from ..proc import log_proc
 import openmesh
@@ -20,7 +20,7 @@ from plyfile import PlyData, PlyElement
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
 from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
     get_dataset_scaling
-
+import tqdm
 try:
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 except ImportError as e:
@@ -187,7 +187,7 @@ class MeshObject(object):
 
 
 def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
-                  single_cc=False, decimate_mesh=0):
+                  single_cc=False, decimate_mesh=0, gradient_direction='ascent'):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
     by building dense matrix (in case of a point cloud) and applying marching
@@ -207,6 +207,8 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
     decimate_mesh : float
         Percentage of mesh size reduction, i.e. 0.1 will leave 90% of the
         vertices
+    gradient_direction : str
+        defines orientation of triangle indices. 'ascent' is needed for KNOSSOS compatibility.
 
     Returns
     -------
@@ -234,25 +236,28 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
     else:
         volume = pts
         if np.any(np.array(downsampling) != 1):
-            volume = measure.block_reduce(volume, downsampling, np.max)
+            # volume = measure.block_reduce(volume, downsampling, np.max)
+            ndimage.zoom(volume, downsampling, order=0)
         offset = np.array([0, 0, 0])
     # volume = multiBinaryErosion(volume, 1).astype(np.float32)
     if n_closings > 0:
         volume = binary_closing(volume, iterations=n_closings).astype(np.float32)
+    else:
+        volume = volume.astype(np.float32)
     if single_cc:
         labeled, nb_cc = ndimage.label(volume)
-        cnt = Counter(labeled.flatten())
+        cnt = Counter(labeled[labeled != 0])
         l, occ = cnt.most_common(1)[0]
         volume = np.array(labeled == l, dtype=np.float32)
     # InterpixelBoundary, OuterBoundary, InnerBoundary
     dt = boundaryDistanceTransform(volume, boundary="InterpixelBoundary")
     dt[volume == 1] *= -1
     volume = gaussianSmoothing(dt, 1)
-    if np.sum(volume < 0) == 0 or  np.sum(volume > 0) == 0:  # less smoothing
+    if np.sum(volume < 0) == 0 or np.sum(volume > 0) == 0:  # less smoothing
         volume = gaussianSmoothing(dt, 0.5)
     try:
         verts, ind, norm, _ = measure.marching_cubes_lewiner(
-            volume, 0, gradient_direction="descent")
+            volume, 0, gradient_direction=gradient_direction)
     except Exception as e:
         print(e)
         raise RuntimeError
@@ -722,7 +727,8 @@ def make_ply_string_wocolor(dest_path, indices, vertices):
              PlyElement.describe(indices, 'face')]).write(dest_path)
 
 
-def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
+def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
+                    force_overwrite=False):
     """
     Writes mesh as .ply's to k.zip file.
 
@@ -746,11 +752,12 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname):
         make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color)
     else:
         make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32))
-    write_data2kzip(k_path, tmp_dest_p, ply_fname)
+    write_data2kzip(k_path, tmp_dest_p, ply_fname,
+                    force_overwrite=force_overwrite)
 
 
 def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
-                      force_overwrite=False):
+                      force_overwrite=True, verbose=True):
     """
     Writes meshes as .ply's to k.zip file.
 
@@ -765,7 +772,14 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
         rgba between 0 and 255
     ply_fnames : list of str
     force_overwrite : bool
+    verbose : bool
     """
+    if not force_overwrite:
+        raise NotImplementedError('Currently modification of data in existing kzip is not implemented.')
+    tmp_paths = []
+    if verbose:
+        log_proc.info('Generating ply files.')
+        pbar = tqdm.tqdm(total=len(inds))
     for i in range(len(inds)):
         vert = verts[i]
         ind = inds[i]
@@ -779,8 +793,13 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
             make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color)
         else:
             make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32))
-        write_data2kzip(k_path, tmp_dest_p, ply_fname,
-                        force_overwrite=force_overwrite)
+        tmp_paths.append(tmp_dest_p)
+        if verbose:
+            pbar.update(1)
+    if verbose:
+        pbar.close()
+    data2kzip(k_path, tmp_paths, ply_fnames, force_overwrite=force_overwrite,
+              verbose=verbose)
 
 
 def get_bb_size(coords):
