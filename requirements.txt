@@ -18,5 +18,7 @@ m2r
 plyfile
 vtkInterface
 openmesh
+pytest
+pytest-runner
 git+https://github.com/knossos-project/knossos_utils.git
 git+https://github.com/ELEKTRONN/ELEKTRONN2.git

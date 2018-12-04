@@ -25,13 +25,15 @@ config = {
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn',
                          'scikit-image', 'm2r', 'plyfile', 'vtkInterface',
-                         'sphinx-autodoc-typehints', 'openmesh'],
+                         'sphinx-autodoc-typehints', 'openmesh', 'pytest',
+                         'pytest-runner'],
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_utils'
                          '/tarball/master#egg=knossos_utils',
                          'https://github.com/ELEKTRONN/ELEKTRONN2'
                          '/tarball/master#egg=ELEKTRONN2'],
     'packages': find_packages(exclude=['scripts']),
-    'long_description': readme,
+    'long_description': readme, 'setup_requires': ["pytest-runner", ],
+    'tests_require': ["pytest",],
 }
 setup(**config)

@@ -289,7 +289,7 @@ def read_txt_from_zip(zip_fname, fname_in_zip):
 
     Returns
     -------
-    str
+    bytes
     """
     with zipfile.ZipFile(zip_fname, allowZip64=True) as z:
         txt = z.read(fname_in_zip)
@@ -303,7 +303,7 @@ def write_txt2kzip(kzip_path, text, fname_in_zip, force_overwrite=False):
     Parameters
     ----------
     kzip_path : str
-    text : str
+    text : str or bytes
     fname_in_zip : str
         name of file when added to zip
     force_overwrite : bool
