@@ -8,11 +8,14 @@
 # --------- Define global working directory
 # wd = "/wholebrain/songbird/j0126/areaxfs_v5"
 # wd = "/wholebrain/scratch/areaxfs3/"
-# wd = "/wholebrain/songbird/j0126/areaxfs_v5/chunkdatasets/"
-wd = '/mnt/j0126/areaxfs_v10/'
+wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+# wd = '/mnt/j0126/areaxfs_v10/'
 
 # --------- Define backend
 backend = "FS"
+
+# ---------- Rendering backend
+PYOPENGL_PLATFORM = 'osmesa'
 
 # --------------------------------------------------------------- GLIA PARAMETER
 # min. connected component size of glia nodes/SV after thresholding glia proba

@@ -17,6 +17,7 @@ import re
 
 
 if __name__ == "__main__":
+    N_JOBS = 300
     np.random.seed(0)
     # generic QSUB script folder
     script_folder = os.path.dirname(os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
@@ -34,63 +35,77 @@ if __name__ == "__main__":
             edges = [int(v) for v in re.findall('(\d+)', l)]
             G.add_edge(edges[0], edges[1])
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
-    print("Found {} SVs in initial RAG. Starting view rendering.".format(len(all_sv_ids_in_rag)))
-    # # preprocess sample locations
-    # multi_params = chunkify(all_sv_ids_in_rag, 1000)
-    # multi_params = [(sv_ixs, wd) for sv_ixs in multi_params]
-    # path_to_out = qu.QSUB_script(multi_params, "sample_location_caching",
-    #                              n_max_co_processes=100, pe="openmp", queue=None,   # TODO: n_max_co_processes=200
-    #                              script_folder=script_folder, suffix="")
+    print("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
 
-    # generate parameter for view rendering of individual SSV
-    multi_params = []
-    for cc in nx.connected_component_subgraphs(G):
-        multi_params.append(cc)
-    multi_params = np.array(multi_params)
+    # add single SV connected components to initial graph
+    sd = SegmentationDataset(obj_type='sv', working_dir=wd)
+    sv_ids = sd.ids
+    diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
+    print('Found {} single connected component SVs which were missing in initial RAG.'.format(len(diff)))
 
-    # identify huge SSVs and process them individually on whole cluster
-    nb_svs = np.array([g.number_of_nodes() for g in multi_params])
-    big_ssv = multi_params[nb_svs > 5e3]
-    for kk, g in enumerate(big_ssv):
-        # Create SSV object
-        sv_ixs = np.sort(list(g.nodes()))
-        print("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(kk, len(big_ssv), len(sv_ixs)))
-        sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
-                                      create=False, sv_ids=sv_ixs)
-        # nodes of sso._rag need to be SV
-        new_G = nx.Graph()
-        for e in g.edges():
-            new_G.add_edge(sso.get_seg_obj("sv", e[0]),
-                           sso.get_seg_obj("sv", e[1]))
-        sso._rag = new_G
-        sso.render_views(add_cellobjects=False, cellobjects_only=False,
-                         skip_indexviews=True, woglia=False,
-                         qsub_pe="openmp", overwrite=True)
+    for ix in diff:
+        G.add_node(ix)
 
-    # render small SSV without overhead and single cpus on whole cluster
-    multi_params = multi_params[nb_svs <= 5e3]
-    np.random.shuffle(multi_params)
-    multi_params = chunkify(multi_params, 2000)
+    all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
+    print("Found {} SVs in initial RAG after adding size-one connected components."
+          " Starting view rendering.".format(len(all_sv_ids_in_rag)))
 
-    # list of SSV IDs and SSD parameters need to be given to a single QSUB job
-    multi_params = [(ixs, wd, version) for ixs in multi_params]
-    path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
-                                 n_max_co_processes=100, pe="openmp", queue=None,   # TODO: n_max_co_processes=200
+    # preprocess sample locations
+    multi_params = chunkify(all_sv_ids_in_rag, 1000)
+    multi_params = [(sv_ixs, wd) for sv_ixs in multi_params]
+    path_to_out = qu.QSUB_script(multi_params, "sample_location_caching",
+                                 n_max_co_processes=300, pe="openmp", queue=None,   # TODO: n_max_co_processes=200
                                  script_folder=script_folder, suffix="")
 
-    # check completeness
-    sd = SegmentationDataset("sv", working_dir=wd)
-    res = find_missing_sv_views(sd, woglia=False, n_cores=10)
-    missing_not_contained_in_rag = []
-    missing_contained_in_rag = []
-    for el in res:
-        if el not in all_sv_ids_in_rag:
-            missing_not_contained_in_rag.append(el)
-        else:
-            missing_contained_in_rag.append(el)
-    if len(missing_not_contained_in_rag):
-        print("%d SVs were not rendered but also not part of the initial"
-              "RAG: {}".format(missing_not_contained_in_rag))
-    if len(missing_contained_in_rag) != 0:
-        raise RuntimeError("Not all SSVs were rendered completely! Missing:\n"
-                           "{}".format(missing_contained_in_rag))
+    # # generate parameter for view rendering of individual SSV
+    # multi_params = []
+    # for cc in nx.connected_component_subgraphs(G):
+    #     multi_params.append(cc)
+    # multi_params = np.array(multi_params)
+    #
+    # # identify huge SSVs and process them individually on whole cluster
+    # nb_svs = np.array([g.number_of_nodes() for g in multi_params])
+    # big_ssv = multi_params[nb_svs > 5e3]
+    # for kk, g in enumerate(big_ssv):
+    #     # Create SSV object
+    #     sv_ixs = np.sort(list(g.nodes()))
+    #     print("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(kk, len(big_ssv), len(sv_ixs)))
+    #     sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
+    #                                   create=False, sv_ids=sv_ixs)
+    #     # nodes of sso._rag need to be SV
+    #     new_G = nx.Graph()
+    #     for e in g.edges():
+    #         new_G.add_edge(sso.get_seg_obj("sv", e[0]),
+    #                        sso.get_seg_obj("sv", e[1]))
+    #     sso._rag = new_G
+    #     sso.render_views(add_cellobjects=False, cellobjects_only=False,
+    #                      skip_indexviews=True, woglia=False,
+    #                      qsub_pe="openmp", overwrite=True, qsub_co_jobs=N_JOBS)
+    #
+    # # render small SSV without overhead and single cpus on whole cluster
+    # multi_params = multi_params[nb_svs <= 5e3]
+    # np.random.shuffle(multi_params)
+    # multi_params = chunkify(multi_params, 2000)
+    #
+    # # list of SSV IDs and SSD parameters need to be given to a single QSUB job
+    # multi_params = [(ixs, wd, version) for ixs in multi_params]
+    # path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
+    #                              n_max_co_processes=N_JOBS, pe="openmp", queue=None,
+    #                              script_folder=script_folder, suffix="")
+    #
+    # # check completeness
+    # sd = SegmentationDataset("sv", working_dir=wd)
+    # res = find_missing_sv_views(sd, woglia=False, n_cores=10)
+    # missing_not_contained_in_rag = []
+    # missing_contained_in_rag = []
+    # for el in res:
+    #     if el not in all_sv_ids_in_rag:
+    #         missing_not_contained_in_rag.append(el)
+    #     else:
+    #         missing_contained_in_rag.append(el)
+    # if len(missing_not_contained_in_rag):
+    #     print("%d SVs were not rendered but also not part of the initial"
+    #           "RAG: {}".format(missing_not_contained_in_rag))
+    # if len(missing_contained_in_rag) != 0:
+    #     raise RuntimeError("Not all SSVs were rendered completely! Missing:\n"
+    #                        "{}".format(missing_contained_in_rag))

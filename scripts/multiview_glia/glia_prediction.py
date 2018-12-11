@@ -55,7 +55,7 @@ if __name__ == "__main__":
                                  n_max_co_processes=25, pe="openmp",
                                  queue=None, n_cores=10, suffix="_glia",
                                  script_folder=script_folder,
-                                 sge_additional_flags="-V")
+                                 additional_flags="-V")
     res = find_missing_sv_attributes(sd, pred_key, n_cores=10)
     if len(res) > 0:
         print("Attribute '{}' missing for follwing"

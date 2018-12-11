@@ -1160,7 +1160,7 @@ class SuperSegmentationObject(object):
 
     def render_views(self, add_cellobjects=False, verbose=False,
                      qsub_pe=None, overwrite=False, cellobjects_only=False,
-                     woglia=True, skip_indexviews=False, qsub_co_jobs=100):
+                     woglia=True, skip_indexviews=False, qsub_co_jobs=200):
         """
         Renders views for each SV based on SSV context and stores them
         on SV level. Usually only used once: for initial glia or axoness

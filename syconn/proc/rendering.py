@@ -26,16 +26,24 @@ import tqdm
 try:
     import os
     if not os.environ.get('PYOPENGL_PLATFORM'):
-        os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
+        os.environ['PYOPENGL_PLATFORM'] = global_params.PYOPENGL_PLATFORM
     import OpenGL
     OpenGL.USE_ACCELERATE = False
     from OpenGL.GL import *
     from OpenGL.GLU import *
-    from OpenGL.osmesa import *
     from OpenGL.GL.framebufferobjects import *
+    from OpenGL.arrays import *
 except Exception as e:
     print("Problem loading OpenGL:", e)
     pass
+
+if os.environ['PYOPENGL_PLATFORM'] == 'egl':
+    from OpenGL.EGL import eglDestroyContext
+elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
+    from OpenGL.osmesa import *
+else:
+    raise NotImplementedError('PYOpenGL environment has to be "egl" or "osmesa".')
+
 
 # ------------------------------------------------------------------------------
 # General rendering code
@@ -168,11 +176,62 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
 # setup ######################################################################
 def init_ctx(ws):
     # ctx = OSMesaCreateContext(OSMESA_RGBA, None)
-    ctx = OSMesaCreateContextExt(OSMESA_RGBA, 32, 0, 0, None)
-    buf = arrays.GLubyteArray.zeros((ws[0], ws[1], 4)) + 1
-    assert(OSMesaMakeCurrent(ctx, buf, GL_UNSIGNED_BYTE, ws[0], ws[1]))
-    assert(OSMesaGetCurrentContext())
-    OSMesaPixelStore(OSMESA_Y_UP, 0)
+    if os.environ['PYOPENGL_PLATFORM'] == 'egl':
+        from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
+            EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
+            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
+            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
+            EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
+            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
+            eglGetDisplay, eglInitialize, eglChooseConfig, \
+            eglBindAPI, eglCreatePbufferSurface, \
+            eglCreateContext, eglMakeCurrent, EGLConfig
+
+        major, minor = ctypes.c_long(), ctypes.c_long()
+        num_configs = ctypes.c_long()
+        configs = (EGLConfig * 1)()
+
+        # Cache DISPLAY if necessary and get an off-screen EGL display
+        orig_dpy = None
+        if 'DISPLAY' in os.environ:
+            orig_dpy = os.environ['DISPLAY']
+            del os.environ['DISPLAY']
+        dsp = eglGetDisplay(EGL_DEFAULT_DISPLAY)
+        assert dsp != EGL_NO_DISPLAY, 'Invalid DISPLAY during egl init.'
+        if orig_dpy is not None:
+            os.environ['DISPLAY'] = orig_dpy
+
+        # Initialize EGL
+        eglInitialize(dsp, major, minor)
+        config_attr = arrays.GLintArray.asArray(
+            [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_LUMINANCE_SIZE, 8,
+             EGL_BLUE_SIZE, 0, EGL_RED_SIZE, 0, EGL_GREEN_SIZE, 0,
+             EGL_DEPTH_SIZE, 24, EGL_COLOR_BUFFER_TYPE,
+             EGL_LUMINANCE_BUFFER, EGL_RENDERABLE_TYPE,
+             EGL_OPENGL_BIT, EGL_CONFORMANT, EGL_OPENGL_BIT, EGL_NONE])
+        eglChooseConfig(dsp, config_attr, configs, 1, num_configs)
+
+        # Bind EGL to the OpenGL API
+        eglBindAPI(EGL_OPENGL_API)
+
+        # Create an EGL context
+        ctx = eglCreateContext(dsp, configs[0], EGL_NO_CONTEXT, None)
+
+        # Create an EGL pbuffer
+        buf = eglCreatePbufferSurface(dsp, configs[0], [EGL_WIDTH, ws[0], EGL_HEIGHT, ws[1], EGL_NONE])
+        ctx = [dsp, ctx]
+        # Make the EGL context current
+        assert (eglMakeCurrent(dsp, buf, buf, ctx))
+
+    elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
+        ctx = OSMesaCreateContextExt(OSMESA_RGBA, 32, 0, 0, None)
+        buf = arrays.GLubyteArray.zeros((ws[0], ws[1], 4)) + 1
+        assert (OSMesaMakeCurrent(ctx, buf, GL_UNSIGNED_BYTE, ws[0], ws[1]))
+        assert (OSMesaGetCurrentContext())
+        OSMesaPixelStore(OSMESA_Y_UP, 0)
+    else:
+        raise NotImplementedError('PYOpenGL environment has to be "egl" or "osmesa".')
     return ctx
 
 
@@ -294,8 +353,10 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
             glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
         c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None, ])
         glPopMatrix()
-    # glFinish()
-    OSMesaDestroyContext(ctx)
+    if os.environ['PYOPENGL_PLATFORM'] == 'egl':
+        eglDestroyContext(*ctx)
+    else:
+        OSMesaDestroyContext(ctx)
     return np.concatenate(c_views)
 
 
@@ -389,8 +450,10 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
         c_views.append(screen_shot(ws, True, depth_map=depth_map,
                                    triangulation=triangulation)[None, ])
         glPopMatrix()
-    # glFinish()
-    OSMesaDestroyContext(ctx)
+    if os.environ['PYOPENGL_PLATFORM'] == 'egl':
+        eglDestroyContext(*ctx)
+    else:
+        OSMesaDestroyContext(ctx)
     return np.concatenate(c_views)
 
 
@@ -642,7 +705,10 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
         end = time.time()
         print("Finished rendering mesh of type %s at %d locations after"
               " %0.1fs" % (views_key,len(mviews), end - start))
-    OSMesaDestroyContext(ctx)
+    if os.environ['PYOPENGL_PLATFORM'] == 'egl':
+        eglDestroyContext(*ctx)
+    else:
+        OSMesaDestroyContext(ctx)
     if return_rot_matrices:
         return mviews, rot_matrices
     return mviews

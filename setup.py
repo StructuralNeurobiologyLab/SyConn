@@ -34,6 +34,6 @@ config = {
                          '/tarball/master#egg=ELEKTRONN2'],
     'packages': find_packages(exclude=['scripts']),
     'long_description': readme, 'setup_requires': ["pytest-runner", ],
-    'tests_require': ["pytest",],
+    'tests_require': ["pytest", ],
 }
 setup(**config)

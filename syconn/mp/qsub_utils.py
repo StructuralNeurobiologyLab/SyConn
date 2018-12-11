@@ -45,8 +45,8 @@ python_path = sys.executable
 
 
 def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
-                sge_additional_flags='', suffix="", job_name="default",
-                script_folder=None, n_max_co_processes=None):
+                additional_flags='', suffix="", job_name="default",
+                script_folder=None, n_max_co_processes=None, sge_additional_flags=None):
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
@@ -68,7 +68,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         number of cores per job submission
     priority: int
         -1024 .. 1023, job priority, higher is more important
-    sge_additional_flags: str
+    additional_flags: str
         additional command line flags to be passed to qsub
     suffix: str
         suffix for folder names - enables the execution of multiple qsub jobs
@@ -88,10 +88,17 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         path to the output directory
 
     """
+    if sge_additional_flags is not None:
+        print('"sge_additional_flags" kwarg will soon be replaced with "additional_flags". '
+              'Please adapt method calls accordingly.')
+        if additional_flags is not '':
+            raise ValueError('Multiple flags set. Please use only "additional_flags" kwarg.')
+        else:
+            additional_flags = sge_additional_flags
     if job_name == "default":
         letters = string.ascii_lowercase
         job_name = "".join([letters[l] for l in
-                            np.random.randint(0, len(letters), 10)])
+                            np.random.randint(0, len(letters), 10 if BACKEND_IDENT == 'QSUB' else 8)])
         print("Random job_name created: %s" % job_name)
     else:
         print("WARNING: running multiple jobs via qsub is only supported "
@@ -182,14 +189,21 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 job_err_path,
                 job_name,
                 priority,
-                sge_additional_flags,
+                additional_flags,
                 this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         elif BACKEND_IDENT == 'SLURM':
-            if sge_additional_flags == '-V':
-                sge_additional_flags = '--export=ALL'
+            if '-V ' in additional_flags:
+                print('"additional_flags" contained "-V" which is a QSUB/SGE specific flag, but SLURM was set '
+                      'as batch system. Converting "-V" to "--export=ALL".')
+                additional_flags.replace('-V ', '--export=ALL ')
+            if not '--mem=' in additional_flags:
+                mem_lim = int(128*n_cores/20)
+                additional_flags += ' --mem={}G'.format(mem_lim)
+                print('Memory requirements were not set explicitly. Setting to '
+                      '128GB*n_cores/20={} GB'.format(mem_lim))
             if pe is not None:
-                queue_option = "--ntasks-per-node %d" % (n_cores)
+                queue_option = "--ntasks-per-node %d" % n_cores
             elif queue is not None:
                 queue_option = "--partition=%s" % queue
             else:
@@ -201,7 +215,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 job_log_path,
                 job_err_path,
                 job_name,
-                sge_additional_flags,
+                additional_flags,
                 this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         else:
@@ -209,9 +223,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
     print("All jobs are submitted: %s" % name)
     while True:
-        time.sleep(5.)
         if show_progress(job_name, len(params), time.time() - time_start):
             break
+        time.sleep(5.)
 
     out_files = glob.glob(path_to_out + "*.pkl")
     if len(out_files) < len(params):
@@ -250,11 +264,11 @@ def number_of_running_processes(job_name):
         cmd_stat = "squeue -u %s" % username
     else:
         raise NotImplementedError
-    process = subprocess.Popen(cmd_stat,
-                               shell=True, stdout=subprocess.PIPE)
+    process = subprocess.Popen(cmd_stat, shell=True,
+                               stdout=subprocess.PIPE)
     nb_lines = 0
     for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
-        if job_name[:10] in line:
+        if job_name[:10 if BACKEND_IDENT == 'QSUB' else 8] in line:
             nb_lines += 1
     return nb_lines
 
@@ -278,7 +292,7 @@ def show_progress(job_name, n_jobs_total, time_diff):
         True of no jobs are running anymore; False otherwise
     """
     nb_rp = number_of_running_processes(job_name)
-
+    print(nb_rp)
     if nb_rp == 0:
         sys.stdout.write('\rAll jobs were finished in %.2fs\n' % time_diff)
         return True
@@ -313,21 +327,24 @@ def delete_jobs_by_name(job_name):
                                stdout=subprocess.PIPE)
     job_ids = []
     for line in iter(process.stdout.readline, ''):
-        if job_name[:10] in line:
-            job_ids.append(re.findall("[\d]+", line)[0])
+        curr_line = str(line)
+        if job_name[:10] in curr_line:
+            job_ids.append(re.findall("[\d]+", curr_line)[0])
 
     if BACKEND_IDENT == 'QSUB':
         cmd_del = "qdel "
+        for job_id in job_ids:
+            cmd_del += job_id + ", "
+        command = cmd_del[:-2]
+
+        subprocess.Popen(command, shell=True,
+                         stdout=subprocess.PIPE)
     elif BACKEND_IDENT == 'SLURM':
-        cmd_del = "scancel "
+        cmd_del = "scancel -n {}".format(job_name)
+        subprocess.Popen(cmd_del, shell=True,
+                         stdout=subprocess.PIPE)
     else:
         raise NotImplementedError
-    for job_id in job_ids:
-        cmd_del += job_id + ", "
-    command = cmd_del[:-2]
-
-    subprocess.Popen(command, shell=True,
-                     stdout=subprocess.PIPE)
 
 
 def negative_to_zero(a):

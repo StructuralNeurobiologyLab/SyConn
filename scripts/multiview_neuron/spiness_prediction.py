@@ -13,7 +13,8 @@ from syconn.mp import qsub_utils as qu
 
 
 if __name__ == "__main__":
-    # TODO: currently working directory has to be set globally in global_params and is not adjustable here because all qsub jobs will start a script referring to 'global_params.wd'
+    # TODO: currently working directory has to be set globally in global_params and is not adjustable here
+    #  because all qsub jobs will start a script referring to 'global_params.wd'
     ssd = SuperSegmentationDataset(working_dir=wd)
 
     # run semantic spine segmentation on multi views
@@ -22,7 +23,7 @@ if __name__ == "__main__":
     multi_params = chunkify(sd.so_dir_paths, 75)
     pred_key = "spiness"
     # set model properties
-    model_kwargs = dict(src=mpath_spiness, multi_gpu=True)
+    model_kwargs = dict(src=mpath_spiness, multi_gpu=False)
     so_kwargs = dict(working_dir=wd)
     pred_kwargs = dict(pred_key=pred_key)
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs]
@@ -32,7 +33,7 @@ if __name__ == "__main__":
     qu.QSUB_script(multi_params, "predict_spiness_chunked",
                    n_max_co_processes=25, pe="openmp", queue=None,
                    script_folder=script_folder, n_cores=10,
-                   suffix="",  sge_additional_flags="-V")
+                   suffix="",  additional_flags="-V --gres=gpu:1")
 
     # map semantic spine segmentation of multi views on SSV mesh
     multi_params = ssd.ssv_ids
@@ -43,6 +44,6 @@ if __name__ == "__main__":
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
                      kwargs_semseg2mesh) for ssv_ids in multi_params]
 
-    qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=200,
+    qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=150,
                    pe="openmp", queue=None, script_folder=script_folder,
-                   n_cores=10, suffix="", sge_additional_flags="-V")
+                   n_cores=2, suffix="", additional_flags="-V")

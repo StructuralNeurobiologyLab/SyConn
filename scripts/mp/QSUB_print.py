@@ -27,7 +27,7 @@ with open(path_storage_file, 'rb') as f:
 numbers = args[0]
 for n in numbers:
     print(n)
-    time.sleep(0.01)
+    time.sleep(2)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(None, f)
