@@ -159,7 +159,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
             for entry in result:
                 results_as_list.append(entry)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         assert transform_func == _gauss_threshold_connected_components_thread,\
             "QSUB currently only supported for gaussian threshold CC."
         path_to_out = qu.QSUB_script(multi_params,
@@ -336,7 +336,7 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
         results = sm.start_multiprocess_imap(_make_unique_labels_thread,
                                          multi_params, debug=debug, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "make_unique_labels",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -431,7 +431,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                 for elem in elems:
                     stitch_list[hdf5_name].append(elem)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "make_stitch_list",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -646,7 +646,7 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
         results = sm.start_multiprocess_imap(_apply_merge_list_thread,
                                          multi_params, debug=debug, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "apply_merge_list",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -784,7 +784,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         results = sm.start_multiprocess_imap(_extract_voxels_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_voxels",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -998,7 +998,7 @@ def combine_voxels(workfolder, hdf5names,
             results = sm.start_multiprocess_imap(_combine_voxels_thread,
                                             multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "combine_voxels",
                                          pe=qsub_pe, queue=qsub_queue,
@@ -1121,7 +1121,7 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
         results = sm.start_multiprocess_imap(_extract_voxels_combined_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_voxels_combined",
                                      pe=qsub_pe, queue=qsub_queue, n_cores=qsub_slots,

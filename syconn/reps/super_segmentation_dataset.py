@@ -327,7 +327,7 @@ class SuperSegmentationDataset(object):
                     reskeletonize_objects_small_ones_thread,
                     multi_params, nb_cpus=nb_cpus)
 
-            elif qu.__QSUB__:
+            elif qu.__BATCHJOB__:
                 path_to_out = qu.QSUB_script(multi_params,
                                              "reskeletonize_objects_small_ones",
                                              n_cores=nb_cpus,
@@ -344,7 +344,7 @@ class SuperSegmentationDataset(object):
                     reskeletonize_objects_big_ones_thread,
                     multi_params, nb_cpus=1)
 
-            elif qu.__QSUB__:
+            elif qu.__BATCHJOB__:
                 path_to_out = qu.QSUB_script(multi_params,
                                              "reskeletonize_objects_big_ones",
                                              n_cores=10,
@@ -369,7 +369,7 @@ class SuperSegmentationDataset(object):
                 multi_params, nb_cpus=nb_cpus)
             no_skel_cnt = np.sum(results)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "export_skeletons",
                                          n_cores=nb_cpus,
@@ -402,7 +402,7 @@ class SuperSegmentationDataset(object):
                 multi_params, nb_cpus=nb_cpus)
             no_skel_cnt = np.sum(results)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "associate_objs_with_skel_nodes",
                                          n_cores=nb_cpus,
@@ -425,7 +425,7 @@ class SuperSegmentationDataset(object):
                 predict_axoness_skelbased_thread,
                 multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "predict_axoness_skelbased",
                                          n_cores=nb_cpus,
@@ -448,7 +448,7 @@ class SuperSegmentationDataset(object):
                 predict_cell_type_skelbased_thread,
                 multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "predict_cell_type_skelbased",
                                          n_cores=nb_cpus,
@@ -508,7 +508,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
             _write_super_segmentation_dataset_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "write_super_segmentation_dataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -637,7 +637,7 @@ def export_to_knossosdataset(ssd, kd, stride=1000, qsub_pe=None,
         results = sm.start_multiprocess(_export_ssv_to_knossosdataset_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_ssv_to_knossosdataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -712,7 +712,7 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
         results = sm.start_multiprocess(_convert_knossosdataset_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "convert_knossosdataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -779,7 +779,7 @@ def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
             multi_params, nb_cpus=nb_cpus)
         no_skel_cnt = np.sum(results)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_skeletons",
                                      n_cores=nb_cpus,

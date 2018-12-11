@@ -99,7 +99,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
         results = sm.start_multiprocess(_combine_and_split_cs_agg_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "combine_and_split_cs_agg",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -268,7 +268,7 @@ def map_objects_to_cs(wd, cs_version=None, ssd_version=None, max_map_dist_nm=200
         results = sm.start_multiprocess(_map_objects_to_cs_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_objects_to_cs",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -498,7 +498,7 @@ def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
         results = sm.start_multiprocess(_overlap_mapping_sj_to_cs_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "overlap_mapping_sj_to_cs",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -635,7 +635,7 @@ def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
         results = sm.start_multiprocess(_overlap_mapping_sj_to_cs_via_kd_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "overlap_mapping_sj_to_cs_via_kd",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -844,7 +844,7 @@ def map_objects_to_conn(wd, conn_version=None, ssd_version=None, mi_version=None
         results = sm.start_multiprocess(_map_objects_to_conn_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_objects_to_conn",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -972,7 +972,7 @@ def classify_conn_objects(wd, conn_version=None, qsub_pe=None,
         results = sm.start_multiprocess(_classify_conn_objects_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "classify_conn_objects",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -1021,7 +1021,7 @@ def collect_axoness_from_ssv_partners(wd, conn_version=None,
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess_imap(_collect_axoness_from_ssv_partners_thread,
                                         multi_params, nb_cpus=nb_cpus)
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "collect_axoness_from_ssv_partners",
                                      pe=qsub_pe, queue=qsub_queue,

@@ -86,7 +86,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
         results = sm.start_multiprocess(combine_and_split_cs_agg_helper,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "combine_and_split_cs_agg",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -113,7 +113,7 @@ def map_objects_to_cs(wd, cs_version=None, ssd_version=None, max_map_dist_nm=200
         results = sm.start_multiprocess(map_objects_to_cs_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_objects_to_cs",
                                      pe=qsub_pe, queue=qsub_queue,

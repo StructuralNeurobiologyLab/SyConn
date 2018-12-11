@@ -34,7 +34,7 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_contact_site_detection_thread,
                                         multi_params, debug=True)
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "contact_site_detection",
                                      script_folder=script_folder,

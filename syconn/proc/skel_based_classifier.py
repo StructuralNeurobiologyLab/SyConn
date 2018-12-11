@@ -181,7 +181,7 @@ class SkelClassifier(object):
             results = sm.start_multiprocess(sbch.generate_clf_data_thread,
                 multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "generate_clf_data",
                                          pe=qsub_pe, queue=qsub_queue,
@@ -204,7 +204,7 @@ class SkelClassifier(object):
             results = sm.start_multiprocess(classifier_production_thread,
                 multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "classifier_production",
                                          n_cores=nb_cpus,

@@ -244,7 +244,7 @@ class ConnectivityMatrix(object):
             results = sm.start_multiprocess(ch.extract_connectivity_thread,
                                             multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "extract_connectivity",
                                          pe=qsub_pe, queue=qsub_queue,
@@ -278,7 +278,7 @@ class ConnectivityMatrix(object):
             results = sm.start_multiprocess(ch.get_sso_specific_info_thread,
                                             multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "get_sso_specific_info",
                                          pe=qsub_pe, queue=qsub_queue,

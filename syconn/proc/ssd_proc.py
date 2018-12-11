@@ -38,7 +38,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
             _write_super_segmentation_dataset_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "write_super_segmentation_dataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -178,7 +178,7 @@ def aggregate_segmentation_object_mappings(ssd, obj_types,
             _aggregate_segmentation_object_mappings_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "aggregate_segmentation_object_mappings",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -240,7 +240,7 @@ def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
         results = sm.start_multiprocess(_apply_mapping_decisions_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "apply_mapping_decisions",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -366,7 +366,7 @@ def map_synaptic_conn_objects(ssd, conn_version=None, stride=1000,
             _map_synaptic_conn_objects_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_synaptic_conn_objects",
                                      pe=qsub_pe, queue=qsub_queue,

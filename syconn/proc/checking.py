@@ -32,7 +32,7 @@ def find_missing_overlaycubes(path, stride=100, qsub_pe=None, qsub_queue=None,
         results = sm.start_multiprocess(find_missing_overlaycubes_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "find_missing_overlaycubes",
                                      pe=qsub_pe, queue=qsub_queue,

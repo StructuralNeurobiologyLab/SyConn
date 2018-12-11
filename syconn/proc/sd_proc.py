@@ -63,7 +63,7 @@ def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
         results = sm.start_multiprocess(_dataset_analysis_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "dataset_analysis",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -211,7 +211,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
         results = sm.start_multiprocess(_map_objects_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_objects",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -251,7 +251,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
         sm.start_multiprocess(_write_mapping_to_sv_thread, multi_params,
                               nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         qu.QSUB_script(multi_params, "write_mapping_to_sv", pe=qsub_pe,
                        queue=qsub_queue, script_folder=script_folder,
                        n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
@@ -373,7 +373,7 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
         results = sm.start_multiprocess(_binary_filling_cs_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "binary_filling_cs",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -528,7 +528,7 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512,
         results = sm.start_multiprocess(_export_sd_to_knossosdataset_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_sd_to_knossosdataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -595,7 +595,7 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
         results = sm.start_multiprocess(_extract_synapse_type_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_synapse_type",
                                      pe=qsub_pe, queue=qsub_queue,

@@ -4,8 +4,6 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
-
-
 try:
     import cPickle as pkl
 except ImportError:
@@ -22,19 +20,26 @@ import subprocess
 import sys
 import time
 
+BACKEND_IDENT = 'SLURM'
+__BATCHJOB__ = BACKEND_IDENT is not None
 
-__QSUB__ = True
 try:
+    if BACKEND_IDENT == 'QSUB':
+        cmd_check = 'qstat'
+    elif BACKEND_IDENT == 'SLURM':
+        cmd_check = 'squeue'
+    else:
+        raise NotImplementedError
     with open(os.devnull, 'w') as devnull:
-        subprocess.check_call('qstat', shell=True,
-                                stdout=devnull, stderr=devnull)
+        subprocess.check_call(cmd_check, shell=True,
+                              stdout=devnull, stderr=devnull)
 except subprocess.CalledProcessError:
     # print("QSUB not found, switching to single node multiprocessing.")
-    __QSUB__ = False
+    __BATCHJOB__ = False
 
 home_dir = os.environ['HOME'] + "/"
 path_to_scripts_default = os.path.dirname(__file__)
-qsub_work_folder = "%s/QSUB/" % home_dir
+qsub_work_folder = "%s/%s/" % (home_dir, BACKEND_IDENT)
 username = getpass.getuser()
 python_path = sys.executable
 
@@ -51,7 +56,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
     Parameters
     ----------
-    params: list
+    params: List
         list of all parameter sets to be processed
     name: str
         name of job - specifies script with QSUB_%s % name
@@ -89,11 +94,11 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                             np.random.randint(0, len(letters), 10)])
         print("Random job_name created: %s" % job_name)
     else:
-        print("WARNING: running multiple jobs via qsub is only supported " \
+        print("WARNING: running multiple jobs via qsub is only supported "
               "with non-default job_names")
 
     if len(job_name) > 10:
-        print("WARNING: Your job_name is longer than 10. job_names have " \
+        print("WARNING: Your job_name is longer than 10. job_names have "
               "to be distinguishable with only using their first 10 characters.")
 
     if script_folder is not None:
@@ -104,19 +109,12 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if os.path.exists(qsub_work_folder+"/%s_folder%s/" % (name, suffix)):
         shutil.rmtree(qsub_work_folder+"/%s_folder%s/" % (name, suffix), ignore_errors=True)
 
-    path_to_script = path_to_scripts + "/QSUB_%s.py" % (name)
+    path_to_script = path_to_scripts + "/QSUB_%s.py" % name
     path_to_storage = qsub_work_folder+"/%s_folder%s/storage/" % (name, suffix)
     path_to_sh = qsub_work_folder+"/%s_folder%s/sh/" % (name, suffix)
     path_to_log = qsub_work_folder+"/%s_folder%s/log/" % (name, suffix)
     path_to_err = qsub_work_folder+"/%s_folder%s/err/" % (name, suffix)
     path_to_out = qsub_work_folder+"/%s_folder%s/out/" % (name, suffix)
-
-    if pe is not None:
-        sge_queue_option = "-pe %s %d" % (pe, n_cores)
-    elif queue is not None:
-        sge_queue_option = "-q %s" % queue
-    else:
-        raise Exception("No queue or parallel environment defined")
 
     if not os.path.exists(path_to_storage):
         os.makedirs(path_to_storage)
@@ -142,7 +140,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
                 if last_diff_rp == 0:
                     progress = float(i_job - n_max_co_processes) / len(params) * 100
-                    print('Progress: %.2f%% in %.2fs' % \
+                    print('Progress: %.2f%% in %.2fs' %
                           (progress, time.time() - time_start))
                     time.sleep(sleep_time)
                     sleep_time = 5
@@ -171,20 +169,49 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         # except SyntaxError:
         # somehow the above does not work to catch the SyntaxError (python3 compatibility)
         os.chmod(this_sh_path, 0o744)
-        subprocess.call("qsub {0} -o {1} -e {2} -N {3} -p {4} {5} {6}".format(
-            sge_queue_option,
-            job_log_path,
-            job_err_path,
-            job_name,
-            priority,
-            sge_additional_flags,
-            this_sh_path), shell=True)
+        if BACKEND_IDENT == 'QSUB':
+            if pe is not None:
+                sge_queue_option = "-pe %s %d" % (pe, n_cores)
+            elif queue is not None:
+                sge_queue_option = "-q %s" % queue
+            else:
+                raise Exception("No queue or parallel environment defined")
+            cmd_exec = "qsub {0} -o {1} -e {2} -N {3} -p {4} {5} {6}".format(
+                sge_queue_option,
+                job_log_path,
+                job_err_path,
+                job_name,
+                priority,
+                sge_additional_flags,
+                this_sh_path)
+            subprocess.call(cmd_exec, shell=True)
+        elif BACKEND_IDENT == 'SLURM':
+            if sge_additional_flags == '-V':
+                sge_additional_flags = '--export=ALL'
+            if pe is not None:
+                queue_option = "--ntasks-per-node %d" % (n_cores)
+            elif queue is not None:
+                queue_option = "--partition=%s" % queue
+            else:
+                raise Exception("No queue or parallel environment defined")
+            if priority is not None and priority != 0:
+                print('Priorities are not supported with SLURM.')
+            cmd_exec = "sbatch {0} --output={1} --error={2} --job-name={3} {4} {5}".format(
+                queue_option,
+                job_log_path,
+                job_err_path,
+                job_name,
+                sge_additional_flags,
+                this_sh_path)
+            subprocess.call(cmd_exec, shell=True)
+        else:
+            raise NotImplementedError
 
     print("All jobs are submitted: %s" % name)
     while True:
+        time.sleep(5.)
         if show_progress(job_name, len(params), time.time() - time_start):
             break
-        time.sleep(5.)
 
     out_files = glob.glob(path_to_out + "*.pkl")
     if len(out_files) < len(params):
@@ -217,7 +244,13 @@ def number_of_running_processes(job_name):
         number of running jobs
 
     """
-    process = subprocess.Popen("qstat -u %s" % username,
+    if BACKEND_IDENT == 'QSUB':
+        cmd_stat = "qstat -u %s" % username
+    elif BACKEND_IDENT == 'SLURM':
+        cmd_stat = "squeue -u %s" % username
+    else:
+        raise NotImplementedError
+    process = subprocess.Popen(cmd_stat,
                                shell=True, stdout=subprocess.PIPE)
     nb_lines = 0
     for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
@@ -270,19 +303,31 @@ def delete_jobs_by_name(job_name):
     -------
 
     """
-    process = subprocess.Popen("qstat -u %s" % username, shell=True,
+    if BACKEND_IDENT == 'QSUB':
+        cmd_stat = "qstat -u %s" % username
+    elif BACKEND_IDENT == 'SLURM':
+        cmd_stat = "squeue -u %s" % username
+    else:
+        raise NotImplementedError
+    process = subprocess.Popen(cmd_stat, shell=True,
                                stdout=subprocess.PIPE)
     job_ids = []
     for line in iter(process.stdout.readline, ''):
         if job_name[:10] in line:
             job_ids.append(re.findall("[\d]+", line)[0])
 
-    command = "qdel "
+    if BACKEND_IDENT == 'QSUB':
+        cmd_del = "qdel "
+    elif BACKEND_IDENT == 'SLURM':
+        cmd_del = "scancel "
+    else:
+        raise NotImplementedError
     for job_id in job_ids:
-        command += job_id + ", "
-    command = command[:-2]
+        cmd_del += job_id + ", "
+    command = cmd_del[:-2]
 
-    subprocess.Popen(command, shell=True, stdout=subprocess.PIPE)
+    subprocess.Popen(command, shell=True,
+                     stdout=subprocess.PIPE)
 
 
 def negative_to_zero(a):
