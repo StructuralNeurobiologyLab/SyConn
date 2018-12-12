@@ -17,7 +17,7 @@ script_folder = os.path.abspath(os.path.dirname(__file__))
 # get example arguments for our jobs (600 arrays of size 10)
 params = np.arange(6000).reshape((-1, 10))
 # Create a list of arguments; each element is input for an executed script.
-# We have created 300 jobs, each with 20 arrays
-params = chunkify(params, 50)
+# We have created 300 jobs, each with 2 arrays
+params = chunkify(params, 300)
 mu.QSUB_script(params, "print", pe="openmp", queue=None,
-               script_folder=script_folder, n_max_co_processes=100)
+               script_folder=script_folder, n_max_co_processes=40)

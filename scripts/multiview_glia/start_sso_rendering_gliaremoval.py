@@ -5,12 +5,13 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 import os
-from syconn.config.global_params import wd
+from syconn.handler.logger import log_main
+from syconn.config.global_params import wd, RENDERING_MAX_NB_SV
 from syconn.mp import qsub_utils as qu
 from syconn.handler.basics import chunkify, parse_cc_dict_from_kml
 from syconn.reps.segmentation_helper import find_missing_sv_views
 from syconn.reps.segmentation import SegmentationDataset
-from syconn.reps.super_segmentation_object import SuperSegmentationObject
+from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
 import numpy as np
 import networkx as nx
 import re
@@ -35,27 +36,32 @@ if __name__ == "__main__":
             edges = [int(v) for v in re.findall('(\d+)', l)]
             G.add_edge(edges[0], edges[1])
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
-    print("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
+    log_main.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
 
     # add single SV connected components to initial graph
     sd = SegmentationDataset(obj_type='sv', working_dir=wd)
     sv_ids = sd.ids
     diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
-    print('Found {} single connected component SVs which were missing in initial RAG.'.format(len(diff)))
+    log_main.info('Found {} single connected component SVs which were missing in initial RAG.'.format(len(diff)))
 
     for ix in diff:
         G.add_node(ix)
 
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
-    print("Found {} SVs in initial RAG after adding size-one connected components."
-          " Starting view rendering.".format(len(all_sv_ids_in_rag)))
+    log_main.info("Found {} SVs in initial RAG after adding size-one connected components."
+          " Starting sample location caching and then view rendering.".format(len(all_sv_ids_in_rag)))
 
     # # preprocess sample locations
-    # multi_params = chunkify(all_sv_ids_in_rag, 1000)
-    # multi_params = [(sv_ixs, wd) for sv_ixs in multi_params]
-    # path_to_out = qu.QSUB_script(multi_params, "sample_location_caching",
-    #                              n_max_co_processes=300, pe="openmp", queue=None,   # TODO: n_max_co_processes=200
-    #                              script_folder=script_folder, suffix="")
+    ssd = SuperSegmentationDataset(working_dir=wd)
+    sd = ssd.get_segmentationdataset("sv")
+    # chunk them
+    multi_params = chunkify(sd.so_dir_paths, 1000)
+    # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
+    so_kwargs = dict(working_dir=wd)
+    multi_params = [[par, so_kwargs] for par in multi_params]
+    path_to_out = qu.QSUB_script(multi_params, "sample_location_caching",
+                                 n_max_co_processes=300, pe="openmp", queue=None,   # TODO: n_max_co_processes=200
+                                 script_folder=script_folder, suffix="")
 
     # generate parameter for view rendering of individual SSV
     multi_params = []
@@ -65,25 +71,25 @@ if __name__ == "__main__":
 
     # identify huge SSVs and process them individually on whole cluster
     nb_svs = np.array([g.number_of_nodes() for g in multi_params])
-    big_ssv = multi_params[nb_svs > 5e3]
-    for kk, g in enumerate(big_ssv):
-        # Create SSV object
-        sv_ixs = np.sort(list(g.nodes()))
-        print("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(kk, len(big_ssv), len(sv_ixs)))
-        sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
-                                      create=False, sv_ids=sv_ixs)
-        # nodes of sso._rag need to be SV
-        new_G = nx.Graph()
-        for e in g.edges():
-            new_G.add_edge(sso.get_seg_obj("sv", e[0]),
-                           sso.get_seg_obj("sv", e[1]))
-        sso._rag = new_G
-        sso.render_views(add_cellobjects=False, cellobjects_only=False,
-                         skip_indexviews=True, woglia=False,
-                         qsub_pe="openmp", overwrite=True, qsub_co_jobs=N_JOBS)
+    big_ssv = multi_params[nb_svs > RENDERING_MAX_NB_SV]
+    # for kk, g in enumerate(big_ssv):
+    #     # Create SSV object
+    #     sv_ixs = np.sort(list(g.nodes()))
+    #     log_main.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(kk, len(big_ssv), len(sv_ixs)))
+    #     sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
+    #                                   create=False, sv_ids=sv_ixs)
+    #     # nodes of sso._rag need to be SV
+    #     new_G = nx.Graph()
+    #     for e in g.edges():
+    #         new_G.add_edge(sso.get_seg_obj("sv", e[0]),
+    #                        sso.get_seg_obj("sv", e[1]))
+    #     sso._rag = new_G
+    #     sso.render_views(add_cellobjects=False, cellobjects_only=False,
+    #                      skip_indexviews=True, woglia=False,
+    #                      qsub_pe="openmp", overwrite=True, qsub_co_jobs=N_JOBS)
 
     # render small SSV without overhead and single cpus on whole cluster
-    multi_params = multi_params[nb_svs <= 5e3]
+    multi_params = multi_params[nb_svs <= RENDERING_MAX_NB_SV]
     np.random.shuffle(multi_params)
     multi_params = chunkify(multi_params, 2000)
 
@@ -92,20 +98,20 @@ if __name__ == "__main__":
     path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
                                  n_max_co_processes=N_JOBS, pe="openmp", queue=None,
                                  script_folder=script_folder, suffix="")
-
-    # check completeness
-    sd = SegmentationDataset("sv", working_dir=wd)
-    res = find_missing_sv_views(sd, woglia=False, n_cores=10)
-    missing_not_contained_in_rag = []
-    missing_contained_in_rag = []
-    for el in res:
-        if el not in all_sv_ids_in_rag:
-            missing_not_contained_in_rag.append(el)
-        else:
-            missing_contained_in_rag.append(el)
-    if len(missing_not_contained_in_rag):
-        print("%d SVs were not rendered but also not part of the initial"
-              "RAG: {}".format(missing_not_contained_in_rag))
-    if len(missing_contained_in_rag) != 0:
-        raise RuntimeError("Not all SSVs were rendered completely! Missing:\n"
-                           "{}".format(missing_contained_in_rag))
+    #
+    # # check completeness
+    # sd = SegmentationDataset("sv", working_dir=wd)
+    # res = find_missing_sv_views(sd, woglia=False, n_cores=10)
+    # missing_not_contained_in_rag = []
+    # missing_contained_in_rag = []
+    # for el in res:
+    #     if el not in all_sv_ids_in_rag:
+    #         missing_not_contained_in_rag.append(el)
+    #     else:
+    #         missing_contained_in_rag.append(el)
+    # if len(missing_not_contained_in_rag):
+    #     print("%d SVs were not rendered but also not part of the initial"
+    #           "RAG: {}".format(missing_not_contained_in_rag))
+    # if len(missing_contained_in_rag) != 0:
+    #     raise RuntimeError("Not all SSVs were rendered completely! Missing:\n"
+    #                        "{}".format(missing_contained_in_rag))

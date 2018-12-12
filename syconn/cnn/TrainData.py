@@ -14,7 +14,7 @@ import warnings
 from syconn.config.global_params import wd
 from syconn.handler.basics import load_pkl2obj, temp_seed
 from syconn.handler.compression import lz4stringtoarr, save_to_h5py
-from syconn.handler.prediction import force_correct_norm, naive_view_normalization, naive_view_normalization_new
+from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.mp.mp_utils import start_multiprocess_obj

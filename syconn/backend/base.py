@@ -53,7 +53,7 @@ class StorageBase(dict):
         return self._dc_intern.__len__()
 
     def __eq__(self, other):
-        if not isinstance(other, FSBase):
+        if not isinstance(other, StorageBase):
             return False
         return self._dc_intern.__eq__(other._dc_intern)
 
@@ -203,7 +203,8 @@ class FSBase(StorageBase):
             source = self._path
         fold, fname = os.path.split(source)
         lock_path = fold + "/." + fname + ".lk"
-        if not os.path.isdir(fold):
+        # only create directory if read_only is false. -> support virtual SSO
+        if not os.path.isdir(fold) and not self.read_only:
             try:
                 os.makedirs(fold)
             except OSError as e:  # if to jobs create the folder at the same time

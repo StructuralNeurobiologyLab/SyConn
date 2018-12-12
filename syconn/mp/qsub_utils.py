@@ -17,6 +17,7 @@ import re
 import shutil
 import string
 import subprocess
+import tqdm
 import sys
 import time
 from syconn.handler.basics import temp_seed
@@ -115,15 +116,16 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     else:
         path_to_scripts = path_to_scripts_default
 
-    if os.path.exists(qsub_work_folder+"/%s_folder%s/" % (name, suffix)):
-        shutil.rmtree(qsub_work_folder+"/%s_folder%s/" % (name, suffix), ignore_errors=True)
+    job_folder = qsub_work_folder+"/%s_folder%s/" % (name, suffix)
+    if os.path.exists(job_folder):
+        shutil.rmtree(job_folder, ignore_errors=True)
 
     path_to_script = path_to_scripts + "/QSUB_%s.py" % name
-    path_to_storage = qsub_work_folder+"/%s_folder%s/storage/" % (name, suffix)
-    path_to_sh = qsub_work_folder+"/%s_folder%s/sh/" % (name, suffix)
-    path_to_log = qsub_work_folder+"/%s_folder%s/log/" % (name, suffix)
-    path_to_err = qsub_work_folder+"/%s_folder%s/err/" % (name, suffix)
-    path_to_out = qsub_work_folder+"/%s_folder%s/out/" % (name, suffix)
+    path_to_storage = "%s/storage/" % job_folder
+    path_to_sh = "%s/sh/" % job_folder
+    path_to_log = "%s/log/" % job_folder
+    path_to_err = "%s/err/" % job_folder
+    path_to_out = "%s/out/" % job_folder
 
     if not os.path.exists(path_to_storage):
         os.makedirs(path_to_storage)
@@ -136,11 +138,13 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if not os.path.exists(path_to_out):
         os.makedirs(path_to_out)
 
-    print("Number of jobs:", len(params))
+    print("Number of jobs for {}-script: {}".format(name, len(params)))
+    pbar = tqdm.tqdm(total=len(params))
 
-    time_start = time.time()
-    sleep_time = 1
+    # memory of finished jobs to calculate increments
+    n_jobs_finished = 0
     last_diff_rp = 0
+    sleep_time = 10
     for i_job in range(len(params)):
         if n_max_co_processes is not None:
             while last_diff_rp == 0:
@@ -148,12 +152,11 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 last_diff_rp = n_max_co_processes - nb_rp
 
                 if last_diff_rp == 0:
-                    progress = float(i_job - n_max_co_processes) / len(params) * 100
-                    print('Progress: %.2f%% in %.2fs' %
-                          (progress, time.time() - time_start))
+                    n_jobs_done = len(glob.glob(path_to_out + "*.pkl"))
+                    diff = n_jobs_done - n_jobs_finished
+                    pbar.update(diff)
+                    n_jobs_finished = n_jobs_done
                     time.sleep(sleep_time)
-                    sleep_time = 5
-
             last_diff_rp -= 1
             sleep_time = 1
 
@@ -225,10 +228,17 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
     print("All jobs are submitted: %s" % name)
     while True:
-        if show_progress(job_name, len(params), time.time() - time_start):
+        nb_rp = number_of_running_processes(job_name)
+        # check actually running files
+        if nb_rp == 0:
             break
-        time.sleep(5.)
-
+        n_jobs_done = len(glob.glob(path_to_out + "*.pkl"))
+        diff = n_jobs_done - n_jobs_finished
+        pbar.update(diff)
+        n_jobs_finished = n_jobs_done
+        time.sleep(sleep_time)
+    pbar.close()
+    print("All batch jobs have finished: %s" % name)
     out_files = glob.glob(path_to_out + "*.pkl")
     if len(out_files) < len(params):
         print("%d jobs appear to have failed" % (len(params) - len(out_files)))
@@ -273,36 +283,6 @@ def number_of_running_processes(job_name):
         if job_name[:10 if BACKEND_IDENT == 'QSUB' else 8] in line:
             nb_lines += 1
     return nb_lines
-
-
-def show_progress(job_name, n_jobs_total, time_diff):
-    """
-    Prints progress for specific qsub job
-
-    Parameters
-    ----------
-    job_name: str
-        job_name as shown in qstats
-    n_jobs_total: int
-        number of submitted jobs
-    time_diff: float
-        time since starting the job
-
-    Returns
-    -------
-    finished: bool
-        True of no jobs are running anymore; False otherwise
-    """
-    nb_rp = number_of_running_processes(job_name)
-    if nb_rp == 0:
-        sys.stdout.write('\rAll jobs were finished in %.2fs\n' % time_diff)
-        return True
-    else:
-        progress = 100 * (n_jobs_total - negative_to_zero(nb_rp)) / \
-                   float(n_jobs_total)
-        sys.stdout.write('\rProgress: %.2f%% in %.2fs' % (progress, time_diff))
-        sys.stdout.flush()
-        return False
 
 
 def delete_jobs_by_name(job_name):

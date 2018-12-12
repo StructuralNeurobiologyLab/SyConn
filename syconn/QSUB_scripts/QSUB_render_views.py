@@ -28,7 +28,9 @@ with open(path_storage_file, 'rb') as f:
 ch = args[0]
 wd = args[1]
 for ssv_ix in ch:
-    sso = SuperSegmentationObject(ssv_ix, working_dir=wd)
+    sso = SuperSegmentationObject(ssv_ix, working_dir=wd,
+                                  enable_locking_so=True)
+    sso.load_attr_dict()
     sso.render_views(add_cellobjects=True, woglia=True, overwrite=True)
 
 

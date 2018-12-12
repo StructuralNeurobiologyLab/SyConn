@@ -30,7 +30,7 @@ from ..config import parser
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage
-from ..proc.graphs import split_glia, split_subcc, create_graph_from_coords
+from ..proc.graphs import split_glia, split_subcc_join, create_graph_from_coords
 from ..proc.meshes import write_mesh2kzip, merge_someshes, \
     compartmentalize_mesh, mesh2obj_file
 from ..proc.rendering import render_sampled_sso, multi_view_sso,\
@@ -1071,7 +1071,7 @@ class SuperSegmentationObject(object):
         if max_nb_sv is None:
             max_nb_sv = global_params.SUBCC_SIZE_BIG_SSV + 2*(lo_first_n-1)
         init_g = self.rag
-        partitions = split_subcc(init_g, max_nb_sv, lo_first_n=lo_first_n)
+        partitions = split_subcc_join(init_g, max_nb_sv, lo_first_n=lo_first_n)
         return partitions
 
     # -------------------------------------------------------------------- VIEWS
@@ -1191,7 +1191,9 @@ class SuperSegmentationObject(object):
         """
         if len(self.sv_ids) > global_params.RENDERING_MAX_NB_SV:
             part = self.partition_cc()
-            if not overwrite: # check existence of glia preds
+            print('Partitioned hugh SSV into {} subgraphs with each {}'
+                  ' SVs.'.format(len(part), len(part[list(part.keys())[0]])))
+            if not overwrite:  # check existence of glia preds
                 views_exist = np.array(self.view_existence(), dtype=np.int)
                 print("Rendering huge SSO. {}/{} views left to process."
                       .format(np.sum(views_exist == 0), len(self.svs)))
@@ -1214,12 +1216,12 @@ class SuperSegmentationObject(object):
                 raise RuntimeError('QSUB has to be enabled when processing '
                                    'huge SSVs.')
             elif qu.__BATCHJOB__:
-                params = chunkify(params, 600)
+                params = chunkify(params, 1000)
                 so_kwargs = {'version': self.svs[0].version,
                              'working_dir': self.working_dir,
                              'obj_type': self.svs[0].type}
                 render_kwargs = {"overwrite": overwrite, 'woglia': woglia,
-                                 "render_first_only": 30,
+                                 "render_first_only": global_params.SUBCC_CHUNK_SIZE_BIG_SSV,
                                  'add_cellobjects': add_cellobjects,
                                  "cellobjects_only": cellobjects_only,
                                  'skip_indexviews': skip_indexviews}
@@ -2200,9 +2202,7 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
     # initilaize temporary SSO
     if not overwrite:
         if render_first_only:
-            if sos[0].views_exist(woglia=woglia):
-                sys.stdout.write("\r%d" % sos[0].id)
-                sys.stdout.flush()
+            if np.all([sos[ii].views_exist(woglia=woglia) for ii in range(render_first_only)]):
                 return
         else:
             if np.all([sv.views_exist(woglia=woglia) for sv in sos]):

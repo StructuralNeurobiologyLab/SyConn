@@ -50,7 +50,7 @@ def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
     return new_vertex_labels
 
 
-def split_subcc_old(g, max_nb, verbose=False, start_nodes=None):
+def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     """
     Creates subgraph for each node consisting of nodes until maximum number of
     nodes is reached.
@@ -91,7 +91,14 @@ def split_subcc_old(g, max_nb, verbose=False, start_nodes=None):
     return subnodes
 
 
-def split_subcc(g, max_nb, verbose=False, start_nodes=None, lo_first_n=1):
+def chunkify_contiguous(l, n):
+    """Yield successive n-sized chunks from l.
+     https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks"""
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
+
+
+def split_subcc_join(g, subgraph_size, lo_first_n=1):
     """
     Creates a subgraph for each node consisting of nodes until maximum number of
     nodes is reached.
@@ -99,10 +106,7 @@ def split_subcc(g, max_nb, verbose=False, start_nodes=None, lo_first_n=1):
     Parameters
     ----------
     g : Graph
-    max_nb : int
-    verbose : bool
-    start_nodes : iterable
-        node ID's
+    subgraph_size : int
     lo_first_n : int
         leave out first n nodes: will collect max_nb nodes starting from center node and then omit the first lo_first_n
         nodes, i.e. not use them as new starting nodes.
@@ -111,37 +115,50 @@ def split_subcc(g, max_nb, verbose=False, start_nodes=None, lo_first_n=1):
     -------
     dict
     """
-    subnodes = {}
-    if verbose:
-        nb_nodes = g.number_of_nodes()
-        pbar = tqdm.tqdm(total=nb_nodes)
-    if start_nodes is None:
-        iter_ixs = g.nodes()
-    else:
-        iter_ixs = start_nodes
-    close2center_nodes_global = set()
-    for n in iter_ixs:
-        # leave out previous center nodes and nodes which were close to previous center nodes
-        if n in close2center_nodes_global:
-            continue
-        n_subgraph = [n]
-        close2center_nodes = set((n, ))
-        close2center_nodes_global.add(n)
-        nb_edges = 0
-        for e in nx.bfs_edges(g, n):
-            n_subgraph.append(e[1])
-            if len(close2center_nodes) < lo_first_n:
-                close2center_nodes.add(e[1])
-                close2center_nodes_global.add(e[1])
+    dfs_nodes = list(nx.dfs_preorder_nodes(g, 1))
+    # get subgraphs via splicing of traversed node list into equally sized fragments. they might
+    # be unconnected if branch sizes mod subgraph_size != 0, then a chunk will contain multiple connected components.
+    chunks = list(chunkify_contiguous(dfs_nodes, lo_first_n))
+    sub_graphs = []
+    for ch in chunks:
+        # collect all connected component subgraphs
+        sub_graphs += list(nx.connected_component_subgraphs(g.subgraph(ch)))
+    # add more context to subgraphs
+    subgraphs_withcontext = []
+    new_node_ix = 'dummy_node'
+    for sg in sub_graphs:
+        curr_g = g.copy()
+        merge_nodes(curr_g, sg.nodes(), new_node_ix)
+        # add context but omit artificial start node
+        subgraph_nodes_with_context = []
+        nb_edges = sg.number_of_nodes()
+        for e in nx.bfs_edges(curr_g, new_node_ix):
+            subgraph_nodes_with_context.append(e[1])
             nb_edges += 1
-            if nb_edges == max_nb:
+            if nb_edges == subgraph_size:
                 break
-        subnodes[n] = n_subgraph
-        if verbose:
-            pbar.update(1)
-    if verbose:
-        pbar.close()
-    return subnodes
+        # add original nodes
+        subgraph_nodes_with_context = list(sg.nodes()) + subgraph_nodes_with_context
+        subgraphs_withcontext.append(subgraph_nodes_with_context)#g.subgraph(subgraph_nodes_with_context))
+    return subgraphs_withcontext
+
+
+def merge_nodes(G, nodes, new_node):
+    """ FOR UNWEIGHTED, UNDIRECTED GRAPHS ONLY
+    """
+    if G.is_directed():
+        raise ValueError('Method "merge_nodes" is only valid for undirected graphs.')
+    G.add_node(new_node)
+    for n in nodes:
+        for e in G.edges(n):
+            # add edge between new node and original partner node
+            edge = list(e)
+            edge.remove(n)
+            paired_node = edge[0]
+            G.add_edge(new_node, paired_node)
+
+    for n in nodes:  # remove the merged nodes
+        G.remove_node(n)
 
 
 def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,

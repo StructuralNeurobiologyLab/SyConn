@@ -568,13 +568,13 @@ class SegmentationObject(object):
         if not os.path.isfile(self.attr_dict_path):
             return False
         glob_attr_dc = AttributeDict(self.attr_dict_path,
-                                     disable_locking=not self.enable_locking)
+                                     disable_locking=True) # look-up only, PS 12Dec2018
         return self.id in glob_attr_dc
 
     @property
     def voxels_exist(self):
         voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
-                                disable_locking=True)
+                                disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in voxel_dc
 
 
@@ -603,13 +603,13 @@ class SegmentationObject(object):
     @property
     def mesh_exists(self):
         mesh_dc = MeshStorage(self.mesh_path,
-                              disable_locking=not self.enable_locking)
+                              disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in mesh_dc
 
     @property
     def skeleton_exists(self):
         skeleton_dc = SkeletonStorage(self.skeleton_path,
-                                      disable_locking=not self.enable_locking)
+                                      disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in skeleton_dc
 
     @property
@@ -660,12 +660,12 @@ class SegmentationObject(object):
     @property
     def sample_locations_exist(self):
         location_dc = CompressedStorage(self.locations_path,
-                                        disable_locking=not self.enable_locking)
+                                        disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in location_dc
 
     def views_exist(self, woglia, index_views=False, view_key=None):
         view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
-                                    disable_locking=not self.enable_locking)
+                                    disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in view_dc
 
     def views(self, woglia, index_views=False, view_key=None):
