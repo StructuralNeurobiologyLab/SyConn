@@ -1051,7 +1051,7 @@ class SuperSegmentationObject(object):
         dest_attr_dc.update(self.attr_dict)
         write_obj2pkl(dest_dir + "/attr_dict.pkl", dest_attr_dc)
 
-    def partition_cc(self, max_nb_sv=None):
+    def partition_cc(self, max_nb_sv=None, lo_first_n=None):
         """
         Splits connected component into subgraphs.
 
@@ -1059,15 +1059,19 @@ class SuperSegmentationObject(object):
         ----------
         max_nb_sv : int
             Number of SV per CC
+        lo_first_n : int
+            do not use first n traversed nodes for new bfs traversals.
 
         Returns
         -------
         dict
         """
+        if lo_first_n is None:
+            lo_first_n = global_params.SUBCC_CHUNK_SIZE_BIG_SSV
         if max_nb_sv is None:
-            max_nb_sv = global_params.SUBCC_SIZE_BIG_SSV
+            max_nb_sv = global_params.SUBCC_SIZE_BIG_SSV + 2*(lo_first_n-1)
         init_g = self.rag
-        partitions = split_subcc(init_g, max_nb_sv)
+        partitions = split_subcc(init_g, max_nb_sv, lo_first_n=lo_first_n)
         return partitions
 
     # -------------------------------------------------------------------- VIEWS
@@ -1210,13 +1214,13 @@ class SuperSegmentationObject(object):
                 raise RuntimeError('QSUB has to be enabled when processing '
                                    'huge SSVs.')
             elif qu.__BATCHJOB__:
-                params = chunkify(params, 1000)
+                params = chunkify(params, 600)
                 so_kwargs = {'version': self.svs[0].version,
                              'working_dir': self.working_dir,
                              'obj_type': self.svs[0].type}
                 render_kwargs = {"overwrite": overwrite, 'woglia': woglia,
-                                 "render_first_only": True,
-                                 'add_cellobjects':add_cellobjects,
+                                 "render_first_only": 30,
+                                 'add_cellobjects': add_cellobjects,
                                  "cellobjects_only": cellobjects_only,
                                  'skip_indexviews': skip_indexviews}
                 params = [[par, so_kwargs, render_kwargs] for par in params]
@@ -2175,7 +2179,7 @@ class SuperSegmentationObject(object):
 # SO rendering code
 
 def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
-                          render_first_only=False, add_cellobjects=True,
+                          render_first_only=0, add_cellobjects=True,
                           overwrite=False, cellobjects_only=False,
                           index_views=False):
     """
@@ -2189,7 +2193,7 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
     verbose : bool
     woglia : bool
         without glia components
-    render_first_only : bool
+    render_first_only : int
     add_cellobjects : bool
     overwrite : bool
     """
@@ -2209,7 +2213,7 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
                                   version="tmp", scaling=sos[0].scaling)
     sso._objects["sv"] = sos
     if render_first_only:
-        coords = [sos[0].sample_locations()]
+        coords = [sos[ii].sample_locations() for ii in range(render_first_only)]
     else:
         coords = sso.sample_locations(cache=False)
     if add_cellobjects:
@@ -2217,7 +2221,7 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
     part_views = np.cumsum([0] + [len(c) for c in coords])
     if index_views:
         views = render_sso_coords_index_views(sso, flatten_list(coords),
-                                  ws=ws, verbose=verbose)
+                                              ws=ws, verbose=verbose)
     else:
         views = render_sso_coords(sso, flatten_list(coords),
                                   add_cellobjects=add_cellobjects,

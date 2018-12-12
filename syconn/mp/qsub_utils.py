@@ -19,6 +19,7 @@ import string
 import subprocess
 import sys
 import time
+from syconn.handler.basics import temp_seed
 
 BACKEND_IDENT = 'SLURM'
 __BATCHJOB__ = BACKEND_IDENT is not None
@@ -96,10 +97,11 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         else:
             additional_flags = sge_additional_flags
     if job_name == "default":
-        letters = string.ascii_lowercase
-        job_name = "".join([letters[l] for l in
-                            np.random.randint(0, len(letters), 10 if BACKEND_IDENT == 'QSUB' else 8)])
-        print("Random job_name created: %s" % job_name)
+        with temp_seed(hash(time.time()) % (2 ** 32 - 1)):
+            letters = string.ascii_lowercase
+            job_name = "".join([letters[l] for l in
+                                np.random.randint(0, len(letters), 10 if BACKEND_IDENT == 'QSUB' else 8)])
+            print("Random job_name created: %s" % job_name)
     else:
         print("WARNING: running multiple jobs via qsub is only supported "
               "with non-default job_names")
@@ -292,7 +294,6 @@ def show_progress(job_name, n_jobs_total, time_diff):
         True of no jobs are running anymore; False otherwise
     """
     nb_rp = number_of_running_processes(job_name)
-    print(nb_rp)
     if nb_rp == 0:
         sys.stdout.write('\rAll jobs were finished in %.2fs\n' % time_diff)
         return True

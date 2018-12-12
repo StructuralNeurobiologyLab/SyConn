@@ -50,7 +50,7 @@ def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
     return new_vertex_labels
 
 
-def split_subcc(g, max_nb, verbose=False, start_nodes=None):
+def split_subcc_old(g, max_nb, verbose=False, start_nodes=None):
     """
     Creates subgraph for each node consisting of nodes until maximum number of
     nodes is reached.
@@ -80,6 +80,59 @@ def split_subcc(g, max_nb, verbose=False, start_nodes=None):
         nb_edges = 0
         for e in nx.bfs_edges(g, n):
             n_subgraph.append(e[1])
+            nb_edges += 1
+            if nb_edges == max_nb:
+                break
+        subnodes[n] = n_subgraph
+        if verbose:
+            pbar.update(1)
+    if verbose:
+        pbar.close()
+    return subnodes
+
+
+def split_subcc(g, max_nb, verbose=False, start_nodes=None, lo_first_n=1):
+    """
+    Creates a subgraph for each node consisting of nodes until maximum number of
+    nodes is reached.
+
+    Parameters
+    ----------
+    g : Graph
+    max_nb : int
+    verbose : bool
+    start_nodes : iterable
+        node ID's
+    lo_first_n : int
+        leave out first n nodes: will collect max_nb nodes starting from center node and then omit the first lo_first_n
+        nodes, i.e. not use them as new starting nodes.
+
+    Returns
+    -------
+    dict
+    """
+    subnodes = {}
+    if verbose:
+        nb_nodes = g.number_of_nodes()
+        pbar = tqdm.tqdm(total=nb_nodes)
+    if start_nodes is None:
+        iter_ixs = g.nodes()
+    else:
+        iter_ixs = start_nodes
+    close2center_nodes_global = set()
+    for n in iter_ixs:
+        # leave out previous center nodes and nodes which were close to previous center nodes
+        if n in close2center_nodes_global:
+            continue
+        n_subgraph = [n]
+        close2center_nodes = set((n, ))
+        close2center_nodes_global.add(n)
+        nb_edges = 0
+        for e in nx.bfs_edges(g, n):
+            n_subgraph.append(e[1])
+            if len(close2center_nodes) < lo_first_n:
+                close2center_nodes.add(e[1])
+                close2center_nodes_global.add(e[1])
             nb_edges += 1
             if nb_edges == max_nb:
                 break
