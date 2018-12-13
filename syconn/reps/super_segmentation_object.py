@@ -1192,7 +1192,7 @@ class SuperSegmentationObject(object):
         if len(self.sv_ids) > global_params.RENDERING_MAX_NB_SV:
             part = self.partition_cc()
             print('Partitioned hugh SSV into {} subgraphs with each {}'
-                  ' SVs.'.format(len(part), len(part[list(part.keys())[0]])))
+                  ' SVs.'.format(len(part), len(part[0])))
             if not overwrite:  # check existence of glia preds
                 views_exist = np.array(self.view_existence(), dtype=np.int)
                 print("Rendering huge SSO. {}/{} views left to process."
@@ -1208,10 +1208,7 @@ class SuperSegmentationObject(object):
             else:
                 print("Rendering huge SSO. {} SVs left to process."
                       .format(len(self.svs)))
-            for k in part.keys():
-                val = part[k]
-                part[k] = [so.id for so in val]
-            params = list(part.values())
+            params = [[so.id for so in el] for el in part]
             if qsub_pe is None:
                 raise RuntimeError('QSUB has to be enabled when processing '
                                    'huge SSVs.')

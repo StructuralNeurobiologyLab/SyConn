@@ -115,7 +115,12 @@ def split_subcc_join(g, subgraph_size, lo_first_n=1):
     -------
     dict
     """
-    dfs_nodes = list(nx.dfs_preorder_nodes(g, 1))
+    start_node = list(g.nodes())[0]
+    for n, d in dict(g.degree).items():
+        if d == 1:
+            start_node = n
+            break
+    dfs_nodes = list(nx.dfs_preorder_nodes(g, start_node))
     # get subgraphs via splicing of traversed node list into equally sized fragments. they might
     # be unconnected if branch sizes mod subgraph_size != 0, then a chunk will contain multiple connected components.
     chunks = list(chunkify_contiguous(dfs_nodes, lo_first_n))
@@ -125,21 +130,25 @@ def split_subcc_join(g, subgraph_size, lo_first_n=1):
         sub_graphs += list(nx.connected_component_subgraphs(g.subgraph(ch)))
     # add more context to subgraphs
     subgraphs_withcontext = []
-    new_node_ix = 'dummy_node'
     for sg in sub_graphs:
-        curr_g = g.copy()
-        merge_nodes(curr_g, sg.nodes(), new_node_ix)
         # add context but omit artificial start node
-        subgraph_nodes_with_context = []
-        nb_edges = sg.number_of_nodes()
-        for e in nx.bfs_edges(curr_g, new_node_ix):
-            subgraph_nodes_with_context.append(e[1])
-            nb_edges += 1
-            if nb_edges == subgraph_size:
-                break
+        context_nodes = []
+        for n in list(sg.nodes()):
+            subgraph_nodes_with_context = []
+            nb_edges = sg.number_of_nodes()
+            for e in nx.bfs_edges(g, n):
+                subgraph_nodes_with_context.append(e[1])
+                nb_edges += 1
+                if nb_edges == subgraph_size:
+                    break
+            context_nodes += subgraph_nodes_with_context
         # add original nodes
-        subgraph_nodes_with_context = list(sg.nodes()) + subgraph_nodes_with_context
-        subgraphs_withcontext.append(subgraph_nodes_with_context)#g.subgraph(subgraph_nodes_with_context))
+        context_nodes = list(set(context_nodes))
+        for n in list(sg.nodes()):
+            if n in context_nodes:
+                context_nodes.remove(n)
+        subgraph_nodes_with_context = list(sg.nodes()) + context_nodes
+        subgraphs_withcontext.append(g.subgraph(subgraph_nodes_with_context))
     return subgraphs_withcontext
 
 

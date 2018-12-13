@@ -69,8 +69,10 @@ cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
 # Extract contact sites
 # About 2h
 from syconn.extraction import cs_extraction_steps as ces
+# POPULATES CS CD
 #ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=5000,
 #                       qsub_pe='default', qsub_queue='all.q')
+
 
 ces.extract_agg_contact_sites(cd, wd,
                               n_folders_fs=10000, suffix="",

@@ -50,8 +50,8 @@ if __name__ == "__main__":
         mk = par[1]
         mk["init_gpu"] = np.random.rand(0, 2)
     script_folder = os.path.dirname(
-        os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts_chunked/"
-    path_to_out = qu.QSUB_script(multi_params, "predict_sv_views",
+        os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
+    path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
                                  n_max_co_processes=25, pe="openmp",
                                  queue=None, n_cores=10, suffix="_glia",
                                  script_folder=script_folder,
