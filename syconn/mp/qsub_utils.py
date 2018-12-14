@@ -221,7 +221,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 raise Exception("No queue or parallel environment defined")
             if priority is not None and priority != 0:
                 log_batchjob.warning('Priorities are not supported with SLURM.')
-            cmd_exec = "sbatch {0} --output={1} --error={2} --job-name={3} {4} {5}".format(
+            # added '--quiet' flag to prevent submission messages, errors will still be printed (https://slurm.schedmd.com/sbatch.html)
+            cmd_exec = "sbatch {0} --output={1} --error={2} --quiet --job-name={3} {4} {5}".format(
                 queue_option,
                 job_log_path,
                 job_err_path,
