@@ -32,7 +32,7 @@ from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, 
 from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage
 from ..proc.graphs import split_glia, split_subcc_join, create_graph_from_coords
 from ..proc.meshes import write_mesh2kzip, merge_someshes, \
-    compartmentalize_mesh, mesh2obj_file
+    compartmentalize_mesh, mesh2obj_file, write_meshes2kzip
 from ..proc.rendering import render_sampled_sso, multi_view_sso,\
     render_sso_coords, render_sso_coords_index_views
 try:
@@ -657,6 +657,11 @@ class SuperSegmentationObject(object):
         return np.unique(np.concatenate([[a.id, b.id] for a, b in edges]))
 
     def save_attr_dict(self):
+        if self.version == 'tmp':
+            log_reps.warning('"save_attr_dict called" but this SSV '
+                             'has version "tmp", attribute dict will'
+                             ' not be saved to disk.')
+            return
         try:
             orig_dc = load_pkl2obj(self.attr_dict_path)
         except IOError:
@@ -675,6 +680,11 @@ class SuperSegmentationObject(object):
         attr_keys : tuple of str
         attr_values : tuple of items
         """
+        if self.version == 'tmp':
+            log_reps.warning('"save_attributes called" but this SSV '
+                             'has version "tmp", attribute dict will'
+                             ' not be saved to disk.')
+            return
         if not hasattr(attr_keys, "__len__"):
             attr_keys = [attr_keys]
         if not hasattr(attr_values, "__len__"):
@@ -886,6 +896,11 @@ class SuperSegmentationObject(object):
             self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
 
     def save_skeleton(self, to_kzip=False, to_object=True):
+        if self.version == 'tmp':
+            log_reps.warning('"save_skeleton called" but this SSV '
+                             'has version "tmp", attribute dict will'
+                             ' not be saved to disk.')
+            return
         if to_object:
             write_obj2pkl(self.skeleton, self.skeleton_path)
 
@@ -1213,7 +1228,7 @@ class SuperSegmentationObject(object):
                 raise RuntimeError('QSUB has to be enabled when processing '
                                    'huge SSVs.')
             elif qu.__BATCHJOB__:
-                params = chunkify(params, 1000)
+                params = chunkify(params, 1600)
                 so_kwargs = {'version': self.svs[0].version,
                              'working_dir': self.working_dir,
                              'obj_type': self.svs[0].type}
@@ -1223,8 +1238,8 @@ class SuperSegmentationObject(object):
                                  "cellobjects_only": cellobjects_only,
                                  'skip_indexviews': skip_indexviews}
                 params = [[par, so_kwargs, render_kwargs] for par in params]
-                qu.QSUB_script(params, "render_views_partial", pe=qsub_pe,
-                               queue=None, script_folder=script_folder,
+                qu.QSUB_script(params, "render_views_partial", suffix="_SSV{}".format(self.id),
+                               pe=qsub_pe, queue=None, script_folder=script_folder,
                                n_max_co_processes=qsub_co_jobs)
             else:
                 raise Exception("QSUB not available")
@@ -1355,6 +1370,7 @@ class SuperSegmentationObject(object):
             try:
                 views = self.load_views('raw{}'.format(nb_views))
             except KeyError:
+                log_reps.warning('Could not find raw-views. Re-rendering now.')
                 self._render_rawviews(nb_views)
                 views = self.load_views('raw{}'.format(nb_views))
             if len(views) != len(np.concatenate(self.sample_locations(cache=False))):
@@ -1765,11 +1781,10 @@ class SuperSegmentationObject(object):
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         mesh = merge_someshes(glia_svs)
-        write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
-                        ply_fname="glia_%0.2f.ply" % thresh)
-        mesh = merge_someshes(nonglia_svs)
-        write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
-                        ply_fname="nonglia_%0.2f.ply" % thresh)
+        neuron_mesh = merge_someshes(nonglia_svs)
+        write_meshes2kzip(dest_path, [mesh[0], neuron_mesh[0]], [mesh[1], neuron_mesh[1]],
+                          [mesh[2], neuron_mesh[2]], [None, None],
+                          ["glia_%0.2f.ply" % thresh, "nonglia_%0.2f.ply" % thresh])
 
     def gliapred2mergelist(self, dest_path=None, thresh=None,
                            pred_key_appendix=""):
@@ -1829,6 +1844,7 @@ class SuperSegmentationObject(object):
         -------
 
         """
+        # TODO: adapt writemesh2kzip to work with multiple writes to same file or use write_meshes2kzip here.
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         # write meshes of CC's
@@ -1863,15 +1879,15 @@ class SuperSegmentationObject(object):
         start = time.time()
         pred_key = "glia_probas"
         pred_key += pred_key_appendix
-        try:
-            predict_sos_views(model, self.svs, pred_key,
-                              nb_cpus=self.nb_cpus, verbose=verbose,
-                              woglia=False, raw_only=True)
-        except KeyError:
-            self.render_views(add_cellobjects=False, woglia=False)
-            predict_sos_views(model, self.svs, pred_key,
-                              nb_cpus=self.nb_cpus, verbose=verbose,
-                              woglia=False, raw_only=True)
+        # try:
+        predict_sos_views(model, self.svs, pred_key,
+                          nb_cpus=self.nb_cpus, verbose=verbose,
+                          woglia=False, raw_only=True)
+        # except KeyError:
+        #     self.render_views(add_cellobjects=False, woglia=False)
+        #     predict_sos_views(model, self.svs, pred_key,
+        #                       nb_cpus=self.nb_cpus, verbose=verbose,
+        #                       woglia=False, raw_only=True)
         end = time.time()
         log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
                        "%0.4fs/SV" % (len(self.svs), end - start,

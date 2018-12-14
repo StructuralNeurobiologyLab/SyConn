@@ -39,7 +39,7 @@ def get_main_log():
     return logger
 
 
-def initialize_logging(log_name):
+def initialize_logging(log_name, log_dir=None):
     """
     Logger for each package module. For import processing steps individual
     logger can be defined (e.g. multiviews, skeleton)
@@ -55,17 +55,18 @@ def initialize_logging(log_name):
     predefined_lognames = ['mp', 'gate', 'proc', 'ui', 'skeleton', 'multiview',
                            'handler', 'cnn', 'extraction', 'reps',
                            'object_extraction', 'backend']
-    if log_name not in predefined_lognames:
-        log_main.warning("Please use logger names as specified"
-                         " here: {}".format(predefined_lognames))
+    # not necessary...
+    # if log_name not in predefined_lognames:
+    #     log_main.warning("Please use logger names as specified"
+    #                      " here: {}".format(predefined_lognames))
     logger = logging.getLogger(log_name)
     coloredlogs.install(level='DEBUG', logger=logger)
     logger.setLevel(logging.DEBUG)
 
     if not global_params.DISABLE_FILE_LOGGING:
         # create file handler which logs even debug messages
-        log_dir = os.path.expanduser('~') + "/SyConn/logs/"
-
+        if log_dir is None:
+            log_dir = os.path.expanduser('~') + "/SyConn/logs/"
         try:
             os.makedirs(log_dir, exist_ok=True)
         except TypeError:

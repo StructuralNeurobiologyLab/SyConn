@@ -353,6 +353,7 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
             glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
         c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None, ])
         glPopMatrix()
+    # glFinish()
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
         eglDestroyContext(*ctx)
     else:
@@ -450,6 +451,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
         c_views.append(screen_shot(ws, True, depth_map=depth_map,
                                    triangulation=triangulation)[None, ])
         glPopMatrix()
+    # glFinish()
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
         eglDestroyContext(*ctx)
     else:

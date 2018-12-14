@@ -440,8 +440,8 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
                                           "raw_only": raw_only}]
                                           for sv in ch], nb_cpus=nb_cpus)
         proba = predict_views(model, views, ch, pred_key, verbose=False,
-                             single_cc_only=single_cc_only,
-                             return_proba=return_proba, nb_cpus=nb_cpus)
+                              single_cc_only=single_cc_only,
+                              return_proba=return_proba, nb_cpus=nb_cpus)
         if verbose:
             pbar.update(len(ch))
         if return_proba:

@@ -137,7 +137,7 @@ def split_subcc_join(g, subgraph_size, lo_first_n=1):
             subgraph_nodes_with_context = []
             nb_edges = sg.number_of_nodes()
             for e in nx.bfs_edges(g, n):
-                subgraph_nodes_with_context.append(e[1])
+                subgraph_nodes_with_context += list(e)
                 nb_edges += 1
                 if nb_edges == subgraph_size:
                     break
@@ -148,7 +148,7 @@ def split_subcc_join(g, subgraph_size, lo_first_n=1):
             if n in context_nodes:
                 context_nodes.remove(n)
         subgraph_nodes_with_context = list(sg.nodes()) + context_nodes
-        subgraphs_withcontext.append(g.subgraph(subgraph_nodes_with_context))
+        subgraphs_withcontext.append(subgraph_nodes_with_context)
     return subgraphs_withcontext
 
 
@@ -197,7 +197,7 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
     if clahe:
         glia_key += "_clahe"
     glia_key += pred_key_appendix
-    glianess, size = get_glianess_dict(nx_g.nodes(), thresh, glia_key,
+    glianess, size = get_glianess_dict(list(nx_g.nodes()), thresh, glia_key,
                                        nb_cpus=nb_cpus)
     return remove_glia_nodes(nx_g, size, glianess, return_removed_nodes=True,
                              shortest_paths_dest_dir=shortest_paths_dest_dir)
@@ -298,47 +298,48 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
 
     # get neuron type connected component sizes
     g_neuron = g.copy()
-    for n in g_neuron.nodes():
+    for n in g.nodes():
         if glia_dict[n] != 0:
             g_neuron.remove_node(n)
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
-    if np.all(neuron2ccsize_dict.values() <= min_cc_size_neuron): # no significant neuron SV
+    if np.all(np.array(list(neuron2ccsize_dict.values())) <= min_cc_size_neuron): # no significant neuron SV
         if return_removed_nodes:
-            return [], list(g.nodes())
+            return [], [list(g.nodes())]
         return []
 
     # get glia type connected component sizes
     g_glia = g.copy()
-    for n in g_glia.nodes():
+    for n in g.nodes():
         if glia_dict[n] == 0:
             g_glia.remove_node(n)
     glia2ccsize_dict = create_ccsize_dict(g_glia, size_dict)
-    if np.all(glia2ccsize_dict.values() <= min_cc_size_glia): # no significant glia SV
+    if np.all(np.array(list(glia2ccsize_dict.values())) <= min_cc_size_glia): # no significant glia SV
         if return_removed_nodes:
-            return list(g.nodes()), []
+            return [list(g.nodes())], []
         return []
 
     tiny_glia_fragments = []
-    for n in g_glia.nodes_iter():
+    for n in g_glia.nodes():
         if glia2ccsize_dict[n] < min_cc_size_glia:
             tiny_glia_fragments += [n]
 
     # create new neuron graph without sufficiently big glia connected components
     g_neuron = g.copy()
-    for n in g.nodes_iter():
+    for n in g.nodes():
         if glia_dict[n] != 0 and n not in tiny_glia_fragments:
             g_neuron.remove_node(n)
 
     # find orphaned neuron SV's and add them to glia graph
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
-    for n in g_neuron.nodes():
+    g_tmp = g_neuron.copy()
+    for n in g_tmp.nodes():
         if neuron2ccsize_dict[n] < min_cc_size_neuron:
             g_neuron.remove_node(n)
 
     # create new glia graph with remaining nodes
     # (as the complementary set of sufficiently big neuron connected components)
     g_glia = g.copy()
-    for n in g_neuron.nodes_iter():
+    for n in g_neuron.nodes():
         g_glia.remove_node(n)
 
     neuron_ccs = list(nx.connected_components(g_neuron))

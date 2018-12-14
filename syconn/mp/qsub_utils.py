@@ -21,6 +21,7 @@ import tqdm
 import sys
 import time
 from syconn.handler.basics import temp_seed
+from syconn.handler.logger import initialize_logging
 
 BACKEND_IDENT = 'SLURM'
 __BATCHJOB__ = BACKEND_IDENT is not None
@@ -90,11 +91,20 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         path to the output directory
 
     """
+    job_folder = qsub_work_folder+"/%s_folder%s/" % (name, suffix)
+    if os.path.exists(job_folder):
+        shutil.rmtree(job_folder, ignore_errors=True)
+    log_batchjob = initialize_logging("/%s_%s/" % (name, suffix),
+                                      log_dir=job_folder)
+
     if sge_additional_flags is not None:
-        print('"sge_additional_flags" kwarg will soon be replaced with "additional_flags". '
+        log_batchjob.info('"sge_additional_flags" kwarg will soon be replaced with "additional_flags". '
               'Please adapt method calls accordingly.')
         if additional_flags is not '':
-            raise ValueError('Multiple flags set. Please use only "additional_flags" kwarg.')
+            message = 'Multiple flags set. Please use only' \
+                      ' "additional_flags" kwarg.'
+            log_batchjob.error(message)
+            raise ValueError(message)
         else:
             additional_flags = sge_additional_flags
     if job_name == "default":
@@ -102,23 +112,19 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             letters = string.ascii_lowercase
             job_name = "".join([letters[l] for l in
                                 np.random.randint(0, len(letters), 10 if BACKEND_IDENT == 'QSUB' else 8)])
-            print("Random job_name created: %s" % job_name)
+            log_batchjob.info("Random job_name created: %s" % job_name)
     else:
-        print("WARNING: running multiple jobs via qsub is only supported "
+        log_batchjob.warning("WARNING: running multiple jobs via qsub is only supported "
               "with non-default job_names")
 
     if len(job_name) > 10:
-        print("WARNING: Your job_name is longer than 10. job_names have "
+        log_batchjob.warning("WARNING: Your job_name is longer than 10. job_names have "
               "to be distinguishable with only using their first 10 characters.")
 
     if script_folder is not None:
         path_to_scripts = script_folder
     else:
         path_to_scripts = path_to_scripts_default
-
-    job_folder = qsub_work_folder+"/%s_folder%s/" % (name, suffix)
-    if os.path.exists(job_folder):
-        shutil.rmtree(job_folder, ignore_errors=True)
 
     path_to_script = path_to_scripts + "/QSUB_%s.py" % name
     path_to_storage = "%s/storage/" % job_folder
@@ -138,7 +144,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if not os.path.exists(path_to_out):
         os.makedirs(path_to_out)
 
-    print("Number of jobs for {}-script: {}".format(name, len(params)))
+    log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
     pbar = tqdm.tqdm(total=len(params))
 
     # memory of finished jobs to calculate increments
@@ -199,13 +205,13 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             subprocess.call(cmd_exec, shell=True)
         elif BACKEND_IDENT == 'SLURM':
             if '-V ' in additional_flags:
-                print('"additional_flags" contained "-V" which is a QSUB/SGE specific flag, but SLURM was set '
+                log_batchjob.warning('"additional_flags" contained "-V" which is a QSUB/SGE specific flag, but SLURM was set '
                       'as batch system. Converting "-V" to "--export=ALL".')
                 additional_flags.replace('-V ', '--export=ALL ')
             if not '--mem=' in additional_flags:
                 mem_lim = int(128*n_cores/20)
                 additional_flags += ' --mem={}G'.format(mem_lim)
-                print('Memory requirements were not set explicitly. Setting to '
+                log_batchjob.info('Memory requirements were not set explicitly. Setting to '
                       '128GB*n_cores/20={} GB'.format(mem_lim))
             if pe is not None:
                 queue_option = "--ntasks-per-node %d" % n_cores
@@ -214,7 +220,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             else:
                 raise Exception("No queue or parallel environment defined")
             if priority is not None and priority != 0:
-                print('Priorities are not supported with SLURM.')
+                log_batchjob.warning('Priorities are not supported with SLURM.')
             cmd_exec = "sbatch {0} --output={1} --error={2} --job-name={3} {4} {5}".format(
                 queue_option,
                 job_log_path,
@@ -226,7 +232,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         else:
             raise NotImplementedError
 
-    print("All jobs are submitted: %s" % name)
+    log_batchjob.info("All jobs are submitted: %s" % name)
     while True:
         nb_rp = number_of_running_processes(job_name)
         # check actually running files
@@ -238,17 +244,16 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         n_jobs_finished = n_jobs_done
         time.sleep(sleep_time)
     pbar.close()
-    print("All batch jobs have finished: %s" % name)
+    log_batchjob.info("All batch jobs have finished: %s" % name)
     out_files = glob.glob(path_to_out + "*.pkl")
     if len(out_files) < len(params):
-        print("%d jobs appear to have failed" % (len(params) - len(out_files)))
+        log_batchjob.error("%d jobs appear to have failed" % (len(params) - len(out_files)))
         checklist = np.zeros(len(params), dtype=np.bool)
 
         for p in out_files:
             checklist[int(re.findall("[\d]+", p)[-1])] = True
 
-        print("Missing:")
-        print(np.where(~checklist)[0])
+        log_batchjob.error("Missing: {}".format(np.where(~checklist)[0]))
 
         raise Exception("No success")
 

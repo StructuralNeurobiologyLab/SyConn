@@ -18,7 +18,7 @@ import re
 
 
 if __name__ == "__main__":
-    N_JOBS = 300
+    N_JOBS = 340
     np.random.seed(0)
     # generic QSUB script folder
     script_folder = os.path.dirname(os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
@@ -72,10 +72,11 @@ if __name__ == "__main__":
     # identify huge SSVs and process them individually on whole cluster
     nb_svs = np.array([g.number_of_nodes() for g in multi_params])
     big_ssv = multi_params[nb_svs > RENDERING_MAX_NB_SV]
-    for kk, g in enumerate(big_ssv):
+    for kk, g in enumerate(big_ssv[::-1]):
         # Create SSV object
         sv_ixs = np.sort(list(g.nodes()))
-        log_main.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(kk, len(big_ssv), len(sv_ixs)))
+        log_main.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(
+            kk+1, len(big_ssv), len(sv_ixs)))
         sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
                                       create=False, sv_ids=sv_ixs)
         # nodes of sso._rag need to be SV

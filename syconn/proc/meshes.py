@@ -788,7 +788,8 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
         ply_fname = ply_fnames[i]
         tmp_dest_p = '{}_{}'.format(k_path, ply_fname)
         if len(vert) == 0:
-            raise ValueError("Mesh with zero-length vertex array.")
+            log_proc.warning("Mesh with zero-length vertex array. Skipping.")
+            continue
         if color is not None:
             make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color)
         else:

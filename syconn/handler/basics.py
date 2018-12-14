@@ -381,7 +381,9 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     force_overwrite : bool
     """
     if not force_overwrite:
-        raise NotImplementedError('Currently modification of data in existing kzip is not implemented.')
+        log_handler.warning('Currently modification of data '
+                            'in already existing kzip is still tested. "remove_from_zip" has to be adapted to'
+                            ' work on all files in kzip.')
     nb_files = len(fpaths)
     if verbose:
         log_handler.info('Writing {} files to .zip.'.format(nb_files))
@@ -400,13 +402,17 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
                             if verbose:
                                 pbar.update()
                 else:
+                    for ii in range(nb_files):
+                        file_name = os.path.split(fpaths[ii])[1]
+                        if fnames_in_zip[ii] is not None:
+                            file_name = fnames_in_zip[ii]
+                        remove_from_zip(kzip_path, file_name)
                     with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED,
                                          allowZip64=True) as zf:
                         for ii in range(nb_files):
                             file_name = os.path.split(fpaths[ii])[1]
                             if fnames_in_zip[ii] is not None:
                                 file_name = fnames_in_zip[ii]
-                            remove_from_zip(kzip_path, file_name)
                             zf.write(fpaths[ii], file_name)
                             if verbose:
                                 pbar.update()
