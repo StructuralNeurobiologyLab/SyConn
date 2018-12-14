@@ -780,6 +780,7 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
     if verbose:
         log_proc.info('Generating ply files.')
         pbar = tqdm.tqdm(total=len(inds))
+    write_out_ply_fnames = []
     for i in range(len(inds)):
         vert = verts[i]
         ind = inds[i]
@@ -795,11 +796,12 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
         else:
             make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32))
         tmp_paths.append(tmp_dest_p)
+        write_out_ply_fnames.append(ply_fname)
         if verbose:
             pbar.update(1)
     if verbose:
         pbar.close()
-    data2kzip(k_path, tmp_paths, ply_fnames, force_overwrite=force_overwrite,
+    data2kzip(k_path, tmp_paths, write_out_ply_fnames, force_overwrite=force_overwrite,
               verbose=verbose)
 
 

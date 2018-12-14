@@ -1774,8 +1774,7 @@ class SuperSegmentationObject(object):
         self.load_attr_dict()
         for sv in self.svs:
             sv.load_attr_dict()
-        glia_svs = [sv for sv in self.svs if
-                    sv.glia_pred(thresh, pred_key_appendix) == 1]
+        glia_svs = [sv for sv in self.svs if sv.glia_pred(thresh, pred_key_appendix) == 1]
         nonglia_svs = [sv for sv in self.svs if
                        sv.glia_pred(thresh, pred_key_appendix) == 0]
         if dest_path is None:

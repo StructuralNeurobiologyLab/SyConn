@@ -316,7 +316,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
     if np.all(np.array(list(glia2ccsize_dict.values())) <= min_cc_size_glia): # no significant glia SV
         if return_removed_nodes:
             return [list(g.nodes())], []
-        return []
+        return [list(g.nodes())]
 
     tiny_glia_fragments = []
     for n in g_glia.nodes():
