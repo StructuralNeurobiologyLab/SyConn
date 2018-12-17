@@ -16,6 +16,8 @@ backend = "FS"
 
 # ---------- Rendering backend
 PYOPENGL_PLATFORM = 'osmesa'
+#PYOPENGL_PLATFORM = 'egl'
+
 
 # --------------------------------------------------------------- GLIA PARAMETER
 # min. connected component size of glia nodes/SV after thresholding glia proba
