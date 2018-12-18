@@ -1043,6 +1043,19 @@ class SuperSegmentationObject(object):
         self.clear_cache()
 
     def copy2dir(self, dest_dir, safe=True):
+        """
+        Usually dest_dir set to the 'ssv_dir' attribute of the target SSV (ssv_target).
+        E.g. if one wants to use this SSV (self), lets call it ssv_orig,
+        for GT purposes, then on can call ssv_orig.copy2dir(ssv_target.ssv_dir)
+         and all data contained in the SSD of ssv_orig will be copied to
+         the SSD of ssv_target.
+        Parameters
+        ----------
+        dest_dir : str
+            target directory to which data will be copied
+        safe : bool
+            if True, will not overwrite existing data
+        """
         # get all files in home directory
         fps = get_filepaths_from_dir(self.ssv_dir, ending=["pkl", "k.zip"])
         fnames = [os.path.split(fname)[1] for fname in fps]

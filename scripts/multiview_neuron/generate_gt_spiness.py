@@ -22,7 +22,7 @@ from sklearn.model_selection import train_test_split
 
 
 def generate_label_views(kzip_path, gt_type="spgt", n_voting=40, nb_views=2,
-                         ws=(256, 128), comp_window=8e3):
+                         ws=(256, 128), comp_window=8e3, initial_run=False):
     """
 
     Parameters
@@ -31,6 +31,11 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40, nb_views=2,
     gt_type :  str
     n_voting : int
         Number of collected nodes during BFS for majority vote (label smoothing)
+    nb_views : int
+    ws: Tuple[int]
+    comp_window : float
+    initial_run : bool
+        if True, will copy SSV from default SSD to SSD with version=gt_type
 
     Returns
     -------
@@ -41,6 +46,13 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40, nb_views=2,
     palette = generate_palette(n_labels)
     sso_id = int(re.findall("/(\d+).", kzip_path)[0])
     sso = SuperSegmentationObject(sso_id, version=gt_type)
+    if initial_run:  # use default SSD version
+        orig_sso = SuperSegmentationObject(sso_id)
+        orig_sso.copy2dir(dest_dir=sso.ssv_dir)
+    if not sso.attr_dict_exists:
+        msg = 'Attribute dict of original SSV was not copied successfully ' \
+              'to target SSD.'
+        raise ValueError(msg)
     sso.load_attr_dict()
     indices, vertices, normals = sso.mesh
 
@@ -198,7 +210,7 @@ def gt_generation_helper(args):
     np.save(dest_p + "label.npy", label_views)
     # np.save(dest_p + "index.npy", index_views)
 
-    # DEBUG PART START
+    # DEBUG PART START, write out images for manual inspection in Fiji
     from syconn.reps.super_segmentation_object import merge_axis02
     # raw_views_wire = merge_axis02(raw_views_wire)[:, :, None]
     raw_views = merge_axis02(raw_views)[:, :, None][:10]
