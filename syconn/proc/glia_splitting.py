@@ -10,7 +10,7 @@ import networkx as nx
 import numpy as np
 
 from syconn.backend.storage import AttributeDict
-from syconn.config.global_params import wd, glia_thresh, min_single_sv_size
+from syconn.config.global_params import wd, glia_thresh, min_single_sv_size, RENDERING_MAX_NB_SV
 from syconn.handler.basics import load_pkl2obj, chunkify, flatten_list, \
     write_txt2kzip, write_obj2pkl
 from syconn.mp import qsub_utils as qu
@@ -26,15 +26,14 @@ def qsub_glia_splitting():
     glia SVs
     """
     cc_dict = load_pkl2obj(wd + "/glia/cc_dict_rag_graphs.pkl")
-    huge_ssvs = [it[0] for it in cc_dict.items() if len(it[1]) > 3e5]
+    huge_ssvs = [it[0] for it in cc_dict.items() if len(it[1]) > RENDERING_MAX_NB_SV]
     if len(huge_ssvs):
-        print("%d huge SSVs detected (#SVs > 3e5)\n%s" %
-              (len(huge_ssvs), huge_ssvs))
+        print("{} huge SSVs detected (#SVs > {})".format(len(huge_ssvs), RENDERING_MAX_NB_SV))
     script_folder = os.path.dirname(
         os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
-    chs = chunkify(list(cc_dict.values()), 1000)
-    qu.QSUB_script(chs, "split_glia", pe="openmp", queue=None,
-                   script_folder=script_folder, n_max_co_processes=100)
+    chs = chunkify(list(cc_dict.values()), 2000)
+    qu.QSUB_script(chs, "split_glia", pe="openmp", queue=None, n_cores=4,
+                   script_folder=script_folder, n_max_co_processes=80)
 
 
 def collect_glia_sv():

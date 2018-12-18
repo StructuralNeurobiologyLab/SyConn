@@ -49,7 +49,8 @@ python_path = sys.executable
 
 def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 additional_flags='', suffix="", job_name="default",
-                script_folder=None, n_max_co_processes=None, sge_additional_flags=None):
+                script_folder=None, n_max_co_processes=None,
+                sge_additional_flags=None, iteration=0, max_iterations=3):
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
@@ -84,6 +85,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     n_max_co_processes: int or None
         limits the number of processes that are executed on the cluster at the 
         same time; None: no limit
+    iteration : int
+        This counter stores how often QSUB_script was called for the same job
+         submission. E.g. if jobs fail during a submission, it will be repeated
+         max_iterations times.
         
     Returns
     -------
@@ -94,7 +99,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     job_folder = qsub_work_folder+"/%s_folder%s/" % (name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
-    log_batchjob = initialize_logging("/%s_%s/" % (name, suffix),
+    log_batchjob = initialize_logging("{}".format(name + suffix),
                                       log_dir=job_folder)
 
     if sge_additional_flags is not None:
@@ -209,10 +214,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                       'as batch system. Converting "-V" to "--export=ALL".')
                 additional_flags.replace('-V ', '--export=ALL ')
             if not '--mem=' in additional_flags:
-                mem_lim = int(128*n_cores/20)
+                mem_lim = int(256*n_cores/20)
                 additional_flags += ' --mem={}G'.format(mem_lim)
-                log_batchjob.info('Memory requirements were not set explicitly. Setting to '
-                      '128GB*n_cores/20={} GB'.format(mem_lim))
+                log_batchjob.info('Memory requirements were not set explicitly. '
+                                  'Setting to 256 GB*n_cores/20={} GB'.format(mem_lim))
             if pe is not None:
                 queue_option = "--ntasks-per-node %d" % n_cores
             elif queue is not None:
@@ -221,7 +226,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 raise Exception("No queue or parallel environment defined")
             if priority is not None and priority != 0:
                 log_batchjob.warning('Priorities are not supported with SLURM.')
-            # added '--quiet' flag to prevent submission messages, errors will still be printed (https://slurm.schedmd.com/sbatch.html)
+            # added '--quiet' flag to prevent submission messages, errors will still be printed (https://slurm.schedmd.com/sbatch.html), DOES NOT WORK
             cmd_exec = "sbatch {0} --output={1} --error={2} --quiet --job-name={3} {4} {5}".format(
                 queue_option,
                 job_log_path,
@@ -247,6 +252,11 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     pbar.close()
     log_batchjob.info("All batch jobs have finished: %s" % name)
     out_files = glob.glob(path_to_out + "*.pkl")
+    if len(out_files) == 0:
+        msg = 'All submitted jobs have failed. Re-submission will not be initiated.' \
+              ' Please check your submitted code.'
+        log_batchjob.error(msg)
+        raise Exception(msg)
     if len(out_files) < len(params):
         log_batchjob.error("%d jobs appear to have failed" % (len(params) - len(out_files)))
         checklist = np.zeros(len(params), dtype=np.bool)
@@ -255,8 +265,15 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             checklist[int(re.findall("[\d]+", p)[-1])] = True
 
         log_batchjob.error("Missing: {}".format(np.where(~checklist)[0]))
-
         raise Exception("No success")
+        # TODO: Identify missing job IDs from error files and restart those only.
+        if iteration < max_iterations:
+            return QSUB_script(params, name, queue=queue, pe=pe, n_cores=n_cores,
+                        priority=priority,
+                        additional_flags='', suffix=suffix, job_name=job_name,
+                        script_folder=script_folder, n_max_co_processes=n_max_co_processes,
+                        sge_additional_flags=sge_additional_flags, iteration=iteration+1,
+                        max_iterations=max_iterations)
 
     return path_to_out
 

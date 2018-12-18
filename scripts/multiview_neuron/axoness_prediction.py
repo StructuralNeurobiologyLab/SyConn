@@ -47,7 +47,7 @@ if __name__ == "__main__":
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
                                  n_max_co_processes=25, pe="openmp", queue=None,
                                  script_folder=script_folder, n_cores=10,
-                                 suffix="_axoness", additional_flags="-V --gres=gpu:1")
+                                 suffix="_axoness", additional_flags="--gres=gpu:1")  # removed -V
     res = find_missing_sv_attributes_in_ssv(ssd, pred_key, n_cores=10)
     if len(res) > 0:
         print("Attribute '{}' missing for follwing"

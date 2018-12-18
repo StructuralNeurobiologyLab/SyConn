@@ -39,6 +39,7 @@ if __name__ == "__main__":
     np.random.seed(0)
     ssv_ids = ssd.ssv_ids
     np.random.shuffle(ssv_ids)
+    # TODO: use BATCHJOB Script
     err = start_multiprocess_imap(celltype_predictor, chunkify(ssd.ssv_ids, 15),
                                   nb_cpus=6)
     err = np.concatenate(err)

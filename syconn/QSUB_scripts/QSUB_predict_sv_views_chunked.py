@@ -17,12 +17,12 @@ from syconn.backend.storage import AttributeDict, CompressedStorage
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
 
-with open(path_storage_file) as f:
+with open(path_storage_file, 'rb') as f:
     args = []
     while True:
         try:
             args.append(pkl.load(f))
-        except:
+        except EOFError:
             break
 
 so_chunk_paths = args[0]
@@ -45,8 +45,9 @@ for p in so_chunk_paths:
     view_dc = CompressedStorage(view_dc_p, disable_locking=True)
     svixs = list(view_dc.keys())
     views = list(view_dc.values())
-    if raw_only:
-        views = views[:, :1]
+    if raw_only and views[0].shape[1] != 1:
+        for ii in range(len(views)):
+            views[ii] = views[ii][:, 1]
     sd = sos_dict_fact(svixs, **so_kwargs)
     sos = init_sos(sd)
     probas = predict_views(model, views, sos, return_proba=True,

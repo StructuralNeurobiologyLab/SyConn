@@ -12,9 +12,29 @@ import networkx as nx
 
 
 if __name__ == "__main__":
-    # path to networkx file containing the initial rag, create alternative formats
-    rag_fname = wd + "/rag.nx"
-    G = nx.read_edgelist(rag_fname, nodetype=int, delimiter=',')
+    # path to networkx file containing the initial rag, TODO: create alternative formats
+    G = nx.Graph()  # TODO: Make this more general
+    with open('/wholebrain/songbird/j0126/RAGs/v4b_20180407_v4b_20180407_merges_newcb_ids_cbsplits.txt', 'r') as f:
+        for l in f.readlines():
+            edges = [int(v) for v in re.findall('(\d+)', l)]
+            G.add_edge(edges[0], edges[1])
+
+    all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
+    log_main.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
+
+    # add single SV connected components to initial graph
+    sd = SegmentationDataset(obj_type='sv', working_dir=wd)
+    sv_ids = sd.ids
+    diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
+    log_main.info('Found {} single connected component SVs which were missing in initial RAG.'.format(len(diff)))
+
+    for ix in diff:
+        G.add_node(ix)
+
+    all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
+    log_main.info("Found {} SVs in initial RAG after adding size-one connected "
+                  "components. Writing kml text file".format(len(all_sv_ids_in_rag)))
+
     if not os.path.isdir(wd + "/glia/"):
         os.makedirs(wd + "/glia/")
     transform_rag_edgelist2pkl(G)

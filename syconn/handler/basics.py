@@ -657,7 +657,7 @@ def prase_cc_dict_from_txt(txt):
     """
     cc_dict = {}
     for line in txt.splitlines()[::4]:
-        line_nb = np.array(re.findall("(\d+)", line), dtype=np.uint)
+        line_nb = np.array(re.findall("(\d+)", line.decode()), dtype=np.uint)
         curr_ixs = line_nb[3:]
         cc_ix = line_nb[0]
         curr_ixs = curr_ixs[curr_ixs != 0]

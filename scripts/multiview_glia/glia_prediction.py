@@ -25,10 +25,11 @@ if __name__ == "__main__":
     assert os.path.isfile(init_rag_p), "Initial RAG could not be found at %s."\
                                        % init_rag_p
     init_rag = parse_cc_dict_from_kml(init_rag_p)
-
+    print('Found {} CCs with a total of {} SVs in inital RAG.'
+          ''.format(len(init_rag), np.sum([len(v) for v in init_rag.values()])))
     # chunk them
     sd = SegmentationDataset("sv", working_dir=wd)
-    multi_params = chunkify(sd.so_dir_paths, 75)
+    multi_params = chunkify(sd.so_dir_paths, 100)
     # get model properties
     m = get_glia_model()
     model_kwargs = dict(model_path=m._path,
@@ -48,14 +49,14 @@ if __name__ == "__main__":
     # randomly assign to gpu 0 or 1
     for par in multi_params:
         mk = par[1]
-        mk["init_gpu"] = np.random.rand(0, 2)
+        mk["init_gpu"] = 0  # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
     script_folder = os.path.dirname(
         os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
                                  n_max_co_processes=25, pe="openmp",
                                  queue=None, n_cores=10, suffix="_glia",
                                  script_folder=script_folder,
-                                 additional_flags="-V")
+                                 additional_flags="--gres=gpu:1")  # removed -V
     res = find_missing_sv_attributes(sd, pred_key, n_cores=10)
     if len(res) > 0:
         print("Attribute '{}' missing for follwing"

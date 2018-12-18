@@ -44,5 +44,6 @@ for g in ch:
     sso._rag = new_G
     sso.render_views(add_cellobjects=False, woglia=False, overwrite=True,
                      skip_indexviews=True)
+
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

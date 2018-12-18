@@ -9,6 +9,7 @@ from syconn.handler.logger import log_main
 from syconn.config.global_params import wd, RENDERING_MAX_NB_SV
 from syconn.mp import qsub_utils as qu
 from syconn.handler.basics import chunkify, parse_cc_dict_from_kml
+from syconn.reps.rep_helper import knossos_ml_from_ccs
 from syconn.reps.segmentation_helper import find_missing_sv_views
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
@@ -18,7 +19,7 @@ import re
 
 
 if __name__ == "__main__":
-    N_JOBS = 340
+    N_JOBS = 360
     np.random.seed(0)
     # generic QSUB script folder
     script_folder = os.path.dirname(os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
@@ -30,11 +31,12 @@ if __name__ == "__main__":
     # init_rag = parse_cc_dict_from_kml(init_rag_p)
     # all_sv_ids_in_rag = np.concatenate(list(init_rag.values()))
 
-    G = nx.Graph()  # TODO: del and uncomment lines above
+    G = nx.Graph()  # TODO: Make this more general
     with open('/wholebrain/songbird/j0126/RAGs/v4b_20180407_v4b_20180407_merges_newcb_ids_cbsplits.txt', 'r') as f:
         for l in f.readlines():
             edges = [int(v) for v in re.findall('(\d+)', l)]
             G.add_edge(edges[0], edges[1])
+
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
     log_main.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
 
@@ -48,22 +50,30 @@ if __name__ == "__main__":
         G.add_node(ix)
 
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
-    log_main.info("Found {} SVs in initial RAG after adding size-one connected components."
-          " Starting sample location caching and then view rendering.".format(len(all_sv_ids_in_rag)))
+    log_main.info("Found {} SVs in initial RAG after adding size-one connected "
+                  "components. Writing kml text file".format(len(all_sv_ids_in_rag)))
 
-    # # # preprocess sample locations
-    # ssd = SuperSegmentationDataset(working_dir=wd)
-    # sd = ssd.get_segmentationdataset("sv")
-    # # chunk them
-    # multi_params = chunkify(sd.so_dir_paths, 1000)
-    # # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
-    # so_kwargs = dict(working_dir=wd)
-    # multi_params = [[par, so_kwargs] for par in multi_params]
-    # path_to_out = qu.QSUB_script(multi_params, "sample_location_caching",
-    #                              n_max_co_processes=300, pe="openmp", queue=None,   # TODO: n_max_co_processes=200
-    #                              script_folder=script_folder, suffix="")
+    # write out readable format for 'glia_prediction.py'
+    ccs = [[n for n in cc] for cc in nx.connected_component_subgraphs(G)]
+    kml = knossos_ml_from_ccs([np.sort(cc)[0] for cc in ccs], ccs)
+    with open(wd + "initial_rag.txt", 'w') as f:
+        f.write(kml)
+
+    log_main.info("Starting sample location caching.")
+    # # preprocess sample locations
+    ssd = SuperSegmentationDataset(working_dir=wd)
+    sd = ssd.get_segmentationdataset("sv")
+    # chunk them
+    multi_params = chunkify(sd.so_dir_paths, 1000)
+    # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
+    so_kwargs = dict(working_dir=wd)
+    multi_params = [[par, so_kwargs] for par in multi_params]
+    path_to_out = qu.QSUB_script(multi_params, "sample_location_caching",
+                                 n_max_co_processes=300, pe="openmp", queue=None,
+                                 script_folder=script_folder, suffix="")
 
     # generate parameter for view rendering of individual SSV
+    log_main.info("Starting view rendering.")
     multi_params = []
     for cc in nx.connected_component_subgraphs(G):
         multi_params.append(cc)
@@ -72,9 +82,11 @@ if __name__ == "__main__":
     # identify huge SSVs and process them individually on whole cluster
     nb_svs = np.array([g.number_of_nodes() for g in multi_params])
     big_ssv = multi_params[nb_svs > RENDERING_MAX_NB_SV]
+
     for kk, g in enumerate(big_ssv[::-1]):
         # Create SSV object
         sv_ixs = np.sort(list(g.nodes()))
+
         log_main.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(
             kk+1, len(big_ssv), len(sv_ixs)))
         sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
@@ -89,17 +101,17 @@ if __name__ == "__main__":
                          skip_indexviews=True, woglia=False,
                          qsub_pe="openmp", overwrite=True, qsub_co_jobs=N_JOBS)
 
-    # # render small SSV without overhead and single cpus on whole cluster
-    # multi_params = multi_params[nb_svs <= RENDERING_MAX_NB_SV]
-    # np.random.shuffle(multi_params)
-    # multi_params = chunkify(multi_params, 2000)
-    #
-    # # list of SSV IDs and SSD parameters need to be given to a single QSUB job
-    # multi_params = [(ixs, wd, version) for ixs in multi_params]
-    # path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
-    #                              n_max_co_processes=N_JOBS, pe="openmp", queue=None,
-    #                              script_folder=script_folder, suffix="")
-    #
+    # render small SSV without overhead and single cpus on whole cluster
+    multi_params = multi_params[nb_svs <= RENDERING_MAX_NB_SV]
+    np.random.shuffle(multi_params)
+    multi_params = chunkify(multi_params, 2000)
+
+    # list of SSV IDs and SSD parameters need to be given to a single QSUB job
+    multi_params = [(ixs, wd, version) for ixs in multi_params]
+    path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
+                                 n_max_co_processes=N_JOBS, pe="openmp", queue=None,
+                                 script_folder=script_folder, suffix="")
+
     # check completeness
     sd = SegmentationDataset("sv", working_dir=wd)
     res = find_missing_sv_views(sd, woglia=False, n_cores=10)

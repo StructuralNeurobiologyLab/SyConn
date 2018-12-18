@@ -33,7 +33,7 @@ if __name__ == "__main__":
     qu.QSUB_script(multi_params, "predict_spiness_chunked",
                    n_max_co_processes=25, pe="openmp", queue=None,
                    script_folder=script_folder, n_cores=10,
-                   suffix="",  additional_flags="-V --gres=gpu:1")
+                   suffix="",  additional_flags="--gres=gpu:1")  # removed -V
 
     # map semantic spine segmentation of multi views on SSV mesh
     multi_params = ssd.ssv_ids
@@ -46,4 +46,4 @@ if __name__ == "__main__":
 
     qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=150,
                    pe="openmp", queue=None, script_folder=script_folder,
-                   n_cores=2, suffix="", additional_flags="-V")
+                   n_cores=2, suffix="", additional_flags="--gres=gpu:1")  # removed -V

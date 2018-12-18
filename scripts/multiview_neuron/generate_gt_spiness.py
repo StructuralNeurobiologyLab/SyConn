@@ -106,9 +106,8 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40, nb_views=2,
     index_views = render_sso_coords_index_views(sso, locs, rot_mat=rot_mat, verbose=True,
                                                 nb_views=nb_views, ws=ws, comp_window=comp_window)
     raw_views = render_sso_coords(sso, locs, nb_views=nb_views, ws=ws,
-                                  comp_window=comp_window, verbose=True, rot_mat=rot_mat)
-    # raw_views_wire = render_sso_coords(sso, locs, wire_frame=True,
-    #  ws=(2048, 1024), nb_views=nb_views, rot_mat=rot_mat)
+                                  comp_window=comp_window, verbose=True,
+                                  rot_mat=rot_mat)
     return raw_views, label_views, index_views
 
 

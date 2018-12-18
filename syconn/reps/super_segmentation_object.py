@@ -1228,7 +1228,7 @@ class SuperSegmentationObject(object):
                 raise RuntimeError('QSUB has to be enabled when processing '
                                    'huge SSVs.')
             elif qu.__BATCHJOB__:
-                params = chunkify(params, 1600)
+                params = chunkify(params, 2000)
                 so_kwargs = {'version': self.svs[0].version,
                              'working_dir': self.working_dir,
                              'obj_type': self.svs[0].type}

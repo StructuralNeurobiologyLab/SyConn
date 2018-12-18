@@ -47,6 +47,9 @@ def initialize_logging(log_name, log_dir=None):
     ----------
     log_name : str
         Name of logger
+    log_dir : str
+        Set log_dir specifically. Will then create a filehandler and ignore the
+         state of global_params.DISABLE_FILE_LOGGING state.
 
     Returns
     -------
@@ -63,7 +66,7 @@ def initialize_logging(log_name, log_dir=None):
     coloredlogs.install(level='DEBUG', logger=logger)
     logger.setLevel(logging.DEBUG)
 
-    if not global_params.DISABLE_FILE_LOGGING:
+    if not global_params.DISABLE_FILE_LOGGING or log_dir is not None:
         # create file handler which logs even debug messages
         if log_dir is None:
             log_dir = os.path.expanduser('~') + "/SyConn/logs/"
