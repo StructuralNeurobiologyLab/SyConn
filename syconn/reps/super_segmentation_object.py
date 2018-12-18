@@ -1816,17 +1816,20 @@ class SuperSegmentationObject(object):
                 shortest_paths_dir = os.path.split(dest_path)[0]
             else:
                 shortest_paths_dir = None
-            log_reps.debug("Splitting glia in SSV {} with {} SV's.".format(self.id, len(self.svs)))
-            start = time.time()
+            if verbose:
+                log_reps.debug("Splitting glia in SSV {} with {} SV's.".format(
+                    self.id, len(self.svs)))
+                start = time.time()
             nonglia_ccs, glia_ccs = split_glia(self, thresh=thresh,
-                        pred_key_appendix=pred_key_appendix,
+                        pred_key_appendix=pred_key_appendix, verbose=verbose,
                         shortest_paths_dest_dir=shortest_paths_dir)
-            log_reps.debug("Splitting glia in SSV %d with %d SV's finished after "
-                           "%.4gs." % (self.id, len(self.svs), time.time() - start))
+            if verbose:
+                log_reps.debug("Splitting glia in SSV %d with %d SV's finished "
+                               "after %.4gs." % (self.id, len(self.svs),
+                                                 time.time() - start))
             non_glia_ccs_ixs = [[so.id for so in nonglia] for nonglia in
                                 nonglia_ccs]
-            glia_ccs_ixs = [[so.id for so in glia] for glia in
-                            glia_ccs]
+            glia_ccs_ixs = [[so.id for so in glia] for glia in glia_ccs]
             self.attr_dict["glia_svs"] = glia_ccs_ixs
             self.attr_dict["nonglia_svs"] = non_glia_ccs_ixs
             self.save_attributes(["glia_svs", "nonglia_svs"],

@@ -22,7 +22,7 @@ PYOPENGL_PLATFORM = 'osmesa'
 min_cc_size_glia = 8e3  # in nm; L1-norm on vertex bounding box
 # min. connected component size of neuron nodes/SV after thresholding glia proba
 min_cc_size_neuron = 8e3  # in nm; L1-norm on vertex bounding box
-min_single_sv_size = 30000  # in number of voxels
+
 glia_thresh = 0.161489   # Threshold for glia classification
 SUBCC_SIZE_BIG_SSV = 35  # number of sv used during local rendering. The total number of SV used are SUBCC_SIZE_BIG_SSV + 2*(SUBCC_CHUNKE_SIZE_BIG_SSV-1)
 RENDERING_MAX_NB_SV = 5e3

@@ -5,12 +5,11 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 import os
-
 import networkx as nx
 import numpy as np
 
 from syconn.backend.storage import AttributeDict
-from syconn.config.global_params import wd, glia_thresh, min_single_sv_size, RENDERING_MAX_NB_SV
+from syconn.config.global_params import wd, glia_thresh, RENDERING_MAX_NB_SV
 from syconn.handler.basics import load_pkl2obj, chunkify, flatten_list, \
     write_txt2kzip, write_obj2pkl
 from syconn.mp import qsub_utils as qu
@@ -18,6 +17,7 @@ from syconn.mp.mp_utils import start_multiprocess_imap as start_multiprocess
 from syconn.reps.rep_helper import knossos_ml_from_ccs
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
+from syconn.proc.graphs import create_ccsize_dict
 
 
 def qsub_glia_splitting():
@@ -31,7 +31,7 @@ def qsub_glia_splitting():
         print("{} huge SSVs detected (#SVs > {})".format(len(huge_ssvs), RENDERING_MAX_NB_SV))
     script_folder = os.path.dirname(
         os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
-    chs = chunkify(list(cc_dict.values()), 2000)
+    chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True), 4000)
     qu.QSUB_script(chs, "split_glia", pe="openmp", queue=None, n_cores=4,
                    script_folder=script_folder, n_max_co_processes=80)
 
@@ -112,53 +112,80 @@ def collect_gliaSV_helper_chunked(path):
     return glia_preds
 
 
-def write_glia_rag(path2rag, suffix=""):
-    assert os.path.isfile(path2rag), "Reconnect RAG has to be given."
-    g = nx.read_edgelist(path2rag, nodetype=int,
-                         delimiter=',')
-    glia_svs = np.load(wd + "/glia/glia_svs.npy")
+def write_glia_rag(rag, min_ssv_size, suffix=""):
+    """
+    Stores glia and neuron RAGs in "wd + /glia/" or "wd + /neuron/" as networkx
+     edgelist and as knossos merge list.
+
+    Parameters
+    ----------
+    rag : str or nx.Graph
+    min_ssv_size : float
+        Bounding box diagonal in NM
+    suffix : str
+        Suffix for saved RAGs
+    Returns
+    -------
+
+    """
+    if type(rag) is str:
+        assert os.path.isfile(rag), "RAG has to be given."
+        g = nx.read_edgelist(rag, nodetype=np.uint, delimiter=',')
+    else:
+        g = rag
+    # create neuron RAG by glia removal
     neuron_g = g.copy()
+    glia_svs = np.load(wd + "/glia/glia_svs.npy")
     for ix in glia_svs:
-        try:
-            neuron_g.remove_node(ix)
-        except:
-            continue
+        neuron_g.remove_node(ix)
     # create glia rag by removing neuron sv's
     glia_g = g.copy()
     for ix in neuron_g.nodes():
         glia_g.remove_node(ix)
-    # add single CCs with single SV manually
+
+    # create dictionatry with CC sizes (BBD)
+    sds = SegmentationDataset("sv", working_dir=wd)
+    sv_size_dict = {}
+    for sv in sds.sos:
+        sv_size_dict[sv.id] = sv.mesh_bb
+    ccsize_dict = create_ccsize_dict(g, sv_size_dict)
+
+    # add CCs with single neuron SV manually
     neuron_ids = neuron_g.nodes()
     all_neuron_ids = np.load(wd + "/glia/neuron_svs.npy")
-    sds = SegmentationDataset("sv", working_dir=wd)
-    all_size_dict = {}
-    for i in range(len(sds.ids)):
-        sv_ix, sv_size = sds.ids[i], sds.sizes[i]
-        all_size_dict[sv_ix] = sv_size
-    missing_neuron_svs = set(all_neuron_ids).difference(neuron_ids)
+    # remove small Neuron CCs
+    missing_neuron_svs = set(all_neuron_ids).difference(set(neuron_ids))
+    if len(missing_neuron_svs) > 0:
+        print("Missing %d glia CCs with one SV." % len(missing_neuron_svs))
+        raise ValueError
     before_cnt = len(neuron_g.nodes())
-    for ix in missing_neuron_svs:
-        if all_size_dict[ix] > min_single_sv_size:
-            neuron_g.add_node(ix)
-            neuron_g.add_edge(ix, ix)
-    print("Added %d neuron CCs with one SV." % (
-                len(neuron_g.nodes()) - before_cnt))
-    ccs = sorted(list(nx.connected_components(neuron_g)), reverse=True, key=len)
+    for ix in neuron_ids:
+        if ccsize_dict[ix] < min_ssv_size:
+            neuron_g.remove_node(ix)
+    print("Removed %d neuron CCs with single SV because of size." %
+          (len(neuron_g.nodes()) - before_cnt))
+    ccs = list(nx.connected_components(neuron_g))
     txt = knossos_ml_from_ccs([list(cc)[0] for cc in ccs], ccs)
     write_txt2kzip(wd + "/glia/neuron_rag_ml%s.k.zip" % suffix, txt,
                    "mergelist.txt")
     nx.write_edgelist(neuron_g, wd + "/glia/neuron_rag%s.bz2" % suffix)
     print("Nb neuron CC's:", len(ccs), len(ccs[0]))
+    print("Nb neuron SVs:", len([n for cc in ccs for n in cc]))
+
     # add glia CCs with single SV
-    missing_glia_svs = set(glia_svs).difference(glia_g.nodes())
+    glia_ids = neuron_g.nodes()
+    missing_glia_svs = set(glia_svs).difference(set(glia_ids))
+    if len(missing_glia_svs) > 0:
+        print("Missing %d glia CCs with one SV." % len(missing_glia_svs))
+        raise ValueError
     before_cnt = len(glia_g.nodes())
-    for ix in missing_glia_svs:
-        if all_size_dict[ix] > min_single_sv_size:
-            glia_g.add_node(ix)
-            glia_g.add_edge(ix, ix)
-    print("Added %d glia CCs with one SV." % (len(glia_g.nodes()) - before_cnt))
+    for ix in glia_ids:
+        if ccsize_dict[ix] < min_ssv_size:
+            glia_g.remove_node(ix)
+    print("Removed %d glia CCs because of size." % (len(glia_g.nodes()) - before_cnt))
     ccs = list(nx.connected_components(glia_g))
-    print("Nb glia CC's:", len(ccs))
+    print("Nb glia CCs:", len(ccs))
+    print("Nb glia SVs:", len([n for cc in ccs for n in cc]))
     nx.write_edgelist(glia_g, wd + "/glia/glia_rag%s.bz2" % suffix)
     txt = knossos_ml_from_ccs([list(cc)[0] for cc in ccs], ccs)
     write_txt2kzip(wd + "/glia/glia_rag_ml%s.k.zip" % suffix, txt,

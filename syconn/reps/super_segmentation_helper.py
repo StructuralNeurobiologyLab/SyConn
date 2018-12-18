@@ -1075,24 +1075,24 @@ def _cnn_spiness2skel(sso, pred_key_appendix="", k=1, reload=False,
 def majority_vote_compartments(sso, ax_pred_key):
     g = sso.weighted_graph(add_node_attr=(ax_pred_key, ))
     soma_free_g = g.copy()
-    for n, d in g.nodes_iter(data=True):
+    for n, d in g.nodes(data=True):
         if d[ax_pred_key] == 2:
             soma_free_g.remove_node(n)
     ccs = list(nx.connected_component_subgraphs(soma_free_g))
     new_axoness_dc = nx.get_node_attributes(g, ax_pred_key)
     for cc in ccs:
-        preds = [d[ax_pred_key] for n, d in cc.nodes_iter(data=True)]
+        preds = [d[ax_pred_key] for n, d in cc.nodes(data=True)]
         cls, cnts = np.unique(preds, return_counts=True)
         majority = cls[np.argmax(cnts)]
         probas = np.array(cnts, dtype=np.float32) / np.sum(cnts)
         # positively bias dendrite assignment
         if (majority == 1) and (probas[cls == 1] < 0.66):
             majority = 0
-        for n in cc.nodes_iter():
+        for n in cc.nodes():
             new_axoness_dc[n] = majority
     nx.set_node_attributes(g, ax_pred_key, new_axoness_dc)
     new_axoness_arr = np.zeros((len(sso.skeleton["nodes"])))
-    for n, d in g.nodes_iter(data=True):
+    for n, d in g.nodes(data=True):
         new_axoness_arr[n] = d[ax_pred_key]
     sso.skeleton[ax_pred_key + "_comp_maj"] = new_axoness_arr
     sso.save_skeleton()

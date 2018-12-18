@@ -171,7 +171,7 @@ def merge_nodes(G, nodes, new_node):
 
 
 def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
-                     nb_cpus=1, pred_key_appendix=""):
+                     nb_cpus=1, pred_key_appendix="", verbose=False):
     """
     Split graph into glia and non-glua CC's.
 
@@ -185,6 +185,7 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
         between neuron type SV end nodes
     nb_cpus : int
     pred_key_appendix : str
+    verbose : bool
 
     Returns
     -------
@@ -192,7 +193,7 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
         Neuron, glia connected components
     """
     _ = start_multiprocess_obj("mesh_bb", [[sv, ] for sv in nx_g.nodes()],
-                               nb_cpus=nb_cpus)
+                               nb_cpus=nb_cpus, verbose=verbose)
     glia_key = "glia_probas"
     if clahe:
         glia_key += "_clahe"
@@ -204,7 +205,7 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
 
 
 def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
-               pred_key_appendix=""):
+               pred_key_appendix="", verbose=False):
     """
     Split SuperSegmentationObject into glia and non glia
     SegmentationObjects.
@@ -219,6 +220,7 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
         between neuron type SV end nodes
     pred_key_appendix : str
         Defines type of glia predictions
+    verbose : bool
 
     Returns
     -------
@@ -228,7 +230,8 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
     nx_G = sso.rag
     nonglia_ccs, glia_ccs = split_glia_graph(nx_G, thresh=thresh, clahe=clahe,
                             nb_cpus=sso.nb_cpus, shortest_paths_dest_dir=
-                            shortest_paths_dest_dir, pred_key_appendix=pred_key_appendix)
+                            shortest_paths_dest_dir, pred_key_appendix=pred_key_appendix,
+                                             verbose=verbose)
     return nonglia_ccs, glia_ccs
 
 
@@ -244,11 +247,13 @@ def create_ccsize_dict(g, sizes):
     return node2cssize_dict
 
 
-def get_glianess_dict(seg_objs, thresh, glia_key, nb_cpus=1, use_sv_volume=False):
+def get_glianess_dict(seg_objs, thresh, glia_key, nb_cpus=1,
+                      use_sv_volume=False, verbose=False):
     glianess = {}
     sizes = {}
     params = [[so, glia_key, thresh, use_sv_volume] for so in seg_objs]
-    res = start_multiprocess(glia_loader_helper, params, nb_cpus=nb_cpus)
+    res = start_multiprocess(glia_loader_helper, params, nb_cpus=nb_cpus,
+                             verbose=verbose, show_progress=verbose)
     for ii, el in enumerate(res):
         so = seg_objs[ii]
         glianess[so] = el[0]
