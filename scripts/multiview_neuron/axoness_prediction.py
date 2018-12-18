@@ -24,7 +24,7 @@ if __name__ == "__main__":
     ssd = SuperSegmentationDataset(working_dir=wd)
     sd = ssd.get_segmentationdataset("sv")
     # chunk them
-    multi_params = chunkify(sd.so_dir_paths, 75)
+    multi_params = chunkify(sd.so_dir_paths, 200)
     pred_key = "axoness_probas"  # leave this fixed because it is used all over
     # get model properties
     m = get_axoness_model()
@@ -41,7 +41,7 @@ if __name__ == "__main__":
     # randomly assign to gpu 0 or 1
     for par in multi_params:
         mk = par[1]
-        mk["init_gpu"] = np.random.rand(0, 2)
+        mk["init_gpu"] = 0  # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
     script_folder = os.path.dirname(
         os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",

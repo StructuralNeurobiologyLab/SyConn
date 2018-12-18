@@ -20,7 +20,7 @@ if __name__ == "__main__":
     # run semantic spine segmentation on multi views
     sd = ssd.get_segmentationdataset("sv")
     # chunk them
-    multi_params = chunkify(sd.so_dir_paths, 75)
+    multi_params = chunkify(sd.so_dir_paths, 200)
     pred_key = "spiness"
     # set model properties
     model_kwargs = dict(src=mpath_spiness, multi_gpu=False)
@@ -36,14 +36,18 @@ if __name__ == "__main__":
                    suffix="",  additional_flags="--gres=gpu:1")  # removed -V
 
     # map semantic spine segmentation of multi views on SSV mesh
-    multi_params = ssd.ssv_ids
-    np.random.shuffle(multi_params)
-    multi_params = chunkify(multi_params, 4000)
+    if not ssd.mapping_dict_exists:
+        raise ValueError('Mapping dict does not exist.')
+    multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
+    nb_svs_per_ssv = [len(ssd.mapping_dict[ssv_id]) for ssv_id in ssd.ssv_ids]
+    # sort ssv ids according to their number of SVs (descending)
+    multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
+    multi_params = chunkify(multi_params, 2000)
     # add ssd parameters
     kwargs_semseg2mesh = dict(semseg_key=pred_key)
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
                      kwargs_semseg2mesh) for ssv_ids in multi_params]
 
-    qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=150,
+    qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=190,
                    pe="openmp", queue=None, script_folder=script_folder,
-                   n_cores=2, suffix="", additional_flags="--gres=gpu:1")  # removed -V
+                   n_cores=2, suffix="", additional_flags="")  # removed -V

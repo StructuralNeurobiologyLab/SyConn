@@ -617,7 +617,7 @@ def overlap_mapping_sj_to_cs_via_cset(cs_sd, sj_sd, cs_cset,
     rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']]
 
     voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
-    conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd, version="new",
+    conn_sd = segmentation.SegmentationDataset("syn", working_dir=wd, version="new",
                                                create=True, n_folders_fs=n_folders_fs)
 
     for p in voxel_rel_paths:
@@ -651,13 +651,13 @@ def _overlap_mapping_sj_to_cs_via_cset_thread(args):
     wd, sj_ids, voxel_rel_paths, conn_sd_version, sj_sd_version, \
         cs_sd_version, cset_path = args
 
-    conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd,
+    conn_sd = segmentation.SegmentationDataset("syn", working_dir=wd,
                                                version=conn_sd_version,
                                                create=False)
     sj_sd = segmentation.SegmentationDataset("sj", working_dir=wd,
                                              version=sj_sd_version,
                                              create=False)
-    cs_sd = segmentation.SegmentationDataset("cs_ssv", working_dir=wd,
+    cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd,
                                              version=cs_sd_version,
                                              create=False)
 
@@ -708,10 +708,7 @@ def _overlap_mapping_sj_to_cs_via_cset_thread(args):
                                          'cs_id': cs_id,
                                          'id_sj_ratio': id_ratio,
                                          'id_cs_ratio': cs_ratio,
-                                         'background_overlap_ratio': zero_ratio,
-                                         'ssv_partners':
-                                             cs.lookup_in_attribute_dict(
-                                                 'neuron_partners')}
+                                         'background_overlap_ratio': zero_ratio}
 
                 next_conn_id += conn_sd.n_folders_fs
 
