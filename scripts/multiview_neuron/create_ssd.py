@@ -10,6 +10,7 @@ from syconn.config import global_params
 from syconn.handler.logger import log_main
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.basics import parse_cc_dict_from_kzip
+from syconn.proc import ssd_proc
 
 
 if __name__ == '__main__':
@@ -27,9 +28,22 @@ if __name__ == '__main__':
         kml_p, len(cc_dict), len(cc_dict_inv)))
     ssd = SuperSegmentationDataset(working_dir=global_params.wd, version='new',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
+    # create cache-arrays for frequently used attributes
     ssd.save_dataset_shallow()
     ssd.save_dataset_deep(qsub_pe="openmp", n_max_co_processes=200)
-    log_main.info('Finished SSD initialization. Writing individual SSV graphs.')
+    log_main.info('Finished SSD initialization. Starting cellular '
+                  'organelle mapping.')
+
+    # # map cellular organelles to SSVs
+    # TODO: increase number of jobs in the next two QSUB submissions and sort by SSV size (descending)
+    ssd_proc.aggregate_segmentation_object_mappings(
+        ssd, global_params.existing_cell_organelles, qsub_pe="openmp")
+    ssd_proc.apply_mapping_decisions(
+        ssd, global_params.existing_cell_organelles, qsub_pe="openmp")
+    log_main.info('Finished mapping of cellular organelles to SSVs. '
+                  'Writing individual SSV graphs.')
+
+    # Write SSV RAGs
     pbar = tqdm.tqdm(total=len(ssd.ssv_ids), mininterval=0.5)
     for ssv in ssd.ssvs:
         # get all nodes in CC of this SSV

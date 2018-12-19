@@ -19,6 +19,10 @@ wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
 path_initrag = '/wholebrain/songbird/j0126/RAGs/v4b_20180407_v4b_20180407_'\
                'merges_newcb_ids_cbsplits.txt'
 rag_suffix = ""  # identifier in case there will be more than one RAG
+
+# TODO: Add to 
+existing_cell_organelles = ['mi', 'sj', 'vc']
+
 # --------- Define backend
 backend = "FS"
 

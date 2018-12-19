@@ -162,6 +162,18 @@ def _write_super_segmentation_dataset_thread(args):
 def aggregate_segmentation_object_mappings(ssd, obj_types,
                                            stride=1000, qsub_pe=None,
                                            qsub_queue=None, nb_cpus=1):
+    """
+
+    Parameters
+    ----------
+    ssd : SuperSegmentationDataset
+    obj_types : List[str]
+    stride : int
+    qsub_pe : Optional[str]
+    qsub_queue : Optional[str]
+    nb_cpus : int
+    """
+
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
     assert "sv" in ssd.version_dict
@@ -226,6 +238,17 @@ def _aggregate_segmentation_object_mappings_thread(args):
 
 def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
                             qsub_queue=None, nb_cpus=1):
+    """
+
+    Parameters
+    ----------
+    ssd : SuperSegmentationDataset
+    obj_types : List[str]
+    stride : int
+    qsub_pe : Optional[str]
+    qsub_queue : Optional[str]
+    nb_cpus : int
+    """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
 

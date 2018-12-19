@@ -37,7 +37,7 @@ cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
 #sd = seg.SegmentationDataset("sv", working_dir=wd)
 #sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q', stride=10, n_max_co_processes=5000)
 
-# Map objects to sv's
+# Map objects to sv's # TODO: make dependent on global_params.existing_cell_organelles
 # About 0.2 h per object class
 #sd_proc.map_objects_to_sv(sd, "sj", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
 
@@ -55,15 +55,15 @@ cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
 #ssd.save_dataset_deep(qsub_pe="default", qsub_queue='all.q', n_max_co_processes=5000, stride=100)
 
 
-# Map objects to SSVs
+# Map objects to SSVs # TODO: This moved to scripts/multiview_neuron/create_ssd.py
 #from syconn.proc import ssd_proc
 
 #ssd = ss.SuperSegmentationDataset(working_dir=wd)
 
-# First step: Took 3.5h, but only on two workers
+# First step: Took 3.5h, but only on two workers # TODO: make dependent on global_params.existing_cell_organelles
 #ssd_proc.aggregate_segmentation_object_mappings(ssd, ['sj', 'vc', 'mi'], qsub_pe='default', qsub_queue='all.q')
 
-# Second step: 1h
+# Second step: 1h # TODO: make dependent on global_params.existing_cell_organelles
 #ssd_proc.apply_mapping_decisions(ssd, ['sj', 'vc', 'mi'], qsub_pe='default', qsub_queue='all.q')
 
 # Extract contact sites
