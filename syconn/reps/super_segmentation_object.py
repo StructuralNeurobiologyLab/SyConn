@@ -582,22 +582,28 @@ class SuperSegmentationObject(object):
             return -1
 
     def load_sv_graph(self):
-        # TODO: store edgelist as attribute during ssv SSD generation
         if os.path.isfile(self.edgelist_path):
             G = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
+        # # Might be useful as soon as global graph path is available
+        # else:
+        #     if os.path.isfile("{}neuron_rag_{}.bz2".format(
+        #             self.working_dir, global_params.rag_suffix)):
+        #         G_glob = nx.read_edgelist(self.working_dir + "neuron_rag.bz2",
+        #                                   nodetype=np.uint)
+        #         G = nx.Graph()
+        #         cc = nx.node_connected_component(G_glob, self.sv_ids[0])
+        #         assert len(set(cc).difference(set(self.sv_ids))) == 0, \
+        #             "SV IDs in graph differ from SSV SVs."
+        #         for e in G_glob.edges(cc):
+        #             G.add_edge(*e)
         else:
-            if os.path.isfile(self.working_dir + "neuron_rag.bz2"):
-                G_glob = nx.read_edgelist(self.working_dir + "neuron_rag.bz2",
-                                          nodetype=np.uint)
-                G = nx.Graph()
-                cc = nx.node_connected_component(G_glob, self.sv_ids[0])
-                assert len(set(cc).difference(set(self.sv_ids))) == 0, \
-                    "SV IDs in graph differ from SSV SVs."
-                for e in G_glob.edges(cc):
-                    G.add_edge(*e)
-            else:
-                raise ValueError("Could not find graph data for SSV {}."
-                                 "".format(self.id))
+            raise ValueError("Could not find graph data for SSV {}."
+                             "".format(self.id))
+        if len(set(list(G.nodes())).difference(set(self.sv_ids))) != 0:
+            msg = "SV IDs in graph differ from SSV SVs."
+            log_reps.error(msg)
+            raise ValueError(msg)
+        # create graph with SV nodes
         new_G = nx.Graph()
         for e in G.edges_iter():
             new_G.add_edge(self.get_seg_obj("sv", e[0]),

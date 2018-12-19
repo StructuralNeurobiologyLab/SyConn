@@ -162,7 +162,7 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
     Parameters
     ----------
     func_name : str
-    params : list of list
+    params : List[List]
         each element in params must be object with attribute func_name
         (+ optional: kwargs)
     debug : boolean
@@ -171,7 +171,7 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
 
     Returns
     -------
-    result: list
+    result: List
         list of function returns
     """
     # found NoDaemonProcess on stackexchange by Chris Arndt - enables
@@ -211,7 +211,6 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
     if verbose:
         print("\nTime to compute:", time.time() - start)
     return result
-
 
 
 def SUBP_script(params, name, suffix="", delay=0):

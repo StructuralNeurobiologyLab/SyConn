@@ -11,6 +11,14 @@
 wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
 # wd = '/mnt/j0126/areaxfs_v10/'
 
+# currently a mergelist of the following form is expected:
+# ID, ID
+#    .
+#    .
+# ID, ID
+path_initrag = '/wholebrain/songbird/j0126/RAGs/v4b_20180407_v4b_20180407_'\
+               'merges_newcb_ids_cbsplits.txt'
+rag_suffix = ""  # identifier in case there will be more than one RAG
 # --------- Define backend
 backend = "FS"
 

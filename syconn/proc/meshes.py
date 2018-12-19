@@ -108,10 +108,10 @@ class MeshObject(object):
     @property
     def normals(self):
         if self._normals is None or len(self._normals) != len(self.vertices):
-            print("Calculating normals")
+            log_proc.info("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         elif len(self._normals) != len(self.vertices):
-            print("Calculating normals, because their shape differs from"
+            log_proc.info("Calculating normals, because their shape differs from"
                   " vertices: %s (normals) vs. %s (vertices)" %
                   (str(self._normals.shape), str(self.vertices.shape)))
             self._normals = unit_normal(self.vertices, self.indices)
@@ -259,8 +259,8 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
         verts, ind, norm, _ = measure.marching_cubes_lewiner(
             volume, 0, gradient_direction=gradient_direction)
     except Exception as e:
-        print(e)
-        raise RuntimeError
+        log_proc.error(e)
+        raise RuntimeError(e)
     if pts.ndim == 2:  # account for [5, 5, 5] offset
         verts -= 5
     verts = np.array(verts) * downsampling + offset
@@ -890,7 +890,7 @@ def mesh_creator_sso(ssv):
         ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
         _ = ssv._load_obj_mesh(obj_type="conn", rewrite=False)
     except KeyError:
-        print("Loading 'conn' objects failed for SSV %s."
+        log_proc.error("Loading 'conn' objects failed for SSV %s."
               % ssv.id)
     ssv.clear_cache()
 
@@ -901,7 +901,7 @@ def mesh_chunk(args):
     ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
     obj_ixs = list(ad.keys())
     if len(obj_ixs) == 0:
-        print("EMPTY ATTRIBUTE DICT", attr_dir)
+        log_proc.warning("EMPTY ATTRIBUTE DICT", attr_dir)
         return
     voxel_dc = VoxelStorage(attr_dir + "/voxel.pkl", disable_locking=True)
     md = MeshStorage(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)

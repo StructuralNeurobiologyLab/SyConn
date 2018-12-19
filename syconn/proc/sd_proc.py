@@ -27,7 +27,7 @@ from ..proc.meshes import mesh_chunk
 
 def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
                      qsub_queue=None, nb_cpus=1, n_max_co_processes=100,
-                     compute_mesharea=False):
+                     compute_meshprops=False):
     """ Analyses the whole dataset and extracts and caches key information
 
     :param sd: SegmentationDataset
@@ -45,7 +45,7 @@ def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
         number of cores per worker for qsub jobs
     :param n_max_co_processes: int
         max number of workers running at the same time when using qsub
-    :param compute_mesharea: bool
+    :param compute_meshprops: bool
     """
 
     paths = sd.so_dir_paths
@@ -55,7 +55,7 @@ def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, sd.type, sd.version,
-                             sd.working_dir, recompute, compute_mesharea])
+                             sd.working_dir, recompute, compute_meshprops])
 
     # Running workers
 
@@ -80,8 +80,9 @@ def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
         raise Exception("QSUB not available")
 
     # Creating summaries
-    # This is a potential bottleneck for very large datasets
-
+    # TODO: This is a potential bottleneck for very large datasets
+    # TODO: resulting cache-arrays might have different lengths if attribute is missing in
+    # some dictionatries -> add checks!
     attr_dict = {}
     for this_attr_dict in results:
         for attribute in this_attr_dict:
@@ -102,7 +103,7 @@ def _dataset_analysis_thread(args):
     version = args[2]
     working_dir = args[3]
     recompute = args[4]
-    compute_mesharea = args[5]
+    compute_meshprops = args[5]
 
     global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[],
                             mesh_area=[])
@@ -133,7 +134,8 @@ def _dataset_analysis_thread(args):
                     so.attr_dict["rep_coord"] = so.rep_coord
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
-                    if compute_mesharea:
+                    if compute_meshprops:
+                        so.attr_dict["mesh_bb"] = so.mesh_bb
                         so.attr_dict["mesh_area"] = so.mesh_area    # TODO try except SV
 
                 for attribute in so.attr_dict.keys():

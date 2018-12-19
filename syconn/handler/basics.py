@@ -649,7 +649,7 @@ def prase_cc_dict_from_txt(txt):
 
     Parameters
     ----------
-    txt : str
+    txt : str or bytes
 
     Returns
     -------
@@ -657,7 +657,11 @@ def prase_cc_dict_from_txt(txt):
     """
     cc_dict = {}
     for line in txt.splitlines()[::4]:
-        line_nb = np.array(re.findall("(\d+)", line.decode()), dtype=np.uint)
+        if type(line) is bytes:
+            curr_line = line.decode()
+        else:
+            curr_line = line
+        line_nb = np.array(re.findall("(\d+)", curr_line), dtype=np.uint)
         curr_ixs = line_nb[3:]
         cc_ix = line_nb[0]
         curr_ixs = curr_ixs[curr_ixs != 0]
@@ -677,7 +681,7 @@ def parse_cc_dict_from_kml(kml_path):
     -------
     dict
     """
-    txt = open(kml_path, "rb").read()
+    txt = open(kml_path, "rb").read().decode()
     return prase_cc_dict_from_txt(txt)
 
 
@@ -692,7 +696,7 @@ def parse_cc_dict_from_kzip(k_path):
     -------
     dict
     """
-    txt = read_txt_from_zip(k_path, "mergelist.txt")
+    txt = read_txt_from_zip(k_path, "mergelist.txt").decode()
     return prase_cc_dict_from_txt(txt)
 
 

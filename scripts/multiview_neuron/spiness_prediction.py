@@ -39,7 +39,7 @@ if __name__ == "__main__":
     if not ssd.mapping_dict_exists:
         raise ValueError('Mapping dict does not exist.')
     multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
-    nb_svs_per_ssv = [len(ssd.mapping_dict[ssv_id]) for ssv_id in ssd.ssv_ids]
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id in ssd.ssv_ids])
     # sort ssv ids according to their number of SVs (descending)
     multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
     multi_params = chunkify(multi_params, 2000)

@@ -6,7 +6,7 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import os
 from syconn.handler.logger import log_main
-from syconn.config.global_params import wd, RENDERING_MAX_NB_SV
+from syconn.config.global_params import wd, RENDERING_MAX_NB_SV, path_initrag
 from syconn.mp import qsub_utils as qu
 from syconn.handler.basics import chunkify, parse_cc_dict_from_kml
 from syconn.reps.rep_helper import knossos_ml_from_ccs
@@ -32,7 +32,7 @@ if __name__ == "__main__":
     # all_sv_ids_in_rag = np.concatenate(list(init_rag.values()))
 
     G = nx.Graph()  # TODO: Make this more general
-    with open('/wholebrain/songbird/j0126/RAGs/v4b_20180407_v4b_20180407_merges_newcb_ids_cbsplits.txt', 'r') as f:
+    with open(path_initrag, 'r') as f:
         for l in f.readlines():
             edges = [int(v) for v in re.findall('(\d+)', l)]
             G.add_edge(edges[0], edges[1])
@@ -59,10 +59,9 @@ if __name__ == "__main__":
     with open(wd + "initial_rag.txt", 'w') as f:
         f.write(kml)
 
-    log_main.info("Starting sample location caching.")
     # # preprocess sample locations
-    ssd = SuperSegmentationDataset(working_dir=wd)
-    sd = ssd.get_segmentationdataset("sv")
+    log_main.info("Starting sample location caching.")
+    sd = SegmentationDataset("sv", working_dir=wd)
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 1000)
     # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
@@ -86,7 +85,6 @@ if __name__ == "__main__":
     for kk, g in enumerate(big_ssv[::-1]):
         # Create SSV object
         sv_ixs = np.sort(list(g.nodes()))
-
         log_main.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(
             kk+1, len(big_ssv), len(sv_ixs)))
         sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,

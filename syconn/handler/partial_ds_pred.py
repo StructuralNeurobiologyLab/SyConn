@@ -26,6 +26,7 @@ gpu_id = np.array(args[6], dtype=np.int)
 i = np.array(args[7], dtype=np.int)
 n = np.array(args[8], dtype=np.int)
 
-ps = tuple(np.array(str(ps).split('/'), dtype = np.int))
+ps = tuple(np.array(str(ps).split('/'), dtype=np.int))
 
-_pred_dataset(str(kd_p),str(kd_pred_p),str(cd_p), str(model_p),imposed_patch_size=ps,gpu_id=gpu_id, i=i, n=n)
+_pred_dataset(str(kd_p), str(kd_pred_p), str(cd_p), str(model_p),
+              imposed_patch_size=ps, gpu_id=gpu_id, i=i, n=n)

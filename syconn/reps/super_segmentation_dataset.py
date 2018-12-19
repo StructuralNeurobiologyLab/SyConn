@@ -87,11 +87,14 @@ class SuperSegmentationDataset(object):
             other_datasets = glob.glob(self.working_dir + "/%s_*" % self.type)
             max_version = -1
             for other_dataset in other_datasets:
-                other_version = \
-                    int(re.findall("[\d]+",
-                                   os.path.basename(other_dataset))[-1])
-                if max_version < other_version:
-                    max_version = other_version
+                try:
+                    other_version = \
+                        int(re.findall("[\d]+",
+                                       os.path.basename(other_dataset))[-1])
+                    if max_version < other_version:
+                        max_version = other_version
+                except IndexError:  # version is not an integer, found version could be e.g. 'tmp'
+                    pass
 
             self._version = max_version + 1
         else:
