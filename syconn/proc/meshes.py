@@ -12,29 +12,30 @@ from numba import jit
 from scipy import spatial, ndimage
 from skimage import measure
 from sklearn.decomposition import PCA
-from ..handler.basics import write_data2kzip, data2kzip
-from .image import apply_pca
-from ..proc import log_proc
 import openmesh
 from plyfile import PlyData, PlyElement
+from scipy.ndimage.morphology import binary_closing
+import tqdm
+try:
+    import vtkInterface
+    __vtk_avail__ = True
+except ImportError:
+    __vtk_avail__ = False
+
+from ..proc import log_proc
+from ..handler.basics import write_data2kzip, data2kzip
+from .image import apply_pca
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
 from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
     get_dataset_scaling
-import tqdm
+from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 try:
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 except ImportError as e:
     boundaryDistanceTransform, gaussianSmoothing = None, None
     log_proc.error('ModuleNotFoundError. Could not import VIGRA. '
                    'Mesh generation will not be possible.')
-from scipy.ndimage.morphology import binary_closing
-from ..proc import log_proc
-try:
-    import vtkInterface
-    __vtk_avail__ = True
-except ImportError:
-    __vtk_avail__ = False
-from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
+
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
            'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso']

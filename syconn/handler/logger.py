@@ -7,6 +7,7 @@
 import logging
 import coloredlogs
 import os
+
 from ..config import global_params
 
 __all__ = ['initialize_logging']

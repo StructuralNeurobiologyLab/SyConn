@@ -7,18 +7,16 @@
 
 import glob
 import numpy as np
-
-from ..reps import segmentation, connectivity_helper as ch, \
-    super_segmentation as ss, rep_helper
-
-from ..mp import qsub_utils as qu
-from ..mp import mp_utils as sm
 from collections import defaultdict
 import networkx as nx
 import os
 import scipy.spatial
-from syconn.backend.storage import AttributeDict, VoxelStorage
 
+from ..reps import segmentation, connectivity_helper as ch, \
+    super_segmentation as ss, rep_helper
+from ..mp import qsub_utils as qu
+from ..mp import mp_utils as sm
+from ..backend.storage import AttributeDict, VoxelStorage
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 

@@ -12,15 +12,18 @@ import os
 import re
 import scipy.spatial
 import shutil
-import sys
 import time
-import warnings
 from collections import Counter
 from scipy.misc import imsave
 from knossos_utils import skeleton
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
-from . import segmentation
+try:
+    from knossos_utils import mergelist_tools
+except ImportError:
+    from knossos_utils import mergelist_tools_fallback as mergelist_tools
+
+from . import segmentation  # TODO: del
 from . import super_segmentation_helper as ssh
 from .segmentation import SegmentationObject
 from ..proc.sd_proc import predict_sos_views
@@ -29,16 +32,12 @@ from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
 from ..config import parser
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
-from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage
+from ..backend.storage import CompressedStorage, MeshStorage
 from ..proc.graphs import split_glia, split_subcc_join, create_graph_from_coords
 from ..proc.meshes import write_mesh2kzip, merge_someshes, \
     compartmentalize_mesh, mesh2obj_file, write_meshes2kzip
 from ..proc.rendering import render_sampled_sso, multi_view_sso,\
     render_sso_coords, render_sso_coords_index_views
-try:
-    from knossos_utils import mergelist_tools
-except ImportError:
-    from knossos_utils import mergelist_tools_fallback as mergelist_tools
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
@@ -605,7 +604,7 @@ class SuperSegmentationObject(object):
             raise ValueError(msg)
         # create graph with SV nodes
         new_G = nx.Graph()
-        for e in G.edges_iter():
+        for e in G.edges():
             new_G.add_edge(self.get_seg_obj("sv", e[0]),
                            self.get_seg_obj("sv", e[1]))
         return new_G
@@ -656,7 +655,7 @@ class SuperSegmentationObject(object):
 
     def load_svixs(self):
         if not os.path.isfile(self.edgelist_path):
-            warnings.warn("Edge list of SSO %d does not exist. Return empty "
+            log_reps.warn("Edge list of SSO %d does not exist. Return empty "
                           "list.", RuntimeWarning)
             return []
         edges = self.load_edgelist()
@@ -701,7 +700,7 @@ class SuperSegmentationObject(object):
             if not "[Errno 13] Permission denied" in str(e):
                 pass
             else:
-                warnings.warn("Could not load SSO attributes to %s due to "
+                log_reps.warn("Could not load SSO attributes to %s due to "
                               "missing permissions." % self.attr_dict_path,
                               RuntimeWarning)
             attr_dict = {}
@@ -713,7 +712,7 @@ class SuperSegmentationObject(object):
             if not "[Errno 13] Permission denied" in str(e):
                 raise (IOError, e)
             else:
-                warnings.warn("Could not save SSO attributes to %s due to "
+                log_reps.warn("Could not save SSO attributes to %s due to "
                               "missing permissions." % self.attr_dict_path,
                               RuntimeWarning)
 
@@ -1198,7 +1197,7 @@ class SuperSegmentationObject(object):
 
     def render_views(self, add_cellobjects=False, verbose=False,
                      qsub_pe=None, overwrite=False, cellobjects_only=False,
-                     woglia=True, skip_indexviews=False, qsub_co_jobs=200):
+                     woglia=True, skip_indexviews=False, qsub_co_jobs=300):
         """
         Renders views for each SV based on SSV context and stores them
         on SV level. Usually only used once: for initial glia or axoness
@@ -2264,7 +2263,7 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
     for i in range(len(coords)):
         v = views[part_views[i]:part_views[i+1]]
         if np.sum(v) == 0 or np.sum(v) == np.prod(v.shape):
-            warnings.warn("Empty views detected after rendering.",
+            log_reps.warn("Empty views detected after rendering.",
                           RuntimeWarning)
         sv_obj = sos[i]
         sv_obj.save_views(views=v, woglia=woglia, index_views=index_views,

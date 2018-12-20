@@ -16,9 +16,9 @@ except ImportError:
           "Please install fasteners to enable locking (pip install fasteners).")
     LOCKING = False
 import os
-import warnings
 import time
 import shutil
+
 from ..extraction import log_extraction
 from ..handler.basics import write_obj2pkl, load_pkl2obj
 __all__ = ['FSBase', 'BTBase']

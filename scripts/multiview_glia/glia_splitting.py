@@ -8,7 +8,9 @@ import os
 import numpy as np
 import networkx as nx
 import re
-from syconn.config.global_params import wd, glia_thresh, min_cc_size_neuron, path_initrag, rag_suffix
+
+from syconn.config.global_params import wd, min_cc_size_neuron, path_initrag,\
+    rag_suffix
 from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
     write_glia_rag, transform_rag_edgelist2pkl
 from syconn.reps.segmentation import SegmentationDataset

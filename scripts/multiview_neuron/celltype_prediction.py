@@ -1,18 +1,16 @@
 # SyConn
 # Copyright (c) 2018 Philipp J. Schubert, J. Kornfeld
 # All rights reserved
+import numpy as np
+import tqdm
+
 from syconn.config import global_params
 from syconn.handler.logger import initialize_logging
 from syconn.handler.prediction import get_celltype_model
 from syconn.handler.basics import chunkify
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
 from syconn.reps.super_segmentation_helper import predict_sso_celltype
-from syconn.mp import qsub_utils as qu
-from syconn.mp.mp_utils import start_multiprocess_imap, start_multiprocess
-import numpy as np
-import tqdm
-import time
-import os
+from syconn.mp.mp_utils import start_multiprocess_imap
 
 
 def celltype_predictor(args):

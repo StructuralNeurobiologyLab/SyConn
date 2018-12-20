@@ -12,17 +12,15 @@ import os
 from scipy import spatial
 from sklearn import ensemble, cross_validation, externals
 from knossos_utils.chunky import load_dataset
-
 from knossos_utils import knossosdataset, skeleton_utils, skeleton
 
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold
 from ..backend.storage import AttributeDict, VoxelStorage
 from ..handler.basics import chunkify
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def filter_relevant_cs_agg(cs_agg, ssd):

@@ -15,10 +15,10 @@ except ImportError as e:
     __cv2__ = False
     createCLAHE = None
     equalizeHist = None
-import warnings
 from scipy import spatial, sparse, ndimage
 from sklearn.decomposition import PCA
 import tqdm
+
 from ..proc import log_proc
 
 
@@ -295,10 +295,9 @@ def remove_outlier(sv, edge_size):
               (sv[:, 1] < edge_size) & (sv[:, 2] >= 0) & (sv[:, 2] < edge_size)
     nb_outlier = np.sum(~inlier)
     if (float(nb_outlier) / len(sv)) > 0.5:
-        warnings.warn("Found %d/%d outlier after PCA while preprocessing"
+        log_proc.warn("Found %d/%d outlier after PCA while preprocessing"
                       "supervoexl. Removing %d%% of voxels" % (nb_outlier,
-                      len(sv), int(float(nb_outlier)/len(sv)*100)),
-                      RuntimeWarning)
+                      len(sv), int(float(nb_outlier)/len(sv)*100)))
     new_sv = sv[inlier]
     assert np.all(np.min(new_sv, axis=0) >= 0), \
         "%s" % np.min(new_sv, axis=0)

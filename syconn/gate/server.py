@@ -4,7 +4,6 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-import sys
 import copy
 import time
 import numpy as np
@@ -12,6 +11,7 @@ from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
 from flask import Flask
 import json
+
 from..gate import log_gate
 
 app = Flask(__name__)

@@ -17,6 +17,7 @@ except ImportError:
           "Please install fasteners to enable locking (pip install fasteners).")
     LOCKING = False
 import numpy as np
+
 from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
 from ..backend import StorageClass
 

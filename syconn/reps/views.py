@@ -5,9 +5,10 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-from ..handler.compression import load_lz4_compressed, save_lz4_compressed
 import numpy as np
 import os
+
+from ..handler.compression import load_lz4_compressed, save_lz4_compressed
 
 
 class ViewContainer(object):

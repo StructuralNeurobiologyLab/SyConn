@@ -130,16 +130,19 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
     if nb_cpus > 1:
         pool = MyPool(nb_cpus)
         if show_progress:
-            result = list(tqdm.tqdm(pool.imap(func, params), total=len(params), ncols=80, leave=False,
-                             unit='jobs', unit_scale=True, dynamic_ncols=False, mininterval=1))
+            result = list(tqdm.tqdm(pool.imap(func, params), total=len(params),
+                                    ncols=80, leave=False, unit='jobs',
+                                    unit_scale=True, dynamic_ncols=False,
+                                    mininterval=1))
         else:
             result = pool.imap(func, params)
         pool.close()
         pool.join()
     else:
         if show_progress:
-            pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False, mininterval=1,
-                                    unit='jobs', unit_scale=True, dynamic_ncols=False)
+            pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
+                             mininterval=1, unit='jobs', unit_scale=True,
+                             dynamic_ncols=False)
             result = []
             for p in params:
                 result.append(func(p))

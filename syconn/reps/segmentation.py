@@ -5,16 +5,13 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-
 import errno
-import os
 import re
 import networkx as nx
-
 from scipy import spatial
 from knossos_utils import knossosdataset
+from skimage.measure import mesh_surface_area
 
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 try:
     default_wd_available = True
     from ..config.global_params import wd
@@ -24,10 +21,12 @@ from ..config import parser
 from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
-from ..handler.basics import get_filepaths_from_dir, safe_copy, write_txt2kzip, temp_seed
+from ..handler.basics import get_filepaths_from_dir, safe_copy,\
+    write_txt2kzip, temp_seed
 from .segmentation_helper import *
 from ..proc import meshes
-from skimage.measure import mesh_surface_area
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
+
 
 
 class SegmentationDataset(object):

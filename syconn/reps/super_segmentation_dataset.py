@@ -5,28 +5,25 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from syconn.reps.super_segmentation_helper import create_sso_skeleton, extract_skel_features, associate_objs_with_skel_nodes
-from syconn.reps.super_segmentation_object import SuperSegmentationObject
 import numpy as np
 import re
 import glob
 import os
-from collections import Counter
 from multiprocessing.pool import ThreadPool
-
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
 from knossos_utils import knossosdataset
-from . import segmentation  # TODO: del
-# from ..reps import segmentation
-from ..config import parser
-from ..handler.basics import load_pkl2obj, write_obj2pkl
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
+
+from . import segmentation  # TODO: del
+from ..config import parser
+from ..handler.basics import load_pkl2obj, write_obj2pkl
+from ..reps.super_segmentation_helper import create_sso_skeleton
 from ..proc.ssd_assembly import assemble_from_mergelist
 from ..mp import qsub_utils as qu
 from .super_segmentation_object import SuperSegmentationObject

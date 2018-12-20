@@ -8,21 +8,19 @@
 from ctypes import sizeof, c_float, c_void_p, c_uint
 from PIL import Image
 from .image import rgb2gray, apply_clahe, normalize_img
-from scipy.ndimage.filters import gaussian_filter
 import numpy as np
 import time
-import sys
+import os
+import tqdm
 import warnings
+
 from ..config import global_params
 from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
 from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
     rgb2id_array, id2rgb_array_contiguous
-from .meshes import merge_meshes, get_random_centered_coords, \
-    MeshObject, calc_rot_matrices, flag_empty_spaces
-import os
-import tqdm
-
+from .meshes import merge_meshes, MeshObject, calc_rot_matrices, \
+    flag_empty_spaces
 try:
     import os
     if not os.environ.get('PYOPENGL_PLATFORM'):
@@ -42,12 +40,12 @@ if os.environ['PYOPENGL_PLATFORM'] == 'egl':
 elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
     from OpenGL.osmesa import *
 else:
-    raise NotImplementedError('PYOpenGL environment has to be "egl" or "osmesa".')
+    raise NotImplementedError('PYOpenGL environment has to be "egl" or'
+                              ' "osmesa".')
 
 
 # ------------------------------------------------------------------------------
 # General rendering code
-
 float_size = sizeof(c_float)
 vertex_offset = c_void_p(0 * float_size)
 normal_offset = c_void_p(3 * float_size)

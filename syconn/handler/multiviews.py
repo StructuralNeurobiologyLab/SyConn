@@ -7,8 +7,9 @@
 import numpy as np
 from numba import jit
 from scipy import spatial
-from ..proc.graphs import bfs_smoothing
 from knossos_utils.skeleton_utils import load_skeleton
+
+from ..proc.graphs import bfs_smoothing
 
 
 def parse_skelnodes_labels_to_mesh(kzip_path, sso, gt_type, n_voting=40):

@@ -14,9 +14,8 @@ import numpy as np
 import os
 import re
 from collections import Counter
-from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, AdaBoostClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from sklearn.externals import joblib
-from sklearn.metrics import precision_recall_fscore_support, precision_recall_curve
 import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
 from matplotlib import pyplot as plt
@@ -28,7 +27,6 @@ from ..reps import super_segmentation as ss
 from ..proc.stats import model_performance
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
-from ..config.global_params import wd
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 logger_skel = initialize_logging('skeleton')
 feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",

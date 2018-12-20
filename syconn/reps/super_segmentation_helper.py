@@ -6,7 +6,6 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import copy
-import itertools
 from collections import Counter
 from multiprocessing.pool import ThreadPool
 import networkx as nx
@@ -14,18 +13,20 @@ import numpy as np
 import os
 import scipy
 import scipy.ndimage
-from knossos_utils.skeleton_utils import annotation_to_nx_graph, load_skeleton as load_skeleton_kzip
+from collections import defaultdict
+from scipy import spatial
+from knossos_utils.skeleton_utils import annotation_to_nx_graph,\
+    load_skeleton as load_skeleton_kzip
+
 from .rep_helper import assign_rep_values, colorcode_vertices
 from . import segmentation
-from ..backend.storage import MeshStorage
 from .segmentation import SegmentationObject
-from .segmentation_helper import load_skeleton, find_missing_sv_views, find_missing_sv_attributes, find_missing_sv_skeletons
-from ..mp.mp_utils import start_multiprocess, start_multiprocess_obj
+from .segmentation_helper import load_skeleton, find_missing_sv_views,\
+    find_missing_sv_attributes, find_missing_sv_skeletons
+from ..mp.mp_utils import start_multiprocess_obj
 skeletopyze_available = False
 from ..reps import log_reps
-from scipy import spatial
 from ..proc.meshes import in_bounding_box, write_mesh2kzip
-from collections import defaultdict
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 

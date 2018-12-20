@@ -18,12 +18,15 @@ from syconn.handler.logger import initialize_logging
 if __name__ == "__main__":
     log = initialize_logging('neuron_view_rendering',
                              global_params.wd + '/logs/')
-    # TODO: currently working directory has to be set globally in global_params and is not adjustable here because all qsub jobs will start a script referring to 'global_params.wd'
+    # TODO: currently working directory has to be set globally in global_params
+    #  and is not adjustable here because all qsub jobs will start a script
+    #  referring to 'global_params.wd'
     # view rendering prior to glia removal, choose SSD accordingly
     ssd = SuperSegmentationDataset(working_dir=global_params.wd)
 
     #  TODO: use actual size criteria, e.g. number of sampling locations
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id in ssd.ssv_ids])
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
+                               for ssv_id in ssd.ssv_ids])
 
     # render normal size SSVs
     size_mask = nb_svs_per_ssv <= global_params.RENDERING_MAX_NB_SV
@@ -53,7 +56,8 @@ if __name__ == "__main__":
         log.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(
             kk+1, len(big_ssv), len(ssv.sv_ids)))
         ssv.render_views(add_cellobjects=True, cellobjects_only=False,
-                         woglia=True, qsub_pe="openmp", overwrite=True)
+                         woglia=True, qsub_pe="openmp", overwrite=True,
+                         qsub_co_jobs=340)
 
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=10)
     if len(res) != 0:

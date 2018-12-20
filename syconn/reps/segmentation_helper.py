@@ -4,15 +4,16 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
 import glob
 import numpy as np
 from scipy import ndimage
 import os
-from syconn.backend.storage import AttributeDict, CompressedStorage, MeshStorage, VoxelStorage, \
-    SkeletonStorage
+
+from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
+    VoxelStorage, SkeletonStorage
 from ..handler.basics import chunkify
 from ..mp.mp_utils import start_multiprocess_imap
-
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 

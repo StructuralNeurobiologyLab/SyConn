@@ -11,7 +11,6 @@ import requests
 import json
 sys.dont_write_bytecode = True
 import time
-import lz4
 import numpy as np
 try:
     try:

@@ -6,8 +6,9 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import time
 import numpy as np
-from ..reps import super_segmentation as ss
 import networkx as nx
+
+from ..reps import super_segmentation as ss
 from ..reps import segmentation
 
 

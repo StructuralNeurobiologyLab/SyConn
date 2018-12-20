@@ -15,7 +15,8 @@ import scipy.ndimage
 import time
 import itertools
 from collections import defaultdict
-from knossos_utils import chunky, knossosdataset
+from knossos_utils import knossosdataset
+
 from ..reps import segmentation
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm

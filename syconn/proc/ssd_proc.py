@@ -13,12 +13,14 @@ import glob
 import numpy as np
 import os
 from collections import Counter
+
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-from ..reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
+from ..reps.super_segmentation import SuperSegmentationObject, \
+    SuperSegmentationDataset
 from ..reps import segmentation, super_segmentation
 from ..proc.meshes import mesh_creator_sso
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,

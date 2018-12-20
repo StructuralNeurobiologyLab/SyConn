@@ -21,11 +21,11 @@ except ImportError:
 from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
 import re
 import signal
-import io
-import sys
-from . import log_handler
 import contextlib
 import tqdm
+
+from . import log_handler
+
 
 __all__ = ["load_from_h5py", "save_to_h5py", "crop_bool_array",
            "get_filepaths_from_dir", "write_obj2pkl", "load_pkl2obj",

@@ -14,7 +14,6 @@ from ..handler.basics import load_pkl2obj, chunkify, flatten_list, \
     write_txt2kzip, write_obj2pkl
 from ..mp import qsub_utils as qu
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
-from ..mp.mp_utils import start_multiprocess_obj
 from ..reps.rep_helper import knossos_ml_from_ccs
 from ..reps.segmentation import SegmentationDataset
 from ..reps.super_segmentation_object import SuperSegmentationObject

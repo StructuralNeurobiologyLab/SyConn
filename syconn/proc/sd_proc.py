@@ -11,18 +11,19 @@ except ImportError:
 import glob
 import numpy as np
 import os
-from ..config.global_params import wd, get_dataset_scaling
+import tqdm
 from collections import defaultdict
-from .image import single_conn_comp_img
 from knossos_utils import knossosdataset
+
+from ..config.global_params import wd, get_dataset_scaling
+from .image import single_conn_comp_img
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-from syconn.backend.storage import AttributeDict, VoxelStorage
+from ..backend.storage import AttributeDict, VoxelStorage
 from ..reps import segmentation, segmentation_helper
 from ..handler import basics
-import tqdm
 from ..proc.meshes import mesh_chunk
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,

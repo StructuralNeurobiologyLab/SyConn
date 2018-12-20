@@ -10,11 +10,12 @@ import networkx as nx
 import numpy as np
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import tqdm
+import itertools
+
 from ..mp.mp_utils import start_multiprocess_obj
 from ..config.global_params import min_cc_size_glia, min_cc_size_neuron,\
     get_dataset_scaling, glia_thresh
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
-import itertools
 
 
 def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):

@@ -11,15 +11,14 @@ import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 import matplotlib.ticker as ticker
 from sklearn.metrics import precision_recall_curve, roc_auc_score, \
-    classification_report, precision_recall_fscore_support, accuracy_score, average_precision_score
+    classification_report, precision_recall_fscore_support, accuracy_score,\
+    average_precision_score
 from sklearn.manifold import TSNE as TSNE_sc
 from sklearn.decomposition import PCA
-import matplotlib.cm as cm
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
 import os
 from sklearn.preprocessing import label_binarize
-from scipy.stats import gaussian_kde
 import seaborn as sns
 from sklearn.externals import joblib
 import matplotlib.patches as mpatches

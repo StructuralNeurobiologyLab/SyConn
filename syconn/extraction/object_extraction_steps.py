@@ -14,18 +14,18 @@ import numpy as np
 import os
 import scipy.ndimage
 import shutil
-import time
 import itertools
 from collections import defaultdict
 from knossos_utils import knossosdataset, chunky
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
+
 from ..handler import log_handler
 from ..mp import qsub_utils as qu, mp_utils as sm
 from ..proc.general import cut_array_in_one_dim
 from ..reps import segmentation, rep_helper as rh
 from ..handler import basics
-from syconn.backend.storage import VoxelStorageL, VoxelStorage
-from syconn.proc.image import multi_mop
+from ..backend.storage import VoxelStorageL, VoxelStorage
+from ..proc.image import multi_mop
 
 
 def gauss_threshold_connected_components(*args, **kwargs):

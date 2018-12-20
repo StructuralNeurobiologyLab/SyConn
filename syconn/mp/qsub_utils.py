@@ -20,8 +20,9 @@ import subprocess
 import tqdm
 import sys
 import time
-from syconn.handler.basics import temp_seed
-from syconn.handler.logger import initialize_logging
+
+from ..handler.basics import temp_seed
+from ..handler.logger import initialize_logging
 
 BACKEND_IDENT = 'SLURM'
 __BATCHJOB__ = BACKEND_IDENT is not None
@@ -103,8 +104,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                                       log_dir=job_folder)
 
     if sge_additional_flags is not None:
-        log_batchjob.info('"sge_additional_flags" kwarg will soon be replaced with "additional_flags". '
-              'Please adapt method calls accordingly.')
+        log_batchjob.info('"sge_additional_flags" kwarg will soon be replaced'
+                          ' with "additional_flags". Please adapt method'
+                          ' calls accordingly.')
         if additional_flags is not '':
             message = 'Multiple flags set. Please use only' \
                       ' "additional_flags" kwarg.'
@@ -269,12 +271,13 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         if iteration >= max_iterations:
             raise RuntimeError(msg)
 
-        # TODO: Identify missing job IDs from error files and restart those only.
         missed_params = params
         # set number cores per job higher which will at the same time increase
         # the available amount of memory per job
+        n_cores += 1  # incrase number of cores per job by at least 1
         n_cores = np.min([20, float(n_max_co_processes) / len(missed_params)
                           * n_cores])
+        # if all jobs failed, increase number of cores
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
             priority=priority, additional_flags='', script_folder=script_folder,

@@ -828,7 +828,7 @@ class main_class(QtGui.QDialog):
             self.show_query()
 
         elif self.current_mode == 'review':
-            for sv_id in self.rec_graph.nodes_iter():
+            for sv_id in self.rec_graph.nodes():
                 # fetch skeleton again
                 nxskel = self.get_skel_by_id_from_db(sv_id)
 
@@ -843,7 +843,7 @@ class main_class(QtGui.QDialog):
                     self.nxskel_to_knossos_tree(nxskel, 2, sv_id, signal_block = False)
 
         elif self.current_mode == 'task':
-            for sv_id in self.rec_graph.nodes_iter():
+            for sv_id in self.rec_graph.nodes():
                 # fetch skeleton again
                 nxskel = self.get_skel_by_id_from_db(sv_id)
                 self.nxskel_to_knossos_tree(nxskel, 1, sv_id, signal_block = False)
@@ -1885,7 +1885,7 @@ class main_class(QtGui.QDialog):
         k_tree = KnossosModule.skeleton.find_tree_by_id(knossos_tree_id)
         # add nodes
         nx_knossos_id_map = dict()
-        for nx_node in nxskel.nodes_iter():
+        for nx_node in nxskel.nodes():
             nx_coord = nxskel.node[nx_node]['position']
             #newsk_node.from_scratch(newsk_anno, nx_coord[1]+1, nx_coord[0]+1, nx_coord[2]+1, ID=nx_node)
             k_node = KnossosModule.skeleton.add_node([nx_coord[1]+1, nx_coord[0]+1, nx_coord[2]+1], k_tree)
@@ -1894,7 +1894,7 @@ class main_class(QtGui.QDialog):
             KnossosModule.skeleton.set_comment(nx_knossos_id_map[nx_node], str(sv_id))
 
         # add edges
-        for nx_src, nx_tgt in nxskel.edges_iter():
+        for nx_src, nx_tgt in nxskel.edges():
             KnossosModule.skeleton.add_segment(nx_knossos_id_map[nx_src], nx_knossos_id_map[nx_tgt])
 
         # enable signals again

@@ -13,31 +13,27 @@ import os
 import re
 import matplotlib.pyplot as plt
 from matplotlib import gridspec
-
+import numpy as np
+import pandas
+import scipy.ndimage
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-import numpy as np
-import pandas
-import scipy.ndimage
-
-from ..mp import qsub_utils as qu
-from ..mp import mp_utils as sm
-
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 try:
     default_wd_available = True
     from ..config.global_params import wd
 except:
     default_wd_available = False
-
+from ..mp import qsub_utils as qu
+from ..mp import mp_utils as sm
 from ..config import parser
 from . import connectivity_helper as ch
 from . import super_segmentation as ss
 from . import segmentation
 from ..handler.basics import load_pkl2obj, write_obj2pkl
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def make_colormap(seq):
