@@ -4,20 +4,20 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+import numpy as np
+import os
+
 from syconn.config.global_params import wd
-from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn.handler.logger import initialize_logging
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.segmentation_helper import find_missing_sv_attributes
 from syconn.handler.prediction import get_glia_model
 from syconn.handler.basics import chunkify, parse_cc_dict_from_kml
-from syconn.config.global_params import get_dataset_scaling
 from syconn.mp import qsub_utils as qu
-import tqdm
-import numpy as np
-import os
 
 
 if __name__ == "__main__":
+    log = initialize_logging('glia_prediction', wd + '/logs/')
     # only append to this key if needed (for e.g. different versions, change accordingly in 'axoness_mapping.py')
     pred_key = "glia_probas"
     # Load initial RAG from  Knossos mergelist text file.
@@ -25,7 +25,7 @@ if __name__ == "__main__":
     assert os.path.isfile(init_rag_p), "Initial RAG could not be found at %s."\
                                        % init_rag_p
     init_rag = parse_cc_dict_from_kml(init_rag_p)
-    print('Found {} CCs with a total of {} SVs in inital RAG.'
+    log.info('Found {} CCs with a total of {} SVs in inital RAG.'
           ''.format(len(init_rag), np.sum([len(v) for v in init_rag.values()])))
     # chunk them
     sd = SegmentationDataset("sv", working_dir=wd)
@@ -57,7 +57,10 @@ if __name__ == "__main__":
                                  queue=None, n_cores=10, suffix="_glia",
                                  script_folder=script_folder,
                                  additional_flags="--gres=gpu:1")  # removed -V
+    log.info('Finished glia prediction. Checking completeness.')
     res = find_missing_sv_attributes(sd, pred_key, n_cores=10)
     if len(res) > 0:
-        print("Attribute '{}' missing for follwing"
-              " SVs:\n{}".format(pred_key, res))
+        log.error("Attribute '{}' missing for follwing"
+                  " SVs:\n{}".format(pred_key, res))
+    else:
+        log.info('Success.')

@@ -5,24 +5,27 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 import os
-from syconn.handler.logger import log_main
-from syconn.config.global_params import wd, RENDERING_MAX_NB_SV, path_initrag
-from syconn.mp import qsub_utils as qu
-from syconn.handler.basics import chunkify, parse_cc_dict_from_kml
-from syconn.reps.rep_helper import knossos_ml_from_ccs
-from syconn.reps.segmentation_helper import find_missing_sv_views
-from syconn.reps.segmentation import SegmentationDataset
-from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
 import numpy as np
 import networkx as nx
 import re
 
+from syconn.config.global_params import wd, RENDERING_MAX_NB_SV, path_initrag
+from syconn.mp import qsub_utils as qu
+from syconn.handler.basics import chunkify
+from syconn.reps.rep_helper import knossos_ml_from_ccs
+from syconn.reps.segmentation_helper import find_missing_sv_views
+from syconn.reps.segmentation import SegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn.handler.logger import initialize_logging
+
 
 if __name__ == "__main__":
+    log = initialize_logging('glia_view_rendering', wd + '/logs/')
     N_JOBS = 360
     np.random.seed(0)
     # generic QSUB script folder
-    script_folder = os.path.dirname(os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
+    script_folder = os.path.dirname(os.path.abspath(__file__)) +\
+                    "/../../syconn/QSUB_scripts/"
     # view rendering prior to glia removal, choose SSD accordingly
     version = "tmp"  # glia removal is based on the initial RAG and does not require explicitly stored SSVs
     # init_rag_p = wd + "initial_rag.txt"
@@ -31,26 +34,27 @@ if __name__ == "__main__":
     # init_rag = parse_cc_dict_from_kml(init_rag_p)
     # all_sv_ids_in_rag = np.concatenate(list(init_rag.values()))
 
-    G = nx.Graph()  # TODO: Make this more general
+    G = nx.Graph()  # TODO: Add factory method for initial RAG
     with open(path_initrag, 'r') as f:
         for l in f.readlines():
             edges = [int(v) for v in re.findall('(\d+)', l)]
             G.add_edge(edges[0], edges[1])
 
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
-    log_main.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
+    log.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
 
     # add single SV connected components to initial graph
     sd = SegmentationDataset(obj_type='sv', working_dir=wd)
     sv_ids = sd.ids
     diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
-    log_main.info('Found {} single connected component SVs which were missing in initial RAG.'.format(len(diff)))
+    log.info('Found {} single connected component SVs which were missing'
+             ' in initial RAG.'.format(len(diff)))
 
     for ix in diff:
         G.add_node(ix)
 
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
-    log_main.info("Found {} SVs in initial RAG after adding size-one connected "
+    log.info("Found {} SVs in initial RAG after adding size-one connected "
                   "components. Writing kml text file".format(len(all_sv_ids_in_rag)))
 
     # write out readable format for 'glia_prediction.py'
@@ -60,7 +64,7 @@ if __name__ == "__main__":
         f.write(kml)
 
     # # preprocess sample locations
-    log_main.info("Starting sample location caching.")
+        log.info("Starting sample location caching.")
     sd = SegmentationDataset("sv", working_dir=wd)
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 1000)
@@ -72,7 +76,7 @@ if __name__ == "__main__":
                                  script_folder=script_folder, suffix="")
 
     # generate parameter for view rendering of individual SSV
-    log_main.info("Starting view rendering.")
+    log.info("Starting view rendering.")
     multi_params = []
     for cc in nx.connected_component_subgraphs(G):
         multi_params.append(cc)
@@ -85,7 +89,7 @@ if __name__ == "__main__":
     for kk, g in enumerate(big_ssv[::-1]):
         # Create SSV object
         sv_ixs = np.sort(list(g.nodes()))
-        log_main.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(
+        log.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(
             kk+1, len(big_ssv), len(sv_ixs)))
         sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
                                       create=False, sv_ids=sv_ixs)
@@ -121,8 +125,11 @@ if __name__ == "__main__":
         else:
             missing_contained_in_rag.append(el)
     if len(missing_not_contained_in_rag):
-        print("%d SVs were not rendered but also not part of the initial"
-              "RAG: {}".format(missing_not_contained_in_rag))
+        log.info("%d SVs were not rendered but also not part of the initial"
+                 "RAG: {}".format(missing_not_contained_in_rag))
     if len(missing_contained_in_rag) != 0:
-        raise RuntimeError("Not all SSVs were rendered completely! Missing:\n"
-                           "{}".format(missing_contained_in_rag))
+        msg = "Not all SSVs were rendered completely! Missing:\n" \
+              "{}".format(missing_contained_in_rag)
+        log.error(msg)
+        raise RuntimeError(msg)
+

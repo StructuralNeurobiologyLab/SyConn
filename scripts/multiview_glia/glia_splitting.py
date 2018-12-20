@@ -59,5 +59,5 @@ if __name__ == "__main__":
     # create glia / neuron RAGs
     write_glia_rag(recon_nx, min_cc_size_neuron, suffix=rag_suffix)
     log.info("Finished glia splitting. Resulting RAGs are stored at {}."
-                  "".format(wd + "/glia/"))
+             "".format(wd + "/glia/"))
 

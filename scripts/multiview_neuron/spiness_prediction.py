@@ -6,13 +6,16 @@
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 import os
 import numpy as np
+
 from syconn.config.global_params import wd, mpath_spiness
 from syconn.handler.basics import chunkify
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.mp import qsub_utils as qu
+from syconn.handler.logger import initialize_logging
 
 
 if __name__ == "__main__":
+    log = initialize_logging('spine_identification', wd + '/logs/')
     # TODO: currently working directory has to be set globally in global_params and is not adjustable here
     #  because all qsub jobs will start a script referring to 'global_params.wd'
     ssd = SuperSegmentationDataset(working_dir=wd)
@@ -28,6 +31,7 @@ if __name__ == "__main__":
     pred_kwargs = dict(pred_key=pred_key)
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs]
                     for par in multi_params]
+    log.info('Starting spine prediction.')
     script_folder = os.path.dirname(
         os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     qu.QSUB_script(multi_params, "predict_spiness_chunked",
@@ -47,7 +51,7 @@ if __name__ == "__main__":
     kwargs_semseg2mesh = dict(semseg_key=pred_key)
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
                      kwargs_semseg2mesh) for ssv_ids in multi_params]
-
+    log.info('Starting mapping of spine predictions to neurite surfaces.')
     qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=190,
                    pe="openmp", queue=None, script_folder=script_folder,
                    n_cores=2, suffix="", additional_flags="")  # removed -V

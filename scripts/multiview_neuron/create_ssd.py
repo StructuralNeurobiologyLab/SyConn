@@ -4,16 +4,16 @@
 import networkx as nx
 import numpy as np
 import tqdm
-import os
 
 from syconn.config import global_params
-from syconn.handler.logger import log_main
+from syconn.handler.logger import log_main, initialize_logging
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.handler.basics import parse_cc_dict_from_kzip
 from syconn.proc import ssd_proc
 
 
 if __name__ == '__main__':
+    log = initialize_logging('create_neuron_ssd', global_params.wd + '/logs/')
     suffix = global_params.rag_suffix
     # TODO: the following paths currently require prior glia-splitting
     kml_p = "{}/glia/neuron_rag_ml{}.k.zip".format(global_params.wd, suffix)
@@ -24,14 +24,14 @@ if __name__ == '__main__':
         for sv_id in cc:
             cc_dict_inv[sv_id] = ssv_id
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
-    log_main.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(
+    log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(
         kml_p, len(cc_dict), len(cc_dict_inv)))
     ssd = SuperSegmentationDataset(working_dir=global_params.wd, version='new',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
     ssd.save_dataset_shallow()
     ssd.save_dataset_deep(qsub_pe="openmp", n_max_co_processes=200)
-    log_main.info('Finished SSD initialization. Starting cellular '
+    log.info('Finished SSD initialization. Starting cellular '
                   'organelle mapping.')
 
     # # map cellular organelles to SSVs
@@ -40,7 +40,7 @@ if __name__ == '__main__':
         ssd, global_params.existing_cell_organelles, qsub_pe="openmp")
     ssd_proc.apply_mapping_decisions(
         ssd, global_params.existing_cell_organelles, qsub_pe="openmp")
-    log_main.info('Finished mapping of cellular organelles to SSVs. '
+    log.info('Finished mapping of cellular organelles to SSVs. '
                   'Writing individual SSV graphs.')
 
     # Write SSV RAGs
@@ -58,4 +58,4 @@ if __name__ == '__main__':
         nx.write_edgelist(ssv_rag, ssv.edgelist_path)
         pbar.update(1)
     pbar.close()
-    log_main.info('Finished saving individual SSV RAGs.')
+    log.info('Finished saving individual SSV RAGs.')

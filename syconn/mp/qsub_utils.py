@@ -264,16 +264,23 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         for p in out_files:
             checklist[int(re.findall("[\d]+", p)[-1])] = True
 
-        log_batchjob.error("Missing: {}".format(np.where(~checklist)[0]))
-        raise Exception("No success")
+        msg = "Missing: {}".format(np.where(~checklist)[0])
+        log_batchjob.error(msg)
+        if iteration >= max_iterations:
+            raise RuntimeError(msg)
+
         # TODO: Identify missing job IDs from error files and restart those only.
-        if iteration < max_iterations:
-            return QSUB_script(params, name, queue=queue, pe=pe, n_cores=n_cores,
-                        priority=priority,
-                        additional_flags='', suffix=suffix, job_name=job_name,
-                        script_folder=script_folder, n_max_co_processes=n_max_co_processes,
-                        sge_additional_flags=sge_additional_flags, iteration=iteration+1,
-                        max_iterations=max_iterations)
+        missed_params = params
+        # set number cores per job higher which will at the same time increase
+        # the available amount of memory per job
+        n_cores = np.min([20, float(n_max_co_processes) / len(missed_params)
+                          * n_cores])
+        return QSUB_script(
+            missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
+            priority=priority, additional_flags='', script_folder=script_folder,
+            job_name="default", suffix=suffix+"iter"+str(iteration),
+            sge_additional_flags=sge_additional_flags, iteration=iteration+1,
+            n_max_co_processes=n_max_co_processes,  n_cores=n_cores)
 
     return path_to_out
 
