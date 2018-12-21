@@ -380,10 +380,11 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     verbose : bool
     force_overwrite : bool
     """
-    if not force_overwrite:
-        log_handler.warning('Currently modification of data '
-                            'in already existing kzip is still tested. "remove_from_zip" has to be adapted to'
-                            ' work on all files in kzip.')
+    # This should now work
+    # if not force_overwrite:
+    #     log_handler.warning('Currently modification of data '
+    #                         'in already existing kzip is still tested. "remove_from_zip" has to be adapted to'
+    #                         ' work on all files in kzip.')
     nb_files = len(fpaths)
     if verbose:
         log_handler.info('Writing {} files to .zip.'.format(nb_files))

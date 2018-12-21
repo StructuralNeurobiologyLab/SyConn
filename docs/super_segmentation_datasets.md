@@ -5,9 +5,11 @@
 It is accompanied by helper functions in `super_segmentation_helper.py` for basic functionality such as
  loading and storing and `ssd_proc.py` and `ssd_proc.assembly` (`syconn.proc`) which contain processing methods.
 
-The first initializing of an SSD usually happens after glia removal.
-Please check the corresponding documentation to learn more about that.
+The first initializing of an SSD usually happens after [glia removal](glia_removal.md).
 
+## Prerequisites
+* Knossos- and SegmentationDataset of the super voxel segmentation
+* Initial RAG/SV-agglomeration
 
 ## Initialization
 
@@ -29,6 +31,8 @@ It is recommended to cache the SSV meshes, which means that they are copied toge
 
     syconn.proc.ssd_proc.mesh_proc_ssv(WD, VERSION, ssd_type="ssv", nb_cpus=20)
 
+A summary script for the initial SSD generation, called `create_ssd.py`, can be found at `SyConn/scripts/`.
+It combines the above procedures, the [mapping of cellular organelles](object_mapping.md) and saves a SV-graph for every SSV.
 
 
 

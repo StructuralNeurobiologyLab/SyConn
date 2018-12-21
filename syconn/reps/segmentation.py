@@ -501,6 +501,7 @@ class SegmentationObject(object):
     def view_path(self, woglia=True, index_views=False, view_key=None):
         if view_key is not None and not (woglia and not index_views):
             raise ValueError('view_path with custom view key is only allowed for default settings.')
+        # TODO: change bool index_views and bool woglia to respective view_key identifier
         if view_key is not None:
             return self.segobj_dir + 'views_{}.pkl'.format(view_key)
         if index_views:

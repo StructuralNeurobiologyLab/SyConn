@@ -22,11 +22,12 @@ def axoness_pred_exists(sv):
 
 if __name__ == "__main__":
     log = initialize_logging('axon_prediction', global_params.wd + '/logs/')
-    # TODO: currently working directory has to be set globally in global_params and is not adjustable here because all qsub jobs will start a script referring to 'global_params.wd'
+    # TODO: currently working directory has to be set globally in global_params and is not adjustable
+    # here because all qsub jobs will start a script referring to 'global_params.wd'
     ssd = SuperSegmentationDataset(working_dir=global_params.wd)
     sd = ssd.get_segmentationdataset("sv")
     # chunk them
-    multi_params = chunkify(sd.so_dir_paths, 200)
+    multi_params = chunkify(sd.so_dir_paths, 100)
     pred_key = "axoness_probas"  # leave this fixed because it is used all over
     # get model properties
     log.info('Performing axon prediction of neuron views. Labels will be stored '
@@ -42,10 +43,11 @@ if __name__ == "__main__":
     pred_kwargs = dict(woglia=True, pred_key=pred_key, verbose=False,
                        raw_only=False)
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for par in multi_params]
-    # randomly assign to gpu 0 or 1
+
     for par in multi_params:
         mk = par[1]
-        mk["init_gpu"] = 0  # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
+        # Single GPUs are made available for every job via slurm, no need for random assignments.
+        mk["init_gpu"] = 0  # np.random.rand(0, 2)
     script_folder = os.path.dirname(
         os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",

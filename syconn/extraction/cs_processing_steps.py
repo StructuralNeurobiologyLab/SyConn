@@ -706,7 +706,11 @@ def _overlap_mapping_sj_to_cs_via_cset_thread(args):
                                          'cs_id': cs_id,
                                          'id_sj_ratio': id_ratio,
                                          'id_cs_ratio': cs_ratio,
-                                         'background_overlap_ratio': zero_ratio}
+                                         'background_overlap_ratio': zero_ratio,
+                                         'ssv_partners':
+                                             cs.lookup_in_attribute_dict(
+                                                 'neuron_partners')
+                                         }
 
                 next_conn_id += conn_sd.n_folders_fs
 
@@ -816,10 +820,7 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
                                          'cs_id': cs_id,
                                          'id_sj_ratio': id_ratio,
                                          'id_cs_ratio': cs_ratio,
-                                         'background_overlap_ratio': zero_ratio,
-                                         'ssv_partners':
-                                             cs.lookup_in_attribute_dict(
-                                                 'neuron_partners')}
+                                         'background_overlap_ratio': zero_ratio,}
 
                 next_conn_id += conn_sd.n_folders_fs
 

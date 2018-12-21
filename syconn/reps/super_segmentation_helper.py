@@ -1138,7 +1138,7 @@ def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=20):
     return list(missing_ssv_ids)
 
 
-def predict_views_semseg(views, model, batch_size=50, verbose=False):
+def predict_views_semseg(views, model, batch_size=20, verbose=False):
     """
     Predicts a view array of shape [N_LOCS, N_CH, N_VIEWS, X, Y] with
     N_LOCS locations each with N_VIEWS perspectives, N_CH different channels
@@ -1269,7 +1269,8 @@ def pred_sv_chunk_semseg(args):
             views = views[:, :1]
         sd = sos_dict_fact(svixs, **so_kwargs)
         svs = init_sos(sd)
-        label_views = pred_svs_semseg(model, views, svs, return_pred=True)
+        label_views = pred_svs_semseg(model, views, svs, return_pred=True,
+                                      verbose=True)
         # choose any SV to get a path constructor for the v
         # iew storage (is the same for all SVs of this chunk)
         lview_dc_p = svs[0].view_path(woglia, view_key=pred_key)
@@ -1309,7 +1310,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
     colors = np.array(colors) * 255
     if nb_views is None:
         # load default
-        i_views = sso.load_views("index").flatten()
+        i_views = sso.load_views(index_views=True).flatten()
     else:
         # load special views
         i_views = sso.load_views("index{}".format(nb_views)).flatten()

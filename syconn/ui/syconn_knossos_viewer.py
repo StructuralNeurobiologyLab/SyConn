@@ -175,6 +175,7 @@ class SyConnGateInteraction(object):
         r = self.session.get(self.server + '/all_syn_meta')
         return json.loads(r.content)
 
+
 class main_class(QtGui.QDialog):
     """
     KNOSSOS plugin class for the SyConn KNOSSOS viewer.
@@ -593,7 +594,8 @@ class main_class(QtGui.QDialog):
 
 def lz4stringtoarr(string, dtype=np.float32, shape=None):
     """
-    Converts lz4 compressed string to 1d array.
+    Converts lz4 compressed string to 1d array. Moved here to circumvent
+    a syconn dependency.
 
     Parameters
     ----------
@@ -611,11 +613,12 @@ def lz4stringtoarr(string, dtype=np.float32, shape=None):
     try:
         arr_1d = np.frombuffer(decompress(string), dtype=dtype)
     except Exception as e:
-        print(e + "\nString length:" + len(string))
+        print(str(e) + "\nString length:" + str(len(string)))
         return np.zeros((0,), dtype=dtype)
     if shape is not None:
         arr_1d = arr_1d.reshape(shape)
     return arr_1d
+
 
 if __name__=='__main__':
     A = main_class()

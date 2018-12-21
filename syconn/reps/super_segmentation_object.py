@@ -1164,16 +1164,21 @@ class SuperSegmentationObject(object):
             else:  # only kept for backwards compat.
                 view_key = "%d%d" % (int(woglia), int(raw_only))
         else:
-            if not view_key in view_dc:
+            # check if random sv has view_key
+            sv_ad = self.svs[0]
+            random_sv_contains_viewkey = sv_ad.views_exist(woglia=woglia,
+                                                           view_key=view_key)
+            if not view_key in view_dc and not random_sv_contains_viewkey:
                 raise KeyError("Given view key '{}' does not exist in view di"
-                               "ctionary of SSV {} at{}. Existing keys: {}\n"
+                               "ctionary of SSV {} at {}. Existing keys: {}\n"
                                "".format(view_key, self.id, self.view_path,
                                          str(view_dc.keys())))
         if view_key in view_dc and not force_reload:
             return view_dc[view_key]
-        del view_dc  # delete previose initialized view dictionary
-        params = [[sv, {'woglia': woglia, 'raw_only': raw_only, 'index_views': index_views,
-                        'ignore_missing': ignore_missing}] for sv in self.svs]
+        del view_dc  # delete previous initialized view dictionary
+        params = [[sv, {'woglia': woglia, 'raw_only': raw_only, 'index_views':
+                        index_views, 'ignore_missing': ignore_missing,
+                        'view_key': view_key}] for sv in self.svs]
         # load views from underlying SVs
         views = sm.start_multiprocess_obj("load_views", params,
                                           nb_cpus=self.nb_cpus
@@ -1182,8 +1187,8 @@ class SuperSegmentationObject(object):
         view_dc = CompressedStorage(self.view_path, read_only=False,
                                     disable_locking=not self.enable_locking)
         if cache_default_views:
-            log_reps.info("Loaded and cached default views of SSO %d at %s. (raw_only: %d,"
-                          " woglia: %d; #views: %d)" % (
+            log_reps.info("Loaded and cached default views of SSO %d at %s."
+                          " (raw_only: %d, woglia: %d; #views: %d)" % (
                 self.id, self.view_path, int(raw_only), int(woglia), len(views)))
             view_dc[view_key] = views
             view_dc.push()

@@ -58,7 +58,7 @@ if __name__ == "__main__":
         ssv.render_views(add_cellobjects=True, cellobjects_only=False,
                          woglia=True, qsub_pe="openmp", overwrite=True,
                          qsub_co_jobs=340)
-
+    log.info('Finished rendering of all SSVs. Checking completeness.')
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=10)
     if len(res) != 0:
         msg = "Not all SSVs were rendered completely! Missing:\n{}".format(res)
