@@ -212,8 +212,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             subprocess.call(cmd_exec, shell=True)
         elif BACKEND_IDENT == 'SLURM':
             if '-V ' in additional_flags:
-                log_batchjob.warning('"additional_flags" contained "-V" which is a QSUB/SGE specific flag, but SLURM was set '
-                      'as batch system. Converting "-V" to "--export=ALL".')
+                log_batchjob.warning('"additional_flags" contained "-V" which is a QSUB/SGE specific flag,'
+                                     ' but SLURM was set as batch system. Converting "-V" to "--export=ALL".')
                 additional_flags.replace('-V ', '--export=ALL ')
             if not '--mem=' in additional_flags:
                 mem_lim = int(256*n_cores/20)
@@ -228,7 +228,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 raise Exception("No queue or parallel environment defined")
             if priority is not None and priority != 0:
                 log_batchjob.warning('Priorities are not supported with SLURM.')
-            # added '--quiet' flag to prevent submission messages, errors will still be printed (https://slurm.schedmd.com/sbatch.html), DOES NOT WORK
+            # added '--quiet' flag to prevent submission messages, errors will still be printed
+            # (https://slurm.schedmd.com/sbatch.html), DOES NOT WORK
             cmd_exec = "sbatch {0} --output={1} --error={2} --quiet --job-name={3} {4} {5}".format(
                 queue_option,
                 job_log_path,
@@ -271,12 +272,12 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         if iteration >= max_iterations:
             raise RuntimeError(msg)
 
-        missed_params = params
+        missed_params = params[checklist]
         # set number cores per job higher which will at the same time increase
         # the available amount of memory per job
         n_cores += 1  # incrase number of cores per job by at least 1
-        n_cores = np.min([20, float(n_max_co_processes) / len(missed_params)
-                          * n_cores])
+        n_cores = np.max([np.min([20, float(n_max_co_processes) /
+                                  len(missed_params) * n_cores]), n_cores])
         # if all jobs failed, increase number of cores
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,

@@ -55,7 +55,7 @@ def create_model():
     target = neuromancer.Input_like(out, override_f=1, name='target')
     weights = neuromancer.ValueNode((3,), 'f', value=(2, 1, 2))
     loss = neuromancer.MultinoulliNLL(out, target, name='nll_',
-                                      target_is_sparse=True,class_weights=weights)
+                                      target_is_sparse=True, class_weights=weights)
     # Objective
     loss = neuromancer.AggregateLoss(loss)
     # Monitoring  / Debug outputs

@@ -40,9 +40,11 @@ if __name__ == "__main__":
     ssv_ids = ssd.ssv_ids
     np.random.shuffle(ssv_ids)
     # TODO: use BATCHJOB Script
+    log.info('Testing GPU init.')
+    _ = get_celltype_model()
     log.info('Starting cell type prediction.')
     err = start_multiprocess_imap(celltype_predictor, chunkify(ssd.ssv_ids, 15),
-                                  nb_cpus=6)
+                                  nb_cpus=1)
     err = np.concatenate(err)
     log.info('Finished cell type prediction. Checking completeness.')
     if len(err) > 0:

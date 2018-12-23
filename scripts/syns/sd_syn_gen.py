@@ -24,12 +24,12 @@ if __name__ == "__main__":
     #                         hdf5names=["cs"], n_max_co_processes=300, n_folders_fs=100000)
 
     cd_dir = global_params.wd + "/chunkdatasets/"
-    cs_sd = SegmentationDataset('cs', working_dir=global_params.wd)
+    cs_sd = SegmentationDataset('cs_agg', working_dir=global_params.wd, version=0)  # version hard coded, TODO: Change before next use to default
     sj_sd = SegmentationDataset('sj', working_dir=global_params.wd)
     cs_cset = chunky.load_dataset(cd_dir, update_paths=True)
 
     cs_processing_steps.overlap_mapping_sj_to_cs_via_cset(cs_sd, sj_sd, cs_cset,
-                                                          n_max_co_processes=340,
-                                                          nb_cpus=1)
+                                                          n_max_co_processes=30,
+                                                          nb_cpus=10, qsub_pe='openmp')
 
     # TODO: merge syn objects according to RAG/mergelist/SSVs and build syn_ssv dataset

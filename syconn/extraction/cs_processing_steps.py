@@ -10,7 +10,8 @@ import numpy as np
 import glob
 import os
 from scipy import spatial
-from sklearn import ensemble, cross_validation, externals
+from sklearn import ensemble, externals
+from sklearn.model_selection import cross_val_score
 from knossos_utils.chunky import load_dataset
 from knossos_utils import knossosdataset, skeleton_utils, skeleton
 
@@ -631,14 +632,14 @@ def overlap_mapping_sj_to_cs_via_cset(cs_sd, sj_sd, cs_cset,
                              sj_sd.version, cs_sd.version, cs_cset.path_head_folder])
 
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_overlap_mapping_sj_to_cs_via_kd_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+        results = sm.start_multiprocess_imap(_overlap_mapping_sj_to_cs_via_cset_thread,
+                                             multi_params, nb_cpus=nb_cpus)
 
     elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
-                                     "overlap_mapping_sj_to_cs_via_kd",
+                                     "overlap_mapping_sj_to_cs_via_cset",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=script_folder, n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -655,7 +656,7 @@ def _overlap_mapping_sj_to_cs_via_cset_thread(args):
     sj_sd = segmentation.SegmentationDataset("sj", working_dir=wd,
                                              version=sj_sd_version,
                                              create=False)
-    cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd,
+    cs_sd = segmentation.SegmentationDataset("cs_agg", working_dir=wd,
                                              version=cs_sd_version,
                                              create=False)
 
@@ -676,13 +677,13 @@ def _overlap_mapping_sj_to_cs_via_cset_thread(args):
 
         for sj_id in sj_id_block:
             sj = sj_sd.get_segmentation_object(sj_id)
-            vxl = sj.voxel_list
-
-            cs_ids = cs_cset.from_chunky_to_matrix(vxl, datatype=np.uint64)
+            bb = sj.bounding_box
+            vxl_sj = sj.voxels
+            offset, size = bb[0], bb[1] - bb[0]
+            cs_ids = cs_cset.from_chunky_to_matrix(size, offset, 'cs', ['cs'], dtype=np.uint64)['cs']
             u_cs_ids, c_cs_ids = np.unique(cs_ids, return_counts=True)
 
             zero_ratio = c_cs_ids[u_cs_ids == 0] / np.sum(c_cs_ids)
-
             for cs_id in u_cs_ids:
                 if cs_id == 0:
                     continue
@@ -690,18 +691,18 @@ def _overlap_mapping_sj_to_cs_via_cset_thread(args):
                 cs = cs_sd.get_segmentation_object(cs_id)
 
                 id_ratio = c_cs_ids[u_cs_ids == cs_id] / float(np.sum(c_cs_ids))
-                overlap_vx = vxl[cs_ids == cs_id]
+                overlap_vx = np.transpose(np.nonzero((cs_ids == cs_id) & vxl_sj)) + offset
                 cs_ratio = float(len(overlap_vx)) / cs.size
+                if len(overlap_vx) == 0:
+                    continue
 
                 bounding_box = [np.min(overlap_vx, axis=0),
                                 np.max(overlap_vx, axis=0) + 1]
-
                 vx_block = np.zeros(bounding_box[1] - bounding_box[0], dtype=np.bool)
                 overlap_vx -= bounding_box[0]
                 vx_block[overlap_vx[:, 0], overlap_vx[:, 1], overlap_vx[:, 2]] = True
 
-                voxel_dc[next_conn_id] = [vx_block], [bounding_box[0]]
-
+                voxel_dc[next_conn_id] = [vx_block], [offset]
                 attr_dc[next_conn_id] = {'sj_id': sj_id,
                                          'cs_id': cs_id,
                                          'id_sj_ratio': id_ratio,
@@ -903,7 +904,7 @@ def create_conn_syn_gt(conn, path_kzip):
     v_labels = v_labels == "synaptic"
     v_labels = v_labels.astype(np.int)
 
-    score = cross_validation.cross_val_score(rfc, v_features,
+    score = cross_val_score(rfc, v_features,
                                              v_labels, cv=10)
     print(np.mean(score), np.std(score))
 

@@ -1158,21 +1158,22 @@ class SuperSegmentationObject(object):
         """
         view_dc = CompressedStorage(self.view_path, read_only=True,
                                     disable_locking=not self.enable_locking)
-        if view_key is None:
-            if index_views:
-                view_key = "%d%d%d" % (int(woglia), int(raw_only), int(index_views))
-            else:  # only kept for backwards compat.
-                view_key = "%d%d" % (int(woglia), int(raw_only))
-        else:
-            # check if random sv has view_key
-            sv_ad = self.svs[0]
-            random_sv_contains_viewkey = sv_ad.views_exist(woglia=woglia,
-                                                           view_key=view_key)
-            if not view_key in view_dc and not random_sv_contains_viewkey:
-                raise KeyError("Given view key '{}' does not exist in view di"
-                               "ctionary of SSV {} at {}. Existing keys: {}\n"
-                               "".format(view_key, self.id, self.view_path,
-                                         str(view_dc.keys())))
+        # Disable view caching on SSV
+        # if view_key is None:
+        #     if index_views:
+        #         view_key = "%d%d%d" % (int(woglia), int(raw_only), int(index_views))
+        #     else:  # only kept for backwards compat.
+        #         view_key = "%d%d" % (int(woglia), int(raw_only))
+        # else:
+        #     # check if random sv has view_key
+        #     sv_ad = self.svs[0]
+        #     random_sv_contains_viewkey = sv_ad.views_exist(woglia=woglia,
+        #                                                    view_key=view_key)
+        #     if not view_key in view_dc and not random_sv_contains_viewkey:
+        #         raise KeyError("Given view key '{}' does not exist in view di"
+        #                        "ctionary of SSV {} at {}. Existing keys: {}\n"
+        #                        "".format(view_key, self.id, self.view_path,
+        #                                  str(view_dc.keys())))
         if view_key in view_dc and not force_reload:
             return view_dc[view_key]
         del view_dc  # delete previous initialized view dictionary
@@ -1186,12 +1187,13 @@ class SuperSegmentationObject(object):
         views = np.concatenate(views)
         view_dc = CompressedStorage(self.view_path, read_only=False,
                                     disable_locking=not self.enable_locking)
-        if cache_default_views:
-            log_reps.info("Loaded and cached default views of SSO %d at %s."
-                          " (raw_only: %d, woglia: %d; #views: %d)" % (
-                self.id, self.view_path, int(raw_only), int(woglia), len(views)))
-            view_dc[view_key] = views
-            view_dc.push()
+        # Disable view caching on SSV
+        # if cache_default_views:
+        #     log_reps.info("Loaded and cached default views of SSO %d at %s."
+        #                   " (raw_only: %d, woglia: %d; #views: %d)" % (
+        #         self.id, self.view_path, int(raw_only), int(woglia), len(views)))
+        #     view_dc[view_key] = views
+        #     view_dc.push()
         return views
 
     def view_existence(self, woglia=True):

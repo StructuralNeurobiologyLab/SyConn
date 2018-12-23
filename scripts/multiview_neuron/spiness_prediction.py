@@ -34,10 +34,10 @@ if __name__ == "__main__":
     log.info('Starting spine prediction.')
     script_folder = os.path.dirname(
         os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
-    # qu.QSUB_script(multi_params, "predict_spiness_chunked",
-    #                n_max_co_processes=25, pe="openmp", queue=None,
-    #                script_folder=script_folder, n_cores=10,
-    #                suffix="",  additional_flags="--gres=gpu:1")  # removed -V
+    qu.QSUB_script(multi_params, "predict_spiness_chunked",
+                   n_max_co_processes=25, pe="openmp", queue=None,
+                   script_folder=script_folder, n_cores=10,
+                   suffix="",  additional_flags="--gres=gpu:1")  # removed -V
 
     # map semantic spine segmentation of multi views on SSV mesh
     if not ssd.mapping_dict_exists:
