@@ -659,7 +659,7 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     skel_nx = from_sso_to_netkx(sso)
 
     if sparsify:
-        sso, skel_nx = sparsify_skeleton(sso,skel_nx)
+        sso, skel_nx = sparsify_skeleton(sso, skel_nx)
 
     # Stitching sso skeletons
     skel_nx = stitch_skel_nx(skel_nx)

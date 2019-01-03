@@ -27,11 +27,11 @@ import tqdm
 from . import log_handler
 
 
-__all__ = ["load_from_h5py", "save_to_h5py", "crop_bool_array",
-           "get_filepaths_from_dir", "write_obj2pkl", "load_pkl2obj",
-           "write_data2kzip", "remove_from_zip", "chunkify", "flatten_list",
-           "get_skelID_from_path", "write_txt2kzip", "switch_array_entries",
-           "parse_cc_dict_from_kzip", "parse_cc_dict_from_kml"]
+__all__ = ['load_from_h5py', 'save_to_h5py', 'crop_bool_array',
+           'get_filepaths_from_dir', 'write_obj2pkl', 'load_pkl2obj',
+           'write_data2kzip', 'remove_from_zip', 'chunkify', 'flatten_list',
+           'get_skelID_from_path', 'write_txt2kzip', 'switch_array_entries',
+           'parse_cc_dict_from_kzip', 'parse_cc_dict_from_kml', 'data2kzip']
 
 
 def load_from_h5py(path, hdf5_names=None, as_dict=False):

@@ -15,7 +15,7 @@ import tqdm
 from collections import defaultdict
 from knossos_utils import knossosdataset
 
-from ..config.global_params import wd, get_dataset_scaling
+from ..config.global_params import wd, get_dataset_scaling, MESH_DOWNSAMPLING, MESH_CLOSING
 from .image import single_conn_comp_img
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
@@ -23,6 +23,7 @@ from ..backend.storage import AttributeDict, VoxelStorage
 from ..reps import segmentation, segmentation_helper
 from ..handler import basics
 from ..proc.meshes import mesh_chunk
+from . import log_proc
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
@@ -48,18 +49,19 @@ def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
         max number of workers running at the same time when using qsub
     :param compute_meshprops: bool
     """
-
     paths = sd.so_dir_paths
-
+    if compute_meshprops:
+        if not (sd.type in MESH_DOWNSAMPLING and sd.type in MESH_CLOSING):
+            msg = 'SegmentationDataset of type "{}" has no configured mesh parameters. ' \
+                  'Please add them to global_params.py accordingly.'
+            log_proc.error(msg)
+            raise ValueError(msg)
     # Partitioning the work
-
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, sd.type, sd.version,
                              sd.working_dir, recompute, compute_meshprops])
-
     # Running workers
-
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_dataset_analysis_thread,
                                         multi_params, nb_cpus=nb_cpus)
@@ -71,7 +73,6 @@ def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
                                      script_folder=script_folder,
                                      n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
-
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -79,7 +80,6 @@ def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
                 results.append(pkl.load(f))
     else:
         raise Exception("QSUB not available")
-
     # Creating summaries
     # TODO: This is a potential bottleneck for very large datasets
     # TODO: resulting cache-arrays might have different lengths if attribute is missing in

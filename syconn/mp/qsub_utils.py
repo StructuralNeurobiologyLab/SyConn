@@ -90,6 +90,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         This counter stores how often QSUB_script was called for the same job
          submission. E.g. if jobs fail during a submission, it will be repeated
          max_iterations times.
+    sge_additional_flags : str
+    max_iterations : int
         
     Returns
     -------
@@ -122,11 +124,11 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             log_batchjob.info("Random job_name created: %s" % job_name)
     else:
         log_batchjob.warning("WARNING: running multiple jobs via qsub is only supported "
-              "with non-default job_names")
+                             "with non-default job_names")
 
     if len(job_name) > 10:
         log_batchjob.warning("WARNING: Your job_name is longer than 10. job_names have "
-              "to be distinguishable with only using their first 10 characters.")
+                             "to be distinguishable with only using their first 10 characters.")
 
     if script_folder is not None:
         path_to_scripts = script_folder
@@ -216,7 +218,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                                      ' but SLURM was set as batch system. Converting "-V" to "--export=ALL".')
                 additional_flags.replace('-V ', '--export=ALL ')
             if not '--mem=' in additional_flags:
-                mem_lim = int(256*n_cores/20)
+                mem_lim = int(256 * n_cores / 20)  # it seems nodes 02-07 get allocated completely with 256/20 using 20 jobs per node, whereas nodes 08, 10-18 do not -> therefore change the allocated memory for each job/core to be slightly lower than 256/20
                 additional_flags += ' --mem={}G'.format(mem_lim)
                 log_batchjob.info('Memory requirements were not set explicitly. '
                                   'Setting to 256 GB*n_cores/20={} GB'.format(mem_lim))

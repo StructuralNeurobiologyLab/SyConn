@@ -1209,7 +1209,8 @@ def create_sso_skeletons_thread(args):
     version_dict = args[2]
     working_dir = args[3]
 
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
+    ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
+                                   version_dict=version_dict)
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)

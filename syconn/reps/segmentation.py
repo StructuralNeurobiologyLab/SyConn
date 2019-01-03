@@ -637,8 +637,11 @@ class SegmentationObject(object):
     @property
     def mesh_bb(self):
         if self._mesh_bb is None:
-            self._mesh_bb = [np.min(self.mesh[1].reshape((-1, 3)), axis=0),
-                             np.max(self.mesh[1].reshape((-1, 3)), axis=0)]
+            if len(self.mesh[1]) == 0 or len(self.mesh[0]) == 0:
+                self._mesh_bb = self.bounding_box * self.scaling
+            else:
+                self._mesh_bb = [np.min(self.mesh[1].reshape((-1, 3)), axis=0),
+                                 np.max(self.mesh[1].reshape((-1, 3)), axis=0)]
         return self._mesh_bb
 
     @property
@@ -789,6 +792,8 @@ class SegmentationObject(object):
             color = (100, 200, 30, 255)
         elif self.type == "conn":
             color = (150, 50, 200, 255)
+        elif self.type == "syn":
+            color = (150, 50, 200, 255)
         elif self.type == "sj":
             color = (int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255)
         elif self.type == "vc":
@@ -807,7 +812,7 @@ class SegmentationObject(object):
         if ply_name == "":
             ply_name = str(self.id)
         meshes.write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
-                             ply_fname=ply_name + ".ply")
+                               ply_fname=ply_name + ".ply")
 
     def mergelist2kzip(self, dest_path):
         self.load_attr_dict()

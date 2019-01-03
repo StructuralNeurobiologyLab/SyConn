@@ -27,11 +27,14 @@ from ..handler.basics import write_data2kzip, data2kzip
 from .image import apply_pca
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
 from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
-    get_dataset_scaling
+    get_dataset_scaling, MESH_MIN_OBJ_VX
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 try:
+    # set matplotlib backend to offscreen
+    import matplotlib
+    matplotlib.use('agg')
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
-except ImportError as e:
+except ImportError:
     boundaryDistanceTransform, gaussianSmoothing = None, None
     log_proc.error('ModuleNotFoundError. Could not import VIGRA. '
                    'Mesh generation will not be possible.')
@@ -309,15 +312,25 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0):
 
     Returns
     -------
-    array [N, 1], array [M, 1], array
-        vertices, indices
+    array [N, 1], array [M, 1], array [M, 1]
+        vertices, indices, normals
     """
     if np.isscalar(obj.voxels):
-        return np.zeros((0, )), np.zeros((0, ))
-
-    indices, vertices, normals = triangulation(
-        np.array(obj.voxel_list), downsampling=downsampling,
-        n_closings=n_closings, decimate_mesh=decimate_mesh)
+        return np.zeros((0, )), np.zeros((0, )), np.zeros((0, ))
+    if len(obj.voxel_list) <= MESH_MIN_OBJ_VX:
+        log_proc.warn('Did not create mesh for bject with ID {} of type {} because'
+                      ' it contains less than {} voxels.'
+                      ''.format(obj.id, obj.type, len(obj.voxel_list)))
+        return np.zeros((0,)), np.zeros((0,)), np.zeros((0,))
+    try:
+        indices, vertices, normals = triangulation(
+            np.array(obj.voxel_list), downsampling=downsampling,
+            n_closings=n_closings, decimate_mesh=decimate_mesh)
+    except RuntimeError as e:
+        msg = 'Error during marching_cubes procedure of SegmentationObject {} of ' \
+              'type "{}".'.format(obj.id, obj.type)
+        log_proc.error(msg)
+        raise RuntimeError(e)
     vertices += 1  # account for knossos 1-indexing
     vertices = np.round(vertices * obj.scaling)
     assert len(vertices) == len(normals) or len(normals) == 0, \
