@@ -1185,9 +1185,11 @@ class SuperSegmentationObject(object):
                                           nb_cpus=self.nb_cpus
                                           if nb_cpus is None else nb_cpus)
         views = np.concatenate(views)
-        view_dc = CompressedStorage(self.view_path, read_only=False,
-                                    disable_locking=not self.enable_locking)
+
         # Disable view caching on SSV
+
+        # view_dc = CompressedStorage(self.view_path, read_only=False,
+        #                             disable_locking=not self.enable_locking)
         # if cache_default_views:
         #     log_reps.info("Loaded and cached default views of SSO %d at %s."
         #                   " (raw_only: %d, woglia: %d; #views: %d)" % (
@@ -2091,6 +2093,10 @@ class SuperSegmentationObject(object):
         res = ssh._average_node_axoness_views(self, **kwargs)
         self.enable_locking = locking_tmp
         return res
+
+    def axoness2mesh(self, dest_path, k=1, pred_key_appendix=''):
+        ssh.write_axpred_cnn(self, pred_key_appendix=pred_key_appendix, k=k,
+                             dest_path=dest_path)
 
     # --------------------------------------------------------------- CELL TYPES
     def predict_cell_type(self, ssd_version="ctgt", clf_name="rfc",

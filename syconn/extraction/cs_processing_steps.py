@@ -667,10 +667,10 @@ def _overlap_mapping_sj_to_cs_via_cset_thread(args):
     for i_sj_id_block, sj_id_block in enumerate(sj_id_blocks):
         rel_path = voxel_rel_paths[i_sj_id_block]
 
-        voxel_dc = VoxelStorage(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
-                                read_only=False)
-        attr_dc = AttributeDict(conn_sd.so_storage_path + rel_path + "/attr_dict.pkl",
-                                read_only=False)
+        voxel_dc = VoxelStorage(conn_sd.so_storage_path + rel_path +
+                                "/voxel.pkl", read_only=False)
+        attr_dc = AttributeDict(conn_sd.so_storage_path + rel_path +
+                                "/attr_dict.pkl", read_only=False)
 
         next_conn_id = ix_from_subfold(rel_path,
                                        conn_sd.n_folders_fs)
@@ -678,9 +678,20 @@ def _overlap_mapping_sj_to_cs_via_cset_thread(args):
         for sj_id in sj_id_block:
             sj = sj_sd.get_segmentation_object(sj_id)
             bb = sj.bounding_box
+            # TODO: HACK, hard-coded for 10-10-20 nm voxel resolution,
+            #  this SJ-CS overlap method will be outdated very soon
+            if np.any((bb[1] - bb[0]) > 2500):
+                print('\nSkipped huge SJ with size: {}, offset: {}, sj_id: {}'
+                      ', sj_coord: {}\n'.format(sj.size, sj.bounding_box[0],
+                                                sj_id, sj.rep_coord))
+                continue
             vxl_sj = sj.voxels
             offset, size = bb[0], bb[1] - bb[0]
-            cs_ids = cs_cset.from_chunky_to_matrix(size, offset, 'cs', ['cs'], dtype=np.uint64)['cs']
+            # print('\nSize: {}, offset: {}, sj_id: {}, sj_coord: {}\n'
+            #       '------------------------------------------------'
+            #       ''.format(size, offset, sj_id, sj.rep_coord))
+            cs_ids = cs_cset.from_chunky_to_matrix(size, offset, 'cs', ['cs'],
+                                                   dtype=np.uint64)['cs']
             u_cs_ids, c_cs_ids = np.unique(cs_ids, return_counts=True)
 
             zero_ratio = c_cs_ids[u_cs_ids == 0] / np.sum(c_cs_ids)

@@ -28,7 +28,7 @@ backend = "FS"  # File system
 PYOPENGL_PLATFORM = 'osmesa'  # Rendering
 
 # file logging for individual modules, and per job. Only use in case of
-# debugging with single processes. Logs for all scripts in 'SyConn/scripts/'
+# debugging with single core processing. Logs for scripts in 'SyConn/scripts/'
 # will be stored at wd + '/logs/'.
 DISABLE_FILE_LOGGING = True
 
@@ -57,7 +57,7 @@ model_dir = wd + '/models/'
 mpath_tnet = '{}/TN-10-Neighbors/'.format(model_dir)
 mpath_spiness = '{}/FCN-VGG13--Lovasz--NewGT/'.format(model_dir)
 mpath_celltype = '{}/celltype_g1_20views_v3/g1_20views_v3-FINAL.mdl'.format(model_dir)
-mpath_axoness = '{}/axoness_g1_v3/g1_v3-FINAL.mdl'.format(model_dir)
+mpath_axoness = '{}/axoness_g1_v2/g1_v2-FINAL.mdl'.format(model_dir)
 mpath_glia = '{}/glia_g0_v0/g0_v0-FINAL.mdl'.format(model_dir)
 
 # --------- RFC PARAMETERS

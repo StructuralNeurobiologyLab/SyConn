@@ -12,10 +12,11 @@ from syconn.extraction import object_extraction_wrapper as oew
 from syconn.reps import segmentation as seg
 from syconn.reps import super_segmentation as ss
 
-# TODO: Adapt full_run.py to be run on example dataset
 
+# path to KnossosDataset of EM segmentation
 kd_seg_path = "/mnt/j0126_cubed/"
-wd = "/mnt/j0126/areaxfs_v10/"
+wd = global_params.wd  # "/mnt/j0126/areaxfs_v10/"
+# resulting ChunkDataset, required for SV extraction  # TODO: get rid of this redundancy
 cd_dir = wd + "chunkdatasets/"
 
 
@@ -28,8 +29,8 @@ cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
                         box_coords=[0, 0, 0], fit_box_size=True)
 
 
-# Object extraction - 2h
-#oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=5000,
+# Object extraction - 2h, the same has to be done for all cell organelles
+# oew.from_ids_to_objects(cd, None, overlaydataset_path=kd_seg_path, n_chunk_jobs=5000,
 #                        hdf5names=["sv"], n_max_co_processes=5000, qsub_pe='default', qsub_queue='all.q', qsub_slots=1,
 #                        n_folders_fs=10000)
 
@@ -39,7 +40,7 @@ cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
 
 # Map objects to sv's # TODO: make dependent on global_params.existing_cell_organelles
 # About 0.2 h per object class
-#sd_proc.map_objects_to_sv(sd, "sj", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
+# sd_proc.map_objects_to_sv(sd, "sj", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
 
 #sd_proc.map_objects_to_sv(sd, "vc", kd_seg_path, qsub_pe='default', qsub_queue='all.q', nb_cpus=1, n_max_co_processes=5000, stride=20)
 

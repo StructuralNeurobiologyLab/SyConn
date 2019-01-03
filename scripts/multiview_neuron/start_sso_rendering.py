@@ -47,7 +47,7 @@ if __name__ == "__main__":
     path_to_out = qu.QSUB_script(multi_params, "render_views", pe="openmp",
                                  n_max_co_processes=380, queue=None,
                                  script_folder=script_folder, suffix="")
-    log.info('Finished rendering of {}/{} SSVs.'.format(len(multi_params),
+    log.info('Finished rendering of {}/{} SSVs.'.format(len(ordering),
                                                         len(nb_svs_per_ssv)))
     # identify huge SSVs and process them individually on whole cluster
     big_ssv = ssd.ssv_ids[~size_mask]
@@ -57,7 +57,7 @@ if __name__ == "__main__":
             kk+1, len(big_ssv), len(ssv.sv_ids)))
         ssv.render_views(add_cellobjects=True, cellobjects_only=False,
                          woglia=True, qsub_pe="openmp", overwrite=True,
-                         qsub_co_jobs=340)
+                         qsub_co_jobs=340, skip_indexviews=False)
     log.info('Finished rendering of all SSVs. Checking completeness.')
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=10)
     if len(res) != 0:

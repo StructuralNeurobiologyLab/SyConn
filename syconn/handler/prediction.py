@@ -702,9 +702,6 @@ def get_axoness_model():
 
 
 def get_glia_model():
-    """
-    Retrained with GP dendrites. May 2018.
-    """
     m = NeuralNetworkInterface(global_params.mpath_glia, imposed_batch_size=200,
                                nb_labels=2, normalize_data=True)
     _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
@@ -714,7 +711,8 @@ def get_glia_model():
 def get_celltype_model(init_gpu=None):
     # this model was trained with 'naive_view_normalization'
     m = NeuralNetworkInterface(global_params.mpath_celltype,
-                               imposed_batch_size=2, nb_labels=4, normalize_data=True,
+                               imposed_batch_size=2, nb_labels=4,
+                               normalize_data=True,
                                init_gpu=init_gpu)
     _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
     return m

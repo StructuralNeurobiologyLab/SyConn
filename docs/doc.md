@@ -21,7 +21,6 @@ organized in [SegmentationDatasets](segmentation_datasets.md).
 
 * Multi-view representation of SSOs (see docs for [glia](glia_removal.md) and [neuron](neuron_analysis.md) analysis; [preprint](https://www.biorxiv.org/content/early/2018/07/06/364034) on biorXiv)
 
-
 ## Analysis steps
 After initialization of the SDs (SVs and cellular organelles) and the SSD
 containing the agglomerated SVs, several analysis steps can be applied:

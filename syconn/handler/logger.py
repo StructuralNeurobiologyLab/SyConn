@@ -81,6 +81,9 @@ def initialize_logging(log_name, log_dir=None):
         # add the handlers to logger
         fh = logging.FileHandler(log_dir + log_name + ".log")
         fh.setLevel(logging.DEBUG)
+        formatter = logging.Formatter(
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+        fh.setFormatter(formatter)
         logger.addHandler(fh)
     return logger
 

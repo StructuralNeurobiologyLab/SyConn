@@ -17,6 +17,7 @@ from collections import defaultdict
 from scipy import spatial
 from knossos_utils.skeleton_utils import annotation_to_nx_graph,\
     load_skeleton as load_skeleton_kzip
+from scipy.ndimage.filters import gaussian_filter
 
 from .rep_helper import assign_rep_values, colorcode_vertices
 from . import segmentation
@@ -889,14 +890,13 @@ def label_array_for_sso_skel(sso, comment_converter):
     return label_array
 
 
-def write_axpred(ssv, pred_key_appendix, dest_path=None, k=1):
+def write_axpred_cnn(ssv, pred_key_appendix, dest_path=None, k=1):
     if dest_path is None:
         dest_path = ssv.skeleton_kzip_path_views
     pred_key = "axoness_preds%s" % pred_key_appendix
     if not ssv.attr_exists(pred_key):
         print("Couldn't find specified axoness prediction. Falling back to "
               "default.")
-        raise ValueError
         preds = np.array(start_multiprocess_obj("axoness_preds",
                                                    [[sv, {
                                                        "pred_key_appendix": pred_key_appendix}]
@@ -911,7 +911,10 @@ def write_axpred(ssv, pred_key_appendix, dest_path=None, k=1):
     pred_coords = np.concatenate(locs)
     assert pred_coords.ndim == 2
     assert pred_coords.shape[1] == 3
-    ssv._pred2mesh(pred_coords, preds, "axoness.ply", dest_path=dest_path, k=k)
+    colors = np.array(np.array([[0.6, 0.6, 0.6, 1], [0.841, 0.138, 0.133, 1.],
+                                [0.32, 0.32, 0.32, 1.]]) * 255, dtype=np.uint)
+    ssv._pred2mesh(pred_coords, preds, "axoness.ply", dest_path=dest_path, k=k,
+                   colors=colors)
 
 
 def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
@@ -1147,7 +1150,7 @@ def predict_views_semseg(views, model, batch_size=20, verbose=False):
     Parameters
     ----------
     views : np.array
-        shape of [N_LOCS, N_CH, N_VIEWS, X, Y]
+        shape of [N_LOCS, N_CH, N_VIEWS, X, Y] as uint8 scaled from 0 to 255
     model : pytorch model
     batch_size : int
     verbose : bool
@@ -1163,8 +1166,17 @@ def predict_views_semseg(views, model, batch_size=20, verbose=False):
     views = views.swapaxes(1, 2)  # swap channel and view axis
     # N, 2, 4, 128, 256
     orig_shape = views.shape
-    # reshape to predict single projections
+    # reshape to predict single projections, N*2, 4, 128, 256
     views = views.reshape([-1] + list(orig_shape[2:]))
+
+    # smooth images
+    n_views = len(views)
+    n_views = len(views)
+    views = views.reshape([-1] + list(orig_shape[2:]))
+    for ii in range(len(views)):
+        views[ii] = gaussian_filter(views[ii])
+    views = views.reshape([n_views, -1] + list(views.shape[1:]))
+
     if verbose:
         log_reps.info('Predicting view array with shape {}.'
                       ''.format(views.shape))
@@ -1193,6 +1205,7 @@ def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
     model :
     views : List[np.array]
         N_SV each with np.array of shape [N_LOCS, N_CH, N_VIEWS, X, Y]
+         as uint8 scaled from 0 to 255
     pred_key : str
     nb_cpus : int
         number CPUs for saving the SV views
@@ -1212,6 +1225,7 @@ def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
     part_views = np.cumsum([0] + [len(v) for v in views])
     assert len(part_views) == len(views) + 1
     views = np.concatenate(views)  # merge axis 0, i.e. N_SV and N_LOCS to N_SV*N_LOCS
+    # views have shape: M, 4, 2, 128, 256
     label_views = predict_views_semseg(views, model, verbose=verbose)
     svs_labelviews = []
     for ii in range(len(part_views[:-1])):

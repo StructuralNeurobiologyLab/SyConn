@@ -7,13 +7,14 @@
 
 from ctypes import sizeof, c_float, c_void_p, c_uint
 from PIL import Image
-from .image import rgb2gray, apply_clahe, normalize_img
 import numpy as np
 import time
 import os
 import tqdm
 import warnings
+from scipy.ndimage.filters import gaussian_filter
 
+from .image import rgb2gray, apply_clahe, normalize_img
 from ..config import global_params
 from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
@@ -152,7 +153,7 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
                             GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE)
         data = Image.frombuffer("L", (ws[0], ws[1]), data, 'raw', 'L', 0, 1) #(mode, size, data, 'raw', mode, 0, 1)
         data = np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM))
-        data = normalize_img(data, max_val=255).astype(np.uint8)
+        data = gaussian_filter(data, .7)
         if clahe:
             data = apply_clahe(data)
         if np.sum(data) == 0:

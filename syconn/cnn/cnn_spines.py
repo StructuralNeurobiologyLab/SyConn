@@ -31,7 +31,7 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="FCN-VGG13--BlurryBoundary--NewGT", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="FCN-VGG13--Lovasz--NewGT-v2", help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
@@ -54,7 +54,6 @@ if __name__ == "__main__":
 
     torch.manual_seed(0)
 
-
     # USER PATHS
     save_root = os.path.expanduser('~/e3training/')
 
@@ -62,7 +61,7 @@ if __name__ == "__main__":
     lr = 0.004
     lr_stepsize = 500
     lr_dec = 0.99
-    batch_size = 20
+    batch_size = 10
 
     model = get_model()
     if torch.cuda.device_count() > 1:
@@ -86,7 +85,7 @@ if __name__ == "__main__":
     )
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
-    criterion = BlurryBoarderLoss().to(device)
+    criterion = LovaszLoss().to(device)
 
     # Create and run trainer
     trainer = Trainer(

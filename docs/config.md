@@ -40,3 +40,7 @@ vc = 1584
 
 Additionally, `syconn.config.global_params.py` stores `SyConn`-wide(!) parameters such as currently active working directory and meshing parameters.
 This will be refactored at some point into a single configuration location.
+
+# Working directory
+The working directory stores SegmentationDatasets and SuperSegmentationDatasets of the initial, the glia split RAG, the
+ cell organelles and contact sites / synapses and is specified in `syconn.config.global_params.py`. The above config has to be place within the working directory.
