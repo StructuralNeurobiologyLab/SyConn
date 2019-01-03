@@ -1206,7 +1206,8 @@ class SuperSegmentationObject(object):
 
     def render_views(self, add_cellobjects=False, verbose=False,
                      qsub_pe=None, overwrite=False, cellobjects_only=False,
-                     woglia=True, skip_indexviews=False, qsub_co_jobs=300):
+                     woglia=True, skip_indexviews=False, qsub_co_jobs=300,
+                     resume_job=False):
         """
         Renders views for each SV based on SSV context and stores them
         on SV level. Usually only used once: for initial glia or axoness
@@ -1267,7 +1268,7 @@ class SuperSegmentationObject(object):
                 params = [[par, so_kwargs, render_kwargs] for par in params]
                 qu.QSUB_script(params, "render_views_partial", suffix="_SSV{}".format(self.id),
                                pe=qsub_pe, queue=None, script_folder=script_folder,
-                               n_max_co_processes=qsub_co_jobs)
+                               n_max_co_processes=qsub_co_jobs, resume_job=resume_job)
             else:
                 raise Exception("QSUB not available")
         else:

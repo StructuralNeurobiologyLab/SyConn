@@ -57,7 +57,7 @@ if __name__ == "__main__":
             kk+1, len(big_ssv), len(ssv.sv_ids)))
         ssv.render_views(add_cellobjects=True, cellobjects_only=False,
                          woglia=True, qsub_pe="openmp", overwrite=True,
-                         qsub_co_jobs=340, skip_indexviews=False)
+                         qsub_co_jobs=340, skip_indexviews=False, resume_job=False)
     log.info('Finished rendering of all SSVs. Checking completeness.')
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=10)
     if len(res) != 0:

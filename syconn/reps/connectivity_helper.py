@@ -7,6 +7,7 @@
 import time
 import numpy as np
 import networkx as nx
+import pandas as pd
 
 from ..reps import super_segmentation as ss
 from ..reps import segmentation
@@ -210,13 +211,8 @@ def connectivity_exporter(human_cell_type_labels = True,
     -------
 
     """
-
-
-
     # parse contact site segmentation dataset
     df_dict = load_cached_data_dict()
-
-
 
     if only_synapses == False:
         start = time.time()
@@ -257,8 +253,6 @@ def connectivity_exporter(human_cell_type_labels = True,
                                               df_dict['neuron_partner_ax_0']])
             df_dict['neuron_partner_ax_1'] = np.array([pre_post_map[int(el)] for el in
                                               df_dict['neuron_partner_ax_1']])
-
-
 
         start = time.time()
         df = pd.DataFrame(df_dict)

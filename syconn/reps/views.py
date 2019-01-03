@@ -129,7 +129,7 @@ class ViewContainer(object):
                center[1]-2:center[1]+2] == 0.)):
                 return True
         if np.sum(views[0]) == np.prod(views[0].shape) or \
-           np.sum(views[0]) == 0 :
+           np.sum(views[0]) == 0:
             return True
         else:
             return False

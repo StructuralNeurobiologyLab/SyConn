@@ -50,7 +50,7 @@ python_path = sys.executable
 
 def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 additional_flags='', suffix="", job_name="default",
-                script_folder=None, n_max_co_processes=None,
+                script_folder=None, n_max_co_processes=None, resume_job=False,
                 sge_additional_flags=None, iteration=0, max_iterations=3):
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
@@ -99,6 +99,13 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         path to the output directory
 
     """
+    if resume_job:
+        return resume_QSUB_script(
+            params, name, queue=queue, pe=pe, max_iterations=max_iterations,
+            priority=priority, additional_flags=additional_flags, script_folder=script_folder,
+            job_name=job_name, suffix=suffix,
+            sge_additional_flags=sge_additional_flags, iteration=iteration,
+            n_max_co_processes=n_max_co_processes,  n_cores=n_cores)
     job_folder = qsub_work_folder+"/%s_folder%s/" % (name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
@@ -263,7 +270,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         log_batchjob.error(msg)
         raise Exception(msg)
     if len(out_files) < len(params):
-        log_batchjob.error("%d jobs appear to have failed" % (len(params) - len(out_files)))
+        log_batchjob.error("%d jobs appear to have failed." % (len(params) - len(out_files)))
         checklist = np.zeros(len(params), dtype=np.bool)
 
         for p in out_files:
@@ -274,7 +281,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         if iteration >= max_iterations:
             raise RuntimeError(msg)
 
-        missed_params = params[checklist]
+        missed_params = np.array(params)[~checklist]
         # set number cores per job higher which will at the same time increase
         # the available amount of memory per job
         n_cores += 1  # incrase number of cores per job by at least 1
@@ -283,10 +290,91 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         # if all jobs failed, increase number of cores
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
-            priority=priority, additional_flags='', script_folder=script_folder,
+            priority=priority, additional_flags=additional_flags, script_folder=script_folder,
             job_name="default", suffix=suffix+"iter"+str(iteration),
             sge_additional_flags=sge_additional_flags, iteration=iteration+1,
             n_max_co_processes=n_max_co_processes,  n_cores=n_cores)
+
+    return path_to_out
+
+
+def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
+                        additional_flags='', suffix="", job_name="default",
+                        script_folder=None, n_max_co_processes=None,
+                        sge_additional_flags=None, iteration=0, max_iterations=3):
+    """
+    QSUB handler - takes parameter list like normal multiprocessing job and
+    runs them on the specified cluster
+
+    IMPORTANT NOTE: the user has to make sure that queues exist and work; we
+    suggest to generate multiple queues handling different workloads
+
+    Parameters
+    ----------
+    params: List
+        list of all parameter sets to be processed
+    name: str
+        name of job - specifies script with QSUB_%s % name
+    queue: str or None
+        queue name
+    pe: str
+        parallel environment name
+    n_cores: int
+        number of cores per job submission
+    priority: int
+        -1024 .. 1023, job priority, higher is more important
+    additional_flags: str
+        additional command line flags to be passed to qsub
+    suffix: str
+        suffix for folder names - enables the execution of multiple qsub jobs
+        for the same function
+    job_name: str
+        unique name for job - or just 'default' which gets changed into a
+        random name automatically
+    script_folder: str or None
+        directory in which the QSUB_* file is located
+    n_max_co_processes: int or None
+        limits the number of processes that are executed on the cluster at the
+        same time; None: no limit
+    iteration : int
+        This counter stores how often QSUB_script was called for the same job
+         submission. E.g. if jobs fail during a submission, it will be repeated
+         max_iterations times.
+    sge_additional_flags : str
+    max_iterations : int
+
+    Returns
+    -------
+    path_to_out: str
+        path to the output directory
+
+    """
+    job_folder = qsub_work_folder + "/%s_folder%s/" % (name, suffix)
+    if not os.path.exists(job_folder):
+        raise RuntimeError('Job folder has to exist, in order to resume unfinished job.')
+    log_batchjob = initialize_logging("{}_resumed".format(name + suffix),
+                                      log_dir=job_folder)
+
+    path_to_out = "%s/out/" % job_folder
+
+    out_files = glob.glob(path_to_out + "*.pkl")
+    if len(out_files) < len(params):
+        log_batchjob.error("%d jobs appear to have failed. Restarting."
+                           "" % (len(params) - len(out_files)))
+        checklist = np.zeros(len(params), dtype=np.bool)
+
+        for p in out_files:
+            checklist[int(re.findall("[\d]+", p)[-1])] = True
+
+        missed_params = np.array(params)[~checklist]
+        return QSUB_script(
+            missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
+            priority=priority, script_folder=script_folder, job_name=job_name,
+            suffix=suffix + "_resumed", additional_flags=additional_flags,
+            sge_additional_flags=sge_additional_flags, iteration=iteration,
+            n_max_co_processes=n_max_co_processes, n_cores=n_cores)
+    else:
+        log_batchjob.info('All jobs had already been finished successfully.')
 
     return path_to_out
 

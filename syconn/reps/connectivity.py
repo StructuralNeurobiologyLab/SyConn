@@ -4,7 +4,6 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
 import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
 import matplotlib.colors as mcolors
@@ -20,7 +19,6 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-
 try:
     default_wd_available = True
     from ..config.global_params import wd
@@ -63,8 +61,8 @@ def diverge_map(low=(239/255., 65/255., 50/255.),
     or rgb color tuples
     """
     c = mcolors.ColorConverter().to_rgb
-    if isinstance(low, basestring): low = c(low)
-    if isinstance(high, basestring): high = c(high)
+    if isinstance(low, str): low = c(low)
+    if isinstance(high, str): high = c(high)
     return make_colormap([low, c('white'), 0.5, c('white'), high])
 
 
@@ -677,7 +675,7 @@ def get_sso_specific_info_thread(args):
     ssd = ss.SuperSegmentationDataset(working_dir,
                                       version=ssd_version)
 
-    cm = connectivity.ConnectivityMatrix(working_dir,
+    cm = ConnectivityMatrix(working_dir,
                                          version=version,
                                          sj_version=sj_version,
                                          create=False)

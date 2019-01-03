@@ -1202,7 +1202,8 @@ def export_matrix(wd, conn_version=None, dest_name=None, syn_prob_t=.5):
     if dest_name is None:
         dest_name = conn_sd.path + "/conn_mat"
 
-    np.savetxt(dest_name + ".csv", table, delimiter="\t", header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tsynprob")
+    np.savetxt(dest_name + ".csv", table, delimiter="\t",
+               header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tsynprob")
 
     labels = np.array(["N/A", "D", "A", "S"])
     labels_ids = np.array([-1, 0, 1, 2])

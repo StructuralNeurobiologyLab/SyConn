@@ -38,3 +38,4 @@ if __name__ == "__main__":
     sd = SegmentationDataset("syn", working_dir=global_params.wd, version="0")
     dataset_analysis(sd, qsub_pe='openmp', compute_meshprops=False)
     # TODO: merge syn objects according to RAG/mergelist/SSVs and build syn_ssv dataset
+    # TODO add syn object mapping to pipeline

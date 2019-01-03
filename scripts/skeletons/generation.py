@@ -17,7 +17,7 @@ from syconn.handler.logger import initialize_logging
 if __name__ == "__main__":
     log = initialize_logging('skeleton_generation', global_params.wd + '/logs/')
     ssd = SuperSegmentationDataset(working_dir=global_params.wd)
-    # TODO: Use this as template for SSD based QSUB jobs
+    # TODO: Order by SSV size
     multi_params = ssd.ssv_ids
     np.random.shuffle(multi_params)
     multi_params = chunkify(multi_params, 3000)
@@ -26,7 +26,7 @@ if __name__ == "__main__":
                     for ssv_ids in multi_params]
     script_folder = os.path.dirname(os.path.abspath(__file__)) + \
                     "/../../syconn/QSUB_scripts/"
-    kwargs = dict(n_max_co_processes=200, pe="openmp", queue=None,
+    kwargs = dict(n_max_co_processes=380, pe="openmp", queue=None,
                   script_folder=script_folder, suffix="")
     # create SSV skeletons, requires SV skeletons!
     log.info('Starting skeleton generation of {} SSVs.'.format(
