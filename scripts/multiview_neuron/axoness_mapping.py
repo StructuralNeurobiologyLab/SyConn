@@ -25,9 +25,9 @@ if __name__ == "__main__":
     np.random.shuffle(multi_params)
     multi_params = chunkify(multi_params, 2000)
     multi_params = [(par, pred_key_appendix) for par in multi_params]
-    log('Starting axoness mapping.')
+    log.info('Starting axoness mapping.')
     path_to_out = qu.QSUB_script(multi_params, "map_viewaxoness2skel",
-                                 n_max_co_processes=280, pe="openmp", queue=None,
+                                 n_max_co_processes=340, pe="openmp", queue=None,
                                  script_folder=script_folder, suffix="", n_cores=1)
     # TODO: perform completeness check
     log.info('Finished axoness mapping.')

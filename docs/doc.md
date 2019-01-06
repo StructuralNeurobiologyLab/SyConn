@@ -11,6 +11,7 @@ Then install all prerequisites and finally git clone and install syconn:
 conda install vigra -c ukoethe
 conda install mesa -c menpo
 conda install osmesa -c menpo
+conda install freeglut
 conda install pyopengl
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 cd SyConn
@@ -21,6 +22,14 @@ Or alternatively with the developer flag:
 ```
 pip install -e .
 ```
+In order to use elektronn3 models, python>=3.6 is required (when installing elektronn3 checkout
+ branch `phil`; this will be updated soon to work with the `master` branch):
+```
+conda create -n py36 python=3.6 anaconda
+source activate py36
+```
+Specify the path to this python executable at `global_params.py36path`. Also install torch
+For the SyConn installation in the py36 environment vigra can be ignored.
 
 ## Package structure and data classes
 The basic data structures and initialization procedures are explained in the following sections:

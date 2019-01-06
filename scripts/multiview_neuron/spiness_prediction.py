@@ -7,7 +7,7 @@
 import os
 import numpy as np
 
-from syconn.config.global_params import wd, mpath_spiness
+from syconn.config.global_params import wd, mpath_spiness, py36path
 from syconn.handler.basics import chunkify
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.mp import qsub_utils as qu
@@ -19,12 +19,12 @@ if __name__ == "__main__":
     # TODO: currently working directory has to be set globally in global_params and is not adjustable here
     #  because all qsub jobs will start a script referring to 'global_params.wd'
     ssd = SuperSegmentationDataset(working_dir=wd)
+    pred_key = "spiness"
 
     # run semantic spine segmentation on multi views
     sd = ssd.get_segmentationdataset("sv")
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 100)
-    pred_key = "spiness"
     # set model properties
     model_kwargs = dict(src=mpath_spiness, multi_gpu=False)
     so_kwargs = dict(working_dir=wd)
@@ -32,12 +32,10 @@ if __name__ == "__main__":
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs]
                     for par in multi_params]
     log.info('Starting spine prediction.')
-    script_folder = os.path.dirname(
-        os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     qu.QSUB_script(multi_params, "predict_spiness_chunked",
-                   n_max_co_processes=25, pe="openmp", queue=None,
-                   script_folder=script_folder, n_cores=10,
-                   suffix="",  additional_flags="--gres=gpu:1")  # removed -V
+                   n_max_co_processes=34, pe="openmp", queue=None,
+                   n_cores=10, python_path=py36path,  # use python 3.6 in
+                   suffix="",  additional_flags="--gres=gpu:1")   # removed -V
 
     # map semantic spine segmentation of multi views on SSV mesh
     if not ssd.mapping_dict_exists:
@@ -52,6 +50,6 @@ if __name__ == "__main__":
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
                      kwargs_semseg2mesh) for ssv_ids in multi_params]
     log.info('Starting mapping of spine predictions to neurite surfaces.')
-    qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=190,
-                   pe="openmp", queue=None, script_folder=script_folder,
-                   n_cores=2, suffix="", additional_flags="")  # removed -V
+    qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=170,
+                   pe="openmp", queue=None, n_cores=2, suffix="",
+                   additional_flags="", resume_job=False)  # removed -V

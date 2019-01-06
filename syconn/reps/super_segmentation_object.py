@@ -13,6 +13,7 @@ import re
 import scipy.spatial
 import shutil
 import time
+import tqdm
 from collections import Counter
 from scipy.misc import imsave
 from knossos_utils import skeleton
@@ -1228,6 +1229,7 @@ class SuperSegmentationObject(object):
             rendering prior to glia-splitting.
         qsub_co_jobs : int
             Number of parallel jobs if QSUB is used
+        resume_job : bool
         Returns
         -------
 
@@ -1266,8 +1268,9 @@ class SuperSegmentationObject(object):
                                  "cellobjects_only": cellobjects_only,
                                  'skip_indexviews': skip_indexviews}
                 params = [[par, so_kwargs, render_kwargs] for par in params]
-                qu.QSUB_script(params, "render_views_partial", suffix="_SSV{}".format(self.id),
-                               pe=qsub_pe, queue=None, script_folder=script_folder,
+                qu.QSUB_script(
+                    params, "render_views_partial", suffix="_SSV{}".format(self.id),
+                               pe=qsub_pe, queue=None, script_folder=script_folder, n_cores=2,
                                n_max_co_processes=qsub_co_jobs, resume_job=resume_job)
             else:
                 raise Exception("QSUB not available")
@@ -2324,3 +2327,33 @@ def merge_axis02(arr):
     # reshape to predict single projections
     arr = arr.reshape([-1] + list(orig_shape[2:]))
     return arr
+
+
+def celltype_predictor(args):
+    """
+
+    Parameters
+    ----------
+    args :
+
+    Returns
+    -------
+
+    """
+    from ..handler.prediction import get_celltype_model
+    ssv_ids = args
+    # randomly initialize gpu
+    m = get_celltype_model(init_gpu=0)
+    pbar = tqdm.tqdm(total=len(ssv_ids))
+    missing_ssvs = []
+    for ix in ssv_ids:
+        ssv = SuperSegmentationObject(ix, working_dir=global_params.wd)
+        ssv.nb_cpus = 1
+        try:
+            ssh.predict_sso_celltype(ssv, m, overwrite=True)
+        except Exception as e:
+            missing_ssvs.append((ssv.id, e))
+            print(repr(e))
+        pbar.update(1)
+    pbar.close()
+    return missing_ssvs

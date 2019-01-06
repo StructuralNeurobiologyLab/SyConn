@@ -14,19 +14,20 @@ from syconn.config import global_params
 from syconn.handler.logger import initialize_logging
 
 
+# ~1h for >90%, >15h for all
 if __name__ == "__main__":
     log = initialize_logging('skeleton_generation', global_params.wd + '/logs/')
     ssd = SuperSegmentationDataset(working_dir=global_params.wd)
-    # TODO: Order by SSV size
+    # TODO: Order by SSV size, currently suffers extremely from curse of the last reducer
     multi_params = ssd.ssv_ids
     np.random.shuffle(multi_params)
-    multi_params = chunkify(multi_params, 3000)
+    multi_params = chunkify(multi_params, 4000)
     # add ssd parameters
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir)
                     for ssv_ids in multi_params]
     script_folder = os.path.dirname(os.path.abspath(__file__)) + \
                     "/../../syconn/QSUB_scripts/"
-    kwargs = dict(n_max_co_processes=380, pe="openmp", queue=None,
+    kwargs = dict(n_max_co_processes=340, pe="openmp", queue=None,
                   script_folder=script_folder, suffix="")
     # create SSV skeletons, requires SV skeletons!
     log.info('Starting skeleton generation of {} SSVs.'.format(

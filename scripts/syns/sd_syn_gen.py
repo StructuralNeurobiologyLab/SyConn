@@ -9,33 +9,53 @@ from knossos_utils import chunky
 from syconn.config import global_params
 from syconn.extraction import object_extraction_wrapper as oew
 from syconn.extraction import cs_processing_steps
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.proc.sd_proc import dataset_analysis
+from syconn.extraction import cs_extraction_steps as ces
+from syconn.extraction import cs_processing_steps as cps
 
 
 if __name__ == "__main__":
     # kd_seg_path = "/mnt/j0126_cubed/"
     # kd = knossosdataset.KnossosDataset()  # Sets initial values of object
-    # kd.initialize_from_knossos_path(kd_seg_path)  # Initializes the dataset by parsing the knossos.conf in path + "mag1"
-    #
-    # cd = chunky.ChunkDataset()  # Class that contains a dict of chunks (with coordinates) after initializing it
+    # # Initializes the dataset by parsing the knossos.conf in path + "mag1"
+    # kd.initialize_from_knossos_path(kd_seg_path)
+    # # TODO: change path of CS chunkdataset
+    # cd_dir = global_params.wd + "/chunkdatasets/"
+    # # Class that contains a dict of chunks (with coordinates) after initializing it
+    # cd = chunky.ChunkDataset()
     # cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
     #               box_coords=[0, 0, 0], fit_box_size=True)
     # oew.from_ids_to_objects(cd, 'cs', n_chunk_jobs=2000, dataset_names=['syn'],
-    #                         hdf5names=["cs"], n_max_co_processes=300, n_folders_fs=100000)
+    #                         hdf5names=["cs"], n_max_co_processes=300,
+    #                         n_folders_fs=100000)
+    #
+    # # POPULATES CS CD with SV contacts
+    # ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=5000,
+    #                       qsub_pe='default', qsub_queue='all.q')
+    #
+    # # create overlap dataset between SJ and CS
+    # # TODO: SD for cs_agg and sj will not be needed anymore
+    # cs_sd = SegmentationDataset('cs_agg', working_dir=global_params.wd, version=0)  # version hard coded, TODO: Change before next use to default
+    # sj_sd = SegmentationDataset('sj', working_dir=global_params.wd)
+    # cs_cset = chunky.load_dataset(cd_dir, update_paths=True)
+    #
+    # # TODO: write new method which iterates over sj prob. map (KD), CS ChunkDataset / KD and (optionally) synapse type in parallel and to create a syn segmentation within from_probmaps_to_objects
+    # cs_processing_steps.overlap_mapping_sj_to_cs_via_cset(cs_sd, sj_sd, cs_cset,
+    #                                                       n_max_co_processes=30,
+    #                                                       nb_cpus=10, qsub_pe='openmp')
+    # sd = SegmentationDataset("syn", working_dir=global_params.wd, version="0")
+    # dataset_analysis(sd, qsub_pe='openmp', compute_meshprops=False)
 
-    # TODO: change path of CS chunkdataset
-    cd_dir = global_params.wd + "/chunkdatasets/"
-    # TODO: SD for cs_agg and sj will not be needed anymore
-    cs_sd = SegmentationDataset('cs_agg', working_dir=global_params.wd, version=0)  # version hard coded, TODO: Change before next use to default
-    sj_sd = SegmentationDataset('sj', working_dir=global_params.wd)
-    cs_cset = chunky.load_dataset(cd_dir, update_paths=True)
-
-    # TODO: write new method which iterates over sj prob. map (KD), CS ChunkDataset / KD and (optionally) synapse type in parallel and to create a syn segmentation within from_probmaps_to_objects
-    cs_processing_steps.overlap_mapping_sj_to_cs_via_cset(cs_sd, sj_sd, cs_cset,
-                                                          n_max_co_processes=30,
-                                                          nb_cpus=10, qsub_pe='openmp')
-    sd = SegmentationDataset("syn", working_dir=global_params.wd, version="0")
-    dataset_analysis(sd, qsub_pe='openmp', compute_meshprops=False)
     # TODO: merge syn objects according to RAG/mergelist/SSVs and build syn_ssv dataset
+    ssd = SuperSegmentationDataset(global_params.wd)
+    cps.combine_and_split_syn(global_params.wd, cs_gap_nm=300,
+                                 stride=100, qsub_pe='default',
+                                 qsub_queue='all.q', resume_job=False,
+                                 n_max_co_processes=200)
+    ssd_syn = SuperSegmentationDataset(global_params.wd, ssd_type='syn_ssv',
+                                       version='new')
     # TODO add syn object mapping to pipeline
+
+

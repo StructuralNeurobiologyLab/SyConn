@@ -40,7 +40,7 @@ def get_main_log():
     return logger
 
 
-def initialize_logging(log_name, log_dir=None):
+def initialize_logging(log_name, log_dir=global_params.default_log_dir):
     """
     Logger for each package module. For import processing steps individual
     logger can be defined (e.g. multiviews, skeleton)
@@ -56,13 +56,6 @@ def initialize_logging(log_name, log_dir=None):
     -------
 
     """
-    predefined_lognames = ['mp', 'gate', 'proc', 'ui', 'skeleton', 'multiview',
-                           'handler', 'cnn', 'extraction', 'reps',
-                           'object_extraction', 'backend']
-    # not necessary...
-    # if log_name not in predefined_lognames:
-    #     log_main.warning("Please use logger names as specified"
-    #                      " here: {}".format(predefined_lognames))
     logger = logging.getLogger(log_name)
     coloredlogs.install(level='DEBUG', logger=logger)
     logger.setLevel(logging.DEBUG)
@@ -91,5 +84,5 @@ def initialize_logging(log_name, log_dir=None):
 # init main logger
 log_main = get_main_log()
 
-
-
+# TODO: might be interesting to redirect output of syconn modules
+# (proc, handler, ...) more dynamically.

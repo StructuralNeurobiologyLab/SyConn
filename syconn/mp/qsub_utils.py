@@ -23,14 +23,15 @@ import time
 
 from ..handler.basics import temp_seed
 from ..handler.logger import initialize_logging
+from ..config import global_params
 
-BACKEND_IDENT = 'SLURM'
-__BATCHJOB__ = BACKEND_IDENT is not None
+BATCH_PROC_SYSTEM = global_params.BATCH_PROC_SYSTEM
+__BATCHJOB__ = BATCH_PROC_SYSTEM is not None
 
 try:
-    if BACKEND_IDENT == 'QSUB':
+    if BATCH_PROC_SYSTEM == 'QSUB':
         cmd_check = 'qstat'
-    elif BACKEND_IDENT == 'SLURM':
+    elif BATCH_PROC_SYSTEM == 'SLURM':
         cmd_check = 'squeue'
     else:
         raise NotImplementedError
@@ -42,16 +43,17 @@ except subprocess.CalledProcessError:
     __BATCHJOB__ = False
 
 home_dir = os.environ['HOME'] + "/"
-path_to_scripts_default = os.path.dirname(__file__)
-qsub_work_folder = "%s/%s/" % (home_dir, BACKEND_IDENT)
+path_to_scripts_default = global_params.batchjob_script_folder
+qsub_work_folder = "%s/%s/" % (home_dir, BATCH_PROC_SYSTEM)
 username = getpass.getuser()
-python_path = sys.executable
+python_path_global = sys.executable
 
 
 def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 additional_flags='', suffix="", job_name="default",
                 script_folder=None, n_max_co_processes=None, resume_job=False,
-                sge_additional_flags=None, iteration=0, max_iterations=3):
+                sge_additional_flags=None, iteration=1, max_iterations=3,
+                params_orig_id=None, python_path=None):
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
@@ -92,6 +94,13 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
          max_iterations times.
     sge_additional_flags : str
     max_iterations : int
+    resume_job : bool
+        If True, will only process jobs without an output pkl file.
+    params_orig_id : np.array or None
+        If given, has to have same length as params, and specifies the previous
+        job ID for each parameter. Only required if resuming a job.
+    python_path : str
+        Default is sys.executable
         
     Returns
     -------
@@ -106,12 +115,16 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             job_name=job_name, suffix=suffix,
             sge_additional_flags=sge_additional_flags, iteration=iteration,
             n_max_co_processes=n_max_co_processes,  n_cores=n_cores)
+    if python_path is None:
+        python_path = python_path_global
     job_folder = qsub_work_folder+"/%s_folder%s/" % (name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob = initialize_logging("{}".format(name + suffix),
                                       log_dir=job_folder)
-
+    log_batchjob.info('Starting BatchJob script {} with {} tasks using {}'
+                      ' parallel jobs, each using {} cores.'.format(
+        name, len(params), n_max_co_processes, n_cores))
     if sge_additional_flags is not None:
         log_batchjob.info('"sge_additional_flags" kwarg will soon be replaced'
                           ' with "additional_flags". Please adapt method'
@@ -127,7 +140,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         with temp_seed(hash(time.time()) % (2 ** 32 - 1)):
             letters = string.ascii_lowercase
             job_name = "".join([letters[l] for l in
-                                np.random.randint(0, len(letters), 10 if BACKEND_IDENT == 'QSUB' else 8)])
+                                np.random.randint(0, len(letters), 10 if BATCH_PROC_SYSTEM == 'QSUB' else 8)])
             log_batchjob.info("Random job_name created: %s" % job_name)
     else:
         log_batchjob.warning("WARNING: running multiple jobs via qsub is only supported "
@@ -168,6 +181,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     last_diff_rp = 0
     sleep_time = 10
     for i_job in range(len(params)):
+        if params_orig_id is not None:
+            job_id = params_orig_id[i_job]
+        else:
+            job_id = i_job
         if n_max_co_processes is not None:
             while last_diff_rp == 0:
                 nb_rp = number_of_running_processes(job_name)
@@ -182,11 +199,11 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             last_diff_rp -= 1
             sleep_time = 1
 
-        this_storage_path = path_to_storage+"job_%d.pkl" % i_job
-        this_sh_path = path_to_sh+"job_%d.sh" % i_job
-        this_out_path = path_to_out+"job_%d.pkl" % i_job
-        job_log_path = path_to_log + "job_%d.log" % i_job
-        job_err_path = path_to_err + "job_%d.log" % i_job
+        this_storage_path = path_to_storage + "job_%d.pkl" % job_id
+        this_sh_path = path_to_sh + "job_%d.sh" % job_id
+        this_out_path = path_to_out + "job_%d.pkl" % job_id
+        job_log_path = path_to_log + "job_%d.log" % job_id
+        job_err_path = path_to_err + "job_%d.log" % job_id
 
         with open(this_sh_path, "w") as f:
             f.write("#!/bin/bash\n")
@@ -203,7 +220,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         # except SyntaxError:
         # somehow the above does not work to catch the SyntaxError (python3 compatibility)
         os.chmod(this_sh_path, 0o744)
-        if BACKEND_IDENT == 'QSUB':
+        if BATCH_PROC_SYSTEM == 'QSUB':
             if pe is not None:
                 sge_queue_option = "-pe %s %d" % (pe, n_cores)
             elif queue is not None:
@@ -219,16 +236,17 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 additional_flags,
                 this_sh_path)
             subprocess.call(cmd_exec, shell=True)
-        elif BACKEND_IDENT == 'SLURM':
+        elif BATCH_PROC_SYSTEM == 'SLURM':
             if '-V ' in additional_flags:
                 log_batchjob.warning('"additional_flags" contained "-V" which is a QSUB/SGE specific flag,'
                                      ' but SLURM was set as batch system. Converting "-V" to "--export=ALL".')
                 additional_flags.replace('-V ', '--export=ALL ')
             if not '--mem=' in additional_flags:
-                mem_lim = int(256 * n_cores / 20)  # it seems nodes 02-07 get allocated completely with 256/20 using 20 jobs per node, whereas nodes 08, 10-18 do not -> therefore change the allocated memory for each job/core to be slightly lower than 256/20
-                additional_flags += ' --mem={}G'.format(mem_lim)
-                log_batchjob.info('Memory requirements were not set explicitly. '
-                                  'Setting to 256 GB*n_cores/20={} GB'.format(mem_lim))
+                # Node memory limit is 250,000M and not 250G! -> max memory per core is 250000M/20, leave safety margin
+                mem_lim = int(global_params.MEM_PER_NODE * n_cores / global_params.NCORES_PER_NODE)
+                additional_flags += ' --mem={}M'.format(mem_lim)
+                log_batchjob.info('Memory requirements were not set explicitly. Setting to 250,000 MB'
+                                  ' * n_cores / {} = {} MB'.format(global_params.NCORES_PER_NODE, mem_lim))
             if pe is not None:
                 queue_option = "--ntasks-per-node %d" % n_cores
             elif queue is not None:
@@ -239,7 +257,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 log_batchjob.warning('Priorities are not supported with SLURM.')
             # added '--quiet' flag to prevent submission messages, errors will still be printed
             # (https://slurm.schedmd.com/sbatch.html), DOES NOT WORK
-            cmd_exec = "sbatch {0} --output={1} --error={2} --quiet --job-name={3} {4} {5}".format(
+            cmd_exec = "sbatch {0} --output={1} --error={2}" \
+                       " --quiet --job-name={3} {4} {5}".format(
                 queue_option,
                 job_log_path,
                 job_err_path,
@@ -251,6 +270,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             raise NotImplementedError
 
     log_batchjob.info("All jobs are submitted: %s" % name)
+
     while True:
         nb_rp = number_of_running_processes(job_name)
         # check actually running files
@@ -263,8 +283,26 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         time.sleep(sleep_time)
     pbar.close()
     log_batchjob.info("All batch jobs have finished: %s" % name)
+
+    # Submit singleton job to send status email after jobs have been completed
+    this_sh_path = path_to_sh + "singleton.sh"
+    with open(this_sh_path, "w") as f:
+        f.write("#!/bin/bash\n")
+        f.write("")
+    job_log_path = path_to_log + "singleton.log"
+    job_err_path = path_to_err + "singleton.log"
+    cmd_exec = "sbatch {0} --output={1} --error={2} \
+     --quiet --job-name={3} --mail-type=END {4} ".format(
+        '--ntasks-per-node 1',
+        job_log_path,
+        job_err_path,
+        job_name,  # has to be the same as the above job name
+        this_sh_path)
+    subprocess.call(cmd_exec, shell=True)
+
     out_files = glob.glob(path_to_out + "*.pkl")
-    if len(out_files) == 0:
+    # only stop if first iteration and script was not resumed (params_orig_id is None)
+    if len(out_files) == 0 and (iteration == 1 or params_orig_id is not None):
         msg = 'All submitted jobs have failed. Re-submission will not be initiated.' \
               ' Please check your submitted code.'
         log_batchjob.error(msg)
@@ -281,19 +319,22 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         if iteration >= max_iterations:
             raise RuntimeError(msg)
 
-        missed_params = np.array(params)[~checklist]
+        missed_params = [params[ii] for ii in range(len(params)) if not checklist[ii]]
+        orig_job_ids = np.arange(len(params))[~checklist]
+        assert len(missed_params) == len(orig_job_ids)
         # set number cores per job higher which will at the same time increase
         # the available amount of memory per job
-        n_cores += 1  # incrase number of cores per job by at least 1
-        n_cores = np.max([np.min([20, float(n_max_co_processes) /
+        n_cores += 1  # increase number of cores per job by at least 1
+        n_cores = np.max([np.min([global_params.NCORES_PER_NODE, float(n_max_co_processes) /
                                   len(missed_params) * n_cores]), n_cores])
         # if all jobs failed, increase number of cores
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
             priority=priority, additional_flags=additional_flags, script_folder=script_folder,
-            job_name="default", suffix=suffix+"iter"+str(iteration),
+            job_name="default", suffix=suffix+"_iter"+str(iteration),
             sge_additional_flags=sge_additional_flags, iteration=iteration+1,
-            n_max_co_processes=n_max_co_processes,  n_cores=n_cores)
+            n_max_co_processes=n_max_co_processes,  n_cores=n_cores,
+            params_orig_id=orig_job_ids)
 
     return path_to_out
 
@@ -354,7 +395,9 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         raise RuntimeError('Job folder has to exist, in order to resume unfinished job.')
     log_batchjob = initialize_logging("{}_resumed".format(name + suffix),
                                       log_dir=job_folder)
-
+    log_batchjob.info('RESUMING BatchJob script {} with {} tasks using {}'
+                      ' parallel jobs, each using {} cores.'.format(
+        name, len(params), n_max_co_processes, n_cores))
     path_to_out = "%s/out/" % job_folder
 
     out_files = glob.glob(path_to_out + "*.pkl")
@@ -366,13 +409,15 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         for p in out_files:
             checklist[int(re.findall("[\d]+", p)[-1])] = True
 
-        missed_params = np.array(params)[~checklist]
+        missed_params = [params[ii] for ii in range(len(params)) if not checklist[ii]]
+        orig_job_ids = np.arange(len(params))[~checklist]
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
             priority=priority, script_folder=script_folder, job_name=job_name,
             suffix=suffix + "_resumed", additional_flags=additional_flags,
             sge_additional_flags=sge_additional_flags, iteration=iteration,
-            n_max_co_processes=n_max_co_processes, n_cores=n_cores)
+            n_max_co_processes=n_max_co_processes, n_cores=n_cores,
+            params_orig_id=orig_job_ids)
     else:
         log_batchjob.info('All jobs had already been finished successfully.')
 
@@ -394,9 +439,9 @@ def number_of_running_processes(job_name):
         number of running jobs
 
     """
-    if BACKEND_IDENT == 'QSUB':
+    if BATCH_PROC_SYSTEM == 'QSUB':
         cmd_stat = "qstat -u %s" % username
-    elif BACKEND_IDENT == 'SLURM':
+    elif BATCH_PROC_SYSTEM == 'SLURM':
         cmd_stat = "squeue -u %s" % username
     else:
         raise NotImplementedError
@@ -404,7 +449,7 @@ def number_of_running_processes(job_name):
                                stdout=subprocess.PIPE)
     nb_lines = 0
     for line in io.TextIOWrapper(process.stdout, encoding="utf-8"):
-        if job_name[:10 if BACKEND_IDENT == 'QSUB' else 8] in line:
+        if job_name[:10 if BATCH_PROC_SYSTEM == 'QSUB' else 8] in line:
             nb_lines += 1
     return nb_lines
 
@@ -422,9 +467,9 @@ def delete_jobs_by_name(job_name):
     -------
 
     """
-    if BACKEND_IDENT == 'QSUB':
+    if BATCH_PROC_SYSTEM == 'QSUB':
         cmd_stat = "qstat -u %s" % username
-    elif BACKEND_IDENT == 'SLURM':
+    elif BATCH_PROC_SYSTEM == 'SLURM':
         cmd_stat = "squeue -u %s" % username
     else:
         raise NotImplementedError
@@ -436,7 +481,7 @@ def delete_jobs_by_name(job_name):
         if job_name[:10] in curr_line:
             job_ids.append(re.findall("[\d]+", curr_line)[0])
 
-    if BACKEND_IDENT == 'QSUB':
+    if BATCH_PROC_SYSTEM == 'QSUB':
         cmd_del = "qdel "
         for job_id in job_ids:
             cmd_del += job_id + ", "
@@ -444,7 +489,7 @@ def delete_jobs_by_name(job_name):
 
         subprocess.Popen(command, shell=True,
                          stdout=subprocess.PIPE)
-    elif BACKEND_IDENT == 'SLURM':
+    elif BATCH_PROC_SYSTEM == 'SLURM':
         cmd_del = "scancel -n {}".format(job_name)
         subprocess.Popen(cmd_del, shell=True,
                          stdout=subprocess.PIPE)

@@ -25,6 +25,7 @@ import contextlib
 import tqdm
 
 from . import log_handler
+from ..config import global_params
 
 
 __all__ = ['load_from_h5py', 'save_to_h5py', 'crop_bool_array',
@@ -190,7 +191,7 @@ def get_paths_of_skelID(id_list, traced_skel_dir):
     return wanted_paths
 
 
-def coordpath2anno(coords, scaling=(10, 10, 20), add_edges=True):
+def coordpath2anno(coords, scaling=None, add_edges=True):
     """
     Creates skeleton from scaled coordinates, assume coords are in order for
     edge creation.
@@ -206,6 +207,8 @@ def coordpath2anno(coords, scaling=(10, 10, 20), add_edges=True):
     -------
     SkeletonAnnotation
     """
+    if scaling is None:
+        scaling = global_params.get_dataset_scaling()
     anno = SkeletonAnnotation()
     anno.scaling = scaling
     scaling = np.array(scaling, dtype=np.int)

@@ -4,7 +4,7 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-
+import os
 
 # ---------------------- STATIC AND GLOBAL PARAMETERS # -----------------------
 
@@ -12,6 +12,18 @@
 # wd = "/wholebrain/scratch/areaxfs3/"
 wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
 # wd = '/mnt/j0126/areaxfs_v10/'
+
+# --------- BACKEND DEFINITIONS
+# TODO: Use batchjob_script_folder everywhere or remove because this is the default now.
+BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
+batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + \
+                         "/../QSUB_scripts/"
+MEM_PER_NODE = 249.5e3  # in MB
+NCORES_PER_NODE = 20
+# TOOD: Use NCORE_TOTAL everywhere
+NCORE_TOTAL = 340
+# TODO: Use NGPU_TOTAL everywhere
+NGPU_TOTAL = 34
 
 # TODO: add generic parser method for initial RAG and handle case without glia-splitting
 path_initrag = '/wholebrain/songbird/j0126/RAGs/v4b_20180407_v4b_20180407_'\
@@ -23,14 +35,25 @@ path_initrag = '/wholebrain/songbird/j0126/RAGs/v4b_20180407_v4b_20180407_'\
 # ID, ID
 rag_suffix = ""  # identifier in case there will be more than one RAG
 
+# --------- LOGGING
+# 'None' disables logging of SyConn modules (e.g. proc, handler, ...) to files.
+# Logs of executed scripts (syconn/scripts) will be stored at the
+# working directory + '/logs/' nonetheless.
+default_log_dir = None
+
 # --------- BACKEND DEFINITIONS
 backend = "FS"  # File system
 PYOPENGL_PLATFORM = 'osmesa'  # Rendering
+
+py36path = '/u/pschuber/anaconda3/envs/py36/bin/python'  # TODO: make this more elegant, e.g. bash script with 'source activate py36'
 
 # file logging for individual modules, and per job. Only use in case of
 # debugging with single core processing. Logs for scripts in 'SyConn/scripts/'
 # will be stored at wd + '/logs/'.
 DISABLE_FILE_LOGGING = True
+
+# --------- CONTACT SITE PARAMETERS
+cs_gap_nm = 300
 
 # --------- MESH PARAMETERS
 existing_cell_organelles = ['mi', 'sj', 'vc']
@@ -89,5 +112,6 @@ def get_dataset_scaling():
         (X, Y, Z)
     """
     from .parser import Config
+    import numpy as np
     cfg = Config(wd)
-    return cfg.entries["Dataset"]["scaling"]
+    return np.array(cfg.entries["Dataset"]["scaling"])

@@ -15,7 +15,8 @@ import tqdm
 from collections import defaultdict
 from knossos_utils import knossosdataset
 
-from ..config.global_params import wd, get_dataset_scaling, MESH_DOWNSAMPLING, MESH_CLOSING
+from ..config.global_params import wd, get_dataset_scaling, MESH_DOWNSAMPLING,\
+    MESH_CLOSING, NCORES_PER_NODE
 from .image import single_conn_comp_img
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
@@ -671,7 +672,7 @@ def _extract_synapse_type_thread(args):
         this_attr_dc.push()
 
 
-def mesh_proc_chunked(working_dir, obj_type, nb_cpus=20):
+def mesh_proc_chunked(working_dir, obj_type, nb_cpus=NCORES_PER_NODE):
     """
     Caches the meshes for all SegmentationObjects within the SegmentationDataset
      with object type 'obj_type'.

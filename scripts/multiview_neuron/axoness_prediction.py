@@ -51,7 +51,7 @@ if __name__ == "__main__":
     script_folder = os.path.dirname(
         os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
-                                 n_max_co_processes=25, pe="openmp", queue=None,
+                                 n_max_co_processes=15, pe="openmp", queue=None,
                                  script_folder=script_folder, n_cores=10,
                                  suffix="_axoness", additional_flags="--gres=gpu:1")  # removed -V
     log.info('Finished axon prediction. Now checking for missing predictions.')

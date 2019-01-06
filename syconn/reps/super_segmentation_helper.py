@@ -17,7 +17,6 @@ from collections import defaultdict
 from scipy import spatial
 from knossos_utils.skeleton_utils import annotation_to_nx_graph,\
     load_skeleton as load_skeleton_kzip
-from scipy.ndimage.filters import gaussian_filter
 
 from .rep_helper import assign_rep_values, colorcode_vertices
 from . import segmentation
@@ -27,6 +26,7 @@ from .segmentation_helper import load_skeleton, find_missing_sv_views,\
 from ..mp.mp_utils import start_multiprocess_obj
 skeletopyze_available = False
 from ..reps import log_reps
+from ..config import global_params
 from ..proc.meshes import in_bounding_box, write_mesh2kzip
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
@@ -362,7 +362,8 @@ def convert_coord(coord_list, scal):
     return np.array([coord_list[1] + 1, coord_list[0] + 1, coord_list[2] + 1]) * np.array(scal)
 
 
-def prune_stub_branches(sso=None, nx_g=None, scal=[10, 10, 20], len_thres=1000, preserve_annotations=True):
+def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
+                        preserve_annotations=True):
     """
     Removes short stub branches, that are often added by annotators but
     hardly represent true morphology.
@@ -379,7 +380,8 @@ def prune_stub_branches(sso=None, nx_g=None, scal=[10, 10, 20], len_thres=1000, 
     -------
     pruned network kx graph
     """
-
+    if scal is None:
+        scal = global_params.get_dataset_scaling()
     pruning_complete = False
 
     if preserve_annotations:
@@ -420,7 +422,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=[10, 10, 20], len_thres=1000, 
     # Important assert. Please don't remove
     assert nx.number_connected_components(new_nx_g) == 1
 
-    print('NUMber of comp after pruning',nx.number_connected_components(new_nx_g) )
+    # print('Number of comp after pruning', nx.number_connected_components(new_nx_g))
 
     if sso is not None:
         sso = from_netkx_to_sso(sso, new_nx_g)
@@ -496,12 +498,12 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, mi
 
     nx_g.add_edges_from(np.array(temp_edges).reshape([-1, 2]))
 
-    return sso,nx_g
+    return sso, nx_g
 
 
-
-
-def smooth_skeleton(skel_nx, scal=[10,10,20]):
+def smooth_skeleton(skel_nx, scal=None):
+    if scal is None:
+        scal = global_params.get_dataset_scaling()
     visiting_nodes = list({k for k, v in dict(skel_nx.degree()).items() if v == 2})
 
     for index, visiting_node in enumerate(visiting_nodes):
@@ -1102,7 +1104,7 @@ def majority_vote_compartments(sso, ax_pred_key):
     sso.save_skeleton()
 
 
-def find_incomplete_ssv_views(ssd, woglia, n_cores=20):
+def find_incomplete_ssv_views(ssd, woglia, n_cores=global_params.NCORES_PER_NODE):
     sd = ssd.get_segmentationdataset("sv")
     incomplete_sv_ids = find_missing_sv_views(sd, woglia, n_cores)
     missing_ssv_ids = set()
@@ -1115,7 +1117,7 @@ def find_incomplete_ssv_views(ssd, woglia, n_cores=20):
     return list(missing_ssv_ids)
 
 
-def find_incomplete_ssv_skeletons(ssd, n_cores=20):
+def find_incomplete_ssv_skeletons(ssd, n_cores=global_params.NCORES_PER_NODE):
     svs = np.concatenate([list(ssv.svs) for ssv in ssd.ssvs])
     incomplete_sv_ids = find_missing_sv_skeletons(svs, n_cores)
     missing_ssv_ids = set()
@@ -1128,7 +1130,7 @@ def find_incomplete_ssv_skeletons(ssd, n_cores=20):
     return list(missing_ssv_ids)
 
 
-def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=20):
+def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=global_params.NCORES_PER_NODE):
     sd = ssd.get_segmentationdataset("sv")
     incomplete_sv_ids = find_missing_sv_attributes(sd, attr_key, n_cores)
     missing_ssv_ids = set()
@@ -1168,14 +1170,6 @@ def predict_views_semseg(views, model, batch_size=20, verbose=False):
     orig_shape = views.shape
     # reshape to predict single projections, N*2, 4, 128, 256
     views = views.reshape([-1] + list(orig_shape[2:]))
-
-    # smooth images
-    n_views = len(views)
-    n_views = len(views)
-    views = views.reshape([-1] + list(orig_shape[2:]))
-    for ii in range(len(views)):
-        views[ii] = gaussian_filter(views[ii])
-    views = views.reshape([n_views, -1] + list(views.shape[1:]))
 
     if verbose:
         log_reps.info('Predicting view array with shape {}.'
@@ -1376,3 +1370,4 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
                         col, ply_fname=semseg_key + ".ply")
         return
     return sso.mesh[0], sso.mesh[1], sso.mesh[2], col
+

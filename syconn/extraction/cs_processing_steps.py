@@ -24,6 +24,199 @@ from ..handler.basics import chunkify
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
+def filter_relevant_syn(sd_syn, ssd):
+    """
+    This function filters (likely ;) ) the intra-ssv contact
+    sites (inside of a ssv, not between ssvs) that do not need to be agglomerated.
+
+    Parameters
+    ----------
+    sd_syn : SegmentationDataset
+    ssd : SuperSegmentationDataset
+
+    Returns
+    -------
+    Dict[list]
+        lookup from SSV-wide synapses to SV syn. objects, keys: SSV syn ID;
+        values: List of SV syn IDs
+    """
+    # get all cs IDs belonging to syn objects and then retrieve corresponding
+    # SVs IDs via bit shift
+    sv_ids = ch.sv_id_to_partner_ids_vec([syn.lookup_in_attribute_dict('cs_id')
+                                          for syn in sd_syn.sos])
+
+    syn_ids = sd_syn.ids.copy()
+    # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
+    sv_ids[sv_ids >= len(ssd.id_changer)] = -1
+    mapped_sv_ids = ssd.id_changer[sv_ids]
+
+    mask = np.all(mapped_sv_ids > 0, axis=1)
+    syn_ids = syn_ids[mask]
+    filtered_mapped_sv_ids = mapped_sv_ids[mask]
+
+    # this identifies all inter-ssv contact sites
+    mask = filtered_mapped_sv_ids[:, 0] - filtered_mapped_sv_ids[:, 1] != 0
+    syn_ids = syn_ids[mask]
+    relevant_syns = filtered_mapped_sv_ids[mask]
+
+    relevant_synssv_ids = np.left_shift(np.max(relevant_syns, axis=1), 32) + \
+                          np.min(relevant_syns, axis=1)
+
+    # create lookup from SSV-wide synapses to SV syn. objects
+    rel_synssv_to_syn_ids = defaultdict(list)
+    for i_entry in range(len(relevant_synssv_ids)):
+        rel_synssv_to_syn_ids[relevant_synssv_ids[i_entry]].\
+            append(syn_ids[i_entry])
+
+    return rel_synssv_to_syn_ids
+
+
+def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
+                          stride=1000, qsub_pe=None, qsub_queue=None, resume_job=False,
+                          nb_cpus=None, n_max_co_processes=None):
+
+    ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
+    syn_sd = segmentation.SegmentationDataset("syn", working_dir=wd,
+                                              version=syn_version)
+
+    rel_synssv_to_syn_ids = filter_relevant_syn(syn_sd, ssd)
+
+    voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, 100000)[:-2]
+                                        for ix in range(100000)])
+
+    voxel_rel_paths = [subfold_from_ix(ix, 100000) for ix in range(100000)]
+    block_steps = np.linspace(0, len(voxel_rel_paths),
+                              int(np.ceil(float(len(rel_synssv_to_syn_ids)) /
+                                          stride)) + 1).astype(np.int)
+    # target SD for SSV syn objects
+    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
+                                                  version="new", create=True,
+                                                  n_folders_fs=100000)
+
+    for p in voxel_rel_paths_2stage:
+        os.makedirs(sd_syn_ssv.so_storage_path + p)
+
+    rel_synssv_to_syn_ids_items = list(rel_synssv_to_syn_ids.items())
+    i_block = 0
+    multi_params = []
+    for block in [rel_synssv_to_syn_ids_items[i:i + stride]
+                  for i in range(0, len(rel_synssv_to_syn_ids_items), stride)]:
+        multi_params.append([wd, block, voxel_rel_paths[block_steps[i_block]: block_steps[i_block+1]],
+                             syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm])
+        i_block += 1
+    if qsub_pe is None and qsub_queue is None:
+        results = sm.start_multiprocess(_combine_and_split_syn_thread,
+                                        multi_params, nb_cpus=nb_cpus)
+
+    elif qu.__BATCHJOB__:
+        path_to_out = qu.QSUB_script(multi_params, "combine_and_split_syn",
+                                     resume_job=resume_job, pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=script_folder,
+                                     n_max_co_processes=n_max_co_processes)
+    else:
+        raise Exception("QSUB not available")
+
+    return sd_syn_ssv
+
+
+def _combine_and_split_syn_thread(args):
+    wd = args[0]
+    rel_cs_to_cs_agg_ids_items = args[1]
+    voxel_rel_paths = args[2]
+    syn_version = args[3]
+    cs_version = args[4]
+    scaling = args[5]
+    cs_gap_nm = args[6]
+
+    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
+                                               version=cs_version)
+
+    sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd,
+                                              version=syn_version)
+
+    n_per_voxel_path = np.ceil(float(len(rel_cs_to_cs_agg_ids_items)) / len(voxel_rel_paths))
+
+    n_items_for_path = 0
+    cur_path_id = 0
+
+    try:
+        os.makedirs(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id])
+    except:
+        pass
+    voxel_dc = VoxelStorage(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
+                         "/voxel.pkl", read_only=False)
+    attr_dc = AttributeDict(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
+                            "/attr_dict.pkl", read_only=False)
+
+    p_parts = voxel_rel_paths[cur_path_id].strip("/").split("/")
+    next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]),
+                                  int(p_parts[2])))
+
+    for item in rel_cs_to_cs_agg_ids_items:
+        n_items_for_path += 1
+
+        ssv_ids = ch.sv_id_to_partner_ids_vec([item[0]])[0]
+
+        voxel_list = sd_syn.get_segmentation_object(item[1][0]).voxel_list
+        for cs_agg_id in item[1][1:]:
+            cs_agg_object = sd_syn.get_segmentation_object(cs_agg_id)
+            voxel_list = np.concatenate([voxel_list, cs_agg_object.voxel_list])
+
+        ccs = cc_large_voxel_lists(voxel_list * scaling, cs_gap_nm)
+
+        i_cc = 0
+        for this_cc in ccs:
+            this_vx = voxel_list[np.array(list(this_cc))]
+            abs_offset = np.min(this_vx, axis=0)
+            this_vx -= abs_offset
+
+            id_mask = np.zeros(np.max(this_vx, axis=0) + 1, dtype=np.bool)
+            id_mask[this_vx[:, 0], this_vx[:, 1], this_vx[:, 2]] = True
+
+            # print(i_cc, next_id, len(this_vx), id_mask.shape)
+            try:
+                voxel_dc[next_id] = [id_mask], [abs_offset]
+            except:
+                print("failed", item)
+                np.save(sd_syn_ssv.so_storage_path + "/%d_%d_%d_%d.npy" %
+                        (next_id, abs_offset[0], abs_offset[1], abs_offset[2]), this_vx)
+
+            attr_dc[next_id] = dict(neuron_partners=ssv_ids)
+            next_id += 100000
+
+        if n_items_for_path > n_per_voxel_path:
+            voxel_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
+                              "/voxel.pkl")
+            attr_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
+                             "/attr_dict.pkl")
+
+            cur_path_id += 1
+            n_items_for_path = 0
+            p_parts = voxel_rel_paths[cur_path_id].strip("/").split("/")
+
+            next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]),
+                                          int(p_parts[2])))
+
+            try:
+                os.makedirs(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id])
+            except:
+                pass
+
+            voxel_dc = VoxelStorage(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
+                                 "voxel.pkl", read_only=False)
+            attr_dc = AttributeDict(sd_syn_ssv.so_storage_path +
+                                    voxel_rel_paths[cur_path_id] + "attr_dict.pkl",
+                                    read_only=False)
+
+    if n_items_for_path > 0:
+        voxel_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
+                          "/voxel.pkl")
+        attr_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
+                         "/attr_dict.pkl")
+
+    print("done")
+
+
 def filter_relevant_cs_agg(cs_agg, ssd):
     """
     This function filters (likely ;) ) the intra-ssv contact
@@ -171,7 +364,7 @@ def _combine_and_split_cs_agg_thread(args):
             id_mask = np.zeros(np.max(this_vx, axis=0) + 1, dtype=np.bool)
             id_mask[this_vx[:, 0], this_vx[:, 1], this_vx[:, 2]] = True
 
-            print(i_cc, next_id, len(this_vx), id_mask.shape)
+            # print(i_cc, next_id, len(this_vx), id_mask.shape)
             try:
                 voxel_dc[next_id] = [id_mask], [abs_offset]
             except:
@@ -212,10 +405,9 @@ def _combine_and_split_cs_agg_thread(args):
         attr_dc.push(cs.so_storage_path + voxel_rel_paths[cur_path_id] +
                          "/attr_dict.pkl")
 
-    print("done")
 
-
-def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000):
+def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000,
+                         verbose=False):
     kdtree = spatial.cKDTree(voxel_list)
 
     checked_ids = np.array([], dtype=np.int)
@@ -226,9 +418,10 @@ def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000):
     vx_ids = np.arange(len(voxel_list), dtype=np.int)
 
     while True:
-        print("NEXT - %d - %d" % (len(next_ids), len(checked_ids)))
-        for cc in ccs:
-            print("N voxels in cc: %d" % (len(cc)))
+        if verbose:
+            print("NEXT - %d - %d" % (len(next_ids), len(checked_ids)))
+            for cc in ccs:
+                print("N voxels in cc: %d" % (len(cc)))
 
         if len(next_ids) == 0:
             p_ids = vx_ids[~np.in1d(vx_ids, checked_ids)]
@@ -1202,8 +1395,7 @@ def export_matrix(wd, conn_version=None, dest_name=None, syn_prob_t=.5):
     if dest_name is None:
         dest_name = conn_sd.path + "/conn_mat"
 
-    np.savetxt(dest_name + ".csv", table, delimiter="\t",
-               header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tsynprob")
+    np.savetxt(dest_name + ".csv", table, delimiter="\t", header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tsynprob")
 
     labels = np.array(["N/A", "D", "A", "S"])
     labels_ids = np.array([-1, 0, 1, 2])
