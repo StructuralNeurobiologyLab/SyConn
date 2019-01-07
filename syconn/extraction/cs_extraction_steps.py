@@ -162,7 +162,9 @@ def process_block(edges, arr, stencil=(7, 7, 3)):
                     continue
 
                 center_id = arr[x, y, z]
-                chunk = arr[x - offset[0]: x + offset[0] + 1, y - offset[1]: y + offset[1], z - offset[2]: z + offset[2]]
+                chunk = arr[x - offset[0]: x + offset[0] + 1,
+                        y - offset[1]: y + offset[1],
+                        z - offset[2]: z + offset[2]]
                 out[x, y, z] = kernel(chunk, center_id)
     return out
 

@@ -28,8 +28,8 @@ In order to use elektronn3 models, python>=3.6 is required (when installing elek
 conda create -n py36 python=3.6 anaconda
 source activate py36
 ```
-Specify the path to this python executable at `global_params.py36path`. Also install torch
-For the SyConn installation in the py36 environment vigra can be ignored.
+Specify the path to this python executable at `syconn/config/global_params.py36path`.
+For the SyConn installation in the py36 environment `vigra` can be ignored.
 
 ## Package structure and data classes
 The basic data structures and initialization procedures are explained in the following sections:

@@ -48,8 +48,8 @@ if __name__ == "__main__":
     script_folder = os.path.dirname(os.path.abspath(__file__)) + \
                     "/../../syconn/QSUB_scripts/"
     path_to_out = qu.QSUB_script(multi_params, "render_views", pe="openmp",
-                                 n_max_co_processes=360, queue=None,
-                                 script_folder=script_folder, suffix="")
+                                 n_max_co_processes=global_params.NCORE_TOTAL,
+                                 script_folder=script_folder, suffix="", queue=None)
     log.info('Finished rendering of {}/{} SSVs.'.format(len(ordering),
                                                         len(nb_svs_per_ssv)))
     # identify huge SSVs and process them individually on whole cluster
@@ -60,7 +60,8 @@ if __name__ == "__main__":
             kk+1, len(big_ssv), len(ssv.sv_ids)))
         ssv.render_views(add_cellobjects=True, cellobjects_only=False,
                          woglia=True, qsub_pe="openmp", overwrite=True,
-                         qsub_co_jobs=300, skip_indexviews=False, resume_job=False)
+                         qsub_co_jobs=global_params.NCORE_TOTAL,
+                         skip_indexviews=False, resume_job=False)
     log.info('Finished rendering of all SSVs. Checking completeness.')
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=10)
     if len(res) != 0:

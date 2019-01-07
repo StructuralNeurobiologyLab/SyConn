@@ -202,6 +202,7 @@ def id2rgb_array(id_arr):
 @jit
 def id2rgb_array_contiguous(id_arr):
     """
+    # TODO: Add rgba implementation to render huge cells with shared context in EGL
     Transforms ID values into the array of RGBs labels based on the assumption
     that 'id_arr' is contiguous index array from 0...len(id_arr).
     Same mapping as 'id2rgb_array'.

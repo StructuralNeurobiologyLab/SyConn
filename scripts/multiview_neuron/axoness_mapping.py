@@ -17,9 +17,9 @@ from syconn.handler.logger import initialize_logging
 if __name__ == "__main__":
     """Maps axon prediction of rendering locations onto SSV skeletons"""
     log = initialize_logging('axon_mapping', global_params.wd + '/logs/')
-    # TODO: currently working directory has to be set globally in global_params and is not adjustable here because all qsub jobs will start a script referring to 'global_params.wd'
     pred_key_appendix = ""
     script_folder = os.path.dirname(os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
+    # Working directory has to be changed globally in global_params
     ssds = SuperSegmentationDataset(working_dir=global_params.wd)
     multi_params = ssds.ssv_ids
     np.random.shuffle(multi_params)

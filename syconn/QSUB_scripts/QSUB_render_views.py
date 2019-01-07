@@ -33,6 +33,5 @@ for ssv_ix in ch:
     sso.load_attr_dict()
     sso.render_views(add_cellobjects=True, woglia=True, overwrite=True)
 
-
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

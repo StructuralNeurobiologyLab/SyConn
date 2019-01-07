@@ -15,6 +15,7 @@ import warnings
 from scipy.ndimage.filters import gaussian_filter
 
 from .image import rgb2gray, apply_clahe, normalize_img
+from . import log_proc
 from ..config import global_params
 from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
@@ -818,13 +819,11 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
                                 "cellobjects only."
-        raw_views = np.ones((len(coords), nb_views, 128, 256), dtype=np.uint8) \
-                    * 255
-        edge_lengths = np.array([comp_window, comp_window / 2, comp_window])
-        mo = MeshObject("raw", mesh[0], mesh[1])
-        mo._colors = None
+        raw_views = np.ones((len(coords), nb_views, 128, 256), dtype=np.uint8) * 255
         if rot_mat is None:
-            querybox_edgelength = np.max(edge_lengths) / mo.max_dist
+            mo = MeshObject("raw", mesh[0], mesh[1])
+            mo._colors = None
+            querybox_edgelength = comp_window / mo.max_dist
             rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
                                         mo.vert_resh, querybox_edgelength)
     else:
@@ -901,17 +900,23 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
               "No mesh for SSO %d found.\n"
               "----------------------------------------------\n")
         return np.ones((len(coords), 2, 128, 256, 3), dtype=np.uint8)
-    color_array = id2rgb_array_contiguous(np.arange(len(ind) // 3))
+    try:
+        color_array = id2rgb_array_contiguous(np.arange(len(ind) // 3))
+    except ValueError as e:
+        msg = "'render_sso_coords_index_views' failed with {} when " \
+              "rendering SSV {}.".format(e, sso.id)
+        log_proc.error(msg)
+        raise ValueError(msg)
     color_array = np.concatenate([color_array, np.ones((len(color_array), 1),
                                                        dtype=np.uint8)*255],
                                  axis=-1).astype(np.float32) / 255.
     # in init it seems color values have to be normalized, check problems with uniqueness if
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
     # backwards compatibility with other color-dependent rendering methods
-    # Create mesh object
+    # Create mesh object without redundant vertices to get same PCA rotation as for raw views
     if rot_mat is None:
-        querybox_edgelength = comp_window
         mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
+        querybox_edgelength = comp_window / mo.max_dist
         rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
                                     mo.vert_resh, querybox_edgelength)
     # create redundant vertices to enable per-face colors

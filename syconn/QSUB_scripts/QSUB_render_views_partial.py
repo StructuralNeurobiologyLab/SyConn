@@ -40,5 +40,6 @@ for svixs in ch:
     if not skip_indexviews:
         render_sampled_sos_cc(sos, index_views=True, **kwargs)
 
+
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

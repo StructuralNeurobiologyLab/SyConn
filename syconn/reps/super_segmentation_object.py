@@ -1427,7 +1427,8 @@ class SuperSegmentationObject(object):
             ssh.pred_svs_semseg(m, reordered_views, semseg_key, self.svs,
                                 nb_cpus=self.nb_cpus, verbose=verbose)
 
-    def semseg2mesh(self, semseg_key, nb_views=None, dest_path=None, k=1):
+    def semseg2mesh(self, semseg_key, nb_views=None, dest_path=None, k=1,
+                    force_overwrite=False):
         """
         Generates vertex labels and stores it in the SSV's label storage under
         the key 'semseg_key'.
@@ -1448,12 +1449,14 @@ class SuperSegmentationObject(object):
         nb_views : Optional[int]
         dest_path : str
         k : int
+        force_overwrite : bool
         """
         if 'spiness' in semseg_key:
             # colors are only needed if dest_path is given
             cols = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
                     [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]]
-            ssh.semseg2mesh(self, semseg_key, nb_views, dest_path, k, cols)
+            ssh.semseg2mesh(self, semseg_key, nb_views, dest_path, k, cols,
+                            force_overwrite=force_overwrite)
         else:
             raise ValueError('Sematic segmentation of "" is not supported.'
                              ''.format(semseg_key))

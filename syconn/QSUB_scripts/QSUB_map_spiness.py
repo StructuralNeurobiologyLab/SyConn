@@ -26,6 +26,5 @@ with open(path_storage_file, 'rb') as f:
 
 map_ssv_semseg(args)
 
-
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

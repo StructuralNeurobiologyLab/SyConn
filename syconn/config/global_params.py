@@ -56,12 +56,12 @@ DISABLE_FILE_LOGGING = True
 cs_gap_nm = 300
 
 # --------- MESH PARAMETERS
-existing_cell_organelles = ['mi', 'sj', 'vc']
+existing_cell_organelles = ['mi', 'sj', 'vc', 'syn_ssv']
 MESH_DOWNSAMPLING = {"sv": (8, 8, 4), "sj": (2, 2, 1), "vc": (4, 4, 2),
                      "mi": (8, 8, 4), "cs": (2, 2, 1), "conn": (2, 2, 1),
-                     'syn': (2, 2, 1)}
+                     'syn_ssv': (2, 2, 1)}
 MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0,
-                "conn": 4, 'syn': 4}
+                "conn": 4, 'syn_ssv': 20}
 
 MESH_MIN_OBJ_VX = 10
 

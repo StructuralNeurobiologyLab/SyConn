@@ -720,6 +720,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         qsub queue
     nb_cpus : int
         number of parallel jobs
+    transform_func_kwargs : dict
 
     """
 

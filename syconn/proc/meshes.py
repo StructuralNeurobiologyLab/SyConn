@@ -672,8 +672,6 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
     str
     """
     # create header
-    if not rgba_color.ndim == 2:
-        rgba_color = np.array(rgba_color, dtype=np.int).reshape((-1, 4))
     if not indices.ndim == 2:
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
@@ -688,6 +686,8 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
                   'or every vertex!'
             log_proc.error(msg)
             raise ValueError(msg)
+    if not rgba_color.ndim == 2:
+        rgba_color = np.array(rgba_color, dtype=np.int).reshape((-1, 4))
     if type(rgba_color) is list:
         rgba_color = np.array(rgba_color, dtype=np.uint8)
         log_proc.warn("Color input is list. It will now be converted "

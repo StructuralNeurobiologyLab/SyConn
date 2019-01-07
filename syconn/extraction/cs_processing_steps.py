@@ -24,6 +24,8 @@ from ..handler.basics import chunkify
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
+# TODO: Move from conn to syn_ssv!
+
 def filter_relevant_syn(sd_syn, ssd):
     """
     This function filters (likely ;) ) the intra-ssv contact
@@ -90,7 +92,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                                           stride)) + 1).astype(np.int)
     # target SD for SSV syn objects
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
-                                                  version="new", create=True,
+                                                  version="0", create=True,
                                                   n_folders_fs=100000)
 
     for p in voxel_rel_paths_2stage:
@@ -158,9 +160,9 @@ def _combine_and_split_syn_thread(args):
         ssv_ids = ch.sv_id_to_partner_ids_vec([item[0]])[0]
 
         voxel_list = sd_syn.get_segmentation_object(item[1][0]).voxel_list
-        for cs_agg_id in item[1][1:]:
-            cs_agg_object = sd_syn.get_segmentation_object(cs_agg_id)
-            voxel_list = np.concatenate([voxel_list, cs_agg_object.voxel_list])
+        for syn_id in item[1][1:]:
+            syn_object = sd_syn.get_segmentation_object(syn_id)
+            voxel_list = np.concatenate([voxel_list, syn_object.voxel_list])
 
         ccs = cc_large_voxel_lists(voxel_list * scaling, cs_gap_nm)
 
@@ -214,8 +216,6 @@ def _combine_and_split_syn_thread(args):
         attr_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
                          "/attr_dict.pkl")
 
-    print("done")
-
 
 def filter_relevant_cs_agg(cs_agg, ssd):
     """
@@ -253,7 +253,6 @@ def filter_relevant_cs_agg(cs_agg, ssd):
     return rel_cs_to_cs_agg_ids
 
 
-# TODO: refactor / substitute by combine and split of syn segmentation objects
 def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
                              cs_agg_version=None,
                              stride=1000, qsub_pe=None, qsub_queue=None,
@@ -809,7 +808,7 @@ def overlap_mapping_sj_to_cs_via_cset(cs_sd, sj_sd, cs_cset,
     rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']]
 
     voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
-    conn_sd = segmentation.SegmentationDataset("syn", working_dir=wd, version="new",
+    conn_sd = segmentation.SegmentationDataset("syn", working_dir=wd, version="0",
                                                create=True, n_folders_fs=n_folders_fs)
 
     for p in voxel_rel_paths:
@@ -906,7 +905,7 @@ def _overlap_mapping_sj_to_cs_via_cset_thread(args):
                 overlap_vx -= bounding_box[0]
                 vx_block[overlap_vx[:, 0], overlap_vx[:, 1], overlap_vx[:, 2]] = True
 
-                voxel_dc[next_conn_id] = [vx_block], [offset]
+                voxel_dc[next_conn_id] = [vx_block], [bounding_box[0]]
                 attr_dc[next_conn_id] = {'sj_id': sj_id,
                                          'cs_id': cs_id,
                                          'id_sj_ratio': id_ratio,
@@ -1364,7 +1363,9 @@ def _collect_axoness_from_ssv_partners_thread(args):
             axoness = []
             for ssv_partner_id in conn_o.attr_dict["ssv_partners"]:
                 ssv_o = ssv.get_super_segmentation_object(ssv_partner_id)
-                axoness.append(ssv_o.axoness_for_coords([conn_o.rep_coord], pred_type='axoness_preds_cnn_views_avg10000')[0])
+                curr_ax = ssv_o.axoness_for_coords([conn_o.rep_coord],
+                          pred_type='axoness_preds_cnn_views_avg10000')[0]
+                axoness.append(curr_ax)
 
             conn_o.attr_dict.update({"partner_axoness": axoness})
             this_attr_dc[conn_id] = conn_o.attr_dict
@@ -1395,7 +1396,8 @@ def export_matrix(wd, conn_version=None, dest_name=None, syn_prob_t=.5):
     if dest_name is None:
         dest_name = conn_sd.path + "/conn_mat"
 
-    np.savetxt(dest_name + ".csv", table, delimiter="\t", header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tsynprob")
+    np.savetxt(dest_name + ".csv", table, delimiter="\t",
+               header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tsynprob")
 
     labels = np.array(["N/A", "D", "A", "S"])
     labels_ids = np.array([-1, 0, 1, 2])

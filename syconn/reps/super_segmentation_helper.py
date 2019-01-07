@@ -544,12 +544,10 @@ def smooth_skeleton(skel_nx, scal=None):
 
                     skel_nx.node[visiting_node]['position'] = np.array(final_node, dtype = np.int)
 
-
     return skel_nx
-#
+
 
 def from_netkx_to_sso(sso, skel_nx):
-
     sso.skeleton = {}
     sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.uint32)
     sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
@@ -571,6 +569,7 @@ def from_netkx_to_sso(sso, skel_nx):
 
     return sso
 
+
 def from_sso_to_netkx(sso):
 
     skel_nx = nx.Graph()
@@ -586,7 +585,6 @@ def from_sso_to_netkx(sso):
 
         ssv_skel['diameters'] = np.concatenate((ssv_skel['diameters'], diameters), axis=0)
 
-
     new_nodes = np.array(ssv_skel['nodes'], dtype=np.uint32).reshape((-1, 3))
     if len(new_nodes) == 0:
         sso.skeleton = ssv_skel
@@ -598,7 +596,6 @@ def from_sso_to_netkx(sso):
     new_edges = np.array(ssv_skel['edges']).reshape((-1, 2))
     new_edges = [tuple(ix) for ix in new_edges]
     skel_nx.add_edges_from(new_edges)
-
 
     return skel_nx
 
@@ -656,14 +653,16 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     -------
 
     """
-
+    # TODO: make use of sso._rag and run sparsification and stitching on SV level first.
+    # TODO: Then combine those using the SSV RAG, and finally sparse and prune the stitched SSV skeleton.
     # Creating network kx graph from sso skel
     skel_nx = from_sso_to_netkx(sso)
 
     if sparsify:
         sso, skel_nx = sparsify_skeleton(sso, skel_nx)
 
-    # Stitching sso skeletons
+    #  TODO: as mentioned above, use SSV._rag for guidance when adding inter-SV edges
+    # Stitching sso skeletons,
     skel_nx = stitch_skel_nx(skel_nx)
 
     # Sparse again after stitching. Inexpensive.
@@ -1289,7 +1288,7 @@ def pred_sv_chunk_semseg(args):
 
 
 def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
-                colors=None):
+                colors=None, force_overwrite=False):
     """
     Maps semantic segmentation to SSV mesh.
 
@@ -1309,55 +1308,59 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         illustrated with by the spine prediction example:
         if k=0: [neck, head, shaft, other, background, unpredicted]
         else: [neck, head, shaft, other, background]
+    force_overwrite : bool
 
     Returns
     -------
     np.array, np.array, np.array, np.array
         indices, vertices, normals, color
     """
-    colors = np.array(colors) * 255
-    if nb_views is None:
-        # load default
-        i_views = sso.load_views(index_views=True).flatten()
-    else:
-        # load special views
-        i_views = sso.load_views("index{}".format(nb_views)).flatten()
-    spiness_views = sso.load_views(semseg_key).flatten()
-    ind = sso.mesh[0]
-    dc = defaultdict(list)
-    background_id = np.max(i_views)
-    for ii in range(len(i_views)):
-        triangle_ix = i_views[ii]
-        if triangle_ix == background_id:
-            continue
-        l = spiness_views[ii]  # triangle label
-        # get vertex ixs from triangle ixs via:
-        vertex_ix = triangle_ix * 3
-        dc[ind[vertex_ix]].append(l)
-        dc[ind[vertex_ix + 1]].append(l)
-        dc[ind[vertex_ix + 2]].append(l)
-    vertex_labels = np.ones((len(sso.mesh[1]) // 3), dtype=np.uint8) * 5
-    for ix, v in dc.items():
-        l, cnts = np.unique(v, return_counts=True)
-        vertex_labels[ix] = l[np.argmax(cnts)]
-    if k == 0:  # map actual prediction situation / coverage
-        # keep unpredicted vertices and vertices with background labels
-        predicted_vertices = sso.mesh[1].reshape(-1, 3)
-        predictions = vertex_labels
-    else:
-        # remove unpredicted vertices
-        predicted_vertices = sso.mesh[1].reshape(-1, 3)[vertex_labels != 5]
-        predictions = vertex_labels[vertex_labels != 5]
-        # remove background class
-        predicted_vertices = predicted_vertices[predictions != 4]
-        predictions = predictions[predictions != 4]
-    maj_vote = colorcode_vertices(
-        sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
-        return_color=False)
-    # add prediction to mesh storage
     ld = sso.label_dict('vertex')
-    ld[semseg_key] = maj_vote
-    ld.push()
+    if force_overwrite or not semseg_key in ld:
+        colors = np.array(colors) * 255
+        if nb_views is None:
+            # load default
+            i_views = sso.load_views(index_views=True).flatten()
+        else:
+            # load special views
+            i_views = sso.load_views("index{}".format(nb_views)).flatten()
+        spiness_views = sso.load_views(semseg_key).flatten()
+        ind = sso.mesh[0]
+        dc = defaultdict(list)
+        background_id = np.max(i_views)
+        for ii in range(len(i_views)):
+            triangle_ix = i_views[ii]
+            if triangle_ix == background_id:
+                continue
+            l = spiness_views[ii]  # triangle label
+            # get vertex ixs from triangle ixs via:
+            vertex_ix = triangle_ix * 3
+            dc[ind[vertex_ix]].append(l)
+            dc[ind[vertex_ix + 1]].append(l)
+            dc[ind[vertex_ix + 2]].append(l)
+        vertex_labels = np.ones((len(sso.mesh[1]) // 3), dtype=np.uint8) * 5
+        for ix, v in dc.items():
+            l, cnts = np.unique(v, return_counts=True)
+            vertex_labels[ix] = l[np.argmax(cnts)]
+        if k == 0:  # map actual prediction situation / coverage
+            # keep unpredicted vertices and vertices with background labels
+            predicted_vertices = sso.mesh[1].reshape(-1, 3)
+            predictions = vertex_labels
+        else:
+            # remove unpredicted vertices
+            predicted_vertices = sso.mesh[1].reshape(-1, 3)[vertex_labels != 5]
+            predictions = vertex_labels[vertex_labels != 5]
+            # remove background class
+            predicted_vertices = predicted_vertices[predictions != 4]
+            predictions = predictions[predictions != 4]
+        maj_vote = colorcode_vertices(
+            sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
+            return_color=False)
+        # add prediction to mesh storage
+        ld[semseg_key] = maj_vote
+        ld.push()
+    else:
+        maj_vote = ld[semseg_key]
     if colors is not None:
         col = colors[maj_vote].astype(np.uint8)
     else:

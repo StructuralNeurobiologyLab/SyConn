@@ -53,7 +53,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 additional_flags='', suffix="", job_name="default",
                 script_folder=None, n_max_co_processes=None, resume_job=False,
                 sge_additional_flags=None, iteration=1, max_iterations=3,
-                params_orig_id=None, python_path=None):
+                params_orig_id=None, python_path=None, disable_mem_flag=False):
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
@@ -101,6 +101,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         job ID for each parameter. Only required if resuming a job.
     python_path : str
         Default is sys.executable
+    disable_mem_flag : bool
+        If True, memory flag will not be set, otherwise it will be set to the
+         fraction of the cores per job to the total number of cores per node
         
     Returns
     -------
@@ -241,7 +244,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 log_batchjob.warning('"additional_flags" contained "-V" which is a QSUB/SGE specific flag,'
                                      ' but SLURM was set as batch system. Converting "-V" to "--export=ALL".')
                 additional_flags.replace('-V ', '--export=ALL ')
-            if not '--mem=' in additional_flags:
+            if not '--mem=' in additional_flags and not disable_mem_flag:
                 # Node memory limit is 250,000M and not 250G! -> max memory per core is 250000M/20, leave safety margin
                 mem_lim = int(global_params.MEM_PER_NODE * n_cores / global_params.NCORES_PER_NODE)
                 additional_flags += ' --mem={}M'.format(mem_lim)
@@ -302,7 +305,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
     out_files = glob.glob(path_to_out + "*.pkl")
     # only stop if first iteration and script was not resumed (params_orig_id is None)
-    if len(out_files) == 0 and (iteration == 1 or params_orig_id is not None):
+    if len(out_files) == 0 and iteration == 1 and params_orig_id is not None:
         msg = 'All submitted jobs have failed. Re-submission will not be initiated.' \
               ' Please check your submitted code.'
         log_batchjob.error(msg)
@@ -323,10 +326,17 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         orig_job_ids = np.arange(len(params))[~checklist]
         assert len(missed_params) == len(orig_job_ids)
         # set number cores per job higher which will at the same time increase
-        # the available amount of memory per job
+        # the available amount of memory per job, ONLY VALID IF '--mem' was not specified explicitly!
         n_cores += 1  # increase number of cores per job by at least 1
         n_cores = np.max([np.min([global_params.NCORES_PER_NODE, float(n_max_co_processes) /
                                   len(missed_params) * n_cores]), n_cores])
+        n_cores = np.min([n_cores, global_params.NCORES_PER_NODE])
+        if n_cores == global_params.NCORES_PER_NODE:
+            if not '--mem=' in additional_flags:
+                additional_flags += ' --mem=0'
+            else:
+                m = re.search('(?<=--mem=)\w+', additional_flags)
+                additional_flags.replace(m.group(0), '--mem=0')
         # if all jobs failed, increase number of cores
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,

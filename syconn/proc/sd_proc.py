@@ -365,14 +365,12 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
     paths = cs_sd.so_dir_paths
 
     # Partitioning the work
-
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, cs_sd.version, cs_sd.working_dir,
                              n_iterations])
 
     # Running workers
-
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_binary_filling_cs_thread,
                                         multi_params, nb_cpus=nb_cpus)
@@ -579,6 +577,7 @@ def _export_sd_to_knossosdataset_thread(args):
                             verbose=True)
 
 
+# TODO: Move from sj to syn_ssv!
 def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                          trafo_dict_path=None, stride=10,
                          qsub_pe=None, qsub_queue=None, nb_cpus=1,
@@ -587,14 +586,12 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
     paths = sj_sd.so_dir_paths
 
     # Partitioning the work
-
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, sj_sd.version, sj_sd.working_dir,
                              kd_asym_path, kd_sym_path, trafo_dict_path])
 
     # Running workers - Extracting mapping
-
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_extract_synapse_type_thread,
                                         multi_params, nb_cpus=nb_cpus)

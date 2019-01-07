@@ -128,7 +128,12 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
 
     start = time.time()
     if nb_cpus > 1:
-        pool = MyPool(nb_cpus)
+        try:
+            pool = MyPool(nb_cpus)
+        except AssertionError:
+            # with py 3.6 the pool class was refactored and NoDaemonProcess impl. are not that straight forward
+            #  anymore, see: https://stackoverflow.com/questions/6974695/python-process-pool-non-daemonic?rq=1
+            pool = multiprocessing.pool.Pool(nb_cpus)
         if show_progress:
             result = list(tqdm.tqdm(pool.imap(func, params), total=len(params),
                                     ncols=80, leave=False, unit='jobs',

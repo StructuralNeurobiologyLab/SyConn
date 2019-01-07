@@ -18,10 +18,15 @@ from syconn.handler.logger import initialize_logging
 if __name__ == "__main__":
     log = initialize_logging('skeleton_generation', global_params.wd + '/logs/')
     ssd = SuperSegmentationDataset(working_dir=global_params.wd)
-    # TODO: Order by SSV size, currently suffers extremely from curse of the last reducer
+
+    # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = ssd.ssv_ids
-    np.random.shuffle(multi_params)
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
+                               for ssv_id in ssd.ssv_ids])
+    ordering = np.argsort(nb_svs_per_ssv)
+    multi_params = multi_params[ordering[::-1]]
     multi_params = chunkify(multi_params, 4000)
+
     # add ssd parameters
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir)
                     for ssv_ids in multi_params]
