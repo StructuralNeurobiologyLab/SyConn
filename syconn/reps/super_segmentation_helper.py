@@ -23,7 +23,7 @@ from . import segmentation
 from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton, find_missing_sv_views,\
     find_missing_sv_attributes, find_missing_sv_skeletons
-from ..mp.mp_utils import start_multiprocess_obj
+from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 skeletopyze_available = False
 from ..reps import log_reps
 from ..config import global_params
@@ -359,7 +359,8 @@ def create_new_skeleton(sv_id, sso):
 
 
 def convert_coord(coord_list, scal):
-    return np.array([coord_list[1] + 1, coord_list[0] + 1, coord_list[2] + 1]) * np.array(scal)
+    return np.array([coord_list[1] + 1, coord_list[0] + 1,
+                     coord_list[2] + 1]) * np.array(scal)
 
 
 def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
@@ -370,11 +371,13 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
 
     Parameters
     ----------
+    sso : SuperSegmentationObject
     nx_g : network kx graph
     scal : array of size 3
         the scaled up factor
     len_thres : int
         threshold of the length below which it will be pruned
+    preserve_annotations : bool
 
     Returns
     -------
@@ -391,11 +394,8 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
 
     # find all tip nodes in an anno, ie degree 1 nodes
     while not pruning_complete:
-
         nx_g = new_nx_g.copy()
-
         end_nodes = list({k for k, v in dict(nx_g.degree()).items() if v == 1})
-
         # DFS to first branch node
         for end_node in end_nodes:
             prune_nodes = []
@@ -415,22 +415,27 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
                     else:
                         break
                 prune_nodes.append(curr_node)
-
         if len(new_nx_g.nodes) == len(nx_g.nodes):
             pruning_complete = True
-
-    # Important assert. Please don't remove
-    assert nx.number_connected_components(new_nx_g) == 1
-
-    # print('Number of comp after pruning', nx.number_connected_components(new_nx_g))
-
+    # TODO: uncomment, or fix by using
+    if nx.number_connected_components(new_nx_g) != 1:
+        msg = 'Pruning of SV skeletons failed during "prune_stub_branches' \
+              '" with {} connected components. Please check the underlying' \
+              ' SSV {}. Performing stitching method to add missing edg' \
+              'es recursively.'.format(nx.number_connected_components(new_nx_g),
+                                       sso.id)
+        new_nx_g = stitch_skel_nx(new_nx_g)
+        log_reps.critical(msg)
+    # # Important assert. Please don't remove
+    # assert nx.number_connected_components(new_nx_g) == 1,\
+    #     'Additional connected components created after pruning!'
     if sso is not None:
         sso = from_netkx_to_sso(sso, new_nx_g)
-
     return sso, new_nx_g
 
 
-def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, min_dist_thresh=50):
+def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500,
+                      min_dist_thresh=50):
     """
     Reduces nodes in the skeleton. (from dense stacking to sparsed stacking)
 
@@ -465,7 +470,7 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500, mi
                 left_node = neighbours[0]
                 right_node = neighbours[1]
                 vector_left_node = np.array([int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
-                vector_right_node =np.array([int(skel_nx.node[right_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+                vector_right_node = np.array([int(skel_nx.node[right_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
 
                 dot_prod = np.dot(vector_left_node/ np.linalg.norm(vector_left_node),vector_right_node/ np.linalg.norm(vector_right_node))
                 dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix]*scal[ix]) - int(skel_nx.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
@@ -571,7 +576,6 @@ def from_netkx_to_sso(sso, skel_nx):
 
 
 def from_sso_to_netkx(sso):
-
     skel_nx = nx.Graph()
     sso.load_attr_dict()
     ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
@@ -653,15 +657,12 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     -------
 
     """
-    # TODO: make use of sso._rag and run sparsification and stitching on SV level first.
-    # TODO: Then combine those using the SSV RAG, and finally sparse and prune the stitched SSV skeleton.
     # Creating network kx graph from sso skel
     skel_nx = from_sso_to_netkx(sso)
 
     if sparsify:
         sso, skel_nx = sparsify_skeleton(sso, skel_nx)
 
-    #  TODO: as mentioned above, use SSV._rag for guidance when adding inter-SV edges
     # Stitching sso skeletons,
     skel_nx = stitch_skel_nx(skel_nx)
 
@@ -672,6 +673,228 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     # Pruning the stitched sso skeletons
     sso, skel_nx = prune_stub_branches(sso, skel_nx, len_thres=pruning_thresh)
 
+    # Estimating the radii
+    sso.skeleton = radius_correction_found_vertices(sso)
+
+    return sso
+
+
+# New Implementation of skeleton generation which makes use of ssv.rag
+
+def from_netkx_to_arr(skel_nx):
+    skeleton = {}
+    skeleton['nodes'] = np.array(
+        [skel_nx.node[ix]['position'] for ix in skel_nx.nodes()],
+        dtype=np.uint32)
+    skeleton['diameters'] = np.zeros(len(skeleton['nodes']), dtype=np.float32)
+
+    # assert nx.number_connected_components(skel_nx) == 1
+
+    # Important bit, please don't remove (needed after pruning)
+    temp_edges = np.array(list(skel_nx.edges())).reshape(-1)
+    temp_edges_sorted = np.unique(np.sort(temp_edges))
+    temp_edges_dict = {}
+
+    for ii, ix in enumerate(temp_edges_sorted):
+        temp_edges_dict[ix] = ii
+
+    temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
+
+    temp_edges = np.array(temp_edges, dtype=np.uint).reshape([-1, 2])
+    skeleton['edges'] = temp_edges
+
+    return skeleton['nodes'], skeleton['diameters'], skeleton['edges']
+
+
+def sparsify_skeleton_fast(skel_nx, scal=None, dot_prod_thresh=0.8,
+                           max_dist_thresh=500, min_dist_thresh=50):
+    """
+    Reduces nodes in the skeleton. (from dense stacking to sparsed stacking)
+
+    Parameters
+    ----------
+    sso : Super Segmentation Object
+    dot_prod_thresh : float
+        the 'straightness' of the edges
+    skel_nx : networkx graph of the sso skel
+    max_dist_thresh : int
+        maximum distance desired between every node
+    min_dist_thresh : int
+        minimum distance desired between every node
+    scal : np.array
+
+    Returns
+    -------
+    sso containing the sparsed skeleton
+    """
+
+    if scal is None:
+        scal = global_params.get_dataset_scaling()
+    change = 1
+
+    while change > 0:
+        change = 0
+        visiting_nodes = list({k for k, v in dict(skel_nx.degree()).items() if v == 2})
+        for visiting_node in visiting_nodes:
+            neighbours = [n for n in skel_nx.neighbors(visiting_node)]
+            if skel_nx.degree(visiting_node) == 2:
+                left_node = neighbours[0]
+                right_node = neighbours[1]
+                vector_left_node = np.array([int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+                vector_right_node =np.array([int(skel_nx.node[right_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+
+                dot_prod = np.dot(vector_left_node/ np.linalg.norm(vector_left_node),vector_right_node/ np.linalg.norm(vector_right_node))
+                dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix]*scal[ix]) - int(skel_nx.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
+
+                # print('dots', dot_prod, 'dist', dist)
+
+                if (abs(dot_prod) > dot_prod_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
+
+                    skel_nx.remove_node(visiting_node)
+                    skel_nx.add_edge(left_node, right_node)
+                    change += 1
+    return skel_nx
+
+
+def create_new_skeleton_fast(args):
+    so, sparsify = args
+    so.enable_locking = False
+    so.load_attr_dict()
+    # ignore diameters, will be populated at the and of create_sso_skeleton_fast
+    nodes, diameters, edges = load_skeleton(so)
+    edges = np.array(edges).reshape((-1, 2))
+    nodes = np.array(nodes).reshape((-1, 3)).astype(np.uint32)
+    # create nx graph
+    skel_nx = nx.Graph()
+    skel_nx.add_nodes_from([(ix, dict(position=coord)) for ix, coord
+                            in enumerate(nodes)])
+
+    new_edges = [tuple(ix) for ix in edges]
+    skel_nx.add_edges_from(new_edges)
+    if sparsify:
+        skel_nx = sparsify_skeleton_fast(skel_nx)
+    n_cc = nx.number_connected_components(skel_nx)
+    if n_cc > 1:
+        log_reps.critical('SV {} contained {} connected components in its skel'
+                          'eton representation. Stitching now.'
+                          ''.format(so.id, n_cc))
+        skel_nx = stitch_skel_nx(skel_nx)
+    nodes, diameters, edges = from_netkx_to_arr(skel_nx)
+    # just get nodes, diameters and edges
+    return nodes, diameters, edges
+
+
+def from_sso_to_netkx_fast(sso, sparsify=True):
+    """
+    Stitches the SV skeletons using sso.rag
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    sparsify : bool
+        Sparsify SV skeletons before stitching
+
+    Returns
+    -------
+    nx.Graph
+    """
+    skel_nx = nx.Graph()
+    sso.load_attr_dict()
+    ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
+    res = start_multiprocess_imap(create_new_skeleton_fast,
+                                  [(sv, sparsify) for sv in sso.svs],
+                                  nb_cpus=sso.nb_cpus, show_progress=False)
+    nodes, diameters, edges, sv_id_arr = [], [], [], []
+    # first offset is 0, last length is not needed
+    n_nodes_per_sv = [0] + list(
+        np.cumsum([len(el[0]) for el in res])[:-1])
+
+    for ii in range(len(res)):
+        nodes.append(res[ii][0])
+        diameters.append(res[ii][1])
+        edges.append(res[ii][2] + int(n_nodes_per_sv[ii]))
+        # store mapping from node to SV ID
+        sv_id_arr.append([sso.sv_ids[ii]] * len(res[ii][0]))
+
+    ssv_skel['nodes'] = np.concatenate(nodes)
+    ssv_skel['diameters'] = np.concatenate(diameters, axis=0)
+    sv_id_arr = np.concatenate(sv_id_arr)
+    node_ix_arr = np.arange(len(sv_id_arr))
+    # stitching
+    if len(sso.sv_ids) > 1:
+        # iterates over SV object edges
+        for e1, e2 in sso.load_edgelist():
+            # get closest edge between SV nodes in question and new edge add to edges
+            nodes1 = ssv_skel['nodes'][sv_id_arr == e1.id]
+            nodes2 = ssv_skel['nodes'][sv_id_arr == e2.id]
+            nodes1_ix = node_ix_arr[sv_id_arr == e1.id]
+            nodes2_ix = node_ix_arr[sv_id_arr == e2.id]
+            assert len(nodes1) > 0 and len(nodes2) > 0
+            tree = spatial.cKDTree(nodes1)
+            dists, node_ixs1 = tree.query(nodes2)
+            # get global index of nodes
+            ix2 = nodes2_ix[np.argmin(dists)]
+            ix1 = nodes1_ix[node_ixs1[np.argmin(dists)]]
+            edges.append(np.array([[ix1, ix2]], dtype=np.uint32))
+    ssv_skel['edges'] = np.concatenate(edges)
+
+    if len(ssv_skel['nodes']) == 0:
+        sso.skeleton = ssv_skel
+        return
+
+    skel_nx.add_nodes_from([(ix, dict(position=coord)) for ix, coord
+                            in enumerate(ssv_skel['nodes'])])
+
+    edges = [tuple(ix) for ix in ssv_skel['edges']]
+    skel_nx.add_edges_from(edges)
+    if nx.number_connected_components(skel_nx) != 1:
+        msg = 'Stitching of SV skeletons failed during "from_sso_to_netkx_' \
+              'fast" with {} connected components. Please check the underlying'\
+              ' RAG of SSV {}. Performing stitching method to add missing edg' \
+              'es recursively.'.format(nx.number_connected_components(skel_nx),
+                                       sso.id)
+        skel_nx = stitch_skel_nx(skel_nx)
+        log_reps.critical(msg)
+        assert nx.number_connected_components(skel_nx) == 1
+    sso.skeleton = ssv_skel
+    return skel_nx
+
+
+def create_sso_skeleton_fast(sso, pruning_thresh=700, sparsify=True):
+    """
+    Creates the super super voxel skeleton. NOTE: If the underlying RAG does
+    not connect close-by SVs do not use this method,
+    but use 'create_sso_skeleton' instead. The latter will recursively add the
+    shortest edge between two different SVs. It is ~10x faster on single CPU.
+    To use multi-processing, set ssv.nb_cpus > 1
+
+    Parameters
+    ----------
+    sso : Super Segmentation Object
+    pruning_thresh : int
+        threshold for pruning
+    sparsify : bool
+        will sparsify if True otherwise not
+
+    Returns
+    -------
+
+    """
+    # Creating network kx graph from sso skel
+    print('Creating skeleton of SSO {}'.format(sso.id))
+    skel_nx = from_sso_to_netkx_fast(sso)
+    print('Number CC after stitching and sparsifying SSO {}:'.format(sso.id),
+          nx.number_connected_components(skel_nx))
+    # Sparse again after stitching. Inexpensive.
+    if sparsify:
+        sso, skel_nx = sparsify_skeleton(sso, skel_nx)
+        print(
+            'Number CC after 2nd sparsification SSO {}:'.format(sso.id),
+            nx.number_connected_components(skel_nx))
+    # Pruning the stitched sso skeletons
+    sso, skel_nx = prune_stub_branches(sso, skel_nx, len_thres=pruning_thresh)
+    print('Number CC after pruning SSO {}:'.format(sso.id),
+          nx.number_connected_components(skel_nx))
     # Estimating the radii
     sso.skeleton = radius_correction_found_vertices(sso)
 
@@ -744,6 +967,7 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
         plt.tight_layout()
         plt.savefig(dest_dir+"/%d_pca_%d%d.png" % (sso.id, a+1, b+1), dpi=400)
         plt.close()
+
 
 def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=1000,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
@@ -918,20 +1142,93 @@ def write_axpred_cnn(ssv, pred_key_appendix, dest_path=None, k=1):
                    colors=colors)
 
 
+def _cnn_axoness2skel(sso, pred_key_appendix="", k=1, force_reload=False,
+                      save_skel=True, use_cache=False):
+    """
+    By default, will create 'axoness_preds_cnn' attribute in SSV attribute dict
+     and save new skeleton attributes with keys "axoness" and "axoness_probas".
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    pred_key_appendix : str
+    k : int
+    force_reload : bool
+        Reload SV predictions.
+    save_skel : bool
+        Save SSV skeleton with prediction attirbutes
+    use_cache : bool
+        Write intermediate SV predictions in SSV attribute dict to disk
+
+    Returns
+    -------
+
+    """
+    if k != 1:
+        log_reps.warn("Parameter 'k' is deprecated but was set to {}. "
+                      "It is not longer used in this method.".format(k))
+    if sso.skeleton is None:
+        sso.load_skeleton()
+    proba_key = "axoness_probas_cnn%s" % pred_key_appendix
+    pred_key = "axoness_preds_cnn%s" % pred_key_appendix
+    if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key) or\
+            force_reload:
+        preds = np.array(start_multiprocess_obj(
+            "axoness_preds", [[sv, {"pred_key_appendix": pred_key_appendix}]
+                              for sv in sso.svs],
+                                                   nb_cpus=sso.nb_cpus))
+        probas = np.array(start_multiprocess_obj(
+            "axoness_probas", [[sv, {"pred_key_appendix": pred_key_appendix}]
+                               for sv in sso.svs], nb_cpus=sso.nb_cpus))
+        preds = np.concatenate(preds)
+        probas = np.concatenate(probas)
+        sso.attr_dict[proba_key] = probas
+        sso.attr_dict[pred_key] = preds
+        if use_cache:
+            sso.save_attributes([proba_key, pred_key], [probas, preds])
+    else:
+        preds = sso.lookup_in_attribute_dict(pred_key)
+        probas = sso.lookup_in_attribute_dict(proba_key)
+    loc_coords = np.concatenate(sso.sample_locations())
+    assert len(loc_coords) == len(preds), "Number of view coordinates is" \
+                                          "different from number of view" \
+                                          "predictions. SSO %d" % sso.id
+    # find NN in loc_coords for every skeleton node and use their majority
+    # prediction
+    node_preds = colorcode_vertices(sso.skeleton["nodes"] * sso.scaling,
+                                    loc_coords, preds, colors=[0, 1, 2], k=1)
+    node_probas, ixs = assign_rep_values(sso.skeleton["nodes"] * sso.scaling,
+                                         loc_coords, probas, return_ixs=True)
+    assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
+                                           "coordinates is bigger than " \
+                                           "length of sample coordinates."
+    sso.skeleton["axoness%s" % pred_key_appendix] = node_preds
+    sso.skeleton["axoness_probas%s" % pred_key_appendix] = node_probas
+    sso.skeleton["view_ixs"] = ixs
+    if save_skel:
+        sso.save_skeleton()
+
+
 def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
-                                max_dist=10000, return_res=False):
+                                max_dist=10000, return_res=False,
+                                use_cache=False):
     """
     Averages the axoness prediction along skeleton with maximum path length
     of 'max_dist'. Therefore, view indices were mapped to every skeleton
     node and collected while traversing the skeleton. The majority of the
     set of their predictions will be assigned to the source node.
+    By default, will create 'axoness_preds_cnn' attribute in SSV attribute dict
+     and save new skeleton attribute with key "%s_views_avg%d" % (pred_key, max_dist).
 
     Parameters
     ----------
     sso : SuperSegmentationObject
-    axoness_pred_key : str
+    pred_key : str
+        Key for the stored SV predictions
     max_dist : int
     return_res : bool
+    use_cache : bool
+        Write intermediate SV predictions in SSV attribute dict to disk
     """
     if sso.skeleton is None:
         sso.load_skeleton()
@@ -949,15 +1246,14 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
         if len(pred_key_appendix) > 0:
             print("Couldn't find specified axoness prediction. Falling back to "
                   "default (-> per SV stored multi-view prediction "
-                  "including SSV context; RAG: 4b_fix).")
-        preds = np.array(start_multiprocess_obj("axoness_preds",
-                                                   [[sv, {
-                                                       "pred_key_appendix": pred_key_appendix}]
-                                                    for sv in sso.svs],
-                                                   nb_cpus=sso.nb_cpus))
+                  "including SSV context")
+        preds = np.array(start_multiprocess_obj(
+            "axoness_preds", [[sv, {"pred_key_appendix": pred_key_appendix}]
+                              for sv in sso.svs], nb_cpus=sso.nb_cpus))
         preds = np.concatenate(preds)
         sso.attr_dict[pred_key] = preds
-        sso.save_attributes([pred_key], [preds])
+        if use_cache:
+            sso.save_attributes([pred_key], [preds])
     else:
         preds = sso.lookup_in_attribute_dict(pred_key)
     loc_coords = np.concatenate(sso.sample_locations())
@@ -968,8 +1264,8 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
         print("View indices were not yet assigned to skeleton nodes. "
               "Running now '_cnn_axonness2skel(sso, "
               "pred_key_appendix=pred_key_appendix, k=1)'")
-        _cnn_axonness2skel(sso, pred_key_appendix=pred_key_appendix, k=1,
-                           save_sso=not return_res)
+        _cnn_axoness2skel(sso, pred_key_appendix=pred_key_appendix, k=1,
+                          save_skel=not return_res, use_cache=use_cache)
     view_ixs = np.array(sso.skeleton["view_ixs"])
     avg_pred = []
 
@@ -983,101 +1279,25 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
         avg_pred.append(c)
     if return_res:
         return avg_pred
-    sso.skeleton["%s_views_avg%d" % (pred_key, max_dist)] = avg_pred
+    sso.skeleton["axoness%s_avg%d" % (pred_key_appendix, max_dist)] = avg_pred
     sso.save_skeleton()
 
 
-def _cnn_axonness2skel(sso, pred_key_appendix="", k=1, reload=False,
-                       save_sso=True):
-    if k != 1:
-        log_reps.warn("Parameter 'k' is deprecated but was set to {}. "
-                      "It is not longer used in this method.".format(k))
-    if sso.skeleton is None:
-        sso.load_skeleton()
-    proba_key = "axoness_probas_cnn%s" % pred_key_appendix
-    pred_key = "axoness_preds_cnn%s" % pred_key_appendix
-    if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key) or reload:
-        preds = np.array(start_multiprocess_obj("axoness_preds", [[sv, {"pred_key_appendix": pred_key_appendix}]
-                                                    for sv in sso.svs],
-                                                   nb_cpus=sso.nb_cpus))
-        probas = np.array(start_multiprocess_obj("axoness_probas",
-                                                    [[sv, {"pred_key_appendix": pred_key_appendix}]
-                                                     for sv in sso.svs],
-                                                    nb_cpus=sso.nb_cpus))
-        preds = np.concatenate(preds)
-        probas = np.concatenate(probas)
-        sso.attr_dict[proba_key] = probas
-        sso.attr_dict[pred_key] = preds
-        sso.save_attributes([proba_key, pred_key], [probas, preds])
-    else:
-        preds = sso.lookup_in_attribute_dict(pred_key)
-        probas = sso.lookup_in_attribute_dict(proba_key)
-    loc_coords = np.concatenate(sso.sample_locations())
-    assert len(loc_coords) == len(preds), "Number of view coordinates is" \
-                                          "different from number of view" \
-                                          "predictions. SSO %d" % sso.id
-    # find NN in loc_coords for every skeleton node and use their majority
-    # prediction
-    node_preds = colorcode_vertices(sso.skeleton["nodes"] * sso.scaling,
-                                    loc_coords, preds, colors=[0, 1, 2], k=1)
-    node_probas, ixs = assign_rep_values(sso.skeleton["nodes"] * sso.scaling,
-                                         loc_coords, probas, return_ixs=True)
-    assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
-                                           "coordinates is bigger than " \
-                                           "length of sample coordinates."
-    sso.skeleton["axoness%s" % pred_key_appendix] = node_preds
-    sso.skeleton["axoness_probas%s" % pred_key_appendix] = node_probas
-    sso.skeleton["view_ixs"] = ixs
-    if save_sso:
-        sso.save_skeleton()
+def majority_vote_compartments(sso, ax_pred_key='axoness'):
+    """
+    By default, will save new skeleton attribute with key
+     ax_pred_key + "_comp_maj".
 
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    ax_pred_key : str
+        Key for the axoness predictions stored in sso.skeleton
 
-def _cnn_spiness2skel(sso, pred_key_appendix="", k=1, reload=False,
-                      save_sso=True):
-    if k != 1:
-        log_reps.warn("Parameter 'k' is deprecated but was set to {}. "
-                      "It is not longer used in this method.".format(k))
-    if sso.skeleton is None:
-        sso.load_skeleton()
-    proba_key = "axoness_probas_cnn%s" % pred_key_appendix
-    pred_key = "axoness_preds_cnn%s" % pred_key_appendix
-    if not sso.attr_exists(pred_key) or not sso.attr_exists(proba_key) or reload:
-        preds = np.array(start_multiprocess_obj("axoness_preds", [[sv, {"pred_key_appendix": pred_key_appendix}]
-                                                    for sv in sso.svs],
-                                                   nb_cpus=sso.nb_cpus))
-        probas = np.array(start_multiprocess_obj("axoness_probas",
-                                                    [[sv, {"pred_key_appendix": pred_key_appendix}]
-                                                     for sv in sso.svs],
-                                                    nb_cpus=sso.nb_cpus))
-        preds = np.concatenate(preds)
-        probas = np.concatenate(probas)
-        sso.attr_dict[proba_key] = probas
-        sso.attr_dict[pred_key] = preds
-        sso.save_attributes([proba_key, pred_key], [probas, preds])
-    else:
-        preds = sso.lookup_in_attribute_dict(pred_key)
-        probas = sso.lookup_in_attribute_dict(proba_key)
-    loc_coords = np.concatenate(sso.sample_locations())
-    assert len(loc_coords) == len(preds), "Number of view coordinates is" \
-                                          "different from number of view" \
-                                          "predictions. SSO %d" % sso.id
-    # find NN in loc_coords for every skeleton node and use their majority
-    # prediction
-    node_preds = colorcode_vertices(sso.skeleton["nodes"] * sso.scaling,
-                                    loc_coords, preds, colors=[0, 1, 2], k=1)
-    node_probas, ixs = assign_rep_values(sso.skeleton["nodes"] * sso.scaling,
-                                         loc_coords, probas, return_ixs=True)
-    assert np.max(ixs) <= len(loc_coords), "Maximum index for sample " \
-                                           "coordinates is bigger than " \
-                                           "length of sample coordinates."
-    sso.skeleton["axoness%s" % pred_key_appendix] = node_preds
-    sso.skeleton["axoness_probas%s" % pred_key_appendix] = node_probas
-    sso.skeleton["view_ixs"] = ixs
-    if save_sso:
-        sso.save_skeleton()
+    Returns
+    -------
 
-
-def majority_vote_compartments(sso, ax_pred_key):
+    """
     g = sso.weighted_graph(add_node_attr=(ax_pred_key, ))
     soma_free_g = g.copy()
     for n, d in g.nodes(data=True):
@@ -1095,7 +1315,7 @@ def majority_vote_compartments(sso, ax_pred_key):
             majority = 0
         for n in cc.nodes():
             new_axoness_dc[n] = majority
-    nx.set_node_attributes(g, ax_pred_key, new_axoness_dc)
+    nx.set_node_attributes(g, new_axoness_dc, ax_pred_key)
     new_axoness_arr = np.zeros((len(sso.skeleton["nodes"])))
     for n, d in g.nodes(data=True):
         new_axoness_arr[n] = d[ax_pred_key]

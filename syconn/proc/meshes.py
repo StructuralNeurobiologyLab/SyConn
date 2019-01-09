@@ -233,8 +233,9 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
         pts -= offset
         pts = (pts / downsampling).astype(np.uint32)
         # add zero boundary around object
-        pts += 5
-        bb = np.max(pts, axis=0) + 5
+        margin = n_closings + 5
+        pts += margin
+        bb = np.max(pts, axis=0) + margin
         volume = np.zeros(bb, dtype=np.float32)
         volume[pts[:, 0], pts[:, 1], pts[:, 2]] = 1
     else:
@@ -266,7 +267,7 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
         log_proc.error(e)
         raise RuntimeError(e)
     if pts.ndim == 2:  # account for [5, 5, 5] offset
-        verts -= 5
+        verts -= margin
     verts = np.array(verts) * downsampling + offset
     if decimate_mesh > 0:
         if not __vtk_avail__:
@@ -318,8 +319,8 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0):
     if np.isscalar(obj.voxels):
         return np.zeros((0, )), np.zeros((0, )), np.zeros((0, ))
     if len(obj.voxel_list) <= MESH_MIN_OBJ_VX:
-        log_proc.warn('Did not create mesh for bject with ID {} of type {} because'
-                      ' it contains less than {} voxels.'
+        log_proc.warn('Did not create mesh for object of type "{}" '
+                      ' with ID {} because it contained less than {} voxels.'
                       ''.format(obj.id, obj.type, len(obj.voxel_list)))
         return np.zeros((0,)), np.zeros((0,)), np.zeros((0,))
     try:
@@ -327,10 +328,11 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0):
             np.array(obj.voxel_list), downsampling=downsampling,
             n_closings=n_closings, decimate_mesh=decimate_mesh)
     except RuntimeError as e:
-        msg = 'Error during marching_cubes procedure of SegmentationObject {} of ' \
-              'type "{}".'.format(obj.id, obj.type)
+        msg = 'Error during marching_cubes procedure of SegmentationObject {}' \
+              ' of type "{}". It contained {} voxels'.format(
+            obj.id, obj.type, len(obj.voxel_list))
         log_proc.error(msg)
-        raise RuntimeError(e)
+        return np.zeros((0,)), np.zeros((0,)), np.zeros((0,))
     vertices += 1  # account for knossos 1-indexing
     vertices = np.round(vertices * obj.scaling)
     assert len(vertices) == len(normals) or len(normals) == 0, \

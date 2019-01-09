@@ -87,7 +87,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         directory in which the QSUB_* file is located
     n_max_co_processes: int or None
         limits the number of processes that are executed on the cluster at the 
-        same time; None: no limit
+        same time; None: use global_params.NCORE_TOTAL // number of cores per job (n_cores)
     iteration : int
         This counter stores how often QSUB_script was called for the same job
          submission. E.g. if jobs fail during a submission, it will be repeated
@@ -125,7 +125,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob = initialize_logging("{}".format(name + suffix),
                                       log_dir=job_folder)
-    log_batchjob.info('Starting BatchJob script {} with {} tasks using {}'
+    n_max_co_processes = np.min([global_params.NCORE_TOTAL // n_cores,
+                                 len(params)])
+    log_batchjob.info('Starting BatchJob script "{}" with {} tasks using {}'
                       ' parallel jobs, each using {} cores.'.format(
         name, len(params), n_max_co_processes, n_cores))
     if sge_additional_flags is not None:
@@ -175,6 +177,22 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         os.makedirs(path_to_err)
     if not os.path.exists(path_to_out):
         os.makedirs(path_to_out)
+
+    if BATCH_PROC_SYSTEM == 'SLURM':
+        if '-V ' in additional_flags:
+            log_batchjob.warning(
+                '"additional_flags" contained "-V" which is a QSUB/SGE specific flag,'
+                ' but SLURM was set as batch system. Converting "-V" to "--export=ALL".')
+            additional_flags.replace('-V ', '--export=ALL ')
+        if not '--mem=' in additional_flags and not disable_mem_flag:
+            # Node memory limit is 250,000M and not 250G! -> max memory per core is 250000M/20, leave safety margin
+            mem_lim = int(
+                global_params.MEM_PER_NODE * n_cores / global_params.NCORES_PER_NODE)
+            additional_flags += ' --mem={}M'.format(mem_lim)
+            log_batchjob.info(
+                'Memory requirements were not set explicitly. Setting to 250,000 MB'
+                ' * n_cores / {} = {} MB'.format(global_params.NCORES_PER_NODE,
+                                                 mem_lim))
 
     log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
     pbar = tqdm.tqdm(total=len(params))
@@ -240,16 +258,6 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         elif BATCH_PROC_SYSTEM == 'SLURM':
-            if '-V ' in additional_flags:
-                log_batchjob.warning('"additional_flags" contained "-V" which is a QSUB/SGE specific flag,'
-                                     ' but SLURM was set as batch system. Converting "-V" to "--export=ALL".')
-                additional_flags.replace('-V ', '--export=ALL ')
-            if not '--mem=' in additional_flags and not disable_mem_flag:
-                # Node memory limit is 250,000M and not 250G! -> max memory per core is 250000M/20, leave safety margin
-                mem_lim = int(global_params.MEM_PER_NODE * n_cores / global_params.NCORES_PER_NODE)
-                additional_flags += ' --mem={}M'.format(mem_lim)
-                log_batchjob.info('Memory requirements were not set explicitly. Setting to 250,000 MB'
-                                  ' * n_cores / {} = {} MB'.format(global_params.NCORES_PER_NODE, mem_lim))
             if pe is not None:
                 queue_option = "--ntasks-per-node %d" % n_cores
             elif queue is not None:
@@ -305,7 +313,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
     out_files = glob.glob(path_to_out + "*.pkl")
     # only stop if first iteration and script was not resumed (params_orig_id is None)
-    if len(out_files) == 0 and iteration == 1 and params_orig_id is not None:
+    if len(out_files) == 0 and iteration == 1 and params_orig_id is None:
         msg = 'All submitted jobs have failed. Re-submission will not be initiated.' \
               ' Please check your submitted code.'
         log_batchjob.error(msg)
@@ -402,12 +410,12 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     """
     job_folder = qsub_work_folder + "/%s_folder%s/" % (name, suffix)
     if not os.path.exists(job_folder):
-        raise RuntimeError('Job folder has to exist, in order to resume unfinished job.')
+        raise RuntimeError('Job folder has to exist, in order to '
+                           'resume unfinished job.')
     log_batchjob = initialize_logging("{}_resumed".format(name + suffix),
                                       log_dir=job_folder)
-    log_batchjob.info('RESUMING BatchJob script {} with {} tasks using {}'
-                      ' parallel jobs, each using {} cores.'.format(
-        name, len(params), n_max_co_processes, n_cores))
+    log_batchjob.info('RESUMING BatchJob script {} with {} tasks.'
+                      .format(name, len(params)))
     path_to_out = "%s/out/" % job_folder
 
     out_files = glob.glob(path_to_out + "*.pkl")

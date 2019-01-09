@@ -9,6 +9,7 @@ import time
 import numpy as np
 from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
+from syconn.config import global_params
 from flask import Flask
 import json
 
@@ -217,7 +218,10 @@ class SyConn_backend(object):
         if skeleton is None:
             return {}
         skel_attr = ["nodes", "edges", "diameters"]
-        for k in ['axoness_preds_cnn_v2_views_avg10000', 'axoness_preds_cnn_v2_views_avg10000_comp_maj']:
+        avg_dst = global_params.DIST_AXONESS_AVERAGING
+        keys = ["axoness_preds_cnn_views_avg{}".format(avg_dst),
+                "axoness_preds_cnn_views_avg{}_comp_maj".format(avg_dst)]
+        for k in keys:
             if k in skeleton:
                 skel_attr.append(k)
                 if type(skeleton[k]) is list:

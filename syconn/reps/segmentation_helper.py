@@ -184,7 +184,8 @@ def load_mesh(so, recompute=False):
 
     Returns
     -------
-
+    Tuple[np.array]
+        indices, vertices, normals; all flattened
     """
     if not recompute and so.mesh_exists:
         try:
@@ -227,24 +228,40 @@ def load_mesh(so, recompute=False):
 
 
 def load_skeleton(so, recompute=False):
+    """
+
+    Parameters
+    ----------
+    so : SegmentationObject
+    recompute : bool
+
+    Returns
+    -------
+    Tuple[np.array]
+        nodes [N, 3], diameters [N, 1], edges [M, 2]
+    """
     if not recompute and so.skeleton_exists:
         try:
             skeleton_dc = SkeletonStorage(so.skeleton_path,
                                           disable_locking=not so.enable_locking)
-            nodes, diameters, edges = skeleton_dc[so.id]['nodes'], skeleton_dc[so.id]['diameters'], skeleton_dc[so.id]['edges']
+            nodes = skeleton_dc[so.id]['nodes']
+            diameters = skeleton_dc[so.id]['diameters']
+            edges = skeleton_dc[so.id]['edges']
         except Exception as e:
             print("\n---------------------------------------------------\n"
-                  "\n%s\nException occured when loading skeletons.pkl of SO (%s)"
-                  " with id %d."
+                  "\n%s\nException occured when loading skeletons.pkl of "
+                  "SO (%s) with id %d."
                   "\n---------------------------------------------------\n"
                   % (e, so.type, so.id))
-            return np.zeros((0, )).astype(np.int), np.zeros((0, )),np.zeros((0,)).astype(np.int)
+            return np.zeros((0, 3)).astype(np.int), np.zeros((0, )), \
+                   np.zeros((0, 2)).astype(np.int)
     else:
         if so.type == "sv":
             print("\n-----------------------\n"
                   "Skeleton of SV %d (size: %d) not found.\n"
                   "-------------------------\n" % (so.id, so.size))
-            return np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0,)).astype(np.int)
+            return np.zeros((0, 3)).astype(np.int), np.zeros((0, )),\
+                   np.zeros((0, 2)).astype(np.int)
 
     nodes = np.array(nodes, dtype=np.int)
     diameters = np.array(diameters, dtype=np.float)

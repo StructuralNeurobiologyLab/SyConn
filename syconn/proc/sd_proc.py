@@ -28,8 +28,8 @@ from . import log_proc
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
-def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
-                     qsub_queue=None, nb_cpus=1, n_max_co_processes=100,
+def dataset_analysis(sd, recompute=True, stride=50, qsub_pe=None,
+                     qsub_queue=None, nb_cpus=1, n_max_co_processes=None,
                      compute_meshprops=False):
     """ Analyses the whole dataset and extracts and caches key information
 

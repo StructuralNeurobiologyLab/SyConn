@@ -800,7 +800,7 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
 
 def overlap_mapping_sj_to_cs_via_cset(cs_sd, sj_sd, cs_cset,
                                     n_folders_fs=10000, n_job_chunks=1000,
-                                    qsub_pe=None, qsub_queue=None,
+                                    qsub_pe=None, qsub_queue=None, resume_job=False,
                                     nb_cpus=None, n_max_co_processes=None):
 
     wd = cs_sd.working_dir
@@ -830,7 +830,7 @@ def overlap_mapping_sj_to_cs_via_cset(cs_sd, sj_sd, cs_cset,
     elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "overlap_mapping_sj_to_cs_via_cset",
-                                     pe=qsub_pe, queue=qsub_queue,
+                                     pe=qsub_pe, queue=qsub_queue, resume_job=resume_job,
                                      script_folder=script_folder, n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
     else:

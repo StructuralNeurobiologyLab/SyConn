@@ -19,7 +19,7 @@ try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
-
+from multiprocessing import cpu_count
 from . import segmentation  # TODO: del
 from ..config import parser
 from ..handler.basics import load_pkl2obj, write_obj2pkl
@@ -1209,11 +1209,13 @@ def create_sso_skeletons_thread(args):
     version_dict = args[2]
     working_dir = args[3]
 
+    n_cpus_avail = cpu_count()
     ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
                                    version_dict=version_dict)
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv.nb_cpus = n_cpus_avail
         ssv.load_skeleton()
         create_sso_skeleton(ssv)
         if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:

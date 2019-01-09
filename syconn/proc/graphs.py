@@ -299,8 +299,8 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
     # # set up edge weights based on sum of node weights
     # for e in g.edges():
     #     e_weights[e] = weights[list(e)[0]] + weights[list(e)[1]]
-    # nx.set_node_attributes(g, 'weight', weights)
-    # nx.set_edge_attributes(g, 'weights', e_weights)
+    # nx.set_node_attributes(g, weights, 'weight')
+    # nx.set_edge_attributes(g, e_weights, 'weights')
 
     # get neuron type connected component sizes
     g_neuron = g.copy()

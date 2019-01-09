@@ -423,7 +423,7 @@ class SuperSegmentationObject(object):
                 dc = {}
                 for n in self._weighted_graph.nodes():
                     dc[n] = self.skeleton[k][n]
-                nx.set_node_attributes(self._weighted_graph, k, dc)
+                nx.set_node_attributes(self._weighted_graph, dc, k)
         return self._weighted_graph
 
     @property
@@ -2083,12 +2083,12 @@ class SuperSegmentationObject(object):
                   "%0.4fs/SV" % (len(self.svs), end - start,
                                  float(end - start) / len(self.svs)))
 
-    def cnn_axoness_2_skel(self, **kwargs):
+    def cnn_axoness2skel(self, **kwargs):
         locking_tmp = self.enable_locking
         self.enable_locking = False  # all SV operations are read-only
         # (enable_locking is inherited by sso.svs);
         # SSV operations not, but SSO file structure is not chunked
-        res = ssh._cnn_axonness2skel(self, **kwargs)
+        res = ssh._cnn_axoness2skel(self, **kwargs)
         self.enable_locking = locking_tmp
         return res
 
@@ -2111,7 +2111,9 @@ class SuperSegmentationObject(object):
         raise DeprecationWarning('This method is deprecated. Use '
                                  '"predict_nodes" instead!')
 
-    def gen_skel_from_sample_locs(self, dest_path, pred_key_appendix=""):
+    def gen_skel_from_sample_locs(self, dest_path=None, pred_key_appendix=""):
+        if dest_path is None:
+            dest_path = self.skeleton_kzip_path_views
         try:
             if os.path.isfile(dest_path):
                 return
@@ -2123,70 +2125,73 @@ class SuperSegmentationObject(object):
             self.skeleton["nodes"] = locs / np.array(self.scaling)
             self.skeleton["edges"] = edge_list
             self.skeleton["diameters"] = np.ones(len(locs))
-            ax_probas = np.array(sm.start_multiprocess_obj("axoness_probas",
-                                 [[sv, {"pred_key_appendix": pred_key_appendix}]
-                                  for sv in self.svs], nb_cpus=self.nb_cpus))
-            ax_probas = np.concatenate(ax_probas)
-            # first stage averaging
-            curr_ax_preds = np.argmax(ax_probas, axis=1)
-            ax_preds = np.zeros((len(locs)), dtype=np.int)
-            for i_node in range(len(self.skeleton["nodes"])):
-                paths = nx.single_source_dijkstra_path(self.weighted_graph(), i_node,
-                                                       30000)
-                neighs = np.array(list(paths.keys()), dtype=np.int)
-                cnt = Counter(curr_ax_preds[neighs])
-                loc_average = np.zeros((3, ))
-                for k, v in cnt.items():
-                    loc_average[k] = v
-                loc_average /= float(len(neighs))
-                if (curr_ax_preds[i_node] == 2 and loc_average[2] >= 0.20) or \
-                        (loc_average[2] >= 0.98):
-                    ax_preds[i_node] = 2
-                else:
-                    ax_preds[i_node] = np.argmax(loc_average[:2])
-            # second stage averaging, majority vote on every branch
-            curr_ax_preds = np.array(ax_preds, dtype=np.int)
-            edge_coords = locs[self.skeleton["edges"]]
-            edge_ax = curr_ax_preds[self.skeleton["edges"]]
-            edges = []
-            for i in range(len(edge_coords)):
-                if 2 in edge_ax[i]:
-                    continue
-                edges.append(self.skeleton["edges"][i])
-            edges = np.array(edges)
-            g = nx.Graph()
-            g.add_edges_from(edges)
-            ccs = nx.connected_components(g)
-            for cc in ccs:
-                curr_ixs = np.array(list(cc), dtype=np.int)
-                cnt = Counter(ax_preds[curr_ixs])
-                loc_average = np.zeros((3, ))
-                for k, v in cnt.items():
-                    loc_average[k] = v
-                curr_ax_preds[curr_ixs] = np.argmax(loc_average)
-            self.skeleton["axoness"] = curr_ax_preds
-            self.save_skeleton_to_kzip(dest_path=dest_path)
+            # TODO: Disentangle skeleton generation from sample locations and
+            # subsequent axon mapping, use 'cnn_axoness2skel' and 'average_node_axoness_views' and 'majority_vote_compartments'
+
+            # ax_probas = np.array(sm.start_multiprocess_obj("axoness_probas",
+            #                      [[sv, {"pred_key_appendix": pred_key_appendix}]
+            #                       for sv in self.svs], nb_cpus=self.nb_cpus))
+            # ax_probas = np.concatenate(ax_probas)
+            # # first stage averaging
+            # curr_ax_preds = np.argmax(ax_probas, axis=1)
+            # ax_preds = np.zeros((len(locs)), dtype=np.int)
+            # for i_node in range(len(self.skeleton["nodes"])):
+            #     paths = nx.single_source_dijkstra_path(self.weighted_graph(), i_node,
+            #                                            30000)
+            #     neighs = np.array(list(paths.keys()), dtype=np.int)
+            #     cnt = Counter(curr_ax_preds[neighs])
+            #     loc_average = np.zeros((3, ))
+            #     for k, v in cnt.items():
+            #         loc_average[k] = v
+            #     loc_average /= float(len(neighs))
+            #     if (curr_ax_preds[i_node] == 2 and loc_average[2] >= 0.20) or \
+            #             (loc_average[2] >= 0.98):
+            #         ax_preds[i_node] = 2
+            #     else:
+            #         ax_preds[i_node] = np.argmax(loc_average[:2])
+            # # second stage averaging, majority vote on every branch
+            # curr_ax_preds = np.array(ax_preds, dtype=np.int)
+            # edge_coords = locs[self.skeleton["edges"]]
+            # edge_ax = curr_ax_preds[self.skeleton["edges"]]
+            # edges = []
+            # for i in range(len(edge_coords)):
+            #     if 2 in edge_ax[i]:
+            #         continue
+            #     edges.append(self.skeleton["edges"][i])
+            # edges = np.array(edges)
+            # g = nx.Graph()
+            # g.add_edges_from(edges)
+            # ccs = nx.connected_components(g)
+            # for cc in ccs:
+            #     curr_ixs = np.array(list(cc), dtype=np.int)
+            #     cnt = Counter(ax_preds[curr_ixs])
+            #     loc_average = np.zeros((3, ))
+            #     for k, v in cnt.items():
+            #         loc_average[k] = v
+            #     curr_ax_preds[curr_ixs] = np.argmax(loc_average)
+            # self.skeleton["axoness"] = curr_ax_preds
         except Exception as e:
             if "null graph" in str(e) and len(self.sv_ids) == 2:
                 print("Null graph error with 2 nodes, falling back to "
                       "original classification and one edge.")
                 locs = np.concatenate(self.sample_locations())
-                self.skeleton = {}
-                self.skeleton["nodes"] = locs / np.array(self.scaling)
-                self.skeleton["edges"] = np.array([[0, 1]])
-                self.skeleton["diameters"] = np.ones(len(locs))
-                ax_probas = np.array(sm.start_multiprocess_obj("axoness_probas",
-                                                               [[sv, {
-                                                                   "pred_key_appendix": pred_key_appendix}]
-                                                                for sv in
-                                                                self.svs],
-                                                               nb_cpus=self.nb_cpus))
-                ax_probas = np.concatenate(ax_probas)
-                # first stage averaging
-                curr_ax_preds = np.argmax(ax_probas, axis=1)
-                self.skeleton["axoness"] = curr_ax_preds
+                # self.skeleton = {}
+                # self.skeleton["nodes"] = locs / np.array(self.scaling)
+                # self.skeleton["edges"] = np.array([[0, 1]])
+                # self.skeleton["diameters"] = np.ones(len(locs))
+                # ax_probas = np.array(sm.start_multiprocess_obj("axoness_probas",
+                #                                                [[sv, {
+                #                                                    "pred_key_appendix": pred_key_appendix}]
+                #                                                 for sv in
+                #                                                 self.svs],
+                #                                                nb_cpus=self.nb_cpus))
+                # ax_probas = np.concatenate(ax_probas)
+                # # first stage averaging
+                # curr_ax_preds = np.argmax(ax_probas, axis=1)
+                # self.skeleton["axoness"] = curr_ax_preds
             else:
                 print("Error %s occured with SSO %d  (%d SVs)." % (e, self.id,  len(self.sv_ids)))
+        self.save_skeleton_to_kzip(dest_path=dest_path)
 
     def predict_celltype_cnn(self, model):
         ssh.predict_sso_celltype(self, model)

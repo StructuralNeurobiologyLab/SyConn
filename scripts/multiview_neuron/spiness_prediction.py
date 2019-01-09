@@ -38,6 +38,7 @@ if __name__ == "__main__":
     #                suffix="",  additional_flags="--gres=gpu:1")   # removed -V
 
     # map semantic spine segmentation of multi views on SSV mesh
+    # TODO: CURRENTLY HIGH MEMORY CONSUMPTION
     if not ssd.mapping_dict_exists:
         raise ValueError('Mapping dict does not exist.')
     multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
@@ -51,5 +52,4 @@ if __name__ == "__main__":
                      kwargs_semseg2mesh) for ssv_ids in multi_params]
     log.info('Starting mapping of spine predictions to neurite surfaces.')
     qu.QSUB_script(multi_params, "map_spiness", pe="openmp", queue=None,
-                   n_max_co_processes=NCORE_TOTAL//4, n_cores=4, suffix="",
-                   additional_flags="", resume_job=False)  # removed -V
+                   n_cores=2, suffix="", additional_flags="", resume_job=False)  # removed -V

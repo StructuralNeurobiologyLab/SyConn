@@ -86,11 +86,14 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
 def start_multiprocess_imap(func, params, debug=False, verbose=False,
                             nb_cpus=None, show_progress=True):
     """
+    Multiprocessing method which supports progress bar (therefore using
+     imap instead of map)
 
     Parameters
     ----------
     func : function
-    params : function parameters
+    params : Iterable
+        function parameters
     debug : boolean
     verbose : bool
     nb_cpus : int
@@ -118,7 +121,9 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
         Process = NoDaemonProcess
 
     if nb_cpus is None:
-        nb_cpus = min(cpu_count(), len(params))
+        nb_cpus = cpu_count()
+
+    nb_cpus = min(nb_cpus, len(params))
 
     if debug:
         nb_cpus = 1
@@ -140,7 +145,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
                                     unit_scale=True, dynamic_ncols=False,
                                     mininterval=1))
         else:
-            result = pool.imap(func, params)
+            result = list(pool.imap(func, params))
         pool.close()
         pool.join()
     else:
