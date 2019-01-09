@@ -34,7 +34,7 @@ try:
     from OpenGL.GL.framebufferobjects import *
     from OpenGL.arrays import *
 except Exception as e:
-    print("Problem loading OpenGL:", e)
+    log_proc.error("Problem loading OpenGL:", e)
     pass
 
 if os.environ['PYOPENGL_PLATFORM'] == 'egl':
@@ -42,8 +42,9 @@ if os.environ['PYOPENGL_PLATFORM'] == 'egl':
 elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
     from OpenGL.osmesa import *
 else:
-    raise NotImplementedError('PYOpenGL environment has to be "egl" or'
-                              ' "osmesa".')
+    msg = 'PYOpenGL environment has to be "egl" or "osmesa".'
+    log_proc.error(msg)
+    raise NotImplementedError(msg)
 
 
 # ------------------------------------------------------------------------------
@@ -529,9 +530,10 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         rot_mat = rot_matrices[ii]
         if np.sum(np.abs(rot_mat)) == 0 or np.sum(np.abs(mesh.vertices)) == 0:
             if views_key in ["raw", "index"]:
-                print("Rotation matrix or vertices of '%s' with %d "
-                      "vertices is zero during rendering at %s. Skipping."
-                              % (views_key, len(mesh.vert_resh), str(c)))
+                log_proc.warning(
+                    "Rotation matrix or vertices of '%s' with %d vertices is"
+                    " zero during rendering at %s. Skipping."
+                    % (views_key, len(mesh.vert_resh), str(c)))
             continue
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
@@ -577,7 +579,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                                   RuntimeWarning)
                     found_empty_view = True
         if found_empty_view:
-            print("View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
+            log_proc.warning(
+                "View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
                   "'%s'-mesh with %d vertices. Location: %s" %
                   (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
                    views_key, len(mesh.vertices), repr(c)))
@@ -596,7 +599,7 @@ def draw_scale(size):
     """
     glLineWidth(5)
     glBegin(GL_LINES)
-    glColor(0,0,0, 1)
+    glColor(0, 0, 0, 1)
     glVertex2f(1 - 0.1 - size, 1 - 0.1)
     glVertex2f(1 - 0.1, 1 - 0.1)
     glEnd()
@@ -692,10 +695,10 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
         local_rot_mat = np.array(rot_matrices)
         local_rot_mat[empty_locs] = 0
     if verbose:
-        print("Calculation of rotation matrices / flagging empty views"
-              " took", time.time() - start)
-        print("Starting local rendering at %d locations (%s)." %
-              (len(coords), views_key))
+        log_proc.info("Calculation of rotation matrices / flagging empty views"
+                      " took", time.time() - start)
+        log_proc.info("Starting local rendering at %d locations (%s)." %
+                      (len(coords), views_key))
     ctx = init_ctx(ws)
     mviews = multi_view_mesh_coords(mesh, coords, local_rot_mat, edge_lengths,
                                     clahe=clahe, views_key=views_key, ws=ws,
@@ -705,8 +708,8 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                                     wire_frame=wire_frame, nb_views=nb_views)
     if verbose:
         end = time.time()
-        print("Finished rendering mesh of type %s at %d locations after"
-              " %0.1fs" % (views_key,len(mviews), end - start))
+        log_proc.info("Finished rendering mesh of type %s at %d locations after"
+                      " %0.1fs" % (views_key,len(mviews), end - start))
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
         eglDestroyContext(*ctx)
     else:
@@ -752,8 +755,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
                                   dtype=np.bool)
         missing_svs = np.array(sso.svs)[missing_sv_ixs]
         coords = np.array(coords)[missing_sv_ixs]
-        print("Rendering %d/%d missing SVs of SSV %d." %
-              (len(missing_svs), len(sso.sv_ids), sso.id))
+        log_proc.info("Rendering %d/%d missing SVs of SSV %d."
+                      % (len(missing_svs), len(sso.sv_ids), sso.id))
     else:
         missing_svs = np.array(sso.svs)
     if len(missing_svs) == 0:
@@ -776,8 +779,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
                       index_views=index_views)
     if verbose:
         dur = time.time() - start
-        print ("Rendering of %d views took %0.2fs (incl. read/write). "
-              "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
+        log_proc.info("Rendering of %d views took %0.2fs (incl. read/write). "
+                      "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
     if return_views:
         return sso.load_views(woglia=woglia, index_views=index_views)
 
@@ -812,9 +815,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
         nb_views = global_params.NB_VIEWS
     mesh = sso.mesh
     if len(mesh[1]) == 0:
-        print("----------------------------------------------\n"
-              "No mesh for SSO %d found.\n"
-              "----------------------------------------------\n")
+        log_proc.error("No mesh for SSO {} found.".format(sso.id))
         return
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
@@ -896,9 +897,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
         nb_views = global_params.NB_VIEWS
     ind, vert, norm = sso.mesh
     if len(vert) == 0:
-        print("----------------------------------------------\n"
-              "No mesh for SSO %d found.\n"
-              "----------------------------------------------\n")
+        log_proc.error("No mesh for SSO {} found.".format(sso.id))
         return np.ones((len(coords), 2, 128, 256, 3), dtype=np.uint8)
     try:
         color_array = id2rgb_array_contiguous(np.arange(len(ind) // 3))

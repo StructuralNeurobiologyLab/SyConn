@@ -42,7 +42,8 @@ if __name__ == "__main__":
     #  raw_only to False
     pred_kwargs = dict(woglia=True, pred_key=pred_key, verbose=False,
                        raw_only=False)
-    multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for par in multi_params]
+    multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for
+                    par in multi_params]
 
     for par in multi_params:
         mk = par[1]

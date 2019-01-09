@@ -21,28 +21,29 @@ if __name__ == "__main__":
     ssd = SuperSegmentationDataset(working_dir=wd)
     pred_key = "spiness"
 
-    # # run semantic spine segmentation on multi views
-    # sd = ssd.get_segmentationdataset("sv")
-    # # chunk them
-    # multi_params = chunkify(sd.so_dir_paths, 100)
-    # # set model properties
-    # model_kwargs = dict(src=mpath_spiness, multi_gpu=False)
-    # so_kwargs = dict(working_dir=wd)
-    # pred_kwargs = dict(pred_key=pred_key)
-    # multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs]
-    #                 for par in multi_params]
-    # log.info('Starting spine prediction.')
-    # qu.QSUB_script(multi_params, "predict_spiness_chunked",
-    #                n_max_co_processes=NGPU_TOTAL, pe="openmp", queue=None,
-    #                n_cores=10, python_path=py36path,  # use python 3.6 in
-    #                suffix="",  additional_flags="--gres=gpu:1")   # removed -V
+    # run semantic spine segmentation on multi views
+    sd = ssd.get_segmentationdataset("sv")
+    # chunk them
+    multi_params = chunkify(sd.so_dir_paths, 100)
+    # set model properties
+    model_kwargs = dict(src=mpath_spiness, multi_gpu=False)
+    so_kwargs = dict(working_dir=wd)
+    pred_kwargs = dict(pred_key=pred_key)
+    multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs]
+                    for par in multi_params]
+    log.info('Starting spine prediction.')
+    qu.QSUB_script(multi_params, "predict_spiness_chunked",
+                   n_max_co_processes=NGPU_TOTAL, pe="openmp", queue=None,
+                   n_cores=10, python_path=py36path,  # use python 3.6 in
+                   suffix="",  additional_flags="--gres=gpu:1")   # removed -V
 
     # map semantic spine segmentation of multi views on SSV mesh
     # TODO: CURRENTLY HIGH MEMORY CONSUMPTION
     if not ssd.mapping_dict_exists:
         raise ValueError('Mapping dict does not exist.')
     multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
-    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id in ssd.ssv_ids])
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id
+                               in ssd.ssv_ids])
     # sort ssv ids according to their number of SVs (descending)
     multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
     multi_params = chunkify(multi_params, 3000)

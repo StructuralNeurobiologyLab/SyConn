@@ -656,8 +656,8 @@ class SuperSegmentationObject(object):
 
     def load_svixs(self):
         if not os.path.isfile(self.edgelist_path):
-            log_reps.warn("Edge list of SSO %d does not exist. Return empty "
-                          "list.", RuntimeWarning)
+            log_reps.warn("Edge list of SSO {} does not exist. Return empty "
+                          "list.".format(self.id))
             return []
         edges = self.load_edgelist()
         return np.unique(np.concatenate([[a.id, b.id] for a, b in edges]))

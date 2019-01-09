@@ -164,7 +164,7 @@ def radius_correction(sso):
             if new_rad == []:
                 med_rad = diameters[el]
             else:
-                print(rad, vert)
+                log_reps.debug(rad, vert)
             diameters[el] = med_rad * 2
             if el < len(found_coords):
                 skel_radius[str(found_coords[el])] = med_rad
@@ -410,7 +410,6 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
                         # collected on our way to the branch point
                         for prune_node in prune_nodes:
                             new_nx_g.remove_node(prune_node)
-                            # print('this got removed', prune_node, len(prune_nodes))
                         break
                     else:
                         break
@@ -475,15 +474,12 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500,
                 dot_prod = np.dot(vector_left_node/ np.linalg.norm(vector_left_node),vector_right_node/ np.linalg.norm(vector_right_node))
                 dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix]*scal[ix]) - int(skel_nx.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
 
-                # print('dots', dot_prod, 'dist', dist)
-
                 if (abs(dot_prod) > dot_prod_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
 
                     skel_nx.remove_node(visiting_node)
                     skel_nx.add_edge(left_node,right_node)
                     change += 1
 
-    # print('number of connected comp sparsification' , nx.number_connected_components(skel_nx))
     sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.uint32)
     sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
 
@@ -515,11 +511,12 @@ def smooth_skeleton(skel_nx, scal=None):
 
         neighbours = [n for n in skel_nx.neighbors(visiting_node)]
 
+        # Why all these if == 2 statements?
         if skel_nx.degree(visiting_node) == 2:
             left_node = neighbours[0]
             right_node = neighbours[1]
 
-        if skel_nx.degree(left_node) == 2 and skel_nx.degree(right_node)==2:
+        if skel_nx.degree(left_node) == 2 and skel_nx.degree(right_node) == 2:
                 vector_left_node = np.array(
                     [int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in
                      range(3)]) * scal
@@ -532,7 +529,6 @@ def smooth_skeleton(skel_nx, scal=None):
                 dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix] * scal[ix]) - int(
                     skel_nx.node[left_node]['position'][ix] * scal[ix]) for ix in range(3)])
 
-                print(dot_prod)
                 if abs(dot_prod) < 0.3:
 
                     x_dist = np.linalg.norm([int(skel_nx.node[visiting_node]['position'][ix] * scal[ix]) - int(
@@ -540,7 +536,6 @@ def smooth_skeleton(skel_nx, scal=None):
 
                     y_dist = np.linalg.norm([int(skel_nx.node[visiting_node]['position'][ix] * scal[ix]) - int(
                         skel_nx.node[right_node]['position'][ix] * scal[ix]) for ix in range(3)])
-
 
                     p = [(int(skel_nx.node[right_node]['position'][ix] + int(skel_nx.node[left_node]['position'][ix]))*x_dist/(x_dist +y_dist)) for ix in range(3)]
 
@@ -554,8 +549,10 @@ def smooth_skeleton(skel_nx, scal=None):
 
 def from_netkx_to_sso(sso, skel_nx):
     sso.skeleton = {}
-    sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in skel_nx.nodes()], dtype=np.uint32)
-    sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']), dtype=np.float)
+    sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in
+                                      skel_nx.nodes()], dtype=np.uint32)
+    sso.skeleton['diameters'] = np.zeros(len(sso.skeleton['nodes']),
+                                         dtype=np.float)
 
     assert nx.number_connected_components(skel_nx) == 1
 
@@ -688,8 +685,6 @@ def from_netkx_to_arr(skel_nx):
         dtype=np.uint32)
     skeleton['diameters'] = np.zeros(len(skeleton['nodes']), dtype=np.float32)
 
-    # assert nx.number_connected_components(skel_nx) == 1
-
     # Important bit, please don't remove (needed after pruning)
     temp_edges = np.array(list(skel_nx.edges())).reshape(-1)
     temp_edges_sorted = np.unique(np.sort(temp_edges))
@@ -745,8 +740,6 @@ def sparsify_skeleton_fast(skel_nx, scal=None, dot_prod_thresh=0.8,
 
                 dot_prod = np.dot(vector_left_node/ np.linalg.norm(vector_left_node),vector_right_node/ np.linalg.norm(vector_right_node))
                 dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix]*scal[ix]) - int(skel_nx.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
-
-                # print('dots', dot_prod, 'dist', dist)
 
                 if (abs(dot_prod) > dot_prod_thresh and dist < max_dist_thresh) or dist <= min_dist_thresh:
 
@@ -810,6 +803,8 @@ def from_sso_to_netkx_fast(sso, sparsify=True):
         np.cumsum([len(el[0]) for el in res])[:-1])
 
     for ii in range(len(res)):
+        if len(res[ii][0]) == 0:  # skip missing / empty skeletons, e.g. happens for small SVs
+            continue
         nodes.append(res[ii][0])
         diameters.append(res[ii][1])
         edges.append(res[ii][2] + int(n_nodes_per_sv[ii]))
@@ -825,26 +820,31 @@ def from_sso_to_netkx_fast(sso, sparsify=True):
         # iterates over SV object edges
         for e1, e2 in sso.load_edgelist():
             # get closest edge between SV nodes in question and new edge add to edges
-            nodes1 = ssv_skel['nodes'][sv_id_arr == e1.id]
-            nodes2 = ssv_skel['nodes'][sv_id_arr == e2.id]
+            nodes1 = ssv_skel['nodes'][sv_id_arr == e1.id] * sso.scaling
+            nodes2 = ssv_skel['nodes'][sv_id_arr == e2.id] * sso.scaling
+            nodes1 = nodes1.astype(np.float32)
+            nodes2 = nodes2.astype(np.float32)
+            if len(nodes1) == 0 or len(nodes2) == 0:
+                continue  # SV without skeleton
             nodes1_ix = node_ix_arr[sv_id_arr == e1.id]
             nodes2_ix = node_ix_arr[sv_id_arr == e2.id]
-            assert len(nodes1) > 0 and len(nodes2) > 0
             tree = spatial.cKDTree(nodes1)
             dists, node_ixs1 = tree.query(nodes2)
-            # get global index of nodes
+            # # get global index of nodes
             ix2 = nodes2_ix[np.argmin(dists)]
             ix1 = nodes1_ix[node_ixs1[np.argmin(dists)]]
+            # node_dist_check = np.linalg.norm(ssv_skel['nodes'][ix1].astype(np.float32) -
+            #                                   ssv_skel['nodes'][ix2].astype(np.float32))
+            # if np.min(dists) < node_dist_check or node_dist_check > 10e3:
+            #     raise ValueError
             edges.append(np.array([[ix1, ix2]], dtype=np.uint32))
     ssv_skel['edges'] = np.concatenate(edges)
 
     if len(ssv_skel['nodes']) == 0:
         sso.skeleton = ssv_skel
         return
-
     skel_nx.add_nodes_from([(ix, dict(position=coord)) for ix, coord
                             in enumerate(ssv_skel['nodes'])])
-
     edges = [tuple(ix) for ix in ssv_skel['edges']]
     skel_nx.add_edges_from(edges)
     if nx.number_connected_components(skel_nx) != 1:
@@ -881,19 +881,19 @@ def create_sso_skeleton_fast(sso, pruning_thresh=700, sparsify=True):
 
     """
     # Creating network kx graph from sso skel
-    print('Creating skeleton of SSO {}'.format(sso.id))
+    log_reps.debug('Creating skeleton of SSO {}'.format(sso.id))
     skel_nx = from_sso_to_netkx_fast(sso)
-    print('Number CC after stitching and sparsifying SSO {}:'.format(sso.id),
+    log_reps.debug('Number CC after stitching and sparsifying SSO {}:'.format(sso.id),
           nx.number_connected_components(skel_nx))
     # Sparse again after stitching. Inexpensive.
     if sparsify:
         sso, skel_nx = sparsify_skeleton(sso, skel_nx)
-        print(
+        log_reps.debug(
             'Number CC after 2nd sparsification SSO {}:'.format(sso.id),
             nx.number_connected_components(skel_nx))
     # Pruning the stitched sso skeletons
     sso, skel_nx = prune_stub_branches(sso, skel_nx, len_thres=pruning_thresh)
-    print('Number CC after pruning SSO {}:'.format(sso.id),
+    log_reps.debug('Number CC after pruning SSO {}:'.format(sso.id),
           nx.number_connected_components(skel_nx))
     # Estimating the radii
     sso.skeleton = radius_correction_found_vertices(sso)
@@ -1120,8 +1120,8 @@ def write_axpred_cnn(ssv, pred_key_appendix, dest_path=None, k=1):
         dest_path = ssv.skeleton_kzip_path_views
     pred_key = "axoness_preds%s" % pred_key_appendix
     if not ssv.attr_exists(pred_key):
-        print("Couldn't find specified axoness prediction. Falling back to "
-              "default.")
+        log_reps.info("Couldn't find specified axoness prediction. Falling back "
+                      "to default.")
         preds = np.array(start_multiprocess_obj("axoness_preds",
                                                    [[sv, {
                                                        "pred_key_appendix": pred_key_appendix}]
@@ -1130,9 +1130,9 @@ def write_axpred_cnn(ssv, pred_key_appendix, dest_path=None, k=1):
         preds = np.concatenate(preds)
     else:
         preds = ssv.lookup_in_attribute_dict(pred_key)
-    print("Collected axoness:", Counter(preds).most_common())
+    log_reps.debug("Collected axoness:", Counter(preds).most_common())
     locs = ssv.sample_locations()
-    print("Collected locations.")
+    log_reps.debug("Collected locations.")
     pred_coords = np.concatenate(locs)
     assert pred_coords.ndim == 2
     assert pred_coords.shape[1] == 3
@@ -1233,7 +1233,8 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
     if sso.skeleton is None:
         sso.load_skeleton()
     if len(sso.skeleton["edges"]) == 0:
-        print("Zero edges in skeleton of SSV %d. Skipping averaging." % sso.id)
+        log_reps.error("Zero edges in skeleton of SSV %d. "
+                       "Skipping averaging." % sso.id)
         return
     if pred_key is None:
         pred_key = "axoness_preds_cnn%s" % pred_key_appendix
@@ -1244,9 +1245,9 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
         raise ValueError("'pred_key' has to be of type str.")
     if not sso.attr_exists(pred_key) and ("axoness_preds_cnn" not in pred_key):
         if len(pred_key_appendix) > 0:
-            print("Couldn't find specified axoness prediction. Falling back to "
-                  "default (-> per SV stored multi-view prediction "
-                  "including SSV context")
+            log_reps.error("Couldn't find specified axoness prediction. Falling"
+                           " back to default (-> per SV stored multi-view "
+                           "prediction including SSV context")
         preds = np.array(start_multiprocess_obj(
             "axoness_preds", [[sv, {"pred_key_appendix": pred_key_appendix}]
                               for sv in sso.svs], nb_cpus=sso.nb_cpus))
@@ -1261,9 +1262,9 @@ def _average_node_axoness_views(sso, pred_key_appendix="", pred_key=None,
                                           "different from number of view " \
                                           "predictions. SSO %d" % sso.id
     if "view_ixs" not in sso.skeleton.keys():
-        print("View indices were not yet assigned to skeleton nodes. "
-              "Running now '_cnn_axonness2skel(sso, "
-              "pred_key_appendix=pred_key_appendix, k=1)'")
+        log_reps.info("View indices were not yet assigned to skeleton nodes. "
+                      "Running now '_cnn_axonness2skel(sso, "
+                      "pred_key_appendix=pred_key_appendix, k=1)'")
         _cnn_axoness2skel(sso, pred_key_appendix=pred_key_appendix, k=1,
                           save_skel=not return_res, use_cache=use_cache)
     view_ixs = np.array(sso.skeleton["view_ixs"])

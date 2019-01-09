@@ -14,6 +14,7 @@ import numpy as np
 import os
 from collections import Counter
 
+from . import log_proc
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
 from ..reps.super_segmentation import SuperSegmentationObject, \
@@ -99,7 +100,6 @@ def _write_super_segmentation_dataset_thread(args):
     attr_dict = dict(id=[])
 
     for ssv_obj_id in ssv_obj_ids:
-        print(ssv_obj_id)
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
                                                     new_mapping=True,
                                                     create=True)
@@ -306,11 +306,13 @@ def _apply_mapping_decisions_thread(args):
             assert obj_type in ssv.version_dict
 
             if not "mapping_%s_ratios" % obj_type in ssv.attr_dict:
-                print("No mapping ratios found")
+                log_proc.error("No mapping ratios found in SSV {}."
+                               "".format(ssv_id))
                 continue
 
             if not "mapping_%s_ids" % obj_type in ssv.attr_dict:
-                print("no mapping ids found")
+                log_proc.error("No mapping ids found in SSV {}."
+                               "".format(ssv_id))
                 continue
 
             if lower_ratio is None:
@@ -318,14 +320,17 @@ def _apply_mapping_decisions_thread(args):
                     lower_ratio = ssv.config.entries["LowerMappingRatios"][
                         obj_type]
                 except:
-                    raise ("Lower ratio undefined")
+                    msg = "Lower ratio undefined. SSV {}.".format(ssv_id)
+                    log_proc.critical(msg)
+                    raise ValueError(msg)
 
             if upper_ratio is None:
                 try:
                     upper_ratio = ssv.config.entries["UpperMappingRatios"][
                         obj_type]
                 except:
-                    print("Upper ratio undefined - 1. assumed")
+                    log_proc.error("Upper ratio undefined - 1. assumed. "
+                                   "SSV {}".format(ssv_id))
                     upper_ratio = 1.
 
             if sizethreshold is None:
@@ -333,7 +338,9 @@ def _apply_mapping_decisions_thread(args):
                     sizethreshold = ssv.config.entries["Sizethresholds"][
                         obj_type]
                 except:
-                    raise ("Size threshold undefined")
+                    msg = "Size threshold undefined. SSV {}.".format(ssv_id)
+                    log_proc.critical(msg)
+                    raise ValueError(msg)
 
             obj_ratios = np.array(ssv.attr_dict["mapping_%s_ratios" % obj_type])
 

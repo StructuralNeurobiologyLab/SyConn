@@ -137,8 +137,9 @@ def _dataset_analysis_thread(args):
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
                     if compute_meshprops:
+                        # if mesh did not exist beforehand, it will be generated
                         so.attr_dict["mesh_bb"] = so.mesh_bb
-                        so.attr_dict["mesh_area"] = so.mesh_area    # TODO try except SV
+                        so.attr_dict["mesh_area"] = so.mesh_area
 
                 for attribute in so.attr_dict.keys():
                     if attribute not in global_attr_dict:
@@ -403,8 +404,8 @@ def _binary_filling_cs_thread(args):
             so = cs_sd.get_segmentation_object(so_id)
             # so.attr_dict = this_attr_dc[so_id]
             so.load_voxels(voxel_dc=this_vx_dc)
-            filled_voxels = segmentation_helper.binary_closing(so.voxels.copy(),
-                                                               n_iterations=n_iterations)
+            filled_voxels = segmentation_helper.binary_closing(
+                so.voxels.copy(), n_iterations=n_iterations)
 
             this_vx_dc[so_id] = [filled_voxels], [so.bounding_box[0]]
 
@@ -577,12 +578,11 @@ def _export_sd_to_knossosdataset_thread(args):
                             verbose=True)
 
 
-# TODO: Move from sj to syn_ssv!
 def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                          trafo_dict_path=None, stride=10,
                          qsub_pe=None, qsub_queue=None, nb_cpus=1,
                          n_max_co_processes=None):
-    assert "sj" in sj_sd.version_dict
+    assert "syn_ssv" in sj_sd.version_dict
     paths = sj_sd.so_dir_paths
 
     # Partitioning the work
@@ -608,7 +608,6 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
 
 
 def _extract_synapse_type_thread(args):
-
     paths = args[0]
     obj_version = args[1]
     working_dir = args[2]
@@ -624,18 +623,15 @@ def _extract_synapse_type_thread(args):
 
     kd_asym = knossosdataset.KnossosDataset()
     kd_asym.initialize_from_knossos_path(kd_asym_path)
-
     kd_sym = knossosdataset.KnossosDataset()
     kd_sym.initialize_from_knossos_path(kd_sym_path)
 
-    seg_dataset = segmentation.SegmentationDataset("sj",
+    seg_dataset = segmentation.SegmentationDataset("syn_ssv",
                                                    version=obj_version,
                                                    working_dir=working_dir)
-
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
                                      read_only=False, disable_locking=True)
-
         for so_id in this_attr_dc.keys():
             so = seg_dataset.get_segmentation_object(so_id)
             so.attr_dict = this_attr_dc[so_id]
@@ -665,7 +661,6 @@ def _extract_synapse_type_thread(args):
 
             so.attr_dict["syn_type_sym_ratio"] = sym_ratio
             this_attr_dc[so_id] = so.attr_dict
-
         this_attr_dc.push()
 
 

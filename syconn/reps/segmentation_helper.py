@@ -14,6 +14,7 @@ from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
     VoxelStorage, SkeletonStorage
 from ..handler.basics import chunkify
 from ..mp.mp_utils import start_multiprocess_imap
+from . import log_reps
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
@@ -83,7 +84,7 @@ def load_voxels(so, voxel_dc=None):
 
     so._size = 0
     if so.id not in voxel_dc:
-        print("Voxels for id %d do not exist" % so.id)
+        log_reps.error("Voxels for id %d do not exist" % so.id)
         return -1
 
     bin_arrs, block_offsets = voxel_dc[so.id]
@@ -200,26 +201,21 @@ def load_mesh(so, recompute=False):
             elif len(mesh) == 4:
                 indices, vertices, normals, col = mesh
         except Exception as e:
-            print("\n---------------------------------------------------\n"
-                  "\n%s\nException occured when loading mesh.pkl of SO (%s)"
-                  "with id %d."
-                  "\n---------------------------------------------------\n"
-                  % (e, so.type, so.id))
+            msg = "\n%s\nException occured when loading mesh.pkl of SO (%s)"\
+                  "with id %d.".format(e, so.type, so.id)
+            log_reps.error(msg)
             return np.zeros((0, )).astype(np.int), np.zeros((0, )), np.zeros((0, ))
     else:
         if so.type == "sv":
-            print("\n-----------------------\n"
-                  "Mesh of SV %d not found.\n"
-                  "-------------------------\n" % so.id)
+            log_reps.error("Mesh of SV %d not found.\n" % so.id)
             return np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))
         indices, vertices, normals = so._mesh_from_scratch()
         col = np.zeros(0, dtype=np.uint8)
         try:
             so._save_mesh(indices, vertices, normals)
         except Exception as e:
-            print("\n-----------------------\n"
-                  "Mesh of %s %d could not be saved:\n%s\n"
-                  "-------------------------\n" % (so.type, so.id, e))
+            log_reps.error("Mesh of %s %d could not be saved:\n%s\n".format(
+                so.type, so.id, e))
     vertices = np.array(vertices, dtype=np.int)
     indices = np.array(indices, dtype=np.int)
     normals = np.array(normals, dtype=np.float32)
@@ -238,7 +234,7 @@ def load_skeleton(so, recompute=False):
     Returns
     -------
     Tuple[np.array]
-        nodes [N, 3], diameters [N, 1], edges [M, 2]
+        nodes, diameters, edges; all flattened
     """
     if not recompute and so.skeleton_exists:
         try:
@@ -248,20 +244,19 @@ def load_skeleton(so, recompute=False):
             diameters = skeleton_dc[so.id]['diameters']
             edges = skeleton_dc[so.id]['edges']
         except Exception as e:
-            print("\n---------------------------------------------------\n"
-                  "\n%s\nException occured when loading skeletons.pkl of "
-                  "SO (%s) with id %d."
-                  "\n---------------------------------------------------\n"
-                  % (e, so.type, so.id))
-            return np.zeros((0, 3)).astype(np.int), np.zeros((0, )), \
-                   np.zeros((0, 2)).astype(np.int)
+            log_reps.error("\n{}\nException occured when loading skeletons.pkl"
+                           " of SO ({}) with id {}.".format(e, so.type, so.id))
+            return np.zeros((0, )).astype(np.int), np.zeros((0, )), \
+                   np.zeros((0, )).astype(np.int)
     else:
+        msg = "Skeleton of SV {} (size: {}) not found.\n".format(so.id, so.size)
         if so.type == "sv":
-            print("\n-----------------------\n"
-                  "Skeleton of SV %d (size: %d) not found.\n"
-                  "-------------------------\n" % (so.id, so.size))
-            return np.zeros((0, 3)).astype(np.int), np.zeros((0, )),\
-                   np.zeros((0, 2)).astype(np.int)
+            if so.size == 1:  # small SVs don't have a skeleton
+                log_reps.debug(msg)
+            else:
+                log_reps.error(msg)
+            return np.zeros((0, )).astype(np.int), np.zeros((0, )),\
+                   np.zeros((0, )).astype(np.int)
 
     nodes = np.array(nodes, dtype=np.int)
     diameters = np.array(diameters, dtype=np.float)

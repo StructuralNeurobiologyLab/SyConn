@@ -3,10 +3,10 @@ import time
 from collections import defaultdict as ddict
 import itertools
 import csv
-from random import randint
 from knossos_utils import knossosdataset
 from syconn.handler import basics
 import multiprocessing
+from syconn.config import global_params
 
 
 def new_extraction(result_queue, params):
@@ -76,7 +76,7 @@ def old_extraction_modified(result_queue, params):
 
 if __name__ == '__main__':
 
-    kd_seg_path = "/wholebrain/songbird/j0126/areaxfs_v5/knossosdatasets"
+    kd_seg_path = global_params.kd_seg_path
 
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(kd_seg_path)

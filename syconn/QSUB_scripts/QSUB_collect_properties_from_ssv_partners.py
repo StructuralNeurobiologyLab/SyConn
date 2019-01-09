@@ -24,7 +24,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = cps._classify_conn_objects_thread(args)
+out = cps._collect_properties_from_ssv_partners_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

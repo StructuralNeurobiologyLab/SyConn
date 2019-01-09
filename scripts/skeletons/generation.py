@@ -19,6 +19,8 @@ if __name__ == "__main__":
     log = initialize_logging('skeleton_generation', global_params.wd + '/logs/')
     ssd = SuperSegmentationDataset(working_dir=global_params.wd)
 
+    # TODO: think about using create_sso_skeleton_fast if underlying RAG obeys spatial correctness (> 10x faster)
+
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = ssd.ssv_ids
     nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])

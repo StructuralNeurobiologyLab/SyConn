@@ -14,7 +14,8 @@ from skimage import measure
 from sklearn.decomposition import PCA
 import openmesh
 from plyfile import PlyData, PlyElement
-from scipy.ndimage.morphology import binary_closing
+from scipy.ndimage.morphology import binary_closing, binary_erosion,\
+    binary_dilation
 import tqdm
 try:
     import vtkInterface
@@ -190,8 +191,9 @@ class MeshObject(object):
         return (self.vert_resh * self.max_dist + self.center).flatten()
 
 
-def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
-                  single_cc=False, decimate_mesh=0, gradient_direction='ascent'):
+def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
+                  decimate_mesh=0, gradient_direction='ascent',
+                  force_single_cc=False):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
     by building dense matrix (in case of a point cloud) and applying marching
@@ -212,7 +214,11 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
         Percentage of mesh size reduction, i.e. 0.1 will leave 90% of the
         vertices
     gradient_direction : str
-        defines orientation of triangle indices. 'ascent' is needed for KNOSSOS compatibility.
+        defines orientation of triangle indices. 'ascent' is needed for KNOSSOS
+         compatibility.
+    force_single_cc : bool
+        If True, performans dilations until only one foreground CC is present
+        and then erodes with the same number to maintain size.
 
     Returns
     -------
@@ -247,6 +253,22 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
     # volume = multiBinaryErosion(volume, 1).astype(np.float32)
     if n_closings > 0:
         volume = binary_closing(volume, iterations=n_closings).astype(np.float32)
+        if force_single_cc:
+            n_dilations = 0
+            while True:
+                labeled, nb_cc = ndimage.label(volume)
+                log_proc.debug('Forcing single CC, additional dilations {}, num'
+                               'ber connected components: {}'
+                               ''.format(n_dilations, nb_cc))
+                if nb_cc == 1:  # does not count background
+                    break
+                # pad volume to maintain margin at boundary and correct offset
+                volume = np.pad(volume, [(1, 1), (1, 1), (1, 1)],
+                                mode='constant', constant_values=0)
+                offset -= 1
+                volume = binary_dilation(volume, iterations=1).astype(
+                    np.float32)
+                n_dilations += 1
     else:
         volume = volume.astype(np.float32)
     if single_cc:
@@ -298,7 +320,8 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
     return np.array(ind, dtype=np.int), verts, norm
 
 
-def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0):
+def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
+                    triangulation_kwargs=None):
     """
     Get object mesh from object voxels using marching cubes.
 
@@ -310,23 +333,30 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0):
     n_closings : int
         Number of closings before mesh generation
     decimate_mesh : float
+    triangulation_kwargs : dict
+     Keyword arguments parsed to 'traingulation' call
 
     Returns
     -------
     array [N, 1], array [M, 1], array [M, 1]
         vertices, indices, normals
     """
+    if triangulation_kwargs is None:
+        triangulation_kwargs = {}
     if np.isscalar(obj.voxels):
-        return np.zeros((0, )), np.zeros((0, )), np.zeros((0, ))
+        return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
+               np.zeros((0,), dtype=np.float32)
     if len(obj.voxel_list) <= MESH_MIN_OBJ_VX:
         log_proc.warn('Did not create mesh for object of type "{}" '
                       ' with ID {} because it contained less than {} voxels.'
                       ''.format(obj.id, obj.type, len(obj.voxel_list)))
-        return np.zeros((0,)), np.zeros((0,)), np.zeros((0,))
+        return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
+               np.zeros((0,), dtype=np.float32)
     try:
         indices, vertices, normals = triangulation(
             np.array(obj.voxel_list), downsampling=downsampling,
-            n_closings=n_closings, decimate_mesh=decimate_mesh)
+            n_closings=n_closings, decimate_mesh=decimate_mesh,
+            **triangulation_kwargs)
     except RuntimeError as e:
         msg = 'Error during marching_cubes procedure of SegmentationObject {}' \
               ' of type "{}". It contained {} voxels'.format(

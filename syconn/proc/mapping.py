@@ -40,7 +40,8 @@ def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
     bndry = np.array(kd.boundary)
     if np.any(so.rep_coord >= bndry) or np.any(so.rep_coord < np.zeros_like(bndry)):
         print(so.id, so.rep_coord)
-        so.save_attributes(["glia_vol_frac", "glia_sv_ids", "glia_cov_frac", "glia_cov"], [-1, -1, -1, -1])
+        so.save_attributes(["glia_vol_frac", "glia_sv_ids", "glia_cov_frac",
+                            "glia_cov"], [-1, -1, -1, -1])
         return
     c = so.rep_coord - (box_size // 2)
     c, box_size = crop_box_to_bndry(c, box_size, bndry)
@@ -151,6 +152,7 @@ def crop_box_to_bndry(offset, box_size, bndry):
     return offset, box_size
 
 
+# TODO: probably out-dated
 def map_cs_properties(cs):
     cs.load_attr_dict()
     if "neuron_partner_ct" in cs.attr_dict:

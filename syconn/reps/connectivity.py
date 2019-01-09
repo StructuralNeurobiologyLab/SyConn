@@ -33,6 +33,7 @@ from . import segmentation
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
+# TODO: unclear what and when this was used for, refactor and use in current project
 
 def make_colormap(seq):
     """Return a LinearSegmentedColormap
@@ -53,7 +54,6 @@ def make_colormap(seq):
 
 def diverge_map(low=(239/255., 65/255., 50/255.),
                 high=(39/255., 184/255., 148/255.)):
-#
 # def diverge_map(low=(255/255., 100/255., 80/255.),
 #                 high=(60/255., 200/255., 160/255.)):
     """Low and high are colors that will be used for the two
@@ -675,11 +675,8 @@ def get_sso_specific_info_thread(args):
     ssd = ss.SuperSegmentationDataset(working_dir,
                                       version=ssd_version)
 
-    cm = ConnectivityMatrix(working_dir,
-                                         version=version,
-                                         sj_version=sj_version,
-                                         create=False)
-
+    cm = ConnectivityMatrix(working_dir, version=version,
+                            sj_version=sj_version, create=False)
     axoness_entries = []
     cell_types = {}
     blacklist = []
@@ -718,3 +715,4 @@ def get_sso_specific_info_thread(args):
 
     axoness_entries = np.array(axoness_entries, dtype=np.int)
     return axoness_entries, cell_types, shapes, blacklist
+

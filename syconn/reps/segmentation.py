@@ -757,12 +757,16 @@ class SegmentationObject(object):
     def extent(self):
         return np.linalg.norm(self.shape * self.scaling)
 
-    def _mesh_from_scratch(self, downsampling=None, n_closings=None):
+    def _mesh_from_scratch(self, downsampling=None, n_closings=None, **kwargs):
         if n_closings is None:
             n_closings = MESH_CLOSING[self.type]
         if downsampling is None:
             downsampling = MESH_DOWNSAMPLING[self.type]
-        return meshes.get_object_mesh(self, downsampling, n_closings=n_closings)
+        # Set 'force_single_cc' to True in case of syn_ssv objects!
+        if self.type == 'syn_ssv' and 'force_single_cc' not in kwargs:
+            kwargs['force_single_cc'] = True
+        return meshes.get_object_mesh(self, downsampling, n_closings=n_closings,
+                                      triangulation_kwargs=kwargs)
 
     def _save_mesh(self, ind, vert, normals):
         mesh_dc = MeshStorage(self.mesh_path, read_only=False,

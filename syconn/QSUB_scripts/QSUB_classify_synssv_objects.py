@@ -2,8 +2,8 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max-Planck-Institute for Medical Research, Heidelberg, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import sys
 
@@ -24,7 +24,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = cps._map_objects_to_conn_thread(args)
+out = cps._classify_synssv_objects_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

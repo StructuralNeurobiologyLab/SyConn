@@ -11,7 +11,9 @@ import pandas as pd
 
 from ..reps import super_segmentation as ss
 from ..reps import segmentation
+from ..config import global_params
 
+# TODO: unclear what and when this was used for, refactor and use in current project
 
 def extract_connectivity_thread(args):
     sj_obj_ids = args[0]
@@ -143,8 +145,7 @@ def connectivity_to_nx_graph():
     return nxg
 
 
-def load_cached_data_dict(syconnfs_working_dir='/wholebrain/scratch/areaxfs/',
-                          cs_seg_ds_version = '33'):
+def load_cached_data_dict(wd=None, cs_seg_ds_version='33'):
     """
     Loads all cached data from a contact site segmentation dataset into a
     dictionary for further processing.
@@ -158,14 +159,12 @@ def load_cached_data_dict(syconnfs_working_dir='/wholebrain/scratch/areaxfs/',
     -------
 
     """
+    if wd is None:
+        wd = global_params.wd
     start = time.time()
-    csd = segmentation.SegmentationDataset(obj_type='cs',
-                                 working_dir=syconnfs_working_dir,
-                                 version=cs_seg_ds_version)
-
-
+    csd = segmentation.SegmentationDataset(obj_type='cs', working_dir=wd,
+                                           version=cs_seg_ds_version)
     cd_dict = dict()
-
     cd_dict['ids'] = csd.load_cached_data('ids')
     # in um2, overlap of cs and sj
     cd_dict['syn_size'] =\
@@ -190,27 +189,24 @@ def load_cached_data_dict(syconnfs_working_dir='/wholebrain/scratch/areaxfs/',
         csd.load_cached_data('neuron_partner_ct')[:, 0].astype(np.int)
     cd_dict['neuron_partner_ct_1'] = \
         csd.load_cached_data('neuron_partner_ct')[:, 1].astype(np.int)
-
     print('Getting all objects took: {0}'.format(time.time() - start))
-
     return cd_dict
 
 
-def connectivity_exporter(human_cell_type_labels = True,
-                          cell_type_map = {0: 'EA', 1: 'MSN', 2: 'GP', 3: 'INT'},
-                          human_pre_post_labels = True,
-                          pre_post_map = {1: 'pre', 0: 'post'},
-                          only_axo_dendritric = True,
-                          out_path = '/wholebrain/scratch/jkornfeld/j0126_matrix_v1.csv',
-                          out_format = 'csv',
-                          no_ids = True,
-                          only_synapses = True):
+def connectivity_exporter(human_cell_type_labels=True,
+                          cell_type_map={0: 'EA', 1: 'MSN', 2: 'GP', 3: 'INT'},
+                          human_pre_post_labels=True,
+                          pre_post_map={1: 'pre', 0: 'post'},
+                          only_axo_dendritric=True,
+                          out_path = None, no_ids=True, only_synapses=True):
     """
     Exports connectivity information to a csv file.
 
     -------
 
     """
+    if out_path is None:
+        out_path = global_params + '/connectivity_matrix/j0126_matrix_v1.csv'
     # parse contact site segmentation dataset
     df_dict = load_cached_data_dict()
 
@@ -240,7 +236,7 @@ def connectivity_exporter(human_cell_type_labels = True,
                                               df_dict['neuron_partner_ct_1']])
 
         if only_axo_dendritric:
-            idx_filter = (df_dict['neuron_partner_ax_0']\
+            idx_filter = (df_dict['neuron_partner_ax_0']
                          + df_dict['neuron_partner_ax_1']) == 1
 
             for k, v in df_dict.items():
@@ -258,5 +254,5 @@ def connectivity_exporter(human_cell_type_labels = True,
         df = pd.DataFrame(df_dict)
         df.to_csv(out_path, index=False)
         print('Export to csv took: {0}'.format(time.time() - start))
-
     return
+

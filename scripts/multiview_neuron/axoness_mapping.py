@@ -18,16 +18,20 @@ if __name__ == "__main__":
     """Maps axon prediction of rendering locations onto SSV skeletons"""
     log = initialize_logging('axon_mapping', global_params.wd + '/logs/')
     pred_key_appendix = ""
-    script_folder = os.path.dirname(os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     # Working directory has to be changed globally in global_params
-    ssds = SuperSegmentationDataset(working_dir=global_params.wd)
-    multi_params = ssds.ssv_ids
-    np.random.shuffle(multi_params)
+    ssd = SuperSegmentationDataset(working_dir=global_params.wd)
+
+    multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
+    # sort ssv ids according to their number of SVs (descending)
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id
+                               in ssd.ssv_ids])
+    multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
     multi_params = chunkify(multi_params, 2000)
+
     multi_params = [(par, pred_key_appendix) for par in multi_params]
     log.info('Starting axoness mapping.')
     path_to_out = qu.QSUB_script(multi_params, "map_viewaxoness2skel",
-                                 n_max_co_processes=340, pe="openmp", queue=None,
-                                 script_folder=script_folder, suffix="", n_cores=1)
+                                 n_max_co_processes=global_params.NCORE_TOTAL,
+                                 pe="openmp", queue=None, suffix="", n_cores=1)
     # TODO: perform completeness check
     log.info('Finished axoness mapping.')

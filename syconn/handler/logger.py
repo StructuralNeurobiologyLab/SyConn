@@ -15,8 +15,9 @@ __all__ = ['initialize_logging']
 
 def get_main_log():
     logger = logging.getLogger('syconn')
-    coloredlogs.install(level='DEBUG', logger=logger)
-    logger.setLevel(logging.DEBUG)
+    coloredlogs.install(level=global_params.log_level, logger=logger)
+    level = logging.getLevelName(global_params.log_level)
+    logger.setLevel(level)
 
     if not global_params.DISABLE_FILE_LOGGING:
         # create file handler which logs even debug messages
@@ -28,7 +29,7 @@ def get_main_log():
             if not os.path.isdir(log_dir):
                 os.makedirs(log_dir)
         fh = logging.FileHandler(log_dir + 'syconn.log')
-        fh.setLevel(logging.DEBUG)
+        fh.setLevel(level)
 
         # add the handlers to logger
         if os.path.isfile(log_dir + 'syconn.log'):
@@ -57,8 +58,9 @@ def initialize_logging(log_name, log_dir=global_params.default_log_dir):
 
     """
     logger = logging.getLogger(log_name)
-    coloredlogs.install(level='DEBUG', logger=logger)
-    logger.setLevel(logging.DEBUG)
+    coloredlogs.install(level=global_params.log_level, logger=logger)
+    level = logging.getLevelName(global_params.log_level)
+    logger.setLevel(level)
 
     if not global_params.DISABLE_FILE_LOGGING or log_dir is not None:
         # create file handler which logs even debug messages
@@ -73,7 +75,7 @@ def initialize_logging(log_name, log_dir=global_params.default_log_dir):
             os.remove(log_dir + log_name + '.log')
         # add the handlers to logger
         fh = logging.FileHandler(log_dir + log_name + ".log")
-        fh.setLevel(logging.DEBUG)
+        fh.setLevel(level)
         formatter = logging.Formatter(
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         fh.setFormatter(formatter)

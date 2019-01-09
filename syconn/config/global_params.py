@@ -13,6 +13,23 @@ import os
 wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
 # wd = '/mnt/j0126/areaxfs_v10/'
 
+# --------- Required data paths
+kd_seg_path = "/mnt/j0126_cubed/"
+# the 'realigned' datasets of the type prediction have slightly different extent
+#  than the segmentation dataset but prediction coordinates did match
+kd_sym_path = '/wholebrain/scratch/areaxfs/knossosdatasets/j0126_3d_symmetric_realigned/'
+kd_asym_path = '/wholebrain/scratch/areaxfs/knossosdatasets/j0126_3d_asymmetric_realigned/'
+
+# TODO: add generic parser method for initial RAG and handle case without glia-splitting
+path_initrag = '/wholebrain/songbird/j0126/RAGs/v4b_20180407_v4b_20180407_'\
+               'merges_newcb_ids_cbsplits.txt'
+# currently a mergelist/RAG of the following form is expected:
+# ID, ID
+#    .
+#    .
+# ID, ID
+rag_suffix = ""  # identifier in case there will be more than one RAG
+
 # --------- BACKEND DEFINITIONS
 # TODO: Use batchjob_script_folder everywhere or remove because this is the default now.
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
@@ -25,21 +42,12 @@ NCORE_TOTAL = 340
 # TODO: Use NGPU_TOTAL everywhere
 NGPU_TOTAL = 34
 
-# TODO: add generic parser method for initial RAG and handle case without glia-splitting
-path_initrag = '/wholebrain/songbird/j0126/RAGs/v4b_20180407_v4b_20180407_'\
-               'merges_newcb_ids_cbsplits.txt'
-# currently a mergelist/RAG of the following form is expected:
-# ID, ID
-#    .
-#    .
-# ID, ID
-rag_suffix = ""  # identifier in case there will be more than one RAG
-
 # --------- LOGGING
 # 'None' disables logging of SyConn modules (e.g. proc, handler, ...) to files.
 # Logs of executed scripts (syconn/scripts) will be stored at the
 # working directory + '/logs/' nonetheless.
 default_log_dir = None
+log_level = 'INFO'
 
 # --------- BACKEND DEFINITIONS
 backend = "FS"  # File system
@@ -54,6 +62,9 @@ DISABLE_FILE_LOGGING = True
 
 # --------- CONTACT SITE PARAMETERS
 cs_gap_nm = 300
+# mapping parameters in 'map_objects_to_synssv'; assignment of cellular organelles to syn_ssv
+max_vx_dist_nm = 2000
+max_rep_coord_dist_nm = 4000
 
 # --------- MESH PARAMETERS
 existing_cell_organelles = ['mi', 'sj', 'vc', 'syn_ssv']
@@ -61,7 +72,7 @@ MESH_DOWNSAMPLING = {"sv": (8, 8, 4), "sj": (2, 2, 1), "vc": (4, 4, 2),
                      "mi": (8, 8, 4), "cs": (2, 2, 1), "conn": (2, 2, 1),
                      'syn_ssv': (2, 2, 1)}
 MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0,
-                "conn": 4, 'syn_ssv': 10}
+                "conn": 4, 'syn_ssv': 20}
 
 MESH_MIN_OBJ_VX = 10
 
@@ -86,6 +97,7 @@ mpath_spiness = '{}/FCN-VGG13--Lovasz--NewGT/'.format(model_dir)
 mpath_celltype = '{}/celltype_g1_20views_v3/g1_20views_v3-FINAL.mdl'.format(model_dir)
 mpath_axoness = '{}/axoness_g1_v2/g1_v2-FINAL.mdl'.format(model_dir)
 mpath_glia = '{}/glia_g0_v0/g0_v0-FINAL.mdl'.format(model_dir)
+mpath_syn_rfc = '{}/conn_syn_rfc//'.format(model_dir)
 
 # --------- RFC PARAMETERS
 SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000}  # in nm
