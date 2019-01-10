@@ -1,22 +1,21 @@
-language: python
-
-addons:
-  apt:
-    packages:
-    - libsnappy-dev
-    
-script:
-  - true
-
 build:
   image: latest
 
 requirements_file: requirements.txt
 
+language: python
+addons:
+  apt:
+    packages:
+    - libsnappy-dev
+install:
+  - pip install python-snappy
+script:
+  - true
+
 python:
   pip_install: false
   version: 3.5
-
 
 #conda:
 #  file: environment.yml
