@@ -10,8 +10,6 @@ except ImportError:
     import pickle as pkl
 import numpy as np
 import time
-import os
-
 from knossos_utils import KnossosDataset
 
 from ..reps import segmentation, rep_helper as rh

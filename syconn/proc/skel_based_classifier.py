@@ -14,9 +14,8 @@ import numpy as np
 import os
 import re
 from collections import Counter
-from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, AdaBoostClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from sklearn.externals import joblib
-from sklearn.metrics import precision_recall_fscore_support, precision_recall_curve
 import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
 from matplotlib import pyplot as plt
@@ -28,7 +27,6 @@ from ..reps import super_segmentation as ss
 from ..proc.stats import model_performance
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
-from ..config.global_params import wd
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 logger_skel = initialize_logging('skeleton')
 feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",
@@ -181,7 +179,7 @@ class SkelClassifier(object):
             results = sm.start_multiprocess(sbch.generate_clf_data_thread,
                 multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "generate_clf_data",
                                          pe=qsub_pe, queue=qsub_queue,
@@ -204,7 +202,7 @@ class SkelClassifier(object):
             results = sm.start_multiprocess(classifier_production_thread,
                 multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "classifier_production",
                                          n_cores=nb_cpus,

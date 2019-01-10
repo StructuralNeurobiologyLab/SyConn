@@ -7,6 +7,7 @@
 import numpy as np
 import time
 import os
+
 from ..extraction import log_extraction
 from ..handler import basics
 from . import object_extraction_steps as oes
@@ -76,6 +77,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                   stitch_overlap=None):
     """
     Main function for the object extraction step; combines all needed steps
+    # TODO: change object_names to dataset_names as in other methods
+
     Parameters
     ----------
     cset : chunkdataset instance
@@ -194,7 +197,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         membrane_kd_path=membrane_kd_path,
         hdf5_name_membrane=hdf5_name_membrane,
         fast_load=True, suffix=suffix,
-        qsub_pe=qsub_pe, transform_func=transform_func, func_kwargs=func_kwargs,
+        qsub_pe=qsub_pe, transform_func=transform_func, transform_func_kwargs=func_kwargs,
         qsub_queue=qsub_queue,
         n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     if stitch_overlap is None:
@@ -429,10 +432,11 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
     print("--------------------------\n")
 
 
-def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
+def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, dataset_names=None,
                         overlaydataset_path=None, chunk_list=None, offset=None,
                         size=None, suffix="", qsub_pe=None, qsub_queue=None, qsub_slots=None,
-                        n_max_co_processes=None, n_chunk_jobs=5000):
+                        n_max_co_processes=None, n_chunk_jobs=5000, transform_func=None,
+                        transform_func_kwargs=None):
     """
     Main function for the object extraction step; combines all needed steps
     Parameters
@@ -443,7 +447,7 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
     hdf5names: list of str
         List of names/ labels to be extracted and processed from the prediction
         file
-    chunk_list: list of int
+    chunk_list: List[int]
         Selective list of chunks for which this function should work on. If None
         all chunks are used.
     debug: boolean
@@ -462,6 +466,8 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
     n_max_co_processes: int or None
         Total number of parallel processes that should be running on the cluster.
     n_chunk_jobs: int
+    transform_func : callable
+    transform_func_kwargs : dict
 
 
     """
@@ -485,12 +491,13 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
     # # --------------------------------------------------------------------------
     #
     time_start = time.time()
-    oes.extract_voxels(cset, filename, hdf5names,
+    oes.extract_voxels(cset, filename, hdf5names, dataset_names=dataset_names,
                        overlaydataset_path=overlaydataset_path,
                        chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
                        qsub_queue=qsub_queue,
                        n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
-                       n_max_co_processes=n_max_co_processes)
+                       n_max_co_processes=n_max_co_processes, transform_func=transform_func,
+                       transform_func_kwargs=transform_func_kwargs)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
     print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
@@ -499,7 +506,8 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
     #
     time_start = time.time()
     oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
-                       hdf5names, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+                       hdf5names, dataset_names=dataset_names,
+                       qsub_pe=qsub_pe, qsub_queue=qsub_queue,
                        n_folders_fs=n_folders_fs,
                        n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)

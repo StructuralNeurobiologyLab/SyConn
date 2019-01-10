@@ -4,7 +4,6 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
-from ..handler import log_handler
 try:
     from lz4.block import compress, decompress
 except ImportError:
@@ -19,7 +18,8 @@ except ImportError:
 import numpy as np
 import h5py
 import os
-import warnings
+
+from ..handler import log_handler
 __all__ = ['arrtolz4string', 'lz4stringtoarr', 'load_lz4_compressed',
            'save_lz4_compressed', 'load_compressed', 'load_from_h5py',
            'save_to_h5py', 'lz4string_listtoarr', 'arrtolz4string_list']

@@ -10,11 +10,12 @@ import networkx as nx
 import numpy as np
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
 import tqdm
+import itertools
+
 from ..mp.mp_utils import start_multiprocess_obj
 from ..config.global_params import min_cc_size_glia, min_cc_size_neuron,\
     get_dataset_scaling, glia_thresh
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
-import itertools
 
 
 def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
@@ -91,8 +92,87 @@ def split_subcc(g, max_nb, verbose=False, start_nodes=None):
     return subnodes
 
 
+def chunkify_contiguous(l, n):
+    """Yield successive n-sized chunks from l.
+     https://stackoverflow.com/questions/312443/how-do-you-split-a-list-into-evenly-sized-chunks"""
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
+
+
+def split_subcc_join(g, subgraph_size, lo_first_n=1):
+    """
+    Creates a subgraph for each node consisting of nodes until maximum number of
+    nodes is reached.
+
+    Parameters
+    ----------
+    g : Graph
+    subgraph_size : int
+    lo_first_n : int
+        leave out first n nodes: will collect max_nb nodes starting from center node and then omit the first lo_first_n
+        nodes, i.e. not use them as new starting nodes.
+
+    Returns
+    -------
+    dict
+    """
+    start_node = list(g.nodes())[0]
+    for n, d in dict(g.degree).items():
+        if d == 1:
+            start_node = n
+            break
+    dfs_nodes = list(nx.dfs_preorder_nodes(g, start_node))
+    # get subgraphs via splicing of traversed node list into equally sized fragments. they might
+    # be unconnected if branch sizes mod subgraph_size != 0, then a chunk will contain multiple connected components.
+    chunks = list(chunkify_contiguous(dfs_nodes, lo_first_n))
+    sub_graphs = []
+    for ch in chunks:
+        # collect all connected component subgraphs
+        sub_graphs += list(nx.connected_component_subgraphs(g.subgraph(ch)))
+    # add more context to subgraphs
+    subgraphs_withcontext = []
+    for sg in sub_graphs:
+        # add context but omit artificial start node
+        context_nodes = []
+        for n in list(sg.nodes()):
+            subgraph_nodes_with_context = []
+            nb_edges = sg.number_of_nodes()
+            for e in nx.bfs_edges(g, n):
+                subgraph_nodes_with_context += list(e)
+                nb_edges += 1
+                if nb_edges == subgraph_size:
+                    break
+            context_nodes += subgraph_nodes_with_context
+        # add original nodes
+        context_nodes = list(set(context_nodes))
+        for n in list(sg.nodes()):
+            if n in context_nodes:
+                context_nodes.remove(n)
+        subgraph_nodes_with_context = list(sg.nodes()) + context_nodes
+        subgraphs_withcontext.append(subgraph_nodes_with_context)
+    return subgraphs_withcontext
+
+
+def merge_nodes(G, nodes, new_node):
+    """ FOR UNWEIGHTED, UNDIRECTED GRAPHS ONLY
+    """
+    if G.is_directed():
+        raise ValueError('Method "merge_nodes" is only valid for undirected graphs.')
+    G.add_node(new_node)
+    for n in nodes:
+        for e in G.edges(n):
+            # add edge between new node and original partner node
+            edge = list(e)
+            edge.remove(n)
+            paired_node = edge[0]
+            G.add_edge(new_node, paired_node)
+
+    for n in nodes:  # remove the merged nodes
+        G.remove_node(n)
+
+
 def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
-                     nb_cpus=1, pred_key_appendix=""):
+                     nb_cpus=1, pred_key_appendix="", verbose=False):
     """
     Split graph into glia and non-glua CC's.
 
@@ -106,6 +186,7 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
         between neuron type SV end nodes
     nb_cpus : int
     pred_key_appendix : str
+    verbose : bool
 
     Returns
     -------
@@ -113,19 +194,19 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
         Neuron, glia connected components
     """
     _ = start_multiprocess_obj("mesh_bb", [[sv, ] for sv in nx_g.nodes()],
-                               nb_cpus=nb_cpus)
+                               nb_cpus=nb_cpus, verbose=verbose)
     glia_key = "glia_probas"
     if clahe:
         glia_key += "_clahe"
     glia_key += pred_key_appendix
-    glianess, size = get_glianess_dict(nx_g.nodes(), thresh, glia_key,
+    glianess, size = get_glianess_dict(list(nx_g.nodes()), thresh, glia_key,
                                        nb_cpus=nb_cpus)
     return remove_glia_nodes(nx_g, size, glianess, return_removed_nodes=True,
                              shortest_paths_dest_dir=shortest_paths_dest_dir)
 
 
 def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
-               pred_key_appendix=""):
+               pred_key_appendix="", verbose=False):
     """
     Split SuperSegmentationObject into glia and non glia
     SegmentationObjects.
@@ -140,6 +221,7 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
         between neuron type SV end nodes
     pred_key_appendix : str
         Defines type of glia predictions
+    verbose : bool
 
     Returns
     -------
@@ -149,7 +231,8 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
     nx_G = sso.rag
     nonglia_ccs, glia_ccs = split_glia_graph(nx_G, thresh=thresh, clahe=clahe,
                             nb_cpus=sso.nb_cpus, shortest_paths_dest_dir=
-                            shortest_paths_dest_dir, pred_key_appendix=pred_key_appendix)
+                            shortest_paths_dest_dir, pred_key_appendix=pred_key_appendix,
+                                             verbose=verbose)
     return nonglia_ccs, glia_ccs
 
 
@@ -165,11 +248,13 @@ def create_ccsize_dict(g, sizes):
     return node2cssize_dict
 
 
-def get_glianess_dict(seg_objs, thresh, glia_key, nb_cpus=1, use_sv_volume=False):
+def get_glianess_dict(seg_objs, thresh, glia_key, nb_cpus=1,
+                      use_sv_volume=False, verbose=False):
     glianess = {}
     sizes = {}
     params = [[so, glia_key, thresh, use_sv_volume] for so in seg_objs]
-    res = start_multiprocess(glia_loader_helper, params, nb_cpus=nb_cpus)
+    res = start_multiprocess(glia_loader_helper, params, nb_cpus=nb_cpus,
+                             verbose=verbose, show_progress=verbose)
     for ii, el in enumerate(res):
         so = seg_objs[ii]
         glianess[so] = el[0]
@@ -214,52 +299,53 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
     # # set up edge weights based on sum of node weights
     # for e in g.edges():
     #     e_weights[e] = weights[list(e)[0]] + weights[list(e)[1]]
-    # nx.set_node_attributes(g, 'weight', weights)
-    # nx.set_edge_attributes(g, 'weights', e_weights)
+    # nx.set_node_attributes(g, weights, 'weight')
+    # nx.set_edge_attributes(g, e_weights, 'weights')
 
     # get neuron type connected component sizes
     g_neuron = g.copy()
-    for n in g_neuron.nodes():
+    for n in g.nodes():
         if glia_dict[n] != 0:
             g_neuron.remove_node(n)
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
-    if np.all(neuron2ccsize_dict.values() <= min_cc_size_neuron): # no significant neuron SV
+    if np.all(np.array(list(neuron2ccsize_dict.values())) <= min_cc_size_neuron): # no significant neuron SV
         if return_removed_nodes:
-            return [], list(g.nodes())
+            return [], [list(g.nodes())]
         return []
 
     # get glia type connected component sizes
     g_glia = g.copy()
-    for n in g_glia.nodes():
+    for n in g.nodes():
         if glia_dict[n] == 0:
             g_glia.remove_node(n)
     glia2ccsize_dict = create_ccsize_dict(g_glia, size_dict)
-    if np.all(glia2ccsize_dict.values() <= min_cc_size_glia): # no significant glia SV
+    if np.all(np.array(list(glia2ccsize_dict.values())) <= min_cc_size_glia): # no significant glia SV
         if return_removed_nodes:
-            return list(g.nodes()), []
-        return []
+            return [list(g.nodes())], []
+        return [list(g.nodes())]
 
     tiny_glia_fragments = []
-    for n in g_glia.nodes_iter():
+    for n in g_glia.nodes():
         if glia2ccsize_dict[n] < min_cc_size_glia:
             tiny_glia_fragments += [n]
 
     # create new neuron graph without sufficiently big glia connected components
     g_neuron = g.copy()
-    for n in g.nodes_iter():
+    for n in g.nodes():
         if glia_dict[n] != 0 and n not in tiny_glia_fragments:
             g_neuron.remove_node(n)
 
     # find orphaned neuron SV's and add them to glia graph
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
-    for n in g_neuron.nodes():
+    g_tmp = g_neuron.copy()
+    for n in g_tmp.nodes():
         if neuron2ccsize_dict[n] < min_cc_size_neuron:
             g_neuron.remove_node(n)
 
     # create new glia graph with remaining nodes
     # (as the complementary set of sufficiently big neuron connected components)
     g_glia = g.copy()
-    for n in g_neuron.nodes_iter():
+    for n in g_neuron.nodes():
         g_glia.remove_node(n)
 
     neuron_ccs = list(nx.connected_components(g_neuron))

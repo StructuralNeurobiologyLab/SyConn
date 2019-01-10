@@ -13,15 +13,13 @@ import numpy as np
 import warnings
 from syconn.config.global_params import wd
 from syconn.handler.basics import load_pkl2obj, temp_seed
-from syconn.handler.compression import lz4stringtoarr, save_to_h5py
-from syconn.handler.prediction import force_correct_norm, naive_view_normalization, naive_view_normalization_new
+from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.mp.mp_utils import start_multiprocess_obj
 import os
 from torch.utils import data
 from elektronn3.data import transforms
-import contextlib
 from typing import Callable
 import h5py
 from scipy import spatial
@@ -79,7 +77,7 @@ class MultiviewDataSpines(data.Dataset):
 
 class MultiviewData_TNet_online(data.Dataset):
     """
-    Multiview spine data loader.
+    Multiview triplet net data loader.
     """
 
     def __init__(

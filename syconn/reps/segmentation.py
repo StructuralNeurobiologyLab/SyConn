@@ -5,16 +5,13 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-
 import errno
-import os
 import re
 import networkx as nx
-
 from scipy import spatial
 from knossos_utils import knossosdataset
+from skimage.measure import mesh_surface_area
 
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 try:
     default_wd_available = True
     from ..config.global_params import wd
@@ -24,10 +21,12 @@ from ..config import parser
 from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
-from ..handler.basics import get_filepaths_from_dir, safe_copy, write_txt2kzip, temp_seed
+from ..handler.basics import get_filepaths_from_dir, safe_copy,\
+    write_txt2kzip, temp_seed
 from .segmentation_helper import *
 from ..proc import meshes
-from skimage.measure import mesh_surface_area
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
+
 
 
 class SegmentationDataset(object):
@@ -502,6 +501,7 @@ class SegmentationObject(object):
     def view_path(self, woglia=True, index_views=False, view_key=None):
         if view_key is not None and not (woglia and not index_views):
             raise ValueError('view_path with custom view key is only allowed for default settings.')
+        # TODO: change bool index_views and bool woglia to respective view_key identifier
         if view_key is not None:
             return self.segobj_dir + 'views_{}.pkl'.format(view_key)
         if index_views:
@@ -568,13 +568,13 @@ class SegmentationObject(object):
         if not os.path.isfile(self.attr_dict_path):
             return False
         glob_attr_dc = AttributeDict(self.attr_dict_path,
-                                     disable_locking=not self.enable_locking)
+                                     disable_locking=True) # look-up only, PS 12Dec2018
         return self.id in glob_attr_dc
 
     @property
     def voxels_exist(self):
         voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
-                                disable_locking=True)
+                                disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in voxel_dc
 
 
@@ -603,13 +603,13 @@ class SegmentationObject(object):
     @property
     def mesh_exists(self):
         mesh_dc = MeshStorage(self.mesh_path,
-                              disable_locking=not self.enable_locking)
+                              disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in mesh_dc
 
     @property
     def skeleton_exists(self):
         skeleton_dc = SkeletonStorage(self.skeleton_path,
-                                      disable_locking=not self.enable_locking)
+                                      disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in skeleton_dc
 
     @property
@@ -637,8 +637,11 @@ class SegmentationObject(object):
     @property
     def mesh_bb(self):
         if self._mesh_bb is None:
-            self._mesh_bb = [np.min(self.mesh[1].reshape((-1, 3)), axis=0),
-                             np.max(self.mesh[1].reshape((-1, 3)), axis=0)]
+            if len(self.mesh[1]) == 0 or len(self.mesh[0]) == 0:
+                self._mesh_bb = self.bounding_box * self.scaling
+            else:
+                self._mesh_bb = [np.min(self.mesh[1].reshape((-1, 3)), axis=0),
+                                 np.max(self.mesh[1].reshape((-1, 3)), axis=0)]
         return self._mesh_bb
 
     @property
@@ -660,12 +663,12 @@ class SegmentationObject(object):
     @property
     def sample_locations_exist(self):
         location_dc = CompressedStorage(self.locations_path,
-                                        disable_locking=not self.enable_locking)
+                                        disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in location_dc
 
     def views_exist(self, woglia, index_views=False, view_key=None):
         view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
-                                    disable_locking=not self.enable_locking)
+                                    disable_locking=True)  # look-up only, PS 12Dec2018
         return self.id in view_dc
 
     def views(self, woglia, index_views=False, view_key=None):
@@ -754,12 +757,16 @@ class SegmentationObject(object):
     def extent(self):
         return np.linalg.norm(self.shape * self.scaling)
 
-    def _mesh_from_scratch(self, downsampling=None, n_closings=None):
+    def _mesh_from_scratch(self, downsampling=None, n_closings=None, **kwargs):
         if n_closings is None:
             n_closings = MESH_CLOSING[self.type]
         if downsampling is None:
             downsampling = MESH_DOWNSAMPLING[self.type]
-        return meshes.get_object_mesh(self, downsampling, n_closings=n_closings)
+        # Set 'force_single_cc' to True in case of syn_ssv objects!
+        if self.type == 'syn_ssv' and 'force_single_cc' not in kwargs:
+            kwargs['force_single_cc'] = True
+        return meshes.get_object_mesh(self, downsampling, n_closings=n_closings,
+                                      triangulation_kwargs=kwargs)
 
     def _save_mesh(self, ind, vert, normals):
         mesh_dc = MeshStorage(self.mesh_path, read_only=False,
@@ -789,6 +796,10 @@ class SegmentationObject(object):
             color = (100, 200, 30, 255)
         elif self.type == "conn":
             color = (150, 50, 200, 255)
+        elif self.type == "syn":
+            color = (150, 50, 200, 255)
+        elif self.type == "syn_ssv":
+            color = (150, 50, 200, 255)
         elif self.type == "sj":
             color = (int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255)
         elif self.type == "vc":
@@ -796,18 +807,16 @@ class SegmentationObject(object):
         elif self.type == "mi":
             color = (0, 153, 255, 255)
         else:
-            raise ("Given object type '{}' does not exist.".format(self.type),
-                   TypeError)
+            raise TypeError("Given object type '{}' does not exist.".format(self.type))
         if ext_color is not None:
             if ext_color == 0:
                 color = None
             else:
                 color = ext_color
-
         if ply_name == "":
             ply_name = str(self.id)
         meshes.write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
-                             ply_fname=ply_name + ".ply")
+                               ply_fname=ply_name + ".ply")
 
     def mergelist2kzip(self, dest_path):
         self.load_attr_dict()

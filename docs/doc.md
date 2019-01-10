@@ -1,5 +1,36 @@
 # Documentation
 
+## Installation
+We recommend installing the latest Anaconda release. Then set up an environment:
+```
+conda create -n py35 python=3.5 anaconda
+source activate py35
+```
+Then install all prerequisites and finally git clone and install syconn:
+```
+conda install vigra -c ukoethe
+conda install mesa -c menpo
+conda install osmesa -c menpo
+conda install freeglut
+conda install pyopengl
+git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
+cd SyConn
+pip install -r requirements.txt
+pip install .
+```
+Or alternatively with the developer flag:
+```
+pip install -e .
+```
+In order to use elektronn3 models, python>=3.6 is required (when installing elektronn3 checkout
+ branch `phil`; this will be updated soon to work with the `master` branch):
+```
+conda create -n py36 python=3.6 anaconda
+source activate py36
+```
+Specify the path to this python executable at `syconn/config/global_params.py36path`.
+For the SyConn installation in the py36 environment `vigra` can be ignored.
+
 ## Package structure and data classes
 The basic data structures and initialization procedures are explained in the following sections:
 
@@ -21,7 +52,6 @@ organized in [SegmentationDatasets](segmentation_datasets.md).
 
 * Multi-view representation of SSOs (see docs for [glia](glia_removal.md) and [neuron](neuron_analysis.md) analysis; [preprint](https://www.biorxiv.org/content/early/2018/07/06/364034) on biorXiv)
 
-
 ## Analysis steps
 After initialization of the SDs (SVs and cellular organelles) and the SSD
 containing the agglomerated SVs, several analysis steps can be applied:
@@ -35,3 +65,6 @@ containing the agglomerated SVs, several analysis steps can be applied:
 * [Identification of synapses and extraction of a wiring diagram](contact_site_classification.md)
 
 
+## Flowchart of SyConn
+
+<img src="https://docs.google.com/drawings/d/e/2PACX-1vSY7p2boPxb9OICxNhSrHQlvuHTBRbSMeIOgQ4_NV6pflxc0FKJvPBtskYMAgJsX_OP-6CNmb08tLC5/pub?w=1920&amp;h=1024">

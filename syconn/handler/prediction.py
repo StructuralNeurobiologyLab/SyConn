@@ -18,6 +18,7 @@ from knossos_utils.knossosdataset import KnossosDataset
 import elektronn2
 from elektronn2.config import config as e2config
 from elektronn2.utils.gpu import initgpu
+
 from ..handler import log_handler
 from ..handler.logger import log_main
 try:
@@ -27,7 +28,8 @@ except Exception as e:  # ImportError as e:
         "elektronn3 could not be imported ({}). Please see 'https://github."
         "com/ELEKTRONN/elektronn3' for more information.".format(e))
 from .compression import load_from_h5py, save_to_h5py
-from .basics import read_txt_from_zip, get_filepaths_from_dir, parse_cc_dict_from_kzip
+from .basics import read_txt_from_zip, get_filepaths_from_dir,\
+    parse_cc_dict_from_kzip
 from ..config import global_params
 
 
@@ -436,7 +438,7 @@ def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
                  mfp_active, gpu_ids, overwrite)
     else:
         print("Starting multi-gpu prediction with GPUs:", gpu_ids)
-
+        # TODO: replace by QSUB script
         _multi_gpu_ds_pred(kd_p, kd_pred_p, cd_p, model_p,imposed_patch_size, gpu_ids)
 
 
@@ -700,9 +702,6 @@ def get_axoness_model():
 
 
 def get_glia_model():
-    """
-    Retrained with GP dendrites. May 2018.
-    """
     m = NeuralNetworkInterface(global_params.mpath_glia, imposed_batch_size=200,
                                nb_labels=2, normalize_data=True)
     _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
@@ -712,7 +711,8 @@ def get_glia_model():
 def get_celltype_model(init_gpu=None):
     # this model was trained with 'naive_view_normalization'
     m = NeuralNetworkInterface(global_params.mpath_celltype,
-                               imposed_batch_size=2, nb_labels=4, normalize_data=True,
+                               imposed_batch_size=2, nb_labels=4,
+                               normalize_data=True,
                                init_gpu=init_gpu)
     _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
     return m
@@ -860,7 +860,7 @@ def views2tripletinput(views):
 
 def _multi_gpu_ds_pred(kd_p, kd_pred_p, cd_p, model_p,
                        imposed_patch_size=None, gpu_ids=(0, 1)):
-
+    # TODO: replace by QSUB_script
     import threading
 
     def start_partial_pred(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size,

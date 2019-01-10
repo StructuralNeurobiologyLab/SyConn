@@ -7,39 +7,48 @@
 
 from ctypes import sizeof, c_float, c_void_p, c_uint
 from PIL import Image
-from .image import rgb2gray, apply_clahe, normalize_img
-from scipy.ndimage.filters import gaussian_filter
 import numpy as np
 import time
-import sys
+import os
+import tqdm
 import warnings
+from scipy.ndimage.filters import gaussian_filter
+
+from .image import rgb2gray, apply_clahe, normalize_img
+from . import log_proc
 from ..config import global_params
 from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
 from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
     rgb2id_array, id2rgb_array_contiguous
-from .meshes import merge_meshes, get_random_centered_coords, \
-    MeshObject, calc_rot_matrices, flag_empty_spaces
-import os
-import tqdm
-
+from .meshes import merge_meshes, MeshObject, calc_rot_matrices, \
+    flag_empty_spaces
 try:
     import os
     if not os.environ.get('PYOPENGL_PLATFORM'):
-        os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
+        os.environ['PYOPENGL_PLATFORM'] = global_params.PYOPENGL_PLATFORM
     import OpenGL
     OpenGL.USE_ACCELERATE = False
     from OpenGL.GL import *
     from OpenGL.GLU import *
-    from OpenGL.osmesa import *
     from OpenGL.GL.framebufferobjects import *
+    from OpenGL.arrays import *
 except Exception as e:
-    print("Problem loading OpenGL:", e)
+    log_proc.error("Problem loading OpenGL:", e)
     pass
+
+if os.environ['PYOPENGL_PLATFORM'] == 'egl':
+    from OpenGL.EGL import eglDestroyContext
+elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
+    from OpenGL.osmesa import *
+else:
+    msg = 'PYOpenGL environment has to be "egl" or "osmesa".'
+    log_proc.error(msg)
+    raise NotImplementedError(msg)
+
 
 # ------------------------------------------------------------------------------
 # General rendering code
-
 float_size = sizeof(c_float)
 vertex_offset = c_void_p(0 * float_size)
 normal_offset = c_void_p(3 * float_size)
@@ -146,7 +155,7 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
                             GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE)
         data = Image.frombuffer("L", (ws[0], ws[1]), data, 'raw', 'L', 0, 1) #(mode, size, data, 'raw', mode, 0, 1)
         data = np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM))
-        data = normalize_img(data, max_val=255).astype(np.uint8)
+        data = gaussian_filter(data, .7)
         if clahe:
             data = apply_clahe(data)
         if np.sum(data) == 0:
@@ -168,11 +177,62 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
 # setup ######################################################################
 def init_ctx(ws):
     # ctx = OSMesaCreateContext(OSMESA_RGBA, None)
-    ctx = OSMesaCreateContextExt(OSMESA_RGBA, 32, 0, 0, None)
-    buf = arrays.GLubyteArray.zeros((ws[0], ws[1], 4)) + 1
-    assert(OSMesaMakeCurrent(ctx, buf, GL_UNSIGNED_BYTE, ws[0], ws[1]))
-    assert(OSMesaGetCurrentContext())
-    OSMesaPixelStore(OSMESA_Y_UP, 0)
+    if os.environ['PYOPENGL_PLATFORM'] == 'egl':
+        from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
+            EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
+            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
+            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
+            EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
+            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
+            eglGetDisplay, eglInitialize, eglChooseConfig, \
+            eglBindAPI, eglCreatePbufferSurface, \
+            eglCreateContext, eglMakeCurrent, EGLConfig
+
+        major, minor = ctypes.c_long(), ctypes.c_long()
+        num_configs = ctypes.c_long()
+        configs = (EGLConfig * 1)()
+
+        # Cache DISPLAY if necessary and get an off-screen EGL display
+        orig_dpy = None
+        if 'DISPLAY' in os.environ:
+            orig_dpy = os.environ['DISPLAY']
+            del os.environ['DISPLAY']
+        dsp = eglGetDisplay(EGL_DEFAULT_DISPLAY)
+        assert dsp != EGL_NO_DISPLAY, 'Invalid DISPLAY during egl init.'
+        if orig_dpy is not None:
+            os.environ['DISPLAY'] = orig_dpy
+
+        # Initialize EGL
+        eglInitialize(dsp, major, minor)
+        config_attr = arrays.GLintArray.asArray(
+            [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_LUMINANCE_SIZE, 8,
+             EGL_BLUE_SIZE, 0, EGL_RED_SIZE, 0, EGL_GREEN_SIZE, 0,
+             EGL_DEPTH_SIZE, 24, EGL_COLOR_BUFFER_TYPE,
+             EGL_LUMINANCE_BUFFER, EGL_RENDERABLE_TYPE,
+             EGL_OPENGL_BIT, EGL_CONFORMANT, EGL_OPENGL_BIT, EGL_NONE])
+        eglChooseConfig(dsp, config_attr, configs, 1, num_configs)
+
+        # Bind EGL to the OpenGL API
+        eglBindAPI(EGL_OPENGL_API)
+
+        # Create an EGL context
+        ctx = eglCreateContext(dsp, configs[0], EGL_NO_CONTEXT, None)
+
+        # Create an EGL pbuffer
+        buf = eglCreatePbufferSurface(dsp, configs[0], [EGL_WIDTH, ws[0], EGL_HEIGHT, ws[1], EGL_NONE])
+        ctx = [dsp, ctx]
+        # Make the EGL context current
+        assert (eglMakeCurrent(dsp, buf, buf, ctx))
+
+    elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
+        ctx = OSMesaCreateContextExt(OSMESA_RGBA, 32, 0, 0, None)
+        buf = arrays.GLubyteArray.zeros((ws[0], ws[1], 4)) + 1
+        assert (OSMesaMakeCurrent(ctx, buf, GL_UNSIGNED_BYTE, ws[0], ws[1]))
+        assert (OSMesaGetCurrentContext())
+        OSMesaPixelStore(OSMESA_Y_UP, 0)
+    else:
+        raise NotImplementedError('PYOpenGL environment has to be "egl" or "osmesa".')
     return ctx
 
 
@@ -295,7 +355,10 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
         c_views.append(screen_shot(ws, colored, depth_map=depth_map)[None, ])
         glPopMatrix()
     # glFinish()
-    OSMesaDestroyContext(ctx)
+    if os.environ['PYOPENGL_PLATFORM'] == 'egl':
+        eglDestroyContext(*ctx)
+    else:
+        OSMesaDestroyContext(ctx)
     return np.concatenate(c_views)
 
 
@@ -390,7 +453,10 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
                                    triangulation=triangulation)[None, ])
         glPopMatrix()
     # glFinish()
-    OSMesaDestroyContext(ctx)
+    if os.environ['PYOPENGL_PLATFORM'] == 'egl':
+        eglDestroyContext(*ctx)
+    else:
+        OSMesaDestroyContext(ctx)
     return np.concatenate(c_views)
 
 
@@ -464,9 +530,10 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         rot_mat = rot_matrices[ii]
         if np.sum(np.abs(rot_mat)) == 0 or np.sum(np.abs(mesh.vertices)) == 0:
             if views_key in ["raw", "index"]:
-                print("Rotation matrix or vertices of '%s' with %d "
-                      "vertices is zero during rendering at %s. Skipping."
-                              % (views_key, len(mesh.vert_resh), str(c)))
+                log_proc.warning(
+                    "Rotation matrix or vertices of '%s' with %d vertices is"
+                    " zero during rendering at %s. Skipping."
+                    % (views_key, len(mesh.vert_resh), str(c)))
             continue
         glMatrixMode(GL_MODELVIEW)
         glLoadIdentity()
@@ -512,7 +579,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                                   RuntimeWarning)
                     found_empty_view = True
         if found_empty_view:
-            print("View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
+            log_proc.warning(
+                "View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
                   "'%s'-mesh with %d vertices. Location: %s" %
                   (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
                    views_key, len(mesh.vertices), repr(c)))
@@ -531,7 +599,7 @@ def draw_scale(size):
     """
     glLineWidth(5)
     glBegin(GL_LINES)
-    glColor(0,0,0, 1)
+    glColor(0, 0, 0, 1)
     glVertex2f(1 - 0.1 - size, 1 - 0.1)
     glVertex2f(1 - 0.1, 1 - 0.1)
     glEnd()
@@ -627,10 +695,10 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
         local_rot_mat = np.array(rot_matrices)
         local_rot_mat[empty_locs] = 0
     if verbose:
-        print("Calculation of rotation matrices / flagging empty views"
-              " took", time.time() - start)
-        print("Starting local rendering at %d locations (%s)." %
-              (len(coords), views_key))
+        log_proc.info("Calculation of rotation matrices / flagging empty views"
+                      " took", time.time() - start)
+        log_proc.info("Starting local rendering at %d locations (%s)." %
+                      (len(coords), views_key))
     ctx = init_ctx(ws)
     mviews = multi_view_mesh_coords(mesh, coords, local_rot_mat, edge_lengths,
                                     clahe=clahe, views_key=views_key, ws=ws,
@@ -640,9 +708,12 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                                     wire_frame=wire_frame, nb_views=nb_views)
     if verbose:
         end = time.time()
-        print("Finished rendering mesh of type %s at %d locations after"
-              " %0.1fs" % (views_key,len(mviews), end - start))
-    OSMesaDestroyContext(ctx)
+        log_proc.info("Finished rendering mesh of type %s at %d locations after"
+                      " %0.1fs" % (views_key,len(mviews), end - start))
+    if os.environ['PYOPENGL_PLATFORM'] == 'egl':
+        eglDestroyContext(*ctx)
+    else:
+        OSMesaDestroyContext(ctx)
     if return_rot_matrices:
         return mviews, rot_matrices
     return mviews
@@ -684,8 +755,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
                                   dtype=np.bool)
         missing_svs = np.array(sso.svs)[missing_sv_ixs]
         coords = np.array(coords)[missing_sv_ixs]
-        print("Rendering %d/%d missing SVs of SSV %d." %
-              (len(missing_svs), len(sso.sv_ids), sso.id))
+        log_proc.info("Rendering %d/%d missing SVs of SSV %d."
+                      % (len(missing_svs), len(sso.sv_ids), sso.id))
     else:
         missing_svs = np.array(sso.svs)
     if len(missing_svs) == 0:
@@ -708,8 +779,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
                       index_views=index_views)
     if verbose:
         dur = time.time() - start
-        print ("Rendering of %d views took %0.2fs (incl. read/write). "
-              "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
+        log_proc.info("Rendering of %d views took %0.2fs (incl. read/write). "
+                      "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
     if return_views:
         return sso.load_views(woglia=woglia, index_views=index_views)
 
@@ -744,20 +815,16 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
         nb_views = global_params.NB_VIEWS
     mesh = sso.mesh
     if len(mesh[1]) == 0:
-        print("----------------------------------------------\n"
-              "No mesh for SSO %d found.\n"
-              "----------------------------------------------\n")
+        log_proc.error("No mesh for SSO {} found.".format(sso.id))
         return
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
                                 "cellobjects only."
-        raw_views = np.ones((len(coords), nb_views, 128, 256), dtype=np.uint8) \
-                    * 255
-        edge_lengths = np.array([comp_window, comp_window / 2, comp_window])
-        mo = MeshObject("raw", mesh[0], mesh[1])
-        mo._colors = None
+        raw_views = np.ones((len(coords), nb_views, 128, 256), dtype=np.uint8) * 255
         if rot_mat is None:
-            querybox_edgelength = np.max(edge_lengths) / mo.max_dist
+            mo = MeshObject("raw", mesh[0], mesh[1])
+            mo._colors = None
+            querybox_edgelength = comp_window / mo.max_dist
             rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
                                         mo.vert_resh, querybox_edgelength)
     else:
@@ -830,21 +897,25 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
         nb_views = global_params.NB_VIEWS
     ind, vert, norm = sso.mesh
     if len(vert) == 0:
-        print("----------------------------------------------\n"
-              "No mesh for SSO %d found.\n"
-              "----------------------------------------------\n")
+        log_proc.error("No mesh for SSO {} found.".format(sso.id))
         return np.ones((len(coords), 2, 128, 256, 3), dtype=np.uint8)
-    color_array = id2rgb_array_contiguous(np.arange(len(ind) // 3))
+    try:
+        color_array = id2rgb_array_contiguous(np.arange(len(ind) // 3))
+    except ValueError as e:
+        msg = "'render_sso_coords_index_views' failed with {} when " \
+              "rendering SSV {}.".format(e, sso.id)
+        log_proc.error(msg)
+        raise ValueError(msg)
     color_array = np.concatenate([color_array, np.ones((len(color_array), 1),
                                                        dtype=np.uint8)*255],
                                  axis=-1).astype(np.float32) / 255.
     # in init it seems color values have to be normalized, check problems with uniqueness if
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
     # backwards compatibility with other color-dependent rendering methods
-    # Create mesh object
+    # Create mesh object without redundant vertices to get same PCA rotation as for raw views
     if rot_mat is None:
-        querybox_edgelength = comp_window
         mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
+        querybox_edgelength = comp_window / mo.max_dist
         rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
                                     mo.vert_resh, querybox_edgelength)
     # create redundant vertices to enable per-face colors

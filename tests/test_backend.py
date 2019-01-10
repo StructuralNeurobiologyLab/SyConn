@@ -21,6 +21,7 @@ test_p = dir_path + "/test.pkl"
 if os.path.isfile(test_p):
     os.remove(test_p)
 
+
 def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
 
     """
@@ -103,6 +104,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
     if q1.get() == 1 or q2.get() == 1 or q3.get() == 1:
        raise AssertionError
 
+
 def test_saving_loading_and_copying_process_for_Attribute_dict():
 
     """
@@ -145,6 +147,7 @@ def test_saving_loading_and_copying_process_for_Attribute_dict():
     except Exception as e:
         logging.warning('FAILED: test_loading_and_copying_process_for_Attribute_dict. ' + str(e))
         raise AssertionError
+
 
 def test_compression_and_decompression_for_mesh_dict():
 
@@ -197,6 +200,7 @@ def test_compression_and_decompression_for_mesh_dict():
     except Exception as e:
         logging.warning('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 3 ' + str(e))
         raise AssertionError
+
 
 def test_compression_and_decompression_for_voxel_dict():
 
@@ -279,6 +283,7 @@ def test_compression_and_decompression_for_voxel_dict():
         logging.warning('FAILED: test_compression_and_decompression_for_voxel_dict: STEP 3 ' + str(e))
         raise AssertionError
 
+
 def test_compression_and_decompression_for_voxel_dictL():
 
     # tests least entropy data
@@ -358,6 +363,7 @@ def test_compression_and_decompression_for_voxel_dictL():
         logging.warning('FAILED: test_compression_and_decompression_for_voxel_dictL: STEP 3 ' + str(e))
         raise AssertionError
 
+
 def test_basics_write_txt2kzip():
 
     """
@@ -380,6 +386,7 @@ def test_basics_write_txt2kzip():
         logging.warning('FAILED: test_basics_write_txt2kzip' + str(e))
         raise AssertionError
 
+
 def test_basics_write_data2kzip():
 
     """
@@ -392,7 +399,7 @@ def test_basics_write_data2kzip():
     try:
         test_file = open(dir_path + '/test.txt', "w+")
         test_file.write('This is line test.')
-        write_data2kzip(dir_path + '/test.kzip', dir_path + '/test.txt' , fname_in_zip='test')
+        write_data2kzip(dir_path + '/test.kzip', dir_path + '/test.txt', fname_in_zip='test')
         logging.info('PASSED: test_basics_write_data2kzip')
     except Exception as e:
         logging.warning('FAILED: test_basics_write_data2kzip' + str(e))
@@ -410,12 +417,15 @@ def test_read_txt_from_zip():
     -------
 
     """
+    test_str = "testing_" + sys._getframe().f_code.co_name
     try:
-        with zipfile.ZipFile(str(dir_path) + '/' + sys._getframe().f_code.co_name + '.zip', mode = 'w') as zf:
-            zf.writestr(sys._getframe().f_code.co_name + '.txt', "testing_" + sys._getframe().f_code.co_name)
+        with zipfile.ZipFile(str(dir_path) + '/' + sys._getframe().f_code.co_name + '.zip', mode='w') as zf:
+            zf.writestr(sys._getframe().f_code.co_name + '.txt', test_str)
             zf.close()
         txt = read_txt_from_zip(str(dir_path) + '/' + sys._getframe().f_code.co_name + '.zip', sys._getframe().f_code.co_name + '.txt')
-        assert txt == "testing_" + sys._getframe().f_code.co_name
+        txt = txt.decode('utf-8')
+        if not txt == test_str:
+            raise ValueError('Invalid text found in test file "{}"'.format(txt))
         logging.info("PASSED:" + sys._getframe().f_code.co_name)
         remove_files_after_test(sys._getframe().f_code.co_name + '.zip')
     except Exception as e:

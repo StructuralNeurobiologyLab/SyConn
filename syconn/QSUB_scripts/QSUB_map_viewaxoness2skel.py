@@ -37,8 +37,8 @@ for ix in ssv_ixs:
         continue
     try:
         for k in [1]:
-            sso.cnn_axoness_2_skel(pred_key_appendix=pred_key_appendix,
-                                   reload=True, k=k)
+            sso.cnn_axoness2skel(pred_key_appendix=pred_key_appendix,
+                                 force_reload=True, k=k)
     except Exception as e:
         print(str(e) + " SSV mapping error " + str(sso.id))
         continue
@@ -48,8 +48,7 @@ for ix in ssv_ixs:
     except Exception as e:
         print(str(e) + " SSV averaging error " + str(sso.id) )
         continue
-    pred_key = "axoness_preds_cnn{}_views_avg{}".format(pred_key_appendix,
-                                                        max_dist)
+    pred_key = "axoness{}_avg{}".format(pred_key_appendix, max_dist)
     majority_vote_compartments(sso, pred_key)
 
 

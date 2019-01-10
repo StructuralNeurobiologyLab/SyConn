@@ -11,23 +11,26 @@ except ImportError:
 import glob
 import numpy as np
 import os
-from ..config.global_params import wd, get_dataset_scaling
+import tqdm
 from collections import defaultdict
-from .image import single_conn_comp_img
 from knossos_utils import knossosdataset
+
+from ..config.global_params import wd, get_dataset_scaling, MESH_DOWNSAMPLING,\
+    MESH_CLOSING, NCORES_PER_NODE
+from .image import single_conn_comp_img
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-from syconn.backend.storage import AttributeDict, VoxelStorage
+from ..backend.storage import AttributeDict, VoxelStorage
 from ..reps import segmentation, segmentation_helper
 from ..handler import basics
-import tqdm
 from ..proc.meshes import mesh_chunk
+from . import log_proc
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
-def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
-                     qsub_queue=None, nb_cpus=1, n_max_co_processes=100,
-                     compute_mesharea=False):
+def dataset_analysis(sd, recompute=True, stride=50, qsub_pe=None,
+                     qsub_queue=None, nb_cpus=1, n_max_co_processes=None,
+                     compute_meshprops=False):
     """ Analyses the whole dataset and extracts and caches key information
 
     :param sd: SegmentationDataset
@@ -45,32 +48,32 @@ def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
         number of cores per worker for qsub jobs
     :param n_max_co_processes: int
         max number of workers running at the same time when using qsub
-    :param compute_mesharea: bool
+    :param compute_meshprops: bool
     """
-
     paths = sd.so_dir_paths
-
+    if compute_meshprops:
+        if not (sd.type in MESH_DOWNSAMPLING and sd.type in MESH_CLOSING):
+            msg = 'SegmentationDataset of type "{}" has no configured mesh parameters. ' \
+                  'Please add them to global_params.py accordingly.'
+            log_proc.error(msg)
+            raise ValueError(msg)
     # Partitioning the work
-
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, sd.type, sd.version,
-                             sd.working_dir, recompute, compute_mesharea])
-
+                             sd.working_dir, recompute, compute_meshprops])
     # Running workers
-
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_dataset_analysis_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "dataset_analysis",
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=script_folder,
                                      n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
-
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -78,10 +81,10 @@ def dataset_analysis(sd, recompute=True, stride=10, qsub_pe=None,
                 results.append(pkl.load(f))
     else:
         raise Exception("QSUB not available")
-
     # Creating summaries
-    # This is a potential bottleneck for very large datasets
-
+    # TODO: This is a potential bottleneck for very large datasets
+    # TODO: resulting cache-arrays might have different lengths if attribute is missing in
+    # some dictionatries -> add checks!
     attr_dict = {}
     for this_attr_dict in results:
         for attribute in this_attr_dict:
@@ -102,7 +105,7 @@ def _dataset_analysis_thread(args):
     version = args[2]
     working_dir = args[3]
     recompute = args[4]
-    compute_mesharea = args[5]
+    compute_meshprops = args[5]
 
     global_attr_dict = dict(id=[], size=[], bounding_box=[], rep_coord=[],
                             mesh_area=[])
@@ -133,8 +136,10 @@ def _dataset_analysis_thread(args):
                     so.attr_dict["rep_coord"] = so.rep_coord
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
-                    if compute_mesharea:
-                        so.attr_dict["mesh_area"] = so.mesh_area    # TODO try except SV
+                    if compute_meshprops:
+                        # if mesh did not exist beforehand, it will be generated
+                        so.attr_dict["mesh_bb"] = so.mesh_bb
+                        so.attr_dict["mesh_area"] = so.mesh_area
 
                 for attribute in so.attr_dict.keys():
                     if attribute not in global_attr_dict:
@@ -211,7 +216,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
         results = sm.start_multiprocess(_map_objects_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_objects",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -251,7 +256,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
         sm.start_multiprocess(_write_mapping_to_sv_thread, multi_params,
                               nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         qu.QSUB_script(multi_params, "write_mapping_to_sv", pe=qsub_pe,
                        queue=qsub_queue, script_folder=script_folder,
                        n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
@@ -361,19 +366,17 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
     paths = cs_sd.so_dir_paths
 
     # Partitioning the work
-
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, cs_sd.version, cs_sd.working_dir,
                              n_iterations])
 
     # Running workers
-
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_binary_filling_cs_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "binary_filling_cs",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -401,8 +404,8 @@ def _binary_filling_cs_thread(args):
             so = cs_sd.get_segmentation_object(so_id)
             # so.attr_dict = this_attr_dc[so_id]
             so.load_voxels(voxel_dc=this_vx_dc)
-            filled_voxels = segmentation_helper.binary_closing(so.voxels.copy(),
-                                                               n_iterations=n_iterations)
+            filled_voxels = segmentation_helper.binary_closing(
+                so.voxels.copy(), n_iterations=n_iterations)
 
             this_vx_dc[so_id] = [filled_voxels], [so.bounding_box[0]]
 
@@ -440,8 +443,8 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
                                           "raw_only": raw_only}]
                                           for sv in ch], nb_cpus=nb_cpus)
         proba = predict_views(model, views, ch, pred_key, verbose=False,
-                             single_cc_only=single_cc_only,
-                             return_proba=return_proba, nb_cpus=nb_cpus)
+                              single_cc_only=single_cc_only,
+                              return_proba=return_proba, nb_cpus=nb_cpus)
         if verbose:
             pbar.update(len(ch))
         if return_proba:
@@ -528,7 +531,7 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512,
         results = sm.start_multiprocess(_export_sd_to_knossosdataset_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_sd_to_knossosdataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -579,23 +582,21 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                          trafo_dict_path=None, stride=10,
                          qsub_pe=None, qsub_queue=None, nb_cpus=1,
                          n_max_co_processes=None):
-    assert "sj" in sj_sd.version_dict
+    assert "syn_ssv" in sj_sd.version_dict
     paths = sj_sd.so_dir_paths
 
     # Partitioning the work
-
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, sj_sd.version, sj_sd.working_dir,
                              kd_asym_path, kd_sym_path, trafo_dict_path])
 
     # Running workers - Extracting mapping
-
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_extract_synapse_type_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_synapse_type",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -607,7 +608,6 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
 
 
 def _extract_synapse_type_thread(args):
-
     paths = args[0]
     obj_version = args[1]
     working_dir = args[2]
@@ -623,18 +623,15 @@ def _extract_synapse_type_thread(args):
 
     kd_asym = knossosdataset.KnossosDataset()
     kd_asym.initialize_from_knossos_path(kd_asym_path)
-
     kd_sym = knossosdataset.KnossosDataset()
     kd_sym.initialize_from_knossos_path(kd_sym_path)
 
-    seg_dataset = segmentation.SegmentationDataset("sj",
+    seg_dataset = segmentation.SegmentationDataset("syn_ssv",
                                                    version=obj_version,
                                                    working_dir=working_dir)
-
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
                                      read_only=False, disable_locking=True)
-
         for so_id in this_attr_dc.keys():
             so = seg_dataset.get_segmentation_object(so_id)
             so.attr_dict = this_attr_dc[so_id]
@@ -664,11 +661,10 @@ def _extract_synapse_type_thread(args):
 
             so.attr_dict["syn_type_sym_ratio"] = sym_ratio
             this_attr_dc[so_id] = so.attr_dict
-
         this_attr_dc.push()
 
 
-def mesh_proc_chunked(working_dir, obj_type, nb_cpus=20):
+def mesh_proc_chunked(working_dir, obj_type, nb_cpus=NCORES_PER_NODE):
     """
     Caches the meshes for all SegmentationObjects within the SegmentationDataset
      with object type 'obj_type'.

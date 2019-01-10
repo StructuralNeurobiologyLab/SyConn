@@ -5,7 +5,6 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 import glob
-import os
 
 
 def find_missing_overlaycubes_thread(args):

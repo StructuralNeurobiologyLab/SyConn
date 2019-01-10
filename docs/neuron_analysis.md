@@ -5,11 +5,11 @@ All scripts used for the analysis of the neuron segmentation are located in `SyC
 * Cell type prediction: `celltype_prediction.py`
 
 ## Prerequisites
-* \[Optional\] [Glia removal](glia_removal.md)
-* [Mapped cellular organelles](object_mapping.md) to SSVs
 * Knossos- and SegmentationDataset of the super voxel segmentation
 * SegmentationDatasets for all cellular organelles (currently mitochondria, vesicle clouds and synaptic junctions)
-* Initial RAG/SV-mapping
+* \[Optional\] [Glia removal](glia_removal.md)
+* The RAG/SV-mapping in form of a SSD, see [SuperSegmentationDatasets](super_segmentation_datasets.md)
+* [Mapped cellular organelles](object_mapping.md) to SSVs
 
 ## Steps
 <img align="right" width="200" height="200" src="./_static/spine_semseg_3D_7141_6013_4838_28479489_spiness_k5_2views.png">

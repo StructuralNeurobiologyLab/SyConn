@@ -7,8 +7,9 @@
 import numpy as np
 from numba import jit
 from scipy import spatial
-from ..proc.graphs import bfs_smoothing
 from knossos_utils.skeleton_utils import load_skeleton
+
+from ..proc.graphs import bfs_smoothing
 
 
 def parse_skelnodes_labels_to_mesh(kzip_path, sso, gt_type, n_voting=40):
@@ -201,6 +202,7 @@ def id2rgb_array(id_arr):
 @jit
 def id2rgb_array_contiguous(id_arr):
     """
+    # TODO: Add rgba implementation to render huge cells with shared context in EGL
     Transforms ID values into the array of RGBs labels based on the assumption
     that 'id_arr' is contiguous index array from 0...len(id_arr).
     Same mapping as 'id2rgb_array'.

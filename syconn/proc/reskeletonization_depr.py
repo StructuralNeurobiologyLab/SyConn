@@ -4,6 +4,8 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
+# TODO: outsource all skeletonization code, currently not used and methods are spread all over code base
 try:
     import cPickle as pkl
 except ImportError:
@@ -16,7 +18,6 @@ from scipy import spatial
 import scipy
 script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 import skeletopyze
-
 
 
 def reskeletonize_plain(volume, coord_scaling=(2, 2, 1), node_offset=0):

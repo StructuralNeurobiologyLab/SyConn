@@ -76,6 +76,7 @@ class UndoState(object):
         self.gw_object = gw_object
         return
 
+
 class AAMInteraction(object):
     def __init__(self, server):
 
@@ -93,8 +94,8 @@ class AAMInteraction(object):
 
     def session_state(self):
         r = self.session.get(self.server + 'api/2/session')
-        print r
-        print r.content
+        print(r)
+        print(r.content)
 
     def submit(self, json_gw='', worktime = 0, gw_log = ''):
 
@@ -177,8 +178,8 @@ class AAMInteraction(object):
         r = self.session.post(self.server + 'graphwalker/get_mesh', post_txt)
 
         if r.status_code != 200:
-            print r
-            print r.content
+            print(r)
+            print(r.content)
             return
 
         fname_ex = 'filename=([^;]+);'
@@ -522,7 +523,7 @@ class main_class(QtGui.QDialog):
             KnossosModule.segmentation.createObject(2, self.current_edge[1][0], self.current_edge[1][2])
 
             # one could cache this, not necessary to rebuild at every step, but no noticable performance effect so far
-            for sv_id in self.rec_graph.nodes_iter():
+            for sv_id in self.rec_graph.nodes():
                 try:
                     KnossosModule.segmentation.addSubobject(2, sv_id)
                 except:
@@ -647,7 +648,7 @@ class main_class(QtGui.QDialog):
     def update_mesh_colors(self):
         # iterate over all existing meshes and update the colors
 
-        for sv_id in self.rec_graph.nodes_iter():
+        for sv_id in self.rec_graph.nodes():
             # check the current color
             tree = KnossosModule.skeleton.find_tree_by_id(sv_id)
             if tree:
@@ -775,7 +776,7 @@ class main_class(QtGui.QDialog):
 
             KnossosModule.segmentation.createObject(2, self.current_edge[1][0], self.current_edge[1][2])
             # one could cache this, not necessary to rebuild at every step
-            for sv_id in self.rec_graph.nodes_iter():
+            for sv_id in self.rec_graph.nodes():
                 try:
                     KnossosModule.segmentation.addSubobject(2, sv_id)
                 except:
@@ -786,11 +787,11 @@ class main_class(QtGui.QDialog):
             KnossosModule.segmentation.changeColor(2, QtGui.QColor(0, 0, 0, 255))
 
         else:
-            ids = list(self.rec_graph.nodes_iter())
+            ids = list(self.rec_graph.nodes())
             if len(ids) > 0:
                 first_id = ids[0]
                 KnossosModule.segmentation.createObject(1, first_id, (1,1,1))
-                for sv_id in self.rec_graph.nodes_iter():
+                for sv_id in self.rec_graph.nodes():
                     try:
                         KnossosModule.segmentation.addSubobject(1, sv_id)
                     except:
@@ -820,14 +821,14 @@ class main_class(QtGui.QDialog):
         self.create_knossos_rec_trees()
 
         if self.current_mode == 'proofreading':
-            for sv_id in self.rec_graph.nodes_iter():
+            for sv_id in self.rec_graph.nodes():
                 # fetch skeleton again
                 nxskel = self.get_skel_by_id_from_db(sv_id)
                 self.nxskel_to_knossos_tree(nxskel, 1, sv_id, signal_block = False)
             self.show_query()
 
         elif self.current_mode == 'review':
-            for sv_id in self.rec_graph.nodes_iter():
+            for sv_id in self.rec_graph.nodes():
                 # fetch skeleton again
                 nxskel = self.get_skel_by_id_from_db(sv_id)
 
@@ -842,7 +843,7 @@ class main_class(QtGui.QDialog):
                     self.nxskel_to_knossos_tree(nxskel, 2, sv_id, signal_block = False)
 
         elif self.current_mode == 'task':
-            for sv_id in self.rec_graph.nodes_iter():
+            for sv_id in self.rec_graph.nodes():
                 # fetch skeleton again
                 nxskel = self.get_skel_by_id_from_db(sv_id)
                 self.nxskel_to_knossos_tree(nxskel, 1, sv_id, signal_block = False)
@@ -1884,7 +1885,7 @@ class main_class(QtGui.QDialog):
         k_tree = KnossosModule.skeleton.find_tree_by_id(knossos_tree_id)
         # add nodes
         nx_knossos_id_map = dict()
-        for nx_node in nxskel.nodes_iter():
+        for nx_node in nxskel.nodes():
             nx_coord = nxskel.node[nx_node]['position']
             #newsk_node.from_scratch(newsk_anno, nx_coord[1]+1, nx_coord[0]+1, nx_coord[2]+1, ID=nx_node)
             k_node = KnossosModule.skeleton.add_node([nx_coord[1]+1, nx_coord[0]+1, nx_coord[2]+1], k_tree)
@@ -1893,7 +1894,7 @@ class main_class(QtGui.QDialog):
             KnossosModule.skeleton.set_comment(nx_knossos_id_map[nx_node], str(sv_id))
 
         # add edges
-        for nx_src, nx_tgt in nxskel.edges_iter():
+        for nx_src, nx_tgt in nxskel.edges():
             KnossosModule.skeleton.add_segment(nx_knossos_id_map[nx_src], nx_knossos_id_map[nx_tgt])
 
         # enable signals again

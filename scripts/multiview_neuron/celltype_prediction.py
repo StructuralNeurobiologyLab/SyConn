@@ -1,51 +1,56 @@
 # SyConn
 # Copyright (c) 2018 Philipp J. Schubert, J. Kornfeld
 # All rights reserved
-from syconn.config.global_params import wd
-from syconn.handler.prediction import get_celltype_model
-from syconn.handler.basics import chunkify
-from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
-from syconn.reps.super_segmentation_helper import predict_sso_celltype
-from syconn.mp import qsub_utils as qu
-from syconn.mp.mp_utils import start_multiprocess_imap, start_multiprocess
 import numpy as np
-import tqdm
-import time
 import os
+import glob
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
+
+from syconn.config import global_params
+from syconn.handler.logger import initialize_logging
+from syconn.handler.basics import chunkify
+from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.mp import qsub_utils as qu
 
 
-def celltype_predictor(args):
-    ssv_ids = args
-    # randomly initialize gpu
-    m = get_celltype_model(init_gpu=np.random.randint(0, 2))
-    pbar = tqdm.tqdm(total=len(ssv_ids))
-    missing_ssvs = []
-    for ix in ssv_ids:
-        ssv = SuperSegmentationObject(ix, working_dir=wd)
-        ssv.nb_cpus = 1
-        try:
-            predict_sso_celltype(ssv, m, overwrite=True)
-        except Exception as e:
-            missing_ssvs.append((ssv.id, e))
-            print(repr(e))
-        pbar.update(1)
-    pbar.close()
-    return missing_ssvs
-
-
+# ~2h with 16 gpus
 if __name__ == "__main__":
-    ssd = SuperSegmentationDataset(working_dir=wd)
+    log = initialize_logging('celltype_prediction', global_params.wd + '/logs/')
+    ssd = SuperSegmentationDataset(working_dir=global_params.wd)
     # shuffle SV IDs
     np.random.seed(0)
     ssv_ids = ssd.ssv_ids
-    np.random.shuffle(ssv_ids)
-    err = start_multiprocess_imap(celltype_predictor, chunkify(ssd.ssv_ids, 15),
-                                  nb_cpus=6)
-    err = np.concatenate(err)
+
+    log.info('Starting cell type prediction.')
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
+                               for ssv_id in ssd.ssv_ids])
+    multi_params = ssd.ssv_ids
+    ordering = np.argsort(nb_svs_per_ssv)
+    multi_params = multi_params[ordering[::-1]]
+    multi_params = chunkify(multi_params, 100)
+    # job parameter will be read sequentially, i.e. in order to provide only
+    # one list as parameter one needs an additonal axis
+    multi_params = [(ixs, ) for ixs in multi_params]
+
+    script_folder = os.path.dirname(os.path.abspath(__file__)) + \
+                    "/../../syconn/QSUB_scripts/"
+    path_to_out = qu.QSUB_script(multi_params, "predict_cell_type", pe="openmp",
+                                 n_max_co_processes=34, queue=None,
+                                 script_folder=script_folder, suffix="",
+                                 n_cores=10, additional_flags="--gres=gpu:1")
+    log.info('Finished prediction of {} SSVs. Checking completeness.'
+             ''.format(len(ordering)))
+    out_files = glob.glob(path_to_out + "*.pkl")
+    err = []
+    for fp in out_files:
+        with open(fp, "rb") as f:
+            local_err = pkl.load(f)
+        err += list(local_err)
     if len(err) > 0:
-        print("{} errors occurred for SSVs with ID: "
-              "{}".format(len(err), [el[0] for el in err]))
-
-
-# TODO: perform async. data loading and model predictions, see
-# https://stackoverflow.com/questions/12474182/asynchronously-read-and-process-an-image-in-python
+        log.error("{} errors occurred for SSVs with ID: "
+                  "{}".format(len(err), [el[0] for el in err]))
+    else:
+        log.info('Success.')

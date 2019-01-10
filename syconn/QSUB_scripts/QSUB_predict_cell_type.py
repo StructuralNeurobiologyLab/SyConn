@@ -2,16 +2,15 @@
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
-# Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Max-Planck-Institute for Medical Research, Heidelberg, Germany
+# Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-
+from syconn.reps.super_segmentation_object import celltype_predictor
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconn.extraction import cs_processing_steps as cps
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -24,7 +23,9 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = cps._collect_axoness_from_ssv_partners_thread(args)
+
+ch = args[0]
+missing = celltype_predictor(ch)
 
 with open(path_out_file, "wb") as f:
-    pkl.dump(out, f)
+    pkl.dump(missing, f)

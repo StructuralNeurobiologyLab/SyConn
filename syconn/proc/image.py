@@ -15,10 +15,10 @@ except ImportError as e:
     __cv2__ = False
     createCLAHE = None
     equalizeHist = None
-import warnings
 from scipy import spatial, sparse, ndimage
 from sklearn.decomposition import PCA
 import tqdm
+
 from ..proc import log_proc
 
 
@@ -295,10 +295,9 @@ def remove_outlier(sv, edge_size):
               (sv[:, 1] < edge_size) & (sv[:, 2] >= 0) & (sv[:, 2] < edge_size)
     nb_outlier = np.sum(~inlier)
     if (float(nb_outlier) / len(sv)) > 0.5:
-        warnings.warn("Found %d/%d outlier after PCA while preprocessing"
+        log_proc.warn("Found %d/%d outlier after PCA while preprocessing"
                       "supervoexl. Removing %d%% of voxels" % (nb_outlier,
-                      len(sv), int(float(nb_outlier)/len(sv)*100)),
-                      RuntimeWarning)
+                      len(sv), int(float(nb_outlier)/len(sv)*100)))
     new_sv = sv[inlier]
     assert np.all(np.min(new_sv, axis=0) >= 0), \
         "%s" % np.min(new_sv, axis=0)
@@ -355,7 +354,8 @@ def multi_dilation(overlay, n_dilations, use_find_objects=False,
 def multi_mop(mop_func, overlay, n_iters, use_find_objects=False,
               background_only=True, mop_kwargs=None, verbose=False):
     """
-    Generic function for binary morphological image operations with multi-label content.
+    Generic function for binary morphological image operations with multi-label
+     content.
 
     Parameters
     ----------
@@ -440,7 +440,7 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, background_only=True,
             overlay[new_obj_slices][binary_mask == 1] = res[binary_mask == 1] * ix
         elif "dilation" in mop_func.__name__:
             proc_mask = (binary_mask == 1) | (sub_vol == 0)  # dilate only background
-            overlay[new_obj_slices][proc_mask] = res[proc_mask]
+            overlay[new_obj_slices][proc_mask] = res[proc_mask] * ix
         else:
             msg = "Only erosion or dilation allowed. Attempted to use morphological " \
                   "operation '{}'.".format(mop_func.__name__)

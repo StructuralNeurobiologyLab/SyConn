@@ -27,6 +27,9 @@ dependencies:
   - vigra
   - osmesa
   - m2r
+  - openmesh
+#  - snappy
+#  - python-snappy
 
   # For docs:
   - sphinx >=1.7.5

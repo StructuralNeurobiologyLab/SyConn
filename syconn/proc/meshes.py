@@ -12,28 +12,34 @@ from numba import jit
 from scipy import spatial, ndimage
 from skimage import measure
 from sklearn.decomposition import PCA
-from ..handler.basics import write_txt2kzip, texts2kzip
-from .image import apply_pca
-from ..proc import log_proc
-
-from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
-from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
-    get_dataset_scaling
-
-try:
-    from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
-except ImportError as e:
-    boundaryDistanceTransform, gaussianSmoothing = None, None
-    log_proc.error('ModuleNotFoundError. Could not import VIGRA. '
-                   'Mesh generation will not be possible.')
-from scipy.ndimage.morphology import binary_closing
-from ..proc import log_proc
+import openmesh
+from plyfile import PlyData, PlyElement
+from scipy.ndimage.morphology import binary_closing, binary_erosion,\
+    binary_dilation
+import tqdm
 try:
     import vtkInterface
     __vtk_avail__ = True
 except ImportError:
     __vtk_avail__ = False
+
+from ..proc import log_proc
+from ..handler.basics import write_data2kzip, data2kzip
+from .image import apply_pca
+from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
+from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
+    get_dataset_scaling, MESH_MIN_OBJ_VX
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
+try:
+    # set matplotlib backend to offscreen
+    import matplotlib
+    matplotlib.use('agg')
+    from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
+except ImportError:
+    boundaryDistanceTransform, gaussianSmoothing = None, None
+    log_proc.error('ModuleNotFoundError. Could not import VIGRA. '
+                   'Mesh generation will not be possible.')
+
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
            'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso']
@@ -107,10 +113,10 @@ class MeshObject(object):
     @property
     def normals(self):
         if self._normals is None or len(self._normals) != len(self.vertices):
-            print("Calculating normals")
+            log_proc.info("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         elif len(self._normals) != len(self.vertices):
-            print("Calculating normals, because their shape differs from"
+            log_proc.info("Calculating normals, because their shape differs from"
                   " vertices: %s (normals) vs. %s (vertices)" %
                   (str(self._normals.shape), str(self.vertices.shape)))
             self._normals = unit_normal(self.vertices, self.indices)
@@ -185,8 +191,9 @@ class MeshObject(object):
         return (self.vert_resh * self.max_dist + self.center).flatten()
 
 
-def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
-                  single_cc=False, decimate_mesh=0):
+def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
+                  decimate_mesh=0, gradient_direction='ascent',
+                  force_single_cc=False):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
     by building dense matrix (in case of a point cloud) and applying marching
@@ -206,6 +213,12 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
     decimate_mesh : float
         Percentage of mesh size reduction, i.e. 0.1 will leave 90% of the
         vertices
+    gradient_direction : str
+        defines orientation of triangle indices. 'ascent' is needed for KNOSSOS
+         compatibility.
+    force_single_cc : bool
+        If True, performans dilations until only one foreground CC is present
+        and then erodes with the same number to maintain size.
 
     Returns
     -------
@@ -226,37 +239,57 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
         pts -= offset
         pts = (pts / downsampling).astype(np.uint32)
         # add zero boundary around object
-        pts += 5
-        bb = np.max(pts, axis=0) + 5
+        margin = n_closings + 5
+        pts += margin
+        bb = np.max(pts, axis=0) + margin
         volume = np.zeros(bb, dtype=np.float32)
         volume[pts[:, 0], pts[:, 1], pts[:, 2]] = 1
     else:
         volume = pts
         if np.any(np.array(downsampling) != 1):
-            volume = measure.block_reduce(volume, downsampling, np.max)
+            # volume = measure.block_reduce(volume, downsampling, np.max)
+            ndimage.zoom(volume, downsampling, order=0)
         offset = np.array([0, 0, 0])
     # volume = multiBinaryErosion(volume, 1).astype(np.float32)
     if n_closings > 0:
         volume = binary_closing(volume, iterations=n_closings).astype(np.float32)
+        if force_single_cc:
+            n_dilations = 0
+            while True:
+                labeled, nb_cc = ndimage.label(volume)
+                log_proc.debug('Forcing single CC, additional dilations {}, num'
+                               'ber connected components: {}'
+                               ''.format(n_dilations, nb_cc))
+                if nb_cc == 1:  # does not count background
+                    break
+                # pad volume to maintain margin at boundary and correct offset
+                volume = np.pad(volume, [(1, 1), (1, 1), (1, 1)],
+                                mode='constant', constant_values=0)
+                offset -= 1
+                volume = binary_dilation(volume, iterations=1).astype(
+                    np.float32)
+                n_dilations += 1
+    else:
+        volume = volume.astype(np.float32)
     if single_cc:
         labeled, nb_cc = ndimage.label(volume)
-        cnt = Counter(labeled.flatten())
+        cnt = Counter(labeled[labeled != 0])
         l, occ = cnt.most_common(1)[0]
         volume = np.array(labeled == l, dtype=np.float32)
     # InterpixelBoundary, OuterBoundary, InnerBoundary
     dt = boundaryDistanceTransform(volume, boundary="InterpixelBoundary")
     dt[volume == 1] *= -1
     volume = gaussianSmoothing(dt, 1)
-    if np.sum(volume < 0) == 0 or  np.sum(volume > 0) == 0:  # less smoothing
+    if np.sum(volume < 0) == 0 or np.sum(volume > 0) == 0:  # less smoothing
         volume = gaussianSmoothing(dt, 0.5)
     try:
         verts, ind, norm, _ = measure.marching_cubes_lewiner(
-            volume, 0, gradient_direction="descent")
+            volume, 0, gradient_direction=gradient_direction)
     except Exception as e:
-        print(e)
-        raise RuntimeError
+        log_proc.error(e)
+        raise RuntimeError(e)
     if pts.ndim == 2:  # account for [5, 5, 5] offset
-        verts -= 5
+        verts -= margin
     verts = np.array(verts) * downsampling + offset
     if decimate_mesh > 0:
         if not __vtk_avail__:
@@ -272,6 +305,12 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
                              axis=1)
         mesh = vtkInterface.PolyData(verts, ind.flatten()).TriFilter()
         decimated_mesh = mesh.Decimate(decimate_mesh, volume_preservation=True)
+        if decimated_mesh is None:  # maybe vtkInterface API changes and operates in-place -> TODO: check version differences and require one of them
+            decimated_mesh = mesh
+            if len(decimated_mesh.faces.reshape((-1, 4))[:, 1:]) == len(ind):
+                log_proc.error(
+                    "'triangulation': Mesh-sparsification could not sparsify"
+                    " mesh.")
         # remove face sizes again
         ind = decimated_mesh.faces.reshape((-1, 4))[:, 1:]
         verts = decimated_mesh.points
@@ -281,7 +320,8 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0,
     return np.array(ind, dtype=np.int), verts, norm
 
 
-def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0):
+def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
+                    triangulation_kwargs=None):
     """
     Get object mesh from object voxels using marching cubes.
 
@@ -293,18 +333,36 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0):
     n_closings : int
         Number of closings before mesh generation
     decimate_mesh : float
+    triangulation_kwargs : dict
+     Keyword arguments parsed to 'traingulation' call
 
     Returns
     -------
-    array [N, 1], array [M, 1], array
-        vertices, indices
+    array [N, 1], array [M, 1], array [M, 1]
+        vertices, indices, normals
     """
+    if triangulation_kwargs is None:
+        triangulation_kwargs = {}
     if np.isscalar(obj.voxels):
-        return np.zeros((0, )), np.zeros((0, ))
-
-    indices, vertices, normals = triangulation(
-        np.array(obj.voxel_list), downsampling=downsampling,
-        n_closings=n_closings, decimate_mesh=decimate_mesh)
+        return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
+               np.zeros((0,), dtype=np.float32)
+    if len(obj.voxel_list) <= MESH_MIN_OBJ_VX:
+        log_proc.warn('Did not create mesh for object of type "{}" '
+                      ' with ID {} because it contained less than {} voxels.'
+                      ''.format(obj.id, obj.type, len(obj.voxel_list)))
+        return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
+               np.zeros((0,), dtype=np.float32)
+    try:
+        indices, vertices, normals = triangulation(
+            np.array(obj.voxel_list), downsampling=downsampling,
+            n_closings=n_closings, decimate_mesh=decimate_mesh,
+            **triangulation_kwargs)
+    except RuntimeError as e:
+        msg = 'Error during marching_cubes procedure of SegmentationObject {}' \
+              ' of type "{}". It contained {} voxels'.format(
+            obj.id, obj.type, len(obj.voxel_list))
+        log_proc.error(msg)
+        return np.zeros((0,)), np.zeros((0,)), np.zeros((0,))
     vertices += 1  # account for knossos 1-indexing
     vertices = np.round(vertices * obj.scaling)
     assert len(vertices) == len(normals) or len(normals) == 0, \
@@ -629,7 +687,7 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     return all_ind, all_vert, all_norm
 
 
-def make_ply_string(indices, vertices, normals, rgba_color):
+def make_ply_string(dest_path, indices, vertices, rgba_color):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -637,10 +695,9 @@ def make_ply_string(indices, vertices, normals, rgba_color):
 
     Parameters
     ----------
-    indices : iterable of indices (int)
-    vertices : iterable of vertices (int)
-    normals : iterable of normals (float)
-    rgba_color : 4-tuple (uint8)
+    indices : np.array
+    vertices : np.array
+    rgba_color : Tuple[uint8] or np.array
 
     Returns
     -------
@@ -661,6 +718,8 @@ def make_ply_string(indices, vertices, normals, rgba_color):
                   'or every vertex!'
             log_proc.error(msg)
             raise ValueError(msg)
+    if not rgba_color.ndim == 2:
+        rgba_color = np.array(rgba_color, dtype=np.int).reshape((-1, 4))
     if type(rgba_color) is list:
         rgba_color = np.array(rgba_color, dtype=np.uint8)
         log_proc.warn("Color input is list. It will now be converted "
@@ -671,36 +730,24 @@ def make_ply_string(indices, vertices, normals, rgba_color):
         log_proc.warn("Color array is not of type integer or unsigned integer."
                       " It will now be converted automatically, data will be "
                       "unusable if not normalized between 0 and 255."
-                      "min/max of data: {}, {}".format(rgba_color.min(), rgba_color.max()))
+                      "min/max of data: {}, {}".format(rgba_color.min(),
+                                                       rgba_color.max()))
         rgba_color = np.array(rgba_color, dtype=np.uint8)
-    ply_str = 'ply\nformat ascii 1.0\nelement vertex {0}\nproperty float x\nproperty float y\nproperty float z\n'\
-    'property uint8 red\nproperty uint8 green\nproperty uint8 blue\nproperty uint8 alpha\n'\
-    'element face {1}\nproperty list uint8 uint vertex_indices\nend_header\n'.format(len(vertices), len(indices))
-    for i in range(len(vertices)):
-        v = vertices[i]
-        curr_rgba = rgba_color[i]
-        ply_str += '{0} {1} {2} {3} {4} {5} {6}\n'.format(v[0], v[1], v[2],
-                    curr_rgba[0], curr_rgba[1], curr_rgba[2], curr_rgba[3])
-    for face in indices:
-        ply_str += '3 {0} {1} {2}\n'.format(face[0], face[1], face[2])
-    return ply_str.encode()
+    # ply file requires 1D object arrays,
+    vertices = np.concatenate([vertices.astype(np.object),
+                               rgba_color.astype(np.object)], axis=1)
+    vertices = np.array([tuple(el) for el in vertices],
+                        dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4'),
+                               ('red', 'u1'), ('green', 'u1'), ('blue', 'u1'),
+                               ('alpha', 'u1')])
+    # ply file requires 1D object arrays.
+    indices = np.array([tuple([el], ) for el in indices],
+                       dtype=[('vertex_indices', 'i4', (3,))])
+    PlyData([PlyElement.describe(vertices, 'vertex'),
+             PlyElement.describe(indices, 'face')]).write(dest_path)
 
 
-def ply_vertex_generator(vertices):
-    ply_str = ""
-    for v in vertices:
-        ply_str += '{0} {1} {2}\n'.format(v[0], v[1], v[2])
-    return ply_str
-
-
-def ply_index_generator(indices):
-    ply_str = ""
-    for face in indices:
-        ply_str += '3 {0} {1} {2}\n'.format(face[0], face[1], face[2])
-    return ply_str
-
-
-def make_ply_string_wocolor(indices, vertices, normals, nb_cpus=1):
+def make_ply_string_wocolor(dest_path, indices, vertices):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -710,7 +757,6 @@ def make_ply_string_wocolor(indices, vertices, normals, nb_cpus=1):
     ----------
     indices : iterable of indices (int)
     vertices : iterable of vertices (int)
-    normals : iterable of normals (float)
 
     Returns
     -------
@@ -721,20 +767,14 @@ def make_ply_string_wocolor(indices, vertices, normals, nb_cpus=1):
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
-    ply_str = 'ply\nformat ascii 1.0\nelement vertex {0}\nproperty float x\nproperty float y\nproperty float z\n'\
-    'element face {1}\nproperty list uint8 uint vertex_indices\nend_header\n'.format(len(vertices), len(indices))
-    params = np.array_split(vertices, 100)
-    res = start_multiprocess_imap(ply_vertex_generator, params, nb_cpus=nb_cpus)
-    for el in res:
-        ply_str += el
-    params = np.array_split(indices, 100)
-    res = start_multiprocess_imap(ply_index_generator, params, nb_cpus=nb_cpus)
-    for el in res:
-        ply_str += el
-    return ply_str.encode()
+    vertices = np.array([tuple(el) for el in vertices], dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
+    indices = np.array([tuple([el], ) for el in indices],dtype=[('vertex_indices', 'i4', (3,))])
+    PlyData([PlyElement.describe(vertices, 'vertex'),
+             PlyElement.describe(indices, 'face')]).write(dest_path)
 
 
-def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname, nb_cpus=1):
+def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
+                    force_overwrite=False):
     """
     Writes mesh as .ply's to k.zip file.
 
@@ -753,16 +793,17 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname, nb_cpus=1):
         log_proc.warn("'write_mesh2kzip' call with empty vertex array. Did not"
                       " write data to kzip.")
         return
+    tmp_dest_p = '{}_{}'.format(k_path, ply_fname)
     if color is not None:
-        ply_str = make_ply_string(ind, vert.astype(np.float32), norm, color)
+        make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color)
     else:
-        ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm,
-                                          nb_cpus=nb_cpus)
-    write_txt2kzip(k_path, ply_str, ply_fname)
+        make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32))
+    write_data2kzip(k_path, tmp_dest_p, ply_fname,
+                    force_overwrite=force_overwrite)
 
 
 def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
-                      force_overwrite=False):
+                      force_overwrite=True, verbose=True):
     """
     Writes meshes as .ply's to k.zip file.
 
@@ -777,21 +818,37 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
         rgba between 0 and 255
     ply_fnames : list of str
     force_overwrite : bool
+    verbose : bool
     """
-    ply_strs = []
+    if not force_overwrite:
+        raise NotImplementedError('Currently modification of data in existing kzip is not implemented.')
+    tmp_paths = []
+    if verbose:
+        log_proc.info('Generating ply files.')
+        pbar = tqdm.tqdm(total=len(inds))
+    write_out_ply_fnames = []
     for i in range(len(inds)):
         vert = verts[i]
         ind = inds[i]
         norm = norms[i]
         color = colors[i]
+        ply_fname = ply_fnames[i]
+        tmp_dest_p = '{}_{}'.format(k_path, ply_fname)
         if len(vert) == 0:
-            raise ValueError("Mesh with zero-length vertex array.")
+            log_proc.warning("Mesh with zero-length vertex array. Skipping.")
+            continue
         if color is not None:
-            ply_str = make_ply_string(ind, vert.astype(np.float32), norm, color)
+            make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color)
         else:
-            ply_str = make_ply_string_wocolor(ind, vert.astype(np.float32), norm)
-        ply_strs.append(ply_str)
-    texts2kzip(k_path, ply_strs, ply_fnames, force_overwrite=force_overwrite)
+            make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32))
+        tmp_paths.append(tmp_dest_p)
+        write_out_ply_fnames.append(ply_fname)
+        if verbose:
+            pbar.update(1)
+    if verbose:
+        pbar.close()
+    data2kzip(k_path, tmp_paths, write_out_ply_fnames, force_overwrite=force_overwrite,
+              verbose=verbose)
 
 
 def get_bb_size(coords):
@@ -835,7 +892,8 @@ def compartmentalize_mesh(ssv, pred_key_appendix=""):
     pred_coords = np.concatenate(locs)
     assert pred_coords.ndim == 2, "Sample locations of ssv have wrong shape."
     assert pred_coords.shape[1] == 3, "Sample locations of ssv have wrong shape."
-    ind, vert, axoness = ssv._pred2mesh(pred_coords, preds, k=3, colors=(0, 1, 2))
+    ind, vert, axoness = ssv._pred2mesh(pred_coords, preds, k=3,
+                                        colors=(0, 1, 2))
     # get axoness of each vertex where indices are pointing to
     ind_comp = axoness[ind]
     ind = ind.reshape(-1, 3)
@@ -878,7 +936,7 @@ def mesh_creator_sso(ssv):
         ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
         _ = ssv._load_obj_mesh(obj_type="conn", rewrite=False)
     except KeyError:
-        print("Loading 'conn' objects failed for SSV %s."
+        log_proc.error("Loading 'conn' objects failed for SSV %s."
               % ssv.id)
     ssv.clear_cache()
 
@@ -889,7 +947,7 @@ def mesh_chunk(args):
     ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
     obj_ixs = list(ad.keys())
     if len(obj_ixs) == 0:
-        print("EMPTY ATTRIBUTE DICT", attr_dir)
+        log_proc.warning("EMPTY ATTRIBUTE DICT", attr_dir)
         return
     voxel_dc = VoxelStorage(attr_dir + "/voxel.pkl", disable_locking=True)
     md = MeshStorage(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)
@@ -917,3 +975,50 @@ def mesh_chunk(args):
         vertices *= scaling
         md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
     md.push()
+
+
+def mesh2obj_file(dest_path, mesh, color=None, center=None):
+    """
+    Writes mesh to .obj file.
+
+    Parameters
+    ----------
+    mesh : List[np.array]
+     flattend arrays of indices (triangle faces), vertices and normals
+    center : np.array
+
+
+    Returns
+    -------
+
+    """
+    options = openmesh.Options()
+    options += openmesh.Options.Binary
+    mesh_obj = openmesh.TriMesh()
+    ind, vert, norm = mesh
+    if vert.ndim == 1:
+        vert = vert.reshape(-1 ,3)
+    if ind.ndim == 1:
+        ind = ind.reshape(-1 ,3)
+    if center is not None:
+        vert -= center
+    vert_openmesh = []
+    if color is not None:
+        mesh_obj.request_vertex_colors()
+        options += openmesh.Options.VertexColor
+        if color.ndim == 1:
+            color = np.array([color] * len(vert))
+        color = color.astype(np.float64)  # required by openmesh
+    for ii, v in enumerate(vert):
+        v = v.astype(np.float64)  # Point requires double
+        v_openmesh = mesh_obj.add_vertex(openmesh.TriMesh.Point(v[0], v[1], v[2]))
+        if color is not None:
+            mesh_obj.set_color(v_openmesh, openmesh.TriMesh.Color(*color[ii]))
+        vert_openmesh.append(v_openmesh)
+    for f in ind:
+        f_openmesh = [vert_openmesh[f[0]], vert_openmesh[f[1]],
+                      vert_openmesh[f[2]]]
+        mesh_obj.add_face(f_openmesh)
+    result = openmesh.write_mesh(mesh_obj, dest_path, options)
+    if not result:
+        log_proc.error("Error occured when writing mesh to .obj file.")

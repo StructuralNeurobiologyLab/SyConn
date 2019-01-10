@@ -13,12 +13,15 @@ import glob
 import numpy as np
 import os
 from collections import Counter
+
+from . import log_proc
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-from ..reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
+from ..reps.super_segmentation import SuperSegmentationObject, \
+    SuperSegmentationDataset
 from ..reps import segmentation, super_segmentation
 from ..proc.meshes import mesh_creator_sso
+script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
@@ -38,7 +41,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
             _write_super_segmentation_dataset_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "write_super_segmentation_dataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -97,7 +100,6 @@ def _write_super_segmentation_dataset_thread(args):
     attr_dict = dict(id=[])
 
     for ssv_obj_id in ssv_obj_ids:
-        print(ssv_obj_id)
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
                                                     new_mapping=True,
                                                     create=True)
@@ -162,6 +164,18 @@ def _write_super_segmentation_dataset_thread(args):
 def aggregate_segmentation_object_mappings(ssd, obj_types,
                                            stride=1000, qsub_pe=None,
                                            qsub_queue=None, nb_cpus=1):
+    """
+
+    Parameters
+    ----------
+    ssd : SuperSegmentationDataset
+    obj_types : List[str]
+    stride : int
+    qsub_pe : Optional[str]
+    qsub_queue : Optional[str]
+    nb_cpus : int
+    """
+
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
     assert "sv" in ssd.version_dict
@@ -178,7 +192,7 @@ def aggregate_segmentation_object_mappings(ssd, obj_types,
             _aggregate_segmentation_object_mappings_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "aggregate_segmentation_object_mappings",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -226,6 +240,17 @@ def _aggregate_segmentation_object_mappings_thread(args):
 
 def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
                             qsub_queue=None, nb_cpus=1):
+    """
+
+    Parameters
+    ----------
+    ssd : SuperSegmentationDataset
+    obj_types : List[str]
+    stride : int
+    qsub_pe : Optional[str]
+    qsub_queue : Optional[str]
+    nb_cpus : int
+    """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
 
@@ -240,7 +265,7 @@ def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
         results = sm.start_multiprocess(_apply_mapping_decisions_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "apply_mapping_decisions",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -281,11 +306,13 @@ def _apply_mapping_decisions_thread(args):
             assert obj_type in ssv.version_dict
 
             if not "mapping_%s_ratios" % obj_type in ssv.attr_dict:
-                print("No mapping ratios found")
+                log_proc.error("No mapping ratios found in SSV {}."
+                               "".format(ssv_id))
                 continue
 
             if not "mapping_%s_ids" % obj_type in ssv.attr_dict:
-                print("no mapping ids found")
+                log_proc.error("No mapping ids found in SSV {}."
+                               "".format(ssv_id))
                 continue
 
             if lower_ratio is None:
@@ -293,14 +320,17 @@ def _apply_mapping_decisions_thread(args):
                     lower_ratio = ssv.config.entries["LowerMappingRatios"][
                         obj_type]
                 except:
-                    raise ("Lower ratio undefined")
+                    msg = "Lower ratio undefined. SSV {}.".format(ssv_id)
+                    log_proc.critical(msg)
+                    raise ValueError(msg)
 
             if upper_ratio is None:
                 try:
                     upper_ratio = ssv.config.entries["UpperMappingRatios"][
                         obj_type]
                 except:
-                    print("Upper ratio undefined - 1. assumed")
+                    log_proc.error("Upper ratio undefined - 1. assumed. "
+                                   "SSV {}".format(ssv_id))
                     upper_ratio = 1.
 
             if sizethreshold is None:
@@ -308,7 +338,9 @@ def _apply_mapping_decisions_thread(args):
                     sizethreshold = ssv.config.entries["Sizethresholds"][
                         obj_type]
                 except:
-                    raise ("Size threshold undefined")
+                    msg = "Size threshold undefined. SSV {}.".format(ssv_id)
+                    log_proc.critical(msg)
+                    raise ValueError(msg)
 
             obj_ratios = np.array(ssv.attr_dict["mapping_%s_ratios" % obj_type])
 
@@ -366,7 +398,7 @@ def map_synaptic_conn_objects(ssd, conn_version=None, stride=1000,
             _map_synaptic_conn_objects_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_synaptic_conn_objects",
                                      pe=qsub_pe, queue=qsub_queue,

@@ -24,7 +24,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = cps._map_objects_to_conn_thread(args)
+out = cps._map_objects_to_synssv_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

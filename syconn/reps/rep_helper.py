@@ -8,6 +8,7 @@
 import numpy as np
 from scipy import spatial
 from collections import Counter
+
 from ..reps import log_reps
 
 

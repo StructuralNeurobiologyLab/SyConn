@@ -5,28 +5,25 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-try:
-    import cPickle as pkl
-except ImportError:
-    import pickle as pkl
-from syconn.reps.super_segmentation_helper import create_sso_skeleton, extract_skel_features, associate_objs_with_skel_nodes
-from syconn.reps.super_segmentation_object import SuperSegmentationObject
 import numpy as np
 import re
 import glob
 import os
-from collections import Counter
 from multiprocessing.pool import ThreadPool
-
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
 from knossos_utils import knossosdataset
-from . import segmentation  # TODO: del
-# from ..reps import segmentation
-from ..config import parser
-from ..handler.basics import load_pkl2obj, write_obj2pkl
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
+from multiprocessing import cpu_count
+from . import segmentation  # TODO: del
+from ..config import parser
+from ..handler.basics import load_pkl2obj, write_obj2pkl
+from ..reps.super_segmentation_helper import create_sso_skeleton
 from ..proc.ssd_assembly import assemble_from_mergelist
 from ..mp import qsub_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
@@ -87,11 +84,14 @@ class SuperSegmentationDataset(object):
             other_datasets = glob.glob(self.working_dir + "/%s_*" % self.type)
             max_version = -1
             for other_dataset in other_datasets:
-                other_version = \
-                    int(re.findall("[\d]+",
-                                   os.path.basename(other_dataset))[-1])
-                if max_version < other_version:
-                    max_version = other_version
+                try:
+                    other_version = \
+                        int(re.findall("[\d]+",
+                                       os.path.basename(other_dataset))[-1])
+                    if max_version < other_version:
+                        max_version = other_version
+                except IndexError:  # version is not an integer, found version could be e.g. 'tmp'
+                    pass
 
             self._version = max_version + 1
         else:
@@ -327,7 +327,7 @@ class SuperSegmentationDataset(object):
                     reskeletonize_objects_small_ones_thread,
                     multi_params, nb_cpus=nb_cpus)
 
-            elif qu.__QSUB__:
+            elif qu.__BATCHJOB__:
                 path_to_out = qu.QSUB_script(multi_params,
                                              "reskeletonize_objects_small_ones",
                                              n_cores=nb_cpus,
@@ -344,7 +344,7 @@ class SuperSegmentationDataset(object):
                     reskeletonize_objects_big_ones_thread,
                     multi_params, nb_cpus=1)
 
-            elif qu.__QSUB__:
+            elif qu.__BATCHJOB__:
                 path_to_out = qu.QSUB_script(multi_params,
                                              "reskeletonize_objects_big_ones",
                                              n_cores=10,
@@ -369,7 +369,7 @@ class SuperSegmentationDataset(object):
                 multi_params, nb_cpus=nb_cpus)
             no_skel_cnt = np.sum(results)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "export_skeletons",
                                          n_cores=nb_cpus,
@@ -402,7 +402,7 @@ class SuperSegmentationDataset(object):
                 multi_params, nb_cpus=nb_cpus)
             no_skel_cnt = np.sum(results)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "associate_objs_with_skel_nodes",
                                          n_cores=nb_cpus,
@@ -425,7 +425,7 @@ class SuperSegmentationDataset(object):
                 predict_axoness_skelbased_thread,
                 multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "predict_axoness_skelbased",
                                          n_cores=nb_cpus,
@@ -448,7 +448,7 @@ class SuperSegmentationDataset(object):
                 predict_cell_type_skelbased_thread,
                 multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.__BATCHJOB__:
             path_to_out = qu.QSUB_script(multi_params,
                                          "predict_cell_type_skelbased",
                                          n_cores=nb_cpus,
@@ -508,7 +508,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
             _write_super_segmentation_dataset_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "write_super_segmentation_dataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -637,7 +637,7 @@ def export_to_knossosdataset(ssd, kd, stride=1000, qsub_pe=None,
         results = sm.start_multiprocess(_export_ssv_to_knossosdataset_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_ssv_to_knossosdataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -712,7 +712,7 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
         results = sm.start_multiprocess(_convert_knossosdataset_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "convert_knossosdataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -779,7 +779,7 @@ def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
             multi_params, nb_cpus=nb_cpus)
         no_skel_cnt = np.sum(results)
 
-    elif qu.__QSUB__:
+    elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_skeletons",
                                      n_cores=nb_cpus,
@@ -1209,10 +1209,13 @@ def create_sso_skeletons_thread(args):
     version_dict = args[2]
     working_dir = args[3]
 
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
+    n_cpus_avail = cpu_count()
+    ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
+                                   version_dict=version_dict)
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv.nb_cpus = n_cpus_avail
         ssv.load_skeleton()
         create_sso_skeleton(ssv)
         if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
@@ -1249,7 +1252,8 @@ def map_ssv_semseg(args):
     working_dir = args[3]
     kwargs_semseg2mesh = args[4]
 
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
+    ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
+                                   version_dict=version_dict)
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)

@@ -28,7 +28,11 @@ def assemble_from_mergelist(ssd, mergelist):
     for sv_id in mergelist.values():
         ssd.mapping_dict[sv_id] = []
 
-    ssd._id_changer = np.ones(np.max(list(mergelist.keys())) + 1,
+    # Changed -1 defaults to 0
+    # ssd._id_changer = np.zeros(np.max(list(mergelist.keys())) + 1,
+    #                           dtype=np.uint)
+    # TODO: check if np.int might be a problem for big datasets
+    ssd._id_changer = np.ones(int(np.max(list(mergelist.keys())) + 1),
                               dtype=np.int) * (-1)
 
     for sv_id in mergelist.keys():

@@ -6,9 +6,10 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 import numpy as np
+import os
+
 from ..reps import super_segmentation as ss
 from ..reps import super_segmentation_helper as ssh
-import os
 from ..proc import log_proc
 
 

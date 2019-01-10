@@ -24,14 +24,16 @@ config = {
                          'numpy', 'scipy', 'lz4', 'h5py', 'networkx', 'numba',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn',
-                         'scikit-image', 'm2r',
-                         'sphinx-autodoc-typehints'],
+                         'scikit-image', 'm2r', 'plyfile', 'vtkInterface',
+                         'sphinx-autodoc-typehints', 'openmesh', 'pytest',
+                         'pytest-runner', 'snappy', 'python-snappy'],
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_utils'
                          '/tarball/master#egg=knossos_utils',
                          'https://github.com/ELEKTRONN/ELEKTRONN2'
                          '/tarball/master#egg=ELEKTRONN2'],
     'packages': find_packages(exclude=['scripts']),
-    'long_description': readme,
+    'long_description': readme, 'setup_requires': ["pytest-runner", ],
+    'tests_require': ["pytest", ],
 }
 setup(**config)

@@ -33,7 +33,9 @@ for g in ch:
     # corresponding SVs are parsed explicitly ('sv_ids=sv_ixs')
     sv_ixs = np.sort(list(g.nodes()))
     sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
-                                  create=False, sv_ids=sv_ixs)
+                                  create=False, sv_ids=sv_ixs,
+                                  enable_locking_so=True)
+    sso.load_attr_dict()
     # nodes of sso._rag need to be SV
     new_G = nx.Graph()
     for e in g.edges():
@@ -42,5 +44,6 @@ for g in ch:
     sso._rag = new_G
     sso.render_views(add_cellobjects=False, woglia=False, overwrite=True,
                      skip_indexviews=True)
+
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)
