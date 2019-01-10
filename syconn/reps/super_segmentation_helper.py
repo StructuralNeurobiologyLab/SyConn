@@ -1524,6 +1524,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         Number of nearest vertices to average over. If k=0 unpredicted vertices
          will be treated as 'unpredicted' class.
     colors : Optional[Tuple[list]]
+        np.array with as many entries as the maximum label of 'semseg_key'
+        predictions with values between 0 and 255 (will be interpreted as uint8).
         If it is None, the majority label according to kNN will be returned
         instead. Note to add a color for unpredicted vertices if k==0; here
         illustrated with by the spine prediction example:
@@ -1538,7 +1540,6 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
     """
     ld = sso.label_dict('vertex')
     if force_overwrite or not semseg_key in ld:
-        colors = np.array(colors) * 255
         if nb_views is None:
             # load default
             i_views = sso.load_views(index_views=True).flatten()
@@ -1584,6 +1585,10 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         maj_vote = ld[semseg_key]
     if colors is not None:
         col = colors[maj_vote].astype(np.uint8)
+        if np.sum(col) == 0:
+            log_reps.warn('All colors-zero warning during "semseg2mesh"'
+                          ' of SSO {}. Make sure color values have uint8 range '
+                          '0...255'.format(sso.id))
     else:
         col = maj_vote
     if dest_path is not None:

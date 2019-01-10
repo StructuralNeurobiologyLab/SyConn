@@ -1336,16 +1336,22 @@ def _collect_properties_from_ssv_partners_thread(args):
             synssv_o.load_attr_dict()
 
             axoness = []
+            spiness = []
             celltypes = []
             for ssv_partner_id in synssv_o.attr_dict["neuron_partners"]:
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
                 ssv_o.load_attr_dict()
                 curr_ax = ssv_o.axoness_for_coords([synssv_o.rep_coord],
-                          pred_type='axoness_avg10000')[0]
-                axoness.append(curr_ax)
+                                                   pred_type='axoness_avg10000')
+                axoness.append(curr_ax[0])
+                # TODO: maybe use more than only a single rep_coord
+                curr_sp = ssv_o.semseg_for_coords([synssv_o.rep_coord],
+                                                  'spiness')
+                spiness.append(curr_sp)
                 celltypes.append(ssv_o.attr_dict['celltype_cnn'])
             synssv_o.attr_dict.update({"partner_axoness": axoness})
             synssv_o.attr_dict.update({"partner_celltypes": celltypes})
+            synssv_o.attr_dict.update({"partner_spiness": spiness})
             this_attr_dc[synssv_id] = synssv_o.attr_dict
 
         this_attr_dc.push()
