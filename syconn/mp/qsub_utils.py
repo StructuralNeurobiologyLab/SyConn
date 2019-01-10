@@ -55,6 +55,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 sge_additional_flags=None, iteration=1, max_iterations=3,
                 params_orig_id=None, python_path=None, disable_mem_flag=False):
     """
+    TODO: change `queue` and `queue` to be set globally in global_params. All wrappers around QSUB_script should then only have a flage like 'use_batchjob'
+
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
 

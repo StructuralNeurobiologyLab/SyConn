@@ -65,3 +65,6 @@ containing the agglomerated SVs, several analysis steps can be applied:
 * [Identification of synapses and extraction of a wiring diagram](contact_site_classification.md)
 
 
+## Flow chart of SyConn
+
+<img src="https://docs.google.com/drawings/d/e/2PACX-1vSY7p2boPxb9OICxNhSrHQlvuHTBRbSMeIOgQ4_NV6pflxc0FKJvPBtskYMAgJsX_OP-6CNmb08tLC5/pub?w=1920&amp;h=1024">

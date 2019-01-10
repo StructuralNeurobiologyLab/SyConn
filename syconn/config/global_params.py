@@ -61,7 +61,9 @@ py36path = '/u/pschuber/anaconda3/envs/py36/bin/python'  # TODO: make this more 
 DISABLE_FILE_LOGGING = True
 
 # --------- CONTACT SITE PARAMETERS
-cs_gap_nm = 300
+# Synaptic junction bounding box diagonal threshold in nm; objects above will not be used during `syn_gen_via_cset`
+thresh_sj_bbd_syngen = 25e3
+cs_gap_nm = 250
 # mapping parameters in 'map_objects_to_synssv'; assignment of cellular organelles to syn_ssv
 max_vx_dist_nm = 2000
 max_rep_coord_dist_nm = 4000

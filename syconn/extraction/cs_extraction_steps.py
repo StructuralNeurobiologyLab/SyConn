@@ -51,45 +51,6 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
         raise Exception("QSUB not available")
 
 
-def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
-                              n_folders_fs=10000, suffix="",
-                              n_max_co_processes=None, qsub_pe=None,
-                              qsub_queue=None, nb_cpus=1):
-
-    all_times = []
-    step_names = []
-    time_start = time.time()
-    oes.extract_voxels(cset, filename, [hdf5name], dataset_names=['cs_agg'],
-                       n_folders_fs=n_folders_fs,
-                       chunk_list=None, suffix=suffix, workfolder=working_dir,
-                       use_work_dir=True, qsub_pe=qsub_pe,
-                       qsub_queue=qsub_queue,
-                       n_max_co_processes=n_max_co_processes,
-                       nb_cpus=nb_cpus)
-    all_times.append(time.time() - time_start)
-    step_names.append("voxel extraction")
-    print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
-
-    # --------------------------------------------------------------------------
-
-    time_start = time.time()
-    oes.combine_voxels(working_dir, ['cs_agg'],
-                       n_folders_fs=n_folders_fs, qsub_pe=qsub_pe,
-                       qsub_queue=qsub_queue,
-                       n_max_co_processes=n_max_co_processes,
-                       nb_cpus=nb_cpus)
-    all_times.append(time.time() - time_start)
-    step_names.append("combine voxels")
-    print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
-
-    print("\nTime overview:")
-    for ii in range(len(all_times)):
-        print("%s: %.3fs" % (step_names[ii], all_times[ii]))
-    print("--------------------------")
-    print("Total Time: %.1f min" % (np.sum(all_times) / 60.))
-    print("--------------------------\n\n")
-
-
 def _contact_site_detection_thread(args):
     chunk = args[0]
     knossos_path = args[1]
@@ -182,6 +143,45 @@ def process_block_nonzero(edges, arr, stencil=(7, 7, 3)):
         chunk = arr[x: x + stencil[0], y: y + stencil[1], z: z + stencil[2]]
         out[x, y, z] = kernel(chunk, center_id)
     return out
+
+
+def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
+                              n_folders_fs=10000, suffix="",
+                              n_max_co_processes=None, qsub_pe=None,
+                              qsub_queue=None, nb_cpus=1):
+
+    all_times = []
+    step_names = []
+    time_start = time.time()
+    oes.extract_voxels(cset, filename, [hdf5name], dataset_names=['cs_agg'],
+                       n_folders_fs=n_folders_fs,
+                       chunk_list=None, suffix=suffix, workfolder=working_dir,
+                       use_work_dir=True, qsub_pe=qsub_pe,
+                       qsub_queue=qsub_queue,
+                       n_max_co_processes=n_max_co_processes,
+                       nb_cpus=nb_cpus)
+    all_times.append(time.time() - time_start)
+    step_names.append("voxel extraction")
+    print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
+
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    oes.combine_voxels(working_dir, ['cs_agg'],
+                       n_folders_fs=n_folders_fs, qsub_pe=qsub_pe,
+                       qsub_queue=qsub_queue,
+                       n_max_co_processes=n_max_co_processes,
+                       nb_cpus=nb_cpus)
+    all_times.append(time.time() - time_start)
+    step_names.append("combine voxels")
+    print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
+
+    print("\nTime overview:")
+    for ii in range(len(all_times)):
+        print("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    print("--------------------------")
+    print("Total Time: %.1f min" % (np.sum(all_times) / 60.))
+    print("--------------------------\n\n")
 
 
 def _extract_agg_cs_thread(args):

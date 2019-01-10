@@ -35,14 +35,14 @@ if __name__ == "__main__":
     sv_ids = sd.ids
     diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
     log.info('Found {} single connected component SVs which were'
-                  ' missing in initial RAG.'.format(len(diff)))
+             ' missing in initial RAG.'.format(len(diff)))
 
     for ix in diff:
         G.add_node(ix)
 
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
     log.info("Found {} SVs in initial RAG after adding size-one connected "
-                  "components. Writing RAG to pkl.".format(len(all_sv_ids_in_rag)))
+             "components. Writing RAG to pkl.".format(len(all_sv_ids_in_rag)))
 
     if not os.path.isdir(wd + "/glia/"):
         os.makedirs(wd + "/glia/")
@@ -56,7 +56,6 @@ if __name__ == "__main__":
     collect_glia_sv()
 
     # # here use reconnected RAG or initial rag
-    # recon_nx = wd + "/reconnect_rag.nx"
     recon_nx = G
     # create glia / neuron RAGs
     write_glia_rag(recon_nx, min_cc_size_neuron, suffix=rag_suffix)

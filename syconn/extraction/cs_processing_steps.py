@@ -79,7 +79,16 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                           stride=1000, qsub_pe=None, qsub_queue=None, nb_cpus=None,
                           resume_job=False, n_max_co_processes=None):
     """
-    TODO: combine syn attributes when during combine/split step and save to syn_ssv attribute dict! List resulting attributes here.
+    Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
+    syn-objects on SSV level and aggregates the respective 'syn' attributes
+    ['sj_id', 'cs_id', 'id_sj_ratio', 'id_cs_ratio', 'background_overlap_ratio',
+    'cs_size', 'sj_size_pseudo']. This method requires the execution of
+    'syn_gen_via_cset' (or equivalent) beforehand.
+
+    All objects of the resulting 'syn_ssv' SegmentationDataset contain the
+    following attributes:
+    ['sj_ids', 'cs_ids', 'id_sj_ratio', 'id_cs_ratio', 'background_overlap_ratio',
+    'neuron_partners']
 
     Parameters
     ----------
@@ -93,9 +102,6 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     resume_job :
     nb_cpus :
     n_max_co_processes :
-
-    Returns
-    -------
 
     """
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
@@ -128,15 +134,13 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                              syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm])
         i_block += 1
     if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_combine_and_split_syn_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+        _ = sm.start_multiprocess(_combine_and_split_syn_thread,
+                                  multi_params, nb_cpus=nb_cpus)
 
     elif qu.__BATCHJOB__:
-        path_to_out = qu.QSUB_script(multi_params, "combine_and_split_syn",
-                                     resume_job=resume_job, pe=qsub_pe,
-                                     queue=qsub_queue,
-                                     script_folder=script_folder,
-                                     n_max_co_processes=n_max_co_processes)
+        _ = qu.QSUB_script(multi_params, "combine_and_split_syn", pe=qsub_pe,
+                           resume_job=resume_job, script_folder=script_folder,
+                           queue=qsub_queue, n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
 
@@ -153,7 +157,7 @@ def _combine_and_split_syn_thread(args):
     cs_gap_nm = args[6]
 
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
-                                               version=cs_version)
+                                                  version=cs_version)
 
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd,
                                               version=syn_version)
@@ -162,15 +166,10 @@ def _combine_and_split_syn_thread(args):
 
     n_items_for_path = 0
     cur_path_id = 0
-
-    try:
-        os.makedirs(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id])
-    except:
-        pass
-    voxel_dc = VoxelStorage(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
-                         "/voxel.pkl", read_only=False)
-    attr_dc = AttributeDict(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
-                            "/attr_dict.pkl", read_only=False)
+    base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
+    os.makedirs(base_dir, exist_ok=True)
+    voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
+    attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
 
     p_parts = voxel_rel_paths[cur_path_id].strip("/").split("/")
     next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]),
@@ -181,15 +180,21 @@ def _combine_and_split_syn_thread(args):
 
         ssv_ids = ch.sv_id_to_partner_ids_vec([item[0]])[0]
 
+        syn_attr_list = []  # used to collect syn properties
         voxel_list = sd_syn.get_segmentation_object(item[1][0]).voxel_list
         for syn_id in item[1][1:]:
             syn_object = sd_syn.get_segmentation_object(syn_id)
+            syn_object.load_attr_dict()
+            syn_attr_list.append(syn_object.attr_dict)
             voxel_list = np.concatenate([voxel_list, syn_object.voxel_list])
+        syn_attr_list = np.array(syn_attr_list)
 
         ccs = cc_large_voxel_lists(voxel_list * scaling, cs_gap_nm)
 
         for this_cc in ccs:
-            this_vx = voxel_list[np.array(list(this_cc))]
+            this_cc_mask = np.array(list(this_cc))
+            this_attr = syn_attr_list[this_cc_mask]
+            this_vx = voxel_list[this_cc_mask]
             abs_offset = np.min(this_vx, axis=0)
             this_vx -= abs_offset
 
@@ -198,7 +203,7 @@ def _combine_and_split_syn_thread(args):
 
             try:
                 voxel_dc[next_id] = [id_mask], [abs_offset]
-            except:
+            except Exception:
                 debug_out_fname = "{}/{}_{}_{}_{}.npy".format(
                     sd_syn_ssv.so_storage_path, next_id, abs_offset[0],
                     abs_offset[1], abs_offset[2])
@@ -207,11 +212,40 @@ def _combine_and_split_syn_thread(args):
                 log_extraction.error(msg)
                 np.save(debug_out_fname, this_vx)
                 raise ValueError(msg)
+            # aggregate syn properties:
+            # ['sj_id', 'cs_id', 'id_sj_ratio', 'id_cs_ratio', 'background_overlap_ratio',
+            #  'cs_size', 'sj_size_pseudo']
+            syn_props_agg = {}
+            for dc in this_attr:
+                for k, v in dc.items():
+                    syn_props_agg.setdefault(k, []).append(v)
+            # store cs and sj IDs
+            syn_props_agg['sj_ids'] = syn_props_agg['sj_id']
+            del syn_props_agg['sj_id']
+            syn_props_agg['cs_ids'] = syn_props_agg['cs_id']
+            del syn_props_agg['cs_id']
+            # calculate weighted mean of sj, cs and background ratios
+            syn_props_agg['sj_size_pseudo'] = np.array([syn_props_agg['sj_size_pseudo']])
+            syn_props_agg['cs_size'] = np.array([syn_props_agg['cs_size']])
+            syn_props_agg['id_sj_ratio'] = np.array([syn_props_agg['id_sj_ratio']])
+            syn_props_agg['id_cs_ratio'] = np.array([syn_props_agg['id_cs_ratio']])
+            syn_props_agg['background_overlap_ratio'] = np.array([syn_props_agg['background_overlap_ratio']])
+            sj_size_pseudo_norm = np.sum(syn_props_agg['sj_size_pseudo'])
+            cs_size_norm = np.sum(syn_props_agg['cs_size'])
+            sj_s_w = syn_props_agg['id_sj_ratio'] * syn_props_agg['sj_size_pseudo']
+            syn_props_agg['id_sj_ratio'] = np.sum(sj_s_w) / sj_size_pseudo_norm
+            back_s_w = syn_props_agg['background_overlap_ratio'] * syn_props_agg['sj_size_pseudo']
+            syn_props_agg['background_overlap_ratio'] = np.sum(back_s_w) / sj_size_pseudo_norm
+            cs_s_w = syn_props_agg['id_cs_ratio'] * syn_props_agg['cs_size']
+            syn_props_agg['id_cs_ratio'] = np.sum(cs_s_w) / cs_size_norm
 
-            attr_dc[next_id] = dict(neuron_partners=ssv_ids)
+            this_attr_dc = dict(neuron_partners=ssv_ids)
+            this_attr_dc.update(syn_props_agg)
+            attr_dc[next_id] = this_attr_dc
             next_id += 100000
 
         if n_items_for_path > n_per_voxel_path:
+            # TODO: passing explicit dest_path might not be required here
             voxel_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
                               "/voxel.pkl")
             attr_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
@@ -223,18 +257,14 @@ def _combine_and_split_syn_thread(args):
 
             next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]),
                                           int(p_parts[2])))
-            try:
-                os.makedirs(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id])
-            except:
-                pass
 
-            voxel_dc = VoxelStorage(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
-                                 "voxel.pkl", read_only=False)
-            attr_dc = AttributeDict(sd_syn_ssv.so_storage_path +
-                                    voxel_rel_paths[cur_path_id] +
-                                    "attr_dict.pkl", read_only=False)
+            base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
+            os.makedirs(base_dir, exist_ok=True)
+            voxel_dc = VoxelStorage(base_dir + "voxel.pkl", read_only=False)
+            attr_dc = AttributeDict(base_dir + "attr_dict.pkl", read_only=False)
 
     if n_items_for_path > 0:
+        # TODO: passing explicit dest_path might not be required here
         voxel_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
                           "/voxel.pkl")
         attr_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
@@ -326,6 +356,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
         raise Exception("QSUB not available")
 
     return cs
+
 
 # TODO: Use this in case contact objects are required
 def _combine_and_split_cs_agg_thread(args):
@@ -470,7 +501,6 @@ def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000,
 
 
 # Code for mapping SJ to CS, three different ways: via ChunkDataset (currently used), KnossosDataset, SegmentationDataset+
-
 # TODO: SegmentationDataset version of below, probably not necessary anymore
 def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
                              n_folders_fs=10000,
@@ -560,9 +590,8 @@ def _overlap_mapping_sj_to_cs_thread(args):
 
                 voxel_dc[next_conn_id] = [vx], [bounding_box[0]]
 
-                attr_dc[next_conn_id] = {'sj_id': sj_id,
-                                         'cs_id': cs_id,
-                                         'ssv_partners': cs.lookup_in_attribute_dict('neuron_partners')}
+                attr_dc[next_conn_id] = {'sj_id': sj_id, 'cs_id': cs_id,
+                                         'neuron_partners': cs.lookup_in_attribute_dict('neuron_partners')}
 
                 next_conn_id += conn_sd.n_folders_fs
                 n_items_for_path += 1
@@ -607,17 +636,16 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
     return overlap_vx_l
 
 
-def overlap_mapping_sj_to_cs_via_cset(cs_sd, sj_sd, cs_cset,
-                                    n_folders_fs=10000, n_job_chunks=1000,
-                                    qsub_pe=None, qsub_queue=None, resume_job=False,
-                                    nb_cpus=None, n_max_co_processes=None):
+def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
+                     n_job_chunks=1000, qsub_pe=None, qsub_queue=None,
+                     resume_job=False, nb_cpus=None, n_max_co_processes=None):
     """
     Creates SegmentationDataset of 'syn' objects from ChunkDataset of 'cs_agg'
     (result of contact_site extraction, does NOT require object extraction of
      'cs_agg' only the chunkdataset) and 'sj' dataset.
     Syn objects have the following attributes:
     ['sj_id', 'cs_id', 'id_sj_ratio', 'id_cs_ratio', 'background_overlap_ratio',
-    'ssv_partners']
+    'cs_size', 'sj_size_pseudo']
 
     Parameters
     ----------
@@ -645,7 +673,14 @@ def overlap_mapping_sj_to_cs_via_cset(cs_sd, sj_sd, cs_cset,
                                                create=True, n_folders_fs=n_folders_fs)
 
     for p in voxel_rel_paths:
-        os.makedirs(sd_syn.so_storage_path + p)
+        try:
+            os.makedirs(sd_syn.so_storage_path + p)
+        except FileExistsError:
+            msg = 'SegmentationDataset of type "syn" already exists. ' \
+                  '"syn_gen_via_cset" is only executed once, please make sure '\
+                  'that no previous SegmentationDataset exists/is overwritten.'
+            log_extraction.critical(msg)
+            raise FileExistsError(msg)
 
     sj_id_blocks = np.array_split(rel_sj_ids, n_job_chunks)
     voxel_rel_path_blocks = np.array_split(voxel_rel_paths, n_job_chunks)
@@ -657,20 +692,20 @@ def overlap_mapping_sj_to_cs_via_cset(cs_sd, sj_sd, cs_cset,
                              sj_sd.version, cs_sd.version, cs_cset.path_head_folder])
 
     if qsub_pe is None and qsub_queue is None:
-        _ = sm.start_multiprocess_imap(_overlap_mapping_sj_to_cs_via_cset_thread,
+        _ = sm.start_multiprocess_imap(syn_gen_via_cset_thread,
                                        multi_params, nb_cpus=nb_cpus)
 
     elif qu.__BATCHJOB__:
-        _ = qu.QSUB_script(multi_params, "overlap_mapping_sj_to_cs_via_cset",
-                                     pe=qsub_pe, queue=qsub_queue, resume_job=resume_job,
-                                     script_folder=script_folder, n_cores=nb_cpus,
-                                     n_max_co_processes=n_max_co_processes)
+        _ = qu.QSUB_script(multi_params, "syn_gen_via_cset", pe=qsub_pe,
+                           queue=qsub_queue, resume_job=resume_job,
+                           script_folder=script_folder, n_cores=nb_cpus,
+                            n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
     return sd_syn
 
 
-def _overlap_mapping_sj_to_cs_via_cset_thread(args):
+def syn_gen_via_cset_thread(args):
     wd, sj_ids, voxel_rel_paths, syn_sd_version, sj_sd_version, \
         cs_sd_version, cset_path = args
 
@@ -701,9 +736,9 @@ def _overlap_mapping_sj_to_cs_via_cset_thread(args):
         for sj_id in sj_id_block:
             sj = sj_sd.get_segmentation_object(sj_id)
             bb = sj.bounding_box
-            # TODO: HACK, hard-coded for 10-10-20 nm voxel resolution,
             #  this SJ-CS overlap method will be outdated very soon
-            if np.any((bb[1] - bb[0]) > 2500):
+            if np.any(np.linalg.norm((bb[1] - bb[0]) * sd_syn.scaling) >
+                      global_params.thresh_sj_bbd_syngen):
                 log_extraction.debug(
                     'Skipped huge SJ with size: {}, offset: {}, sj_id: {}, sj_c'
                     'oord: {}'.format(sj.size, sj.bounding_box[0], sj_id,
@@ -711,18 +746,19 @@ def _overlap_mapping_sj_to_cs_via_cset_thread(args):
                 continue
             vxl_sj = sj.voxels
             offset, size = bb[0], bb[1] - bb[0]
+            log_extraction.info('Loading CS chunk data of size {}'.format(size))
             cs_ids = cs_cset.from_chunky_to_matrix(size, offset, 'cs', ['cs'],
                                                    dtype=np.uint64)['cs']
             u_cs_ids, c_cs_ids = np.unique(cs_ids, return_counts=True)
-
-            zero_ratio = c_cs_ids[u_cs_ids == 0] / np.sum(c_cs_ids)
+            n_vxs_in_sjbb = float(np.sum(c_cs_ids))  # equivalent to np.prod(size) which is the volume spanned by the SJ bounding box
+            zero_ratio = c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb
             for cs_id in u_cs_ids:
                 if cs_id == 0:
                     continue
 
                 cs = cs_sd.get_segmentation_object(cs_id)
 
-                id_ratio = c_cs_ids[u_cs_ids == cs_id] / float(np.sum(c_cs_ids))
+                id_ratio = c_cs_ids[u_cs_ids == cs_id] / n_vxs_in_sjbb
                 overlap_vx = np.transpose(np.nonzero((cs_ids == cs_id) & vxl_sj)) + offset
                 cs_ratio = float(len(overlap_vx)) / cs.size
                 if len(overlap_vx) == 0:
@@ -735,14 +771,14 @@ def _overlap_mapping_sj_to_cs_via_cset_thread(args):
                 vx_block[overlap_vx[:, 0], overlap_vx[:, 1], overlap_vx[:, 2]] = True
 
                 voxel_dc[next_syn_id] = [vx_block], [bounding_box[0]]
+                # also store cs size and sj bounding box (equivalent to the sum of all cs voxels including background...)
+                # for faster calculation  of aggregated syn properties during 'syn_ssv' generation ('combine_and_split_syn')
                 attr_dc[next_syn_id] = {'sj_id': sj_id, 'cs_id': cs_id,
                                         'id_sj_ratio': id_ratio,
+                                        'sj_size_pseudo': n_vxs_in_sjbb,  # TODO: still unclear why not use sj.size, PS. This would be more intuitive.
                                         'id_cs_ratio': cs_ratio,
-                                        'background_overlap_ratio': zero_ratio,
-                                        'ssv_partners':
-                                             cs.lookup_in_attribute_dict(
-                                                 'neuron_partners')}
-
+                                        'cs_size': cs.size,
+                                        'background_overlap_ratio': zero_ratio}
                 next_syn_id += sd_syn.n_folders_fs
 
         voxel_dc.push(sd_syn.so_storage_path + rel_path + "/voxel.pkl")
@@ -835,7 +871,6 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
                     continue
 
                 cs = cs_sd.get_segmentation_object(cs_id)
-
                 id_ratio = c_cs_ids[u_cs_ids == cs_id] / float(np.sum(c_cs_ids))
                 overlap_vx = vxl[cs_ids == cs_id]
                 cs_ratio = float(len(overlap_vx)) / cs.size
@@ -848,7 +883,6 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
                 vx_block[overlap_vx[:, 0], overlap_vx[:, 1], overlap_vx[:, 2]] = True
 
                 voxel_dc[next_conn_id] = [vx_block], [bounding_box[0]]
-
                 attr_dc[next_conn_id] = {'sj_id': sj_id,
                                          'cs_id': cs_id,
                                          'id_sj_ratio': id_ratio,
@@ -921,25 +955,18 @@ def create_syn_gt(conn, path_kzip):
         assert 0 in vx_ds
 
     features = []
-
     for conn_id in conn_ids:
         conn_o = conn.get_segmentation_object(conn_id)
 
         features.append(synssv_o_features(conn_o))
-
     features = np.array(features)
-
-    rfc = ensemble.RandomForestClassifier(n_estimators=200,
-                                          max_features='sqrt',
+    rfc = ensemble.RandomForestClassifier(n_estimators=200, max_features='sqrt',
                                           n_jobs=-1)
-
     v_features = features[labels != "ambiguous"]
     v_labels = labels[labels != "ambiguous"]
     v_labels = v_labels == "synaptic"
     v_labels = v_labels.astype(np.int)
-
-    score = cross_val_score(rfc, v_features,
-                                             v_labels, cv=10)
+    score = cross_val_score(rfc, v_features, v_labels, cv=10)
     log_extraction.info('Mean score +- std: {} +- {}'.format(np.mean(score),
                                                              np.std(score)))
 
@@ -1384,7 +1411,7 @@ def export_matrix(wd, obj_version=None, dest_name=None, syn_prob_t=.5):
             #    r = m_sizes[i_syn]
             skel_node = skeleton.SkeletonNode(). \
             from_scratch(anno, c[0], c[1], c[2], radius=r)
-            skel_node.data["ssv_partners"] = m_ssv_partners[i_syn]
+            skel_node.data["neuron_partners"] = m_ssv_partners[i_syn]
             skel_node.data["size"] = m_sizes[i_syn]
             skel_node.data["syn_prob"] = m_syn_prob[i_syn]
             skel_node.data["sign"] = m_syn_sign[i_syn]

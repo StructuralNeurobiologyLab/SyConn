@@ -23,7 +23,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = cps._overlap_mapping_sj_to_cs_via_cset_thread(args)
+out = cps.syn_gen_via_cset_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

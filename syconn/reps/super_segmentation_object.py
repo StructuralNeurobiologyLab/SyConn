@@ -1461,6 +1461,9 @@ class SuperSegmentationObject(object):
             raise ValueError('Sematic segmentation of "" is not supported.'
                              ''.format(semseg_key))
 
+    def semseg_for_coords(self, coords, radius_nm=4000, pred_type="axoness"):
+        return
+
     def get_spine_compartments(self, semseg_key='spiness', k=1,
                                min_spine_cc_size=None, dest_folder=None):
         """
