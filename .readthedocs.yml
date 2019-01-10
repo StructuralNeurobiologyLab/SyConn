@@ -1,13 +1,3 @@
-language: python
-addons:
-  apt:
-    packages:
-    - libsnappy-dev
-install:
-  - pip install python-snappy
-script:
-  - true
-
 build:
   image: latest
 
