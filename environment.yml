@@ -28,8 +28,8 @@ dependencies:
   - osmesa
   - m2r
   - openmesh
-  - snappy
-  - python-snappy
+#  - snappy
+#  - python-snappy
 
   # For docs:
   - sphinx >=1.7.5
