@@ -1,7 +1,7 @@
 build:
   image: latest
 
-requirements_file: requirements.txt
+# requirements_file: requirements.txt
 
 python:
   pip_install: false
