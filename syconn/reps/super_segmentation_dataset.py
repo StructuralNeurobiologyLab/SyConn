@@ -28,7 +28,6 @@ from ..proc.ssd_assembly import assemble_from_mergelist
 from ..mp import qsub_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
 from ..mp import mp_utils as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 try:
     default_wd_available = True
     from ..config.global_params import wd
@@ -332,7 +331,7 @@ class SuperSegmentationDataset(object):
                                              "reskeletonize_objects_small_ones",
                                              n_cores=nb_cpus,
                                              pe=qsub_pe, queue=qsub_queue,
-                                             script_folder=script_folder,
+                                             script_folder=None,
                                              n_max_co_processes=
                                              n_max_co_processes)
             else:
@@ -350,7 +349,7 @@ class SuperSegmentationDataset(object):
                                              n_cores=10,
                                              n_max_co_processes=int(n_max_co_processes/10*nb_cpus),
                                              pe=qsub_pe, queue=qsub_queue,
-                                             script_folder=script_folder)
+                                             script_folder=None)
             else:
                 raise Exception("QSUB not available")
 
@@ -374,7 +373,7 @@ class SuperSegmentationDataset(object):
                                          "export_skeletons",
                                          n_cores=nb_cpus,
                                          pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
+                                         script_folder=None)
             out_files = glob.glob(path_to_out + "/*")
             no_skel_cnt = 0
             for out_file in out_files:
@@ -407,7 +406,7 @@ class SuperSegmentationDataset(object):
                                          "associate_objs_with_skel_nodes",
                                          n_cores=nb_cpus,
                                          pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
+                                         script_folder=None)
         else:
             raise Exception("QSUB not available")
 
@@ -430,7 +429,7 @@ class SuperSegmentationDataset(object):
                                          "predict_axoness_skelbased",
                                          n_cores=nb_cpus,
                                          pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
+                                         script_folder=None)
         else:
             raise Exception("QSUB not available")
 
@@ -453,7 +452,7 @@ class SuperSegmentationDataset(object):
                                          "predict_cell_type_skelbased",
                                          n_cores=nb_cpus,
                                          pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
+                                         script_folder=None)
         else:
             raise Exception("QSUB not available")
 
@@ -512,7 +511,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
         path_to_out = qu.QSUB_script(multi_params,
                                      "write_super_segmentation_dataset",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
 
@@ -641,7 +640,7 @@ def export_to_knossosdataset(ssd, kd, stride=1000, qsub_pe=None,
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_ssv_to_knossosdataset",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder)
+                                     script_folder=None)
 
     else:
         raise Exception("QSUB not available")
@@ -716,7 +715,7 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
         path_to_out = qu.QSUB_script(multi_params,
                                      "convert_knossosdataset",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder)
+                                     script_folder=None)
 
     else:
         raise Exception("QSUB not available")
@@ -784,7 +783,7 @@ def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
                                      "export_skeletons",
                                      n_cores=nb_cpus,
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder)
+                                     script_folder=None)
         out_files = glob.glob(path_to_out + "/*")
         no_skel_cnt = 0
         for out_file in out_files:

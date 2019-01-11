@@ -41,8 +41,6 @@ from ..proc.rendering import render_sampled_sso, multi_view_sso, \
     render_sso_coords, render_sso_coords_index_views
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
-
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 from ..reps import log_reps
 
 try:
@@ -1266,7 +1264,7 @@ class SuperSegmentationObject(object):
                 params = [[par, so_kwargs, render_kwargs] for par in params]
                 qu.QSUB_script(
                     params, "render_views_partial", suffix="_SSV{}".format(self.id),
-                    pe=qsub_pe, queue=None, script_folder=script_folder, n_cores=2,
+                    pe=qsub_pe, queue=None, script_folder=None, n_cores=2,
                     n_max_co_processes=qsub_co_jobs, resume_job=resume_job)
             else:
                 raise Exception("QSUB not available")

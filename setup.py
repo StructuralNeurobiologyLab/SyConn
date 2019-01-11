@@ -1,6 +1,7 @@
 from setuptools import setup, find_packages
 import os
-# TODO: add vigra and opencv (cv2)
+import sys
+from unittest.mock import MagicMock
 readme_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md')
 try:
     from m2r import parse_from_file
@@ -9,6 +10,18 @@ except ImportError:
     # m2r may not be installed in user environment
     with open(readme_file) as f:
         readme = f.read()
+
+
+# not possible to install C-library libsnappy-dev
+# (https://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules)
+class Mock(MagicMock):
+    @classmethod
+    def __getattr__(cls, name):
+        return MagicMock()
+
+
+MOCK_MODULES = ['snappy', 'python-snappy']
+sys.modules.update((mod_name, Mock()) for mod_name in MOCK_MODULES)
 
 config = {
     'description': 'Analysis pipeline for EM raw data based on deep and '

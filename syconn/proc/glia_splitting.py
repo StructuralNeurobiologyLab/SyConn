@@ -31,11 +31,9 @@ def qsub_glia_splitting():
     if len(huge_ssvs):
         log_proc.info("{} huge SSVs detected (#SVs > {})".format(len(huge_ssvs),
                                                          RENDERING_MAX_NB_SV))
-    script_folder = os.path.dirname(
-        os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True), 4000)
     qu.QSUB_script(chs, "split_glia", pe="openmp", queue=None, n_cores=2,
-                   script_folder=script_folder, n_max_co_processes=170)
+                   script_folder=None, n_max_co_processes=170)
 
 
 def collect_glia_sv():

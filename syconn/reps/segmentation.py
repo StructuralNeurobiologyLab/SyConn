@@ -25,8 +25,6 @@ from ..handler.basics import get_filepaths_from_dir, safe_copy,\
     write_txt2kzip, temp_seed
 from .segmentation_helper import *
 from ..proc import meshes
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-
 
 
 class SegmentationDataset(object):

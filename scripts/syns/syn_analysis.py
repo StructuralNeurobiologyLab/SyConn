@@ -20,15 +20,16 @@ if __name__ == '__main__':
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.wd,
                                      obj_type='syn_ssv')
-    # # This will be replaced by the new method for syn_ssv generation
-    extract_synapse_type(sd_syn_ssv, kd_sym_path=kd_sym_path, stride=100,
-                         kd_asym_path=kd_asym_path, qsub_pe='openmp')
-    log.info('Synapse type was mapped to "syn_ssv".')
 
-    cps.map_objects_to_synssv(global_params.wd)
+    # # # This will be replaced by the new method for the 'syn_ssv' generation, ~80 min
+    # extract_synapse_type(sd_syn_ssv, kd_sym_path=kd_sym_path, stride=100,
+    #                      kd_asym_path=kd_asym_path, qsub_pe='openmp')
+    # log.info('Synapse type was mapped to "syn_ssv".')
+
+    cps.map_objects_to_synssv(global_params.wd, qsub_pe='openmp')
     log.info('Cellular organelles were mapped to "syn_ssv".')
 
-    cps.classify_synssv_objects(global_params.wd,)# qsub_pe='openmp')
+    cps.classify_synssv_objects(global_params.wd, qsub_pe='openmp')
     log.info('Synapse property prediction finished.')
 
     # # as an alternative to the skeletons, use vertex predictions for that

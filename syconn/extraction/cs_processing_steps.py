@@ -23,11 +23,9 @@ from ..backend.storage import AttributeDict, VoxelStorage
 from ..handler.basics import chunkify
 from . import log_extraction
 from ..config import global_params
-script_folder = global_params.batchjob_script_folder
 
 
 # code for splitting 'syn' objects, which are generated as overlap between CS and SJ, see below.
-
 def filter_relevant_syn(sd_syn, ssd):
     """
     This function filters (likely ;) ) the intra-ssv contact
@@ -123,7 +121,14 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                                                   n_folders_fs=100000)
 
     for p in voxel_rel_paths_2stage:
-        os.makedirs(sd_syn_ssv.so_storage_path + p)
+        try:
+            os.makedirs(sd_syn_ssv.so_storage_path + p)
+        except FileExistsError:
+            msg = 'SegmentationDataset of type "syn_ssv" already exists. ' \
+                  '"combine_and_split_syn" is only executed once, please make sure '\
+                  'that no previous SegmentationDataset exists/will be overwritten.'
+            log_extraction.critical(msg)
+            raise FileExistsError(msg)
 
     rel_synssv_to_syn_ids_items = list(rel_synssv_to_syn_ids.items())
     i_block = 0
@@ -139,7 +144,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
 
     elif qu.__BATCHJOB__:
         _ = qu.QSUB_script(multi_params, "combine_and_split_syn", pe=qsub_pe,
-                           resume_job=resume_job, script_folder=script_folder,
+                           resume_job=resume_job, script_folder=None,
                            queue=qsub_queue, n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -180,24 +185,30 @@ def _combine_and_split_syn_thread(args):
 
         ssv_ids = ch.sv_id_to_partner_ids_vec([item[0]])[0]
 
-        syn_attr_list = []  # used to collect syn properties
-        voxel_list = sd_syn.get_segmentation_object(item[1][0]).voxel_list
-        for syn_id in item[1][1:]:
+        syn = sd_syn.get_segmentation_object(item[1][0])
+        syn.load_attr_dict()
+        syn_attr_list = [syn.attr_dict]  # used to collect syn properties
+        voxel_list = syn.voxel_list
+        # store index of syn. objects for attribute dict retrieval
+        synix_list = [0] * len(voxel_list)
+        for syn_ix, syn_id in enumerate(item[1][1:]):
             syn_object = sd_syn.get_segmentation_object(syn_id)
             syn_object.load_attr_dict()
             syn_attr_list.append(syn_object.attr_dict)
             voxel_list = np.concatenate([voxel_list, syn_object.voxel_list])
+            synix_list += [syn_ix] * len(syn_object.voxel_list)
         syn_attr_list = np.array(syn_attr_list)
+        synix_list = np.array(synix_list)
 
         ccs = cc_large_voxel_lists(voxel_list * scaling, cs_gap_nm)
-
         for this_cc in ccs:
             this_cc_mask = np.array(list(this_cc))
-            this_attr = syn_attr_list[this_cc_mask]
+            # retrieve the index of the syn objects selected for this CC
+            this_syn_ixs = np.unique(synix_list[this_cc_mask])
+            this_attr = syn_attr_list[this_syn_ixs]
             this_vx = voxel_list[this_cc_mask]
             abs_offset = np.min(this_vx, axis=0)
             this_vx -= abs_offset
-
             id_mask = np.zeros(np.max(this_vx, axis=0) + 1, dtype=np.bool)
             id_mask[this_vx[:, 0], this_vx[:, 1], this_vx[:, 2]] = True
 
@@ -217,19 +228,20 @@ def _combine_and_split_syn_thread(args):
             #  'cs_size', 'sj_size_pseudo']
             syn_props_agg = {}
             for dc in this_attr:
-                for k, v in dc.items():
-                    syn_props_agg.setdefault(k, []).append(v)
+                for k in ['background_overlap_ratio', 'id_cs_ratio', 'id_sj_ratio', 'cs_id',
+                          'sj_id', 'sj_size_pseudo', 'cs_size']:
+                    syn_props_agg.setdefault(k, []).append(dc[k])
             # store cs and sj IDs
             syn_props_agg['sj_ids'] = syn_props_agg['sj_id']
             del syn_props_agg['sj_id']
             syn_props_agg['cs_ids'] = syn_props_agg['cs_id']
             del syn_props_agg['cs_id']
             # calculate weighted mean of sj, cs and background ratios
-            syn_props_agg['sj_size_pseudo'] = np.array([syn_props_agg['sj_size_pseudo']])
-            syn_props_agg['cs_size'] = np.array([syn_props_agg['cs_size']])
-            syn_props_agg['id_sj_ratio'] = np.array([syn_props_agg['id_sj_ratio']])
-            syn_props_agg['id_cs_ratio'] = np.array([syn_props_agg['id_cs_ratio']])
-            syn_props_agg['background_overlap_ratio'] = np.array([syn_props_agg['background_overlap_ratio']])
+            syn_props_agg['sj_size_pseudo'] = np.array(syn_props_agg['sj_size_pseudo'])
+            syn_props_agg['cs_size'] = np.array(syn_props_agg['cs_size'])
+            syn_props_agg['id_sj_ratio'] = np.array(syn_props_agg['id_sj_ratio'])
+            syn_props_agg['id_cs_ratio'] = np.array(syn_props_agg['id_cs_ratio'])
+            syn_props_agg['background_overlap_ratio'] = np.array(syn_props_agg['background_overlap_ratio'])
             sj_size_pseudo_norm = np.sum(syn_props_agg['sj_size_pseudo'])
             cs_size_norm = np.sum(syn_props_agg['cs_size'])
             sj_s_w = syn_props_agg['id_sj_ratio'] * syn_props_agg['sj_size_pseudo']
@@ -238,7 +250,9 @@ def _combine_and_split_syn_thread(args):
             syn_props_agg['background_overlap_ratio'] = np.sum(back_s_w) / sj_size_pseudo_norm
             cs_s_w = syn_props_agg['id_cs_ratio'] * syn_props_agg['cs_size']
             syn_props_agg['id_cs_ratio'] = np.sum(cs_s_w) / cs_size_norm
-
+            del syn_props_agg['cs_size']
+            del syn_props_agg['sj_size_pseudo']
+            # add syn_ssv dict to AttributeStorage
             this_attr_dc = dict(neuron_partners=ssv_ids)
             this_attr_dc.update(syn_props_agg)
             attr_dc[next_id] = this_attr_dc
@@ -350,7 +364,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
         path_to_out = qu.QSUB_script(multi_params,
                                      "combine_and_split_cs_agg",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -531,7 +545,7 @@ def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
         path_to_out = qu.QSUB_script(multi_params,
                                      "overlap_mapping_sj_to_cs",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -698,7 +712,7 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
     elif qu.__BATCHJOB__:
         _ = qu.QSUB_script(multi_params, "syn_gen_via_cset", pe=qsub_pe,
                            queue=qsub_queue, resume_job=resume_job,
-                           script_folder=script_folder, n_cores=nb_cpus,
+                           script_folder=None, n_cores=nb_cpus,
                             n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -819,7 +833,7 @@ def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
         path_to_out = qu.QSUB_script(multi_params,
                                      "overlap_mapping_sj_to_cs_via_kd",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -997,7 +1011,7 @@ def synssv_o_features(synssv_o):
     synssv_o.load_attr_dict()
 
     features = [synssv_o.size,
-                synssv_o.attr_dict["id_sj_ratio"][0],
+                synssv_o.attr_dict["id_sj_ratio"],
                 synssv_o.attr_dict["id_cs_ratio"]]
 
     partner_ids = synssv_o.lookup_in_attribute_dict("neuron_partners")
@@ -1038,11 +1052,10 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version=obj_version)
 
-    multi_params = []
-    for so_dir_path in sd_syn_ssv.so_dir_paths:
-        multi_params.append([so_dir_path, wd, obj_version,
-                             mi_version, vc_version, ssd_version,
-                             max_vx_dist_nm, max_rep_coord_dist_nm])
+    # chunk params
+    multi_params = chunkify(sd_syn_ssv.so_dir_paths, 1500)
+    multi_params = [(so_dir_paths, wd, obj_version, mi_version, vc_version, ssd_version, max_vx_dist_nm,
+                     max_rep_coord_dist_nm) for so_dir_paths in multi_params]
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_map_objects_to_synssv_thread,
@@ -1052,7 +1065,7 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_objects_to_synssv",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -1067,7 +1080,7 @@ def _map_objects_to_synssv_thread(args):
     args : Tuple
         see 'map_objects_to_synssv'
     """
-    so_dir_path, wd, obj_version, mi_version, vc_version, ssd_version, \
+    so_dir_paths, wd, obj_version, mi_version, vc_version, ssd_version, \
         max_vx_dist_nm, max_rep_coord_dist_nm = args
 
     ssv = super_segmentation.SuperSegmentationDataset(working_dir=wd,
@@ -1081,28 +1094,28 @@ def _map_objects_to_synssv_thread(args):
     vc_sd = segmentation.SegmentationDataset(obj_type="vc",
                                              working_dir=wd,
                                              version=vc_version)
+    for so_dir_path in so_dir_paths:
+        this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
+                                     read_only=False)
 
-    this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
-                                 read_only=False)
+        for synssv_id in this_attr_dc.keys():
+            synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
+            synssv_o.load_attr_dict()
 
-    for synssv_id in this_attr_dc.keys():
-        synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
-        synssv_o.load_attr_dict()
+            for k in list(synssv_o.attr_dict.keys()):
+                if k.startswith("n_mi_"):
+                    del(synssv_o.attr_dict[k])
+                if k.startswith("n_vc_"):
+                    del(synssv_o.attr_dict[k])
 
-        for k in list(synssv_o.attr_dict.keys()):
-            if k.startswith("n_mi_"):
-                del(synssv_o.attr_dict[k])
-            if k.startswith("n_vc_"):
-                del(synssv_o.attr_dict[k])
+            synssv_feats = objects_to_single_synssv(
+                synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=max_vx_dist_nm,
+                max_rep_coord_dist_nm=max_rep_coord_dist_nm)
 
-        synssv_feats = objects_to_single_synssv(
-            synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=max_vx_dist_nm,
-            max_rep_coord_dist_nm=max_rep_coord_dist_nm)
+            synssv_o.attr_dict.update(synssv_feats)
+            this_attr_dc[synssv_id] = synssv_o.attr_dict
 
-        synssv_o.attr_dict.update(synssv_feats)
-        this_attr_dc[synssv_id] = synssv_o.attr_dict
-
-    this_attr_dc.push()
+        this_attr_dc.push()
 
 
 def objects_to_single_synssv(synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=2000,
@@ -1222,9 +1235,9 @@ def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version=obj_version)
 
-    multi_params = []
-    for so_dir_path in sd_syn_ssv.so_dir_paths:
-        multi_params.append([so_dir_path, wd, obj_version])
+    multi_params = chunkify(sd_syn_ssv.so_dir_paths, 1500)
+    multi_params = [(so_dir_paths, wd, obj_version) for so_dir_paths in
+                    multi_params]
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(_classify_synssv_objects_thread,
@@ -1234,7 +1247,7 @@ def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
         path_to_out = qu.QSUB_script(multi_params,
                                      "classify_synssv_objects",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -1249,27 +1262,28 @@ def _classify_synssv_objects_thread(args):
     args : Tuple
         see 'classify_synssv_objects'
     """
-    so_dir_path, wd, obj_version = args
+    so_dir_paths, wd, obj_version = args
 
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
     rfc = externals.joblib.load(global_params.mpath_syn_rfc + '/')
 
-    this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
-                                 read_only=False)
+    for so_dir_path in so_dir_paths:
+        this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
+                                     read_only=False)
 
-    for synssv_id in this_attr_dc.keys():
-        synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
-        synssv_o.load_attr_dict()
+        for synssv_id in this_attr_dc.keys():
+            synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
+            synssv_o.load_attr_dict()
 
-        feats = synssv_o_features(synssv_o)
-        syn_prob = rfc.predict_proba([feats])[0][1]
+            feats = synssv_o_features(synssv_o)
+            syn_prob = rfc.predict_proba([feats])[0][1]
 
-        synssv_o.attr_dict.update({"syn_prob": syn_prob})
-        this_attr_dc[synssv_id] = synssv_o.attr_dict
+            synssv_o.attr_dict.update({"syn_prob": syn_prob})
+            this_attr_dc[synssv_id] = synssv_o.attr_dict
 
-    this_attr_dc.push()
+        this_attr_dc.push()
 
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
@@ -1295,7 +1309,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                                   version=obj_version)
 
     multi_params = []
-    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, 4000):
+    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, 2000):
         multi_params.append([so_dir_paths, wd, obj_version,
                              ssd_version])
     if qsub_pe is None and qsub_queue is None:
@@ -1305,7 +1319,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     elif qu.__BATCHJOB__:
         _ = qu.QSUB_script(
             multi_params, "collect_properties_from_ssv_partners", pe=qsub_pe,
-            queue=qsub_queue, script_folder=script_folder,
+            queue=qsub_queue, script_folder=None,
             n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -1380,6 +1394,7 @@ def export_matrix(wd, obj_version=None, dest_name=None, syn_prob_t=.5):
     m = syn_prob > syn_prob_t
     m_axs = sd_syn_ssv.load_cached_data("partner_axoness")[m]
     m_cts = sd_syn_ssv.load_cached_data("partner_celltypes")[m]
+    m_sp = sd_syn_ssv.load_cached_data("partner_spiness")[m]
     m_coords = sd_syn_ssv.rep_coords[m]
     # m_sizes = sd_syn_ssv.sizes[m]
     m_sizes = sd_syn_ssv.load_cached_data("mesh_area")[m] / 2
@@ -1390,14 +1405,19 @@ def export_matrix(wd, obj_version=None, dest_name=None, syn_prob_t=.5):
     m_sizes = np.multiply(m_sizes, m_syn_sign)
 
     table = np.concatenate([m_coords, m_ssv_partners, m_sizes[:, None],
-                            m_axs, m_cts, m_syn_prob[:, None]], axis=1)
+                            m_axs, m_cts, m_sp, m_syn_prob[:, None]], axis=1)
 
     np.savetxt(dest_name + ".csv", table, delimiter="\t",
                header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2"
-                      "\tcelltype1\tcelltype2\tsynprob")
+                      "\tcelltype1\tcelltype2\tspiness1\tspiness2\tsynprob")
 
-    labels = np.array(["N/A", "D", "A", "S"])
-    labels_ids = np.array([-1, 0, 1, 2])
+    ax_labels = np.array(["N/A", "D", "A", "S"])
+    ax_label_ids = np.array([-1, 0, 1, 2])
+    # Documentation of prediction labels, maybe add somewhere to .k.zip or .csv
+    ct_labels = ['N/A', 'EA', 'MSN', 'GP', 'INT']
+    ct_label_ids = np.array([-1, 0, 1, 2, 3])
+    sp_labels = ['N/A', 'neck', 'head', 'shaft', 'other']
+    sp_label_ids = np.array([-1, 0, 1, 2, 3, 4])
 
     annotations = []
     m_sizes = np.abs(m_sizes)
@@ -1407,9 +1427,9 @@ def export_matrix(wd, obj_version=None, dest_name=None, syn_prob_t=.5):
     for u_ax in u_axs:
         anno = skeleton.SkeletonAnnotation()
         anno.scaling = sd_syn_ssv.scaling
-        anno.comment = "%s - %s" % (labels[labels_ids == u_ax[0]][0],
-                                    labels[labels_ids == u_ax[1]][0])
-
+        cmt = "{} - {}".format(ax_labels[ax_label_ids == u_ax[0]][0],
+                               ax_labels[ax_label_ids == u_ax[1]][0])
+        anno.comment = cmt
         for i_syn in np.where(np.sum(np.abs(ms_axs - u_ax), axis=1) == 0)[0]:
             c = m_coords[i_syn]
             # somewhat approximated from sphere volume:
@@ -1421,6 +1441,8 @@ def export_matrix(wd, obj_version=None, dest_name=None, syn_prob_t=.5):
             skel_node.data["size"] = m_sizes[i_syn]
             skel_node.data["syn_prob"] = m_syn_prob[i_syn]
             skel_node.data["sign"] = m_syn_sign[i_syn]
+            skel_node.data['partner_spiness'] = m_sp[i_syn]
+            skel_node.data['partner_celltypes'] = m_cts[i_syn]
             anno.addNode(skel_node)
         annotations.append(anno)
     skeleton_utils.write_skeleton(dest_name + ".k.zip", annotations)

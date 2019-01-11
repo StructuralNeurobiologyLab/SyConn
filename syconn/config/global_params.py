@@ -31,7 +31,6 @@ path_initrag = '/wholebrain/songbird/j0126/RAGs/v4b_20180407_v4b_20180407_'\
 rag_suffix = ""  # identifier in case there will be more than one RAG
 
 # --------- BACKEND DEFINITIONS
-# TODO: Use batchjob_script_folder everywhere or remove because this is the default now.
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
 batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + \
                          "/../QSUB_scripts/"

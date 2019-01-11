@@ -50,12 +50,10 @@ if __name__ == "__main__":
     for par in multi_params:
         mk = par[1]
         mk["init_gpu"] = 0  # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
-    script_folder = os.path.dirname(
-        os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
                                  n_max_co_processes=25, pe="openmp",
                                  queue=None, n_cores=10, suffix="_glia",
-                                 script_folder=script_folder,
+                                 script_folder=None,
                                  additional_flags="--gres=gpu:1")  # removed -V
     log.info('Finished glia prediction. Checking completeness.')
     res = find_missing_sv_attributes(sd, pred_key, n_cores=10)

@@ -31,10 +31,9 @@ from . import connectivity_helper as ch
 from . import super_segmentation as ss
 from . import segmentation
 from ..handler.basics import load_pkl2obj, write_obj2pkl
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
+
 
 # TODO: unclear what and when this was used for, refactor and use in current project
-
 def make_colormap(seq):
     """Return a LinearSegmentedColormap
     seq: a sequence of floats and RGB-tuples. The floats should be increasing
@@ -242,7 +241,7 @@ class ConnectivityMatrix(object):
             path_to_out = qu.QSUB_script(multi_params,
                                          "extract_connectivity",
                                          pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
+                                         script_folder=None)
             out_files = glob.glob(path_to_out + "/*")
             results = []
             for out_file in out_files:
@@ -276,7 +275,7 @@ class ConnectivityMatrix(object):
             path_to_out = qu.QSUB_script(multi_params,
                                          "get_sso_specific_info",
                                          pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
+                                         script_folder=None)
             out_files = glob.glob(path_to_out + "/*")
             results = []
             for out_file in out_files:

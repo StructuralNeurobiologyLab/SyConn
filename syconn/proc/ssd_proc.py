@@ -21,7 +21,6 @@ from ..reps.super_segmentation import SuperSegmentationObject, \
     SuperSegmentationDataset
 from ..reps import segmentation, super_segmentation
 from ..proc.meshes import mesh_creator_sso
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
@@ -45,7 +44,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
         path_to_out = qu.QSUB_script(multi_params,
                                      "write_super_segmentation_dataset",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
 
@@ -196,7 +195,7 @@ def aggregate_segmentation_object_mappings(ssd, obj_types,
         path_to_out = qu.QSUB_script(multi_params,
                                      "aggregate_segmentation_object_mappings",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder)
+                                     script_folder=None)
 
     else:
         raise Exception("QSUB not available")
@@ -269,7 +268,7 @@ def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
         path_to_out = qu.QSUB_script(multi_params,
                                      "apply_mapping_decisions",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder)
+                                     script_folder=None)
 
     else:
         raise Exception("QSUB not available")
@@ -402,7 +401,7 @@ def map_synaptic_conn_objects(ssd, conn_version=None, stride=1000,
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_synaptic_conn_objects",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
 
     else:

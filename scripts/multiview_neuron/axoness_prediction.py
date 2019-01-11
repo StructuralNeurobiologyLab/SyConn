@@ -49,11 +49,9 @@ if __name__ == "__main__":
         mk = par[1]
         # Single GPUs are made available for every job via slurm, no need for random assignments.
         mk["init_gpu"] = 0  # np.random.rand(0, 2)
-    script_folder = os.path.dirname(
-        os.path.abspath(__file__)) + "/../../syconn/QSUB_scripts/"
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
                                  n_max_co_processes=15, pe="openmp", queue=None,
-                                 script_folder=script_folder, n_cores=10,
+                                 script_folder=None, n_cores=10,
                                  suffix="_axoness", additional_flags="--gres=gpu:1")  # removed -V
     log.info('Finished axon prediction. Now checking for missing predictions.')
     res = find_missing_sv_attributes_in_ssv(ssd, pred_key, n_cores=10)

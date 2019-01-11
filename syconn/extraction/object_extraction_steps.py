@@ -17,7 +17,6 @@ import shutil
 import itertools
 from collections import defaultdict
 from knossos_utils import knossosdataset, chunky
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 from ..handler import log_handler
 from ..mp import qsub_utils as qu, mp_utils as sm
@@ -166,7 +165,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                                      "gauss_threshold_connected_components",
                                      pe=qsub_pe, queue=qsub_queue,
                                      n_cores=nb_cpus,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
 
         out_files = glob.glob(path_to_out + "/*")
@@ -340,7 +339,7 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
         path_to_out = qu.QSUB_script(multi_params,
                                      "make_unique_labels",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -435,7 +434,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
         path_to_out = qu.QSUB_script(multi_params,
                                      "make_stitch_list",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
 
         out_files = glob.glob(path_to_out + "/*")
@@ -650,7 +649,7 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
         path_to_out = qu.QSUB_script(multi_params,
                                      "apply_merge_list",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
 
     else:
@@ -787,7 +786,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_voxels",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes,
                                      n_cores=nb_cpus)
 
@@ -1006,7 +1005,7 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
             path_to_out = qu.QSUB_script(multi_params,
                                          "combine_voxels",
                                          pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder,
+                                         script_folder=None,
                                          n_max_co_processes=n_max_co_processes,
                                          n_cores=nb_cpus)
 
@@ -1121,7 +1120,7 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_voxels_combined",
                                      pe=qsub_pe, queue=qsub_queue, n_cores=qsub_slots,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
 
 

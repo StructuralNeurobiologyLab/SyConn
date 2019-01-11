@@ -27,25 +27,27 @@ if __name__ == "__main__":
     # kd.initialize_from_knossos_path(kd_seg_path)
 
     # TODO: change path of CS chunkdataset
+    # Initital contact site extraction
     cd_dir = global_params.wd + "/chunkdatasets/"
-    # # Class that contains a dict of chunks (with coordinates) after initializing it
-    # cd = chunky.ChunkDataset()
-    # cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
-    #               box_coords=[0, 0, 0], fit_box_size=True)
-    # oew.from_ids_to_objects(cd, 'cs', n_chunk_jobs=2000, dataset_names=['syn'],
-    #                         hdf5names=["cs"], n_max_co_processes=300,
-    #                         n_folders_fs=100000)
-    #
-    # # POPULATES CS CD with SV contacts
-    # ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=5000,
-    #                       qsub_pe='default', qsub_queue='all.q')
-    # ces.extract_agg_contact_sites(cd, wd, n_folders_fs=10000, suffix="",
-    #                               qsub_queue='all.q', n_max_co_processes=5000,
-    #                               qsub_pe='default')
+    # Class that contains a dict of chunks (with coordinates) after initializing it
+    cd = chunky.ChunkDataset()
+    cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
+                  box_coords=[0, 0, 0], fit_box_size=True)
+    oew.from_ids_to_objects(cd, 'cs', n_chunk_jobs=2000, dataset_names=['syn'],
+                            hdf5names=["cs"], n_max_co_processes=300,
+                            n_folders_fs=100000)
+
+    # POPULATES CS CD with SV contacts
+    ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=5000,
+                          qsub_pe='default', qsub_queue='all.q')
+    ces.extract_agg_contact_sites(cd, wd, n_folders_fs=10000, suffix="",
+                                  qsub_queue='all.q', n_max_co_processes=5000,
+                                  qsub_pe='default')
     log.info('CS extraction finished.')
-    # # create overlap dataset between SJ and CS: SegmentationDataset of type 'syn'
-    # # TODO: write new method which iterates over sj prob. map (KD), CS ChunkDataset / KD and (optionally) synapse type in parallel and to create a syn segmentation within from_probmaps_to_objects
-    # # TODO: SD for cs_agg and sj will not be needed anymore
+
+    # create overlap dataset between SJ and CS: SegmentationDataset of type 'syn'
+    # TODO: write new method which iterates over sj prob. map (KD), CS ChunkDataset / KD and (optionally) synapse type in parallel and to create a syn segmentation within from_probmaps_to_objects
+    # TODO: SD for cs_agg and sj will not be needed anymore
     cs_sd = SegmentationDataset('cs_agg', working_dir=global_params.wd,
                                 version=0)  # version hard coded
     sj_sd = SegmentationDataset('sj', working_dir=global_params.wd)
@@ -58,9 +60,9 @@ if __name__ == "__main__":
     dataset_analysis(sd, qsub_pe='openmp', compute_meshprops=False)
     log.info('SegmentationDataset of type "syn" was generated.')
 
-    # # This creates an SD of type 'syn_ssv'
+    # This creates an SD of type 'syn_ssv', ~15 min
     cps.combine_and_split_syn(global_params.wd, resume_job=False,
-                              stride=100, qsub_pe='default', qsub_queue='all.q',
+                              stride=250, qsub_pe='default', qsub_queue='all.q',
                               cs_gap_nm=global_params.cs_gap_nm,
                               n_max_co_processes=global_params.NCORE_TOTAL)
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.wd,

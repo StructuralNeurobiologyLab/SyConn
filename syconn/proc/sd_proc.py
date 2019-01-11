@@ -25,7 +25,6 @@ from ..reps import segmentation, segmentation_helper
 from ..handler import basics
 from ..proc.meshes import mesh_chunk
 from . import log_proc
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def dataset_analysis(sd, recompute=True, stride=50, qsub_pe=None,
@@ -71,7 +70,7 @@ def dataset_analysis(sd, recompute=True, stride=50, qsub_pe=None,
         path_to_out = qu.QSUB_script(multi_params,
                                      "dataset_analysis",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
         out_files = glob.glob(path_to_out + "/*")
@@ -220,7 +219,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_objects",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
 
@@ -258,7 +257,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
 
     elif qu.__BATCHJOB__:
         qu.QSUB_script(multi_params, "write_mapping_to_sv", pe=qsub_pe,
-                       queue=qsub_queue, script_folder=script_folder,
+                       queue=qsub_queue, script_folder=None,
                        n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -380,7 +379,7 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
         path_to_out = qu.QSUB_script(multi_params,
                                      "binary_filling_cs",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
     else:
@@ -535,7 +534,7 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512,
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_sd_to_knossosdataset",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -600,7 +599,7 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_synapse_type",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
     else:

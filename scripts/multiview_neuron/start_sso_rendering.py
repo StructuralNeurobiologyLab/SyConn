@@ -45,11 +45,9 @@ if __name__ == "__main__":
              'afterwards using the whole cluster.'.format(np.sum(size_mask),
                                                           np.sum(~size_mask)))
     # generic
-    script_folder = os.path.dirname(os.path.abspath(__file__)) + \
-                    "/../../syconn/QSUB_scripts/"
     path_to_out = qu.QSUB_script(multi_params, "render_views", pe="openmp",
                                  n_max_co_processes=global_params.NCORE_TOTAL,
-                                 script_folder=script_folder, suffix="", queue=None)
+                                 script_folder=None, suffix="", queue=None)
     log.info('Finished rendering of {}/{} SSVs.'.format(len(ordering),
                                                         len(nb_svs_per_ssv)))
     # identify huge SSVs and process them individually on whole cluster

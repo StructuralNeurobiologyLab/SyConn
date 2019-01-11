@@ -16,7 +16,6 @@ import itertools
 import networkx as nx
 from scipy import spatial
 import scipy
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 import skeletopyze
 
 

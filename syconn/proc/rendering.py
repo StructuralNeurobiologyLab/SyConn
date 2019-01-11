@@ -14,7 +14,7 @@ import tqdm
 import warnings
 from scipy.ndimage.filters import gaussian_filter
 
-from .image import rgb2gray, apply_clahe, normalize_img
+from .image import rgb2gray, apply_clahe
 from . import log_proc
 from ..config import global_params
 from ..handler.basics import flatten_list
@@ -47,12 +47,12 @@ else:
     raise NotImplementedError(msg)
 
 
-# ------------------------------------------------------------------------------
-# General rendering code
+# ------------------------------------ General rendering code ------------------------------------------
+# structure definition of rendering data array
 float_size = sizeof(c_float)
 vertex_offset = c_void_p(0 * float_size)
 normal_offset = c_void_p(3 * float_size)
-color_offset  = c_void_p(6 * float_size)
+color_offset = c_void_p(6 * float_size)
 record_len = 10 * float_size
 
 
@@ -62,10 +62,14 @@ def init_object(indices, vertices, normals, colors, ws):
 
     Parameters
     ----------
-    indices : np.array [3N, 1]
-    vertices : np.array [3M, 1]
-    normals : np.array [3M, 1]
-    colors : np.array [4M, 1]
+    indices : array_like
+        [3N, 1]
+    vertices : array_like
+        [3M, 1]
+    normals : array_like
+        [3M, 1]
+    colors : array_like
+        [4M, 1]
     ws : tuple
 
     Returns
@@ -142,6 +146,7 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
     colored : bool
     depth_map : bool
     clahe : bool
+    triangulation : bool
 
     Returns
     -------
@@ -153,7 +158,7 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
     if depth_map:
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE)
-        data = Image.frombuffer("L", (ws[0], ws[1]), data, 'raw', 'L', 0, 1) #(mode, size, data, 'raw', mode, 0, 1)
+        data = Image.frombuffer("L", (ws[0], ws[1]), data, 'raw', 'L', 0, 1)
         data = np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM))
         data = gaussian_filter(data, .7)
         if clahe:
@@ -163,12 +168,12 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
     elif colored:
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_RGB, GL_UNSIGNED_BYTE)
-        data = Image.frombuffer("RGB", (ws[0], ws[1]), data, 'raw', 'RGB', 0, 1) #Image.frombuffer(mode="RGB", size=(ws[0], ws[1]), data=data)
+        data = Image.frombuffer("RGB", (ws[0], ws[1]), data, 'raw', 'RGB', 0, 1)
         data = np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM))
     else:
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_RGB, GL_UNSIGNED_BYTE)
-        data = Image.frombuffer("RGB", (ws[0], ws[1]), data, 'raw', 'RGB', 0, 1) #Image.frombuffer(mode="RGB", size=(ws[0], ws[1]), data=data)
+        data = Image.frombuffer("RGB", (ws[0], ws[1]), data, 'raw', 'RGB', 0, 1)
         data = rgb2gray(np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM))) * 255
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     return data
@@ -368,7 +373,8 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
                    nb_views=3, background=1, rot_mat=None,
                    triangulation=True):
     """
-    Render mesh from 3 (default) equidistant perspectives.
+    Render mesh from nb_views (default: 3) perspectives rotated around the
+     first principle component (angle between adjacent views is 360°/nb_views)
 
     Parameters
     ----------
@@ -1001,15 +1007,25 @@ def get_sso_view_dc(sso, verbose=False):
 
 
 def render_sso_ortho_views(sso):
+    """
+    Renders three views of SSO mesh.
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+
+    Returns
+    -------
+    np.array
+    """
     views = np.zeros((3, 4, 1024, 1024))
     # init MeshObject to calculate rotation into PCA frame
-
     views[:, 0] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
-                                 obj_to_render=('sv'), )
+                                 obj_to_render=('sv', ), )
     views[:, 1] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
-                                 obj_to_render=('mi'))
+                                 obj_to_render=('mi', ))
     views[:, 2] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
-                                 obj_to_render=('vc'))
+                                 obj_to_render=('vc', ))
     views[:, 3] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
-                                 obj_to_render=('sj'))
+                                 obj_to_render=('sj', ))
     return views

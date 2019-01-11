@@ -15,7 +15,6 @@ from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
 from ..handler.basics import chunkify
 from ..mp.mp_utils import start_multiprocess_imap
 from . import log_reps
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def glia_pred_so(so, thresh, pred_key_appendix):

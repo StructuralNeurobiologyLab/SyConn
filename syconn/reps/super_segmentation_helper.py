@@ -28,7 +28,6 @@ skeletopyze_available = False
 from ..reps import log_reps
 from ..config import global_params
 from ..proc.meshes import in_bounding_box, write_mesh2kzip
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def majority_vote(anno, prop, max_dist):

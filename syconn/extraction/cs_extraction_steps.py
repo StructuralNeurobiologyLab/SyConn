@@ -23,8 +23,6 @@ from ..mp import mp_utils as sm
 from ..handler import compression
 from . import object_extraction_steps as oes
 
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
-
 
 def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
                        qsub_pe=None, qsub_queue=None):
@@ -38,7 +36,7 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
     elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
                                      "contact_site_detection",
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes,
                                      pe=qsub_pe, queue=qsub_queue)
 

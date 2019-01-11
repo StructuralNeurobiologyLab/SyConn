@@ -35,11 +35,9 @@ if __name__ == "__main__":
     # one list as parameter one needs an additonal axis
     multi_params = [(ixs, ) for ixs in multi_params]
 
-    script_folder = os.path.dirname(os.path.abspath(__file__)) + \
-                    "/../../syconn/QSUB_scripts/"
     path_to_out = qu.QSUB_script(multi_params, "predict_cell_type", pe="openmp",
                                  n_max_co_processes=34, queue=None,
-                                 script_folder=script_folder, suffix="",
+                                 script_folder=None, suffix="",
                                  n_cores=10, additional_flags="--gres=gpu:1")
     log.info('Finished prediction of {} SSVs. Checking completeness.'
              ''.format(len(ordering)))

@@ -32,10 +32,9 @@ if __name__ == "__main__":
     # add ssd parameters
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir)
                     for ssv_ids in multi_params]
-    script_folder = os.path.dirname(os.path.abspath(__file__)) + \
-                    "/../../syconn/QSUB_scripts/"
+
     kwargs = dict(n_max_co_processes=340, pe="openmp", queue=None,
-                  script_folder=script_folder, suffix="")
+                  script_folder=None, suffix="")
     # create SSV skeletons, requires SV skeletons!
     log.info('Starting skeleton generation of {} SSVs.'.format(
         len(ssd.ssv_ids)))

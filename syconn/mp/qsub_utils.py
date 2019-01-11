@@ -116,7 +116,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if resume_job:
         return resume_QSUB_script(
             params, name, queue=queue, pe=pe, max_iterations=max_iterations,
-            priority=priority, additional_flags=additional_flags, script_folder=script_folder,
+            priority=priority, additional_flags=additional_flags, script_folder=None,
             job_name=job_name, suffix=suffix,
             sge_additional_flags=sge_additional_flags, iteration=iteration,
             n_max_co_processes=n_max_co_processes,  n_cores=n_cores)
@@ -270,8 +270,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 log_batchjob.warning('Priorities are not supported with SLURM.')
             # added '--quiet' flag to prevent submission messages, errors will still be printed
             # (https://slurm.schedmd.com/sbatch.html), DOES NOT WORK
-            cmd_exec = "sbatch {0} --output={1} --error={2}" \
-                       " --quiet --job-name={3} {4} {5}".format(
+            cmd_exec = "sbatch {0} --quiet --output={1} --error={2}" \
+                       " --job-name={3} {4} {5}".format(
                 queue_option,
                 job_log_path,
                 job_err_path,
@@ -350,7 +350,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         # if all jobs failed, increase number of cores
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
-            priority=priority, additional_flags=additional_flags, script_folder=script_folder,
+            priority=priority, additional_flags=additional_flags, script_folder=None,
             job_name="default", suffix=suffix+"_iter"+str(iteration),
             sge_additional_flags=sge_additional_flags, iteration=iteration+1,
             n_max_co_processes=n_max_co_processes,  n_cores=n_cores,
@@ -433,7 +433,7 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         orig_job_ids = np.arange(len(params))[~checklist]
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
-            priority=priority, script_folder=script_folder, job_name=job_name,
+            priority=priority, script_folder=None, job_name=job_name,
             suffix=suffix + "_resumed", additional_flags=additional_flags,
             sge_additional_flags=sge_additional_flags, iteration=iteration,
             n_max_co_processes=n_max_co_processes, n_cores=n_cores,

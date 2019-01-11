@@ -27,7 +27,6 @@ from ..reps import super_segmentation as ss
 from ..proc.stats import model_performance
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 logger_skel = initialize_logging('skeleton')
 feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",
                "Hist4", "Hist5", "Hist6", "Hist7", "Hist8", "Hist9", "Hist10",
@@ -183,7 +182,7 @@ class SkelClassifier(object):
             path_to_out = qu.QSUB_script(multi_params,
                                          "generate_clf_data",
                                          pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
+                                         script_folder=None)
         else:
             msg = "QSUB not available"
             logger_skel.critical(msg)
@@ -207,7 +206,7 @@ class SkelClassifier(object):
                                          "classifier_production",
                                          n_cores=nb_cpus,
                                          pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
+                                         script_folder=None)
 
         else:
             msg = "QSUB not available"

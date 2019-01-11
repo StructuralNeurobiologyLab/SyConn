@@ -23,9 +23,7 @@ if __name__ == "__main__":
     log = initialize_logging('glia_view_rendering', wd + '/logs/')
     N_JOBS = 360
     np.random.seed(0)
-    # generic QSUB script folder
-    script_folder = os.path.dirname(os.path.abspath(__file__)) +\
-                    "/../../syconn/QSUB_scripts/"
+
     # view rendering prior to glia removal, choose SSD accordingly
     version = "tmp"  # glia removal is based on the initial RAG and does not require explicitly stored SSVs
     # init_rag_p = wd + "initial_rag.txt"
@@ -73,7 +71,7 @@ if __name__ == "__main__":
     multi_params = [[par, so_kwargs] for par in multi_params]
     path_to_out = qu.QSUB_script(multi_params, "sample_location_caching",
                                  n_max_co_processes=300, pe="openmp", queue=None,
-                                 script_folder=script_folder, suffix="")
+                                 script_folder=None, suffix="")
 
     # generate parameter for view rendering of individual SSV
     log.info("Starting view rendering.")
@@ -112,7 +110,7 @@ if __name__ == "__main__":
     multi_params = [(ixs, wd, version) for ixs in multi_params]
     path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
                                  n_max_co_processes=N_JOBS, pe="openmp", queue=None,
-                                 script_folder=script_folder, suffix="")
+                                 script_folder=None, suffix="")
 
     # check completeness
     sd = SegmentationDataset("sv", working_dir=wd)
