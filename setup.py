@@ -36,7 +36,7 @@ config = {
     'install_requires': ['knossos_utils>=0.1', 'ELEKTRONN2', 'matplotlib',
                          'numpy', 'scipy', 'lz4', 'h5py', 'networkx', 'numba',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
-                         'opencv-python', 'pyopengl', 'scikit-learn',
+                         'opencv-python', 'pyopengl', 'scikit-learn==0.19.1',
                          'scikit-image', 'm2r', 'plyfile', 'vtkInterface',
                          'sphinx-autodoc-typehints', 'openmesh', 'pytest',
                          'pytest-runner', 'snappy', 'python-snappy'],

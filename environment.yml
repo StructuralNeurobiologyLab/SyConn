@@ -15,7 +15,7 @@ dependencies:
   - seaborn >=0.8.1
   - tqdm >=4.23.3
   - numpy>=1.11.1
-  - scikit-learn >=0.19.1
+  - scikit-learn == 0.19.1
   - scipy >=1.1.0
   - networkx
   - lz4
@@ -28,8 +28,8 @@ dependencies:
   - osmesa
   - m2r
   - openmesh
-#  - snappy
-#  - python-snappy
+  - snappy
+  - python-snappy
 
   # For docs:
   - sphinx >=1.7.5

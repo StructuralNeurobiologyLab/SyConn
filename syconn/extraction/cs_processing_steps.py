@@ -5,9 +5,7 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 from collections import defaultdict
-import networkx as nx
 import numpy as np
-import glob
 import os
 from scipy import spatial
 from sklearn import ensemble, externals
@@ -951,28 +949,41 @@ def create_syn_gt(conn, path_kzip):
     conn_kdtree = spatial.cKDTree(conn.rep_coords * conn.scaling)
     ds, list_ids = conn_kdtree.query(label_coords * conn.scaling)
 
-    conn_ids = conn.ids[list_ids]
-    for label_id in np.where(ds > 0)[0]:
-        _, close_ids = conn_kdtree.query(label_coords[label_id] * conn.scaling,
-                                         k=100)
-
-        for close_id in close_ids:
-            conn_o = conn.get_segmentation_object(conn.ids[close_id])
-
-            vx_ds = np.sum(np.abs(conn_o.voxel_list - label_coords[label_id]),
-                           axis=-1)
-
-            if np.min(vx_ds) == 0:
-                conn_ids[label_id] = conn.ids[close_id]
-                break
-
-        assert 0 in vx_ds
+    synssv_ids = conn.ids[list_ids]
+    mapped_synssv_objects_kzip = os.path.split(path_kzip)[0] + '/mapped_synssv.k.zip'
+    # for label_id in np.where(ds > 0)[0]:
+    #     dists, close_ids = conn_kdtree.query(label_coords[label_id] * conn.scaling,
+    #                                          k=100)
+    #
+    #     for close_id in close_ids[np.argsort(dists)]:
+    #         conn_o = conn.get_segmentation_object(conn.ids[close_id])
+    #         if len(conn_o.mesh[1]) == 0:  # only big synapses..
+    #             continue
+    #         vx_ds = np.sum(np.abs(conn_o.voxel_list - label_coords[label_id]),
+    #                        axis=-1)
+    #         print('voxel dist:', np.min(vx_ds))
+    #         synssv_ids[label_id] = conn.ids[close_id]
+    #         break
+    #         # if np.min(vx_ds) == 0:
+    #         #     synssv_ids[label_id] = conn.ids[close_id]
+    #         #     break
+    #
+    #     # assert 0 in vx_ds
 
     features = []
-    for conn_id in conn_ids:
-        conn_o = conn.get_segmentation_object(conn_id)
-
-        features.append(synssv_o_features(conn_o))
+    skel = skeleton.Skeleton()
+    anno = skeleton.SkeletonAnnotation()
+    anno.scaling = conn.scaling
+    for kk, synssv_id in enumerate(synssv_ids):
+        synssv_o = conn.get_segmentation_object(synssv_id)
+        synssv_o.mesh2kzip(mapped_synssv_objects_kzip, ext_color=None, ply_name='{}.ply'.format(synssv_id))
+        n = skeleton.SkeletonNode().from_scratch(anno, synssv_o.rep_coord[0], synssv_o.rep_coord[1],
+                                                 synssv_o.rep_coord[2])
+        n.setComment('{}'.format(labels[kk]))
+        anno.addNode(n)
+        features.append(synssv_o_features(synssv_o))
+    skel.add_annotation(anno)
+    skel.to_kzip(mapped_synssv_objects_kzip)
     features = np.array(features)
     rfc = ensemble.RandomForestClassifier(n_estimators=200, max_features='sqrt',
                                           n_jobs=-1)
@@ -987,11 +998,11 @@ def create_syn_gt(conn, path_kzip):
     rfc.fit(v_features, v_labels)
     log_extraction.info('RFC importances:' + str(rfc.feature_importances_))
 
-    model_base_dir = global_params.mpath_syn_rfc + "/conn_syn_rfc/"
+    model_base_dir = os.path.split(global_params.mpath_syn_rfc)[0]
     os.makedirs(model_base_dir, exist_ok=True)
 
     # unclear why there is 'rfc' after it
-    externals.joblib.dump(rfc, model_base_dir + "rfc")
+    externals.joblib.dump(rfc, global_params.mpath_syn_rfc)
 
     return rfc, v_features, v_labels
 
@@ -1267,7 +1278,7 @@ def _classify_synssv_objects_thread(args):
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
-    rfc = externals.joblib.load(global_params.mpath_syn_rfc + '/')
+    rfc = externals.joblib.load(global_params.mpath_syn_rfc)
 
     for so_dir_path in so_dir_paths:
         this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
@@ -1400,7 +1411,7 @@ def export_matrix(wd, obj_version=None, dest_name=None, syn_prob_t=.5):
     m_sizes = sd_syn_ssv.load_cached_data("mesh_area")[m] / 2
     m_ssv_partners = sd_syn_ssv.load_cached_data("neuron_partners")[m]
     m_syn_prob = syn_prob[m]
-    m_syn_sign = sd_syn_ssv.load_cached_data("syn_sign")[m]
+    m_syn_sign = sd_syn_ssv.load_cached_data("syn_type_sym_ratio")[m]
 
     m_sizes = np.multiply(m_sizes, m_syn_sign)
 

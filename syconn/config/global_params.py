@@ -98,7 +98,7 @@ mpath_spiness = '{}/FCN-VGG13--Lovasz--NewGT/'.format(model_dir)
 mpath_celltype = '{}/celltype_g1_20views_v3/g1_20views_v3-FINAL.mdl'.format(model_dir)
 mpath_axoness = '{}/axoness_g1_v2/g1_v2-FINAL.mdl'.format(model_dir)
 mpath_glia = '{}/glia_g0_v0/g0_v0-FINAL.mdl'.format(model_dir)
-mpath_syn_rfc = '{}/conn_syn_rfc//'.format(model_dir)
+mpath_syn_rfc = '{}/conn_syn_rfc//rfc'.format(model_dir)
 
 # --------- RFC PARAMETERS
 SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000}  # in nm
