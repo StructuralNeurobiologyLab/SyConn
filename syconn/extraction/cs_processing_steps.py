@@ -1414,7 +1414,7 @@ def export_matrix(wd, obj_version=None, dest_name=None, syn_prob_t=.5):
     m_syn_sign = sd_syn_ssv.load_cached_data("syn_type_sym_ratio")[m]
 
     m_sizes = np.multiply(m_sizes, m_syn_sign)
-
+    m_sp = m_sp.squeeze()
     table = np.concatenate([m_coords, m_ssv_partners, m_sizes[:, None],
                             m_axs, m_cts, m_sp, m_syn_prob[:, None]], axis=1)
 
@@ -1434,7 +1434,11 @@ def export_matrix(wd, obj_version=None, dest_name=None, syn_prob_t=.5):
     m_sizes = np.abs(m_sizes)
 
     ms_axs = np.sort(m_axs, axis=1)
-    u_axs = np.unique(ms_axs, axis=0)
+    # vigra currently requires numpy==1.11.1
+    try:
+        u_axs = np.unique(ms_axs, axis=0)
+    except TypeError:  # in case numpy < 1.13
+        u_axs = np.vstack({tuple(row) for row in ms_axs})
     for u_ax in u_axs:
         anno = skeleton.SkeletonAnnotation()
         anno.scaling = sd_syn_ssv.scaling
