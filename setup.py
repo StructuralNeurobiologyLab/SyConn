@@ -39,7 +39,8 @@ config = {
                          'opencv-python', 'pyopengl', 'scikit-learn==0.19.1',
                          'scikit-image', 'm2r', 'plyfile', 'vtkInterface',
                          'sphinx-autodoc-typehints', 'openmesh', 'pytest',
-                         'pytest-runner', 'snappy', 'python-snappy'],
+                         'pytest-runner', 'snappy', 'python-snappy',
+                         'prompt-toolkit<2.0'],
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_utils'
                          '/tarball/master#egg=knossos_utils',

@@ -709,10 +709,21 @@ def get_glia_model():
 
 
 def get_celltype_model(init_gpu=None):
-    # this model was trained with 'naive_view_normalization'
+    """
+    retrained on new GT on Jan. 13th, 2019
+    Parameters
+    ----------
+    init_gpu
+
+    Returns
+    -------
+
+    """
+    # this model was trained with 'naive_view_normalization_new'
     m = NeuralNetworkInterface(global_params.mpath_celltype,
                                imposed_batch_size=2, nb_labels=4,
                                normalize_data=True,
+                               normalize_func=naive_view_normalization_new,
                                init_gpu=init_gpu)
     _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
     return m

@@ -5,25 +5,25 @@
 import os
 import syconn
 
-save_path = '~/CNN_Training/SyConn/celltype/'
+save_path = '~/CNN_Training/SyConn/celltype_correctedGT/'
 # preview_data_path = None
 # preview_kwargs    = dict(export_class='all', max_z_pred=5)
 # initial_prev_h   = 0.5                  # hours: time after which first preview is made
 # prev_save_h      = 1.0
 home = os.path.expanduser("~/")
 data_class = (os.path.split(syconn.__file__)[0] + '/cnn/TrainData.py',
-              'SSVCelltype')
-background_processes = 8
+              'CelltypeViews')
+background_processes = 4
 
 n_steps = 400000
-max_runtime = 4 * 24 * 3600 # in seconds
+max_runtime = 4 * 24 * 3600  # in seconds
 history_freq = 200
 monitor_batch_size = 48
 optimiser = 'Adam'
 nb_views = 20
 save_name = "g1_%dviews_v3" % nb_views
 data_batch_args = {}
-data_init_kwargs = {"nb_views": nb_views, "nb_cpus": 1, "raw_only": False,
+data_init_kwargs = {"raw_only": False, "nb_views": nb_views,
                     "reduce_context": 0, "reduce_context_fact": 1,
                     "binary_views": False}
 optimiser_params = dict(lr=10e-4, mom=0.9, wd=0.5e-3, beta2=0.99)
@@ -43,12 +43,13 @@ if data_init_kwargs["reduce_context_fact"] > 1:
     x = 128 / data_init_kwargs["reduce_context_fact"]
     y = 256 / data_init_kwargs["reduce_context_fact"]
 
+
 def create_model():
     from elektronn2 import neuromancer
 
     act = 'relu'
     in_sh = (batch_size, 1 if data_init_kwargs["raw_only"] else 4,
-             data_init_kwargs["nb_views"], int(x), int(y))
+             nb_views, int(x), int(y))
     inp = neuromancer.Input(in_sh, 'b,f,z,y,x', name='raw')
     out0 = neuromancer.Conv(inp, 13, (1, 5, 5), (1, 2, 2), activation_func=act, dropout_rate=dr)
     out0 = neuromancer.Conv(out0, 19, (1, 5, 5), (1, 2, 2), activation_func=act, dropout_rate=dr)

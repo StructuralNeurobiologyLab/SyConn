@@ -103,10 +103,10 @@ def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
     sso.save_attributes(["celltype_cnn_probas"], [res])
 
 
-def sso_views_to_modelinput(sso, nb_views):
+def sso_views_to_modelinput(sso, nb_views, view_key=None):
     np.random.seed(0)
     assert len(sso.sv_ids) > 0
-    views = sso.load_views()
+    views = sso.load_views(view_key=view_key)
     np.random.shuffle(views)
     # view shape: (#multi-views, 4 channels, 2 perspectives, 128, 256)
     views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
