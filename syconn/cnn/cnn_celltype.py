@@ -5,7 +5,7 @@
 import os
 import syconn
 
-save_path = '~/CNN_Training/SyConn/celltype_correctedGT/'
+save_path = '~/CNN_Training/SyConn/celltype/'
 # preview_data_path = None
 # preview_kwargs    = dict(export_class='all', max_z_pred=5)
 # initial_prev_h   = 0.5                  # hours: time after which first preview is made
@@ -13,21 +13,21 @@ save_path = '~/CNN_Training/SyConn/celltype_correctedGT/'
 home = os.path.expanduser("~/")
 data_class = (os.path.split(syconn.__file__)[0] + '/cnn/TrainData.py',
               'CelltypeViews')
-background_processes = 4
+background_processes = 10
 
 n_steps = 400000
 max_runtime = 4 * 24 * 3600  # in seconds
 history_freq = 200
-monitor_batch_size = 48
+monitor_batch_size = 96
 optimiser = 'Adam'
 nb_views = 20
-save_name = "g1_%dviews_v3" % nb_views
+save_name = "g1_%dviews_corrected_v2_newdrawing_smallbatchsize_b2" % nb_views
 data_batch_args = {}
 data_init_kwargs = {"raw_only": False, "nb_views": nb_views,
                     "reduce_context": 0, "reduce_context_fact": 1,
                     "binary_views": False}
-optimiser_params = dict(lr=10e-4, mom=0.9, wd=0.5e-3, beta2=0.99)
-batch_size = 16
+optimiser_params = dict(lr=5e-4, mom=0.9, wd=0.5e-3, beta2=0.99)
+batch_size = 2
 schedules = {"lr": {"dec": 0.98}}#{'lr': {'updates': [(2000, 10e-4), (3000, 8e-4), (5000, 6e-4), (7500, 4e-4), (15000, 2e-4)]}}
 dr = 0.08
 

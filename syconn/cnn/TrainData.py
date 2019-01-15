@@ -267,7 +267,7 @@ class MultiViewData(Data):
             self.train_l = np.zeros((1, 1))
             self.valid_d = np.zeros((1, 1))
             self.valid_l = np.zeros((1, 1))
-            self.example_shape = self.train_d[0].shape
+            self.example_shape = self.train_d[:1].shape
             super(MultiViewData, self).__init__()
             return
 
@@ -360,15 +360,16 @@ class CelltypeViews(MultiViewData):
     def __init__(self, inp_node, out_node, raw_only=False, nb_views=20,
                  reduce_context=0, binary_views=False, reduce_context_fact=1,
                  load_data=False, nb_cpus=1):
+        # TODO: current cache size is not related to max_cache_uses nor batch_size
         self.view_key = "raw{}".format(2)
         self.nb_views = nb_views
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
         self.reduce_context = reduce_context
-        self.max_nb_cache_uses = 100
+        self.max_nb_cache_uses = 2000
         self.current_cache_uses = 0
-        self.view_cache = None
-        self.label_cache = None
+        self.view_cache = {'train': None, 'valid': None, 'test': None}
+        self.label_cache = {'train': None, 'valid': None, 'test': None}
         self.reduce_context_fact = reduce_context_fact
         self.binary_views = binary_views
         self.example_shape = (nb_views, 4, 2, 128, 256)
@@ -386,6 +387,7 @@ class CelltypeViews(MultiViewData):
         self.train_d = self.train_d[:, None]
         self.valid_d = self.valid_d[:, None]
         self.test_d = self.test_d[:, None]
+        super(MultiViewData, self).__init__()
 
     def getbatch(self, batch_size, source='train'):
         self._reseed()
@@ -396,7 +398,7 @@ class CelltypeViews(MultiViewData):
             self.valid_d = self.valid_d[ixs]
             self.valid_l = self.valid_l[ixs]
         # NOTE: also performs 'naive_view_normalization'
-        if self.view_cache is None or self.current_cache_uses == self.max_nb_cache_uses:
+        if self.view_cache[source] is None or self.current_cache_uses == self.max_nb_cache_uses:
             sample_fac = np.max([int(self.nb_views / 20), 1])  # draw more ssv if number of views is high
             nb_ssv = 12 * sample_fac  # 1 for each class
             sample_ixs = []
@@ -406,20 +408,23 @@ class CelltypeViews(MultiViewData):
             np.random.shuffle(labels2draw)  # change order
             for i in labels2draw:
                 curr_nb_samples = nb_ssv // 4 * class_sample_weight[i]  # sample more EA and MSN
-                if source == "train":
-                    sample_ixs.append(np.random.choice(self.train_d[self.train_l == i],
-                                                       curr_nb_samples, replace=True).tolist())
-                    l += [[i] * curr_nb_samples]
-                elif source == "valid":
-                    sample_ixs.append(np.random.choice(self.valid_d[self.valid_l == i],
-                                                       curr_nb_samples, replace=True).tolist())
-                    l += [[i] * curr_nb_samples]
-                elif source == "test":
-                    sample_ixs.append(np.random.choice(self.test_d[self.test_l == i],
-                                                       curr_nb_samples, replace=True).tolist())
-                    l += [[i] * curr_nb_samples]
-                else:
-                    raise NotImplementedError
+                try:
+                    if source == "train":
+                        sample_ixs.append(np.random.choice(self.train_d[self.train_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    elif source == "valid":
+                        sample_ixs.append(np.random.choice(self.valid_d[self.valid_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    elif source == "test":
+                        sample_ixs.append(np.random.choice(self.test_d[self.test_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    else:
+                        raise NotImplementedError
+                except ValueError:  # requested class does not exist in current dataset
+                    pass
             ssos = []
             sample_ixs = np.concatenate(sample_ixs)
             l = np.concatenate(l)
@@ -427,15 +432,81 @@ class CelltypeViews(MultiViewData):
                 sso = self.ssd.get_super_segmentation_object(ix)
                 sso.nb_cpus = self.nb_cpus
                 ssos.append(sso)
-            self.view_cache = [sso.load_views(view_key="raw{}".format(2)) for sso in ssos]
-            self.label_cache = l
+            self.view_cache[source] = [sso.load_views(view_key="raw{}".format(2)) for sso in ssos]
+            self.label_cache[source] = l
+            # draw big cache batch from current SSOs from which training batches are drawn
+            self.view_cache[source], self.label_cache[source] = transform_celltype_data_views(
+                self.view_cache[source], self.label_cache[source], 2000, self.nb_views, norm_func=naive_view_normalization_new)
             self.current_cache_uses = 0
-        ixs = np.arange(len(self.view_cache))
+        ixs = np.arange(len(self.view_cache[source]))
         with temp_seed(None):
             np.random.shuffle(ixs)
-        self.view_cache = [self.view_cache[ix] for ix in ixs]
-        self.label_cache = self.label_cache[ixs]
-        d, l = transform_celltype_data_views(self.view_cache, self.label_cache,
+        ixs = ixs[:batch_size]
+        d, l = self.view_cache[source][ixs], self.label_cache[source][ixs]
+        if self.reduce_context > 0:
+            d = d[:, :, :, (self.reduce_context/2):(-self.reduce_context/2),
+                self.reduce_context:-self.reduce_context]
+        if self.reduce_context_fact > 1:
+            d = d[:, :, :, ::self.reduce_context_fact, ::self.reduce_context_fact]
+        if self.binary_views:
+            d[d < 1.0] = 0
+        self.current_cache_uses += 1
+        if self.raw_only:
+            return d[:, :1], l
+        return tuple([d, l])
+
+    def getbatch_old(self, batch_size, source='train'):
+        self._reseed()
+        if source == 'valid':
+            nb = len(self.valid_l)
+            ixs = np.arange(nb)
+            np.random.shuffle(ixs)
+            self.valid_d = self.valid_d[ixs]
+            self.valid_l = self.valid_l[ixs]
+        # NOTE: also performs 'naive_view_normalization'
+        if self.view_cache[source] is None or self.current_cache_uses == self.max_nb_cache_uses:
+            sample_fac = np.max([int(self.nb_views / 20), 1])  # draw more ssv if number of views is high
+            nb_ssv = 12 * sample_fac  # 1 for each class
+            sample_ixs = []
+            l = []
+            labels2draw = np.arange(4)
+            class_sample_weight = np.array([2, 2, 1, 1])
+            np.random.shuffle(labels2draw)  # change order
+            for i in labels2draw:
+                curr_nb_samples = nb_ssv // 4 * class_sample_weight[i]  # sample more EA and MSN
+                try:
+                    if source == "train":
+                        sample_ixs.append(np.random.choice(self.train_d[self.train_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    elif source == "valid":
+                        sample_ixs.append(np.random.choice(self.valid_d[self.valid_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    elif source == "test":
+                        sample_ixs.append(np.random.choice(self.test_d[self.test_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    else:
+                        raise NotImplementedError
+                except ValueError:  # requested class does not exist in current dataset
+                    pass
+            ssos = []
+            sample_ixs = np.concatenate(sample_ixs)
+            l = np.concatenate(l)
+            for ix in sample_ixs:
+                sso = self.ssd.get_super_segmentation_object(ix)
+                sso.nb_cpus = self.nb_cpus
+                ssos.append(sso)
+            self.view_cache[source] = [sso.load_views(view_key="raw{}".format(2)) for sso in ssos]
+            self.label_cache[source] = l
+            self.current_cache_uses = 0
+        ixs = np.arange(len(self.view_cache[source]))
+        with temp_seed(None):
+            np.random.shuffle(ixs)
+        self.view_cache[source] = [self.view_cache[source][ix] for ix in ixs]
+        self.label_cache[source] = self.label_cache[source][ixs]
+        d, l = transform_celltype_data_views(self.view_cache[source], self.label_cache[source],
                                              batch_size, self.nb_views,
                                              norm_func=naive_view_normalization_new)
         if self.reduce_context > 0:
