@@ -1382,7 +1382,7 @@ def _collect_properties_from_ssv_partners_thread(args):
         this_attr_dc.push()
 
 
-def export_matrix(wd, obj_version=None, dest_name=None, syn_prob_t=.5):
+def export_matrix(obj_version=None, dest_name=None, syn_prob_t=.5):
     """
     Writes .csv summary file of connectivity matrix.
 
@@ -1397,7 +1397,7 @@ def export_matrix(wd, obj_version=None, dest_name=None, syn_prob_t=.5):
     if dest_name is None:
         dest_name = global_params.wd + '/connectivity_matrix/conn_mat'
     os.makedirs(os.path.split(dest_name)[0], exist_ok=True)
-    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
+    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.wd,
                                                   version=obj_version)
 
     syn_prob = sd_syn_ssv.load_cached_data("syn_prob")

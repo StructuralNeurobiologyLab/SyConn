@@ -40,9 +40,9 @@ if __name__ == '__main__':
     # synapse probabilities etc, -> recompute=False
     dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True,
                      stride=100, recompute=False)
-    log.info('Synapse property collection from SSVs finished.')
+    # log.info('Synapse property collection from SSVs finished.')
 
     # export_matrix
     dest_name = global_params.wd + '/connectivity_matrix/conn_mat'
-    cps.export_matrix(global_params.wd, dest_name(dest_name))
+    cps.export_matrix(dest_name=dest_name)
     log.info('Connectivity matrix was epxorted to "{}".'.format(dest_name))
