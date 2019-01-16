@@ -117,7 +117,6 @@ def connectivity_to_nx_graph():
     for k, v in cd_dict.items():
         cd_dict[k] = v[idx_filter]
 
-
     idx_filter = (cd_dict['neuron_partner_ax_0']\
                  + cd_dict['neuron_partner_ax_1']) == 1
 
@@ -145,15 +144,15 @@ def connectivity_to_nx_graph():
     return nxg
 
 
-def load_cached_data_dict(wd=None, cs_seg_ds_version='33'):
+def load_cached_data_dict(wd=None, syn_version=None):
     """
     Loads all cached data from a contact site segmentation dataset into a
     dictionary for further processing.
 
     Parameters
     ----------
-    syconnfs_working_dir
-    cs_seg_ds_version
+    wd : str
+    syn_version : str
 
     Returns
     -------
@@ -162,15 +161,15 @@ def load_cached_data_dict(wd=None, cs_seg_ds_version='33'):
     if wd is None:
         wd = global_params.wd
     start = time.time()
-    csd = segmentation.SegmentationDataset(obj_type='cs', working_dir=wd,
-                                           version=cs_seg_ds_version)
+    csd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=wd,
+                                           version=syn_version)
     cd_dict = dict()
-    cd_dict['ids'] = csd.load_cached_data('ids')
+    cd_dict['ids'] = csd.load_cached_data('id')
     # in um2, overlap of cs and sj
     cd_dict['syn_size'] =\
-        csd.load_cached_data('overlap_area')
+        csd.load_cached_data('mesh_area') / 2  # as used in syn_analysis.py -> export_matrix
     cd_dict['synaptivity_proba'] = \
-        csd.load_cached_data('synaptivity_proba')
+        csd.load_cached_data('syn_prob')
     cd_dict['coord_x'] = \
         csd.load_cached_data('rep_coord')[:, 0].astype(np.int)
     cd_dict['coord_y'] = \
@@ -182,13 +181,17 @@ def load_cached_data_dict(wd=None, cs_seg_ds_version='33'):
     cd_dict['ssv_partner_1'] = \
         csd.load_cached_data('neuron_partners')[:, 1].astype(np.int)
     cd_dict['neuron_partner_ax_0'] = \
-        csd.load_cached_data('neuron_partner_ax')[:, 0].astype(np.int)
+        csd.load_cached_data('partner_axoness')[:, 0].astype(np.int)
     cd_dict['neuron_partner_ax_1'] = \
-        csd.load_cached_data('neuron_partner_ax')[:, 1].astype(np.int)
+        csd.load_cached_data('partner_axoness')[:, 1].astype(np.int)
     cd_dict['neuron_partner_ct_0'] = \
-        csd.load_cached_data('neuron_partner_ct')[:, 0].astype(np.int)
+        csd.load_cached_data('partner_celltypes')[:, 0].astype(np.int)
     cd_dict['neuron_partner_ct_1'] = \
-        csd.load_cached_data('neuron_partner_ct')[:, 1].astype(np.int)
+        csd.load_cached_data('partner_celltypes')[:, 1].astype(np.int)
+    cd_dict['neuron_partner_sp_0'] = \
+        csd.load_cached_data('partner_spiness')[:, 0].astype(np.int)
+    cd_dict['neuron_partner_sp_1'] = \
+        csd.load_cached_data('partner_spiness')[:, 1].astype(np.int)
     print('Getting all objects took: {0}'.format(time.time() - start))
     return cd_dict
 

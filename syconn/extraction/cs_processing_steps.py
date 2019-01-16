@@ -1384,7 +1384,7 @@ def _collect_properties_from_ssv_partners_thread(args):
 
 def export_matrix(obj_version=None, dest_name=None, syn_prob_t=.5):
     """
-    Writes .csv summary file of connectivity matrix.
+    Writes .csv and .kzip summary file of connectivity matrix.
 
     Parameters
     ----------
@@ -1413,6 +1413,7 @@ def export_matrix(obj_version=None, dest_name=None, syn_prob_t=.5):
     m_syn_prob = syn_prob[m]
     m_syn_sign = sd_syn_ssv.load_cached_data("syn_type_sym_ratio")[m]
 
+    # TODO: fix syn_sign, see also property key below (loop of skeleton node generation)
     m_sizes = np.multiply(m_sizes, m_syn_sign)
     m_sp = m_sp.squeeze()
     table = np.concatenate([m_coords, m_ssv_partners, m_sizes[:, None],
@@ -1452,12 +1453,14 @@ def export_matrix(obj_version=None, dest_name=None, syn_prob_t=.5):
             #    r = m_sizes[i_syn]
             skel_node = skeleton.SkeletonNode(). \
             from_scratch(anno, c[0], c[1], c[2], radius=r)
-            skel_node.data["neuron_partners"] = m_ssv_partners[i_syn]
+            skel_node.data["partner_ids"] = m_ssv_partners[i_syn]
             skel_node.data["size"] = m_sizes[i_syn]
             skel_node.data["syn_prob"] = m_syn_prob[i_syn]
-            skel_node.data["sign"] = m_syn_sign[i_syn]
-            skel_node.data['partner_spiness'] = m_sp[i_syn]
-            skel_node.data['partner_celltypes'] = m_cts[i_syn]
+            # TODO: fix syn_sign
+            skel_node.data["sym2asym_ratio"] = m_syn_sign[i_syn]
+            skel_node.data['partner_sp'] = m_sp[i_syn]
+            skel_node.data['partner_ct'] = m_cts[i_syn]
+            skel_node.data['partner_ax'] = m_axs[i_syn]
             anno.addNode(skel_node)
         annotations.append(anno)
     skeleton_utils.write_skeleton(dest_name + ".k.zip", annotations)
