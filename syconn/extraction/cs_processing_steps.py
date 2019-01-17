@@ -1302,7 +1302,8 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                          nb_cpus=1, n_max_co_processes=None):
     """
     Collect axoness, cell types and spiness from synaptic partners and stores
-     them in syn_ssv objects.
+    them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
+    (-1 for asym., 1 for sym. synapses).
 
     Parameters
     ----------
@@ -1366,6 +1367,7 @@ def _collect_properties_from_ssv_partners_thread(args):
             for ssv_partner_id in synssv_o.attr_dict["neuron_partners"]:
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
                 ssv_o.load_attr_dict()
+                # add pred_type key to global_params?
                 curr_ax = ssv_o.axoness_for_coords([synssv_o.rep_coord],
                                                    pred_type='axoness_avg10000')
                 axoness.append(curr_ax[0])
@@ -1374,9 +1376,10 @@ def _collect_properties_from_ssv_partners_thread(args):
                                                   'spiness')
                 spiness.append(curr_sp)
                 celltypes.append(ssv_o.attr_dict['celltype_cnn'])
-            synssv_o.attr_dict.update({"partner_axoness": axoness})
-            synssv_o.attr_dict.update({"partner_celltypes": celltypes})
-            synssv_o.attr_dict.update({"partner_spiness": spiness})
+            sym_asym_ratio = synssv_o.attr_dict['syn_type_sym_ratio']
+            syn_sign = -1 if sym_asym_ratio > global_params.sym_thresh else 1
+            synssv_o.attr_dict.update({'partner_axoness': axoness, 'partner_spiness': spiness,
+                                       'partner_celltypes': celltypes, 'syn_sign': syn_sign})
             this_attr_dc[synssv_id] = synssv_o.attr_dict
 
         this_attr_dc.push()
@@ -1411,13 +1414,16 @@ def export_matrix(obj_version=None, dest_name=None, syn_prob_t=.5):
     m_sizes = sd_syn_ssv.load_cached_data("mesh_area")[m] / 2
     m_ssv_partners = sd_syn_ssv.load_cached_data("neuron_partners")[m]
     m_syn_prob = syn_prob[m]
-    m_syn_sign = sd_syn_ssv.load_cached_data("syn_type_sym_ratio")[m]
+    m_syn_sign = sd_syn_ssv.load_cached_data("syn_sign")[m]
+    m_syn_asym_ratio = sd_syn_ssv.load_cached_data("syn_type_sym_ratio")[m]
 
-    # TODO: fix syn_sign, see also property key below (loop of skeleton node generation)
-    m_sizes = np.multiply(m_sizes, m_syn_sign)
-    m_sp = m_sp.squeeze()
-    table = np.concatenate([m_coords, m_ssv_partners, m_sizes[:, None],
-                            m_axs, m_cts, m_sp, m_syn_prob[:, None]], axis=1)
+    # (loop of skeleton node generation)
+    # make sure cache-arrays have ndim == 2
+    m_sizes = np.multiply(m_sizes, m_syn_sign).squeeze()[:, None]  # N, 1
+    m_sp = m_sp.squeeze()  # N, 2
+    m_syn_prob = m_syn_prob.squeeze()[:, None]  # N, 1
+    table = np.concatenate([m_coords, m_ssv_partners, m_sizes, m_axs, m_cts,
+                            m_sp, m_syn_prob], axis=1)
 
     np.savetxt(dest_name + ".csv", table, delimiter="\t",
                header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2"
@@ -1456,8 +1462,8 @@ def export_matrix(obj_version=None, dest_name=None, syn_prob_t=.5):
             skel_node.data["partner_ids"] = m_ssv_partners[i_syn]
             skel_node.data["size"] = m_sizes[i_syn]
             skel_node.data["syn_prob"] = m_syn_prob[i_syn]
-            # TODO: fix syn_sign
-            skel_node.data["sym2asym_ratio"] = m_syn_sign[i_syn]
+            skel_node.data["syn_sign"] = m_syn_sign[i_syn]
+            skel_node.data["sym_asym_ratio"] = m_syn_asym_ratio[i_syn]
             skel_node.data['partner_sp'] = m_sp[i_syn]
             skel_node.data['partner_ct'] = m_cts[i_syn]
             skel_node.data['partner_ax'] = m_axs[i_syn]

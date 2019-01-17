@@ -41,12 +41,14 @@ NCORE_TOTAL = 340
 # TODO: Use NGPU_TOTAL everywhere
 NGPU_TOTAL = 34
 
+
 # --------- LOGGING
 # 'None' disables logging of SyConn modules (e.g. proc, handler, ...) to files.
 # Logs of executed scripts (syconn/scripts) will be stored at the
 # working directory + '/logs/' nonetheless.
 default_log_dir = None
 log_level = 'INFO'
+
 
 # --------- BACKEND DEFINITIONS
 backend = "FS"  # File system
@@ -59,6 +61,7 @@ py36path = '/u/pschuber/anaconda3/envs/py36/bin/python'  # TODO: make this more 
 # will be stored at wd + '/logs/'.
 DISABLE_FILE_LOGGING = True
 
+
 # --------- CONTACT SITE PARAMETERS
 # Synaptic junction bounding box diagonal threshold in nm; objects above will not be used during `syn_gen_via_cset`
 thresh_sj_bbd_syngen = 25e3
@@ -66,6 +69,8 @@ cs_gap_nm = 250
 # mapping parameters in 'map_objects_to_synssv'; assignment of cellular organelles to syn_ssv
 max_vx_dist_nm = 2000
 max_rep_coord_dist_nm = 4000
+sym_thresh = 0.225  # above will be assigned synaptic sign (-1, inhibitory) and <= will be (1, excitatory)
+
 
 # --------- MESH PARAMETERS
 existing_cell_organelles = ['mi', 'sj', 'vc', 'syn_ssv']
@@ -74,11 +79,12 @@ MESH_DOWNSAMPLING = {"sv": (8, 8, 4), "sj": (2, 2, 1), "vc": (4, 4, 2),
                      'syn_ssv': (2, 2, 1)}
 MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0,
                 "conn": 4, 'syn_ssv': 20}
-
 MESH_MIN_OBJ_VX = 10
+
 
 # --------- VIEW PARAMETERS
 NB_VIEWS = 2
+
 
 # --------- GLIA PARAMETERS
 # min. connected component size of glia nodes/SV after thresholding glia proba
@@ -86,10 +92,14 @@ min_cc_size_glia = 8e3  # in nm; L1-norm on vertex bounding box
 # min. connected component size of neuron nodes/SV after thresholding glia proba
 min_cc_size_neuron = 8e3  # in nm; L1-norm on vertex bounding box
 
-glia_thresh = 0.161489   # Threshold for glia classification
-SUBCC_SIZE_BIG_SSV = 35  # number of sv used during local rendering. The total number of SV used are SUBCC_SIZE_BIG_SSV + 2*(SUBCC_CHUNKE_SIZE_BIG_SSV-1)
+# Threshold for glia classification
+glia_thresh = 0.161489
+# number of sv used during local rendering. The total number of SV used are SUBCC_SIZE_BIG_SSV + 2*(SUBCC_CHUNKE_SIZE_BIG_SSV-1)
+SUBCC_SIZE_BIG_SSV = 35
 RENDERING_MAX_NB_SV = 5e3
-SUBCC_CHUNK_SIZE_BIG_SSV = 9  # number of SV for which views are rendered in one pass
+# number of SV for which views are rendered in one pass
+SUBCC_CHUNK_SIZE_BIG_SSV = 9
+
 
 # --------- CLASSIFICATION MODELS
 model_dir = wd + '/models/'
@@ -100,15 +110,19 @@ mpath_axoness = '{}/axoness_g1_v2/g1_v2-FINAL.mdl'.format(model_dir)
 mpath_glia = '{}/glia_g0_v0/g0_v0-FINAL.mdl'.format(model_dir)
 mpath_syn_rfc = '{}/conn_syn_rfc//rfc'.format(model_dir)
 
+
 # --------- RFC PARAMETERS
 SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000}  # in nm
+
 
 # --------- SPINE PARAMETERS
 min_spine_cc_size = 10
 min_edge_dist_spine_graph = 110
 
+
 # --------- COMPARTMENT PARAMETERS
 DIST_AXONESS_AVERAGING = 10000
+
 
 # --------- CELLTYPE PARAMETERS
 

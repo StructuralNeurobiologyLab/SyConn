@@ -16,7 +16,8 @@ from syconn.handler.logger import initialize_logging
 
 # ~1h for >90%, >15h for all
 if __name__ == "__main__":
-    log = initialize_logging('skeleton_generation', global_params.wd + '/logs/')
+    log = initialize_logging('skeleton_generation', global_params.wd + '/logs/',
+                             overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.wd)
 
     # TODO: think about using create_sso_skeleton_fast if underlying RAG obeys spatial correctness (> 10x faster)

@@ -20,7 +20,8 @@ from syconn.handler.logger import initialize_logging
 
 
 if __name__ == "__main__":
-    log = initialize_logging('glia_view_rendering', wd + '/logs/')
+    log = initialize_logging('glia_view_rendering', wd + '/logs/',
+                             overwrite=False)
     N_JOBS = 360
     np.random.seed(0)
 

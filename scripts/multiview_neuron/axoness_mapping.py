@@ -16,7 +16,8 @@ from syconn.handler.logger import initialize_logging
 
 if __name__ == "__main__":
     """Maps axon prediction of rendering locations onto SSV skeletons"""
-    log = initialize_logging('axon_mapping', global_params.wd + '/logs/')
+    log = initialize_logging('axon_mapping', global_params.wd + '/logs/',
+                             overwrite=False)
     pred_key_appendix = ""
     # Working directory has to be changed globally in global_params
     ssd = SuperSegmentationDataset(working_dir=global_params.wd)

@@ -15,9 +15,8 @@ from syconn.handler.logger import initialize_logging
 
 
 if __name__ == "__main__":
-    log = initialize_logging('spine_identification', wd + '/logs/')
-    # TODO: currently working directory has to be set globally in global_params and is not adjustable here
-    #  because all qsub jobs will start a script referring to 'global_params.wd'
+    log = initialize_logging('spine_identification', wd + '/logs/',
+                             overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=wd)
     pred_key = "spiness"
 
@@ -34,9 +33,9 @@ if __name__ == "__main__":
     log.info('Starting spine prediction.')
     qu.QSUB_script(multi_params, "predict_spiness_chunked",
                    n_max_co_processes=NGPU_TOTAL, pe="openmp", queue=None,
-                   n_cores=10, python_path=py36path,  # use python 3.6 in
-                   suffix="",  additional_flags="--gres=gpu:1")   # removed -V
-
+                   n_cores=10, python_path=py36path,  # use python 3.6
+                   suffix="",  additional_flags="--gres=gpu:1")   # removed -V (used with QSUB)
+    log.info('Finished spine prediction.')
     # map semantic spine segmentation of multi views on SSV mesh
     # TODO: CURRENTLY HIGH MEMORY CONSUMPTION
     if not ssd.mapping_dict_exists:
@@ -53,4 +52,6 @@ if __name__ == "__main__":
                      kwargs_semseg2mesh) for ssv_ids in multi_params]
     log.info('Starting mapping of spine predictions to neurite surfaces.')
     qu.QSUB_script(multi_params, "map_spiness", pe="openmp", queue=None,
-                   n_cores=2, suffix="", additional_flags="", resume_job=False)  # removed -V
+                   n_cores=2, suffix="", additional_flags="", resume_job=False)  # removed -V (used with QSUB)
+    log.info('Finished spine mapping.')
+

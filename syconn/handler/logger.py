@@ -41,7 +41,8 @@ def get_main_log():
     return logger
 
 
-def initialize_logging(log_name, log_dir=global_params.default_log_dir):
+def initialize_logging(log_name, log_dir=global_params.default_log_dir,
+                       overwrite=True):
     """
     Logger for each package module. For import processing steps individual
     logger can be defined (e.g. multiviews, skeleton)
@@ -52,6 +53,8 @@ def initialize_logging(log_name, log_dir=global_params.default_log_dir):
     log_dir : str
         Set log_dir specifically. Will then create a filehandler and ignore the
          state of global_params.DISABLE_FILE_LOGGING state.
+    overwrite : bool
+        Previous log file will be overwritten
 
     Returns
     -------
@@ -71,7 +74,7 @@ def initialize_logging(log_name, log_dir=global_params.default_log_dir):
         except TypeError:
             if not os.path.isdir(log_dir):
                 os.makedirs(log_dir)
-        if os.path.isfile(log_dir + log_name + '.log'):
+        if overwrite and os.path.isfile(log_dir + log_name + '.log'):
             os.remove(log_dir + log_name + '.log')
         # add the handlers to logger
         fh = logging.FileHandler(log_dir + log_name + ".log")

@@ -86,7 +86,8 @@ class SuperSegmentationObject(object):
             (SV, mitochondria, vesicle clouds, ...)
         ssd_type : str
         """
-
+        if version == 'temp':
+            version = 'tmp'
         if version == "tmp":
             self._object_caching = False
             self._voxel_caching = False
@@ -128,6 +129,7 @@ class SuperSegmentationObject(object):
         self._weighted_graph = None
         self._sample_locations = None
         self._rot_mat = None
+        self._label_dict = {}
 
         if sv_ids is not None:
             self.attr_dict["sv"] = sv_ids
@@ -377,7 +379,12 @@ class SuperSegmentationObject(object):
 
     def label_dict(self, data_type='vertex'):
         if data_type == 'vertex':
-            return CompressedStorage(self.vlabel_dc_path)
+            if data_type in self._label_dict:
+                pass
+            else:
+                self._label_dict[data_type] = CompressedStorage(
+                    None if self.version == 'tmp' else self.vlabel_dc_path)
+            return self._label_dict[data_type]
         else:
             raise ValueError('Label dict for data type "{}" not supported.'
                              ''.format(data_type))
@@ -661,7 +668,7 @@ class SuperSegmentationObject(object):
 
     def save_attr_dict(self):
         if self.version == 'tmp':
-            log_reps.warning('"save_attr_dict called" but this SSV '
+            log_reps.warning('"save_attr_dict" called but this SSV '
                              'has version "tmp", attribute dict will'
                              ' not be saved to disk.')
             return
@@ -684,8 +691,8 @@ class SuperSegmentationObject(object):
         attr_values : tuple of items
         """
         if self.version == 'tmp':
-            log_reps.warning('"save_attributes called" but this SSV '
-                             'has version "tmp", attribute dict will'
+            log_reps.warning('"save_attributes" called but this SSV '
+                             'has version "tmp", attributes will'
                              ' not be saved to disk.')
             return
         if not hasattr(attr_keys, "__len__"):
@@ -900,8 +907,8 @@ class SuperSegmentationObject(object):
 
     def save_skeleton(self, to_kzip=False, to_object=True):
         if self.version == 'tmp':
-            log_reps.warning('"save_skeleton called" but this SSV '
-                             'has version "tmp", attribute dict will'
+            log_reps.warning('"save_skeleton" called but this SSV '
+                             'has version "tmp", skeleton will'
                              ' not be saved to disk.')
             return
         if to_object:
@@ -1116,6 +1123,11 @@ class SuperSegmentationObject(object):
         -------
 
         """
+        if self.version == 'tmp':
+            log_reps.warning('"save_views" called but this SSV '
+                             'has version "tmp", views will'
+                             ' not be saved to disk.')
+            return
         view_dc = CompressedStorage(self.view_path, read_only=False,
                                     disable_locking=not self.enable_locking)
         view_dc[view_key] = views
@@ -1418,8 +1430,13 @@ class SuperSegmentationObject(object):
             for ii in range(len(locs[:-1])):
                 sv_views = views[cumsum[ii]:cumsum[ii + 1]]
                 reordered_views.append(sv_views)
+            if self.version == 'tmp':
+                log_reps.warning('"predict_semseg" called but this SSV '
+                                 'has version "tmp", results will'
+                                 ' not be saved to disk.')
             ssh.pred_svs_semseg(m, reordered_views, semseg_key, self.svs,
-                                nb_cpus=self.nb_cpus, verbose=verbose)
+                                nb_cpus=self.nb_cpus, verbose=verbose,
+                                return_pred=self.version == 'tmp')  # do not write to disk
 
     def semseg2mesh(self, semseg_key, dest_path=None, nb_views=None, k=1,
                     force_overwrite=False):
@@ -2110,17 +2127,23 @@ class SuperSegmentationObject(object):
         start = time.time()
         pred_key = "axoness_probas"
         pred_key += pred_key_appendix
+        if self.version == 'tmp':
+            log_reps.warning('"predict_views_axoness" called but this SSV '
+                             'has version "tmp", results will'
+                             ' not be saved to disk.')
         try:
             predict_sos_views(model, self.svs, pred_key,
                               nb_cpus=self.nb_cpus, verbose=verbose,
-                              woglia=True, raw_only=False)
+                              woglia=True, raw_only=False,
+                              return_proba=self.version == 'tmp')  # do not write to disk
         except KeyError:
             log_reps.error("Re-rendering SSV %d (%d SVs), because views are missing."
                            % (self.id, len(self.sv_ids)))
             self.render_views(add_cellobjects=True, woglia=True, overwrite=True)
             predict_sos_views(model, self.svs, pred_key,
                               nb_cpus=self.nb_cpus, verbose=verbose,
-                              woglia=True, raw_only=False)
+                              woglia=True, raw_only=False,
+                              return_proba=self.version == 'tmp')  # do not write to disk)
         end = time.time()
         log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
                        "%0.4fs/SV" % (len(self.svs), end - start,

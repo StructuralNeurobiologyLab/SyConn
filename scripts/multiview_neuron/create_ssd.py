@@ -13,7 +13,8 @@ from syconn.proc import ssd_proc
 
 
 if __name__ == '__main__':
-    log = initialize_logging('create_neuron_ssd', global_params.wd + '/logs/')
+    log = initialize_logging('create_neuron_ssd', global_params.wd + '/logs/',
+                             overwrite=False)
     suffix = global_params.rag_suffix
     # TODO: the following paths currently require prior glia-splitting
     kml_p = "{}/glia/neuron_rag_ml{}.k.zip".format(global_params.wd, suffix)

@@ -18,7 +18,8 @@ from syconn.handler.logger import initialize_logging
 
 
 if __name__ == "__main__":
-    log = initialize_logging('glia_splitting', wd + '/logs/')
+    log = initialize_logging('glia_splitting', wd + '/logs/',
+                             overwrite=False)
     suffix = rag_suffix
     # path to networkx file containing the initial rag, TODO: create alternative formats
     G = nx.Graph()  # TODO: Make this more general

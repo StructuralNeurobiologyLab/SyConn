@@ -469,13 +469,15 @@ def predict_views(model, views, ch, pred_key, single_cc_only=False,
     views = np.concatenate(views)
     probas = model.predict_proba(views, verbose=verbose)
     so_probas = []
-    for ii, so in enumerate(part_views[:-1]):
+    for ii, _ in enumerate(part_views[:-1]):
         sv_probas = probas[part_views[ii]:part_views[ii + 1]]
         so_probas.append(sv_probas)
-        # so.attr_dict[key] = sv_probas
     assert len(part_views) == len(so_probas) + 1
     if return_proba:
         return so_probas
+    if nb_cpus > 1:  # make sure locking is enabled if multiprocessed
+        for so in ch:
+            so.enable_locking = True
     params = [[so, prob, pred_key] for so, prob in zip(ch, so_probas)]
     sm.start_multiprocess(multi_probas_saver, params, nb_cpus=nb_cpus)
 

@@ -26,6 +26,29 @@ subp_work_folder = "%s/SUBP/" % home_dir
 username = getpass.getuser()
 python_path = sys.executable
 
+# with py 3.6 the pool class was refactored and NoDaemonProcess impl. are not that straight forward
+#  anymore, see: https://stackoverflow.com/questions/6974695/python-process-pool-non-daemonic?rq=1
+if not (sys.version_info[0] == 3 and sys.version_info[1] > 5):
+    # found NoDaemonProcess on stackexchange by Chris Arndt - enables
+    # hierarchical multiprocessing
+    class NoDaemonProcess(Process):
+        # make 'daemon' attribute always return False
+        def _get_daemon(self):
+            return False
+
+        def _set_daemon(self, value):
+            pass
+
+        daemon = property(_get_daemon, _set_daemon)
+
+
+    # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
+    # because the latter is only a wrapper function, not a proper class.
+    class MyPool(multiprocessing.pool.Pool):
+        Process = NoDaemonProcess
+else:
+    MyPool = multiprocessing.pool.Pool
+
 
 def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
     """
@@ -43,22 +66,6 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
     result: list
         list of function returns
     """
-    # found NoDaemonProcess on stackexchange by Chris Arndt - enables
-    # hierarchical multiprocessing
-    class NoDaemonProcess(Process):
-        # make 'daemon' attribute always return False
-        def _get_daemon(self):
-            return False
-
-        def _set_daemon(self, value):
-            pass
-        daemon = property(_get_daemon, _set_daemon)
-
-    # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
-    # because the latter is only a wrapper function, not a proper class.
-    class MyPool(multiprocessing.pool.Pool):
-        Process = NoDaemonProcess
-
     if nb_cpus is None:
         nb_cpus = max(cpu_count(), 1)
 
@@ -87,7 +94,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
                             nb_cpus=None, show_progress=True):
     """
     Multiprocessing method which supports progress bar (therefore using
-     imap instead of map)
+    imap instead of map). # TODO: support generator params
 
     Parameters
     ----------
@@ -104,22 +111,6 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
     result: list
         list of function returns
     """
-    # found NoDaemonProcess on stackexchange by Chris Arndt - enables
-    # hierarchical multiprocessing
-    class NoDaemonProcess(Process):
-        # make 'daemon' attribute always return False
-        def _get_daemon(self):
-            return False
-
-        def _set_daemon(self, value):
-            pass
-        daemon = property(_get_daemon, _set_daemon)
-
-    # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
-    # because the latter is only a wrapper function, not a proper class.
-    class MyPool(multiprocessing.pool.Pool):
-        Process = NoDaemonProcess
-
     if nb_cpus is None:
         nb_cpus = cpu_count()
 
@@ -133,12 +124,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
 
     start = time.time()
     if nb_cpus > 1:
-        try:
-            pool = MyPool(nb_cpus)
-        except AssertionError:
-            # with py 3.6 the pool class was refactored and NoDaemonProcess impl. are not that straight forward
-            #  anymore, see: https://stackoverflow.com/questions/6974695/python-process-pool-non-daemonic?rq=1
-            pool = multiprocessing.pool.Pool(nb_cpus)
+        pool = MyPool(nb_cpus)
         if show_progress:
             result = list(tqdm.tqdm(pool.imap(func, params), total=len(params),
                                     ncols=80, leave=False, unit='jobs',
@@ -187,22 +173,6 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
     result: List
         list of function returns
     """
-    # found NoDaemonProcess on stackexchange by Chris Arndt - enables
-    # hierarchical multiprocessing
-    class NoDaemonProcess(Process):
-        # make 'daemon' attribute always return False
-        def _get_daemon(self):
-            return False
-
-        def _set_daemon(self, value):
-            pass
-        daemon = property(_get_daemon, _set_daemon)
-
-    # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
-    # because the latter is only a wrapper function, not a proper class.
-    class MyPool(multiprocessing.pool.Pool):
-        Process = NoDaemonProcess
-
     if nb_cpus is None:
         nb_cpus = max(cpu_count(), 1)
 

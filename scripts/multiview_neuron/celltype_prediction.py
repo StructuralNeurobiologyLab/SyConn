@@ -18,7 +18,8 @@ from syconn.mp import qsub_utils as qu
 
 # ~2h with 16 gpus
 if __name__ == "__main__":
-    log = initialize_logging('celltype_prediction', global_params.wd + '/logs/')
+    log = initialize_logging('celltype_prediction', global_params.wd + '/logs/',
+                             overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.wd)
     # shuffle SV IDs
     np.random.seed(0)

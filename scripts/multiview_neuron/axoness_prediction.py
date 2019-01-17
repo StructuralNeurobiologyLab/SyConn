@@ -21,7 +21,8 @@ def axoness_pred_exists(sv):
 
 
 if __name__ == "__main__":
-    log = initialize_logging('axon_prediction', global_params.wd + '/logs/')
+    log = initialize_logging('axon_prediction', global_params.wd + '/logs/',
+                             overwrite=False)
     # TODO: currently working directory has to be set globally in global_params and is not adjustable
     # here because all qsub jobs will start a script referring to 'global_params.wd'
     ssd = SuperSegmentationDataset(working_dir=global_params.wd)

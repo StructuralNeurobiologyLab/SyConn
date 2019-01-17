@@ -17,7 +17,8 @@ from syconn.mp import qsub_utils as qu
 
 
 if __name__ == "__main__":
-    log = initialize_logging('glia_prediction', wd + '/logs/')
+    log = initialize_logging('glia_prediction', wd + '/logs/',
+                             overwrite=False)
     # only append to this key if needed (for e.g. different versions, change accordingly in 'axoness_mapping.py')
     pred_key = "glia_probas"
     # Load initial RAG from  Knossos mergelist text file.

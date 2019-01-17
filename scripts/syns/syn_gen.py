@@ -19,7 +19,8 @@ from syconn.handler.logger import initialize_logging
 
 
 if __name__ == "__main__":
-    log = initialize_logging('synapse_analysis', global_params.wd + '/logs/')
+    log = initialize_logging('synapse_analysis', global_params.wd + '/logs/',
+                             overwrite=False)
 
     kd_seg_path = global_params.kd_seg_path
     # kd = knossosdataset.KnossosDataset()  # Sets initial values of object
