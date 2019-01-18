@@ -38,8 +38,10 @@ except Exception as e:
 
 # can't load more than one platform simultaneously
 if os.environ['PYOPENGL_PLATFORM'] == 'egl':
-    from OpenGL.EGL import eglDestroyContext
+    print('EGL')
+    from OpenGL.EGL import eglDestroyContext, eglSwapBuffers
 elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
+    print('OSMESA')
     from OpenGL.osmesa import *
 else:
     msg = 'PYOpenGL environment has to be "egl" or "osmesa".'
@@ -136,7 +138,7 @@ def draw_object(triangulation=True):
 
 
 def screen_shot(ws, colored=False, depth_map=False, clahe=False,
-                triangulation=True):
+                triangulation=True, egl_args=None):
     """
     Create screenshot of currently opened window and return as array.
 
@@ -154,7 +156,11 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
     """
     glBindFramebuffer(GL_FRAMEBUFFER, 0)
     draw_object(triangulation)
-    glReadBuffer(GL_FRONT)
+    if egl_args is None:
+        glReadBuffer(GL_FRONT)
+    else:
+        eglSwapBuffers(egl_args[0], egl_args[2])
+
     if depth_map:
         data = glReadPixels(0, 0, ws[0], ws[1],
                             GL_DEPTH_COMPONENT, GL_UNSIGNED_BYTE)
@@ -192,7 +198,8 @@ def init_ctx(ws):
             EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
             eglGetDisplay, eglInitialize, eglChooseConfig, \
             eglBindAPI, eglCreatePbufferSurface, \
-            eglCreateContext, eglMakeCurrent, EGLConfig
+            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, \
+            EGL_TRUE, EGL_FALSE,  EGL_LOSE_CONTEXT_ON_RESET, EGL_NO_RESET_NOTIFICATION
 
         major, minor = ctypes.c_long(), ctypes.c_long()
         num_configs = ctypes.c_long()
@@ -211,25 +218,28 @@ def init_ctx(ws):
         # Initialize EGL
         eglInitialize(dsp, major, minor)
         config_attr = arrays.GLintArray.asArray(
-            [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_LUMINANCE_SIZE, 8,
-             EGL_BLUE_SIZE, 0, EGL_RED_SIZE, 0, EGL_GREEN_SIZE, 0,
-             EGL_DEPTH_SIZE, 24, EGL_COLOR_BUFFER_TYPE,
-             EGL_LUMINANCE_BUFFER, EGL_RENDERABLE_TYPE,
-             EGL_OPENGL_BIT, EGL_CONFORMANT, EGL_OPENGL_BIT, EGL_NONE])
+            [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, #EGL_LUMINANCE_SIZE, 8,
+             EGL_BLUE_SIZE, 8, EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8,
+             EGL_DEPTH_SIZE, 8, EGL_COLOR_BUFFER_TYPE, #EGL_LUMINANCE_BUFFER,
+             EGL_RGB_BUFFER,
+             EGL_RENDERABLE_TYPE,
+             EGL_OPENGL_BIT,  EGL_NONE])   #EGL_CONFORMANT, EGL_OPENGL_BIT,
         eglChooseConfig(dsp, config_attr, configs, 1, num_configs)
 
         # Bind EGL to the OpenGL API
         eglBindAPI(EGL_OPENGL_API)
+        #attrbls = [major, minor,  EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_TRUE, EGL_FALSE, EGL_FALSE,
+         #          EGL_NO_RESET_NOTIFICATION]
+        attrbls = None
 
         # Create an EGL context
-        ctx = eglCreateContext(dsp, configs[0], EGL_NO_CONTEXT, None)
+        ctx = eglCreateContext(dsp, configs[0], EGL_NO_CONTEXT, attrbls)
 
         # Create an EGL pbuffer
         buf = eglCreatePbufferSurface(dsp, configs[0], [EGL_WIDTH, ws[0], EGL_HEIGHT, ws[1], EGL_NONE])
-        ctx = [dsp, ctx]
         # Make the EGL context current
         assert (eglMakeCurrent(dsp, buf, buf, ctx))
-
+        ctx = [dsp, ctx, buf]
     elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
         ctx = OSMesaCreateContextExt(OSMESA_RGBA, 32, 0, 0, None)
         buf = arrays.GLubyteArray.zeros((ws[0], ws[1], 4)) + 1
@@ -469,7 +479,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
 def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                            ws=(256, 128), views_key="raw", nb_simplices=3,
                            depth_map=True, clahe=False, smooth_shade=True,
-                           verbose=False, wire_frame=False,
+                           verbose=False, wire_frame=False, egl_args=None,
                            nb_views=None, triangulation=True):
     """
     Same as multi_view_mesh_coords but without creating gl context.
@@ -499,6 +509,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     np.array
         Returns array of views, else None
     """
+    if os.environ['PYOPENGL_PLATFORM'] != 'egl':
+        egl_args=None
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     # center data
@@ -553,7 +565,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         transformed_c = mesh.transform_external_coords([c])[0]
         # dummy rendering, somehow first screenshot is always black
         _ = screen_shot(ws, colored=colored, depth_map=depth_map, clahe=clahe,
-                        triangulation=triangulation)
+                        triangulation=triangulation, egl_args=egl_args)
         # glPopMatrix()
 
         glMatrixMode(GL_MODELVIEW)
@@ -570,7 +582,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
             glLightfv(GL_LIGHT0, GL_POSITION, light_position)
             glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
             c_views[m] = screen_shot(ws, colored=colored, depth_map=depth_map,
-                                     clahe=clahe, triangulation=triangulation)
+                                     clahe=clahe, triangulation=triangulation, egl_args=egl_args)
             glPopMatrix()
         res[ii] = c_views
         if verbose:
@@ -710,7 +722,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                                     clahe=clahe, views_key=views_key, ws=ws,
                                     depth_map=depth_map, verbose=verbose,
                                     smooth_shade=smooth_shade,
-                                    triangulation=triangulation,
+                                    triangulation=triangulation, egl_args=ctx,
                                     wire_frame=wire_frame, nb_views=nb_views)
     if verbose:
         end = time.time()
