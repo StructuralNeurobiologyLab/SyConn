@@ -1427,7 +1427,7 @@ class SuperSegmentationObject(object):
             locs = self.sample_locations()
             reordered_views = []
             cumsum = np.cumsum([0] + [len(el) for el in locs])
-            for ii in range(len(locs[:-1])):
+            for ii in range(len(locs)):
                 sv_views = views[cumsum[ii]:cumsum[ii + 1]]
                 reordered_views.append(sv_views)
             if self.version == 'tmp':
@@ -1956,13 +1956,18 @@ class SuperSegmentationObject(object):
 
     def predict_views_gliaSV(self, model, verbose=True,
                              pred_key_appendix=""):
+        if self.version == 'tmp':
+            log_reps.warning('"predict_views_gliaSV" called but this SSV '
+                             'has version "tmp", results will'
+                             ' not be saved to disk.')
         start = time.time()
         pred_key = "glia_probas"
         pred_key += pred_key_appendix
         # try:
         predict_sos_views(model, self.svs, pred_key,
                           nb_cpus=self.nb_cpus, verbose=verbose,
-                          woglia=False, raw_only=True)
+                          woglia=False, raw_only=True,
+                          return_proba=self.version == 'tmp')  # do not write to disk
         # except KeyError:
         #     self.render_views(add_cellobjects=False, woglia=False)
         #     predict_sos_views(model, self.svs, pred_key,
@@ -2358,7 +2363,7 @@ def celltype_predictor(args):
             ssh.predict_sso_celltype(ssv, m, overwrite=True)
         except Exception as e:
             missing_ssvs.append((ssv.id, e))
-            print(repr(e))
+            log_reps.error(repr(e))
         pbar.update(1)
     pbar.close()
     return missing_ssvs

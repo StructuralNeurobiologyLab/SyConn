@@ -16,7 +16,7 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.mp import qsub_utils as qu
 
 
-# ~2h with 16 gpus
+# ~2.5h with 24 gpus
 if __name__ == "__main__":
     log = initialize_logging('celltype_prediction', global_params.wd + '/logs/',
                              overwrite=False)

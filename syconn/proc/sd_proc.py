@@ -456,6 +456,24 @@ def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
 
 def predict_views(model, views, ch, pred_key, single_cc_only=False,
                   verbose=False, return_proba=False, nb_cpus=1):
+    """
+    Will not be written to disk if return_proba is True.
+
+    Parameters
+    ----------
+    model :
+    views :
+    ch :
+    pred_key :
+    single_cc_only :
+    verbose :
+    return_proba :
+    nb_cpus :
+
+    Returns
+    -------
+
+    """
     for kk in range(len(views)):
         data = views[kk]
         for i in range(len(data)):

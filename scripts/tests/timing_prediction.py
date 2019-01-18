@@ -7,7 +7,8 @@
 
 from syconn.reps.super_segmentation import *
 from syconn.mp.mp_utils import start_multiprocess_imap
-from syconn.handler.prediction import get_celltype_model, get_axoness_model, get_semseg_spiness_model
+from syconn.handler.prediction import get_celltype_model, get_axoness_model, \
+    get_semseg_spiness_model, get_glia_model
 from syconn.backend.storage import AttributeDict
 import time
 import sys
@@ -39,6 +40,30 @@ if __name__ == '__main__':
                                         sv_ids=ssv.sv_ids) for ssv in ssvs]
     # perform python dependent processing
     if not (sys.version_info[0] == 3 and sys.version_info[1] > 5):
+
+        # sample locs
+        print('Sampling rendering locations [s]:')
+        for ii in range(3):
+            start = time.time()
+            for ssv_tmp in ssvs_tmp:
+                ssv_tmp.nb_cpus = 1  # default when using GPU
+                print('Sampling SSV {}'.format(ssv_tmp.id))
+                ssv_tmp.sample_locations(cache=False, force=True)
+            print('Run {}: {:.4f}'.format(ii, time.time() - start))
+
+        # glia
+        m = get_glia_model()
+        print('Predicting glia [s]:')
+        for ii in range(3):
+            start = time.time()
+            for ssv_tmp in ssvs_tmp:
+                ssv_tmp.nb_cpus = 10  # default when using GPU
+                print('Predicting SSV {} with {} sample locations.'.format(
+                    ssv_tmp.id, len(np.concatenate(ssv_tmp.sample_locations()))))
+                ssv_tmp.predict_views_gliaSV(m)
+            print('Run {}: {:.4f}'.format(ii, time.time() - start))
+        del m
+
         # celltyes
         m = get_celltype_model()
         print('Predicting celltype [s]:')

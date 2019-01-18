@@ -1596,7 +1596,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         if k > 0:  # map predictions of predicted vertices to all vertices
             maj_vote = colorcode_vertices(
                 sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
-                return_color=False)
+                return_color=False, nb_cpus=sso.nb_cpus)
         else:  # no vertex mask was applied in this case
             maj_vote = predictions
         ts4 = time.time()
