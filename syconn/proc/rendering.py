@@ -25,18 +25,18 @@ from .meshes import merge_meshes, MeshObject, calc_rot_matrices, \
     flag_empty_spaces
 try:
     import os
-    if not os.environ.get('PYOPENGL_PLATFORM'):
-        os.environ['PYOPENGL_PLATFORM'] = global_params.PYOPENGL_PLATFORM
+    os.environ['PYOPENGL_PLATFORM'] = global_params.PYOPENGL_PLATFORM
     import OpenGL
-    OpenGL.USE_ACCELERATE = False
+    OpenGL.USE_ACCELERATE = True  # unclear behavior
     from OpenGL.GL import *
     from OpenGL.GLU import *
     from OpenGL.GL.framebufferobjects import *
     from OpenGL.arrays import *
 except Exception as e:
-    log_proc.error("Problem loading OpenGL:", e)
+    log_proc.error("Problem loading OpenGL: {}".format(e))
     pass
 
+# can't load more than one platform simultaneously
 if os.environ['PYOPENGL_PLATFORM'] == 'egl':
     from OpenGL.EGL import eglDestroyContext
 elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
@@ -779,14 +779,19 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
         views = render_sso_coords(sso, flat_coords, ws=ws, verbose=verbose,
                                   add_cellobjects=add_cellobjects,
                                   cellobjects_only=cellobjects_only)
-    for i, so in enumerate(missing_svs):
-        sv_views = views[part_views[i]:part_views[i+1]]
-        so.save_views(sv_views, woglia=woglia, cellobjects_only=cellobjects_only,
-                      index_views=index_views)
     if verbose:
         dur = time.time() - start
-        log_proc.info("Rendering of %d views took %0.2fs (incl. read/write). "
+        log_proc.info("Rendering of %d views took %0.2fs. "
                       "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
+    if sso.version != 'tmp':
+        for i, so in enumerate(missing_svs):
+            sv_views = views[part_views[i]:part_views[i+1]]
+            so.save_views(sv_views, woglia=woglia, cellobjects_only=cellobjects_only,
+                          index_views=index_views)
+    else:
+        log_proc.warning('"render_sampled_sso" called but this SSV '
+                         'has version "tmp", results will'
+                         ' not be saved to disk.')
     if return_views:
         return sso.load_views(woglia=woglia, index_views=index_views)
 
@@ -817,6 +822,9 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     -------
     np.array
     """
+    if verbose:
+        log_proc.info('Started "render_sso_coords" for SSO {} using PyOpenGL platform'
+                      ' "{}".'.format(sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     mesh = sso.mesh

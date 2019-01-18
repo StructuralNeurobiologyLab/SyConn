@@ -52,7 +52,7 @@ log_level = 'INFO'
 
 # --------- BACKEND DEFINITIONS
 backend = "FS"  # File system
-PYOPENGL_PLATFORM = 'osmesa'  # Rendering
+PYOPENGL_PLATFORM = 'egl'  # Rendering
 
 py36path = '/u/pschuber/anaconda3/envs/py36/bin/python'  # TODO: make this more elegant, e.g. bash script with 'source activate py36'
 

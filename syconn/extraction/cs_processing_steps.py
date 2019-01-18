@@ -12,6 +12,8 @@ from sklearn import ensemble, externals
 from sklearn.model_selection import cross_val_score
 from knossos_utils.chunky import load_dataset
 from knossos_utils import knossosdataset, skeleton_utils, skeleton
+import time
+import datetime
 
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
@@ -1385,7 +1387,7 @@ def _collect_properties_from_ssv_partners_thread(args):
         this_attr_dc.push()
 
 
-def export_matrix(obj_version=None, dest_name=None, syn_prob_t=.5):
+def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
     """
     Writes .csv and .kzip summary file of connectivity matrix.
 
@@ -1393,13 +1395,14 @@ def export_matrix(obj_version=None, dest_name=None, syn_prob_t=.5):
     ----------
     wd : str
     obj_version : str
-    dest_name : str
+    dest_folder : str
         Path to csv file
     syn_prob_t :
     """
-    if dest_name is None:
-        dest_name = global_params.wd + '/connectivity_matrix/conn_mat'
-    os.makedirs(os.path.split(dest_name)[0], exist_ok=True)
+    if dest_folder is None:
+        dest_folder = global_params.wd + '/connectivity_matrix/'
+    os.makedirs(os.path.split(dest_folder)[0], exist_ok=True)
+    dest_name = dest_folder + '/conn_mat'
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.wd,
                                                   version=obj_version)
 
@@ -1424,6 +1427,11 @@ def export_matrix(obj_version=None, dest_name=None, syn_prob_t=.5):
     m_syn_prob = m_syn_prob.squeeze()[:, None]  # N, 1
     table = np.concatenate([m_coords, m_ssv_partners, m_sizes, m_axs, m_cts,
                             m_sp, m_syn_prob], axis=1)
+
+    # do not overwrite previous files
+    if os.path.isfile(dest_name + '.csv'):
+        st = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+        os.rename(dest_name + '.csv', '{}_{}.csv'.format(dest_name, st))
 
     np.savetxt(dest_name + ".csv", table, delimiter="\t",
                header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2"
@@ -1459,15 +1467,20 @@ def export_matrix(obj_version=None, dest_name=None, syn_prob_t=.5):
             #    r = m_sizes[i_syn]
             skel_node = skeleton.SkeletonNode(). \
             from_scratch(anno, c[0], c[1], c[2], radius=r)
-            skel_node.data["partner_ids"] = m_ssv_partners[i_syn]
+            skel_node.data["ids"] = m_ssv_partners[i_syn]
             skel_node.data["size"] = m_sizes[i_syn]
             skel_node.data["syn_prob"] = m_syn_prob[i_syn]
-            skel_node.data["syn_sign"] = m_syn_sign[i_syn]
-            skel_node.data["sym_asym_ratio"] = m_syn_asym_ratio[i_syn]
-            skel_node.data['partner_sp'] = m_sp[i_syn]
-            skel_node.data['partner_ct'] = m_cts[i_syn]
-            skel_node.data['partner_ax'] = m_axs[i_syn]
+            skel_node.data["sign"] = m_syn_sign[i_syn]
+            skel_node.data["in_ex_frac"] = m_syn_asym_ratio[i_syn]
+            skel_node.data['sp'] = m_sp[i_syn]
+            skel_node.data['ct'] = m_cts[i_syn]
+            skel_node.data['ax'] = m_axs[i_syn]
             anno.addNode(skel_node)
         annotations.append(anno)
+
+    # do not overwrite previous files
+    if os.path.isfile(dest_name + '.k.zip'):
+        st = datetime.datetime.fromtimestamp(time.time()).strftime('%Y-%m-%d %H:%M:%S')
+        os.rename(dest_name + '.k.zip', '{}_{}.k.zip'.format(dest_name, st))
     skeleton_utils.write_skeleton(dest_name + ".k.zip", annotations)
 

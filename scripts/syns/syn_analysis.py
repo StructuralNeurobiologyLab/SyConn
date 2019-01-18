@@ -46,6 +46,6 @@ if __name__ == '__main__':
 
     # export_matrix
     log.info('Exporting connectivity matrix now.')
-    dest_name = global_params.wd + '/connectivity_matrix/conn_mat/'
-    cps.export_matrix(dest_name=dest_name)
-    log.info('Connectivity matrix was epxorted to "{}".'.format(dest_name))
+    dest_folder = global_params.wd + '/connectivity_matrix/'
+    cps.export_matrix(dest_folder=dest_folder)
+    log.info('Connectivity matrix was epxorted to "{}".'.format(dest_folder))

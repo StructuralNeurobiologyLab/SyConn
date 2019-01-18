@@ -644,6 +644,7 @@ def _extract_synapse_type_thread(args):
                 vxl -= trafo_dict[so_id]
                 vxl = vxl[:, [1, 0, 2]]
 
+            # TODO: remvoe try-except
             try:
                 asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl))
                 sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl))

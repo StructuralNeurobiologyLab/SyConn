@@ -605,7 +605,8 @@ def transform_celltype_data_views(sso_views, labels, batch_size, nb_views,
             continue
         view_sampling = np.random.choice(np.arange(views.shape[1]),
                                          curr_nb_samples*nb_views, replace=False)
-        orig_views[cnt:(curr_nb_samples+cnt)] = views[:, view_sampling].reshape((4, curr_nb_samples, nb_views, 128, 256)).swapaxes(1, 0)
+        orig_views[cnt:(curr_nb_samples+cnt)] = views[:, view_sampling].reshape((4, curr_nb_samples,
+                                                                                 nb_views, 128, 256)).swapaxes(1, 0)
         new_labels[cnt:(curr_nb_samples+cnt)] = labels[ii]
         cnt += curr_nb_samples
         if cnt == batch_size:
