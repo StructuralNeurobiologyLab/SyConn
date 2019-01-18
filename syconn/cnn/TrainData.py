@@ -389,7 +389,21 @@ class CelltypeViews(MultiViewData):
         self.test_d = self.test_d[:, None]
         super(MultiViewData, self).__init__()
 
-    def getbatch(self, batch_size, source='train'):
+    def getbatch_alternative(self, batch_size, source='train'):
+        """
+        Preliminary tests showed inferior performance of models trained with sampling
+        batches with this method compared to "getbatch" below. Might be due to less
+        stochasticity (bigger cache)
+
+        Parameters
+        ----------
+        batch_size :
+        source :
+
+        Returns
+        -------
+
+        """
         self._reseed()
         if source == 'valid':
             nb = len(self.valid_l)
@@ -455,7 +469,7 @@ class CelltypeViews(MultiViewData):
             return d[:, :1], l
         return tuple([d, l])
 
-    def getbatch_old(self, batch_size, source='train'):
+    def getbatch(self, batch_size, source='train'):
         self._reseed()
         if source == 'valid':
             nb = len(self.valid_l)

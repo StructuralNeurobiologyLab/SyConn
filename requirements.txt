@@ -1,3 +1,4 @@
+ipython <7.0.0
 h5py
 matplotlib>=2.2.2
 scipy>=1.1.0
@@ -13,15 +14,14 @@ scikit-learn==0.19.1
 scikit-image>=0.13.1
 pyopengl
 opencv-python
-numba
+numba==0.41.0
+llvmlite==0.26.0
 m2r
 plyfile
 vtkInterface
 openmesh
 pytest
 pytest-runner
-snappy
-python-snappy
 prompt-toolkit < 2.0
 git+https://github.com/knossos-project/knossos_utils.git
 git+https://github.com/ELEKTRONN/ELEKTRONN2.git

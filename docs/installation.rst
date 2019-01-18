@@ -26,3 +26,11 @@ Then install all prerequisites and finally git clone and install syconn:
 Or alternatively with the developer flag:
 
     pip install -e .
+
+
+In the case that there are problems with snappy/python-snappy remove previous installations and
+install them via conda:
+
+    conda uninstall snappy
+    conda install python-snappy
+

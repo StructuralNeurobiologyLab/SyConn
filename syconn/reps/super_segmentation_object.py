@@ -2190,8 +2190,8 @@ class SuperSegmentationObject(object):
         self.skeleton["diameters"] = np.ones(len(locs))
         self.save_skeleton_to_kzip(dest_path=dest_path)
 
-    def predict_celltype_cnn(self, model):
-        ssh.predict_sso_celltype(self, model)
+    def predict_celltype_cnn(self, model, **kwargs):
+        ssh.predict_sso_celltype(self, model, **kwargs)
 
     def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
                                obj_to_render=("sv", )):

@@ -6,7 +6,8 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-import numpy as np
+# TODO: This will be used if PYOPENGL PLATFORM is osmesa
+
 try:
     import cPickle as pkl
 except ImportError:
@@ -32,7 +33,6 @@ for ssv_ix in ch:
                                   enable_locking_so=True)
     sso.load_attr_dict()
     sso.render_views(add_cellobjects=True, woglia=True, overwrite=True)
-
 
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

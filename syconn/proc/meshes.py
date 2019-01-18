@@ -396,6 +396,7 @@ def normalize_vertices(vertices):
 
 def calc_rot_matrices(coords, vertices, edge_length):
     """
+    # TODO: optimize with cython (bottleneck is probably 'in_bounding_box' -> create single for loop)
     Fits a PCA to local sub-volumes in order to rotate them according to
     its main process (e.g. x-axis will be parallel to the long axis of a tube)
 
@@ -515,6 +516,7 @@ def get_bounding_box(coordinates):
 def in_bounding_box(coords, bounding_box):
     """
     Loop version with numba
+
     Parameters
     ----------
     coords : np.array (N x 3)

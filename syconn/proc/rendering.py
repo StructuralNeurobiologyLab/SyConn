@@ -21,8 +21,7 @@ from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
 from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
     rgb2id_array, id2rgb_array_contiguous
-from .meshes import merge_meshes, MeshObject, calc_rot_matrices, \
-    flag_empty_spaces
+from .meshes import merge_meshes, MeshObject, calc_rot_matrices
 try:
     import os
     os.environ['PYOPENGL_PLATFORM'] = global_params.PYOPENGL_PLATFORM
@@ -38,10 +37,10 @@ except Exception as e:
 
 # can't load more than one platform simultaneously
 if os.environ['PYOPENGL_PLATFORM'] == 'egl':
-    print('EGL')
+    log_proc.info('EGL rendering enabled.')
     from OpenGL.EGL import eglDestroyContext, eglSwapBuffers
 elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
-    print('OSMESA')
+    log_proc.info('OSMESA rendering enabled.')
     from OpenGL.osmesa import *
 else:
     msg = 'PYOpenGL environment has to be "egl" or "osmesa".'
@@ -510,7 +509,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         Returns array of views, else None
     """
     if os.environ['PYOPENGL_PLATFORM'] != 'egl':
-        egl_args=None
+        egl_args = None
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     # center data
@@ -542,7 +541,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                 smooth_shade=smooth_shade, wire_frame=wire_frame)
     init_object(indices, vertices, normals, colors, ws)
     if verbose:
-        pbar = tqdm.tqdm(total=len(res))
+        pbar = tqdm.tqdm(total=len(res), mininterval=0.5)
     for ii, c in enumerate(coords):
         c_views = np.ones(view_sh, dtype=np.float32)
         rot_mat = rot_matrices[ii]
@@ -582,7 +581,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
             glLightfv(GL_LIGHT0, GL_POSITION, light_position)
             glLightModeli(GL_LIGHT_MODEL_TWO_SIDE, GL_TRUE)
             c_views[m] = screen_shot(ws, colored=colored, depth_map=depth_map,
-                                     clahe=clahe, triangulation=triangulation, egl_args=egl_args)
+                                     clahe=clahe, triangulation=triangulation,
+                                     egl_args=egl_args)
             glPopMatrix()
         res[ii] = c_views
         if verbose:
@@ -706,19 +706,14 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
         rot_matrices = calc_rot_matrices(mesh.transform_external_coords(coords),
                                          mesh.vert_resh,
                                          querybox_edgelength / mesh.max_dist)
-        local_rot_mat = rot_matrices
-    else:
-        empty_locs = flag_empty_spaces(
-            coords, mesh.vertices_scaled.reshape((-1, 3)), querybox_edgelength)
-        local_rot_mat = np.array(rot_matrices)
-        local_rot_mat[empty_locs] = 0
+        if verbose:
+            log_proc.info("Calculation of rotation matrices took {:.2f}s."
+                          "".format(time.time() - start))
     if verbose:
-        log_proc.info("Calculation of rotation matrices / flagging empty views"
-                      " took", time.time() - start)
         log_proc.info("Starting local rendering at %d locations (%s)." %
                       (len(coords), views_key))
     ctx = init_ctx(ws)
-    mviews = multi_view_mesh_coords(mesh, coords, local_rot_mat, edge_lengths,
+    mviews = multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths,
                                     clahe=clahe, views_key=views_key, ws=ws,
                                     depth_map=depth_map, verbose=verbose,
                                     smooth_shade=smooth_shade,
@@ -727,7 +722,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
     if verbose:
         end = time.time()
         log_proc.info("Finished rendering mesh of type %s at %d locations after"
-                      " %0.1fs" % (views_key,len(mviews), end - start))
+                      " %0.2fs" % (views_key,len(mviews), end - start))
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
         eglDestroyContext(*ctx)
     else:
@@ -736,9 +731,9 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
         return mviews, rot_matrices
     return mviews
 
+
 # ------------------------------------------------------------------------------
 # SSO rendering code
-
 
 def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
                        add_cellobjects=True, overwrite=True, index_views=False,
@@ -764,8 +759,6 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
     cellobjects_only : bool
     """
     # get coordinates for N SV's in SSO
-    if verbose:
-        start = time.time()
     coords = sso.sample_locations(cache=False)
     if not overwrite:
         missing_sv_ixs = np.array([not so.views_exist(woglia=woglia)
@@ -784,6 +777,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
     # len(part_views) == N + 1
     part_views = np.cumsum([0] + [len(c) for c in coords])
     flat_coords = np.array(flatten_list(coords))
+    if verbose:
+        start = time.time()
     if index_views:
         views = render_sso_coords_index_views(sso, flat_coords, ws=ws,
                                               verbose=verbose)
@@ -835,8 +830,8 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     np.array
     """
     if verbose:
-        log_proc.info('Started "render_sso_coords" for SSO {} using PyOpenGL platform'
-                      ' "{}".'.format(sso.id, os.environ['PYOPENGL_PLATFORM']))
+        log_proc.info('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'
+                      ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     mesh = sso.mesh
@@ -919,6 +914,9 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     -------
 
     """
+    if verbose:
+        log_proc.info('Started "render_sso_coords_index_views" at {} locations for SSO {} using PyOpenGL'
+                      ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     ind, vert, norm = sso.mesh

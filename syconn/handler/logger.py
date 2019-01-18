@@ -37,7 +37,7 @@ def get_main_log():
         logger.addHandler(fh)
         logger.info("Initialized file logging. Log-files are stored at"
                     " {}.".format(log_dir))
-    logger.info("Initialized stdout logging.")
+    logger.info("Initialized stdout logging (level: {}).".format(global_params.log_level))
     return logger
 
 

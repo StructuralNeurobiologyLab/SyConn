@@ -24,6 +24,7 @@ from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton, find_missing_sv_views,\
     find_missing_sv_attributes, find_missing_sv_skeletons
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
+import time
 skeletopyze_available = False
 from ..reps import log_reps
 from ..config import global_params
@@ -1510,6 +1511,7 @@ def pred_sv_chunk_semseg(args):
 def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
                 colors=None, force_overwrite=False):
     """
+    # TODO: optimize with cython
     Maps semantic segmentation to SSV mesh.
 
     Parameters
@@ -1539,6 +1541,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
     """
     ld = sso.label_dict('vertex')
     if force_overwrite or not semseg_key in ld:
+        ts0 = time.time()  # view loading
         if nb_views is None:
             # load default
             i_views = sso.load_views(index_views=True).flatten()
@@ -1546,9 +1549,13 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             # load special views
             i_views = sso.load_views("index{}".format(nb_views)).flatten()
         spiness_views = sso.load_views(semseg_key).flatten()
+        ts1 = time.time()
+        log_reps.debug('Time to load index and shape views: '
+                       '{:.2f}s.'.format(ts1 - ts0))
         ind = sso.mesh[0]
         dc = defaultdict(list)
         background_id = np.max(i_views)
+        # color buffer holds traingle ID not vertex ID
         for ii in range(len(i_views)):
             triangle_ix = i_views[ii]
             if triangle_ix == background_id:
@@ -1559,7 +1566,16 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             dc[ind[vertex_ix]].append(l)
             dc[ind[vertex_ix + 1]].append(l)
             dc[ind[vertex_ix + 2]].append(l)
-        vertex_labels = np.ones((len(sso.mesh[1]) // 3), dtype=np.uint8) * 5
+        ts2 = time.time()
+        log_reps.debug('Time to generate look-up dict: '
+                       '{:.2f}s.'.format(ts2 - ts1))
+        # background label is highest label in prediction (see 'generate_palette' or
+        # 'remap_rgb_labelviews' in multiviews.py)
+        background_l = np.max(spiness_views)
+        unpredicted_l = background_l + 1
+        if unpredicted_l > 255:
+            raise ValueError('Overflow in label view array.')
+        vertex_labels = np.ones((len(sso.mesh[1]) // 3), dtype=np.uint8) * unpredicted_l
         for ix, v in dc.items():
             l, cnts = np.unique(v, return_counts=True)
             vertex_labels[ix] = l[np.argmax(cnts)]
@@ -1569,14 +1585,23 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             predictions = vertex_labels
         else:
             # remove unpredicted vertices
-            predicted_vertices = sso.mesh[1].reshape(-1, 3)[vertex_labels != 5]
-            predictions = vertex_labels[vertex_labels != 5]
+            predicted_vertices = sso.mesh[1].reshape(-1, 3)[vertex_labels != unpredicted_l]
+            predictions = vertex_labels[vertex_labels != unpredicted_l]
             # remove background class
-            predicted_vertices = predicted_vertices[predictions != 4]
-            predictions = predictions[predictions != 4]
-        maj_vote = colorcode_vertices(
-            sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
-            return_color=False)
+            predicted_vertices = predicted_vertices[predictions != background_id]
+            predictions = predictions[predictions != background_id]
+        ts3 = time.time()
+        log_reps.debug('Time to map predictions on vertices: '
+                       '{:.2f}s.'.format(ts3 - ts2))
+        if k > 0:  # map predictions of predicted vertices to all vertices
+            maj_vote = colorcode_vertices(
+                sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
+                return_color=False)
+        else:  # no vertex mask was applied in this case
+            maj_vote = predictions
+        ts4 = time.time()
+        log_reps.debug('Time to map predictions on unpredicted vertices: '
+                       '{:.2f}s.'.format(ts4 - ts3))
         # add prediction to mesh storage
         ld[semseg_key] = maj_vote
         ld.push()

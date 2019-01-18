@@ -7,7 +7,6 @@
 import os
 
 # ---------------------- STATIC AND GLOBAL PARAMETERS # -----------------------
-
 # --------- GLOBAL WORKING DIRECTORY
 # wd = "/wholebrain/scratch/areaxfs3/"
 wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
@@ -47,7 +46,13 @@ NGPU_TOTAL = 34
 # Logs of executed scripts (syconn/scripts) will be stored at the
 # working directory + '/logs/' nonetheless.
 default_log_dir = None
-log_level = 'INFO'
+# TODO: remove all verbose kwargs and verbose log.info and execute log.debug() instead
+log_level = 'DEBUG'  # INFO, DEBUG
+
+# file logging for individual modules, and per job. Only use in case of
+# debugging with single core processing. Logs for scripts in 'SyConn/scripts/'
+# will be stored at wd + '/logs/'.
+DISABLE_FILE_LOGGING = True
 
 
 # --------- BACKEND DEFINITIONS
@@ -55,11 +60,6 @@ backend = "FS"  # File system
 PYOPENGL_PLATFORM = 'egl'  # Rendering
 
 py36path = '/u/pschuber/anaconda3/envs/py36/bin/python'  # TODO: make this more elegant, e.g. bash script with 'source activate py36'
-
-# file logging for individual modules, and per job. Only use in case of
-# debugging with single core processing. Logs for scripts in 'SyConn/scripts/'
-# will be stored at wd + '/logs/'.
-DISABLE_FILE_LOGGING = True
 
 
 # --------- CONTACT SITE PARAMETERS
