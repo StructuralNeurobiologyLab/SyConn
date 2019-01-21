@@ -9,7 +9,8 @@ from syconn.reps.super_segmentation import *
 from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.handler.prediction import get_celltype_model, get_axoness_model, \
     get_semseg_spiness_model, get_glia_model
-from syconn.backend.storage import AttributeDict
+from syconn.backend.storage import AttributeDict, CompressedStorage
+from syconn.reps.segmentation import SegmentationDataset
 import time
 import sys
 
@@ -23,19 +24,37 @@ def helper_func(paths):
         num_locs.append(len(sample_locs))
     return num_locs
 
+
+def helper_func_sd(paths):
+    num_locs = []
+    for p in paths:
+        loc_dc = CompressedStorage(p + '/locations.pkl', read_only=True,
+                           disable_locking=True)
+        sample_locs = [np.concatenate(sl) for sl in loc_dc.values()]
+        num_locs += [len(sl) for sl in sample_locs]
+    return num_locs
+
 # TODO: make this a test on toy data (which has to be created and added to the repo)
 if __name__ == '__main__':
     # performed on SSD at '/wholebrain/songbird/j0126/areaxfs_v6//ssv_0/', 17Jan02019
     ssd = SuperSegmentationDataset(working_dir='/wholebrain/songbird/j0126/areaxfs_v6/')
-    ssvs = ssd.get_super_segmentation_object([26607617, 27525127])
-    [ssv.load_attr_dict() for ssv in ssvs]
+    sd = SegmentationDataset(obj_type='sv', working_dir='/wholebrain/songbird/j0126/areaxfs_v6/')
+
     # # Statistics of SSVs in datatset
     # all_paths = chunkify(glob.glob(ssd.path + "/so_storage/*/*/*/"), 500)
     # num_samplelocs = start_multiprocess_imap(helper_func, all_paths, nb_cpus=20)
     # num_samplelocs = np.concatenate(num_samplelocs)  # transform list of lists into 1D array
     # print('#SSVs: {}\nMean #sample_locs: {}\nTotal #sample_locs: {}'.format(len(ssd.ssv_ids),
     #                                                 np.mean(num_samplelocs), np.sum(num_samplelocs)))
+    # # Statistics of SVs in the original datatset
+    # all_paths = chunkify(sd.so_dir_paths, 500)
+    # num_samplelocs = start_multiprocess_imap(helper_func_sd, all_paths, nb_cpus=20)
+    # num_samplelocs = np.concatenate(num_samplelocs)  # transform list of lists into 1D array
+    # print('#SVs: {}\nMean #sample_locs: {}\nTotal #sample_locs: {}'.format(len(sd.ids),
+    #                                                 np.mean(num_samplelocs), np.sum(num_samplelocs)))
 
+    ssvs = ssd.get_super_segmentation_object([26607617, 27525127])
+    [ssv.load_attr_dict() for ssv in ssvs]
     ssvs_tmp = [SuperSegmentationObject(ssv.id, create=False, version='tmp',
                                         sv_ids=ssv.sv_ids) for ssv in ssvs]
     # perform python dependent processing
@@ -122,7 +141,7 @@ if __name__ == '__main__':
         for ii in range(3):
             start = time.time()
             for ssv_tmp in ssvs_tmp:
-                ssv_tmp.nb_cpus = 1
+                ssv_tmp.nb_cpus = 2
                 ssv_tmp.semseg2mesh('spiness', force_overwrite=True)
             print('Run {}: {:.4f}'.format(ii, time.time() - start))
 

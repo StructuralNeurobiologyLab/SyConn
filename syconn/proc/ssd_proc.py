@@ -14,6 +14,7 @@ import numpy as np
 import os
 from collections import Counter
 
+from ..config import global_params
 from . import log_proc
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
@@ -382,24 +383,40 @@ def _apply_mapping_decisions_thread(args):
             ssv.save_attr_dict()
 
 
-def map_synaptic_conn_objects(ssd, conn_version=None, stride=1000,
-                              qsub_pe=None, qsub_queue=None, nb_cpus=1,
-                              n_max_co_processes=100):
+def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue=None,
+                       nb_cpus=1, n_max_co_processes=global_params.NCORE_TOTAL):
+    """
+    Map synn_ssv objects to all SSO objects contained in SSV SuperSegmentationDataset.
+    Also computes syn_ssv meshes.
 
+    Parameters
+    ----------
+    synssv_version : str
+    stride : int
+    qsub_pe : str
+    qsub_queue : str
+    nb_cpus : int
+    n_max_co_processes : int
+
+    Returns
+    -------
+
+    """
+    ssd = SuperSegmentationDataset(global_params.wd)
     multi_params = []
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
                          for i in range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, ssd.type, conn_version])
+                             ssd.working_dir, ssd.type, synssv_version])
 
     if qsub_pe is None and qsub_queue is None:
         results = sm.start_multiprocess(
-            _map_synaptic_conn_objects_thread,
+            map_synssv_objects_thread,
             multi_params, nb_cpus=nb_cpus)
 
     elif qu.__BATCHJOB__:
         path_to_out = qu.QSUB_script(multi_params,
-                                     "map_synaptic_conn_objects",
+                                     "map_synssv_objects",
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
@@ -408,35 +425,36 @@ def map_synaptic_conn_objects(ssd, conn_version=None, stride=1000,
         raise Exception("QSUB not available")
 
 
-def _map_synaptic_conn_objects_thread(args):
+def map_synssv_objects_thread(args):
     ssv_obj_ids, version, version_dict, working_dir, \
-        ssd_type, conn_version = args
+        ssd_type, synssv_version = args
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir, version,
                                                       ssd_type=ssd_type,
                                                       version_dict=version_dict)
 
-    conn_sd = segmentation.SegmentationDataset(obj_type="conn",
+    syn_ssv_sd = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                working_dir=working_dir,
-                                               version=conn_version)
+                                               version=synssv_version)
 
-    ssv_partners = conn_sd.load_cached_data("ssv_partners")
-    syn_prob = conn_sd.load_cached_data("syn_prob")
-    conn_ids = conn_sd.load_cached_data("id")
+    ssv_partners = syn_ssv_sd.load_cached_data("neuron_partners")
+    syn_prob = syn_ssv_sd.load_cached_data("syn_prob")
+    synssv_ids = syn_ssv_sd.load_cached_data("id")
 
-    conn_ids = conn_ids[syn_prob > .5]
+    synssv_ids = synssv_ids[syn_prob > .5]
     ssv_partners = ssv_partners[syn_prob > .5]
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id, False)
         ssv.load_attr_dict()
 
-        ssv_conn_ids = conn_ids[np.in1d(ssv_partners[:, 0], ssv.id)]
-        ssv_conn_ids = np.concatenate([ssv_conn_ids,
-                                       conn_ids[np.in1d(ssv_partners[:, 1], ssv.id)]])
-
-        ssv.attr_dict["conn_ids"] = ssv_conn_ids
+        curr_synssv_ids = synssv_ids[np.in1d(ssv_partners[:, 0], ssv.id)]
+        curr_synssv_ids = np.concatenate([curr_synssv_ids,
+                                          synssv_ids[np.in1d(ssv_partners[:, 1], ssv.id)]])
+        # key has to be the same as the SegmentationDataset name to enable automatic mesh retrieval in syconn/gate/server.py
+        ssv.attr_dict["syn_ssv"] = curr_synssv_ids
         ssv.save_attr_dict()
+        _ = ssv.load_mesh('syn_ssv')
 
 
 def mesh_proc_ssv(working_dir, version=None, ssd_type='ssv', nb_cpus=20):

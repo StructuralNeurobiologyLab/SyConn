@@ -26,7 +26,7 @@ except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
 
 from . import super_segmentation_helper as ssh
-from .segmentation import SegmentationObject
+from .segmentation import SegmentationObject, SegmentationDataset
 from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     knossos_ml_from_svixs, subfold_from_ix_SSO
@@ -121,7 +121,7 @@ class SuperSegmentationObject(object):
         self._rag = None
 
         # init mesh dicts
-        self._meshes = {"sv": None, "sj": None,
+        self._meshes = {"sv": None, "sj": None, "syn_ssv": None,
                         "vc": None, "mi": None, "conn": None}
 
         self._views = None

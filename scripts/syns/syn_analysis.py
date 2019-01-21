@@ -8,6 +8,7 @@
 from syconn.config import global_params
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.proc.sd_proc import dataset_analysis, extract_synapse_type
+from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
 from syconn.handler.logger import initialize_logging
 
@@ -43,6 +44,10 @@ if __name__ == '__main__':
     dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True,
                      stride=100, recompute=False)
     log.info('Synapse property collection from SSVs finished.')
+
+    log.info('Collecting and writing syn-ssv objects to SSV attribute dictionary.')
+    map_synssv_objects(qsub_pe='openmp')
+    log.info('Finished.')
 
     # export_matrix
     log.info('Exporting connectivity matrix now.')

@@ -297,7 +297,7 @@ class main_class(QtGui.QDialog):
         self.populate_ssv_list()
 
         self.populate_syn_list()
-        print('Connected to SyConnFS backend')
+        print('Connected to SyConn gate')
 
         layout.addWidget(self.direct_ssv_id_input, 1, 0, 1, 2)
         layout.addWidget(self.ssv_selector, 2, 0, 1, 1)

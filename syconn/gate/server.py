@@ -13,7 +13,7 @@ from syconn.config import global_params
 from flask import Flask
 import json
 
-from..gate import log_gate
+from syconn.gate import log_gate
 
 app = Flask(__name__)
 
@@ -115,9 +115,9 @@ def route_hello():
 
 
 class SyConn_backend(object):
-    def __init__(self, syconnfs_path='', logger=None):
+    def __init__(self, syconn_path='', logger=None):
         """
-        Initializes a SyConnFS backend for operation.
+        Initializes a SyConn backend for operation.
         This includes in-memory initialization of the
         most important caches. Currently, SyConn Gate
         does not support backend data changes and the server needs
@@ -126,12 +126,12 @@ class SyConn_backend(object):
         might be served.
         All backend functions must return dicts.
 
-        :param syconnfs_path: str 
+        :param syconn_path: str
         """
         self.logger = logger
         self.logger.info('Initializing SyConn backend')
 
-        self.ssd = ss.SuperSegmentationDataset(syconnfs_path)
+        self.ssd = ss.SuperSegmentationDataset(syconn_path)
 
         self.logger.info('SuperSegmentation dataset initialized.')
 
@@ -187,7 +187,10 @@ class SyConn_backend(object):
         dtime = time.time() - start
         self.logger.info('Got ssv {} mesh indices after'
                          ' {:.2f}'.format(ssv_id, dtime))
-        return b"".join(mesh[0])
+        try:
+            return b"".join(mesh[0])
+        except TypeError:  # contains str, not byte
+            return "".join(mesh[0])
 
     def ssv_vert(self, ssv_id):
         """
@@ -203,7 +206,10 @@ class SyConn_backend(object):
         dtime = time.time() - start
         self.logger.info('Got ssv {} mesh vertices after'
                          ' {:.2f}'.format(ssv_id, dtime))
-        return b"".join(mesh[1])
+        try:
+            return b"".join(mesh[1])
+        except TypeError:  # contains str, not byte
+            return "".join(mesh[1])
 
     def ssv_skeleton(self, ssv_id):
         """
@@ -244,8 +250,11 @@ class SyConn_backend(object):
         self.logger.info('Got ssv {} mesh normals after'
                          ' {:.2f}'.format(ssv_id, dtime))
         if len(mesh) == 2:
-            return ""
-        return b"".join(mesh[2])
+            return b""
+        try:
+            return b"".join(mesh[2])
+        except TypeError:  # contains str, not byte
+            return "".join(mesh[2])
 
     def ssv_obj_mesh(self, ssv_id, obj_type):
         """
@@ -258,10 +267,10 @@ class SyConn_backend(object):
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
-                ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
-                obj_type = "conn"
-                print("Loading 'conn' objects instead of 'sj' for SSV %s."
-                      % ssv_id)
+                obj_type = "syn_ssv"
+                _ = ssv.attr_dict[obj_type]  # try to query mapped syn_ssv objects
+                print("Loading '{}' objects instead of 'sj' for SSV {}."
+                      .format(obj_type, ssv_id))
             except KeyError:
                 pass
         # if not existent, create mesh
@@ -288,10 +297,10 @@ class SyConn_backend(object):
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
-                ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
-                obj_type = "conn"
-                print("Loading 'conn' objects instead of 'sj' for SSV %s."
-                      % ssv_id)
+                obj_type = "syn_ssv"
+                _ = ssv.attr_dict[obj_type]  # try to query mapped syn_ssv objects
+                print("Loading '{}' objects instead of 'sj' for SSV {}."
+                      .format(obj_type, ssv_id))
             except KeyError:
                 pass
         # if not existent, create mesh
@@ -300,7 +309,10 @@ class SyConn_backend(object):
         dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh indices after'
                          ' {:.2f}'.format(ssv_id, obj_type, dtime))
-        return b"".join(mesh[0])
+        try:
+            return b"".join(mesh[0])
+        except TypeError:  # contains str, not byte
+            return "".join(mesh[0])
 
     def ssv_obj_vert(self, ssv_id, obj_type):
         """
@@ -316,10 +328,10 @@ class SyConn_backend(object):
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
-                ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
-                obj_type = "conn"
-                print("Loading 'conn' objects instead of 'sj' for SSV %s."
-                      % ssv_id)
+                obj_type = "syn_ssv"
+                _ = ssv.attr_dict[obj_type]  # try to query mapped syn_ssv objects
+                print("Loading '{}' objects instead of 'sj' for SSV {}."
+                      .format(obj_type, ssv_id))
             except KeyError:
                 pass
         # if not existent, create mesh
@@ -328,7 +340,10 @@ class SyConn_backend(object):
         dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh vertices after'
                          ' {:.2f}'.format(ssv_id, obj_type, dtime))
-        return b"".join(mesh[1])
+        try:
+            return b"".join(mesh[1])
+        except TypeError:  # contains str, not byte
+            return "".join(mesh[1])
 
     def ssv_obj_norm(self, ssv_id, obj_type):
         """
@@ -344,10 +359,10 @@ class SyConn_backend(object):
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
-                ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
-                obj_type = "conn"
-                print("Loading 'conn' objects instead of 'sj' for SSV %s."
-                      % ssv_id)
+                obj_type = "syn_ssv"
+                _ = ssv.attr_dict[obj_type]  # try to query mapped syn_ssv objects
+                print("Loading '{}' objects instead of 'sj' for SSV {}."
+                      .format(obj_type, ssv_id))
             except KeyError:
                 pass
         # if not existent, create mesh
@@ -358,7 +373,10 @@ class SyConn_backend(object):
                          ' {:.2f}'.format(ssv_id, obj_type, dtime))
         if len(mesh) == 2:
             return ""
-        return b"".join(mesh[2])
+        try:
+            return b"".join(mesh[2])
+        except TypeError:  # contains str, not byte
+            return "".join(mesh[2])
 
     def ssv_list(self):
         """
@@ -466,8 +484,7 @@ class ServerState(object):
         self.logger = log_gate
 
         self.logger.info('SyConn gate server starting up.')
-        self.backend = SyConn_backend('/wholebrain/scratch/areaxfs3/',
-                                        logger=self.logger)
+        self.backend = SyConn_backend(global_params.wd, logger=self.logger)
         self.logger.info('SyConn gate server running.')
         return
 
@@ -492,18 +509,18 @@ class MyEncoder(json.JSONEncoder):
 """
 Alternative way of running the server is currently:
 export FLASK_APP=server.py
-flask run --host=0.0.0.0 --port=8080 --debugger
+flask run --host=0.0.0.0 --port=10001 --debugger
 
 OR
 
-FLASK_APP=server.py FLASK_DEBUG=1 flask run --host=0.0.0.0 --port 8081
+FLASK_APP=server.py FLASK_DEBUG=1 flask run --host=0.0.0.0 --port 10001
 
 """
 sg_state = ServerState()
 
-    # context = ('cert.crt', 'key.key') enable later
-    #app.run(host='0.0.0.0',  # do not run this on a non-firewalled machine!
-    #        port=8080,
-    #        # ssl_context=context,
-    #        threaded=True,
-    #        debug=True)
+# context = ('cert.crt', 'key.key') enable later
+app.run(host='0.0.0.0',  # do not run this on a non-firewalled machine!
+       port=10001,
+       # ssl_context=context,
+       threaded=True,
+       debug=True, use_reloader=True)

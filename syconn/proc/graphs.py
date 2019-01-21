@@ -581,7 +581,7 @@ def create_graph_from_coords(coords, max_dist=6000, force_single_cc=True,
     return g
 
 
-def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150,
+def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150, seed=0,
                     glia_key="glia_probas", node_size_cap=np.inf, mcmp=None, pos=None):
     """
     Draw graph with nodes colored in red (glia) and blue) depending on their
@@ -592,6 +592,8 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150,
     G : nx.Graph
     dest_path : str
     min_sv_size : int
+    seed : int
+        Default: 0; random seed for layout generation
     ext_glia : dict
         keys: node in G, values: number indicating class
     glia_key : str
@@ -622,7 +624,7 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150,
     n_size = n_size[n_size >= min_sv_size]
     n_size = n_size / np.max(n_size) * 25.
     if pos is None:
-        pos = nx.spring_layout(G, weight="weight", iterations=iterations)
+        pos = nx.spring_layout(G, weight="weight", iterations=iterations, random_state=seed)
     nx.draw(G, nodelist=nodelist, node_color=col, node_size=n_size,
             cmap=mcmp, width=0.15, pos=pos, linewidths=0)
     plt.savefig(dest_path)
