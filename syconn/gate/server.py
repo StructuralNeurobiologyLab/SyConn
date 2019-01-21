@@ -225,8 +225,8 @@ class SyConn_backend(object):
             return {}
         skel_attr = ["nodes", "edges", "diameters"]
         avg_dst = global_params.DIST_AXONESS_AVERAGING
-        keys = ["axoness_preds_cnn_views_avg{}".format(avg_dst),
-                "axoness_preds_cnn_views_avg{}_comp_maj".format(avg_dst)]
+        keys = ["axoness_avg{}".format(avg_dst),
+                "axoness_avg{}_comp_maj".format(avg_dst)]
         for k in keys:
             if k in skeleton:
                 skel_attr.append(k)
