@@ -49,6 +49,7 @@ def generate_label_views(kzip_path, gt_type="spgt", n_voting=40, nb_views=2,
     if initial_run:  # use default SSD version
         orig_sso = SuperSegmentationObject(sso_id)
         orig_sso.copy2dir(dest_dir=sso.ssv_dir)
+    print("attr_dict_path: ", sso.attr_dict_path)
     if not sso.attr_dict_exists:
         msg = 'Attribute dict of original SSV was not copied successfully ' \
               'to target SSD.'

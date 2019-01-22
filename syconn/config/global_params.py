@@ -9,7 +9,8 @@ import os
 # ---------------------- STATIC AND GLOBAL PARAMETERS # -----------------------
 # --------- GLOBAL WORKING DIRECTORY
 # wd = "/wholebrain/scratch/areaxfs3/"
-wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+# wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+wd = "/wholebrain/scratch/areaxfs3/"
 # wd = '/mnt/j0126/areaxfs_v10/'
 
 # --------- Required data paths
