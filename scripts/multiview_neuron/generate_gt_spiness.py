@@ -1,8 +1,9 @@
-# SyConn
-# Copyright (c) 2016 Philipp J. Schubert
-# All rights reserved
-
-# download/import all necessary work packages
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 import numpy as np
 from knossos_utils.skeleton_utils import load_skeleton
 from sklearn.neighbors import KDTree
