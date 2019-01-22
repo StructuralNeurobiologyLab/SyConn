@@ -2,6 +2,9 @@ from setuptools import setup, find_packages
 import os
 import sys
 from unittest.mock import MagicMock
+from distutils.core import setup
+import numpy
+from Cython.Build import cythonize
 readme_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md')
 try:
     from m2r import parse_from_file
@@ -12,7 +15,7 @@ except ImportError:
         readme = f.read()
 
 
-# not possible to install C-library libsnappy-dev
+# not possible to install C-library libsnappy-dev, TODO: this did not work with readthedocs
 # (https://docs.readthedocs.io/en/latest/faq.html#i-get-import-errors-on-libraries-that-depend-on-c-modules)
 class Mock(MagicMock):
     @classmethod
@@ -46,8 +49,10 @@ config = {
                          '/tarball/master#egg=knossos_utils',
                          'https://github.com/ELEKTRONN/ELEKTRONN2'
                          '/tarball/master#egg=ELEKTRONN2'],
-    'packages': find_packages(exclude=['scripts']),
-    'long_description': readme, 'setup_requires': ["pytest-runner", ],
-    'tests_require': ["pytest", ],
+    'packages': find_packages(exclude=['scripts']), 'long_description': readme,
+    'setup_requires': ["pytest-runner", ], 'tests_require': ["pytest", ],
+    # this will compile all files within directories in syconn/
+    'ext_modules': cythonize("syconn/*/*.pyx", include_path=[numpy.get_include()]),
+
 }
 setup(**config)
