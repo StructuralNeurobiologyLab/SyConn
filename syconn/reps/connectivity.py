@@ -21,12 +21,12 @@ except ImportError:
     import pickle as pkl
 try:
     default_wd_available = True
-    from ..config.global_params import wd
+    from ..global_params import wd
 except:
     default_wd_available = False
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm
-from ..config import parser
+from ..handler import parser
 from . import connectivity_helper as ch
 from . import super_segmentation as ss
 from . import segmentation

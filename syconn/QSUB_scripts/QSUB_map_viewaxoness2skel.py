@@ -13,7 +13,7 @@ except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation_helper import majority_vote_compartments
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
-from syconn.config import global_params
+from syconn import global_params
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]

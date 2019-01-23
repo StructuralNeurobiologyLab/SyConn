@@ -23,7 +23,7 @@ import time
 
 from ..handler.basics import temp_seed
 from ..handler.logger import initialize_logging
-from ..config import global_params
+from syconn import global_params
 
 BATCH_PROC_SYSTEM = global_params.BATCH_PROC_SYSTEM
 __BATCHJOB__ = BATCH_PROC_SYSTEM is not None

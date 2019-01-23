@@ -10,7 +10,6 @@ from collections import Counter
 from multiprocessing.pool import ThreadPool
 import networkx as nx
 import numpy as np
-import os
 import scipy
 import scipy.ndimage
 from collections import defaultdict
@@ -27,7 +26,7 @@ from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 import time
 skeletopyze_available = False
 from ..reps import log_reps
-from ..config import global_params
+from .. import global_params
 from ..proc.meshes import in_bounding_box, write_mesh2kzip
 
 

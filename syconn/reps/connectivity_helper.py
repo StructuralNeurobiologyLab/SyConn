@@ -4,6 +4,7 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
 import time
 import numpy as np
 import networkx as nx
@@ -11,10 +12,10 @@ import pandas as pd
 
 from ..reps import super_segmentation as ss
 from ..reps import segmentation
-from ..config import global_params
+from syconn import global_params
+
 
 # TODO: unclear what and when this was used for, refactor and use in current project
-
 def extract_connectivity_thread(args):
     sj_obj_ids = args[0]
     sj_version = args[1]

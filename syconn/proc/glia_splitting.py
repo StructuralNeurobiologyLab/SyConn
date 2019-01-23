@@ -9,7 +9,7 @@ import networkx as nx
 import numpy as np
 
 from ..backend.storage import AttributeDict
-from ..config.global_params import wd, glia_thresh, RENDERING_MAX_NB_SV
+from ..global_params import wd, glia_thresh, RENDERING_MAX_NB_SV
 from ..handler.basics import load_pkl2obj, chunkify, flatten_list, \
     write_txt2kzip, write_obj2pkl
 from ..mp import qsub_utils as qu

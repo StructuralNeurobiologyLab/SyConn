@@ -14,11 +14,11 @@ from skimage.measure import mesh_surface_area
 
 try:
     default_wd_available = True
-    from ..config.global_params import wd
+    from ..global_params import wd
 except:
     default_wd_available = False
-from ..config import parser
-from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING
+from ..handler import parser
+from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
 from ..handler.basics import get_filepaths_from_dir, safe_copy,\
@@ -31,24 +31,26 @@ class SegmentationDataset(object):
     def __init__(self, obj_type, version=None, working_dir=None, scaling=None,
                  version_dict=None, create=False, config=None,
                  n_folders_fs=None):
-        """ Dataset Initialization
+        """
+        Class to represent a set of supervoxels.
 
-        :param obj_type: str
-            type of objects; usually one of: vc, sj, mi, cs, sv
-        :param version: str || int
+        Parameters
+        ----------
+        obj_type : str
+             type of objects; usually one of: vc, sj, mi, cs, sv
+        version : str or int
             version of dataset to distinguish it from others of the same type
-        :param working_dir: str
+        working_dir : str
             path to working directory
-        :param scaling: list || array of three ints
+        scaling : List[int] or np.arry
             scaling of the raw data to nanometer
-        :param version_dict: dict
+        version_dict : dict
             versions of datasets of other types that correspond with this dataset
-        :param create: bool
+        create : bool
             whether or not to create this dataset on disk
-        :param config: str
+        config : str
             content of configuration file
-        :param n_folders: int
-
+        n_folders_fs : int
         """
 
         self._type = obj_type
@@ -306,6 +308,31 @@ class SegmentationObject(object):
                  voxel_caching=True, mesh_caching=False, view_caching=False,
                  config=None, n_folders_fs=None, enable_locking=True,
                  skeleton_caching=True):
+        """
+        Represents individual supervoxels. Used for cell shape ('sv'), cell organelles,
+        e.g. mitochondria ('mi'), vesicle clouds ('vc') and synaptic junctions ('sj').
+
+        Parameters
+        ----------
+        obj_id : int
+        obj_type : str
+        version : str or int
+        working_dir : str
+            Path to folder which contains SegmentationDataset of type 'obj_type'.
+        rep_coord : np.array
+            Representation coordinate
+        size : int
+            Number of voxels
+        scaling : np.array
+        create : bool
+        voxel_caching : bool
+        mesh_caching : bool
+        view_caching : bool
+        config :
+        n_folders_fs : int
+        enable_locking : bool
+        skeleton_caching : bool
+        """
         self._id = int(obj_id)
         self._type = obj_type
         self._rep_coord = rep_coord
@@ -823,8 +850,9 @@ class SegmentationObject(object):
 
     def load_views(self, woglia=True, raw_only=False, ignore_missing=False,
                    index_views=False, view_key=None):
-        view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
-                                    disable_locking=not self.enable_locking)
+        view_p = self.view_path(woglia=woglia, index_views=index_views,
+                                view_key=view_key)
+        view_dc = CompressedStorage(view_p, disable_locking=not self.enable_locking)
         try:
             views = view_dc[self.id]
         except KeyError as e:
@@ -840,8 +868,9 @@ class SegmentationObject(object):
     def save_views(self, views, woglia=True, cellobjects_only=False,
                    index_views=False, view_key=None):
         """
-        Saves views according to its properties. If view_key is given it has to be a special type of view, e.g. spine
-        predictions. If in this case any other kwarg is not set to default it will raise an error.
+        Saves views according to its properties. If view_key is given it has
+        to be a special type of view, e.g. spine predictions. If in this case
+        any other kwarg is not set to default it will raise an error.
 
         Parameters
         ----------
@@ -975,33 +1004,6 @@ class SegmentationObject(object):
         vx = bin_arrs[central_block_id].copy()
         central_block_offset = block_offsets[central_block_id]
 
-
-        # Old and crazy inefficient implementation to find a multivariate "mean" which
-        # is inside of the object.
-
-        #vx = ndimage.morphology.distance_transform_edt(
-        #    np.pad(vx, 1, mode="constant", constant_values=0))[1:-1, 1:-1, 1:-1]
-
-        #max_locs = np.where(vx == vx.max())
-
-        #max_loc_id = int(len(max_locs[0]) / 2)
-        #max_loc = np.array([max_locs[0][max_loc_id],
-        #                    max_locs[1][max_loc_id],
-        #                    max_locs[2][max_loc_id]])
-
-        #if not fast:
-        #    vx = ndimage.gaussian_filter(vx, sigma=[15, 15, 7])
-        #    max_locs = np.where(vx == vx.max())
-
-        #    max_loc_id = int(len(max_locs[0]) / 2)
-        #    better_loc = np.array([max_locs[0][max_loc_id],
-        #                           max_locs[1][max_loc_id],
-        #                           max_locs[2][max_loc_id]])
-
-        #    if bin_arrs[central_block_id][better_loc[0], better_loc[1], better_loc[2]]:
-        #        max_loc = better_loc
-
-
         id_locs = np.where(vx == vx.max())
         id_locs = np.array(id_locs)
 
@@ -1037,9 +1039,9 @@ class SegmentationObject(object):
             try:
                 kd = knossosdataset.KnossosDataset()
                 kd.initialize_from_knossos_path(
-                    self.config.entries["Dataset"]["seg_path"])
+                    self.config.entries["Paths"]["kd_seg_path"])
             except:
-                raise("KnossosDataset could not be loaded")
+                raise ValueError("KnossosDataset could not be loaded")
 
         kd.from_matrix_to_cubes(self.bounding_box[0],
                                 data=self.voxels.astype(np.uint64) * write_id,
@@ -1120,5 +1122,4 @@ class SegmentationObject(object):
                 this_voxels[this_voxel_list[:, 0],
                             this_voxel_list[:, 1],
                             this_voxel_list[:, 2]] = True
-
-                save_voxels(new_so_obj, this_voxels, bb[0], size=len(voxel_ids))
+                save_voxels(new_so_obj, this_voxels, bb[0])

@@ -9,18 +9,21 @@ An example `config` using all defined categories:
 [Versions]
 sv = 0
 vc = 0
-sj = 5
+sj = 0
+syn = 0
+syn_ssv = 0
 mi = 0
 ssv = 0
-cs = 29
-cs_agg = 26
-conn = 12
+cs_agg = 0
 ax_gt = 0
 
-[Dataset]
-scaling = 10., 10., 20.
-seg_path = /path/to/knossosdataset/with/seg/
-super_seg_path = /path/to/knossosdataset/with/superseg/
+[Paths]
+kd_seg_path = path_seg
+kd_sym_path = path_sym
+kd_asym_path = path_asym
+kd_sj = path_sj
+kd_vc = path_vc
+kd_mi = path_mi
 
 [LowerMappingRatios]
 mi = 0.5

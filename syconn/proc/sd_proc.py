@@ -15,7 +15,7 @@ import tqdm
 from collections import defaultdict
 from knossos_utils import knossosdataset
 
-from ..config.global_params import wd, get_dataset_scaling, MESH_DOWNSAMPLING,\
+from ..global_params import wd, get_dataset_scaling, MESH_DOWNSAMPLING,\
     MESH_CLOSING, NCORES_PER_NODE
 from .image import single_conn_comp_img
 from ..mp import qsub_utils as qu

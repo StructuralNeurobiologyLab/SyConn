@@ -12,7 +12,7 @@ except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.proc.sd_proc import sos_dict_fact, init_sos
-from syconn.config.global_params import wd, get_dataset_scaling
+from syconn.global_params import wd, get_dataset_scaling
 import networkx as nx
 import numpy as np
 

@@ -63,6 +63,18 @@ def acquire_obj_ids(sd):
 
 
 def save_voxels(so, bin_arr, offset, overwrite=False):
+    """
+    Helper function to save SegmentationObject voxels.
+
+    Parameters
+    ----------
+    so : SegmentationObject
+    bin_arr : np.array
+        Binary mask array, 0: background, 1: supervoxel locations.
+    offset : np.array
+    overwrite : bool
+
+    """
     assert bin_arr.dtype == bool
 
     voxel_dc = VoxelStorage(so.voxel_path, read_only=False,
@@ -77,6 +89,19 @@ def save_voxels(so, bin_arr, offset, overwrite=False):
 
 
 def load_voxels(so, voxel_dc=None):
+    """
+    Helper function to load voxels of a SegmentationObject as 3D array.
+
+    Parameters
+    ----------
+    so : SegmentationObject
+    voxel_dc : VoxelStorage
+
+    Returns
+    -------
+    np.array
+        3D binary mask array, 0: background, 1: supervoxel locations.
+    """
     if voxel_dc is None:
         voxel_dc = VoxelStorage(so.voxel_path, read_only=True,
                                 disable_locking=True)
@@ -122,6 +147,18 @@ def load_voxels_downsampled(so, downsampling=(2, 2, 1)):
 
 
 def load_voxel_list(so):
+    """
+    Helper function to load voxels of a SegmentationObject.
+
+    Parameters
+    ----------
+    so : SegmentationObject
+
+    Returns
+    -------
+    np.array
+        2D array of coordinates to all voxels in SegmentationObject.
+    """
     voxel_list = np.array([], dtype=np.int32)
 
     if so._voxels is not None:
@@ -143,11 +180,22 @@ def load_voxel_list(so):
 
 
 def load_voxel_list_downsampled(so, downsampling=(2, 2, 1)):
+    """
+    TODO: refactor, probably more efficient implementation possible.
+
+    Parameters
+    ----------
+    so : SegmentationObject
+    downsampling : Tuple[int]
+
+    Returns
+    -------
+
+    """
     downsampling = np.array(downsampling)
     dvoxels = so.load_voxels_downsampled(downsampling)
     voxel_list = np.array(np.transpose(np.nonzero(dvoxels)), dtype=np.int32)
     voxel_list = voxel_list * downsampling + np.array(so.bounding_box[0])
-
     return voxel_list
 
 

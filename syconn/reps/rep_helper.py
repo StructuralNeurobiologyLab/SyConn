@@ -217,6 +217,7 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
     Assigns all vertices the kNN majority label from rep_coords/rep_values and
     if return_color is True assigns those a color. Helper function to colorcode
     a set of coordinates (vertices) by known labels (rep_coords, rep_values).
+
     Parameters
     ----------
     vertices : np.array

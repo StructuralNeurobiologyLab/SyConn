@@ -12,7 +12,7 @@ import json
 
 from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
-from syconn.config import global_params
+from syconn import global_params
 from syconn.gate import log_gate
 
 app = Flask(__name__)

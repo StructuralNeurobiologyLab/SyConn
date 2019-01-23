@@ -22,7 +22,7 @@ from ..reps.rep_helper import subfold_from_ix, ix_from_subfold
 from ..backend.storage import AttributeDict, VoxelStorage
 from ..handler.basics import chunkify
 from . import log_extraction
-from ..config import global_params
+from .. import global_params
 
 
 # code for splitting 'syn' objects, which are generated as overlap between CS and SJ, see below.

@@ -11,10 +11,9 @@ except ImportError:
 from typing import Iterable, List, Tuple
 import glob
 import numpy as np
-import os
 from collections import Counter
 
-from ..config import global_params
+from .. import global_params
 from . import log_proc
 from ..mp import qsub_utils as qu
 from ..mp import mp_utils as sm

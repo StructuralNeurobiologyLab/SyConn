@@ -11,12 +11,12 @@ matplotlib.use("Agg", warn=False, force=True)
 from elektronn2.data.traindata import Data
 import numpy as np
 import warnings
-from syconn.config.global_params import wd
+from syconn.global_params import wd
 from syconn.handler.basics import load_pkl2obj, temp_seed
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
-from syconn.config import global_params
+from syconn import global_params
 import os
 try:
     from torch.utils.data import Dataset

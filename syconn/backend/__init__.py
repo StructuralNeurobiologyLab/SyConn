@@ -5,7 +5,7 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 
-from ..config.global_params import backend
+from ..global_params import backend
 from .base import FSBase, BTBase
 from ..handler.logger import initialize_logging
 # init backend

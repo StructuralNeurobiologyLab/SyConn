@@ -9,4 +9,5 @@ from syconn.exec import exec_multiview
 
 
 if __name__ == "__main__":
-    exec_multiview.run_spiness_prediction()
+    exec_multiview.run_axoness_mapping()
+    exec_multiview.run_axoness_mapping()

@@ -1,10 +1,10 @@
 # SyConn
 # Copyright (c) 2018 Philipp J. Schubert, J. Kornfeld
 # All rights reserved
-from syconn.config.global_params import wd, get_dataset_scaling
-from syconn.handler.prediction import get_tripletnet_model_ortho, NeuralNetworkInterface
+from syconn.global_params import get_dataset_scaling
+from syconn.handler.prediction import NeuralNetworkInterface
 from syconn.handler.basics import chunkify, get_filepaths_from_dir
-from syconn.proc.stats import projection_pca, projection_tSNE
+from syconn.proc.stats import projection_pca
 from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.proc.rendering import render_sso_ortho_views

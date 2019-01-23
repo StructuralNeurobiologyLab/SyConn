@@ -6,7 +6,7 @@ import csv
 from knossos_utils import knossosdataset
 from syconn.handler import basics
 import multiprocessing
-from syconn.config import global_params
+from syconn import global_params
 
 
 def new_extraction(result_queue, params):

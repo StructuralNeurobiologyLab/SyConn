@@ -30,7 +30,7 @@ from .segmentation import SegmentationObject, SegmentationDataset
 from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     knossos_ml_from_svixs, subfold_from_ix_SSO
-from ..config import parser
+from ..handler import parser
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..backend.storage import CompressedStorage, MeshStorage
@@ -45,10 +45,10 @@ from ..reps import log_reps
 
 try:
     default_wd_available = True
-    from ..config.global_params import wd
+    from ..global_params import wd
 except:
     default_wd_available = False
-from ..config import global_params
+from .. import global_params
 
 
 class SuperSegmentationObject(object):
@@ -58,6 +58,7 @@ class SuperSegmentationObject(object):
                  view_caching=False, config=None, nb_cpus=1,
                  enable_locking=True, enable_locking_so=False, ssd_type="ssv"):
         """
+        Class to represent an agglomeration of supervoxels (SegmentationObjects).
 
         Parameters
         ----------

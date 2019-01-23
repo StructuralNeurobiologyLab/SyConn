@@ -5,6 +5,7 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 import os
+from  .handler.parser import Config
 
 # ---------------------- STATIC AND GLOBAL PARAMETERS # -----------------------
 # --------- GLOBAL WORKING DIRECTORY
@@ -13,21 +14,31 @@ wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
 # wd = '/mnt/j0126/areaxfs_v10/'
 
 # --------- Required data paths
-kd_seg_path = "/mnt/j0126_cubed/"
+config = Config(wd)
+kd_seg_path = config.entries['Paths']['kd_seg_path']
 # the 'realigned' datasets of the type prediction have slightly different extent
 #  than the segmentation dataset but prediction coordinates did match
-kd_sym_path = '/wholebrain/scratch/areaxfs/knossosdatasets/j0126_3d_symmetric_realigned/'
-kd_asym_path = '/wholebrain/scratch/areaxfs/knossosdatasets/j0126_3d_asymmetric_realigned/'
+kd_sym_path = config.entries['Paths']['kd_sym_path']
+kd_asym_path = config.entries['Paths']['kd_asym_path']
+# Cell organelles
+kd_sj = config.entries['Paths']['kd_sj']
+kd_vc = config.entries['Paths']['kd_vc']
+kd_mi = config.entries['Paths']['kd_mi']
 
 # TODO: add generic parser method for initial RAG and handle case without glia-splitting
 path_initrag = '/wholebrain/songbird/j0126/RAGs/v4b_20180407_v4b_20180407_'\
                'merges_newcb_ids_cbsplits.txt'
+
 # currently a mergelist/RAG of the following form is expected:
 # ID, ID
 #    .
 #    .
 # ID, ID
 rag_suffix = ""  # identifier in case there will be more than one RAG
+
+
+# All subsquent parameter are dataset independent and do not have to be stored at
+# config.ini in the working directory
 
 # --------- BACKEND DEFINITIONS
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
@@ -86,6 +97,17 @@ MESH_MIN_OBJ_VX = 10
 NB_VIEWS = 2
 
 
+# --------- CLASSIFICATION MODELS
+# TODO: make model names more generic
+model_dir = wd + '/models/'
+mpath_tnet = '{}/TN-10-Neighbors/'.format(model_dir)
+mpath_spiness = '{}/FCN-VGG13--Lovasz--NewGT/'.format(model_dir)
+mpath_celltype = '{}/celltype_g1_20views_v2/celltype_g1_20views_v2-LAST.mdl'.format(model_dir)
+mpath_axoness = '{}/axoness_g1_v2/g1_v2-FINAL.mdl'.format(model_dir)
+mpath_glia = '{}/glia_g0_v0/g0_v0-FINAL.mdl'.format(model_dir)
+mpath_syn_rfc = '{}/conn_syn_rfc//rfc'.format(model_dir)
+
+
 # --------- GLIA PARAMETERS
 # min. connected component size of glia nodes/SV after thresholding glia proba
 min_cc_size_glia = 8e3  # in nm; L1-norm on vertex bounding box
@@ -99,16 +121,6 @@ SUBCC_SIZE_BIG_SSV = 35
 RENDERING_MAX_NB_SV = 5e3
 # number of SV for which views are rendered in one pass
 SUBCC_CHUNK_SIZE_BIG_SSV = 9
-
-
-# --------- CLASSIFICATION MODELS
-model_dir = wd + '/models/'
-mpath_tnet = '{}/TN-10-Neighbors/'.format(model_dir)
-mpath_spiness = '{}/FCN-VGG13--Lovasz--NewGT/'.format(model_dir)
-mpath_celltype = '{}/celltype_g1_20views_v2/celltype_g1_20views_v2-LAST.mdl'.format(model_dir)
-mpath_axoness = '{}/axoness_g1_v2/g1_v2-FINAL.mdl'.format(model_dir)
-mpath_glia = '{}/glia_g0_v0/g0_v0-FINAL.mdl'.format(model_dir)
-mpath_syn_rfc = '{}/conn_syn_rfc//rfc'.format(model_dir)
 
 
 # --------- RFC PARAMETERS
@@ -138,7 +150,7 @@ def get_dataset_scaling():
     tuple of float
         (X, Y, Z)
     """
-    from .parser import Config
+    from syconn.handler.parser import Config
     import numpy as np
     cfg = Config(wd)
     return np.array(cfg.entries["Dataset"]["scaling"])

@@ -21,7 +21,7 @@ except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
 from multiprocessing import cpu_count
 from . import segmentation  # TODO: del
-from ..config import parser
+from ..handler import parser
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from ..reps.super_segmentation_helper import create_sso_skeleton
 from ..proc.ssd_assembly import assemble_from_mergelist
@@ -30,7 +30,7 @@ from .super_segmentation_object import SuperSegmentationObject
 from ..mp import mp_utils as sm
 try:
     default_wd_available = True
-    from ..config.global_params import wd
+    from ..global_params import wd
 except:
     default_wd_available = False
 
@@ -39,14 +39,18 @@ class SuperSegmentationDataset(object):
     def __init__(self, working_dir=None, version=None, ssd_type='ssv',
                  version_dict=None, sv_mapping=None, scaling=None, config=None):
         """
+        Class to hold a set of agglomerated supervoxels (SuperSegmentationObject).
 
         Parameters
         ----------
         working_dir : str
-        version : str
+        version : str or int
+        ssd_type : str
         version_dict : dict
         sv_mapping : dict or str
-        scaling : tuple
+        scaling : np.array
+        config : Optional[Config]
+            Config object, see syconn/config/parser.py
         """
         self.ssv_dict = {}
         self.mapping_dict = {}
@@ -239,6 +243,14 @@ class SuperSegmentationDataset(object):
                                                 version=self.version_dict[
                                                     obj_type],
                                                 working_dir=self.working_dir)
+
+    def load_sv_graph(self):
+        if os.path.isfile(self.edgelist_path):
+            g = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
+            return g
+        else:
+            raise ValueError("Could not find graph data for SSV {}."
+                             "".format(self.id))
 
     def apply_mergelist(self, sv_mapping):
         assemble_from_mergelist(self, sv_mapping)

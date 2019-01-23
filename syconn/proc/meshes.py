@@ -14,8 +14,7 @@ from skimage import measure
 from sklearn.decomposition import PCA
 import openmesh
 from plyfile import PlyData, PlyElement
-from scipy.ndimage.morphology import binary_closing, binary_erosion,\
-    binary_dilation
+from scipy.ndimage.morphology import binary_closing, binary_dilation
 import tqdm
 try:
     import vtkInterface
@@ -27,7 +26,7 @@ from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip
 from .image import apply_pca
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
-from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
+from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
     get_dataset_scaling, MESH_MIN_OBJ_VX
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 try:

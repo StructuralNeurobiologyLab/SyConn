@@ -16,7 +16,7 @@ from scipy.ndimage.filters import gaussian_filter
 
 from .image import rgb2gray, apply_clahe
 from . import log_proc
-from ..config import global_params
+from .. import global_params
 from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
 from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
@@ -190,15 +190,13 @@ def init_ctx(ws):
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
         from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
             EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
-            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
-            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
+            EGL_COLOR_BUFFER_TYPE, EGL_HEIGHT, \
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_OPENGL_BIT, EGL_NONE, \
             EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
-            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
+            EGL_OPENGL_API, EGL_NO_DISPLAY,\
             eglGetDisplay, eglInitialize, eglChooseConfig, \
             eglBindAPI, eglCreatePbufferSurface, \
-            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, \
-            EGL_TRUE, EGL_FALSE,  EGL_LOSE_CONTEXT_ON_RESET, EGL_NO_RESET_NOTIFICATION
+            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
 
         major, minor = ctypes.c_long(), ctypes.c_long()
         num_configs = ctypes.c_long()

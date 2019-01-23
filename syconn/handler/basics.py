@@ -25,8 +25,7 @@ import contextlib
 import tqdm
 
 from . import log_handler
-from ..config import global_params
-
+from .. import global_params
 
 __all__ = ['load_from_h5py', 'save_to_h5py', 'crop_bool_array',
            'get_filepaths_from_dir', 'write_obj2pkl', 'load_pkl2obj',
