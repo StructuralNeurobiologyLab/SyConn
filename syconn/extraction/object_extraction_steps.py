@@ -149,7 +149,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
              membrane_filename, membrane_kd_path,
              hdf5_name_membrane, fast_load, suffix, transform_func_kwargs])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess_imap(transform_func,
                                         multi_params, debug=debug)
 
@@ -255,8 +255,8 @@ def _gauss_threshold_connected_components_thread(args):
         if np.sum(sigmas[nb_hdf5_name]) != 0:
             tmp_data = scipy.ndimage.gaussian_filter(tmp_data, sigmas[nb_hdf5_name])
 
-        if hdf5_name in ["p4", "vc"] and membrane_filename is not None and \
-                        hdf5_name_membrane is not None:
+        # if hdf5_name in ["p4", "vc"] and membrane_filename is not None and hdf5_name_membrane is not None:  # seems to be a hack for debugging
+        if membrane_filename is not None and hdf5_name_membrane is not None:
             membrane_data = basics.load_from_h5py(chunk.folder + membrane_filename + ".h5",
                                                   hdf5_name_membrane)[0]
             membrane_data_shape = membrane_data.shape
@@ -265,7 +265,8 @@ def _gauss_threshold_connected_components_thread(args):
                                           offset[1]: membrane_data_shape[1]-offset[1],
                                           offset[2]: membrane_data_shape[2]-offset[2]]
             tmp_data[membrane_data > 255*.4] = 0
-        elif hdf5_name in ["p4", "vc"] and membrane_kd_path is not None:
+        # elif hdf5_name in ["p4", "vc"] and membrane_kd_path is not None:  # seems to be a hack for debugging
+        elif membrane_kd_path is not None:
             kd_bar = knossosdataset.KnossosDataset()
             kd_bar.initialize_from_knossos_path(membrane_kd_path)
             membrane_data = kd_bar.from_raw_cubes_to_matrix(size, box_offset)
@@ -331,7 +332,7 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
         multi_params.append([cset.chunk_dict[nb_chunk], filename, hdf5names,
                              this_max_nb_dict, suffix])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess_imap(_make_unique_labels_thread,
                                          multi_params, debug=debug, nb_cpus=nb_cpus)
 
@@ -417,7 +418,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
         multi_params.append([cset, nb_chunk, filename, hdf5names, stitch_overlap, overlap,
                              suffix, chunk_list, n_erosion, overlap_thresh])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess_imap(_make_stitch_list_thread,
                                          multi_params, debug=debug, nb_cpus=nb_cpus)
 
@@ -641,7 +642,7 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
         multi_params.append([cset.chunk_dict[nb_chunk], filename, hdf5names,
                              merge_list_dict_path, suffix])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess_imap(_apply_merge_list_thread,
                                          multi_params, debug=debug, nb_cpus=nb_cpus)
 
@@ -778,7 +779,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                              filename, hdf5names, dataset_names, overlaydataset_path,
                              suffix, path_blocks[i_job], n_folders_fs, transform_func, transform_func_kwargs])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess_imap(_extract_voxels_thread, multi_params,
                                              nb_cpus=nb_cpus)
 
@@ -790,7 +791,6 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                                      n_max_co_processes=n_max_co_processes,
                                      n_cores=nb_cpus)
 
-        # path_to_out = "/u/sdorkenw/QSUB/extract_voxels_folder/out/"
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -997,7 +997,7 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
                                  path_block_dicts, segdataset.version,
                                  n_folders_fs])
 
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
             results = sm.start_multiprocess_imap(_combine_voxels_thread,
                                             multi_params, nb_cpus=nb_cpus)
 
@@ -1112,7 +1112,7 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                              overlaydataset_path,
                              suffix, n_folders_fs, object_names])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess_imap(_extract_voxels_combined_thread,
                                         multi_params, nb_cpus=nb_cpus)
 

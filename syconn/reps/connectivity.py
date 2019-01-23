@@ -233,7 +233,7 @@ class ConnectivityMatrix(object):
             multi_params.append([id_block, self._sj_version, self._ssd_version,
                                  self.working_dir])
 
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
             results = sm.start_multiprocess(ch.extract_connectivity_thread,
                                             multi_params, nb_cpus=nb_cpus)
 
@@ -267,7 +267,7 @@ class ConnectivityMatrix(object):
             multi_params.append([id_block, self._sj_version, self._ssd_version,
                                  self.working_dir, self.version])
 
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
             results = sm.start_multiprocess(ch.get_sso_specific_info_thread,
                                             multi_params, nb_cpus=nb_cpus)
 

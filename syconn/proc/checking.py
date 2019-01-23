@@ -28,7 +28,7 @@ def find_missing_overlaycubes(path, stride=100, qsub_pe=None, qsub_queue=None,
                        for i in range(0, len(paths), stride)]:
         multi_params.append([path_block])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(find_missing_overlaycubes_thread,
                                         multi_params, nb_cpus=nb_cpus)
 

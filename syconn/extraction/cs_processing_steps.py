@@ -138,7 +138,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
         multi_params.append([wd, block, voxel_rel_paths[block_steps[i_block]: block_steps[i_block+1]],
                              syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm])
         i_block += 1
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         _ = sm.start_multiprocess(_combine_and_split_syn_thread,
                                   multi_params, nb_cpus=nb_cpus)
 
@@ -356,7 +356,7 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
                              cs_agg.version, cs.version, ssd.scaling, cs_gap_nm])
         i_block += 1
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_combine_and_split_cs_agg_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
@@ -537,7 +537,7 @@ def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
                              sj_sd.version, cs_sd.version,
                              rep_coord_dist_nm])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_overlap_mapping_sj_to_cs_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
@@ -705,7 +705,7 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
                              voxel_rel_path_blocks[i_block], sd_syn.version,
                              sj_sd.version, cs_sd.version, cs_cset.path_head_folder])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         _ = sm.start_multiprocess_imap(syn_gen_via_cset_thread,
                                        multi_params, nb_cpus=nb_cpus)
 
@@ -825,7 +825,7 @@ def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
                              voxel_rel_path_blocks[i_block], conn_sd.version,
                              sj_sd.version, cs_sd.version, cs_kd.knossos_path])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_overlap_mapping_sj_to_cs_via_kd_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
@@ -1070,7 +1070,7 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
     multi_params = [(so_dir_paths, wd, obj_version, mi_version, vc_version, ssd_version, max_vx_dist_nm,
                      max_rep_coord_dist_nm) for so_dir_paths in multi_params]
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_map_objects_to_synssv_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
@@ -1252,7 +1252,7 @@ def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
     multi_params = [(so_dir_paths, wd, obj_version) for so_dir_paths in
                     multi_params]
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_classify_synssv_objects_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
@@ -1326,7 +1326,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, 2000):
         multi_params.append([so_dir_paths, wd, obj_version,
                              ssd_version])
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         _ = sm.start_multiprocess_imap(
             _collect_properties_from_ssv_partners_thread, multi_params,
             nb_cpus=nb_cpus)

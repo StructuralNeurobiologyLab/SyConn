@@ -333,7 +333,7 @@ class SuperSegmentationDataset(object):
                                  self.working_dir])
 
         if small:
-            if qsub_pe is None and qsub_queue is None:
+            if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
                 results = sm.start_multiprocess(
                     reskeletonize_objects_small_ones_thread,
                     multi_params, nb_cpus=nb_cpus)
@@ -350,7 +350,7 @@ class SuperSegmentationDataset(object):
                 raise Exception("QSUB not available")
 
         if big:
-            if qsub_pe is None and qsub_queue is None:
+            if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
                 results = sm.start_multiprocess(
                     reskeletonize_objects_big_ones_thread,
                     multi_params, nb_cpus=1)
@@ -374,7 +374,7 @@ class SuperSegmentationDataset(object):
             multi_params.append([ssv_id_block, self.version, self.version_dict,
                                  self.working_dir, obj_types, apply_mapping])
 
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
             results = sm.start_multiprocess(
                 reskeletonize_objects_small_ones_thread,
                 multi_params, nb_cpus=nb_cpus)
@@ -407,7 +407,7 @@ class SuperSegmentationDataset(object):
             multi_params.append([ssv_id_block, self.version, self.version_dict,
                                  self.working_dir, obj_types])
 
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
             results = sm.start_multiprocess(
                 associate_objs_with_skel_nodes_thread,
                 multi_params, nb_cpus=nb_cpus)
@@ -431,7 +431,7 @@ class SuperSegmentationDataset(object):
             multi_params.append([ssv_id_block, self.version, self.version_dict,
                                  self.working_dir])
 
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
             results = sm.start_multiprocess(
                 predict_axoness_skelbased_thread,
                 multi_params, nb_cpus=nb_cpus)
@@ -454,7 +454,7 @@ class SuperSegmentationDataset(object):
             multi_params.append([ssv_id_block, self.version, self.version_dict,
                                  self.working_dir])
 
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
             results = sm.start_multiprocess(
                 predict_cell_type_skelbased_thread,
                 multi_params, nb_cpus=nb_cpus)
@@ -514,7 +514,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
                              ssd.working_dir, extract_only, attr_keys,
                              ssd._type, new_mapping])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(
             _write_super_segmentation_dataset_thread,
             multi_params, nb_cpus=nb_cpus)
@@ -644,7 +644,7 @@ def export_to_knossosdataset(ssd, kd, stride=1000, qsub_pe=None,
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, kd.knossos_path, nb_cpus])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_export_ssv_to_knossosdataset_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
@@ -719,7 +719,7 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
                              sv_kd_path, ssv_kd_path, offsets,
                              size])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_convert_knossosdataset_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
@@ -783,8 +783,8 @@ def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
                          range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, obj_types, apply_mapping])
-    # TODO @Sven: which function is requiered here? I changed it from _export_skeletons to ssh.export_skeletons
-    if qsub_pe is None and qsub_queue is None:
+
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(
             export_skeletons_thread,
             multi_params, nb_cpus=nb_cpus)

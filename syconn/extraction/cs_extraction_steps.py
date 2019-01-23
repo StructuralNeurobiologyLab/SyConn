@@ -30,7 +30,7 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
     for chunk in cset.chunk_dict.values():
         multi_params.append([chunk, knossos_path, filename])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_contact_site_detection_thread,
                                         multi_params, debug=True)
     elif qu.__BATCHJOB__:

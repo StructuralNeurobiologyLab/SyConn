@@ -62,7 +62,7 @@ def dataset_analysis(sd, recompute=True, stride=50, qsub_pe=None,
         multi_params.append([path_block, sd.type, sd.version,
                              sd.working_dir, recompute, compute_meshprops])
     # Running workers
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_dataset_analysis_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
@@ -211,7 +211,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
 
     # Running workers - Extracting mapping
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_map_objects_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
@@ -251,7 +251,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
 
     # Running workers - Writing mapping to SVs
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         sm.start_multiprocess(_write_mapping_to_sv_thread, multi_params,
                               nb_cpus=nb_cpus)
 
@@ -371,7 +371,7 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
                              n_iterations])
 
     # Running workers
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_binary_filling_cs_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
@@ -546,7 +546,7 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512,
         multi_params.append([np.array(grid_loc), bbs_job_dict[grid_loc], sd.type, sd.version,
                              sd.working_dir, kd.knossos_path, block_edge_length])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_export_sd_to_knossosdataset_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
@@ -611,7 +611,7 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                              kd_asym_path, kd_sym_path, trafo_dict_path])
 
     # Running workers - Extracting mapping
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
         results = sm.start_multiprocess(_extract_synapse_type_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
