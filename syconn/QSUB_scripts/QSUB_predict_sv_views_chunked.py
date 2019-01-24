@@ -13,6 +13,7 @@ except ImportError:
 from syconn.proc.sd_proc import sos_dict_fact, init_sos, predict_views
 from syconn.handler.prediction import NeuralNetworkInterface
 from syconn.backend.storage import AttributeDict, CompressedStorage
+from syconn import global_params
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -29,6 +30,9 @@ so_chunk_paths = args[0]
 model_kwargs = args[1]
 so_kwargs = args[2]
 pred_kwargs = args[3]
+
+working_dir = so_kwargs['working_dir']
+global_params.wd = working_dir
 
 woglia = pred_kwargs["woglia"]
 del pred_kwargs["woglia"]

@@ -720,7 +720,7 @@ def get_axoness_model():
     """
     Retrained with GP dendrites. May 2018.
     """
-    m = NeuralNetworkInterface(global_params.mpath_axoness,
+    m = NeuralNetworkInterface(global_params.paths.mpath_axoness,
                                imposed_batch_size=200,
                                nb_labels=3, normalize_data=True)
     _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
@@ -728,7 +728,7 @@ def get_axoness_model():
 
 
 def get_glia_model():
-    m = NeuralNetworkInterface(global_params.mpath_glia, imposed_batch_size=200,
+    m = NeuralNetworkInterface(global_params.paths.mpath_glia, imposed_batch_size=200,
                                nb_labels=2, normalize_data=True)
     _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
     return m
@@ -746,7 +746,7 @@ def get_celltype_model(init_gpu=None):
 
     """
     # this model was trained with 'naive_view_normalization_new'
-    m = NeuralNetworkInterface(global_params.mpath_celltype,
+    m = NeuralNetworkInterface(global_params.paths.mpath_celltype,
                                imposed_batch_size=2, nb_labels=4,
                                normalize_data=True,
                                normalize_func=naive_view_normalization_new,
@@ -756,25 +756,25 @@ def get_celltype_model(init_gpu=None):
 
 
 def get_semseg_spiness_model():
-    path = global_params.mpath_spiness
+    path = global_params.paths.mpath_spiness
     m = InferenceModel(path)
     m._path = path
     return m
 
 
 def get_tripletnet_model_e3():
-    m_path = global_params.mpath_tnet
+    m_path = global_params.paths.mpath_tnet
     m = InferenceModel(m_path)
     return m
 
 
 def get_knn_tnet_embedding_e3():
-    tnet_eval_dir = "{}/pred/".format(global_params.mpath_tnet)
+    tnet_eval_dir = "{}/pred/".format(global_params.paths.mpath_tnet)
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
 def get_pca_tnet_embedding_e3():
-    tnet_eval_dir = "{}/pred/".format(global_params.mpath_tnet)
+    tnet_eval_dir = "{}/pred/".format(global_params.paths.mpath_tnet)
     return pca_tnet_embedding(tnet_eval_dir)
 
 

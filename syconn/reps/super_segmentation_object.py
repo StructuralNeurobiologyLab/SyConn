@@ -30,7 +30,7 @@ from .segmentation import SegmentationObject, SegmentationDataset
 from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     knossos_ml_from_svixs, subfold_from_ix_SSO
-from ..handler import parser
+from ..handler import config
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..backend.storage import CompressedStorage, MeshStorage
@@ -39,15 +39,9 @@ from ..proc.meshes import write_mesh2kzip, merge_someshes, \
     compartmentalize_mesh, mesh2obj_file, write_meshes2kzip
 from ..proc.rendering import render_sampled_sso, multi_view_sso, \
     render_sso_coords, render_sso_coords_index_views
-from ..mp import qsub_utils as qu
+from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import log_reps
-
-try:
-    default_wd_available = True
-    from ..global_params import wd
-except:
-    default_wd_available = False
 from .. import global_params
 
 
@@ -439,7 +433,7 @@ class SuperSegmentationObject(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = parser.Config(self.working_dir)
+            self._config = config.Config(self.working_dir)
         return self._config
 
     @property
@@ -1264,7 +1258,7 @@ class SuperSegmentationObject(object):
             if qsub_pe is None:
                 raise RuntimeError('QSUB has to be enabled when processing '
                                    'huge SSVs.')
-            elif qu.__BATCHJOB__:
+            elif qu.batchjob_enabled():
                 params = chunkify(params, 2000)
                 so_kwargs = {'version': self.svs[0].version,
                              'working_dir': self.working_dir,

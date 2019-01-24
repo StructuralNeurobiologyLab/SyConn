@@ -25,7 +25,7 @@ def run_create_sds():
     # Sets initial values of object
     kd = knossosdataset.KnossosDataset()
     # Initializes the dataset by parsing the knossos.conf in path + "mag1"
-    kd.initialize_from_knossos_path(global_params.kd_seg_path)
+    kd.initialize_from_knossos_path(global_params.paths.kd_seg_path)
 
     # Object extraction - 2h, the same has to be done for all cell organelles
     cd_dir = global_params.wd + "chunkdatasets/sv/"
@@ -33,7 +33,7 @@ def run_create_sds():
     cd = chunky.ChunkDataset()
     cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
                   box_coords=[0, 0, 0], fit_box_size=True)
-    oew.from_ids_to_objects(cd, "sv", overlaydataset_path=global_params.kd_seg_path, n_chunk_jobs=5000,
+    oew.from_ids_to_objects(cd, "sv", overlaydataset_path=global_params.paths.kd_seg_path, n_chunk_jobs=5000,
                             hdf5names=["sv"], n_max_co_processes=None, qsub_pe='default',
                             qsub_queue='all.q', qsub_slots=1, n_folders_fs=10000)
     log.info('Finished object extraction for cell SVs.')
@@ -55,7 +55,7 @@ def run_create_sds():
                                           hdf5names=[co], n_max_co_processes=None, qsub_pe='default',
                                           qsub_queue='all.q', n_folders_fs=10000)
         # About 0.2 h per object class
-        sd_proc.map_objects_to_sv(sd, co, global_params.kd_seg_path, qsub_pe='default',
+        sd_proc.map_objects_to_sv(sd, co, global_params.paths.kd_seg_path, qsub_pe='default',
                                   qsub_queue='all.q', stride=20)
         log.info('Finished object extraction for {} SVs.'.format(co))
 

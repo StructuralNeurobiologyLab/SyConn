@@ -15,7 +15,7 @@ from collections import Counter
 
 from .. import global_params
 from . import log_proc
-from ..mp import qsub_utils as qu
+from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps.super_segmentation import SuperSegmentationObject, \
     SuperSegmentationDataset
@@ -35,12 +35,12 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
                              ssd.working_dir, extract_only, attr_keys,
                              ssd.type])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(
             _write_super_segmentation_dataset_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "write_super_segmentation_dataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -186,12 +186,12 @@ def aggregate_segmentation_object_mappings(ssd, obj_types,
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, obj_types, ssd.type])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(
             _aggregate_segmentation_object_mappings_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "aggregate_segmentation_object_mappings",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -260,11 +260,11 @@ def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, obj_types, ssd.type])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(_apply_mapping_decisions_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "apply_mapping_decisions",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -408,12 +408,12 @@ def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, ssd.type, synssv_version])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(
             map_synssv_objects_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_synssv_objects",
                                      pe=qsub_pe, queue=qsub_queue,

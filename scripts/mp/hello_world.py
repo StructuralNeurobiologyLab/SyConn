@@ -6,7 +6,7 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import os
 import numpy as np
-from syconn.mp import qsub_utils as mu
+from syconn.mp import batchjob_utils as mu
 from syconn.handler.basics import chunkify
 
 

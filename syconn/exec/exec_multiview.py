@@ -13,12 +13,10 @@ import numpy as np
 import networkx as nx
 import re
 
-from syconn.global_params import RENDERING_MAX_NB_SV
 from syconn.reps.rep_helper import knossos_ml_from_ccs
 from syconn.reps.segmentation_helper import find_missing_sv_views
 from syconn.reps.super_segmentation import SuperSegmentationObject
-from syconn.global_params import min_cc_size_neuron, path_initrag,\
-    rag_suffix
+from syconn.global_params import min_cc_size_neuron, rag_suffix, RENDERING_MAX_NB_SV
 from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
     write_glia_rag, transform_rag_edgelist2pkl
 from syconn.reps.segmentation import SegmentationDataset
@@ -28,23 +26,23 @@ from syconn.handler.basics import parse_cc_dict_from_kml
 from syconn.handler.basics import parse_cc_dict_from_kzip
 from syconn.proc import ssd_proc
 from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
-from syconn.global_params import wd, mpath_spiness, py36path, NGPU_TOTAL
+from syconn.global_params import NGPU_TOTAL
 from syconn import global_params
 from syconn.handler.prediction import get_axoness_model
 from syconn.handler.basics import chunkify
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_ssv
 from syconn.handler.logger import initialize_logging
-from syconn.mp import qsub_utils as qu
+from syconn.mp import batchjob_utils as qu
 
 
 def run_axoness_mapping():
     """Maps axon prediction of rendering locations onto SSV skeletons"""
-    log = initialize_logging('axon_mapping', global_params.wd + '/logs/',
+    log = initialize_logging('axon_mapping', global_params.paths.working_dir + '/logs/',
                              overwrite=False)
     pred_key_appendix = ""
     # Working directory has to be changed globally in global_params
-    ssd = SuperSegmentationDataset(working_dir=global_params.wd)
+    ssd = SuperSegmentationDataset(working_dir=global_params.paths.working_dir)
 
     multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
     # sort ssv ids according to their number of SVs (descending)
@@ -63,11 +61,11 @@ def run_axoness_mapping():
 
 
 def run_axoness_prediction():
-    log = initialize_logging('axon_prediction', global_params.wd + '/logs/',
+    log = initialize_logging('axon_prediction', global_params.paths.working_dir + '/logs/',
                              overwrite=False)
     # TODO: currently working directory has to be set globally in global_params and is not adjustable
-    # here because all qsub jobs will start a script referring to 'global_params.wd'
-    ssd = SuperSegmentationDataset(working_dir=global_params.wd)
+    # here because all qsub jobs will start a script referring to 'global_params.paths.working_dir'
+    ssd = SuperSegmentationDataset(working_dir=global_params.paths.working_dir)
     sd = ssd.get_segmentationdataset("sv")
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 100)
@@ -80,7 +78,7 @@ def run_axoness_prediction():
                         imposed_batch_size=m.imposed_batch_size, nb_labels=m.nb_labels,
                         channels_to_load=m.channels_to_load)
     # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
-    so_kwargs = dict(working_dir=global_params.wd)
+    so_kwargs = dict(working_dir=global_params.paths.working_dir)
     # for axoness views set woglia to True (because glia were removed beforehand),
     #  raw_only to False
     pred_kwargs = dict(woglia=True, pred_key=pred_key, verbose=False,
@@ -106,9 +104,9 @@ def run_axoness_prediction():
 
 
 def run_celltype_prediction():
-    log = initialize_logging('celltype_prediction', global_params.wd + '/logs/',
+    log = initialize_logging('celltype_prediction', global_params.paths.working_dir+ '/logs/',
                              overwrite=False)
-    ssd = SuperSegmentationDataset(working_dir=global_params.wd)
+    ssd = SuperSegmentationDataset(working_dir=global_params.paths.working_dir)
     # shuffle SV IDs
     np.random.seed(0)
     ssv_ids = ssd.ssv_ids
@@ -144,9 +142,9 @@ def run_celltype_prediction():
 
 
 def run_spiness_prediction():
-    log = initialize_logging('spine_identification', wd + '/logs/',
-                             overwrite=False)
-    ssd = SuperSegmentationDataset(working_dir=wd)
+    log = initialize_logging('spine_identification', global_params.paths.working_dir
+                             + '/logs/', overwrite=False)
+    ssd = SuperSegmentationDataset(working_dir=global_params.paths.working_dir)
     pred_key = "spiness"
 
     # run semantic spine segmentation on multi views
@@ -154,15 +152,16 @@ def run_spiness_prediction():
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 100)
     # set model properties
-    model_kwargs = dict(src=mpath_spiness, multi_gpu=False)
-    so_kwargs = dict(working_dir=wd)
+    model_kwargs = dict(src=global_params.paths.mpath_spiness,
+                        multi_gpu=False)
+    so_kwargs = dict(working_dir=global_params.paths.working_dir)
     pred_kwargs = dict(pred_key=pred_key)
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs]
                     for par in multi_params]
     log.info('Starting spine prediction.')
     qu.QSUB_script(multi_params, "predict_spiness_chunked",
                    n_max_co_processes=NGPU_TOTAL, pe="openmp", queue=None,
-                   n_cores=10, python_path=py36path,  # use python 3.6
+                   n_cores=10, python_path=global_params.paths.py36path,  # use python 3.6
                    suffix="",  additional_flags="--gres=gpu:1")   # removed -V (used with QSUB)
     log.info('Finished spine prediction.')
     # map semantic spine segmentation of multi views on SSV mesh
@@ -187,12 +186,12 @@ def run_spiness_prediction():
 
 def run_neuron_rendering():
     log = initialize_logging('neuron_view_rendering',
-                             global_params.wd + '/logs/')
+                             global_params.paths.working_dir + '/logs/')
     # TODO: currently working directory has to be set globally in global_params
     #  and is not adjustable here because all qsub jobs will start a script
-    #  referring to 'global_params.wd'
+    #  referring to 'global_params.paths.working_dir'
     # view rendering prior to glia removal, choose SSD accordingly
-    ssd = SuperSegmentationDataset(working_dir=global_params.wd)
+    ssd = SuperSegmentationDataset(working_dir=global_params.paths.working_dir)
 
     #  TODO: use actual size criteria, e.g. number of sampling locations
     nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
@@ -208,7 +207,7 @@ def run_neuron_rendering():
     multi_params = multi_params[ordering[::-1]]
     multi_params = chunkify(multi_params, 2000)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
-    multi_params = [(ixs, global_params.wd) for ixs in multi_params]
+    multi_params = [(ixs, global_params.paths.working_dir) for ixs in multi_params]
     log.info('Start rendering of {} SSVs. {} huge SSVs will be rendered '
              'afterwards using the whole cluster.'.format(np.sum(size_mask),
                                                           np.sum(~size_mask)))
@@ -239,12 +238,12 @@ def run_neuron_rendering():
 
 
 def run_create_neuron_ssd():
-    log = initialize_logging('create_neuron_ssd', global_params.wd + '/logs/',
+    log = initialize_logging('create_neuron_ssd',global_params.paths.working_dir + '/logs/',
                              overwrite=False)
     suffix = global_params.rag_suffix
     # TODO: the following paths currently require prior glia-splitting
-    kml_p = "{}/glia/neuron_rag_ml{}.k.zip".format(global_params.wd, suffix)
-    g_p = "{}/glia/neuron_rag{}.bz2".format(global_params.wd, suffix)
+    kml_p = "{}/glia/neuron_rag_ml{}.k.zip".format(global_params.paths.working_dir, suffix)
+    g_p = "{}/glia/neuron_rag{}.bz2".format(global_params.paths.working_dir, suffix)
     cc_dict = parse_cc_dict_from_kzip(kml_p)
     cc_dict_inv = {}
     for ssv_id, cc in cc_dict.items():
@@ -253,7 +252,7 @@ def run_create_neuron_ssd():
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
     log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(
         kml_p, len(cc_dict), len(cc_dict_inv)))
-    ssd = SuperSegmentationDataset(working_dir=global_params.wd, version='new',
+    ssd = SuperSegmentationDataset(working_dir=global_params.paths.working_dir, version='new',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
     ssd.save_dataset_shallow()
@@ -289,19 +288,19 @@ def run_create_neuron_ssd():
 
 
 def run_glia_prediction():
-    log = initialize_logging('glia_prediction', wd + '/logs/',
+    log = initialize_logging('glia_prediction', global_params.paths.working_dir + '/logs/',
                              overwrite=False)
     # only append to this key if needed (for e.g. different versions, change accordingly in 'axoness_mapping.py')
     pred_key = "glia_probas"
     # Load initial RAG from  Knossos mergelist text file.
-    init_rag_p = wd + "initial_rag.txt"
+    init_rag_p = global_params.paths.working_dir + "initial_rag.txt"
     assert os.path.isfile(init_rag_p), "Initial RAG could not be found at %s."\
                                        % init_rag_p
     init_rag = parse_cc_dict_from_kml(init_rag_p)
     log.info('Found {} CCs with a total of {} SVs in inital RAG.'
           ''.format(len(init_rag), np.sum([len(v) for v in init_rag.values()])))
     # chunk them
-    sd = SegmentationDataset("sv", working_dir=wd)
+    sd = SegmentationDataset("sv", working_dir=global_params.paths.working_dir)
     multi_params = chunkify(sd.so_dir_paths, 100)
     # get model properties
     m = get_glia_model()
@@ -311,7 +310,7 @@ def run_glia_prediction():
                         nb_labels=m.nb_labels,
                         channels_to_load=m.channels_to_load)
     # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
-    so_kwargs = dict(working_dir=wd)
+    so_kwargs = dict(working_dir=global_params.paths.working_dir)
     # for glia views set woglia to False (because glia are included),
     #  raw_only to True
     pred_kwargs = dict(woglia=False, pred_key=pred_key, verbose=False,
@@ -338,12 +337,11 @@ def run_glia_prediction():
 
 
 def run_glia_splitting():
-    log = initialize_logging('glia_splitting', wd + '/logs/',
+    log = initialize_logging('glia_splitting', global_params.paths.working_dir + '/logs/',
                              overwrite=False)
-    suffix = rag_suffix
     # path to networkx file containing the initial rag, TODO: create alternative formats
     G = nx.Graph()  # TODO: Make this more general
-    with open(path_initrag, 'r') as f:
+    with open(global_params.paths.init_rag_path, 'r') as f:
         for l in f.readlines():
             edges = [int(v) for v in re.findall('(\d+)', l)]
             G.add_edge(edges[0], edges[1])
@@ -352,7 +350,7 @@ def run_glia_splitting():
     log.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
 
     # add single SV connected components to initial graph
-    sd = SegmentationDataset(obj_type='sv', working_dir=wd)
+    sd = SegmentationDataset(obj_type='sv', working_dir=global_params.paths.working_dir)
     sv_ids = sd.ids
     diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
     log.info('Found {} single connected component SVs which were'
@@ -365,8 +363,8 @@ def run_glia_splitting():
     log.info("Found {} SVs in initial RAG after adding size-one connected "
              "components. Writing RAG to pkl.".format(len(all_sv_ids_in_rag)))
 
-    if not os.path.isdir(wd + "/glia/"):
-        os.makedirs(wd + "/glia/")
+    if not os.path.isdir(global_params.paths.working_dir + "/glia/"):
+        os.makedirs(global_params.paths.working_dir + "/glia/")
     transform_rag_edgelist2pkl(G)
 
     # first perform glia splitting based on multi-view predictions, results are
@@ -381,25 +379,25 @@ def run_glia_splitting():
     # create glia / neuron RAGs
     write_glia_rag(recon_nx, min_cc_size_neuron, suffix=rag_suffix)
     log.info("Finished glia splitting. Resulting RAGs are stored at {}."
-             "".format(wd + "/glia/"))
+             "".format(global_params.paths.working_dir + "/glia/"))
 
 
 def run_glia_rendering():
-    log = initialize_logging('glia_view_rendering', wd + '/logs/',
+    log = initialize_logging('glia_view_rendering', global_params.paths.working_dir + '/logs/',
                              overwrite=False)
     N_JOBS = 360
     np.random.seed(0)
 
     # view rendering prior to glia removal, choose SSD accordingly
     version = "tmp"  # glia removal is based on the initial RAG and does not require explicitly stored SSVs
-    # init_rag_p = wd + "initial_rag.txt"
+    # init_rag_p = global_params.paths.working_dir + "initial_rag.txt"
     # assert os.path.isfile(init_rag_p), "Initial RAG could not be found at %s."\
     #                                    % init_rag_p
     # init_rag = parse_cc_dict_from_kml(init_rag_p)
     # all_sv_ids_in_rag = np.concatenate(list(init_rag.values()))
 
     G = nx.Graph()  # TODO: Add factory method for initial RAG
-    with open(path_initrag, 'r') as f:
+    with open(global_params.paths.init_rag_path, 'r') as f:
         for l in f.readlines():
             edges = [int(v) for v in re.findall('(\d+)', l)]
             G.add_edge(edges[0], edges[1])
@@ -408,7 +406,7 @@ def run_glia_rendering():
     log.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
 
     # add single SV connected components to initial graph
-    sd = SegmentationDataset(obj_type='sv', working_dir=wd)
+    sd = SegmentationDataset(obj_type='sv', working_dir=global_params.paths.working_dir)
     sv_ids = sd.ids
     diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
     log.info('Found {} single connected component SVs which were missing'
@@ -424,16 +422,16 @@ def run_glia_rendering():
     # write out readable format for 'glia_prediction.py'
     ccs = [[n for n in cc] for cc in nx.connected_component_subgraphs(G)]
     kml = knossos_ml_from_ccs([np.sort(cc)[0] for cc in ccs], ccs)
-    with open(wd + "initial_rag.txt", 'w') as f:
+    with open(global_params.paths.working_dir + "initial_rag.txt", 'w') as f:
         f.write(kml)
 
     # # preprocess sample locations
         log.info("Starting sample location caching.")
-    sd = SegmentationDataset("sv", working_dir=wd)
+    sd = SegmentationDataset("sv", working_dir=global_params.paths.working_dir)
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 1000)
     # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
-    so_kwargs = dict(working_dir=wd)
+    so_kwargs = dict(working_dir=global_params.paths.working_dir)
     multi_params = [[par, so_kwargs] for par in multi_params]
     path_to_out = qu.QSUB_script(multi_params, "sample_location_caching",
                                  n_max_co_processes=300, pe="openmp", queue=None,
@@ -455,8 +453,8 @@ def run_glia_rendering():
         sv_ixs = np.sort(list(g.nodes()))
         log.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(
             kk+1, len(big_ssv), len(sv_ixs)))
-        sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
-                                      create=False, sv_ids=sv_ixs)
+        sso = SuperSegmentationObject(sv_ixs[0], working_dir=global_params.paths.working_dir,
+                                      version=version, create=False, sv_ids=sv_ixs)
         # nodes of sso._rag need to be SV
         new_G = nx.Graph()
         for e in g.edges():
@@ -473,13 +471,13 @@ def run_glia_rendering():
     multi_params = chunkify(multi_params, 2000)
 
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
-    multi_params = [(ixs, wd, version) for ixs in multi_params]
+    multi_params = [(ixs, global_params.paths.working_dir, version) for ixs in multi_params]
     path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
                                  n_max_co_processes=N_JOBS, pe="openmp", queue=None,
                                  script_folder=None, suffix="")
 
     # check completeness
-    sd = SegmentationDataset("sv", working_dir=wd)
+    sd = SegmentationDataset("sv", working_dir=global_params.paths.working_dir)
     res = find_missing_sv_views(sd, woglia=False, n_cores=10)
     missing_not_contained_in_rag = []
     missing_contained_in_rag = []

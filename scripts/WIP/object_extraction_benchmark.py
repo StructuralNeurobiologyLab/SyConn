@@ -76,7 +76,7 @@ def old_extraction_modified(result_queue, params):
 
 if __name__ == '__main__':
 
-    kd_seg_path = global_params.kd_seg_path
+    kd_seg_path = global_params.paths.kd_seg_path
 
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(kd_seg_path)

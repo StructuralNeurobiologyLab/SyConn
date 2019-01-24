@@ -6,19 +6,19 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 import numpy as np
-from syconn.mp import qsub_utils as qu
+from syconn.mp import batchjob_utils as qu
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.handler.basics import chunkify
-from syconn import global_params
 from syconn.handler.logger import initialize_logging
 from syconn.proc.skel_based_classifier import SkelClassifier
-from syconn.global_params import wd, NCORES_PER_NODE
+from syconn.global_params import NCORES_PER_NODE
+from syconn import global_params
 
 
 def run_skeleton_generation():
-    log = initialize_logging('skeleton_generation', global_params.wd + '/logs/',
+    log = initialize_logging('skeleton_generation', global_params.paths.working_dir + '/logs/',
                              overwrite=False)
-    ssd = SuperSegmentationDataset(working_dir=global_params.wd)
+    ssd = SuperSegmentationDataset(working_dir=global_params.paths.working_dir)
 
     # TODO: think about using create_sso_skeleton_fast if underlying RAG obeys spatial correctness (> 10x faster)
 
@@ -50,7 +50,7 @@ def run_skeleton_generation():
 def run_skeleton_axoness():
     # # run skeleton feature extraction # Not needed anymore, will be kept in
     # case skeleton features should remain a feature of SyConn
-    sbc = SkelClassifier("axoness", working_dir=wd)
+    sbc = SkelClassifier("axoness", working_dir=global_params.paths.working_dir)
     ft_context = [1000, 2000, 4000, 8000, 12000]
     sbc.generate_data(feature_contexts_nm=ft_context, nb_cpus=NCORES_PER_NODE)
     sbc.classifier_production(ft_context, nb_cpus=NCORES_PER_NODE)

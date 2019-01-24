@@ -71,6 +71,8 @@ if __name__ == '__main__':
     os.makedirs(example_wd + '/glia/', exist_ok=True)
     shutil.copy(curr_dir + "/data/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
     global_params.wd = example_wd
+    py36path = subprocess.check_output('source deactivate; source activate py36;'
+                                       ' which python', shell=True).decode().replace('\n', '')
     config_str = """[Versions]
 sv = 0
 vc = 0
@@ -83,12 +85,14 @@ cs_agg = 0
 ax_gt = 0
 
 [Paths]
-kd_seg_path = {}
-kd_sym_path = {}
-kd_asym_path = {}
+kd_seg = {}
+kd_sym = {}
+kd_asym = {}
 kd_sj = {}
 kd_vc = {}
 kd_mi = {}
+init_rag = {}
+py36path = {}
 
 [LowerMappingRatios]
 mi = 0.5
@@ -104,28 +108,41 @@ vc = 1.
 mi = 2786
 sj = 498
 vc = 1584
-    """.format(example_wd + 'seg/', example_wd + 'sym/', example_wd + 'asym/', example_wd + 'sj/',
-               example_wd + 'vc/', example_wd + 'mi/')
+    """.format(example_wd + 'knossosdatasets/seg/', example_wd + 'knossosdatasets/sym/',
+               example_wd + 'knossosdatasets/asym/', example_wd + 'knossosdatasets/sj/',
+               example_wd + 'knossosdatasets/vc/', example_wd + 'knossosdatasets/mi/', '', py36path)
     with open(example_wd + 'config.ini', 'w') as f:
         f.write(config_str)
 
     log.info('Finished example cube preparation. Starting SyConn pipeline.')
+
     # RUN SYCONN
-    # TODO: currently example run does not support QSUB/SLURM, because global_params.wd is not changed in the file, only in memory. Alternative could be to use bash variables or similar
+    log.info('Step 0/7 - Creating SegmentationDatasets')
+    # TODO: currently example run does not support fallback for SLURM entirely -> adapt and test
     exec_init.run_create_sds()
 
+    log.info('Step 1/7 - Creating SuperSegmentationDataset')
     exec_multiview.run_create_neuron_ssd()
 
-    raise()
+    log.info('Step 2/7 - Neuron rendering')
     # TODO: create fallback if SV meshes are not available (e.g. use mesh_from_scratch)
     exec_multiview.run_neuron_rendering()
+
+    log.info('Step 3/7 - Axon prediction')
     exec_multiview.run_axoness_prediction()
     # TODO: create fallback if SV skeletons are not available (e.g. use rendering locations?)
     exec_multiview.run_axoness_mapping()
+
+    log.info('Step 4/7 - Celltype prediction')
     exec_multiview.run_celltype_prediction()
+
+    log.info('Step 5/7 - Spine prediction')
     exec_multiview.run_spiness_prediction()
 
+    log.info('Step 6/7 - Synapse identification')
     exec_syns.run_syn_generation()
+
+    log.info('Step 7/7 - Synapse analysis')
     exec_syns.run_syn_analysis()
 
 

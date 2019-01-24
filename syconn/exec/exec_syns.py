@@ -22,8 +22,8 @@ def run_syn_analysis():
     log = initialize_logging('synapse_analysis', global_params.wd + '/logs/',
                              overwrite=False)
 
-    kd_sym_path = global_params.kd_sym_path
-    kd_asym_path = global_params.kd_asym_path
+    kd_sym_path = global_params.paths.kd_sym_path
+    kd_asym_path = global_params.paths.kd_asym_path
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.wd,
                                      obj_type='syn_ssv')
@@ -65,7 +65,7 @@ def run_syn_generation():
     log = initialize_logging('synapse_analysis', global_params.wd + '/logs/',
                              overwrite=False)
 
-    kd_seg_path = global_params.kd_seg_path
+    kd_seg_path = global_params.paths.kd_seg_path
     kd = knossosdataset.KnossosDataset()  # Sets initial values of object
     # Initializes the dataset by parsing the knossos.conf in path + "mag1"
     kd.initialize_from_knossos_path(kd_seg_path)

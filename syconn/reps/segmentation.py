@@ -12,12 +12,8 @@ from scipy import spatial
 from knossos_utils import knossosdataset
 from skimage.measure import mesh_surface_area
 
-try:
-    default_wd_available = True
-    from ..global_params import wd
-except:
-    default_wd_available = False
-from ..handler import parser
+from .. import global_params
+from ..handler import config
 from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
@@ -69,10 +65,7 @@ class SegmentationDataset(object):
                                 [10**i for i in range(6)])
 
         if working_dir is None:
-            if default_wd_available:
-                self._working_dir = wd
-            else:
-                raise Exception("No working directory (wd) specified in config")
+            self._working_dir = global_params.paths.working_dir
         else:
             self._working_dir = working_dir
 
@@ -212,7 +205,7 @@ class SegmentationDataset(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = parser.Config(self.working_dir)
+            self._config = config.Config(self.working_dir)
         return self._config
 
     @property
@@ -357,10 +350,7 @@ class SegmentationObject(object):
         self._skeleton_caching = skeleton_caching
 
         if working_dir is None:
-            if default_wd_available:
-                self._working_dir = wd
-            else:
-                raise Exception("No working directory (wd) specified in config")
+            self._working_dir = global_params.paths.working_dir
         else:
             self._working_dir = working_dir
 
@@ -465,7 +455,7 @@ class SegmentationObject(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = parser.Config(self.working_dir)
+            self._config = config.Config(self.working_dir)
         return self._config
 
     #                                                                      PATHS

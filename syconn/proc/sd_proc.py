@@ -15,10 +15,11 @@ import tqdm
 from collections import defaultdict
 from knossos_utils import knossosdataset
 
-from ..global_params import wd, get_dataset_scaling, MESH_DOWNSAMPLING,\
+from ..global_params import get_dataset_scaling, MESH_DOWNSAMPLING,\
     MESH_CLOSING, NCORES_PER_NODE
+from .. import global_params
 from .image import single_conn_comp_img
-from ..mp import qsub_utils as qu
+from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..backend.storage import AttributeDict, VoxelStorage
 from ..reps import segmentation, segmentation_helper
@@ -62,11 +63,11 @@ def dataset_analysis(sd, recompute=True, stride=50, qsub_pe=None,
         multi_params.append([path_block, sd.type, sd.version,
                              sd.working_dir, recompute, compute_meshprops])
     # Running workers
-    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(_dataset_analysis_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "dataset_analysis",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -211,11 +212,11 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
 
     # Running workers - Extracting mapping
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(_map_objects_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_objects",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -251,11 +252,11 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
 
     # Running workers - Writing mapping to SVs
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         sm.start_multiprocess(_write_mapping_to_sv_thread, multi_params,
                               nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         qu.QSUB_script(multi_params, "write_mapping_to_sv", pe=qsub_pe,
                        queue=qsub_queue, script_folder=None,
                        n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
@@ -371,11 +372,11 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
                              n_iterations])
 
     # Running workers
-    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(_binary_filling_cs_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "binary_filling_cs",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -420,7 +421,9 @@ def init_sos(sos_dict):
 
 
 def sos_dict_fact(svixs, version=None, scaling=None, obj_type="sv",
-                  working_dir=wd, create=False):
+                  working_dir=None, create=False):
+    if working_dir is None:
+        working_dir = global_params.paths.working_dir
     if scaling is None:
         scaling = get_dataset_scaling()
     sos_dict = {"svixs": svixs, "version": version,
@@ -546,11 +549,11 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512,
         multi_params.append([np.array(grid_loc), bbs_job_dict[grid_loc], sd.type, sd.version,
                              sd.working_dir, kd.knossos_path, block_edge_length])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(_export_sd_to_knossosdataset_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_sd_to_knossosdataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -611,11 +614,11 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                              kd_asym_path, kd_sym_path, trafo_dict_path])
 
     # Running workers - Extracting mapping
-    if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(_extract_synapse_type_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_synapse_type",
                                      pe=qsub_pe, queue=qsub_queue,

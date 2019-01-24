@@ -23,24 +23,32 @@ import time
 
 from ..handler.basics import temp_seed
 from ..handler.logger import initialize_logging
-from syconn import global_params
+from .. import global_params
+from ..mp.mp_utils import start_multiprocess_imap
 
 BATCH_PROC_SYSTEM = global_params.BATCH_PROC_SYSTEM
-__BATCHJOB__ = BATCH_PROC_SYSTEM is not None
 
-try:
-    if BATCH_PROC_SYSTEM == 'QSUB':
-        cmd_check = 'qstat'
-    elif BATCH_PROC_SYSTEM == 'SLURM':
-        cmd_check = 'squeue'
-    else:
-        raise NotImplementedError
-    with open(os.devnull, 'w') as devnull:
-        subprocess.check_call(cmd_check, shell=True,
-                              stdout=devnull, stderr=devnull)
-except subprocess.CalledProcessError:
-    # print("QSUB not found, switching to single node multiprocessing.")
-    __BATCHJOB__ = False
+
+def batchjob_enabled():
+    if 'example_cube' in global_params.wd:  # disable QSUB/SLURM for example_run.py
+        return False
+    if BATCH_PROC_SYSTEM is None:
+        return False
+    try:
+        if BATCH_PROC_SYSTEM == 'QSUB':
+            cmd_check = 'qstat'
+        elif BATCH_PROC_SYSTEM == 'SLURM':
+            cmd_check = 'squeue'
+        else:
+            raise NotImplementedError
+        with open(os.devnull, 'w') as devnull:
+            subprocess.check_call(cmd_check, shell=True,
+                                  stdout=devnull, stderr=devnull)
+    except subprocess.CalledProcessError:
+        # print("QSUB not found, switching to single node multiprocessing.")
+        return False
+    return True
+
 
 home_dir = os.environ['HOME'] + "/"
 path_to_scripts_default = global_params.batchjob_script_folder
@@ -113,6 +121,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         path to the output directory
 
     """
+    if not batchjob_enabled():
+        batchjob_fallback(params, name, n_cores, suffix, job_name, script_folder,
+                          python_path)
     if resume_job:
         return resume_QSUB_script(
             params, name, queue=queue, pe=pe, max_iterations=max_iterations,
@@ -199,6 +210,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
     pbar = tqdm.tqdm(total=len(params))
 
+    # TODO: add fallback
+    # if not batchjob_enabled():
+    #     n_max_co_processes = global_params.NCORES_PER_NODE
+
     # memory of finished jobs to calculate increments
     n_jobs_finished = 0
     last_diff_rp = 0
@@ -243,6 +258,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         # except SyntaxError:
         # somehow the above does not work to catch the SyntaxError (python3 compatibility)
         os.chmod(this_sh_path, 0o744)
+        # if not batchjob_enabled():
+        #     cmd_exec = "sh {}".format(this_sh_path)
+        #     subprocess.call(cmd_exec, shell=True)
         if BATCH_PROC_SYSTEM == 'QSUB':
             if pe is not None:
                 sge_queue_option = "-pe %s %d" % (pe, n_cores)
@@ -442,6 +460,116 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         log_batchjob.info('All jobs had already been finished successfully.')
 
     return path_to_out
+
+
+# TODO: test
+def batchjob_fallback(params, name, n_cores=1, suffix="", job_name="default",
+                      script_folder=None, python_path=None):
+    """
+    Fallback method in case no batchjob submission system is available.
+
+    Parameters
+    ----------
+    params :
+    name :
+    n_cores :
+    suffix :
+    job_name :
+    script_folder :
+    python_path :
+
+    Returns
+    -------
+
+    """
+    # TODO add logging and error propagation
+    if python_path is None:
+        python_path = python_path_global
+    job_folder = qsub_work_folder + "/%s_folder%s/" % (name, suffix)
+    if os.path.exists(job_folder):
+        shutil.rmtree(job_folder, ignore_errors=True)
+    log_batchjob = initialize_logging("{}_fallback".format(name + suffix),
+                                      log_dir=job_folder)
+    n_max_co_processes = np.min([global_params.NCORES_PER_NODE // n_cores,
+                                 len(params)])
+    log_batchjob.info('Starting BatchJobFallback script "{}" with {} tasks using {}'
+                      ' parallel jobs, each using {} cores.'.format(
+        name, len(params), n_max_co_processes, n_cores))
+
+    if script_folder is not None:
+        path_to_scripts = script_folder
+    else:
+        path_to_scripts = path_to_scripts_default
+
+    path_to_script = path_to_scripts + "/QSUB_%s.py" % name
+    path_to_storage = "%s/storage/" % job_folder
+    path_to_sh = "%s/sh/" % job_folder
+    path_to_log = "%s/log/" % job_folder
+    path_to_err = "%s/err/" % job_folder
+    path_to_out = "%s/out/" % job_folder
+
+    if not os.path.exists(path_to_storage):
+        os.makedirs(path_to_storage)
+    if not os.path.exists(path_to_sh):
+        os.makedirs(path_to_sh)
+    if not os.path.exists(path_to_log):
+        os.makedirs(path_to_log)
+    if not os.path.exists(path_to_err):
+        os.makedirs(path_to_err)
+    if not os.path.exists(path_to_out):
+        os.makedirs(path_to_out)
+
+    log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
+    pbar = tqdm.tqdm(total=len(params))
+
+    # memory of finished jobs to calculate increments
+    n_jobs_finished = 0
+    last_diff_rp = 0
+    sleep_time = 10
+    multi_params = []
+    for i_job in range(len(params)):
+        job_id = i_job
+        if n_max_co_processes is not None:
+            while last_diff_rp == 0:
+                nb_rp = number_of_running_processes(job_name)
+                last_diff_rp = n_max_co_processes - nb_rp
+
+                if last_diff_rp == 0:
+                    n_jobs_done = len(glob.glob(path_to_out + "*.pkl"))
+                    diff = n_jobs_done - n_jobs_finished
+                    pbar.update(diff)
+                    n_jobs_finished = n_jobs_done
+                    time.sleep(sleep_time)
+            last_diff_rp -= 1
+            sleep_time = 1
+
+        this_storage_path = path_to_storage + "job_%d.pkl" % job_id
+        this_sh_path = path_to_sh + "job_%d.sh" % job_id
+        this_out_path = path_to_out + "job_%d.pkl" % job_id
+
+        with open(this_sh_path, "w") as f:
+            f.write("#!/bin/bash\n")
+            f.write("{0} {1} {2} {3}".format(python_path,
+                                             path_to_script,
+                                             this_storage_path,
+                                             this_out_path))
+        with open(this_storage_path, "wb") as f:
+            for param in params[i_job]:
+                pkl.dump(param, f)
+        os.chmod(this_sh_path, 0o744)
+        cmd_exec = "sh {}".format(this_sh_path)
+        multi_params.append([cmd_exec, log_batchjob])
+
+    start_multiprocess_imap(fallback_exec, multi_params,
+                            nb_cpus=n_max_co_processes)
+
+
+def fallback_exec(args):
+    """
+    Helper function to execute commands using subprocess.
+    """
+    cmd_exec, log_batchjob = args
+    log_batchjob.info(subprocess.check_output(cmd_exec, shell=True))
 
 
 def number_of_running_processes(job_name):

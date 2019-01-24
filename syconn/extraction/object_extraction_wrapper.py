@@ -7,7 +7,10 @@
 import numpy as np
 import time
 import os
+import warnings
+warnings.filterwarnings("ignore", message="You are using implicit channel selection. This possibility will soon be removed.")
 
+from .. import global_params
 from ..extraction import log_extraction
 from ..handler import basics
 from . import object_extraction_steps as oes
@@ -494,7 +497,7 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
     oes.extract_voxels(cset, filename, hdf5names, dataset_names=dataset_names,
                        overlaydataset_path=overlaydataset_path,
                        chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
-                       qsub_queue=qsub_queue,
+                       qsub_queue=qsub_queue, workfolder=global_params.wd,
                        n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
                        n_max_co_processes=n_max_co_processes, transform_func=transform_func,
                        transform_func_kwargs=transform_func_kwargs)
@@ -505,7 +508,7 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
     # # --------------------------------------------------------------------------
     #
     time_start = time.time()
-    oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
+    oes.combine_voxels(global_params.wd,
                        hdf5names, dataset_names=dataset_names,
                        qsub_pe=qsub_pe, qsub_queue=qsub_queue,
                        n_folders_fs=n_folders_fs,

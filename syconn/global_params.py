@@ -5,37 +5,124 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 import os
-from  .handler.parser import Config
-
+from .handler.config import Config
+import sys
 # ---------------------- STATIC AND GLOBAL PARAMETERS # -----------------------
 # --------- GLOBAL WORKING DIRECTORY
 # wd = "/wholebrain/scratch/areaxfs3/"
 wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
 # wd = '/mnt/j0126/areaxfs_v10/'
 
-# --------- Required data paths
-config = Config(wd)
-kd_seg_path = config.entries['Paths']['kd_seg_path']
-# the 'realigned' datasets of the type prediction have slightly different extent
-#  than the segmentation dataset but prediction coordinates did match
-kd_sym_path = config.entries['Paths']['kd_sym_path']
-kd_asym_path = config.entries['Paths']['kd_asym_path']
-# Cell organelles
-kd_sj = config.entries['Paths']['kd_sj']
-kd_vc = config.entries['Paths']['kd_vc']
-kd_mi = config.entries['Paths']['kd_mi']
 
-# TODO: add generic parser method for initial RAG and handle case without glia-splitting
-path_initrag = '/wholebrain/songbird/j0126/RAGs/v4b_20180407_v4b_20180407_'\
-               'merges_newcb_ids_cbsplits.txt'
+# --------- Required data paths
+# TODO: add generic parser method for initial RAG and handle case without glia-splitting, refactor RAG path handling
+# TODO:(cover case if glia removal was not performed, change resulting rag paths after glia removal from 'glia' to 'rag'
+class _PathHandler(Config):
+    def __init__(self):
+        super().__init__(wd)
+
+    def _check_actuality(self):
+        if self.working_dir != wd:
+            super().__init__(wd)
+
+    @property
+    def kd_seg_path(self):
+        self._check_actuality()
+        return self.entries['Paths']['kd_seg']
+
+    @property
+    def kd_sym_path(self):
+        self._check_actuality()
+        return self.entries['Paths']['kd_sym']
+
+    @property
+    def kd_asym_path(self):
+        self._check_actuality()
+        return self.entries['Paths']['kd_asym']
+
+    @property
+    def kd_sj_path(self):
+        self._check_actuality()
+        return self.entries['Paths']['kd_sj']
+
+    @property
+    def kd_vc_path(self):
+        self._check_actuality()
+        return self.entries['Paths']['kd_vc']
+
+    @property
+    def kd_mi_path(self):
+        self._check_actuality()
+        return self.entries['Paths']['kd_mi']
+
+    @property
+    # TODO: make this more elegant, e.g. bash script with 'source activate py36'
+    def py36path(self):
+        self._check_actuality()
+        return self.entries['Paths']['py36path']
+
+    # TODO: Work-in usage of init_rag_path
+    @property
+    def init_rag_path(self):
+        self._check_actuality()
+        return self.entries['Paths']['init_rag']
+
+    # TODO: make model names more generic, this is not adjustable in config, see also TODOs above
+    # --------- CLASSIFICATION MODELS
+    @property
+    def model_dir(self):
+        self._check_actuality()
+        return self.working_dir + '/models/'
+
+    @property
+    def mpath_tnet(self):
+        self._check_actuality()
+        return self.working_dir + '/TN-10-Neighbors/'
+
+    @property
+    def mpath_spiness(self):
+        self._check_actuality()
+        return self.working_dir + '/FCN-VGG13--Lovasz--NewGT/'
+
+    @property
+    def mpath_celltype(self):
+        self._check_actuality()
+        return self.working_dir + '/celltype_g1_20views_v2/celltype_g1_20views_v2-LAST.mdl'
+
+    @property
+    def mpath_axoness(self):
+        self._check_actuality()
+        return self.working_dir + '/axoness_g1_v2/g1_v2-FINAL.mdl'
+
+    @property
+    def mpath_glia(self):
+        self._check_actuality()
+        return self.working_dir + '/glia_g0_v0/g0_v0-FINAL.mdl'
+
+    @property
+    def mpath_syn_rfc(self):
+        self._check_actuality()
+        return self.working_dir + '/conn_syn_rfc//rfc'
+
+
+paths = _PathHandler()
+# config = Config(wd)
+# kd_seg_path = config.entries['Paths']['kd_seg_path']
+# # the 'realigned' datasets of the type prediction have slightly different extent
+# #  than the segmentation dataset but prediction coordinates did match
+# kd_sym_path = config.entries['Paths']['kd_sym_path']
+# kd_asym_path = config.entries['Paths']['kd_asym_path']
+# # Cell organelles
+# kd_sj = config.entries['Paths']['kd_sj']
+# kd_vc = config.entries['Paths']['kd_vc']
+# kd_mi = config.entries['Paths']['kd_mi']
 
 # currently a mergelist/RAG of the following form is expected:
 # ID, ID
 #    .
 #    .
 # ID, ID
-rag_suffix = ""  # identifier in case there will be more than one RAG
-
+rag_suffix = ""  # identifier in case there will be more than one RAG, TODO: Remove
 
 # All subsquent parameter are dataset independent and do not have to be stored at
 # config.ini in the working directory
@@ -43,7 +130,7 @@ rag_suffix = ""  # identifier in case there will be more than one RAG
 # --------- BACKEND DEFINITIONS
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
 batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + \
-                         "/../QSUB_scripts/"
+                         "/QSUB_scripts/"
 MEM_PER_NODE = 249.5e3  # in MB
 NCORES_PER_NODE = 20
 # TOOD: Use NCORE_TOTAL everywhere
@@ -61,7 +148,7 @@ default_log_dir = None
 log_level = 'DEBUG'  # INFO, DEBUG
 
 # file logging for individual modules, and per job. Only use in case of
-# debugging with single core processing. Logs for scripts in 'SyConn/scripts/'
+# debugging with single core processing. Logs for scripts are located in 'SyConn/scripts/'
 # will be stored at wd + '/logs/'.
 DISABLE_FILE_LOGGING = True
 
@@ -69,9 +156,6 @@ DISABLE_FILE_LOGGING = True
 # --------- BACKEND DEFINITIONS
 backend = "FS"  # File system
 PYOPENGL_PLATFORM = 'egl'  # Rendering
-
-py36path = '/u/pschuber/anaconda3/envs/py36/bin/python'  # TODO: make this more elegant, e.g. bash script with 'source activate py36'
-
 
 # --------- CONTACT SITE PARAMETERS
 # Synaptic junction bounding box diagonal threshold in nm; objects above will not be used during `syn_gen_via_cset`
@@ -95,18 +179,6 @@ MESH_MIN_OBJ_VX = 10
 
 # --------- VIEW PARAMETERS
 NB_VIEWS = 2
-
-
-# --------- CLASSIFICATION MODELS
-# TODO: make model names more generic
-model_dir = wd + '/models/'
-mpath_tnet = '{}/TN-10-Neighbors/'.format(model_dir)
-mpath_spiness = '{}/FCN-VGG13--Lovasz--NewGT/'.format(model_dir)
-mpath_celltype = '{}/celltype_g1_20views_v2/celltype_g1_20views_v2-LAST.mdl'.format(model_dir)
-mpath_axoness = '{}/axoness_g1_v2/g1_v2-FINAL.mdl'.format(model_dir)
-mpath_glia = '{}/glia_g0_v0/g0_v0-FINAL.mdl'.format(model_dir)
-mpath_syn_rfc = '{}/conn_syn_rfc//rfc'.format(model_dir)
-
 
 # --------- GLIA PARAMETERS
 # min. connected component size of glia nodes/SV after thresholding glia proba
@@ -150,7 +222,7 @@ def get_dataset_scaling():
     tuple of float
         (X, Y, Z)
     """
-    from syconn.handler.parser import Config
+    from syconn.handler.config import Config
     import numpy as np
     cfg = Config(wd)
     return np.array(cfg.entries["Dataset"]["scaling"])

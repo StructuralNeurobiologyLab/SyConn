@@ -17,22 +17,22 @@ if __name__ == '__main__':
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
 
     kd = knossosdataset.KnossosDataset()
-    kd.initialize_from_knossos_path(global_params.kd_seg_path)
+    kd.initialize_from_knossos_path(global_params.paths.kd_seg_path)
 
     kd_mi = knossosdataset.KnossosDataset()
-    kd_mi.initialize_from_knossos_path(global_params.kd_mi)
+    kd_mi.initialize_from_knossos_path(global_params.paths.kd_mi)
 
     kd_vc = knossosdataset.KnossosDataset()
-    kd_vc.initialize_from_knossos_path(global_params.kd_vc)
+    kd_vc.initialize_from_knossos_path(global_params.paths.kd_vc)
 
     kd_sj = knossosdataset.KnossosDataset()
-    kd_sj.initialize_from_knossos_path(global_params.kd_sj)
+    kd_sj.initialize_from_knossos_path(global_params.paths.kd_sj)
 
     kd_sym = knossosdataset.KnossosDataset()
-    kd_sym.initialize_from_knossos_path(global_params.kd_sym_path)
+    kd_sym.initialize_from_knossos_path(global_params.paths.kd_sym_path)
 
     kd_asym = knossosdataset.KnossosDataset()
-    kd_asym.initialize_from_knossos_path(global_params.kd_asym_path)
+    kd_asym.initialize_from_knossos_path(global_params.paths.kd_asym_path)
     # get data
     kzip_p = curr_dir + '/example_cube.k.zip'
     bb = parse_movement_area_from_zip(kzip_p)

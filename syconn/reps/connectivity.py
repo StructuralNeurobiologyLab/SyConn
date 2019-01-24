@@ -4,6 +4,7 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
 import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
 import matplotlib.colors as mcolors
@@ -19,14 +20,10 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-try:
-    default_wd_available = True
-    from ..global_params import wd
-except:
-    default_wd_available = False
-from ..mp import qsub_utils as qu
+from .. import global_params
+from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
-from ..handler import parser
+from ..handler import config
 from . import connectivity_helper as ch
 from . import super_segmentation as ss
 from . import segmentation
@@ -98,11 +95,7 @@ class ConnectivityMatrix(object):
         self._cell_types = None
 
         if working_dir is None:
-            if default_wd_available:
-                self._working_dir = wd
-            else:
-                raise Exception(
-                    "No working directory (wd) specified in config")
+            self._working_dir = global_params.paths.working_dir
         else:
             self._working_dir = working_dir
 
@@ -160,7 +153,7 @@ class ConnectivityMatrix(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = parser.Config(self.working_dir)
+            self._config = config.Config(self.working_dir)
         return self._config
 
     @property
@@ -233,11 +226,11 @@ class ConnectivityMatrix(object):
             multi_params.append([id_block, self._sj_version, self._ssd_version,
                                  self.working_dir])
 
-        if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
+        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
             results = sm.start_multiprocess(ch.extract_connectivity_thread,
                                             multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__BATCHJOB__:
+        elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "extract_connectivity",
                                          pe=qsub_pe, queue=qsub_queue,
@@ -267,11 +260,11 @@ class ConnectivityMatrix(object):
             multi_params.append([id_block, self._sj_version, self._ssd_version,
                                  self.working_dir, self.version])
 
-        if (qsub_pe is None and qsub_queue is None) or not qu.__BATCHJOB__:
+        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
             results = sm.start_multiprocess(ch.get_sso_specific_info_thread,
                                             multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__BATCHJOB__:
+        elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "get_sso_specific_info",
                                          pe=qsub_pe, queue=qsub_queue,
