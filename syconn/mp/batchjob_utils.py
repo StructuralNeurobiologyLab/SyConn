@@ -570,7 +570,9 @@ def fallback_exec(cmd_exec):
     """
     Helper function to execute commands using subprocess.
     """
-    subprocess.check_output(cmd_exec, shell=True)
+    # still getting output in terminal
+    fnull = open(os.devnull, 'w')
+    subprocess.call(cmd_exec, shell=True, stdout=fnull)
 
 
 def number_of_running_processes(job_name):

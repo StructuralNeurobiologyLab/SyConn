@@ -43,7 +43,11 @@ for p in so_chunk_paths:
     loc_dc = CompressedStorage(loc_dc_p, disable_locking=True)
     for so in sos:
         verts = so.mesh[1].reshape(-1, 3)
-        loc_dc[so.id] = surface_samples(verts).astype(np.float32)
+        if len(verts) == 0:
+            coords = np.array([so.rep_coord, ], dtype=np.float32)
+        else:
+            coords = surface_samples(verts).astype(np.float32)
+        loc_dc[so.id] = coords
     loc_dc.push()
 
 with open(path_out_file, "wb") as f:

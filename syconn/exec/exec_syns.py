@@ -22,15 +22,12 @@ def run_syn_analysis():
     log = initialize_logging('synapse_analysis', global_params.paths.working_dir + '/logs/',
                              overwrite=False)
 
-    kd_sym_path = global_params.paths.kd_sym_path
-    kd_asym_path = global_params.paths.kd_asym_path
-
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.paths.working_dir,
                                      obj_type='syn_ssv')
 
     # This will be replaced by the new method for the 'syn_ssv' generation, ~80 min @ 340 cpus
-    extract_synapse_type(sd_syn_ssv, kd_sym_path=kd_sym_path, stride=100,
-                         kd_asym_path=kd_asym_path, qsub_pe='openmp')
+    extract_synapse_type(sd_syn_ssv, kd_sym_path=global_params.paths.kd_sym_path, stride=100,
+                         kd_asym_path=global_params.paths.kd_asym_path, qsub_pe='openmp')
     log.info('Synapse type was mapped to "syn_ssv".')
 
     # ~1h
