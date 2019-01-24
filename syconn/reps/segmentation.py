@@ -759,7 +759,6 @@ class SegmentationObject(object):
                   "not available. Existing keys: {}".format(
                 pred_key, self.id, self.attr_dict.keys())
             raise ValueError(msg)
-            # return np.array([[0, 1, 0] * len(self.sample_locations())]).reshape((-1, 3))
         return self.attr_dict[pred_key]
 
     #                                                                  FUNCTIONS

@@ -12,6 +12,8 @@ from syconn.extraction import object_extraction_wrapper as oew
 from syconn.proc import sd_proc
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.handler.logger import initialize_logging
+from syconn.mp import batchjob_utils as qu
+from syconn.handler.basics import chunkify
 
 
 # TODO: make it work with new SyConn
@@ -35,12 +37,28 @@ def run_create_sds(chunk_size=None):
     cd = chunky.ChunkDataset()
     cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
                   box_coords=[0, 0, 0], fit_box_size=True)
+    log.info('Generating SegmentationDatasets for cell and cell organelle supervoxels.')
     oew.from_ids_to_objects(cd, "sv", overlaydataset_path=global_params.paths.kd_seg_path, n_chunk_jobs=5000,
                             hdf5names=["sv"], n_max_co_processes=None, qsub_pe='default',
                             qsub_queue='all.q', qsub_slots=1, n_folders_fs=10000)
+
+    # Object Processing -- Perform after mapping to also cache mapping ratios
+    sd = SegmentationDataset("sv", working_dir=global_params.paths.working_dir)
+
+    # preprocess sample locations (and meshes if they did not exist yet)
+    log.info("Caching sample locations.")
+    # chunk them
+    multi_params = chunkify(sd.so_dir_paths, 800)
+    # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
+    so_kwargs = dict(working_dir=global_params.paths.working_dir)
+    multi_params = [[par, so_kwargs] for par in multi_params]
+    _ = qu.QSUB_script(multi_params, "sample_location_caching",
+                       n_max_co_processes=global_params.NCORE_TOTAL,
+                       pe="openmp", queue=None, script_folder=None, suffix="")
+    sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q',
+                             stride=10, compute_meshprops=True)
     log.info('Finished object extraction for cell SVs.')
 
-    log.info('Generating SegmentationDatasets for cell and cell organelle supervoxels.')
     # create SegmentationDataset for each cell organelle
     for co in global_params.existing_cell_organelles:
         cd_dir = global_params.paths.working_dir + "chunkdatasets/{}/".format(co)
@@ -63,9 +81,4 @@ def run_create_sds(chunk_size=None):
         sd_proc.map_objects_to_sv(sd, co, global_params.paths.kd_seg_path, qsub_pe='default',
                                   qsub_queue='all.q', stride=20)
         log.info('Finished object extraction for {} SVs.'.format(co))
-
-    # Object Processing - 0.5h -- Perform after mapping to also cache mapping ratios
-    sd = SegmentationDataset("sv", working_dir=global_params.paths.working_dir)
-    sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q',
-                             stride=10, compute_meshprops=True)
 

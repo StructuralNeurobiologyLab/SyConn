@@ -310,7 +310,7 @@ def assign_rep_values(target_coords, rep_coords, rep_values,
 
 def surface_samples(coords, bin_sizes=(2000, 2000, 2000), max_nb_samples=5000,
                     r=1000):
-    """
+    """'TODO: optimization required -- maybe use simple downsampling instead of histogram
     Sample locations from density grid given by coordinates and bin sizes.
     At each grid center, collects coordinates within r to calculate center of
     mass for sample location.
@@ -334,7 +334,7 @@ def surface_samples(coords, bin_sizes=(2000, 2000, 2000), max_nb_samples=5000,
     nb_bins = np.max([[1, 1, 1], nb_bins], axis=0)
     H, edges = np.histogramdd(coords, bins=nb_bins)
     nb_smaples = np.min([np.sum(H != 0), max_nb_samples])
-    if nb_smaples > max_nb_samples:
+    if nb_smaples > max_nb_samples:  # only use location with highest coordinate density
         thresh_val = np.sort(H.flatten())[::-1][nb_smaples]
         H[H <= thresh_val] = 0
     # get vertices closest to grid bins with density != 0

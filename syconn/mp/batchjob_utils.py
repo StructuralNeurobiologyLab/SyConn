@@ -522,33 +522,13 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", job_name="default",
         os.makedirs(path_to_out)
 
     log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
-    pbar = tqdm.tqdm(total=len(params))
 
-    # memory of finished jobs to calculate increments
-    n_jobs_finished = 0
-    last_diff_rp = 0
-    sleep_time = 10
     multi_params = []
     for i_job in range(len(params)):
         job_id = i_job
-        if n_max_co_processes is not None:
-            while last_diff_rp == 0:
-                nb_rp = number_of_running_processes(job_name)
-                last_diff_rp = n_max_co_processes - nb_rp
-
-                if last_diff_rp == 0:
-                    n_jobs_done = len(glob.glob(path_to_out + "*.pkl"))
-                    diff = n_jobs_done - n_jobs_finished
-                    pbar.update(diff)
-                    n_jobs_finished = n_jobs_done
-                    time.sleep(sleep_time)
-            last_diff_rp -= 1
-            sleep_time = 1
-
         this_storage_path = path_to_storage + "job_%d.pkl" % job_id
         this_sh_path = path_to_sh + "job_%d.sh" % job_id
         this_out_path = path_to_out + "job_%d.pkl" % job_id
-
         with open(this_sh_path, "w") as f:
             f.write("#!/bin/bash\n")
             f.write("{0} {1} {2} {3}".format(python_path,
@@ -561,7 +541,6 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", job_name="default",
         os.chmod(this_sh_path, 0o744)
         cmd_exec = "sh {}".format(this_sh_path)
         multi_params.append(cmd_exec)
-
     start_multiprocess_imap(fallback_exec, multi_params, debug=False,
                             nb_cpus=n_max_co_processes)
 
@@ -570,9 +549,13 @@ def fallback_exec(cmd_exec):
     """
     Helper function to execute commands using subprocess.
     """
+    # TODO: Handle error output. Currently, colored log ends up being in stderr
     # still getting output in terminal
-    fnull = open(os.devnull, 'w')
-    subprocess.call(cmd_exec, shell=True, stdout=fnull)
+    # fnull = open(os.devnull, 'w')
+    # _ = subprocess.check_output(cmd_exec, shell=True)
+    ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE,
+                          stderr=subprocess.PIPE)
+    _ = ps.communicate()[0]
 
 
 def number_of_running_processes(job_name):

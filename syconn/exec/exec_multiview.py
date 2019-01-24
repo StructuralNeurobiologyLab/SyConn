@@ -259,27 +259,18 @@ def run_create_neuron_ssd(prior_glia_removal=True):
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
     # e.g. if rag was not created by glia splitting procedure this filtering is required
     if not prior_glia_removal:
-        # preprocess sample locations  # TODO: the sample location caching should be part of the cell SV generation in create_sds --> also remove in glia_splitting
-        log.info("Starting sample location caching.")
         sd = SegmentationDataset("sv", working_dir=global_params.paths.working_dir)
-        # chunk them
-        multi_params = chunkify(sd.so_dir_paths, 1000)
-        # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
-        so_kwargs = dict(working_dir=global_params.paths.working_dir)
-        multi_params = [[par, so_kwargs] for par in multi_params]
-        _ = qu.QSUB_script(multi_params, "sample_location_caching", n_max_co_processes=300,
-                           pe="openmp", queue=None, script_folder=None, suffix="")
 
         sv_size_dict = {}
         bbs = sd.load_cached_data('bounding_box') * sd.scaling
-        for ii in range(len(sds.ids)):
-            sv_size_dict[sds.ids[ii]] = bbs[ii]
+        for ii in range(len(sd.ids)):
+            sv_size_dict[sd.ids[ii]] = bbs[ii]
         ccsize_dict = create_ccsize_dict(rag_g, sv_size_dict)
         log.info("Finished preparation of SSV size dictionary based "
                  "on bounding box diagional of corresponding SVs.")
 
         before_cnt = len(rag_g.nodes())
-        for ix in rag_g.nodes():
+        for ix in list(rag_g.nodes()):
             if ccsize_dict[ix] < global_params.min_cc_size_neuron:
                 rag_g.remove_node(ix)
         log.info("Removed %d neuron CCs because of size." %
@@ -464,18 +455,6 @@ def run_glia_rendering():
     kml = knossos_ml_from_ccs([np.sort(cc)[0] for cc in ccs], ccs)
     with open(global_params.paths.working_dir + "initial_rag.txt", 'w') as f:
         f.write(kml)
-
-    # preprocess sample locations
-    log.info("Starting sample location caching.")
-    sd = SegmentationDataset("sv", working_dir=global_params.paths.working_dir)
-    # chunk them
-    multi_params = chunkify(sd.so_dir_paths, 1000)
-    # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
-    so_kwargs = dict(working_dir=global_params.paths.working_dir)
-    multi_params = [[par, so_kwargs] for par in multi_params]
-    path_to_out = qu.QSUB_script(multi_params, "sample_location_caching",
-                                 n_max_co_processes=300, pe="openmp", queue=None,
-                                 script_folder=None, suffix="")
 
     # generate parameter for view rendering of individual SSV
     log.info("Starting view rendering.")
