@@ -207,15 +207,15 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         stitch_overlap = overlap_info[1]
     else:
         overlap_info[1] = stitch_overlap
-    if not np.all(stitch_overlap < overlap_info[0]):
-        msg = "Stitch overlap ({}) has to be smaller than chunk overlap ({})." \
+    if not np.all(stitch_overlap <= overlap_info[0]):
+        msg = "Stitch overlap ({}) has to be <= than chunk overlap ({})." \
               "".format(overlap_info[1], overlap_info[0])
         log_extraction.error(msg)
         raise ValueError(msg)
     overlap = overlap_info[0]
     all_times.append(time.time() - time_start)
     step_names.append("conneceted components")
-    log_extraction.info(
+    log_extraction.debug(
         "Time needed for connected components: %.3fs" % all_times[-1])
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/connected_components.pkl",
                          [cc_info_list, overlap_info])
@@ -242,8 +242,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                     nb_cc_dict[hdf5_name][-1])
     all_times.append(time.time() - time_start)
     step_names.append("extracting max labels")
-    log_extraction.info("Time needed for extracting max labels: %.6fs" % all_times[-1])
-    log_extraction.info("Max labels: {}".format(max_labels))
+    log_extraction.debug("Time needed for extracting max labels: %.6fs" % all_times[-1])
+    log_extraction.debug("Max labels: {}".format(max_labels))
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",
                          [max_labels])
     #
@@ -256,7 +256,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                            n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
-    log_extraction.info("Time needed for unique labels: %.3fs" % all_times[-1])
+    log_extraction.debug("Time needed for unique labels: %.3fs" % all_times[-1])
     #
     # # --------------------------------------------------------------------------
     #
@@ -269,7 +269,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                        overlap_thresh=overlap_thresh)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
-    log_extraction.info(
+    log_extraction.debug(
         "Time needed for stitch list: {:.3f}s.\nLength of stitch-lists for"
         " hdf5-names {}: {}".format(all_times[-1], hdf5names, [
             len(stitch_list[key]) for key in hdf5names]))
@@ -283,7 +283,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                                       max_labels)
     all_times.append(time.time() - time_start)
     step_names.append("merge list")
-    log_extraction.info("Time needed for merge list: %.3fs" % all_times[-1])
+    log_extraction.debug("Time needed for merge list: %.3fs" % all_times[-1])
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/merge_list.pkl",
                          [merge_dict, merge_list_dict])
     # if all_times[-1] < 0.01:
@@ -297,7 +297,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                          qsub_queue=qsub_queue, n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
-    log_extraction.info("Time needed for applying merge list: %.3fs" % all_times[-1])
+    log_extraction.debug("Time needed for applying merge list: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
@@ -309,7 +309,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                        n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
-    log_extraction.info("Time needed for extracting voxels: %.3fs" % all_times[-1])
+    log_extraction.debug("Time needed for extracting voxels: %.3fs" % all_times[-1])
     # TODO: Remove map-reduce procedure or make it optional with kwarg
     # # --------------------------------------------------------------------------
     #
@@ -401,7 +401,7 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
     qsub_queue: str or None
         qsub queue name
     """
-
+    # TODO: currently not used and needs to be refactored
     thresholds = np.array(
         255. / (nb_thresholds + 1) * np.array(range(1, nb_thresholds + 1)),
         dtype=np.uint8)
@@ -503,7 +503,7 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
                        transform_func_kwargs=transform_func_kwargs)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
-    log_extraction.info("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
+    log_extraction.debug("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
     #
     # # --------------------------------------------------------------------------
     #
@@ -515,7 +515,7 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
                        n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("combine voxels")
-    log_extraction.info("\nTime needed for combining voxels: %.3fs" % all_times[-1])
+    log_extraction.debug("\nTime needed for combining voxels: %.3fs" % all_times[-1])
     #
     # # --------------------------------------------------------------------------
 
@@ -532,9 +532,9 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
 
     # --------------------------------------------------------------------------
 
-    log_extraction.info("\nTime overview:")
+    log_extraction.info("Time overview:")
     for ii in range(len(all_times)):
         log_extraction.info("%s: %.3fs" % (step_names[ii], all_times[ii]))
     log_extraction.info("--------------------------")
     log_extraction.info("Total Time: %.1f min" % (np.sum(all_times) / 60))
-    log_extraction.info("--------------------------\n\n")
+    log_extraction.info("--------------------------")

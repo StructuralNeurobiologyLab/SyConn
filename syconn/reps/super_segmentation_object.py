@@ -920,6 +920,9 @@ class SuperSegmentationObject(object):
             self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
         except:
+            if global_params.paths.allow_skel_gen:
+                self.gen_skel_from_sample_locs()
+                return True
             return False
 
     def aggregate_segmentation_object_mappings(self, obj_types, save=False):
@@ -2178,6 +2181,13 @@ class SuperSegmentationObject(object):
                                  '"predict_nodes" instead!')
 
     def gen_skel_from_sample_locs(self, dest_path=None):
+        """
+
+        Parameters
+        ----------
+        dest_path : str
+            Path to kzip
+        """
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         locs = np.concatenate(self.sample_locations())
@@ -2188,7 +2198,9 @@ class SuperSegmentationObject(object):
         self.skeleton["nodes"] = locs / np.array(self.scaling)
         self.skeleton["edges"] = edge_list
         self.skeleton["diameters"] = np.ones(len(locs))
-        self.save_skeleton_to_kzip(dest_path=dest_path)
+        self.save_skeleton()
+        if dest_path is not None:
+            self.save_skeleton_to_kzip(dest_path=dest_path)
 
     def predict_celltype_cnn(self, model, **kwargs):
         ssh.predict_sso_celltype(self, model, **kwargs)

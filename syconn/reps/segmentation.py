@@ -79,7 +79,7 @@ class SegmentationDataset(object):
         if create and (version is None):
             version = 'new'
 
-        if version is None and create==False:
+        if version is None and create == False:
             try:
                 self._version = self.config.entries["Versions"][self.type]
             except:
@@ -708,7 +708,10 @@ class SegmentationObject(object):
             return CompressedStorage(self.locations_path,
                                      disable_locking=not self.enable_locking)[self.id]
         else:
-            coords = surface_samples(self.mesh[1].reshape(-1, 3))
+            verts = self.mesh[1].reshape(-1, 3)
+            if len(verts) == 0:  # only return scaled rep. coord as [1, 3] array
+                return np.array([self.rep_coord, ], dtype=np.float32) * self.scaling
+            coords = surface_samples(verts)
             loc_dc = CompressedStorage(self.locations_path, read_only=False,
                                        disable_locking=not self.enable_locking)
             loc_dc[self.id] = coords.astype(np.float32)

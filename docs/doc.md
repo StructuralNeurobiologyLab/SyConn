@@ -31,6 +31,27 @@ source activate py36
 Specify the path to this python executable at `syconn/config/global_params.py36path`.
 For the SyConn installation in the py36 environment `vigra` can be ignored.
 
+
+## Example run
+Place the example data in syconn/scripts/example_run/data/, `cd` to SyConn/scripts/example_run/ and then run
+```
+python start.py --working_dir=~/SyConn/example_cube/
+```
+
+
+## Analysis steps
+After initialization of the SDs (SVs and cellular organelles) and the SSD
+containing the agglomerated SVs, several analysis steps can be applied:
+
+* [Optional] [Glia removal](glia_removal.md)
+
+* [Neuronal morphology analysis and classification](neuron_analysis.md) to identify cellular compartments (e.g. axons and spines) and to perform morphology based cell type classification.
+
+* [Contact site extraction](contact_site_extraction.md)
+
+* [Identification of synapses and extraction of a wiring diagram](contact_site_classification.md)
+
+
 ## Package structure and data classes
 The basic data structures and initialization procedures are explained in the following sections:
 
@@ -51,18 +72,6 @@ organized in [SegmentationDatasets](segmentation_datasets.md).
 * [Mesh](meshes.md) generation and representation of SOs
 
 * Multi-view representation of SSOs (see docs for [glia](glia_removal.md) and [neuron](neuron_analysis.md) analysis; [preprint](https://www.biorxiv.org/content/early/2018/07/06/364034) on biorXiv)
-
-## Analysis steps
-After initialization of the SDs (SVs and cellular organelles) and the SSD
-containing the agglomerated SVs, several analysis steps can be applied:
-
-* [Optional] [Glia removal](glia_removal.md)
-
-* [Neuronal morphology analysis and classification](neuron_analysis.md) to identify cellular compartments (e.g. axons and spines) and to perform morphology based cell type classification.
-
-* [Contact site extraction](contact_site_extraction.md)
-
-* [Identification of synapses and extraction of a wiring diagram](contact_site_classification.md)
 
 
 ## Flowchart of SyConn

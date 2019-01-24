@@ -172,7 +172,8 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
     log_proc.info("Removed %d neuron CCs with single SV because of size." %
           (before_cnt - len(neuron_g.nodes())))
     ccs = list(nx.connected_components(neuron_g))
-    txt = knossos_ml_from_ccs([list(cc)[0] for cc in ccs], ccs)
+    # Added np.min(list(cc)) to have deterministic SSV ID
+    txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)
     write_txt2kzip(global_params.paths.working_dir + "/glia/neuron_rag_ml%s.k.zip" % suffix, txt,
                    "mergelist.txt")
     nx.write_edgelist(neuron_g, global_params.paths.working_dir + "/glia/neuron_rag%s.bz2" % suffix)
@@ -196,7 +197,8 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
     log_proc.info("Nb glia CCs: {}".format(len(ccs)))
     log_proc.info("Nb glia SVs: {}".format(len([n for cc in ccs for n in cc])))
     nx.write_edgelist(glia_g, global_params.paths.working_dir + "/glia/glia_rag%s.bz2" % suffix)
-    txt = knossos_ml_from_ccs([list(cc)[0] for cc in ccs], ccs)
+    # Added np.min(list(cc)) to have deterministic SSV ID
+    txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)
     write_txt2kzip(global_params.paths.working_dir + "/glia/glia_rag_ml%s.k.zip" % suffix, txt,
                    "mergelist.txt")
 

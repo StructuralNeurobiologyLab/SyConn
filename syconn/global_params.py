@@ -13,116 +13,124 @@ import sys
 wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
 # wd = '/mnt/j0126/areaxfs_v10/'
 
+# TODO: Put all dataset-specific parameters into config.ini / configspec.ini
+
 
 # --------- Required data paths
 # TODO: add generic parser method for initial RAG and handle case without glia-splitting, refactor RAG path handling
 # TODO:(cover case if glia removal was not performed, change resulting rag paths after glia removal from 'glia' to 'rag'
 class _PathHandler(Config):
+    """
+    Enables dynamic and SyConn-wide update of working directory 'wd'.
+    """
     def __init__(self):
         super().__init__(wd)
 
     def _check_actuality(self):
-        if self.working_dir != wd:
+        """
+        Crucial check, which triggers the update everytime wd is not the same as
+         self.working dir
+        """
+        if super().working_dir != wd:
             super().__init__(wd)
 
     @property
-    def kd_seg_path(self):
+    def entries(self):
         self._check_actuality()
+        return super().entries
+
+    @property
+    def working_dir(self):
+        self._check_actuality()
+        return super().working_dir
+
+    @property
+    def kd_seg_path(self):
         return self.entries['Paths']['kd_seg']
 
     @property
     def kd_sym_path(self):
-        self._check_actuality()
         return self.entries['Paths']['kd_sym']
 
     @property
     def kd_asym_path(self):
-        self._check_actuality()
         return self.entries['Paths']['kd_asym']
 
     @property
     def kd_sj_path(self):
-        self._check_actuality()
         return self.entries['Paths']['kd_sj']
 
     @property
     def kd_vc_path(self):
-        self._check_actuality()
         return self.entries['Paths']['kd_vc']
 
     @property
     def kd_mi_path(self):
-        self._check_actuality()
         return self.entries['Paths']['kd_mi']
 
     @property
     # TODO: make this more elegant, e.g. bash script with 'source activate py36'
     def py36path(self):
-        self._check_actuality()
         return self.entries['Paths']['py36path']
 
     # TODO: Work-in usage of init_rag_path
     @property
     def init_rag_path(self):
-        self._check_actuality()
+        """
+        # currently a mergelist/RAG of the following form is expected:
+        # ID, ID
+        #    .
+        #    .
+        # ID, ID
+
+        Returns
+        -------
+        str
+        """
+        # self._check_actuality()
         return self.entries['Paths']['init_rag']
 
     # TODO: make model names more generic, this is not adjustable in config, see also TODOs above
     # --------- CLASSIFICATION MODELS
     @property
     def model_dir(self):
-        self._check_actuality()
         return self.working_dir + '/models/'
 
     @property
     def mpath_tnet(self):
-        self._check_actuality()
         return self.working_dir + '/TN-10-Neighbors/'
 
     @property
     def mpath_spiness(self):
-        self._check_actuality()
         return self.working_dir + '/FCN-VGG13--Lovasz--NewGT/'
 
     @property
     def mpath_celltype(self):
-        self._check_actuality()
         return self.working_dir + '/celltype_g1_20views_v2/celltype_g1_20views_v2-LAST.mdl'
 
     @property
     def mpath_axoness(self):
-        self._check_actuality()
         return self.working_dir + '/axoness_g1_v2/g1_v2-FINAL.mdl'
 
     @property
     def mpath_glia(self):
-        self._check_actuality()
         return self.working_dir + '/glia_g0_v0/g0_v0-FINAL.mdl'
 
     @property
     def mpath_syn_rfc(self):
-        self._check_actuality()
         return self.working_dir + '/conn_syn_rfc//rfc'
 
+    @property
+    def allow_mesh_gen_cells(self):
+        return self.entries['Mesh']['allow_mesh_gen_cells']
 
-paths = _PathHandler()
-# config = Config(wd)
-# kd_seg_path = config.entries['Paths']['kd_seg_path']
-# # the 'realigned' datasets of the type prediction have slightly different extent
-# #  than the segmentation dataset but prediction coordinates did match
-# kd_sym_path = config.entries['Paths']['kd_sym_path']
-# kd_asym_path = config.entries['Paths']['kd_asym_path']
-# # Cell organelles
-# kd_sj = config.entries['Paths']['kd_sj']
-# kd_vc = config.entries['Paths']['kd_vc']
-# kd_mi = config.entries['Paths']['kd_mi']
+    @property
+    def allow_skel_gen(self):
+        return self.entries['Skeleton']['allow_skel_gen']
 
-# currently a mergelist/RAG of the following form is expected:
-# ID, ID
-#    .
-#    .
-# ID, ID
+
 rag_suffix = ""  # identifier in case there will be more than one RAG, TODO: Remove
+paths = _PathHandler()  # TODO: rename paths to config or similar
 
 # All subsquent parameter are dataset independent and do not have to be stored at
 # config.ini in the working directory
@@ -168,23 +176,24 @@ sym_thresh = 0.225  # above will be assigned synaptic sign (-1, inhibitory) and 
 
 
 # --------- MESH PARAMETERS
-existing_cell_organelles = ['mi', 'sj', 'vc', 'syn_ssv']
+existing_cell_organelles = ['mi', 'sj', 'vc']
 MESH_DOWNSAMPLING = {"sv": (8, 8, 4), "sj": (2, 2, 1), "vc": (4, 4, 2),
                      "mi": (8, 8, 4), "cs": (2, 2, 1), "conn": (2, 2, 1),
                      'syn_ssv': (2, 2, 1)}
 MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0,
                 "conn": 4, 'syn_ssv': 20}
-MESH_MIN_OBJ_VX = 10
+MESH_MIN_OBJ_VX = 100  # adapt to size threshold
 
 
 # --------- VIEW PARAMETERS
 NB_VIEWS = 2
 
 # --------- GLIA PARAMETERS
+# CC size threshold needs to be the same  # TODO: remove coexistence
 # min. connected component size of glia nodes/SV after thresholding glia proba
 min_cc_size_glia = 8e3  # in nm; L1-norm on vertex bounding box
 # min. connected component size of neuron nodes/SV after thresholding glia proba
-min_cc_size_neuron = 8e3  # in nm; L1-norm on vertex bounding box
+min_cc_size_neuron = min_cc_size_glia  # in nm; L1-norm on vertex bounding box
 
 # Threshold for glia classification
 glia_thresh = 0.161489
@@ -210,9 +219,6 @@ DIST_AXONESS_AVERAGING = 10000
 
 # --------- CELLTYPE PARAMETERS
 
-
-# TODO: Put all static parameters from config.ini into this file.
-# TODO: All versioning can stay in config.ini because it this is dynamic
 def get_dataset_scaling():
     """
     Helper method to get dataset scaling.

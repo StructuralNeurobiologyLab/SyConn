@@ -23,7 +23,7 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.segmentation_helper import find_missing_sv_attributes
 from syconn.handler.prediction import get_glia_model
 from syconn.handler.basics import parse_cc_dict_from_kml
-from syconn.handler.basics import parse_cc_dict_from_kzip
+from syconn.proc.graphs import create_ccsize_dict
 from syconn.proc import ssd_proc
 from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
 from syconn.global_params import NGPU_TOTAL
@@ -237,22 +237,67 @@ def run_neuron_rendering():
         log.info('Success.')
 
 
-def run_create_neuron_ssd():
-    log = initialize_logging('create_neuron_ssd',global_params.paths.working_dir + '/logs/',
+def run_create_neuron_ssd(prior_glia_removal=True):
+    """
+    Creates SuperSegmentationDataset with version 0.
+
+    Parameters
+    ----------
+    prior_glia_removal : bool
+        If False, will apply filtering to create SSO objects above minimum size, see global_params.min_cc_size_neuron
+         and cache SV sample locations.
+
+    Returns
+    -------
+
+    """
+    log = initialize_logging('create_neuron_ssd', global_params.paths.working_dir + '/logs/',
                              overwrite=False)
     suffix = global_params.rag_suffix
     # TODO: the following paths currently require prior glia-splitting
-    kml_p = "{}/glia/neuron_rag_ml{}.k.zip".format(global_params.paths.working_dir, suffix)
     g_p = "{}/glia/neuron_rag{}.bz2".format(global_params.paths.working_dir, suffix)
-    cc_dict = parse_cc_dict_from_kzip(kml_p)
+    rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
+    # e.g. if rag was not created by glia splitting procedure this filtering is required
+    if not prior_glia_removal:
+        # preprocess sample locations  # TODO: the sample location caching should be part of the cell SV generation in create_sds --> also remove in glia_splitting
+        log.info("Starting sample location caching.")
+        sd = SegmentationDataset("sv", working_dir=global_params.paths.working_dir)
+        # chunk them
+        multi_params = chunkify(sd.so_dir_paths, 1000)
+        # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
+        so_kwargs = dict(working_dir=global_params.paths.working_dir)
+        multi_params = [[par, so_kwargs] for par in multi_params]
+        _ = qu.QSUB_script(multi_params, "sample_location_caching", n_max_co_processes=300,
+                           pe="openmp", queue=None, script_folder=None, suffix="")
+
+        sv_size_dict = {}
+        bbs = sd.load_cached_data('bounding_box') * sd.scaling
+        for ii in range(len(sds.ids)):
+            sv_size_dict[sds.ids[ii]] = bbs[ii]
+        ccsize_dict = create_ccsize_dict(rag_g, sv_size_dict)
+        log.info("Finished preparation of SSV size dictionary based "
+                 "on bounding box diagional of corresponding SVs.")
+
+        before_cnt = len(rag_g.nodes())
+        for ix in rag_g.nodes():
+            if ccsize_dict[ix] < global_params.min_cc_size_neuron:
+                rag_g.remove_node(ix)
+        log.info("Removed %d neuron CCs because of size." %
+                 (before_cnt - len(rag_g.nodes())))
+
+    ccs = nx.connected_components(rag_g)
+    cc_dict = {}
+    for cc in ccs:
+        cc_arr = np.array(list(cc))
+        cc_dict[np.min(cc_arr)] = cc_arr
+
     cc_dict_inv = {}
     for ssv_id, cc in cc_dict.items():
         for sv_id in cc:
             cc_dict_inv[sv_id] = ssv_id
-    rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
     log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(
-        kml_p, len(cc_dict), len(cc_dict_inv)))
-    ssd = SuperSegmentationDataset(working_dir=global_params.paths.working_dir, version='new',
+        g_p, len(cc_dict), len(cc_dict_inv)))
+    ssd = SuperSegmentationDataset(working_dir=global_params.paths.working_dir, version='0',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
     ssd.save_dataset_shallow()
@@ -260,14 +305,14 @@ def run_create_neuron_ssd():
     log.info('Finished SSD initialization. Starting cellular '
              'organelle mapping.')
 
-    # # map cellular organelles to SSVs
+    # map cellular organelles to SSVs
     # TODO: increase number of jobs in the next two QSUB submissions and sort by SSV size (descending)
     ssd_proc.aggregate_segmentation_object_mappings(
         ssd, global_params.existing_cell_organelles, qsub_pe="openmp")
     ssd_proc.apply_mapping_decisions(
         ssd, global_params.existing_cell_organelles, qsub_pe="openmp")
     log.info('Finished mapping of cellular organelles to SSVs. '
-                  'Writing individual SSV graphs.')
+             'Writing individual SSV graphs.')
 
     # Write SSV RAGs
     pbar = tqdm.tqdm(total=len(ssd.ssv_ids), mininterval=0.5)
@@ -321,7 +366,8 @@ def run_glia_prediction():
     # randomly assign to gpu 0 or 1
     for par in multi_params:
         mk = par[1]
-        mk["init_gpu"] = 0  # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
+        # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
+        mk["init_gpu"] = 0
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
                                  n_max_co_processes=25, pe="openmp",
                                  queue=None, n_cores=10, suffix="_glia",
@@ -385,16 +431,10 @@ def run_glia_splitting():
 def run_glia_rendering():
     log = initialize_logging('glia_view_rendering', global_params.paths.working_dir + '/logs/',
                              overwrite=False)
-    N_JOBS = 360
     np.random.seed(0)
 
     # view rendering prior to glia removal, choose SSD accordingly
     version = "tmp"  # glia removal is based on the initial RAG and does not require explicitly stored SSVs
-    # init_rag_p = global_params.paths.working_dir + "initial_rag.txt"
-    # assert os.path.isfile(init_rag_p), "Initial RAG could not be found at %s."\
-    #                                    % init_rag_p
-    # init_rag = parse_cc_dict_from_kml(init_rag_p)
-    # all_sv_ids_in_rag = np.concatenate(list(init_rag.values()))
 
     G = nx.Graph()  # TODO: Add factory method for initial RAG
     with open(global_params.paths.init_rag_path, 'r') as f:
@@ -417,7 +457,7 @@ def run_glia_rendering():
 
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
     log.info("Found {} SVs in initial RAG after adding size-one connected "
-                  "components. Writing kml text file".format(len(all_sv_ids_in_rag)))
+             "components. Writing kml text file".format(len(all_sv_ids_in_rag)))
 
     # write out readable format for 'glia_prediction.py'
     ccs = [[n for n in cc] for cc in nx.connected_component_subgraphs(G)]
@@ -425,8 +465,8 @@ def run_glia_rendering():
     with open(global_params.paths.working_dir + "initial_rag.txt", 'w') as f:
         f.write(kml)
 
-    # # preprocess sample locations
-        log.info("Starting sample location caching.")
+    # preprocess sample locations
+    log.info("Starting sample location caching.")
     sd = SegmentationDataset("sv", working_dir=global_params.paths.working_dir)
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 1000)
@@ -463,7 +503,7 @@ def run_glia_rendering():
         sso._rag = new_G
         sso.render_views(add_cellobjects=False, cellobjects_only=False,
                          skip_indexviews=True, woglia=False,
-                         qsub_pe="openmp", overwrite=True, qsub_co_jobs=N_JOBS)
+                         qsub_pe="openmp", overwrite=True, qsub_co_jobs=global_params.NCORE_TOTAL)
 
     # render small SSV without overhead and single cpus on whole cluster
     multi_params = multi_params[nb_svs <= RENDERING_MAX_NB_SV]
@@ -473,8 +513,8 @@ def run_glia_rendering():
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.paths.working_dir, version) for ixs in multi_params]
     path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
-                                 n_max_co_processes=N_JOBS, pe="openmp", queue=None,
-                                 script_folder=None, suffix="")
+                                 n_max_co_processes=global_params.NCORE_TOTAL, pe="openmp",
+                                 queue=None, script_folder=None, suffix="")
 
     # check completeness
     sd = SegmentationDataset("sv", working_dir=global_params.paths.working_dir)

@@ -28,6 +28,7 @@ from .image import apply_pca
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
 from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
     get_dataset_scaling, MESH_MIN_OBJ_VX
+from .. import global_params
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 try:
     # set matplotlib backend to offscreen
@@ -285,8 +286,7 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
         verts, ind, norm, _ = measure.marching_cubes_lewiner(
             volume, 0, gradient_direction=gradient_direction)
     except Exception as e:
-        log_proc.error(e)
-        raise RuntimeError(e)
+        raise ValueError(e)
     if pts.ndim == 2:  # account for [5, 5, 5] offset
         verts -= margin
     verts = np.array(verts) * downsampling + offset
@@ -345,21 +345,25 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
     if np.isscalar(obj.voxels):
         return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
                np.zeros((0,), dtype=np.float32)
-    if len(obj.voxel_list) <= MESH_MIN_OBJ_VX:
-        log_proc.warn('Did not create mesh for object of type "{}" '
-                      ' with ID {} because it contained less than {} voxels.'
-                      ''.format(obj.id, obj.type, len(obj.voxel_list)))
-        return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
-               np.zeros((0,), dtype=np.float32)
+    try:
+        min_obj_vx = global_params.paths.entries['Sizethresholds'][obj.type]
+    except KeyError:
+        min_obj_vx = MESH_MIN_OBJ_VX
     try:
         indices, vertices, normals = triangulation(
             np.array(obj.voxel_list), downsampling=downsampling,
             n_closings=n_closings, decimate_mesh=decimate_mesh,
             **triangulation_kwargs)
-    except RuntimeError as e:
-        msg = 'Error during marching_cubes procedure of SegmentationObject {}' \
-              ' of type "{}". It contained {} voxels'.format(
-            obj.id, obj.type, len(obj.voxel_list))
+    except ValueError as e:
+        if len(obj.voxel_list) <= min_obj_vx:
+            # log_proc.debug('Did not create mesh for object of type "{}" '
+            #                ' with ID {} because its size is {} voxels.'
+            #                ''.format(obj.type, obj.id, len(obj.voxel_list)))
+            return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32), \
+                   np.zeros((0,), dtype=np.float32)
+        msg = 'Error ({}) during marching_cubes procedure of SegmentationObject {}' \
+              ' of type "{}". It contained {} voxels.'.format(str(e), obj.id, obj.type,
+                                                              len(obj.voxel_list))
         log_proc.error(msg)
         return np.zeros((0,)), np.zeros((0,)), np.zeros((0,))
     vertices += 1  # account for knossos 1-indexing

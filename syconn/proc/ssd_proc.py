@@ -240,6 +240,7 @@ def _aggregate_segmentation_object_mappings_thread(args):
 def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
                             qsub_queue=None, nb_cpus=1):
     """
+    Requires prior execution of `aggregate_segmentation_object_mappings`.
 
     Parameters
     ----------

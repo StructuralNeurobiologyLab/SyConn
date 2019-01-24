@@ -548,8 +548,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
             np.save(ssd.path + "/%ss.npy" % attribute,
                     attr_dict[attribute])
 
-#
-#
+
 def _write_super_segmentation_dataset_thread(args):
     ssv_obj_ids = args[0]
     version = args[1]

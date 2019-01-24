@@ -15,6 +15,7 @@ from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
 from ..handler.basics import chunkify
 from ..mp.mp_utils import start_multiprocess_imap
 from . import log_reps
+from .. import global_params
 
 
 def glia_pred_so(so, thresh, pred_key_appendix):
@@ -253,7 +254,7 @@ def load_mesh(so, recompute=False):
             log_reps.error(msg)
             return np.zeros((0, )).astype(np.int), np.zeros((0, )), np.zeros((0, ))
     else:
-        if so.type == "sv":
+        if so.type == "sv" and not global_params.paths.allow_mesh_gen_cells:
             log_reps.error("Mesh of SV %d not found.\n" % so.id)
             return np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))
         indices, vertices, normals = so._mesh_from_scratch()

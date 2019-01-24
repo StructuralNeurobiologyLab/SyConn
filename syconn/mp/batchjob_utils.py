@@ -122,8 +122,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
     """
     if not batchjob_enabled():
-        batchjob_fallback(params, name, n_cores, suffix, job_name, script_folder,
-                          python_path)
+        return batchjob_fallback(params, name, n_cores, suffix, job_name, script_folder,
+                                 python_path)
+    if n_cores is None:
+        n_cores = 1
     if resume_job:
         return resume_QSUB_script(
             params, name, queue=queue, pe=pe, max_iterations=max_iterations,
@@ -558,18 +560,17 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", job_name="default",
                 pkl.dump(param, f)
         os.chmod(this_sh_path, 0o744)
         cmd_exec = "sh {}".format(this_sh_path)
-        multi_params.append([cmd_exec, log_batchjob])
+        multi_params.append(cmd_exec)
 
-    start_multiprocess_imap(fallback_exec, multi_params,
+    start_multiprocess_imap(fallback_exec, multi_params, debug=False,
                             nb_cpus=n_max_co_processes)
 
 
-def fallback_exec(args):
+def fallback_exec(cmd_exec):
     """
     Helper function to execute commands using subprocess.
     """
-    cmd_exec, log_batchjob = args
-    log_batchjob.info(subprocess.check_output(cmd_exec, shell=True))
+    subprocess.check_output(cmd_exec, shell=True)
 
 
 def number_of_running_processes(job_name):

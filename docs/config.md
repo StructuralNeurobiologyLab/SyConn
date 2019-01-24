@@ -18,13 +18,13 @@ cs_agg = 0
 ax_gt = 0
 
 [Paths]
-kd_seg = path_seg
-kd_sym = path_sym
-kd_asym = path_asym
-kd_sj = path_sj
-kd_vc = path_vc
-kd_mi = path_mi
-init_rag = path_initrag
+kd_seg =
+kd_sym =
+kd_asym =
+kd_sj =
+kd_vc =
+kd_mi =
+init_rag =
 py36path =
 
 [LowerMappingRatios]
@@ -41,6 +41,17 @@ vc = 1.
 mi = 2786
 sj = 498
 vc = 1584
+
+[Probathresholds]
+mi = 0.428571429
+sj = 0.19047619
+vc = 0.285714286
+
+[Mesh]
+allow_mesh_gen_cells = True
+
+[Skeleton]
+allow_skel_gen = True
 ```
 
 
@@ -50,7 +61,7 @@ The data types for the `config.ini` entries are defined in `configspec.ini` whic
 __many__ = string
 
 [Paths]
-__many__ = string()
+__many__ = string
 
 [Dataset]
 scaling = float_list(min=3, max=3)
@@ -64,6 +75,14 @@ __many__ = float
 [Sizethresholds]
 __many__ = integer
 
+[Probathresholds]
+__many__ = float
+
+[Mesh]
+allow_mesh_gen_cells = boolean
+
+[Skeleton]
+allow_skel_gen = boolean
 ```
 Additionally, `syconn.global_params.py` stores `SyConn`-wide(!) parameters such as currently active working directory and meshing parameters.
 This will be refactored at some point into a single configuration location.
