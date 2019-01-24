@@ -50,7 +50,7 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
             for z in range(offset[2], offset[2]+size[2], cset.chunk_size[2]):
                 chunk_list.append(cset.coord_dict[tuple([x, y, z])])
                 translator[chunk_list[-1]] = len(chunk_list)-1
-    print("Chunk List contains %d elements." % len(chunk_list))
+    log_extraction.info("Chunk List contains %d elements." % len(chunk_list))
     return chunk_list, translator
 
 
@@ -320,7 +320,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     #                    n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     # all_times.append(time.time() - time_start)
     # step_names.append("combine voxels")
-    # print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
+    # log_extraction.info("\nTime needed for combining voxels: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
     log_extraction.info("Time overview:")
@@ -408,7 +408,7 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
 
     all_times = []
     for nb, t in enumerate(thresholds):
-        print("\n\n ======= t = %.2f =======" % t)
+        log_extraction.info("\n\n ======= t = %.2f =======" % t)
         time_start = time.time()
         from_probabilities_to_objects(cset, filename, hdf5names,
                                       overlap=overlap, sigmas=sigmas,
@@ -427,12 +427,12 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
                                       debug=False)
         all_times.append(time.time() - time_start)
 
-    print("\n\nTime overview:")
+    log_extraction.info("\n\nTime overview:")
     for ii in range(len(all_times)):
-        print("t = %.2f: %.1f min" % (thresholds[ii], all_times[ii] / 60))
-    print("--------------------------")
-    print("Total Time: %.1f min" % (np.sum(all_times) / 60))
-    print("--------------------------\n")
+        log_extraction.info("t = %.2f: %.1f min" % (thresholds[ii], all_times[ii] / 60))
+    log_extraction.info("--------------------------")
+    log_extraction.info("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    log_extraction.info("--------------------------\n")
 
 
 def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, dataset_names=None,
@@ -503,7 +503,7 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
                        transform_func_kwargs=transform_func_kwargs)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
-    print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
+    log_extraction.info("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
     #
     # # --------------------------------------------------------------------------
     #
@@ -515,7 +515,7 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
                        n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("combine voxels")
-    print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
+    log_extraction.info("\nTime needed for combining voxels: %.3fs" % all_times[-1])
     #
     # # --------------------------------------------------------------------------
 
@@ -528,13 +528,13 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
     #                    n_max_co_processes=n_max_co_processes)
     # all_times.append(time.time() - time_start)
     # step_names.append("extract voxels combined")
-    # print("\nTime needed for extracting voxels combined: %.3fs" % all_times[-1])
+    # log_extraction.info("\nTime needed for extracting voxels combined: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
-    print("\nTime overview:")
+    log_extraction.info("\nTime overview:")
     for ii in range(len(all_times)):
-        print("%s: %.3fs" % (step_names[ii], all_times[ii]))
-    print("--------------------------")
-    print("Total Time: %.1f min" % (np.sum(all_times) / 60))
-    print("--------------------------\n\n")
+        log_extraction.info("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    log_extraction.info("--------------------------")
+    log_extraction.info("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    log_extraction.info("--------------------------\n\n")

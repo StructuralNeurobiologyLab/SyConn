@@ -51,7 +51,7 @@ def run_create_sds():
         cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
                       box_coords=[0, 0, 0], fit_box_size=True)
 
-        oew.from_probabilities_to_objects(cd, co, membrane_kd_path=getattr(global_params, 'kd_{}'.format(co)),
+        oew.from_probabilities_to_objects(cd, co, membrane_kd_path=getattr(global_params, 'kd_{}_path'.format(co)),
                                           hdf5names=[co], n_max_co_processes=None, qsub_pe='default',
                                           qsub_queue='all.q', n_folders_fs=10000)
         # About 0.2 h per object class

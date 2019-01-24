@@ -28,9 +28,9 @@ if __name__ == '__main__':
 
     example_wd = os.path.expanduser('~/SyConn/example_cube/')
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
-    log.info('Preparing SyConn example at "{}".'.format(example_wd))
+    log.info('Step 0/8 - Preparation\nExample can be found at "{}".'.format(example_wd))
 
-    kzip_p = curr_dir + '/example_cube.k.zip'
+    kzip_p = curr_dir + '/example_cube_small.k.zip'
     bb = parse_movement_area_from_zip(kzip_p)
     offset = np.array([0, 0, 0])
     bd = bb[1] - bb[0]
@@ -142,35 +142,35 @@ __many__ = integer
     with open(example_wd + 'configspec.ini', 'w') as f:
         f.write(configspec_str)
 
-    log.info('Finished example cube preparation. Starting SyConn pipeline.')
+    log.info('Finished example cube preparation {}. Starting SyConn pipeline.'.format(bd))
 
     # RUN SYCONN
-    log.info('Step 0/7 - Creating SegmentationDatasets')
+    log.info('Step 1/8 - Creating SegmentationDatasets')
     # TODO: currently example run does not support fallback for SLURM entirely -> adapt and test
     exec_init.run_create_sds()
 
-    log.info('Step 1/7 - Creating SuperSegmentationDataset')
+    log.info('Step 2/8 - Creating SuperSegmentationDataset')
     exec_multiview.run_create_neuron_ssd()
 
-    log.info('Step 2/7 - Neuron rendering')
+    log.info('Step 3/8 - Neuron rendering')
     # TODO: create fallback if SV meshes are not available (e.g. use mesh_from_scratch)
     exec_multiview.run_neuron_rendering()
 
-    log.info('Step 3/7 - Axon prediction')
+    log.info('Step 4/8 - Axon prediction')
     exec_multiview.run_axoness_prediction()
     # TODO: create fallback if SV skeletons are not available (e.g. use rendering locations?)
     exec_multiview.run_axoness_mapping()
 
-    log.info('Step 4/7 - Celltype prediction')
+    log.info('Step 5/8 - Celltype prediction')
     exec_multiview.run_celltype_prediction()
 
-    log.info('Step 5/7 - Spine prediction')
+    log.info('Step 6/8 - Spine prediction')
     exec_multiview.run_spiness_prediction()
 
-    log.info('Step 6/7 - Synapse identification')
+    log.info('Step 7/8 - Synapse identification')
     exec_syns.run_syn_generation()
 
-    log.info('Step 7/7 - Synapse analysis')
+    log.info('Step 8/8 - Synapse analysis')
     exec_syns.run_syn_analysis()
 
 
