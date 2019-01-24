@@ -19,13 +19,13 @@ from syconn.handler.logger import initialize_logging
 
 
 def run_syn_analysis():
-    log = initialize_logging('synapse_analysis', global_params.wd + '/logs/',
+    log = initialize_logging('synapse_analysis', global_params.paths.working_dir + '/logs/',
                              overwrite=False)
 
     kd_sym_path = global_params.paths.kd_sym_path
     kd_asym_path = global_params.paths.kd_asym_path
 
-    sd_syn_ssv = SegmentationDataset(working_dir=global_params.wd,
+    sd_syn_ssv = SegmentationDataset(working_dir=global_params.paths.working_dir,
                                      obj_type='syn_ssv')
 
     # This will be replaced by the new method for the 'syn_ssv' generation, ~80 min @ 340 cpus
@@ -34,15 +34,15 @@ def run_syn_analysis():
     log.info('Synapse type was mapped to "syn_ssv".')
 
     # ~1h
-    cps.map_objects_to_synssv(global_params.wd, qsub_pe='openmp')
+    cps.map_objects_to_synssv(global_params.paths.working_dir, qsub_pe='openmp')
     log.info('Cellular organelles were mapped to "syn_ssv".')
 
-    cps.classify_synssv_objects(global_params.wd, qsub_pe='openmp')
+    cps.classify_synssv_objects(global_params.paths.working_dir, qsub_pe='openmp')
     log.info('Synapse property prediction finished.')
 
     # as an alternative to the skeletons, use vertex predictions or sample_locations, ~3.5h @ 300 cpus
     # TODO: requires speed-up; one could collect properties only for synapses > probability threshold
-    cps.collect_properties_from_ssv_partners(global_params.wd, qsub_pe='openmp')
+    cps.collect_properties_from_ssv_partners(global_params.paths.working_dir, qsub_pe='openmp')
 
     # collect new object attributes collected above partner axoness, celltypes,
     # synapse probabilities etc, no need to compute size/rep_coord etc. -> recompute=False
@@ -56,13 +56,13 @@ def run_syn_analysis():
 
     # export_matrix
     log.info('Exporting connectivity matrix now.')
-    dest_folder = global_params.wd + '/connectivity_matrix/'
+    dest_folder = global_params.paths.working_dir + '/connectivity_matrix/'
     cps.export_matrix(dest_folder=dest_folder)
     log.info('Connectivity matrix was epxorted to "{}".'.format(dest_folder))
 
 
 def run_syn_generation():
-    log = initialize_logging('synapse_analysis', global_params.wd + '/logs/',
+    log = initialize_logging('synapse_analysis', global_params.paths.working_dir + '/logs/',
                              overwrite=False)
 
     kd_seg_path = global_params.paths.kd_seg_path
@@ -72,7 +72,7 @@ def run_syn_generation():
 
     # TODO: change path of CS chunkdataset
     # Initital contact site extraction
-    cd_dir = global_params.wd + "/chunkdatasets/cs/"
+    cd_dir = global_params.paths.working_dir + "/chunkdatasets/cs/"
     # Class that contains a dict of chunks (with coordinates) after initializing it
     cd = chunky.ChunkDataset()
     cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
@@ -84,7 +84,7 @@ def run_syn_generation():
     # POPULATES CS CD with SV contacts
     ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=5000,
                           qsub_pe='default', qsub_queue='all.q')
-    ces.extract_agg_contact_sites(cd, global_params.wd, n_folders_fs=10000, suffix="",
+    ces.extract_agg_contact_sites(cd, global_params.paths.working_dir, n_folders_fs=10000, suffix="",
                                   qsub_queue='all.q', n_max_co_processes=5000,
                                   qsub_pe='default')
     log.info('CS extraction finished.')
@@ -92,24 +92,24 @@ def run_syn_generation():
     # create overlap dataset between SJ and CS: SegmentationDataset of type 'syn'
     # TODO: write new method which iterates over sj prob. map (KD), CS ChunkDataset / KD and (optionally) synapse type in parallel and to create a syn segmentation within from_probmaps_to_objects
     # TODO: SD for cs_agg and sj will not be needed anymore
-    cs_sd = SegmentationDataset('cs_agg', working_dir=global_params.wd,
+    cs_sd = SegmentationDataset('cs_agg', working_dir=global_params.paths.working_dir,
                                 version=0)  # version hard coded
-    sj_sd = SegmentationDataset('sj', working_dir=global_params.wd)
+    sj_sd = SegmentationDataset('sj', working_dir=global_params.paths.working_dir)
     cs_cset = chunky.load_dataset(cd_dir, update_paths=True)
 
     # # This creates an SD of type 'syn', currently ~6h, will hopefully be sped up after refactoring
     cs_processing_steps.syn_gen_via_cset(cs_sd, sj_sd, cs_cset, resume_job=False,
                                          nb_cpus=2, qsub_pe='openmp')
-    sd = SegmentationDataset("syn", working_dir=global_params.wd, version="0")
+    sd = SegmentationDataset("syn", working_dir=global_params.paths.working_dir, version="0")
     dataset_analysis(sd, qsub_pe='openmp', compute_meshprops=False)
     log.info('SegmentationDataset of type "syn" was generated.')
 
     # This creates an SD of type 'syn_ssv', ~15 min
-    cps.combine_and_split_syn(global_params.wd, resume_job=False,
+    cps.combine_and_split_syn(global_params.paths.working_dir, resume_job=False,
                               stride=250, qsub_pe='default', qsub_queue='all.q',
                               cs_gap_nm=global_params.cs_gap_nm,
                               n_max_co_processes=global_params.NCORE_TOTAL)
-    sd_syn_ssv = SegmentationDataset(working_dir=global_params.wd,
+    sd_syn_ssv = SegmentationDataset(working_dir=global_params.paths.working_dir,
                                      obj_type='syn_ssv')
     dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True,
                      stride=100)

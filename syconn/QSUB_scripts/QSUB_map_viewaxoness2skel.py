@@ -30,7 +30,7 @@ ssv_ixs = args[0]
 pred_key_appendix = args[1]
 max_dist = global_params.DIST_AXONESS_AVERAGING
 for ix in ssv_ixs:
-    sso = SuperSegmentationObject(ix, working_dir=global_params.wd)
+    sso = SuperSegmentationObject(ix, working_dir=global_params.paths.working_dir)
     sso.load_skeleton()
     if sso.skeleton is None or len(sso.skeleton["nodes"]) < 2:
         print("Skeleton of SSV %d has zero or less than two nodes." % ix)

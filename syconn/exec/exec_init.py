@@ -16,7 +16,7 @@ from syconn.handler.logger import initialize_logging
 
 # TODO: make it work with new SyConn
 def run_create_sds():
-    log = initialize_logging('create_sds', global_params.wd + '/logs/',
+    log = initialize_logging('create_sds', global_params.paths.working_dir + '/logs/',
                              overwrite=False)
     log.info('Generating SegmentationDatasets for cell and cell organelle supervoxels.')
     # TODO: get rid of explicit voxel extraction, all info necessary should be extracted at the beginning, e.g. size, bounding box etc and then refactor to only use those cached attributes!
@@ -28,7 +28,7 @@ def run_create_sds():
     kd.initialize_from_knossos_path(global_params.paths.kd_seg_path)
 
     # Object extraction - 2h, the same has to be done for all cell organelles
-    cd_dir = global_params.wd + "chunkdatasets/sv/"
+    cd_dir = global_params.paths.working_dir + "chunkdatasets/sv/"
     # Class that contains a dict of chunks (with coordinates) after initializing it
     cd = chunky.ChunkDataset()
     cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
@@ -39,13 +39,13 @@ def run_create_sds():
     log.info('Finished object extraction for cell SVs.')
 
     # Object Processing - 0.5h
-    sd = SegmentationDataset("sv", working_dir=global_params.wd)
+    sd = SegmentationDataset("sv", working_dir=global_params.paths.working_dir)
     sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q',
                              stride=10)
     log.info('Generating SegmentationDatasets for cell and cell organelle supervoxels.')
     # create SegmentationDataset for each cell organelle
     for co in global_params.existing_cell_organelles:
-        cd_dir = wd + "chunkdatasets/{}/".format(co)
+        cd_dir = global_params.paths.working_dir + "chunkdatasets/{}/".format(co)
         # Class that contains a dict of chunks (with coordinates) after initializing it
         cd = chunky.ChunkDataset()
         cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,

@@ -32,7 +32,7 @@ so_kwargs = args[2]
 pred_kwargs = args[3]
 
 working_dir = so_kwargs['working_dir']
-global_params.wd = working_dir
+global_params.wd = working_dir  # adapt working dir
 
 woglia = pred_kwargs["woglia"]
 del pred_kwargs["woglia"]

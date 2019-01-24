@@ -20,21 +20,22 @@ if __name__ == '__main__':
     kd.initialize_from_knossos_path(global_params.paths.kd_seg_path)
 
     kd_mi = knossosdataset.KnossosDataset()
-    kd_mi.initialize_from_knossos_path(global_params.paths.kd_mi)
+    kd_mi.initialize_from_knossos_path(global_params.paths.kd_mi_path)
 
     kd_vc = knossosdataset.KnossosDataset()
-    kd_vc.initialize_from_knossos_path(global_params.paths.kd_vc)
+    kd_vc.initialize_from_knossos_path(global_params.paths.kd_vc_path)
 
     kd_sj = knossosdataset.KnossosDataset()
-    kd_sj.initialize_from_knossos_path(global_params.paths.kd_sj)
+    kd_sj.initialize_from_knossos_path(global_params.paths.kd_sj_path)
 
     kd_sym = knossosdataset.KnossosDataset()
     kd_sym.initialize_from_knossos_path(global_params.paths.kd_sym_path)
 
     kd_asym = knossosdataset.KnossosDataset()
     kd_asym.initialize_from_knossos_path(global_params.paths.kd_asym_path)
+
     # get data
-    kzip_p = curr_dir + '/example_cube.k.zip'
+    kzip_p = curr_dir + '/example_cube_small.k.zip'
     bb = parse_movement_area_from_zip(kzip_p)
     raw = kd.from_raw_cubes_to_matrix(bb[1] - bb[0], bb[0], mag=1)
     seg = kd.from_overlaycubes_to_matrix(bb[1] - bb[0], bb[0], mag=1)
@@ -43,6 +44,7 @@ if __name__ == '__main__':
     seg_sj = kd_sj.from_raw_cubes_to_matrix(bb[1] - bb[0], bb[0], mag=1)
     sym = kd_sym.from_raw_cubes_to_matrix(bb[1] - bb[0], bb[0], mag=1)
     asym = kd_asym.from_raw_cubes_to_matrix(bb[1] - bb[0], bb[0], mag=1)
+
     # save data
     save_to_h5py([raw], curr_dir + 'data/raw.h5', hdf5_names=['raw'])
     save_to_h5py([seg], curr_dir + 'data/seg.h5', hdf5_names=['seg'])
@@ -53,7 +55,7 @@ if __name__ == '__main__':
     save_to_h5py([asym], curr_dir + 'data/asym.h5', hdf5_names=['asym'])
 
     # store subgraph of SV-agglomeration
-    g_p = "{}/glia/neuron_rag.bz2".format(global_params.wd)
+    g_p = "{}/glia/neuron_rag.bz2".format(global_params.paths.working_dir)
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
     sv_ids = np.unique(seg)
     rag_sub_g = rag_g.subgraph(sv_ids)

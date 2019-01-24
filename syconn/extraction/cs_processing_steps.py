@@ -1400,10 +1400,10 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
     syn_prob_t :
     """
     if dest_folder is None:
-        dest_folder = global_params.wd + '/connectivity_matrix/'
+        dest_folder = global_params.paths.working_dir + '/connectivity_matrix/'
     os.makedirs(os.path.split(dest_folder)[0], exist_ok=True)
     dest_name = dest_folder + '/conn_mat'
-    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.wd,
+    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.paths.working_dir,
                                                   version=obj_version)
 
     syn_prob = sd_syn_ssv.load_cached_data("syn_prob")

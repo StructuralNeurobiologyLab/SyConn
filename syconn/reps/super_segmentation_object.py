@@ -2352,7 +2352,7 @@ def celltype_predictor(args):
     pbar = tqdm.tqdm(total=len(ssv_ids))
     missing_ssvs = []
     for ix in ssv_ids:
-        ssv = SuperSegmentationObject(ix, working_dir=global_params.wd)
+        ssv = SuperSegmentationObject(ix, working_dir=global_params.paths.working_dir)
         ssv.nb_cpus = 1
         try:
             ssh.predict_sso_celltype(ssv, m, overwrite=True)

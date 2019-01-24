@@ -401,7 +401,7 @@ def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue
     -------
 
     """
-    ssd = SuperSegmentationDataset(global_params.wd)
+    ssd = SuperSegmentationDataset(global_params.paths.working_dir)
     multi_params = []
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
                          for i in range(0, len(ssd.ssv_ids), stride)]:
