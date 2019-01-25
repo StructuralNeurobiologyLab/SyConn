@@ -73,7 +73,6 @@ def run_axoness_prediction():
     # get model properties
     log.info('Performing axon prediction of neuron views. Labels will be stored '
              'on SV level in the attribute dict with key "{}"'.format(pred_key))
-    raise()
 
     m = get_axoness_model()
     model_kwargs = dict(model_path=m._path, normalize_data=m.normalize_data,
@@ -91,7 +90,7 @@ def run_axoness_prediction():
         mk = par[1]
         # Single GPUs are made available for every job via slurm, no need for random assignments.
         mk["init_gpu"] = 0  # np.random.rand(0, 2)
-    print('lala')
+
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
                                  n_max_co_processes=15, pe="openmp", queue=None,
                                  script_folder=None, n_cores=10,

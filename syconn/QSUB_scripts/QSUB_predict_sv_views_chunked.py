@@ -48,6 +48,8 @@ for p in so_chunk_paths:
     view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
     view_dc = CompressedStorage(view_dc_p, disable_locking=True)
     svixs = list(view_dc.keys())
+    if len(svixs) == 0:
+        continue
     views = list(view_dc.values())
     if raw_only and views[0].shape[1] != 1:
         for ii in range(len(views)):
