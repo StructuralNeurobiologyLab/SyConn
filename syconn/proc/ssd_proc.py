@@ -187,7 +187,7 @@ def aggregate_segmentation_object_mappings(ssd, obj_types,
                              ssd.working_dir, obj_types, ssd.type])
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess(
+        results = sm.start_multiprocess_imap(
             _aggregate_segmentation_object_mappings_thread,
             multi_params, nb_cpus=nb_cpus)
 
@@ -262,8 +262,8 @@ def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
                              ssd.working_dir, obj_types, ssd.type])
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess(_apply_mapping_decisions_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+        results = sm.start_multiprocess_imap(_apply_mapping_decisions_thread,
+                                             multi_params, nb_cpus=nb_cpus)
 
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,

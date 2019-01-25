@@ -73,6 +73,8 @@ def run_axoness_prediction():
     # get model properties
     log.info('Performing axon prediction of neuron views. Labels will be stored '
              'on SV level in the attribute dict with key "{}"'.format(pred_key))
+    raise()
+
     m = get_axoness_model()
     model_kwargs = dict(model_path=m._path, normalize_data=m.normalize_data,
                         imposed_batch_size=m.imposed_batch_size, nb_labels=m.nb_labels,
@@ -85,11 +87,11 @@ def run_axoness_prediction():
                        raw_only=False)
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for
                     par in multi_params]
-
     for par in multi_params:
         mk = par[1]
         # Single GPUs are made available for every job via slurm, no need for random assignments.
         mk["init_gpu"] = 0  # np.random.rand(0, 2)
+    print('lala')
     path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
                                  n_max_co_processes=15, pe="openmp", queue=None,
                                  script_folder=None, n_cores=10,
@@ -208,25 +210,27 @@ def run_neuron_rendering():
     multi_params = chunkify(multi_params, 2000)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.config.working_dir) for ixs in multi_params]
-    log.info('Start rendering of {} SSVs. {} huge SSVs will be rendered '
-             'afterwards using the whole cluster.'.format(np.sum(size_mask),
-                                                          np.sum(~size_mask)))
+    log.info('Start rendering of {} SSVs. '.format(np.sum(size_mask)))
+    if np.sum(~size_mask) > 0:
+        log.info('{} huge SSVs will be rendered afterwards using the whole'
+                 ' cluster.'.format(np.sum(~size_mask)))
     # generic
     path_to_out = qu.QSUB_script(multi_params, "render_views", pe="openmp",
                                  n_max_co_processes=global_params.NCORE_TOTAL,
                                  script_folder=None, suffix="", queue=None)
-    log.info('Finished rendering of {}/{} SSVs.'.format(len(ordering),
-                                                        len(nb_svs_per_ssv)))
-    # identify huge SSVs and process them individually on whole cluster
-    big_ssv = ssd.ssv_ids[~size_mask]
-    for kk, ssv_id in enumerate(big_ssv):
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-        log.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(
-            kk+1, len(big_ssv), len(ssv.sv_ids)))
-        ssv.render_views(add_cellobjects=True, cellobjects_only=False,
-                         woglia=True, qsub_pe="openmp", overwrite=True,
-                         qsub_co_jobs=global_params.NCORE_TOTAL,
-                         skip_indexviews=False, resume_job=False)
+    if np.sum(~size_mask) > 0:
+        log.info('Finished rendering of {}/{} SSVs.'.format(len(ordering),
+                                                            len(nb_svs_per_ssv)))
+        # identify huge SSVs and process them individually on whole cluster
+        big_ssv = ssd.ssv_ids[~size_mask]
+        for kk, ssv_id in enumerate(big_ssv):
+            ssv = ssd.get_super_segmentation_object(ssv_id)
+            log.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(
+                kk+1, len(big_ssv), len(ssv.sv_ids)))
+            ssv.render_views(add_cellobjects=True, cellobjects_only=False,
+                             woglia=True, qsub_pe="openmp", overwrite=True,
+                             qsub_co_jobs=global_params.NCORE_TOTAL,
+                             skip_indexviews=False, resume_job=False)
     log.info('Finished rendering of all SSVs. Checking completeness.')
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=10)
     if len(res) != 0:

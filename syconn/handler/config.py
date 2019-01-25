@@ -80,7 +80,11 @@ class DynConfig(Config):
         Crucial check, which triggers the update everytime wd is not the same as
          self.working dir
         """
-        if super().working_dir != global_params.wd:
+        # first check if working directory was set in environ, else check if it was changed in memory.
+        if 'syconn_wd' in os.environ:
+            if super().working_dir != os.environ['syconn_wd']:
+                super().__init__(os.environ['syconn_wd'])
+        elif super().working_dir != global_params.wd:
             super().__init__(global_params.wd)
 
     @property
@@ -129,7 +133,6 @@ class DynConfig(Config):
         raise RuntimeError('Python 3.6 is not available. Please install SyConn within python 3.6 or specify '
                            '"py36path" in config.ini!')
 
-
     # TODO: Work-in usage of init_rag_path
     @property
     def init_rag_path(self):
@@ -154,27 +157,27 @@ class DynConfig(Config):
 
     @property
     def mpath_tnet(self):
-        return self.working_dir + '/tCMN/'
+        return self.model_dir + '/tCMN/'
 
     @property
     def mpath_spiness(self):
-        return self.working_dir + '/spiness/'
+        return self.model_dir + '/spiness/'
 
     @property
     def mpath_celltype(self):
-        return self.working_dir + '/celltype/celltype.mdl'
+        return self.model_dir + '/celltype/celltype.mdl'
 
     @property
     def mpath_axoness(self):
-        return self.working_dir + '/axoness/axoness.mdl'
+        return self.model_dir + '/axoness/axoness.mdl'
 
     @property
     def mpath_glia(self):
-        return self.working_dir + '/glia/glia.mdl'
+        return self.model_dir + '/glia/glia.mdl'
 
     @property
     def mpath_syn_rfc(self):
-        return self.working_dir + '/conn_syn_rfc//rfc'
+        return self.model_dir + '/conn_syn_rfc//rfc'
 
     @property
     def allow_mesh_gen_cells(self):

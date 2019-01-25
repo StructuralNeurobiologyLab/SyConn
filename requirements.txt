@@ -25,3 +25,4 @@ pytest-runner
 prompt-toolkit < 2.0
 git+https://github.com/knossos-project/knossos_utils.git
 git+https://github.com/ELEKTRONN/ELEKTRONN2.git
+git+https://github.com/ELEKTRONN/elektronn3@phil#egg=elektronn3

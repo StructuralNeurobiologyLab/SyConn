@@ -69,7 +69,7 @@ def initialize_logging(log_name, log_dir=global_params.default_log_dir,
     if not global_params.DISABLE_FILE_LOGGING or log_dir is not None:
         # create file handler which logs even debug messages
         if log_dir is None:
-            log_dir = os.path.expanduser('~') + "/SyConn/logs/"
+            log_dir = os.path.expanduser('~') + "/.SyConn/logs/"
         try:
             os.makedirs(log_dir, exist_ok=True)
         except TypeError:

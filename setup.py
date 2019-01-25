@@ -43,12 +43,14 @@ config = {
                          'scikit-image', 'm2r', 'plyfile', 'vtkInterface',
                          'sphinx-autodoc-typehints', 'openmesh', 'pytest',
                          'pytest-runner', 'prompt-toolkit<2.0', 'numba==0.41.0',
-                         'llvmlite==0.26.0'],  # numba/llvmluite requirements due to https://github.com/numba/numba/issues/3666 in @jit compilation of 'id2rgb_array_contiguous' (in multiviews.py)
+                         'llvmlite==0.26.0', 'elektronn3'],  # numba/llvmluite requirements due to https://github.com/numba/numba/issues/3666 in @jit compilation of 'id2rgb_array_contiguous' (in multiviews.py)
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_utils'
                          '/tarball/master#egg=knossos_utils',
                          'https://github.com/ELEKTRONN/ELEKTRONN2'
-                         '/tarball/master#egg=ELEKTRONN2'],
+                         '/tarball/master#egg=ELEKTRONN2',
+                         'https://github.com/ELEKTRONN/elektronn3/'
+                         'tarball/phil/#egg=elektronn3'],
     'packages': find_packages(exclude=['scripts']), 'long_description': readme,
     'setup_requires': ["pytest-runner", ], 'tests_require': ["pytest", ],
     # this will compile all files within directories in syconn/

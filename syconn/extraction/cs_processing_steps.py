@@ -1096,6 +1096,7 @@ def _map_objects_to_synssv_thread(args):
     """
     so_dir_paths, wd, obj_version, mi_version, vc_version, ssd_version, \
         max_vx_dist_nm, max_rep_coord_dist_nm = args
+    global_params.wd = wd
 
     ssv = super_segmentation.SuperSegmentationDataset(working_dir=wd,
                                                       version=ssd_version)

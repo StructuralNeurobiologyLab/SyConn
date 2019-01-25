@@ -254,6 +254,7 @@ def _map_objects_thread(args):
     working_dir = args[3]
     kd_path = args[4]
     readonly = args[5]
+    global_params.wd = working_dir
     if len(args) > 6:
         datatype = args[6]
     else:

@@ -13,6 +13,7 @@ try:
 except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn import global_params
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -28,7 +29,9 @@ with open(path_storage_file, 'rb') as f:
 
 ch = args[0]
 wd = args[1]
+# global_params.wd = wd
 for ssv_ix in ch:
+    print(global_params.config.working_dir)
     sso = SuperSegmentationObject(ssv_ix, working_dir=wd,
                                   enable_locking_so=True)
     sso.load_attr_dict()

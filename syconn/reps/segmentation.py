@@ -132,8 +132,8 @@ class SegmentationDataset(object):
         if self._n_folders_fs is None:
             ps = glob.glob("%s/%s*/" % (self.path, self.so_storage_path_base))
             if len(ps) == 0:
-                raise Exception("No storage folder found and no number of "
-                                "subfolders specified (n_folders_fs))")
+                raise Exception("No storage folder found at '{}' and no number of "
+                                "subfolders specified (n_folders_fs))".format(self.path))
 
             bp = os.path.basename(ps[0].strip('/'))
             for p in ps:
@@ -399,8 +399,8 @@ class SegmentationObject(object):
             ps = glob.glob(
                 "%s/%s*/" % (self.segds_dir, self.so_storage_path_base))
             if len(ps) == 0:
-                raise Exception("No storage folder found and no number of "
-                                "subfolders specified (n_folders_fs))")
+                raise Exception("No storage folder found at '{}' and no number of "
+                                "subfolders specified (n_folders_fs))".format(self.segds_dir))
 
             bp = os.path.basename(ps[0].strip('/'))
             for p in ps:

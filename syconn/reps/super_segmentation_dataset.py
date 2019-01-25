@@ -1251,6 +1251,7 @@ def map_ssv_semseg(args):
     version_dict = args[2]
     working_dir = args[3]
     kwargs_semseg2mesh = args[4]
+    global_params.wd = working_dir
 
     ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
                                    version_dict=version_dict)

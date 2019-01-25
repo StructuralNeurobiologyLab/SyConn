@@ -245,10 +245,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
         with open(this_sh_path, "w") as f:
             f.write("#!/bin/bash\n")
-            f.write("{0} {1} {2} {3}".format(python_path,
-                                             path_to_script,
-                                             this_storage_path,
-                                             this_out_path))
+            f.write('export syconn_wd="{4}"\n{0} {1} {2} {3}'.format(
+                python_path, path_to_script, this_storage_path,
+                this_out_path, global_params.config.working_dir))
 
         with open(this_storage_path, "wb") as f:
             for param in params[i_job]:
@@ -263,13 +262,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             else:
                 raise Exception("No queue or parallel environment defined")
             cmd_exec = "qsub {0} -o {1} -e {2} -N {3} -p {4} {5} {6}".format(
-                sge_queue_option,
-                job_log_path,
-                job_err_path,
-                job_name,
-                priority,
-                additional_flags,
-                this_sh_path)
+                sge_queue_option, job_log_path, job_err_path, job_name,
+                priority, additional_flags, this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         elif BATCH_PROC_SYSTEM == 'SLURM':
             if pe is not None:
@@ -519,15 +513,15 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
         this_sh_path = path_to_sh + "job_%d.sh" % job_id
         this_out_path = path_to_out + "job_%d.pkl" % job_id
         with open(this_sh_path, "w") as f:
-            f.write("#!/bin/bash\n")
-            f.write("{0} {1} {2} {3}".format(python_path,
-                                             path_to_script,
-                                             this_storage_path,
-                                             this_out_path))
+            f.write('#!/bin/bash\n')
+            f.write('export syconn_wd="{4}"\n{0} {1} {2} {3}'.format(
+                python_path, path_to_script, this_storage_path,
+                this_out_path, global_params.config.working_dir))
         with open(this_storage_path, "wb") as f:
             for param in params[i_job]:
                 pkl.dump(param, f)
         os.chmod(this_sh_path, 0o744)
+
         cmd_exec = "sh {}".format(this_sh_path)
         multi_params.append(cmd_exec)
     start_multiprocess_imap(fallback_exec, multi_params, debug=False,
@@ -541,9 +535,10 @@ def fallback_exec(cmd_exec):
     """
     ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
-    err = ps.communicate()[1]
+    out, err = ps.communicate()
     if 'error' in err.decode().lower():
-        log_mp.error(err)
+        log_mp.error(out.decode())
+        log_mp.error(err.decode())
 
 
 def number_of_running_processes(job_name):

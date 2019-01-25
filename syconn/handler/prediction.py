@@ -23,12 +23,6 @@ from elektronn2.utils.gpu import initgpu
 
 from ..handler import log_handler
 from ..handler.logger import log_main
-try:
-    from elektronn3.models.base import InferenceModel
-except Exception as e:  # ImportError as e:
-    log_main.error(
-        "elektronn3 could not be imported ({}). Please see 'https://github."
-        "com/ELEKTRONN/elektronn3' for more information.".format(e))
 from .compression import load_from_h5py, save_to_h5py
 from .basics import read_txt_from_zip, get_filepaths_from_dir,\
     parse_cc_dict_from_kzip
@@ -649,6 +643,7 @@ class NeuralNetworkInterface(object):
         self.normal = normal
         self.normalize_data = normalize_data
         self.normalize_func = normalize_func
+
         if init_gpu is None:
             init_gpu = 'auto'
         if e2config.device is None:
@@ -758,6 +753,12 @@ def get_celltype_model(init_gpu=None):
 
 
 def get_semseg_spiness_model():
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
     path = global_params.config.mpath_spiness
     m = InferenceModel(path)
     m._path = path
@@ -765,6 +766,12 @@ def get_semseg_spiness_model():
 
 
 def get_tripletnet_model_e3():
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
     m_path = global_params.config.mpath_tnet
     m = InferenceModel(m_path)
     return m
