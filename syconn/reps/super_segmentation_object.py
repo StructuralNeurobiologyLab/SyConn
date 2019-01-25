@@ -129,13 +129,6 @@ class SuperSegmentationObject(object):
         if sv_ids is not None:
             self.attr_dict["sv"] = sv_ids
 
-        # TODO: Refine try-except statements
-        try:
-            self._scaling = np.array(scaling)
-        except:
-            print("Currently, scaling has to be set in the config")
-            self._scaling = np.array([1, 1, 1])
-
         if working_dir is None:
             try:
                 self._working_dir = wd
@@ -148,11 +141,13 @@ class SuperSegmentationObject(object):
             try:
                 self._scaling = \
                     np.array(self.config.entries["Dataset"]["scaling"])
-            except:
-                self._scaling = np.array([1, 1, 1])
+            except KeyError:
+                msg = 'Scaling not set and could not be found in config ' \
+                      'with entries: {}'.format(self.config.entries)
+                log_reps.error(msg)
+                raise KeyError(msg)
         else:
             self._scaling = scaling
-
         if version is None:
             try:
                 self._version = self.config.entries["Versions"][self.type]
@@ -490,7 +485,7 @@ class SuperSegmentationObject(object):
             for sv in self.svs:
                 sv._voxel_caching = False
                 if sv.voxels_exist:
-                    print(np.sum(sv.voxels), sv.size)
+                    log_reps.debug(np.sum(sv.voxels), sv.size)
                     box = [sv.bounding_box[0] - self.bounding_box[0],
                            sv.bounding_box[1] - self.bounding_box[0]]
 
@@ -498,7 +493,7 @@ class SuperSegmentationObject(object):
                     box[0][1]: box[1][1],
                     box[0][2]: box[1][2]][sv.voxels] = True
                 else:
-                    print("missing voxels from %d" % sv.id)
+                    log_reps.warning("missing voxels from %d" % sv.id)
 
             if self.voxel_caching:
                 self._voxels = voxels
@@ -795,7 +790,7 @@ class SuperSegmentationObject(object):
             return
         ssh.create_sso_skeleton(self)
         if len(self.skeleton["nodes"]) == 0:
-            print("%s has zero nodes." % repr(self))
+            log_reps.warning("%s has zero nodes." % repr(self))
         self.save_skeleton()
 
     def save_skeleton_to_kzip(self, dest_path=None, additional_keys=None):
@@ -840,7 +835,7 @@ class SuperSegmentationObject(object):
                 dest_path = self.skeleton_kzip_path
             write_skeleton_kzip(dest_path, [a])
         except Exception as e:
-            print("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, repr(e)))
+            log_reps.warning("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, repr(e)))
 
     def save_objects_to_kzip_sparse(self, obj_types=("sj", "mi", "vc"),
                                     dest_path=None):
@@ -849,8 +844,8 @@ class SuperSegmentationObject(object):
             assert obj_type in self.attr_dict
             map_ratio_key = "mapping_%s_ratios" % obj_type
             if not map_ratio_key in self.attr_dict.keys():
-                print("%s not yet mapped. Object nodes are not written to "
-                      "k.zip." % obj_type)
+                log_reps.warning("%s not yet mapped. Object nodes are not "
+                                 "written to k.zip." % obj_type)
                 continue
             overlap_ratios = np.array(self.attr_dict[map_ratio_key])
             overlap_ids = np.array(self.attr_dict["mapping_%s_ids" % obj_type])
@@ -955,33 +950,37 @@ class SuperSegmentationObject(object):
 
         self.load_attr_dict()
         if not "mapping_%s_ratios" % obj_type in self.attr_dict:
-            print("No mapping ratios found")
+            log_reps.error("No mapping ratios found")
             return
 
         if not "mapping_%s_ids" % obj_type in self.attr_dict:
-            print("no mapping ids found")
+            log_reps.error("no mapping ids found")
             return
 
         if lower_ratio is None:
             try:
                 lower_ratio = self.config.entries["LowerMappingRatios"][
                     obj_type]
-            except:
-                raise ("Lower ratio undefined")
+            except KeyError:
+                msg = "Lower ratio undefined"
+                log_reps.error(msg)
+                raise ValueError(msg)
 
         if upper_ratio is None:
             try:
                 upper_ratio = self.config.entries["UpperMappingRatios"][
                     obj_type]
             except:
-                print("Upper ratio undefined - 1. assumed")
+                log_reps.critical("Upper ratio undefined - 1. assumed")
                 upper_ratio = 1.
 
         if sizethreshold is None:
             try:
                 sizethreshold = self.config.entries["Sizethresholds"][obj_type]
-            except:
-                raise ("Size threshold undefined")
+            except KeyError:
+                msg = "Size threshold undefined"
+                log_reps.error(msg)
+                raise ValueError(msg)
 
         obj_ratios = np.array(self.attr_dict["mapping_%s_ratios" % obj_type])
 
@@ -1072,9 +1071,9 @@ class SuperSegmentationObject(object):
             dest_filename = dest_dir + "/" + fnames[i]
             try:
                 safe_copy(src_filename, dest_filename, safe=safe)
-                print("Copied %s to %s." % (src_filename, dest_filename))
+                log_reps.info("Copied %s to %s." % (src_filename, dest_filename))
             except Exception as e:
-                print("Skipped", fnames[i], str(e))
+                log_reps.error("Skipped", fnames[i], str(e))
                 pass
         self.load_attr_dict()
         if os.path.isfile(dest_dir + "/attr_dict.pkl"):
@@ -1240,12 +1239,12 @@ class SuperSegmentationObject(object):
         """
         if len(self.sv_ids) > global_params.RENDERING_MAX_NB_SV:
             part = self.partition_cc()
-            print('Partitioned hugh SSV into {} subgraphs with each {}'
-                  ' SVs.'.format(len(part), len(part[0])))
+            log_reps.info('Partitioned hugh SSV into {} subgraphs with each {}'
+                          ' SVs.'.format(len(part), len(part[0])))
             if not overwrite:  # check existence of glia preds
                 views_exist = np.array(self.view_existence(), dtype=np.int)
-                print("Rendering huge SSO. {}/{} views left to process."
-                      .format(np.sum(views_exist == 0), len(self.svs)))
+                log_reps.info("Rendering huge SSO. {}/{} views left to process"
+                              ".".format(np.sum(views_exist == 0), len(self.svs)))
                 ex_dc = {}
                 for ii, k in enumerate(self.svs):
                     ex_dc[k] = views_exist[ii]
@@ -1255,8 +1254,8 @@ class SuperSegmentationObject(object):
                         continue
                 del ex_dc
             else:
-                print("Rendering huge SSO. {} SVs left to process."
-                      .format(len(self.svs)))
+                log_reps.info("Rendering huge SSO. {} SVs left to process"
+                              ".".format(len(self.svs)))
             params = [[so.id for so in el] for el in part]
             if qsub_pe is None:
                 raise RuntimeError('QSUB has to be enabled when processing '
@@ -1327,9 +1326,9 @@ class SuperSegmentationObject(object):
             index_views = render_sso_coords_index_views(
                 self, locs, nb_views=nb_views, verbose=verbose, rot_mat=self._rot_mat)
         end_ix_views = time.time()
-        print("Rendering views took {:.2f} s. {:.2f} views/s".format(
+        log_reps.debug("Rendering views took {:.2f} s. {:.2f} views/s".format(
             end_ix_views - start, len(index_views) / (end_ix_views - start)))
-        print("Mapping rgb values to vertex indices took {:.2f}s.".format(
+        log_reps.debug("Mapping rgb values to vertex indices took {:.2f}s.".format(
             time.time() - end_ix_views))
         if not save:
             return index_views

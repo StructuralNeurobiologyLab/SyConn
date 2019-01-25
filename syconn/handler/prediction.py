@@ -397,8 +397,8 @@ def parse_movement_area_from_zip(zip_fname):
 
     Returns
     -------
-    np.array (2, 3)
-        Movement Area
+    np.array
+        Movement Area [2, 3]
     """
     anno_str = read_txt_from_zip(zip_fname, "annotation.xml").decode()
     line = re.findall("MovementArea (.*)/>", anno_str)

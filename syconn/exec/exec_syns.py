@@ -45,7 +45,7 @@ def run_syn_analysis():
     # collect new object attributes collected above partner axoness, celltypes,
     # synapse probabilities etc, no need to compute size/rep_coord etc. -> recompute=False
     dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True,
-                     stride=100, recompute=False)
+                     recompute=False)
     log.info('Synapse property collection from SSVs finished.')
 
     log.info('Collecting and writing syn-ssv objects to SSV attribute dictionary.')
@@ -109,6 +109,5 @@ def run_syn_generation():
                               n_max_co_processes=global_params.NCORE_TOTAL)
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
-    dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True,
-                     stride=100)
+    dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True)
     log.info('SegmentationDataset of type "syn_ssv" was generated.')

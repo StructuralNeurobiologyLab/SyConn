@@ -716,38 +716,30 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
     nb_cpus : int
         number of parallel jobs
     transform_func_kwargs : dict
+    n_chunk_jobs : int
+        Total number of jobs
+    n_max_co_processes : int
+        Jobs run in parallel
+    use_work_dir : bool
+        Unclear what this is for
+    workfolder : str
+        Working directory of SyConn
 
     """
 
     if chunk_list is None:
         chunk_list = [ii for ii in range(len(cset.chunk_dict))]
-
     if use_work_dir:
         if workfolder is None:
             workfolder = os.path.dirname(cset.path_head_folder.rstrip("/"))
     else:
         workfolder = cset.path_head_folder
-
     voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
-
-    voxel_rel_paths_2stage = []
-    for ix in range(n_folders_fs):
-        vp = ""
-        for p in rh.subfold_from_ix(ix, n_folders_fs).strip('/').split('/')[:-1]:
-            vp += p + "/"
-        voxel_rel_paths_2stage.append(vp)
-
-    voxel_rel_paths_2stage = np.unique(voxel_rel_paths_2stage)
-
     if dataset_names is not None:
         for dataset_name in dataset_names:
             dataset_path = workfolder + "/%s_temp/" % dataset_name
             if os.path.exists(dataset_path):
                 shutil.rmtree(dataset_path)
-
-            # TODO: can probably be removed
-            # for p in voxel_rel_paths_2stage:
-            #     os.makedirs(dataset_path + p, exist_ok=True)
     else:
         dataset_names = hdf5names
 
@@ -755,31 +747,21 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
             dataset_path = workfolder + "/%s_temp/" % hdf5_name
             if os.path.exists(dataset_path):
                 shutil.rmtree(dataset_path)
-
-            # TODO: can probably be removed
-            # for p in voxel_rel_paths_2stage:
-            #     os.makedirs(dataset_path + p, exist_ok=True)
-
     multi_params = []
-
     if n_chunk_jobs > len(chunk_list):
         n_chunk_jobs = len(chunk_list)
 
     if n_chunk_jobs > len(voxel_rel_paths):
         n_chunk_jobs = len(voxel_rel_paths)
-
     chunk_blocks = np.array_split(np.array(chunk_list), n_chunk_jobs)
     path_blocks = np.array_split(np.array(voxel_rel_paths), n_chunk_jobs)
-
     for i_job in range(n_chunk_jobs):
         multi_params.append([[cset.chunk_dict[nb_chunk] for nb_chunk in chunk_blocks[i_job]], workfolder,
                              filename, hdf5names, dataset_names, overlaydataset_path,
                              suffix, path_blocks[i_job], n_folders_fs, transform_func, transform_func_kwargs])
-
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_extract_voxels_thread, multi_params,
                                              nb_cpus=nb_cpus, verbose=debug, debug=debug)
-
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_voxels",
@@ -787,7 +769,6 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                                      script_folder=None,
                                      n_max_co_processes=n_max_co_processes,
                                      n_cores=nb_cpus)
-
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -795,15 +776,12 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                 results.append(pkl.load(f))
     else:
         raise Exception("QSUB not available")
-
     for i_hdf5_name, hdf5_name in enumerate(hdf5names):
         dataset_path = workfolder + "/%s_temp/" % dataset_names[i_hdf5_name]
-
         remap_dict = defaultdict(list)
         for result in results:
             for key, value in result[hdf5_name].items():
                 remap_dict[key].append(value)
-
         with open("%s/remapping_dict.pkl" % dataset_path, "wb") as f:
             pkl.dump(remap_dict, f)
 
@@ -944,23 +922,10 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
         voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in
                            range(n_folders_fs)]
 
-        voxel_rel_paths_2stage = []
-        for ix in range(n_folders_fs):
-            vp = ""
-            for p in rh.subfold_from_ix(ix, n_folders_fs).strip('/').split('/')[:-1]:
-                vp += p + "/"
-            voxel_rel_paths_2stage.append(vp)
-
-        voxel_rel_paths_2stage = np.unique(voxel_rel_paths_2stage)
-
         segdataset = segmentation.SegmentationDataset(obj_type=dataset_names[ii],
                                                       working_dir=workfolder,
                                                       version=sd_version,
                                                       create=True, n_folders_fs=n_folders_fs)
-
-        # TODO: can probably be removed
-        # for p in voxel_rel_paths_2stage:
-        #     os.makedirs(segdataset.so_storage_path + p, exist_ok=True)
 
         multi_params = []
         path_blocks = np.array_split(np.array(voxel_rel_paths),
@@ -1052,6 +1017,7 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
     """
     Creates a SegmentationDataset of type object_names/dataset_names/hdf5names  # TODO fix this redundancy once and for all
 
+
     Parameters
     ----------
     cset :
@@ -1114,7 +1080,7 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
             raise ValueError('object_names were specified but did not match length of "dataset_names"/"hdf5names"')
         for kk, hdf5_name in enumerate(hdf5names):
             object_name = object_names[kk]
-            segdataset = segmentation.SegmentationDataset(
+            segdataset = segmentation.SegmentationDataset(version=sd_version,
                 obj_type=object_name, working_dir=workfolder, create=True, n_folders_fs=n_folders_fs)
             dataset_path = segdataset.so_storage_path
             if os.path.exists(dataset_path):

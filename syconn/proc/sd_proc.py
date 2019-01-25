@@ -29,17 +29,18 @@ from ..proc.meshes import mesh_chunk
 from . import log_proc
 
 
-def dataset_analysis(sd, recompute=True, stride=50, qsub_pe=None,
+def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
                      qsub_queue=None, nb_cpus=1, n_max_co_processes=None,
                      compute_meshprops=False):
-    """ Analyses the whole dataset and extracts and caches key information
+    """ Analyze SegmentationDataset and extract and cache SegmentationObjects
+    attributes as numpy arrays.
 
     :param sd: SegmentationDataset
     :param recompute: bool
         whether or not to (re-)compute key information of each object
         (rep_coord, bounding_box, size)
-    :param stride: int
-        number of voxel / attribute dicts per thread
+    :param n_jobs: int
+        number of jobs
     :param qsub_pe: str
         qsub parallel environment
     :param qsub_queue: str
@@ -59,10 +60,10 @@ def dataset_analysis(sd, recompute=True, stride=50, qsub_pe=None,
             log_proc.error(msg)
             raise ValueError(msg)
     # Partitioning the work
-    multi_params = []
-    for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
-        multi_params.append([path_block, sd.type, sd.version,
-                             sd.working_dir, recompute, compute_meshprops])
+    multi_params = basics.chunkify(paths, n_jobs)
+    multi_params = [[mps, sd.type, sd.version, sd.working_dir, recompute,
+                     compute_meshprops] for mps in multi_params]
+
     # Running workers
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_dataset_analysis_thread,
@@ -146,16 +147,16 @@ def _dataset_analysis_thread(args):
 
 
 def map_objects_to_sv_multiple(sd, obj_types, kd_path, readonly=False, 
-                               stride=50, qsub_pe=None, qsub_queue=None,
+                               n_jobs=1000, qsub_pe=None, qsub_queue=None,
                                nb_cpus=1, n_max_co_processes=None):
-    assert isinstance(obj_types, list)
+    assert isinstance(obj_types, list)  # TODO: probably possible to optimize
     for obj_type in obj_types:
-        map_objects_to_sv(sd, obj_type, kd_path, readonly=readonly, stride=stride,
+        map_objects_to_sv(sd, obj_type, kd_path, readonly=readonly, n_jobs=n_jobs,
                           qsub_pe=qsub_pe, qsub_queue=qsub_queue, nb_cpus=nb_cpus,
                           n_max_co_processes=n_max_co_processes)
         
 
-def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
+def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
                       qsub_pe=None, qsub_queue=None, nb_cpus=None,
                       n_max_co_processes=None):
     """
@@ -172,8 +173,8 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
         if True the mapping is only read from the segmentation objects and not
         computed. This requires the previous computation of the mapping for the
         mapped segmentation objects.
-    stride : int
-        number of voxel / attribute dicts per thread
+    n_jobs : int
+        total number of jobs
     qsub_pe : str
         qsub parallel environment
     qsub_queue : str
@@ -194,11 +195,9 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
     paths = seg_dataset.so_dir_paths
 
     # Partitioning the work
-    multi_params = []
-    for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
-        multi_params.append([path_block, obj_type,
-                            sd.version_dict[obj_type], sd.working_dir,
-                            kd_path, readonly])
+    multi_params = basics.chunkify(paths, n_jobs)
+    multi_params = [[mps, obj_type, sd.version_dict[obj_type], sd.working_dir,
+                     kd_path, readonly] for mps in multi_params]
 
     # Running workers - Extracting mapping
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
@@ -231,9 +230,8 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, stride=1000,
     paths = sd.so_dir_paths
 
     # Partitioning the work
-    multi_params = []
-    for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
-        multi_params.append([path_block, obj_type, mapping_dict_path])
+    multi_params = basics.chunkify(paths, n_jobs)
+    multi_params = [[path_block, obj_type, mapping_dict_path] for path_block in multi_params]
 
     # Running workers - Writing mapping to SVs
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
@@ -284,7 +282,7 @@ def _map_objects_thread(args):
                         else:
                             sv_id_dict[ids[i_id]] = {so_id: id_ratios[i_id]}
             else:
-                if np.product(so.shape) > 1e12:
+                if np.product(so.shape) > 1e12:  # TODO: Seems hacky
                     continue
                 vx_list = np.argwhere(so.voxels) + so.bounding_box[0]
                 try:
@@ -574,6 +572,22 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                          trafo_dict_path=None, stride=10,
                          qsub_pe=None, qsub_queue=None, nb_cpus=1,
                          n_max_co_processes=None):
+    """TODO: will be refactored into single method when generating syn objects
+    Extract synapse type from KnossosDatasets. Stores sym.-asym. ratio in
+    SJ object attribute dict.
+
+    Parameters
+    ----------
+    sj_sd : SegmentationDataset
+    kd_asym_path : str
+    kd_sym_path : str
+    trafo_dict_path : dict
+    stride : int
+    qsub_pe : str
+    qsub_queue : str
+    nb_cpus : int
+    n_max_co_processes : int
+    """
     assert "syn_ssv" in sj_sd.version_dict
     paths = sj_sd.so_dir_paths
 
@@ -634,31 +648,27 @@ def _extract_synapse_type_thread(args):
             if trafo_dict is not None:
                 vxl -= trafo_dict[so_id]
                 vxl = vxl[:, [1, 0, 2]]
-
             # TODO: remvoe try-except
             try:
                 asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl))
                 sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl))
             except:
-                # print("Fail")
+                log_proc.error("Failed to read raw cubes during synapse type "
+                               "extraction.")
                 sym_prop = 0
                 asym_prop = 0
 
             if sym_prop + asym_prop == 0:
                 sym_ratio = -1
-                # print(so.rep_coord, so.size)
             else:
                 sym_ratio = sym_prop / float(asym_prop + sym_prop)
-
-            # print(sym_ratio, asym_prop, sym_prop, so.size, so.rep_coord, np.mean(vxl, axis=0).astype(np.int))
-
             so.attr_dict["syn_type_sym_ratio"] = sym_ratio
             this_attr_dc[so_id] = so.attr_dict
         this_attr_dc.push()
 
 
 def mesh_proc_chunked(working_dir, obj_type, nb_cpus=NCORES_PER_NODE):
-    """
+    """TODO: create QSUB solution and run if cell SV meshes do not exist
     Caches the meshes for all SegmentationObjects within the SegmentationDataset
      with object type 'obj_type'.
 

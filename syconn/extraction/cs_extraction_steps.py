@@ -10,7 +10,6 @@ except ImportError:
     import pickle as pkl
 import glob
 import numpy as np
-import os
 import scipy.ndimage
 import time
 import itertools
@@ -23,6 +22,7 @@ from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..handler import compression
 from . import object_extraction_steps as oes
+from . import log_extraction
 
 
 def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
@@ -161,7 +161,6 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
                        nb_cpus=nb_cpus)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
-    print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
@@ -173,14 +172,13 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
                        nb_cpus=nb_cpus)
     all_times.append(time.time() - time_start)
     step_names.append("combine voxels")
-    print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
 
-    print("\nTime overview:")
+    log_extraction.debug("\nTime overview:")
     for ii in range(len(all_times)):
-        print("%s: %.3fs" % (step_names[ii], all_times[ii]))
-    print("--------------------------")
-    print("Total Time: %.1f min" % (np.sum(all_times) / 60.))
-    print("--------------------------\n\n")
+        log_extraction.debug("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    log_extraction.debug("--------------------------")
+    log_extraction.debug("Total Time: %.1f min" % (np.sum(all_times) / 60.))
+    log_extraction.debug("--------------------------\n\n")
 
 
 def _extract_agg_cs_thread(args):

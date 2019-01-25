@@ -14,15 +14,10 @@ First steps:
    GettingStarted
    installation
    Example
+   syconn
 
 .. mdinclude:: doc.md
 
-API
-===
-.. toctree::
-   :maxdepth: 1
-
-   syconn
 
 Indices and tables
 ------------------

@@ -214,7 +214,9 @@ class SegmentationDataset(object):
             if os.path.exists(self.path_sizes):
                 self._sizes = np.load(self.path_sizes)
             else:
-                print("sizes were not calculated...")
+                msg = "sizes were not calculated... Please run dataset_analysis"
+                log_reps.error(msg)
+                raise ValueError(msg)
         return self._sizes
 
     @property
@@ -223,7 +225,9 @@ class SegmentationDataset(object):
             if os.path.exists(self.path_rep_coords):
                 self._rep_coords = np.load(self.path_rep_coords)
             else:
-                print("rep coords were not calculated...")
+                msg = "rep_coords were not calculated... Please run dataset_analysis"
+                log_reps.error(msg)
+                raise ValueError(msg)
         return self._rep_coords
 
     @property
@@ -849,7 +853,7 @@ class SegmentationObject(object):
             views = view_dc[self.id]
         except KeyError as e:
             if ignore_missing:
-                print("Views of SV {} were missing. Skipping.".format(self.id))
+                log_reps.warning("Views of SV {} were missing. Skipping.".format(self.id))
                 views = np.zeros((0, 4, 2, 128, 256), dtype=np.uint8)
             else:
                 raise KeyError(e)
@@ -967,7 +971,7 @@ class SegmentationObject(object):
 
         if not self.id in voxel_dc:
             self._bounding_box = np.array([[-1, -1, -1], [-1, -1, -1]])
-            print("No voxels found in VoxelDict!")
+            log_reps.warning("No voxels found in VoxelDict!")
             return
 
         bin_arrs, block_offsets = voxel_dc[self.id]
@@ -1066,8 +1070,7 @@ class SegmentationObject(object):
             try:
                 safe_copy(src_filename, dest_filename, safe=safe)
             except Exception as e:
-                print(e)
-                print("Skipped", fnames[i])
+                log_reps.warning("{}. Skipped {}.".format(e, fnames[i]))
                 pass
         # copy attr_dict values
         self.load_attr_dict()

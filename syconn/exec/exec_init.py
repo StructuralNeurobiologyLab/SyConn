@@ -56,7 +56,7 @@ def run_create_sds(chunk_size=None):
                        n_max_co_processes=global_params.NCORE_TOTAL,
                        pe="openmp", queue=None, script_folder=None, suffix="")
     sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q',
-                             stride=10, compute_meshprops=True)
+                             compute_meshprops=True)
     log.info('Finished object extraction for cell SVs.')
 
     # create SegmentationDataset for each cell organelle
@@ -76,9 +76,9 @@ def run_create_sds(chunk_size=None):
                                           qsub_queue='all.q', n_folders_fs=10000, debug=False)
         sd_co = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir)
         sd_proc.dataset_analysis(sd_co, qsub_pe="default", qsub_queue='all.q',
-                                 stride=10, compute_meshprops=True)
+                                 compute_meshprops=True)
         # About 0.2 h per object class -- TODO: Seems to be slow for VC
         sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path, qsub_pe='default',
-                                  qsub_queue='all.q', stride=20)
+                                  qsub_queue='all.q')
         log.info('Finished object extraction for {} SVs.'.format(co))
 

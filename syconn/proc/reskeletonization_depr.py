@@ -58,7 +58,7 @@ def cleanup_skeleton(skeleton, scaling):
         edge_lengths.append(np.linalg.norm(skeleton["nodes"][e[1]] - skeleton["nodes"][e[0]]))
 
     edge_lengths = np.array(edge_lengths)
-    print(np.mean(edge_lengths), np.std(edge_lengths))
+    log_proc.info(np.mean(edge_lengths), np.std(edge_lengths))
 
     edges = skeleton["edges"][edge_lengths < np.median(edge_lengths) + np.std(edge_lengths)].tolist()
 

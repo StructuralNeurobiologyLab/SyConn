@@ -6,7 +6,6 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import numpy as np
 import time
-import os
 import warnings
 # knossos:utils warning for implicit channel selection and init from dir instead of config file
 warnings.filterwarnings("ignore", message="You are using implicit channel selection")
@@ -57,29 +56,15 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
 
 
 def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
-                                  overlap="auto", sigmas=None,
-                                  thresholds=None,
-                                  chunk_list=None,
-                                  debug=False,
-                                  swapdata=0,
-                                  offset=None,
-                                  size=None,
-                                  prob_kd_path_dict=None,
-                                  membrane_filename=None,
-                                  membrane_kd_path=None,
-                                  hdf5_name_membrane=None,
-                                  n_folders_fs=1000,
-                                  suffix="",
-                                  qsub_pe=None,
-                                  qsub_queue=None,
-                                  n_max_co_processes=None,
-                                  transform_func=None,
-                                  func_kwargs=None,
-                                  nb_cpus=1,
-                                  workfolder=None,
-                                  n_erosion=0,
-                                  overlap_thresh=0,
-                                  stitch_overlap=None):
+                                  overlap="auto", sigmas=None, thresholds=None,
+                                  chunk_list=None, debug=False, swapdata=0,
+                                  offset=None, size=None, prob_kd_path_dict=None,
+                                  membrane_filename=None, membrane_kd_path=None,
+                                  hdf5_name_membrane=None, n_folders_fs=1000,
+                                  suffix="", qsub_pe=None, qsub_queue=None,
+                                  n_max_co_processes=None,transform_func=None,
+                                  func_kwargs=None, nb_cpus=1, workfolder=None,
+                                  n_erosion=0, overlap_thresh=0, stitch_overlap=None):
     """
     Main function for the object extraction step; combines all needed steps
     # TODO: change object_names to dataset_names as in other methods
@@ -89,7 +74,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     cset : chunkdataset instance
     filename : str
         Filename of the prediction in the chunkdataset
-    hdf5names: list of str
+    hdf5names: List[str]
         List of names/ labels to be extracted and processed from the prediction
         file
     object_names : list of str
@@ -99,14 +84,14 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         Defines the overlap with neighbouring chunks that is left for later
         processing steps; if 'auto' the overlap is calculated from the sigma and
         the stitch_overlap (here: [1., 1., 1.])
-    sigmas: list of lists or None
+    sigmas: List[List] or None
         Defines the sigmas of the gaussian filters applied to the probability
         maps. Has to be the same length as hdf5names. If None no gaussian filter
         is applied
     thresholds: list of float
         Threshold for cutting the probability map. Has to be the same length as
         hdf5names. If None zeros are used instead (not recommended!)
-    chunk_list: list of int
+    chunk_list: List[int]
         Selective list of chunks for which this function should work on. If None
         all chunks are used.
     debug: boolean
@@ -196,14 +181,11 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     cc_info_list, overlap_info = oes.object_segmentation(
         cset, filename, hdf5names, overlap=overlap, sigmas=sigmas,
         thresholds=thresholds, chunk_list=chunk_list, debug=debug,
-        swapdata=swapdata,
-        prob_kd_path_dict=prob_kd_path_dict,
-        membrane_filename=membrane_filename,
-        membrane_kd_path=membrane_kd_path,
-        hdf5_name_membrane=hdf5_name_membrane,
-        fast_load=True, suffix=suffix,
-        qsub_pe=qsub_pe, transform_func=transform_func, transform_func_kwargs=func_kwargs,
-        qsub_queue=qsub_queue,
+        swapdata=swapdata, prob_kd_path_dict=prob_kd_path_dict,
+        membrane_filename=membrane_filename, membrane_kd_path=membrane_kd_path,
+        hdf5_name_membrane=hdf5_name_membrane, fast_load=True,
+        suffix=suffix, qsub_pe=qsub_pe, transform_func=transform_func,
+        transform_func_kwargs=func_kwargs, qsub_queue=qsub_queue,
         n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     if stitch_overlap is None:
         stitch_overlap = overlap_info[1]
@@ -326,22 +308,11 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     log_extraction.debug("--------------------------")
 
 
-def from_probabilities_to_objects_parameter_sweeping(cset,
-                                                     filename,
-                                                     hdf5names,
-                                                     nb_thresholds,
-                                                     overlap="auto",
-                                                     sigmas=None,
-                                                     chunk_list=None,
-                                                     swapdata=0,
-                                                     label_density=np.ones(3),
-                                                     offset=None,
-                                                     size=None,
-                                                     membrane_filename=None,
-                                                     membrane_kd_path=None,
-                                                     hdf5_name_membrane=None,
-                                                     qsub_pe=None,
-                                                     qsub_queue=None):
+def from_probabilities_to_objects_parameter_sweeping(
+        cset, filename, hdf5names, nb_thresholds, overlap="auto", sigmas=None,
+        chunk_list=None, swapdata=0, label_density=np.ones(3), offset=None,
+        size=None, membrane_filename=None, membrane_kd_path=None,
+        hdf5_name_membrane=None, qsub_pe=None, qsub_queue=None):
     """
     Sweeps over different thresholds. Each objectextraction resutls are saved in
     a seperate folder, all intermediate steps are saved with a different suffix
@@ -485,7 +456,8 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
         else:
             for ii in range(len(chunk_list)):
                 chunk_translator[chunk_list[ii]] = ii
-    # TODO: Remove or make optional
+
+    # TODO: make extract-combine or extract_combined selectable / find optimal solution
     # # --------------------------------------------------------------------------
     #
     time_start = time.time()

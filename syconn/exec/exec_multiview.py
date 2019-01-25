@@ -16,7 +16,7 @@ import re
 from syconn.reps.rep_helper import knossos_ml_from_ccs
 from syconn.reps.segmentation_helper import find_missing_sv_views
 from syconn.reps.super_segmentation import SuperSegmentationObject
-from syconn.global_params import min_cc_size_neuron, rag_suffix, RENDERING_MAX_NB_SV
+from syconn.global_params import rag_suffix, RENDERING_MAX_NB_SV
 from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
     write_glia_rag, transform_rag_edgelist2pkl
 from syconn.reps.segmentation import SegmentationDataset
@@ -244,7 +244,7 @@ def run_create_neuron_ssd(prior_glia_removal=True):
     Parameters
     ----------
     prior_glia_removal : bool
-        If False, will apply filtering to create SSO objects above minimum size, see global_params.min_cc_size_neuron
+        If False, will apply filtering to create SSO objects above minimum size, see global_params.min_cc_size_ssv
          and cache SV sample locations.
 
     Returns
@@ -270,7 +270,7 @@ def run_create_neuron_ssd(prior_glia_removal=True):
                   "on bounding box diagional of corresponding SVs.")
         before_cnt = len(rag_g.nodes())
         for ix in list(rag_g.nodes()):
-            if ccsize_dict[ix] < global_params.min_cc_size_neuron:
+            if ccsize_dict[ix] < global_params.min_cc_size_ssv:
                 rag_g.remove_node(ix)
         log.debug("Removed %d neuron CCs because of size." %
                   (before_cnt - len(rag_g.nodes())))
@@ -414,7 +414,7 @@ def run_glia_splitting():
     # # here use reconnected RAG or initial rag
     recon_nx = G
     # create glia / neuron RAGs
-    write_glia_rag(recon_nx, min_cc_size_neuron, suffix=rag_suffix)
+    write_glia_rag(recon_nx, global_params.min_cc_size_ssv, suffix=rag_suffix)
     log.info("Finished glia splitting. Resulting RAGs are stored at {}."
              "".format(global_params.config.working_dir + "/glia/"))
 

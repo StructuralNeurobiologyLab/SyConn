@@ -52,7 +52,7 @@ config = {
     'packages': find_packages(exclude=['scripts']), 'long_description': readme,
     'setup_requires': ["pytest-runner", ], 'tests_require': ["pytest", ],
     # this will compile all files within directories in syconn/
-    'ext_modules': cythonize("syconn/*/*.pyx", include_path=[numpy.get_include()]),
-
+    'ext_modules': cythonize(["syconn/*/*.pyx"], include_path=[numpy.get_include()]),
 }
+
 setup(**config)

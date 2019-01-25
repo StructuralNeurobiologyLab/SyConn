@@ -22,8 +22,7 @@ from syconn import global_params
 from syconn.exec import exec_init, exec_syns, exec_multiview
 
 
-# TODO add materialize button which stores current process in config.ini -> allows to resume interrupted processes
-
+# TODO add materialize button and store current process in config.ini -> allows to resume interrupted processes
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='~/SyConn/example_cube/',
@@ -84,7 +83,7 @@ if __name__ == '__main__':
                                    data_path=h5_dir + 'asym.h5', mags=[1, 2], hdf5_names=['asym'])
 
     # PREPARE CONFIG
-    os.makedirs(example_wd + '/glia/', exist_ok=True)
+    os.makedirs(example_wd + '/glia/', exist_ok=True)  # currently this is were SyConn looks for the neuron rag # TODO refactor
     shutil.copy(curr_dir + "/data/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
     global_params.wd = example_wd
     if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
@@ -99,9 +98,8 @@ if __name__ == '__main__':
         f.write(configspec_str)
     log.info('Finished example cube preparation {}. Starting SyConn pipeline.'.format(bd))
 
-    # RUN SYCONN
+    # RUN SYCONN - without glia removal
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    # TODO: currently example run does not support fallback for SLURM entirely -> adapt and test
     exec_init.run_create_sds(chunk_size=(128, 128, 128))
 
     log.info('Step 2/8 - Creating SuperSegmentationDataset')

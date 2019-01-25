@@ -26,11 +26,10 @@ config = DynConfig()
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
 batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + \
                          "/QSUB_scripts/"
+# TODO: Use computing settings everywhere
 MEM_PER_NODE = 249.5e3  # in MB
 NCORES_PER_NODE = 20
-# TOOD: Use NCORE_TOTAL everywhere
 NCORE_TOTAL = 340
-# TODO: Use NGPU_TOTAL everywhere
 NGPU_TOTAL = 34
 
 
@@ -76,11 +75,8 @@ MESH_MIN_OBJ_VX = 100  # adapt to size threshold
 NB_VIEWS = 2
 
 # --------- GLIA PARAMETERS
-# CC size threshold needs to be the same  # TODO: remove coexistence
 # min. connected component size of glia nodes/SV after thresholding glia proba
-min_cc_size_glia = 8e3  # in nm; L1-norm on vertex bounding box
-# min. connected component size of neuron nodes/SV after thresholding glia proba
-min_cc_size_neuron = min_cc_size_glia  # in nm; L1-norm on vertex bounding box
+min_cc_size_ssv = 8e3  # in nm; L1-norm on vertex bounding box
 
 # Threshold for glia classification
 glia_thresh = 0.161489

@@ -25,6 +25,13 @@ pip install -e .
 In order to use elektronn3 models, python>=3.6 is required (when installing elektronn3 checkout
  branch `phil`; this will be updated soon to work with the `master` branch).
 
+In the case that there are problems with snappy/python-snappy remove previous installations and
+install them via conda:
+```
+conda uninstall snappy
+conda install snappy
+conda install python-snappy
+```
 
 ## Example run
 Place the example data in syconn/scripts/example_run/data/, `cd` to SyConn/scripts/example_run/ and then run
