@@ -224,7 +224,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                     nb_cc_dict[hdf5_name][-1])
     all_times.append(time.time() - time_start)
     step_names.append("extracting max labels")
-    log_extraction.debug("Max labels: {}".format(max_labels))
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",
                          [max_labels])
     #
@@ -249,10 +248,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                        overlap_thresh=overlap_thresh)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
-    log_extraction.debug(
-        "Time needed for stitch list: {:.3f}s.\nLength of stitch-lists for"
-        " hdf5-names {}: {}".format(all_times[-1], hdf5names, [
-            len(stitch_list[key]) for key in hdf5names]))
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/stitch_list.pkl",
                          [stitch_list])
     #

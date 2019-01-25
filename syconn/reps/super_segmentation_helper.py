@@ -383,7 +383,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
     pruned network kx graph
     """
     if scal is None:
-        scal = global_params.config['Dataset']['scaling']
+        scal = global_params.config.entries['Dataset']['scaling']
     pruning_complete = False
 
     if preserve_annotations:
@@ -503,7 +503,7 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500,
 
 def smooth_skeleton(skel_nx, scal=None):
     if scal is None:
-        scal = global_params.config['Dataset']['scaling']
+        scal = global_params.config.entries['Dataset']['scaling']
     visiting_nodes = list({k for k, v in dict(skel_nx.degree()).items() if v == 2})
 
     for index, visiting_node in enumerate(visiting_nodes):
@@ -723,7 +723,7 @@ def sparsify_skeleton_fast(skel_nx, scal=None, dot_prod_thresh=0.8,
     """
 
     if scal is None:
-        scal = global_params.config['Dataset']['scaling']
+        scal = global_params.config.entries['Dataset']['scaling']
     change = 1
 
     while change > 0:

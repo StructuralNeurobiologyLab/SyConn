@@ -28,7 +28,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-scaling = global_params.config['Dataset']['scaling']
+scaling = global_params.config.entries['Dataset']['scaling']
 for cc in args:
     svixs = list(cc.nodes())
     cc_ix = np.min(svixs)

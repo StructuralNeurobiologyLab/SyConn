@@ -18,7 +18,19 @@ from syconn.handler.basics import chunkify
 
 
 # TODO: make it work with new SyConn
-def run_create_sds(chunk_size=None):
+def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False):
+    """
+
+    Parameters
+    ----------
+    chunk_size :
+    n_folders_fs :
+    generate_sv_meshs :
+
+    Returns
+    -------
+
+    """
     if chunk_size is None:
         chunk_size = [512, 512, 512]
     log = initialize_logging('create_sds', global_params.config.working_dir + '/logs/',
@@ -38,27 +50,38 @@ def run_create_sds(chunk_size=None):
     cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
                   box_coords=[0, 0, 0], fit_box_size=True)
     log.info('Generating SegmentationDatasets for cell and cell organelle supervoxels.')
-    oew.from_ids_to_objects(cd, "sv", overlaydataset_path=global_params.config.kd_seg_path, n_chunk_jobs=5000,
-                            hdf5names=["sv"], n_max_co_processes=None, qsub_pe='default',
-                            qsub_queue='all.q', qsub_slots=1, n_folders_fs=10000)
+    oew.from_ids_to_objects(cd, "sv", overlaydataset_path=global_params.config.kd_seg_path,
+                            n_chunk_jobs=5000, hdf5names=["sv"], n_max_co_processes=None,
+                            qsub_pe='default', qsub_queue='all.q', qsub_slots=1,
+                            n_folders_fs=n_folders_fs)
 
     # Object Processing -- Perform after mapping to also cache mapping ratios
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
+    sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q',
+                             compute_meshprops=True)
 
+    # TODO: Add preprocessing of SV meshes only if config flag is set
     # preprocess sample locations (and meshes if they did not exist yet)
     log.debug("Caching sample locations (and meshes if not provided during init.).")
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 800)
     # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
-    so_kwargs = dict(working_dir=global_params.config.working_dir)
+    so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type='sv')
     multi_params = [[par, so_kwargs] for par in multi_params]
+
+    if generate_sv_meshs:
+        _ = qu.QSUB_script(multi_params, "mesh_caching",
+                           n_max_co_processes=global_params.NCORE_TOTAL,
+                           pe="openmp", queue=None, script_folder=None, suffix="")
+        sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q',
+                                 compute_meshprops=True)
     _ = qu.QSUB_script(multi_params, "sample_location_caching",
                        n_max_co_processes=global_params.NCORE_TOTAL,
                        pe="openmp", queue=None, script_folder=None, suffix="")
+    # recompute=False: only collect new sample_location property
     sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q',
-                             compute_meshprops=True)
+                             compute_meshprops=True, recompute=False)
     log.info('Finished object extraction for cell SVs.')
-
     # create SegmentationDataset for each cell organelle
     for co in global_params.existing_cell_organelles:
         cd_dir = global_params.config.working_dir + "chunkdatasets/{}/".format(co)
@@ -73,11 +96,12 @@ def run_create_sds(chunk_size=None):
                                           prob_kd_path_dict=prob_kd_path_dict, thresholds=[prob_thresh],
                                           workfolder=global_params.config.working_dir,
                                           hdf5names=[co], n_max_co_processes=None, qsub_pe='default',
-                                          qsub_queue='all.q', n_folders_fs=10000, debug=False)
+                                          qsub_queue='all.q', n_folders_fs=n_folders_fs, debug=False)
         sd_co = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir)
         sd_proc.dataset_analysis(sd_co, qsub_pe="default", qsub_queue='all.q',
                                  compute_meshprops=True)
-        # About 0.2 h per object class -- TODO: Seems to be slow for VC
+        # About 0.2 h per object class  # TODO: optimization required
+        log.debug('Mapping objects {} to SVs.'.format(co))
         sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path, qsub_pe='default',
                                   qsub_queue='all.q')
         log.info('Finished object extraction for {} SVs.'.format(co))

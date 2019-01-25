@@ -4,6 +4,7 @@ from syconn.proc.rendering import render_sso_coords
 import time
 
 if __name__=='__main__':
+    # TODO: use toy data and improve logging, see test_backend.py
     now = time.time()
     print(now)
     ssc=SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')   #running on cluster

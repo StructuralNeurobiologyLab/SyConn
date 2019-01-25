@@ -946,12 +946,11 @@ def mesh_creator_sso(ssv):
 
 
 def mesh_chunk(args):
-    scaling = global_params.config['Dataset']['scaling']
     attr_dir, obj_type = args
+    scaling = global_params.config.entries['Dataset']['scaling']
     ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
     obj_ixs = list(ad.keys())
     if len(obj_ixs) == 0:
-        log_proc.warning("EMPTY ATTRIBUTE DICT", attr_dir)
         return
     voxel_dc = VoxelStorage(attr_dir + "/voxel.pkl", disable_locking=True)
     md = MeshStorage(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)

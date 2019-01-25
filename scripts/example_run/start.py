@@ -38,7 +38,6 @@ if __name__ == '__main__':
         raise ValueError('Example data could not be found at "{}".'.format(h5_dir))
 
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
-    log.info('Step 0/8 - Preparation\nExample will be processed in "{}".'.format(example_wd))
 
     kzip_p = curr_dir + '/example_cube_small.k.zip'
     bb = parse_movement_area_from_zip(kzip_p)
@@ -47,8 +46,26 @@ if __name__ == '__main__':
     scale = np.array([10, 10, 20])
     experiment_name = 'j0126_example'
 
+    # PREPARE CONFIG
+    os.makedirs(example_wd + '/glia/', exist_ok=True)  # currently this is were SyConn looks for the neuron rag # TODO refactor
+    shutil.copy(curr_dir + "/data/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
+    global_params.wd = example_wd
+    if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
+        py36path = subprocess.check_output('source deactivate; source activate py36;'
+                                           ' which python', shell=True).decode().replace('\n', '')
+    else:
+        py36path = ""
+    config_str, configspec_str = get_default_conf_str(example_wd, py36path)
+    with open(example_wd + 'config.ini', 'w') as f:
+        f.write(config_str)
+    with open(example_wd + 'configspec.ini', 'w') as f:
+        f.write(configspec_str)
+    log.info('Finished example cube preparation {}. Starting SyConn pipeline.'.format(bd))
+    log.info('Example data will be processed in "{}".'.format(example_wd))
+
     # INITIALIZE DATA
     # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
+    log.info('Step 0/8 - Preparation')
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_matrix(example_wd + 'knossosdatasets/seg/', scale, experiment_name,
                               offset=offset, boundary=bd, fast_downsampling=True,
@@ -82,25 +99,9 @@ if __name__ == '__main__':
                                    offset=offset, boundary=bd, fast_downsampling=True,
                                    data_path=h5_dir + 'asym.h5', mags=[1, 2], hdf5_names=['asym'])
 
-    # PREPARE CONFIG
-    os.makedirs(example_wd + '/glia/', exist_ok=True)  # currently this is were SyConn looks for the neuron rag # TODO refactor
-    shutil.copy(curr_dir + "/data/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
-    global_params.wd = example_wd
-    if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
-        py36path = subprocess.check_output('source deactivate; source activate py36;'
-                                           ' which python', shell=True).decode().replace('\n', '')
-    else:
-        py36path = ""
-    config_str, configspec_str = get_default_conf_str(example_wd, py36path)
-    with open(example_wd + 'config.ini', 'w') as f:
-        f.write(config_str)
-    with open(example_wd + 'configspec.ini', 'w') as f:
-        f.write(configspec_str)
-    log.info('Finished example cube preparation {}. Starting SyConn pipeline.'.format(bd))
-
     # RUN SYCONN - without glia removal
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    exec_init.run_create_sds(chunk_size=(128, 128, 128))
+    exec_init.run_create_sds(chunk_size=(128, 128, 128), n_folders_fs=100)
 
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
     exec_multiview.run_create_neuron_ssd(prior_glia_removal=False)

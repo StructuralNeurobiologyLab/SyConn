@@ -21,7 +21,7 @@ def latent_data_loader(args):
         ssv = ssd.get_super_segmentation_object(ix)
         ssv.load_attr_dict()
         if diagonal_size is not None:
-            bb = np.array(ssv.bounding_box) * global_params.config['Dataset']['scaling']
+            bb = np.array(ssv.bounding_box) * global_params.config.entries['Dataset']['scaling']
             diagonal = np.linalg.norm(bb[1] - bb[0])
             if not diagonal > diagonal_size:
                 continue

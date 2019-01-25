@@ -207,7 +207,7 @@ def coordpath2anno(coords, scaling=None, add_edges=True):
     SkeletonAnnotation
     """
     if scaling is None:
-        scaling = global_params.config['Dataset']['scaling']
+        scaling = global_params.config.entries['Dataset']['scaling']
     anno = SkeletonAnnotation()
     anno.scaling = scaling
     scaling = np.array(scaling, dtype=np.int)

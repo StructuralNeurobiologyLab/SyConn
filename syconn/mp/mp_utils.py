@@ -11,6 +11,7 @@ except ImportError:
     import pickle as pkl
 import getpass
 from multiprocessing import cpu_count, Process
+import multiprocessing
 import multiprocessing.pool
 import os
 import shutil
@@ -18,6 +19,7 @@ import subprocess
 import sys
 import time
 import tqdm
+from . import log_mp
 
 
 home_dir = os.environ['HOME'] + "/"
@@ -47,7 +49,24 @@ if not (sys.version_info[0] == 3 and sys.version_info[1] > 5):
     class MyPool(multiprocessing.pool.Pool):
         Process = NoDaemonProcess
 else:
-    MyPool = multiprocessing.pool.Pool
+    class NoDaemonProcess(multiprocessing.Process):
+        @property
+        def daemon(self):
+            return False
+
+        @daemon.setter
+        def daemon(self, value):
+            pass
+
+    class NoDaemonContext(type(multiprocessing.get_context())):
+        Process = NoDaemonProcess
+
+    # We sub-class multiprocessing.pool.Pool instead of multiprocessing.Pool
+    # because the latter is only a wrapper function, not a proper class.
+    class MyPool(multiprocessing.pool.Pool):
+        def __init__(self, *args, **kwargs):
+            kwargs['context'] = NoDaemonContext()
+            super(MyPool, self).__init__(*args, **kwargs)
 
 
 def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
@@ -73,7 +92,7 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
         nb_cpus = 1
 
     if verbose:
-        print("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
+        log_mp.debug("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
 
     start = time.time()
     if nb_cpus > 1:
@@ -85,7 +104,7 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
         result = list(map(func, params))
 
     if verbose:
-        print("\nTime to compute:", time.time() - start)
+        log_mp.debug("\nTime to compute:", time.time() - start)
 
     return result
 
@@ -120,7 +139,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
         nb_cpus = 1
 
     if verbose:
-        print("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
+        log_mp.debug("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
 
     start = time.time()
     if nb_cpus > 1:
@@ -129,7 +148,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
             result = list(tqdm.tqdm(pool.imap(func, params), total=len(params),
                                     ncols=80, leave=False, unit='jobs',
                                     unit_scale=True, dynamic_ncols=False,
-                                    mininterval=1))
+                                    mininterval=0.5))
         else:
             result = list(pool.imap(func, params))
         pool.close()
@@ -137,7 +156,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
     else:
         if show_progress:
             pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
-                             mininterval=1, unit='jobs', unit_scale=True,
+                             mininterval=0.5, unit='jobs', unit_scale=True,
                              dynamic_ncols=False)
             result = []
             for p in params:
@@ -149,7 +168,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
             for p in params:
                 result.append(func(p))
     if verbose:
-        print("\nTime to compute:", time.time() - start)
+        log_mp.debug("\nTime to compute:", time.time() - start)
 
     return result
 
@@ -180,7 +199,7 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
         nb_cpus = 1
 
     if verbose:
-        print("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
+        log_mp.debug("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
     for el in params:
         el.insert(0, func_name)
     start = time.time()
@@ -192,7 +211,7 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
     else:
         result = list(map(multi_helper_obj, params))
     if verbose:
-        print("\nTime to compute:", time.time() - start)
+        log_mp.debug("\nTime to compute:", time.time() - start)
     return result
 
 
@@ -203,7 +222,7 @@ def SUBP_script(params, name, suffix="", delay=0):
 
     Parameters
     ----------
-    params: list
+    params: List
         list of all paramter sets to be processed
     name: str
         name of job - specifies script with QSUB_%s % name

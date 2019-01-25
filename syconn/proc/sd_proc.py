@@ -12,6 +12,7 @@ import glob
 import numpy as np
 import os
 import tqdm
+import time
 from collections import defaultdict
 from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
@@ -30,7 +31,7 @@ from . import log_proc
 
 
 def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
-                     qsub_queue=None, nb_cpus=1, n_max_co_processes=None,
+                     qsub_queue=None, nb_cpus=None, n_max_co_processes=None,
                      compute_meshprops=False):
     """ Analyze SegmentationDataset and extract and cache SegmentationObjects
     attributes as numpy arrays.
@@ -61,8 +62,8 @@ def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
             raise ValueError(msg)
     # Partitioning the work
     multi_params = basics.chunkify(paths, n_jobs)
-    multi_params = [[mps, sd.type, sd.version, sd.working_dir, recompute,
-                     compute_meshprops] for mps in multi_params]
+    multi_params = [(mps, sd.type, sd.version, sd.working_dir, recompute,
+                     compute_meshprops) for mps in multi_params]
 
     # Running workers
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
@@ -132,10 +133,10 @@ def _dataset_analysis_thread(args):
                     so.attr_dict["rep_coord"] = so.rep_coord
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
-                    if compute_meshprops:
-                        # if mesh does not exist beforehand, it will be generated
-                        so.attr_dict["mesh_bb"] = so.mesh_bb
-                        so.attr_dict["mesh_area"] = so.mesh_area
+                if compute_meshprops:
+                    # if mesh does not exist beforehand, it will be generated
+                    so.attr_dict["mesh_bb"] = so.mesh_bb
+                    so.attr_dict["mesh_area"] = so.mesh_area
                 for attribute in so.attr_dict.keys():
                     if attribute not in global_attr_dict:
                         global_attr_dict[attribute] = []
@@ -160,7 +161,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
                       qsub_pe=None, qsub_queue=None, nb_cpus=None,
                       n_max_co_processes=None):
     """
-    TODO: (cython) optimization required!
+    TODO: (cython) optimization required! E.g. replace by single iteration over cell segm. and all cell organelle KDs
     Maps objects to SVs. The segmentation needs to be written to a KnossosDataset before running this
 
     Parameters
@@ -188,6 +189,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     -------
 
     """
+    start = time.time()
     if sd.type != "sv":
         raise Exception("You are mapping to a non-sv dataset")
     assert obj_type in sd.version_dict
@@ -196,27 +198,24 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
 
     # Partitioning the work
     multi_params = basics.chunkify(paths, n_jobs)
-    multi_params = [[mps, obj_type, sd.version_dict[obj_type], sd.working_dir,
-                     kd_path, readonly] for mps in multi_params]
+    multi_params = [(mps, obj_type, sd.version_dict[obj_type], sd.working_dir,
+                     kd_path, readonly) for mps in multi_params]
 
     # Running workers - Extracting mapping
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_map_objects_thread, multi_params,
-                                             nb_cpus=nb_cpus)
-    elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "map_objects",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_cores=nb_cpus,
-                                     n_max_co_processes=n_max_co_processes)
-        out_files = glob.glob(path_to_out + "/*")
-        results = []
-        for out_file in out_files:
-            with open(out_file, 'rb') as f:
-                results.append(pkl.load(f))
-    else:
-        raise Exception("QSUB not available")
+    # does not work with imap in python 3.6, jobs do not return # TODO investigate; also: single processing is faster than single-node with 20 cores
+    # if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    #     results = sm.start_multiprocess_imap(_map_objects_thread, multi_params,
+    #                                     nb_cpus=nb_cpus, verbose=False, debug=True)
+    # elif qu.batchjob_enabled():
+    path_to_out = qu.QSUB_script(multi_params, "map_objects",
+                                 pe=qsub_pe, queue=qsub_queue,
+                                 script_folder=None, n_cores=nb_cpus,
+                                 n_max_co_processes=n_max_co_processes)
+    out_files = glob.glob(path_to_out + "/*")
+    results = []
+    for out_file in out_files:
+        with open(out_file, 'rb') as f:
+            results.append(pkl.load(f))
 
     sv_obj_map_dict = defaultdict(dict)
     for result in results:
@@ -231,18 +230,19 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
 
     # Partitioning the work
     multi_params = basics.chunkify(paths, n_jobs)
-    multi_params = [[path_block, obj_type, mapping_dict_path] for path_block in multi_params]
+    multi_params = [(path_block, obj_type, mapping_dict_path) for path_block in multi_params]
 
     # Running workers - Writing mapping to SVs
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_mapping_to_sv_thread, multi_params,
-                                   nb_cpus=nb_cpus)
+                                   nb_cpus=nb_cpus, debug=False)
     elif qu.batchjob_enabled():
         qu.QSUB_script(multi_params, "write_mapping_to_sv", pe=qsub_pe,
                        queue=qsub_queue, script_folder=None,
                        n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
+    log_proc.debug("map_objects_to_sv: %.3fs" % (time.time() - start))
 
 
 def _map_objects_thread(args):
@@ -264,9 +264,10 @@ def _map_objects_thread(args):
                                                    working_dir=working_dir)
     sv_id_dict = {}
     for p in paths:
-        this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=readonly)
-        this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True)
+        this_attr_dc = AttributeDict(p + "/attr_dict.pkl", read_only=readonly,
+                                     disable_locking=True)
+        this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True,
+                                  disable_locking=True)
         for so_id in this_vx_dc.keys():
             so = seg_dataset.get_segmentation_object(so_id)
             so.attr_dict = this_attr_dc[so_id]
@@ -288,6 +289,8 @@ def _map_objects_thread(args):
                 try:
                     id_list = kd.from_overlaycubes_to_list(vx_list, datatype=datatype)
                 except:
+                    log_proc.error('Could not load overlaycube '
+                                   'during object mapping')
                     continue
                 ids, id_counts = np.unique(id_list, return_counts=True)
                 id_ratios = id_counts / float(np.sum(id_counts))
@@ -318,18 +321,16 @@ def _write_mapping_to_sv_thread(args):
     for p in paths:
         this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
                                      read_only=False)
-
         for sv_id in this_attr_dc.keys():
             this_attr_dc[sv_id]["mapping_%s_ids" % obj_type] = \
                 list(mapping_dict[sv_id].keys())
             this_attr_dc[sv_id]["mapping_%s_ratios" % obj_type] = \
                 list(mapping_dict[sv_id].values())
-
         this_attr_dc.push()
 
 
 def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=1,
+                      qsub_pe=None, qsub_queue=None, nb_cpus=None,
                       n_max_co_processes=None):
     paths = cs_sd.so_dir_paths
 
@@ -393,7 +394,7 @@ def sos_dict_fact(svixs, version=None, scaling=None, obj_type="sv",
     if working_dir is None:
         working_dir = global_params.config.working_dir
     if scaling is None:
-        scaling = global_params.config['Dataset']['scaling']
+        scaling = global_params.config.entries['Dataset']['scaling']
     sos_dict = {"svixs": svixs, "version": version,
                 "working_dir": working_dir, "scaling": scaling,
                 "create": create, "obj_type": obj_type}

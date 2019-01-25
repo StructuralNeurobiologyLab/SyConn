@@ -636,7 +636,7 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150, 
 
 def nxGraph2kzip(g, coords, kzip_path):
     import tqdm
-    scaling = global_params.config['Dataset']['scaling']()
+    scaling = global_params.config.entries['Dataset']['scaling']()
     coords = coords / scaling
     skel = Skeleton()
     anno = SkeletonAnnotation()
