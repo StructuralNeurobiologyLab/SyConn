@@ -1,6 +1,5 @@
 name: syconn
 channels:
-  - ukoethe
   - defaults
   - menpo
   - conda-forge

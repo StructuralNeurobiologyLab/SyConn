@@ -12,7 +12,6 @@ except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.proc.sd_proc import sos_dict_fact, init_sos
-from syconn.global_params import get_dataset_scaling
 from syconn import global_params
 import networkx as nx
 import numpy as np
@@ -29,12 +28,13 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
+scaling = global_params.config['Dataset']['scaling']
 for cc in args:
     svixs = list(cc.nodes())
     cc_ix = np.min(svixs)
     sso = SuperSegmentationObject(cc_ix, version="gliaremoval", nb_cpus=2,
-                                  working_dir=global_params.paths.working_dir,
-                                  create=True, scaling=get_dataset_scaling(),
+                                  working_dir=global_params.config.working_dir,
+                                  create=True, scaling=scaling,
                                   sv_ids=svixs)
     so_cc = nx.Graph()
     for e in cc.edges():

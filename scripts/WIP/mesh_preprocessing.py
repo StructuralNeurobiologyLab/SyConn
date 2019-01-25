@@ -9,7 +9,7 @@ from syconn import global_params
 
 if __name__ == "__main__":
     # preprocess meshes of all objects
-    mesh_proc_chunked(global_params.paths.working_dir, "conn")
-    mesh_proc_chunked(global_params.paths.working_dir, "sj")
-    mesh_proc_chunked(global_params.paths.working_dir, "vc")
-    mesh_proc_chunked(global_params.paths.working_dir, "mi")
+    mesh_proc_chunked(global_params.config.working_dir, "conn")
+    mesh_proc_chunked(global_params.config.working_dir, "sj")
+    mesh_proc_chunked(global_params.config.working_dir, "vc")
+    mesh_proc_chunked(global_params.config.working_dir, "mi")

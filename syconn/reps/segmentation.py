@@ -10,10 +10,10 @@ import re
 import networkx as nx
 from scipy import spatial
 from knossos_utils import knossosdataset
+knossosdataset._set_noprint(True)
 from skimage.measure import mesh_surface_area
 
 from .. import global_params
-from ..handler import config as config_handler
 from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
@@ -65,7 +65,7 @@ class SegmentationDataset(object):
                                 [10**i for i in range(6)])
 
         if working_dir is None:
-            self._working_dir = global_params.paths.working_dir
+            self._working_dir = global_params.config.working_dir
         else:
             self._working_dir = working_dir
 
@@ -205,7 +205,7 @@ class SegmentationDataset(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = config_handler.Config(self.working_dir)
+            self._config = global_params.config
         return self._config
 
     @property
@@ -350,7 +350,7 @@ class SegmentationObject(object):
         self._skeleton_caching = skeleton_caching
 
         if working_dir is None:
-            self._working_dir = global_params.paths.working_dir
+            self._working_dir = global_params.config.working_dir
         else:
             self._working_dir = working_dir
 
@@ -455,7 +455,7 @@ class SegmentationObject(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = config_handler.Config(self.working_dir)
+            self._config = global_params.config
         return self._config
 
     #                                                                      PATHS

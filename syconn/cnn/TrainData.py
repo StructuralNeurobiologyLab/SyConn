@@ -319,7 +319,7 @@ class AxonViews(MultiViewData):
                  reduce_context_fact=1, binary_views=False, raw_only=False,
                  nb_cpus=20, **kwargs):
         if working_dir is None:
-            working_dir = global_params.paths.working_dir
+            working_dir = global_params.config.working_dir
         super(AxonViews, self).__init__(working_dir, gt_type,
                                         nb_cpus=nb_cpus, **kwargs)
         print("Initialized AxonViews:", self.__repr__())
@@ -375,7 +375,7 @@ class CelltypeViews(MultiViewData):
         self.binary_views = binary_views
         self.example_shape = (nb_views, 4, 2, 128, 256)
         print("Initializing CelltypeViews:", self.__dict__)
-        super().__init__(global_params.paths.working_dir, "ctgt", train_fraction=0.95,
+        super().__init__(global_params.config.working_dir, "ctgt", train_fraction=0.95,
                          naive_norm=False, load_data=load_data)
         ssv_splits = self.splitting_dict
         self.train_d = np.array(ssv_splits["train"])
@@ -1089,13 +1089,13 @@ def add_gt_sample(ssv_id, label, gt_type, set_type="train"):
     """
     # retrieve SSV from original SSD (which is used in Knossos-Plugin) and
     # copy its data to the yet empty SSV in the axgt SSD.
-    ssd_axgt = SuperSegmentationDataset(version=gt_type, working_dir=global_params.paths.working_dir)
-    ssd = SuperSegmentationDataset(working_dir=global_params.paths.working_dir)
+    ssd_axgt = SuperSegmentationDataset(version=gt_type, working_dir=global_params.config.working_dir)
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     ssv = ssd.get_super_segmentation_object(ssv_id)
     ssv_axgt = ssd_axgt.get_super_segmentation_object(ssv_id)
     ssv.copy2dir(ssv_axgt.ssv_dir)
     # add entries to label and splitting dict
-    base_dir = "{}/ssv_{}/".format(global_params.paths.working_dir, gt_type)
+    base_dir = "{}/ssv_{}/".format(global_params.config.working_dir, gt_type)
     splitting = load_pkl2obj("{}/axgt_splitting.pkl".format(base_dir))
     labels = load_pkl2obj("{}/axgt_labels.pkl".format(base_dir))
     splitting[set_type].append(ssv_id)

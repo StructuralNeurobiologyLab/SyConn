@@ -16,6 +16,7 @@ import time
 import itertools
 from collections import defaultdict
 from knossos_utils import knossosdataset
+knossosdataset._set_noprint(True)
 
 from ..reps import segmentation
 from ..mp import batchjob_utils as qu

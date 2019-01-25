@@ -6,6 +6,8 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import numpy as np
 from scipy import spatial
+from knossos_utils import knossosdataset
+knossosdataset._set_noprint(True)
 from knossos_utils.knossosdataset import KnossosDataset
 from skimage.segmentation import find_boundaries
 

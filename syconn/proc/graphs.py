@@ -13,8 +13,8 @@ import tqdm
 import itertools
 
 from ..mp.mp_utils import start_multiprocess_obj
-from ..global_params import min_cc_size_glia, min_cc_size_neuron,\
-    get_dataset_scaling, glia_thresh
+from .. import global_params
+from ..global_params import min_cc_size_glia, min_cc_size_neuron, glia_thresh
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 
 
@@ -634,7 +634,7 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150, 
 
 def nxGraph2kzip(g, coords, kzip_path):
     import tqdm
-    scaling = get_dataset_scaling()
+    scaling = global_params.config['Dataset']['scaling']()
     coords = coords / scaling
     skel = Skeleton()
     anno = SkeletonAnnotation()

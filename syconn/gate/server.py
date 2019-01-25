@@ -484,7 +484,7 @@ class ServerState(object):
         self.logger = log_gate
 
         self.logger.info('SyConn gate server starting up.')
-        self.backend = SyConnBackend(global_params.paths.working_dir, logger=self.logger)
+        self.backend = SyConnBackend(global_params.config.working_dir, logger=self.logger)
         self.logger.info('SyConn gate server running.')
         return
 

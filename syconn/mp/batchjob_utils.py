@@ -30,7 +30,7 @@ BATCH_PROC_SYSTEM = global_params.BATCH_PROC_SYSTEM
 
 
 def batchjob_enabled():
-    if 'example_cube' in global_params.paths.working_dir:  # disable QSUB/SLURM for example_run.py
+    if 'example_cube' in global_params.config.working_dir:  # disable QSUB/SLURM for example_run.py
         return False
     if BATCH_PROC_SYSTEM is None:
         return False
@@ -494,8 +494,8 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", job_name="default",
                                       log_dir=job_folder)
     n_max_co_processes = np.min([global_params.NCORES_PER_NODE // n_cores,
                                  len(params)])
-    log_batchjob.info('Starting BatchJobFallback script "{}" with {} tasks using {}'
-                      ' parallel jobs, each using {} cores.'.format(
+    log_batchjob.debug('Starting BatchJobFallback script "{}" with {} tasks using {}'
+                       ' parallel jobs, each using {} cores.'.format(
         name, len(params), n_max_co_processes, n_cores))
 
     if script_folder is not None:
@@ -520,8 +520,6 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", job_name="default",
         os.makedirs(path_to_err)
     if not os.path.exists(path_to_out):
         os.makedirs(path_to_out)
-
-    log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
 
     multi_params = []
     for i_job in range(len(params)):

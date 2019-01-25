@@ -6,11 +6,13 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 from knossos_utils import knossosdataset
+knossosdataset._set_noprint(True)
 import numpy as np
 import os
 import subprocess
 import glob
 import shutil
+import sys
 import argparse
 
 from syconn.handler.prediction import parse_movement_area_from_zip
@@ -48,7 +50,6 @@ if __name__ == '__main__':
 
     # INITIALIZE DATA
     # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
-    #
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_matrix(example_wd + 'knossosdatasets/seg/', scale, experiment_name,
                               offset=offset, boundary=bd, fast_downsampling=True,
@@ -86,8 +87,11 @@ if __name__ == '__main__':
     os.makedirs(example_wd + '/glia/', exist_ok=True)
     shutil.copy(curr_dir + "/data/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
     global_params.wd = example_wd
-    py36path = subprocess.check_output('source deactivate; source activate py36;'
-                                       ' which python', shell=True).decode().replace('\n', '')
+    if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
+        py36path = subprocess.check_output('source deactivate; source activate py36;'
+                                           ' which python', shell=True).decode().replace('\n', '')
+    else:
+        py36path = ""
     config_str, configspec_str = get_default_conf_str(example_wd, py36path)
     with open(example_wd + 'config.ini', 'w') as f:
         f.write(config_str)
@@ -96,7 +100,7 @@ if __name__ == '__main__':
     log.info('Finished example cube preparation {}. Starting SyConn pipeline.'.format(bd))
 
     # RUN SYCONN
-    log.info('Step 1/8 - Creating SegmentationDatasets (incl. cell SV meshes)')
+    log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     # TODO: currently example run does not support fallback for SLURM entirely -> adapt and test
     exec_init.run_create_sds(chunk_size=(128, 128, 128))
 

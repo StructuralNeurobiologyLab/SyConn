@@ -7,12 +7,11 @@
 
 from syconn.handler.basics import flatten
 from multiprocessing import JoinableQueue as Queue
-#from threading import Thread
 from multiprocessing import Process
-#from dummy_threading import Thread
 from knossos_utils import skeleton
 from knossos_utils import skeleton_utils as su
 from knossos_utils import knossosdataset as kds
+kds._set_noprint(True)
 import zipfile
 import os
 import time

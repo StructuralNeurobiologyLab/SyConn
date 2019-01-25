@@ -433,7 +433,7 @@ class SuperSegmentationObject(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = config.Config(self.working_dir)
+            self._config = global_params.config
         return self._config
 
     @property
@@ -920,7 +920,7 @@ class SuperSegmentationObject(object):
             self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
         except:
-            if global_params.paths.allow_skel_gen:
+            if global_params.config.allow_skel_gen:
                 self.gen_skel_from_sample_locs()
                 return True
             return False
@@ -2364,7 +2364,7 @@ def celltype_predictor(args):
     pbar = tqdm.tqdm(total=len(ssv_ids))
     missing_ssvs = []
     for ix in ssv_ids:
-        ssv = SuperSegmentationObject(ix, working_dir=global_params.paths.working_dir)
+        ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
         ssv.nb_cpus = 1
         try:
             ssh.predict_sso_celltype(ssv, m, overwrite=True)

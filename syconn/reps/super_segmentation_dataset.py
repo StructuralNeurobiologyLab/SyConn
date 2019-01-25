@@ -15,13 +15,13 @@ try:
 except ImportError:
     import pickle as pkl
 from knossos_utils import knossosdataset
+knossosdataset._set_noprint(True)
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
 from multiprocessing import cpu_count
 from . import segmentation  # TODO: del
-from ..handler import config
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from ..reps.super_segmentation_helper import create_sso_skeleton
 from ..proc.ssd_assembly import assemble_from_mergelist
@@ -46,7 +46,7 @@ class SuperSegmentationDataset(object):
         sv_mapping : dict or str
         scaling : np.array
         config : Optional[Config]
-            Config object, see syconn/config/parser.py
+            DynConfig object, see syconn/handler/config.py
         """
         self.ssv_dict = {}
         self.mapping_dict = {}
@@ -58,7 +58,7 @@ class SuperSegmentationDataset(object):
         self._config = config
 
         if working_dir is None:
-            self._working_dir = global_params.paths.working_dir
+            self._working_dir = global_params.config.working_dir
         else:
             self._working_dir = working_dir
 
@@ -128,7 +128,7 @@ class SuperSegmentationDataset(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = config.Config(self.working_dir)
+            self._config = global_params.config
         return self._config
 
     @property
@@ -1190,7 +1190,7 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1):
     n_jobs : int
     """
     if target_wd is None:
-        target_wd = global_params.paths.working_dir
+        target_wd = global_params.config.working_dir
     scaling = ssvs[0].scaling
     new_ssd = SuperSegmentationDataset(working_dir=target_wd, version=new_version,
                                        scaling=scaling)

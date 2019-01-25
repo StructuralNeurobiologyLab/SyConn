@@ -12,6 +12,7 @@ from sklearn import ensemble, externals
 from sklearn.model_selection import cross_val_score
 from knossos_utils.chunky import load_dataset
 from knossos_utils import knossosdataset, skeleton_utils, skeleton
+knossosdataset._set_noprint(True)
 import time
 import datetime
 
@@ -1000,11 +1001,11 @@ def create_syn_gt(conn, path_kzip):
     rfc.fit(v_features, v_labels)
     log_extraction.info('RFC importances:' + str(rfc.feature_importances_))
 
-    model_base_dir = os.path.split(global_params.paths.mpath_syn_rfc)[0]
+    model_base_dir = os.path.split(global_params.config.mpath_syn_rfc)[0]
     os.makedirs(model_base_dir, exist_ok=True)
 
     # unclear why there is 'rfc' after it
-    externals.joblib.dump(rfc, global_params.paths.mpath_syn_rfc)
+    externals.joblib.dump(rfc, global_params.config.mpath_syn_rfc)
 
     return rfc, v_features, v_labels
 
@@ -1280,7 +1281,7 @@ def _classify_synssv_objects_thread(args):
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
-    rfc = externals.joblib.load(global_params.paths.mpath_syn_rfc)
+    rfc = externals.joblib.load(global_params.config.mpath_syn_rfc)
 
     for so_dir_path in so_dir_paths:
         this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
@@ -1400,10 +1401,10 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
     syn_prob_t :
     """
     if dest_folder is None:
-        dest_folder = global_params.paths.working_dir + '/connectivity_matrix/'
+        dest_folder = global_params.config.working_dir + '/connectivity_matrix/'
     os.makedirs(os.path.split(dest_folder)[0], exist_ok=True)
     dest_name = dest_folder + '/conn_mat'
-    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.paths.working_dir,
+    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.config.working_dir,
                                                   version=obj_version)
 
     syn_prob = sd_syn_ssv.load_cached_data("syn_prob")

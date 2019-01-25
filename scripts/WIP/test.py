@@ -4,4 +4,4 @@
 
 if __name__ == '__main__':
     from syconn import global_params
-    print(global_params.paths.working_dir)
+    print(global_params.config.working_dir)

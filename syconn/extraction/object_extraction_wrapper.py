@@ -8,7 +8,9 @@ import numpy as np
 import time
 import os
 import warnings
-warnings.filterwarnings("ignore", message="You are using implicit channel selection. This possibility will soon be removed.")
+# knossos:utils warning for implicit channel selection and init from dir instead of config file
+warnings.filterwarnings("ignore", message="You are using implicit channel selection")
+warnings.filterwarnings("ignore", message="You are initializing a KnossosDataset from a path")
 
 from .. import global_params
 from ..extraction import log_extraction
@@ -215,8 +217,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     overlap = overlap_info[0]
     all_times.append(time.time() - time_start)
     step_names.append("conneceted components")
-    log_extraction.debug(
-        "Time needed for connected components: %.3fs" % all_times[-1])
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/connected_components.pkl",
                          [cc_info_list, overlap_info])
 
@@ -242,7 +242,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                     nb_cc_dict[hdf5_name][-1])
     all_times.append(time.time() - time_start)
     step_names.append("extracting max labels")
-    log_extraction.debug("Time needed for extracting max labels: %.6fs" % all_times[-1])
     log_extraction.debug("Max labels: {}".format(max_labels))
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",
                          [max_labels])
@@ -256,7 +255,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                            n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
-    log_extraction.debug("Time needed for unique labels: %.3fs" % all_times[-1])
     #
     # # --------------------------------------------------------------------------
     #
@@ -283,7 +281,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                                       max_labels)
     all_times.append(time.time() - time_start)
     step_names.append("merge list")
-    log_extraction.debug("Time needed for merge list: %.3fs" % all_times[-1])
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/merge_list.pkl",
                          [merge_dict, merge_list_dict])
     # if all_times[-1] < 0.01:
@@ -297,7 +294,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                          qsub_queue=qsub_queue, n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
-    log_extraction.debug("Time needed for applying merge list: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
@@ -309,7 +305,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                        n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
-    log_extraction.debug("Time needed for extracting voxels: %.3fs" % all_times[-1])
     # TODO: Remove map-reduce procedure or make it optional with kwarg
     # # --------------------------------------------------------------------------
     #
@@ -323,12 +318,12 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     # log_extraction.info("\nTime needed for combining voxels: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
-    log_extraction.info("Time overview:")
+    log_extraction.debug("Time overview:")
     for ii in range(len(all_times)):
-        log_extraction.info("%s: %.3fs" % (step_names[ii], all_times[ii]))
-    log_extraction.info("--------------------------")
-    log_extraction.info("Total Time: %.1f min" % (np.sum(all_times) / 60))
-    log_extraction.info("--------------------------")
+        log_extraction.debug("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    log_extraction.debug("--------------------------")
+    log_extraction.debug("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    log_extraction.debug("--------------------------")
 
 
 def from_probabilities_to_objects_parameter_sweeping(cset,
@@ -427,12 +422,12 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
                                       debug=False)
         all_times.append(time.time() - time_start)
 
-    log_extraction.info("\n\nTime overview:")
+    log_extraction.debug("\n\nTime overview:")
     for ii in range(len(all_times)):
-        log_extraction.info("t = %.2f: %.1f min" % (thresholds[ii], all_times[ii] / 60))
-    log_extraction.info("--------------------------")
-    log_extraction.info("Total Time: %.1f min" % (np.sum(all_times) / 60))
-    log_extraction.info("--------------------------\n")
+        log_extraction.debug("t = %.2f: %.1f min" % (thresholds[ii], all_times[ii] / 60))
+    log_extraction.debug("--------------------------")
+    log_extraction.debug("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    log_extraction.debug("--------------------------\n")
 
 
 def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, dataset_names=None,
@@ -497,25 +492,23 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
     oes.extract_voxels(cset, filename, hdf5names, dataset_names=dataset_names,
                        overlaydataset_path=overlaydataset_path,
                        chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
-                       qsub_queue=qsub_queue, workfolder=global_params.paths.working_dir,
+                       qsub_queue=qsub_queue, workfolder=global_params.config.working_dir,
                        n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
                        n_max_co_processes=n_max_co_processes, transform_func=transform_func,
                        transform_func_kwargs=transform_func_kwargs)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
-    log_extraction.debug("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
     #
     # # --------------------------------------------------------------------------
     #
     time_start = time.time()
-    oes.combine_voxels(global_params.paths.working_dir,
+    oes.combine_voxels(global_params.config.working_dir,
                        hdf5names, dataset_names=dataset_names,
                        qsub_pe=qsub_pe, qsub_queue=qsub_queue,
                        n_folders_fs=n_folders_fs,
                        n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("combine voxels")
-    log_extraction.debug("\nTime needed for combining voxels: %.3fs" % all_times[-1])
     #
     # # --------------------------------------------------------------------------
 
@@ -532,9 +525,9 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
 
     # --------------------------------------------------------------------------
 
-    log_extraction.info("Time overview:")
+    log_extraction.debug("Time overview:")
     for ii in range(len(all_times)):
-        log_extraction.info("%s: %.3fs" % (step_names[ii], all_times[ii]))
-    log_extraction.info("--------------------------")
-    log_extraction.info("Total Time: %.1f min" % (np.sum(all_times) / 60))
-    log_extraction.info("--------------------------")
+        log_extraction.debug("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    log_extraction.debug("--------------------------")
+    log_extraction.debug("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    log_extraction.debug("--------------------------")

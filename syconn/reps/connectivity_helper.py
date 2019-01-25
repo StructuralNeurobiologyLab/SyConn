@@ -160,7 +160,7 @@ def load_cached_data_dict(wd=None, syn_version=None):
 
     """
     if wd is None:
-        wd = global_params.paths.working_dir
+        wd = global_params.config.working_dir
     start = time.time()
     csd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=wd,
                                            version=syn_version)

@@ -26,8 +26,7 @@ from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip
 from .image import apply_pca
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
-from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
-    get_dataset_scaling, MESH_MIN_OBJ_VX
+from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING, MESH_MIN_OBJ_VX
 from .. import global_params
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 try:
@@ -346,7 +345,7 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
         return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
                np.zeros((0,), dtype=np.float32)
     try:
-        min_obj_vx = global_params.paths.entries['Sizethresholds'][obj.type]
+        min_obj_vx = global_params.config.entries['Sizethresholds'][obj.type]
     except KeyError:
         min_obj_vx = MESH_MIN_OBJ_VX
     try:
@@ -947,7 +946,7 @@ def mesh_creator_sso(ssv):
 
 
 def mesh_chunk(args):
-    scaling = get_dataset_scaling()
+    scaling = global_params.config['Dataset']['scaling']
     attr_dir, obj_type = args
     ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
     obj_ixs = list(ad.keys())

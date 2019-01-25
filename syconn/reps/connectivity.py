@@ -95,7 +95,7 @@ class ConnectivityMatrix(object):
         self._cell_types = None
 
         if working_dir is None:
-            self._working_dir = global_params.paths.working_dir
+            self._working_dir = global_params.config.working_dir
         else:
             self._working_dir = working_dir
 
@@ -153,7 +153,7 @@ class ConnectivityMatrix(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = config.Config(self.working_dir)
+            self._config = global_params.config
         return self._config
 
     @property

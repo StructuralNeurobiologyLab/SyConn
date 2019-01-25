@@ -6,6 +6,7 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 from knossos_utils import knossosdataset
+knossosdataset._set_noprint(True)
 import os
 import networkx as nx
 import numpy as np
@@ -17,22 +18,22 @@ if __name__ == '__main__':
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
 
     kd = knossosdataset.KnossosDataset()
-    kd.initialize_from_knossos_path(global_params.paths.kd_seg_path)
+    kd.initialize_from_knossos_path(global_params.config.kd_seg_path)
 
     kd_mi = knossosdataset.KnossosDataset()
-    kd_mi.initialize_from_knossos_path(global_params.paths.kd_mi_path)
+    kd_mi.initialize_from_knossos_path(global_params.config.kd_mi_path)
 
     kd_vc = knossosdataset.KnossosDataset()
-    kd_vc.initialize_from_knossos_path(global_params.paths.kd_vc_path)
+    kd_vc.initialize_from_knossos_path(global_params.config.kd_vc_path)
 
     kd_sj = knossosdataset.KnossosDataset()
-    kd_sj.initialize_from_knossos_path(global_params.paths.kd_sj_path)
+    kd_sj.initialize_from_knossos_path(global_params.config.kd_sj_path)
 
     kd_sym = knossosdataset.KnossosDataset()
-    kd_sym.initialize_from_knossos_path(global_params.paths.kd_sym_path)
+    kd_sym.initialize_from_knossos_path(global_params.config.kd_sym_path)
 
     kd_asym = knossosdataset.KnossosDataset()
-    kd_asym.initialize_from_knossos_path(global_params.paths.kd_asym_path)
+    kd_asym.initialize_from_knossos_path(global_params.config.kd_asym_path)
 
     # get data
     kzip_p = curr_dir + '/example_cube_small.k.zip'
@@ -55,7 +56,7 @@ if __name__ == '__main__':
     save_to_h5py([asym], curr_dir + 'data/asym.h5', hdf5_names=['asym'])
 
     # store subgraph of SV-agglomeration
-    g_p = "{}/glia/neuron_rag.bz2".format(global_params.paths.working_dir)
+    g_p = "{}/glia/neuron_rag.bz2".format(global_params.config.working_dir)
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
     sv_ids = np.unique(seg)
     rag_sub_g = rag_g.subgraph(sv_ids)

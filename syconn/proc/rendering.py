@@ -589,7 +589,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         for cv in c_views:
             if len(np.unique(cv)) == 1:
                 if views_key == "raw":
-                    warnings.warn("Empty view of '%s'-mesh with %d "
+                    log_proc.warn("Empty view of '%s'-mesh with %d "
                                   "vertices found."
                                   % (views_key, len(mesh.vert_resh)),
                                   RuntimeWarning)

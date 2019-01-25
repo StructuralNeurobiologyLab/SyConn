@@ -17,6 +17,7 @@ import shutil
 import itertools
 from collections import defaultdict
 from knossos_utils import knossosdataset, chunky
+knossosdataset._set_noprint(True)
 
 from ..handler import log_handler
 from ..mp import batchjob_utils as qu, mp_utils as sm

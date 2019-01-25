@@ -7,7 +7,6 @@
 
 from collections import defaultdict
 import collections
-import warnings
 import numpy as np
 import h5py
 import os
@@ -208,7 +207,7 @@ def coordpath2anno(coords, scaling=None, add_edges=True):
     SkeletonAnnotation
     """
     if scaling is None:
-        scaling = global_params.get_dataset_scaling()
+        scaling = global_params.config['Dataset']['scaling']
     anno = SkeletonAnnotation()
     anno.scaling = scaling
     scaling = np.array(scaling, dtype=np.int)
@@ -482,8 +481,8 @@ def write_obj2pkl(path, objects):
             with open(path, 'wb') as output:
                 pkl.dump(objects, output, -1)
         else:
-            warnings.warn("Write_obj2pkl takes arguments 'path' (str) and "
-                          "'objects' (python object).", DeprecationWarning)
+            log_handler.warn("Write_obj2pkl takes arguments 'path' (str) and "
+                             "'objects' (python object).", DeprecationWarning)
             with open(objects, 'wb') as output:
                 pkl.dump(path, output, -1)
 

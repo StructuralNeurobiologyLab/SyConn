@@ -14,8 +14,9 @@ import os
 import tqdm
 from collections import defaultdict
 from knossos_utils import knossosdataset
+knossosdataset._set_noprint(True)
 
-from ..global_params import get_dataset_scaling, MESH_DOWNSAMPLING,\
+from ..global_params import MESH_DOWNSAMPLING,\
     MESH_CLOSING, NCORES_PER_NODE
 from .. import global_params
 from .image import single_conn_comp_img
@@ -392,9 +393,9 @@ def init_sos(sos_dict):
 def sos_dict_fact(svixs, version=None, scaling=None, obj_type="sv",
                   working_dir=None, create=False):
     if working_dir is None:
-        working_dir = global_params.paths.working_dir
+        working_dir = global_params.config.working_dir
     if scaling is None:
-        scaling = get_dataset_scaling()
+        scaling = global_params.config['Dataset']['scaling']
     sos_dict = {"svixs": svixs, "version": version,
                 "working_dir": working_dir, "scaling": scaling,
                 "create": create, "obj_type": obj_type}

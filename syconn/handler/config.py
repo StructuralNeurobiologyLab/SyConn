@@ -7,7 +7,10 @@
 
 from configobj import ConfigObj
 import os
+import sys
 from validate import Validator
+from .. import global_params
+__all__ = ['DynConfig']
 
 
 class Config(object):
@@ -63,7 +66,125 @@ class Config(object):
             self._entries = ConfigObj(self.path_config)
 
 
-#
+# TODO: add generic parser method for initial RAG and handle case without glia-splitting, refactor RAG path handling
+# TODO:(cover case if glia removal was not performed, change resulting rag paths after glia removal from 'glia' to 'rag'
+class DynConfig(Config):
+    """
+    Enables dynamic and SyConn-wide update of working directory 'wd'.
+    """
+    def __init__(self):
+        super().__init__(global_params.wd)
+
+    def _check_actuality(self):
+        """
+        Crucial check, which triggers the update everytime wd is not the same as
+         self.working dir
+        """
+        if super().working_dir != global_params.wd:
+            super().__init__(global_params.wd)
+
+    @property
+    def entries(self):
+        self._check_actuality()
+        return super().entries
+
+    @property
+    def working_dir(self):
+        self._check_actuality()
+        return super().working_dir
+
+    @property
+    def kd_seg_path(self):
+        return self.entries['Paths']['kd_seg']
+
+    @property
+    def kd_sym_path(self):
+        return self.entries['Paths']['kd_sym']
+
+    @property
+    def kd_asym_path(self):
+        return self.entries['Paths']['kd_asym']
+
+    @property
+    def kd_sj_path(self):
+        return self.entries['Paths']['kd_sj']
+
+    @property
+    def kd_vc_path(self):
+        return self.entries['Paths']['kd_vc']
+
+    @property
+    def kd_mi_path(self):
+        return self.entries['Paths']['kd_mi']
+
+    @property
+    # TODO: make this more elegant, e.g. bash script with 'source activate py36' -- check if conda_forge vigra install
+    #  works with all the rest, then move to py36 once and for all
+    def py36path(self):
+        if len(self.entries['Paths']['py36path']) != 0:
+            return self.entries['Paths']['py36path']  # python 3.6 path is available
+        else:  # python 3.6 path is not set, check current python
+            if sys.version_info[0] == 3 and sys.version_info[1] == 6:
+                return sys.executable
+        raise RuntimeError('Python 3.6 is not available. Please install SyConn within python 3.6 or specify '
+                           '"py36path" in config.ini!')
+
+
+    # TODO: Work-in usage of init_rag_path
+    @property
+    def init_rag_path(self):
+        """
+        # currently a mergelist/RAG of the following form is expected:
+        # ID, ID
+        #    .
+        #    .
+        # ID, ID
+
+        Returns
+        -------
+        str
+        """
+        # self._check_actuality()
+        return self.entries['Paths']['init_rag']
+
+    # --------- CLASSIFICATION MODELS
+    @property
+    def model_dir(self):
+        return self.working_dir + '/models/'
+
+    @property
+    def mpath_tnet(self):
+        return self.working_dir + '/tCMN/'
+
+    @property
+    def mpath_spiness(self):
+        return self.working_dir + '/spiness/'
+
+    @property
+    def mpath_celltype(self):
+        return self.working_dir + '/celltype/celltype.mdl'
+
+    @property
+    def mpath_axoness(self):
+        return self.working_dir + '/axoness/axoness.mdl'
+
+    @property
+    def mpath_glia(self):
+        return self.working_dir + '/glia/glia.mdl'
+
+    @property
+    def mpath_syn_rfc(self):
+        return self.working_dir + '/conn_syn_rfc//rfc'
+
+    @property
+    def allow_mesh_gen_cells(self):
+        return self.entries['Mesh']['allow_mesh_gen_cells']
+
+    @property
+    def allow_skel_gen(self):
+        return self.entries['Skeleton']['allow_skel_gen']
+
+
 def get_default_conf_str(example_wd, py36path=""):
     """
     Default SyConn config and type specification, placed in the working directory.
