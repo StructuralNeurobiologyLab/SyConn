@@ -15,6 +15,7 @@ import time
 import itertools
 from collections import defaultdict
 from knossos_utils import knossosdataset
+from knossos_utils import chunky
 knossosdataset._set_noprint(True)
 
 from ..reps import segmentation
@@ -32,8 +33,8 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
         multi_params.append([chunk, knossos_path, filename])
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess(_contact_site_detection_thread,
-                                        multi_params, debug=True)
+        results = sm.start_multiprocess_imap(_contact_site_detection_thread,
+                                             multi_params, debug=True)
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "contact_site_detection",
@@ -48,6 +49,7 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
                 results.append(pkl.load(f))
     else:
         raise Exception("QSUB not available")
+    chunky.save_dataset(cset)
 
 
 def _contact_site_detection_thread(args):

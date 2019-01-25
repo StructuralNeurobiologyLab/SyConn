@@ -511,7 +511,6 @@ def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000,
 
         cc_ids = np.array(list(ccs[current_ccs]))
         next_ids = vx_ids[cc_ids[~np.in1d(cc_ids, checked_ids)][:max_concurrent_nodes]]
-
     return ccs
 
 
@@ -634,7 +633,7 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
 
     u_cand_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']][np.array(list(u_cand_sj_ids))]
 
-    log_extraction.debug("%d candidate sjs" % len(u_cand_sj_ids))
+    # log_extraction.debug("%d candidate sjs" % len(u_cand_sj_ids))
 
     overlap_vx_l = []
     for sj_id in u_cand_sj_ids:
@@ -646,7 +645,7 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
         if len(overlap_vx) > 0:
             overlap_vx_l.append([sj_id, overlap_vx])
 
-    log_extraction.debug("%d candidate sjs overlap" % len(overlap_vx_l))
+    # log_extraction.debug("%d candidate sjs overlap" % len(overlap_vx_l))
 
     return overlap_vx_l
 
@@ -725,8 +724,8 @@ def syn_gen_via_cset_thread(args):
         cs_sd_version, cset_path = args
 
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd,
-                                               version=syn_sd_version,
-                                               create=False)
+                                              version=syn_sd_version,
+                                              create=False)
     sj_sd = segmentation.SegmentationDataset("sj", working_dir=wd,
                                              version=sj_sd_version,
                                              create=False)
@@ -761,7 +760,7 @@ def syn_gen_via_cset_thread(args):
                 continue
             vxl_sj = sj.voxels
             offset, size = bb[0], bb[1] - bb[0]
-            log_extraction.info('Loading CS chunk data of size {}'.format(size))
+            # log_extraction.info('Loading CS chunk data of size {}'.format(size))
             cs_ids = cs_cset.from_chunky_to_matrix(size, offset, 'cs', ['cs'],
                                                    dtype=np.uint64)['cs']
             u_cs_ids, c_cs_ids = np.unique(cs_ids, return_counts=True)
@@ -1157,12 +1156,12 @@ def objects_to_single_synssv(synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=2000,
     for i_partner_id, partner_id in enumerate(partner_ids):
         ssv_o = ssv.get_super_segmentation_object(partner_id)
 
-        log_extraction.debug(len(ssv_o.mi_ids))
+        # log_extraction.debug(len(ssv_o.mi_ids))
         n_mi_objs, n_mi_vxs = map_objects_from_ssv(synssv_o, mi_sd, ssv_o.mi_ids,
                                                    max_vx_dist_nm,
                                                    max_rep_coord_dist_nm)
 
-        log_extraction.debug(len(ssv_o.vc_ids))
+        # log_extraction.debug(len(ssv_o.vc_ids))
         n_vc_objs, n_vc_vxs = map_objects_from_ssv(synssv_o, vc_sd, ssv_o.vc_ids,
                                                    max_vx_dist_nm,
                                                    max_rep_coord_dist_nm)
@@ -1211,7 +1210,7 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
 
     synssv_vx_kdtree = spatial.cKDTree(synssv_o.voxel_list * synssv_o.scaling)
 
-    log_extraction.debug(len(close_obj_ids))
+    # log_extraction.debug(len(close_obj_ids))
 
     n_obj_vxs = []
     for close_obj_id in close_obj_ids:
@@ -1225,7 +1224,7 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
 
     n_obj_vxs = np.array(n_obj_vxs)
 
-    log_extraction.debug(n_obj_vxs)
+    # log_extraction.debug(n_obj_vxs)
     n_objects = np.sum(n_obj_vxs > 0)
     n_vxs = np.sum(n_obj_vxs)
 

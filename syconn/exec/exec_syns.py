@@ -59,7 +59,7 @@ def run_syn_analysis():
     log.info('Connectivity matrix was epxorted to "{}".'.format(dest_folder))
 
 
-def run_syn_generation():
+def run_syn_generation(chunk_size=(512, 512, 512)):
     log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
                              overwrite=False)
 
@@ -68,16 +68,12 @@ def run_syn_generation():
     # Initializes the dataset by parsing the knossos.conf in path + "mag1"
     kd.initialize_from_knossos_path(kd_seg_path)
 
-    # TODO: change path of CS chunkdataset
     # Initital contact site extraction
     cd_dir = global_params.config.working_dir + "/chunkdatasets/cs/"
     # Class that contains a dict of chunks (with coordinates) after initializing it
     cd = chunky.ChunkDataset()
-    cd.initialize(kd, kd.boundary, [512, 512, 512], cd_dir,
+    cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
                   box_coords=[0, 0, 0], fit_box_size=True)
-    oew.from_ids_to_objects(cd, 'cs', n_chunk_jobs=2000, dataset_names=['syn'],
-                            hdf5names=["cs"], n_max_co_processes=300,
-                            n_folders_fs=100000)
 
     # POPULATES CS CD with SV contacts
     ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=5000,

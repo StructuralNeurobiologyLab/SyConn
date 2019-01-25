@@ -256,9 +256,9 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
             n_dilations = 0
             while True:
                 labeled, nb_cc = ndimage.label(volume)
-                log_proc.debug('Forcing single CC, additional dilations {}, num'
-                               'ber connected components: {}'
-                               ''.format(n_dilations, nb_cc))
+                # log_proc.debug('Forcing single CC, additional dilations {}, num'
+                #                'ber connected components: {}'
+                #                ''.format(n_dilations, nb_cc))
                 if nb_cc == 1:  # does not count background
                     break
                 # pad volume to maintain margin at boundary and correct offset
