@@ -241,7 +241,7 @@ def create_ccsize_dict(g, sizes):
     node2cssize_dict = {}
     for cc in ccs:
         mesh_bbs = np.concatenate([sizes[n] for n in cc])
-        cc_size = np.linalg.norm(np.max(mesh_bbs, axis=0)-
+        cc_size = np.linalg.norm(np.max(mesh_bbs, axis=0) -
                                  np.min(mesh_bbs, axis=0), ord=2)
         for n in cc:
             node2cssize_dict[n] = cc_size

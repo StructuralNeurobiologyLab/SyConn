@@ -61,7 +61,8 @@ def initialize_logging(log_name, log_dir=global_params.default_log_dir,
 
     """
     logger = logging.getLogger(log_name)
-    coloredlogs.install(level=global_params.log_level, logger=logger)
+    coloredlogs.install(level=global_params.log_level, logger=logger,
+                        reconfigure=False)  # True possibly leads to stderr output
     level = logging.getLevelName(global_params.log_level)
     logger.setLevel(level)
 

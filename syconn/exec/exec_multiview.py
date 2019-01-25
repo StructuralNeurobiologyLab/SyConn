@@ -266,15 +266,14 @@ def run_create_neuron_ssd(prior_glia_removal=True):
         for ii in range(len(sd.ids)):
             sv_size_dict[sd.ids[ii]] = bbs[ii]
         ccsize_dict = create_ccsize_dict(rag_g, sv_size_dict)
-        log.info("Finished preparation of SSV size dictionary based "
-                 "on bounding box diagional of corresponding SVs.")
-
+        log.debug("Finished preparation of SSV size dictionary based "
+                  "on bounding box diagional of corresponding SVs.")
         before_cnt = len(rag_g.nodes())
         for ix in list(rag_g.nodes()):
             if ccsize_dict[ix] < global_params.min_cc_size_neuron:
                 rag_g.remove_node(ix)
-        log.info("Removed %d neuron CCs because of size." %
-                 (before_cnt - len(rag_g.nodes())))
+        log.debug("Removed %d neuron CCs because of size." %
+                  (before_cnt - len(rag_g.nodes())))
 
     ccs = nx.connected_components(rag_g)
     cc_dict = {}
@@ -288,6 +287,7 @@ def run_create_neuron_ssd(prior_glia_removal=True):
             cc_dict_inv[sv_id] = ssv_id
     log.info('Parsed RAG from {} with {} SSVs and {} SVs.'.format(
         g_p, len(cc_dict), len(cc_dict_inv)))
+
     ssd = SuperSegmentationDataset(working_dir=global_params.paths.working_dir, version='0',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes

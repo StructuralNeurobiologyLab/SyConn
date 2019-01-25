@@ -555,7 +555,7 @@ def fallback_exec(cmd_exec):
     # _ = subprocess.check_output(cmd_exec, shell=True)
     ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
-    _ = ps.communicate()[0]
+    _ = ps.communicate()[1]
 
 
 def number_of_running_processes(job_name):

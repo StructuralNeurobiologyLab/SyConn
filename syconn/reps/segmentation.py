@@ -13,7 +13,7 @@ from knossos_utils import knossosdataset
 from skimage.measure import mesh_surface_area
 
 from .. import global_params
-from ..handler import config
+from ..handler import config as config_handler
 from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.basics import load_pkl2obj, write_obj2pkl
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
@@ -205,7 +205,7 @@ class SegmentationDataset(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = config.Config(self.working_dir)
+            self._config = config_handler.Config(self.working_dir)
         return self._config
 
     @property
@@ -455,7 +455,7 @@ class SegmentationObject(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = config.Config(self.working_dir)
+            self._config = config_handler.Config(self.working_dir)
         return self._config
 
     #                                                                      PATHS

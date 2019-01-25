@@ -94,6 +94,9 @@ kd_mi = {}
 init_rag = {}
 py36path = {}
 
+[Dataset]
+scaling = 10., 10., 20.
+
 [LowerMappingRatios]
 mi = 0.5
 sj = 0.1

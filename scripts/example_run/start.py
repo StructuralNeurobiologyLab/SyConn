@@ -48,7 +48,7 @@ if __name__ == '__main__':
 
     # INITIALIZE DATA
     # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
-
+    #
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_matrix(example_wd + 'knossosdatasets/seg/', scale, experiment_name,
                               offset=offset, boundary=bd, fast_downsampling=True,
@@ -96,7 +96,7 @@ if __name__ == '__main__':
     log.info('Finished example cube preparation {}. Starting SyConn pipeline.'.format(bd))
 
     # RUN SYCONN
-    log.info('Step 1/8 - Creating SegmentationDatasets')
+    log.info('Step 1/8 - Creating SegmentationDatasets (incl. cell SV meshes)')
     # TODO: currently example run does not support fallback for SLURM entirely -> adapt and test
     exec_init.run_create_sds(chunk_size=(128, 128, 128))
 
