@@ -65,6 +65,14 @@ class Config(object):
         else:
             self._entries = ConfigObj(self.path_config)
 
+    def write_config(self):
+        # TODO: implement string conversion
+        raise NotImplementedError
+        # with open(self.working_dir + 'config.ini', 'w') as f:
+            # f.write(config_str)
+        # with open(self.working_dir + 'configspec.ini', 'w') as f:
+            # f.write(configspec_str)
+
 
 # TODO: add generic parser method for initial RAG and handle case without glia-splitting, refactor RAG path handling
 # TODO:(cover case if glia removal was not performed, change resulting rag paths after glia removal from 'glia' to 'rag'

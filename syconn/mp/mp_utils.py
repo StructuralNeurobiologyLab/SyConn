@@ -104,7 +104,7 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
         result = list(map(func, params))
 
     if verbose:
-        log_mp.debug("\nTime to compute: {:.1f} min".format((time.time() - start) / 60.))
+        log_mp.debug("Time to compute: {:.1f} min".format((time.time() - start) / 60.))
 
     return result
 
@@ -143,16 +143,14 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
 
     start = time.time()
     if nb_cpus > 1:
-        pool = MyPool(nb_cpus)
-        if show_progress:
-            result = list(tqdm.tqdm(pool.imap(func, params), total=len(params),
-                                    ncols=80, leave=False, unit='jobs',
-                                    unit_scale=True, dynamic_ncols=False,
-                                    mininterval=0.5))
-        else:
-            result = list(pool.imap(func, params))
-        pool.close()
-        pool.join()
+        with MyPool(nb_cpus) as pool:
+            if show_progress:
+                result = list(tqdm.tqdm(pool.imap(func, params), total=len(params),
+                                        ncols=80, leave=False, unit='jobs',
+                                        unit_scale=True, dynamic_ncols=False,
+                                        mininterval=0.5))
+            else:
+                result = list(pool.imap(func, params))
     else:
         if show_progress:
             pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
@@ -168,7 +166,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
             for p in params:
                 result.append(func(p))
     if verbose:
-        log_mp.debug("\nTime to compute: {:.1f} min".format((time.time() - start) / 60.))
+        log_mp.debug("Time to compute: {:.1f} min".format((time.time() - start) / 60.))
 
     return result
 
@@ -211,7 +209,7 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
     else:
         result = list(map(multi_helper_obj, params))
     if verbose:
-        log_mp.debug("\nTime to compute: {:.1f} min".format((time.time() - start) / 60.))
+        log_mp.debug("Time to compute: {:.1f} min".format((time.time() - start) / 60.))
     return result
 
 
