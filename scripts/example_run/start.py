@@ -117,14 +117,14 @@ if __name__ == '__main__':
     exec_multiview.run_neuron_rendering()
 
     log.info('Step 4/8 - Axon prediction')
-    exec_multiview.run_axoness_prediction()
+    exec_multiview.run_axoness_prediction(n_jobs=4)
     exec_multiview.run_axoness_mapping()
 
     log.info('Step 5/8 - Celltype prediction')
-    exec_multiview.run_celltype_prediction()
+    exec_multiview.run_celltype_prediction(n_jobs=4)
 
     log.info('Step 6/8 - Spine prediction')
-    exec_multiview.run_spiness_prediction()
+    exec_multiview.run_spiness_prediction(n_jobs=4)
 
     log.info('Step 7/8 - Synapse identification')
     exec_syns.run_syn_generation(chunk_size=(128, 128, 128))

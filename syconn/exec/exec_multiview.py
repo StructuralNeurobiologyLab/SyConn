@@ -60,7 +60,7 @@ def run_axoness_mapping():
     log.info('Finished axoness mapping.')
 
 
-def run_axoness_prediction():
+def run_axoness_prediction(n_jobs=100):
     log = initialize_logging('axon_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     # TODO: currently working directory has to be set globally in global_params and is not adjustable
@@ -68,7 +68,7 @@ def run_axoness_prediction():
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     sd = ssd.get_segmentationdataset("sv")
     # chunk them
-    multi_params = chunkify(sd.so_dir_paths, 100)
+    multi_params = chunkify(sd.so_dir_paths, n_jobs)
     pred_key = "axoness_probas"  # leave this fixed because it is used all over
     # get model properties
     log.info('Performing axon prediction of neuron views. Labels will be stored '
@@ -104,7 +104,7 @@ def run_axoness_prediction():
         log.info('Success.')
 
 
-def run_celltype_prediction():
+def run_celltype_prediction(n_jobs=100):
     log = initialize_logging('celltype_prediction', global_params.config.working_dir+ '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -118,7 +118,7 @@ def run_celltype_prediction():
     multi_params = ssd.ssv_ids
     ordering = np.argsort(nb_svs_per_ssv)
     multi_params = multi_params[ordering[::-1]]
-    multi_params = chunkify(multi_params, 100)
+    multi_params = chunkify(multi_params, n_jobs)
     # job parameter will be read sequentially, i.e. in order to provide only
     # one list as parameter one needs an additonal axis
     multi_params = [(ixs, ) for ixs in multi_params]
@@ -142,7 +142,7 @@ def run_celltype_prediction():
         log.info('Success.')
 
 
-def run_spiness_prediction():
+def run_spiness_prediction(n_jobs=100):
     log = initialize_logging('spine_identification', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -151,7 +151,7 @@ def run_spiness_prediction():
     # run semantic spine segmentation on multi views
     sd = ssd.get_segmentationdataset("sv")
     # chunk them
-    multi_params = chunkify(sd.so_dir_paths, 100)
+    multi_params = chunkify(sd.so_dir_paths, n_jobs)
     # set model properties
     model_kwargs = dict(src=global_params.config.mpath_spiness,
                         multi_gpu=False)
