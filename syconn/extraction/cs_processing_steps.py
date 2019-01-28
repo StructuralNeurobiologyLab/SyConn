@@ -1039,7 +1039,7 @@ def synssv_o_features(synssv_o):
 def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
                           mi_version=None, vc_version=None, max_vx_dist_nm=None,
                           max_rep_coord_dist_nm=None, qsub_pe=None,
-                          qsub_queue=None, nb_cpus=1, n_max_co_processes=None):
+                          qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
     is executed in 'classify_synssv_objects'.
@@ -1232,7 +1232,7 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
 
 
 def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
-                            qsub_queue=None, nb_cpus=1, n_max_co_processes=None):
+                            qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     """
     Classifiy SSV contact sites into snaptic or non-synaptic using an RFC model
     and stores the result in the attribute dict of the syn_ssv objects.
@@ -1302,7 +1302,7 @@ def _classify_synssv_objects_thread(args):
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                          qsub_pe=None, qsub_queue=None,
-                                         nb_cpus=1, n_max_co_processes=None):
+                                         nb_cpus=None, n_max_co_processes=None):
     """
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign

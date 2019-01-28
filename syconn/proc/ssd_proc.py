@@ -24,7 +24,7 @@ from ..proc.meshes import mesh_creator_sso
 
 
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=1,
+                      qsub_pe=None, qsub_queue=None, nb_cpus=None,
                       n_max_co_processes=None):
     ssd.save_dataset_shallow()
 
@@ -162,7 +162,7 @@ def _write_super_segmentation_dataset_thread(args):
 
 def aggregate_segmentation_object_mappings(ssd, obj_types,
                                            stride=1000, qsub_pe=None,
-                                           qsub_queue=None, nb_cpus=1):
+                                           qsub_queue=None, nb_cpus=None):
     """
 
     Parameters
@@ -238,7 +238,7 @@ def _aggregate_segmentation_object_mappings_thread(args):
 
 
 def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
-                            qsub_queue=None, nb_cpus=1):
+                            qsub_queue=None, nb_cpus=None):
     """
     Requires prior execution of `aggregate_segmentation_object_mappings`.
 
@@ -384,7 +384,7 @@ def _apply_mapping_decisions_thread(args):
 
 
 def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue=None,
-                       nb_cpus=1, n_max_co_processes=global_params.NCORE_TOTAL):
+                       nb_cpus=None, n_max_co_processes=global_params.NCORE_TOTAL):
     """
     Map synn_ssv objects to all SSO objects contained in SSV SuperSegmentationDataset.
     Also computes syn_ssv meshes.

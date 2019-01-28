@@ -149,7 +149,7 @@ def _dataset_analysis_thread(args):
 
 def map_objects_to_sv_multiple(sd, obj_types, kd_path, readonly=False, 
                                n_jobs=1000, qsub_pe=None, qsub_queue=None,
-                               nb_cpus=1, n_max_co_processes=None):
+                               nb_cpus=None, n_max_co_processes=None):
     assert isinstance(obj_types, list)  # TODO: probably possible to optimize
     for obj_type in obj_types:
         map_objects_to_sv(sd, obj_type, kd_path, readonly=readonly, n_jobs=n_jobs,
@@ -574,7 +574,7 @@ def _export_sd_to_knossosdataset_thread(args):
 
 def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                          trafo_dict_path=None, stride=10,
-                         qsub_pe=None, qsub_queue=None, nb_cpus=1,
+                         qsub_pe=None, qsub_queue=None, nb_cpus=None,
                          n_max_co_processes=None):
     """TODO: will be refactored into single method when generating syn objects
     Extract synapse type from KnossosDatasets. Stores sym.-asym. ratio in

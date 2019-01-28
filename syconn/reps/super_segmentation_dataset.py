@@ -307,7 +307,7 @@ class SuperSegmentationDataset(object):
         self.save_id_changer()
 
     def save_dataset_deep(self, extract_only=False, attr_keys=(), stride=1000,
-                          qsub_pe=None, qsub_queue=None, nb_cpus=1,
+                          qsub_pe=None, qsub_queue=None, nb_cpus=None,
                           n_max_co_processes=None, new_mapping=True):
         save_dataset_deep(self, extract_only=extract_only,
                           attr_keys=attr_keys, stride=stride,
@@ -496,7 +496,7 @@ class SuperSegmentationDataset(object):
 
 
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=1,
+                      qsub_pe=None, qsub_queue=None, nb_cpus=None,
                       n_max_co_processes=None, new_mapping=True):
     ssd.save_dataset_shallow()
 

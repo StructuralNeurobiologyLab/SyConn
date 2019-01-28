@@ -225,6 +225,9 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
         indices [M, 3], vertices [N, 3], normals [N, 3]
 
     """
+    if boundaryDistanceTransform is None:
+        raise ImportError('"boundaryDistanceTransform" could not be imported from VIGRA. '
+                          'Please install vigra, see SyConn documentation.')
     assert type(downsampling) == tuple, "Downsampling has to be of type 'tuple'"
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
         "Point cloud used for mesh generation has wrong shape."

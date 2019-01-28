@@ -63,7 +63,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                   hdf5_name_membrane=None, n_folders_fs=1000,
                                   suffix="", qsub_pe=None, qsub_queue=None,
                                   n_max_co_processes=None,transform_func=None,
-                                  func_kwargs=None, nb_cpus=1, workfolder=None,
+                                  func_kwargs=None, nb_cpus=None, workfolder=None,
                                   n_erosion=0, overlap_thresh=0, stitch_overlap=None):
     """
     Main function for the object extraction step; combines all needed steps

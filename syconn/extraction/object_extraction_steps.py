@@ -38,7 +38,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                         swapdata=False, prob_kd_path_dict=None,
                         membrane_filename=None, membrane_kd_path=None,
                         hdf5_name_membrane=None, fast_load=False, suffix="",
-                        qsub_pe=None, qsub_queue=None, nb_cpus=1,
+                        qsub_pe=None, qsub_queue=None, nb_cpus=None,
                         n_max_co_processes=None, transform_func=None,
                         transform_func_kwargs=None):
     """
@@ -283,7 +283,7 @@ def _gauss_threshold_connected_components_thread(args):
 
 
 def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
-                       chunk_translator, debug, suffix="", nb_cpus=1,
+                       chunk_translator, debug, suffix="", nb_cpus=None,
                        qsub_pe=None, qsub_queue=None, n_max_co_processes=100):
     """
     Makes labels unique across chunks
@@ -364,7 +364,7 @@ def _make_unique_labels_thread(args):
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                      overlap, debug, suffix="", qsub_pe=None, qsub_queue=None,
-                     n_max_co_processes=100, nb_cpus=1, n_erosion=0,
+                     n_max_co_processes=100, nb_cpus=None, n_erosion=0,
                      overlap_thresh=0):
     """
     Creates a stitch list for the overlap region between chunks
@@ -597,7 +597,7 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
 
 def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                      debug, suffix="", qsub_pe=None, qsub_queue=None,
-                     n_max_co_processes=100, nb_cpus=1):
+                     n_max_co_processes=100, nb_cpus=None):
     """
     Applies merge list to all chunks
 
@@ -1013,7 +1013,7 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                    n_folders_fs=10000, workfolder=None, overlaydataset_path=None,
                    chunk_list=None, suffix="", n_chunk_jobs=5000, sd_version=0,
                    use_work_dir=True, qsub_pe=None, qsub_queue=None, qsub_slots=1,
-                   n_max_co_processes=None, nb_cpus=1, object_names=None):
+                   n_max_co_processes=None, nb_cpus=None, object_names=None):
     """
     Creates a SegmentationDataset of type object_names/dataset_names/hdf5names  # TODO fix this redundancy once and for all
 
