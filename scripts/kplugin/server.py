@@ -4,11 +4,15 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
+# TODO: move code to syconn/gate/
 import copy
 import time
 import numpy as np
 from flask import Flask
 import json
+import argparse
+import os
 
 from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
@@ -26,7 +30,7 @@ def route_ssv_skeleton(ssv_id):
     d = sg_state.backend.ssv_skeleton(ssv_id)
     start = time.time()
     ret = json.dumps(d, cls=MyEncoder)
-    log_gate.debug("JSON dump:", time.time() - start)
+    log_gate.debug("JSON dump: {}".format(time.time() - start))
     return ret
 
 
@@ -35,7 +39,7 @@ def route_ssv_mesh(ssv_id):
     d = sg_state.backend.ssv_mesh(ssv_id)
     start = time.time()
     ret = json.dumps(d, cls=MyEncoder)
-    log_gate.debug("JSON dump:", time.time() - start)
+    log_gate.debug("JSON dump: {}".format(time.time() - start))
     return ret
 
 
@@ -62,7 +66,7 @@ def ssv_obj_mesh(ssv_id, obj_type):
     d = sg_state.backend.ssv_obj_mesh(ssv_id, obj_type)
     start = time.time()
     ret = json.dumps(d, cls=MyEncoder)
-    log_gate.debug("JSON dump:", time.time() - start)
+    log_gate.debug("JSON dump: {}".format(time.time() - start))
     return ret
 
 
@@ -483,7 +487,8 @@ class ServerState(object):
 
         self.logger = log_gate
 
-        self.logger.info('SyConn gate server starting up.')
+        self.logger.info('SyConn gate server starting up on working directory '
+                         '"{}".'.format(global_params.wd))
         self.backend = SyConnBackend(global_params.config.working_dir, logger=self.logger)
         self.logger.info('SyConn gate server running.')
         return
@@ -513,9 +518,23 @@ OR
 FLASK_APP=server.py FLASK_DEBUG=1 flask run --host=0.0.0.0 --port 10001
 
 """
+
+parser = argparse.ArgumentParser(description='SyConn Gate')
+parser.add_argument('--working_dir', type=str, default=global_params.wd,
+                    help='Working directory of SyConn')
+parser.add_argument('--port', type=int, default=10001,
+                    help='Port to connect to SyConn Gate')
+parser.add_argument('--host', type=str, default='0.0.0.0',
+                    help='IP address to SyConn Gate')
+args = parser.parse_args()
+server_wd = os.path.expanduser(args.working_dir)
+server_port = args.port
+server_host = args.host
+global_params.wd = server_wd
+
 sg_state = ServerState()
 
 # context = ('cert.crt', 'key.key') enable later
-app.run(host='0.0.0.0',  # do not run this on a non-firewalled machine!
-       port=10001, # ssl_context=context,
+app.run(host=server_host,  # do not run this on a non-firewalled machine!
+       port=server_port, # ssl_context=context,
        threaded=True, debug=True, use_reloader=True)

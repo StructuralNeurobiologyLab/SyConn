@@ -60,6 +60,13 @@ if __name__ == '__main__':
         f.write(config_str)
     with open(example_wd + 'configspec.ini', 'w') as f:
         f.write(configspec_str)
+
+    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype', 'mpath_axoness', 'mpath_glia']:
+        mpath = getattr(global_params.config, mpath_key)
+        if not (os.path.isfile(mpath) or os.path.isdir(mpath)):
+            raise ValueError('Could not find model "{}". Make sure to copy the "models" folder into the'
+                             ' current working directory "{}".'.format(mpath, example_wd))
+
     log.info('Finished example cube preparation {}. Starting SyConn pipeline.'.format(bd))
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
@@ -125,5 +132,10 @@ if __name__ == '__main__':
     log.info('Step 8/8 - Synapse analysis')
     exec_syns.run_syn_analysis()
 
-
+    log.info('SyConn analysis of "" has finished. Setting up flask server for'
+             ' inspection of cell reconstructions  via the KNOSSOS-SyConn'
+             ' plugin.'.format(kd.experiment_name))
+    fname_server = os.path.dirname(os.path.abspath(__file__)) + \
+                   '/../kplugin/server.py'
+    os.system('python {} --working_dir={} --port=10002'.format(fname_server, example_wd))
 

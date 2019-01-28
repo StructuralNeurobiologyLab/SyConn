@@ -1444,7 +1444,7 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
     ct_labels = ['N/A', 'EA', 'MSN', 'GP', 'INT']
     ct_label_ids = np.array([-1, 0, 1, 2, 3])
     sp_labels = ['N/A', 'neck', 'head', 'shaft', 'other']
-    sp_label_ids = np.array([-1, 0, 1, 2, 3, 4])
+    sp_label_ids = np.array([-1, 0, 1, 2, 3])
 
     annotations = []
     m_sizes = np.abs(m_sizes)

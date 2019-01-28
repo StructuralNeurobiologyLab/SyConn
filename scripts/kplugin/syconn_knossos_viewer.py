@@ -4,6 +4,8 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
+# TODO: move code to syconn/ui/
 from PythonQt import QtGui, Qt, QtCore
 import KnossosModule
 import sys

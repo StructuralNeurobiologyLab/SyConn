@@ -482,7 +482,7 @@ def write_obj2pkl(path, objects):
                 pkl.dump(objects, output, -1)
         else:
             log_handler.warn("Write_obj2pkl takes arguments 'path' (str) and "
-                             "'objects' (python object).", DeprecationWarning)
+                             "'objects' (python object).")
             with open(objects, 'wb') as output:
                 pkl.dump(path, output, -1)
 

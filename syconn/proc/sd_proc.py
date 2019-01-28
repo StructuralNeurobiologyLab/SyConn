@@ -200,7 +200,6 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     multi_params = basics.chunkify(paths, n_jobs)
     multi_params = [(mps, obj_type, sd.version_dict[obj_type], sd.working_dir,
                      kd_path, readonly) for mps in multi_params]
-
     # Running workers - Extracting mapping
     # does not work with imap in python 3.6, jobs do not return # TODO investigate; also: single processing is faster than single-node with 20 cores
     # if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
@@ -242,7 +241,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
                        n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
-    log_proc.debug("map_objects_to_sv: %.3fs" % (time.time() - start))
+    log_proc.debug("map_objects_to_sv: %.1f min" % ((time.time() - start) / 60.))
 
 
 def _map_objects_thread(args):

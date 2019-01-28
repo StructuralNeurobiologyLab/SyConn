@@ -126,8 +126,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if n_cores is None:
         n_cores = 1
     if not batchjob_enabled():
-        return batchjob_fallback(params, name, n_cores, suffix, script_folder,
-                                 python_path)
+        return batchjob_fallback(params, name, n_cores, suffix, n_max_co_processes,
+                                 script_folder, python_path)
     if resume_job:
         return resume_QSUB_script(
             params, name, queue=queue, pe=pe, max_iterations=max_iterations,
@@ -450,8 +450,7 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     return path_to_out
 
 
-# TODO: test
-def batchjob_fallback(params, name, n_cores=1, suffix="",
+def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=None,
                       script_folder=None, python_path=None):
     """
     Fallback method in case no batchjob submission system is available.
@@ -477,10 +476,11 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
         shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob = initialize_logging("{}_fallback".format(name + suffix),
                                       log_dir=job_folder)
-    n_max_co_processes = np.min([global_params.NCORES_PER_NODE // n_cores,
-                                 len(params)])
+    if n_max_co_processes is None:
+        n_max_co_processes = global_params.NCORES_PER_NODE // n_cores
+    n_max_co_processes = np.min([n_max_co_processes, len(params)])
     log_batchjob.debug('Starting BatchJobFallback script "{}" with {} tasks using {}'
-                       ' parallel jobs, each using {} cores.'.format(
+                       ' parallel jobs, each using {} core(s).'.format(
         name, len(params), n_max_co_processes, n_cores))
 
     if script_folder is not None:
