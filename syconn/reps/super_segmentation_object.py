@@ -131,7 +131,7 @@ class SuperSegmentationObject(object):
 
         if working_dir is None:
             try:
-                self._working_dir = wd
+                self._working_dir = global_params.wd
             except:
                 raise Exception("No working directory (wd) specified in config")
         else:
@@ -902,7 +902,7 @@ class SuperSegmentationObject(object):
                              ' not be saved to disk.')
             return
         if to_object:
-            write_obj2pkl(self.skeleton, self.skeleton_path)
+            write_obj2pkl(self.skeleton_path, self.skeleton)
 
         if to_kzip:
             self.save_skeleton_to_kzip()
@@ -2191,8 +2191,12 @@ class SuperSegmentationObject(object):
             dest_path = self.skeleton_kzip_path_views
         locs = np.concatenate(self.sample_locations())
         g = create_graph_from_coords(locs, mst=True)
-        edge_list = np.array(g.edges())
+        if g.number_of_edges() == 1:
+            edge_list = np.array(list(g.edges()))
+        else:
+            edge_list = np.array(g.edges())
         del g
+        assert edge_list.ndim == 2
         self.skeleton = dict()
         self.skeleton["nodes"] = locs / np.array(self.scaling)
         self.skeleton["edges"] = edge_list

@@ -8,10 +8,10 @@ lz4
 configobj
 flask
 fasteners
-numpy>=1.11.1
+numpy==1.16
 coloredlogs
 scikit-learn==0.19.1
-scikit-image>=0.13.1
+scikit-image==0.14.2
 pyopengl
 opencv-python
 numba==0.41.0
@@ -23,6 +23,6 @@ openmesh
 pytest
 pytest-runner
 prompt-toolkit < 2.0
-git+https://github.com/knossos-project/knossos_utils.git
+git+https://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
 git+https://github.com/ELEKTRONN/ELEKTRONN2.git
 git+https://github.com/ELEKTRONN/elektronn3@phil#egg=elektronn3
