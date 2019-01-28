@@ -180,10 +180,10 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
         qsub parallel environment
     qsub_queue : str
         qsub queue
-    nb_cpus : int
+    nb_cpus : int or None
         number of cores used for multithreading
         number of cores per worker for qsub jobs
-    n_max_co_processes : int
+    n_max_co_processes : int or None
         max number of workers running at the same time when using qsub
     Returns
     -------
@@ -196,26 +196,29 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     seg_dataset = sd.get_segmentationdataset(obj_type)
     paths = seg_dataset.so_dir_paths
 
+    # write cell organell mappings to cell organelle SV attribute dicts
     # Partitioning the work
     multi_params = basics.chunkify(paths, n_jobs)
     multi_params = [(mps, obj_type, sd.version_dict[obj_type], sd.working_dir,
                      kd_path, readonly) for mps in multi_params]
     # Running workers - Extracting mapping
     # does not work with imap in python 3.6, jobs do not return # TODO investigate; also: single processing is faster than single-node with 20 cores
-    # if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-    #     results = sm.start_multiprocess_imap(_map_objects_thread, multi_params,
-    #                                     nb_cpus=nb_cpus, verbose=False, debug=True)
-    # elif qu.batchjob_enabled():
-    path_to_out = qu.QSUB_script(multi_params, "map_objects",
-                                 pe=qsub_pe, queue=qsub_queue,
-                                 script_folder=None, n_cores=nb_cpus,
-                                 n_max_co_processes=n_max_co_processes)
-    out_files = glob.glob(path_to_out + "/*")
-    results = []
-    for out_file in out_files:
-        with open(out_file, 'rb') as f:
-            results.append(pkl.load(f))
+    if qu.batchjob_enabled():
+        path_to_out = qu.QSUB_script(multi_params, "map_objects",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=None, n_cores=nb_cpus,
+                                     n_max_co_processes=n_max_co_processes)
+        out_files = glob.glob(path_to_out + "/*")
+        results = []
+        for out_file in out_files:
+            with open(out_file, 'rb') as f:
+                results.append(pkl.load(f))
+    else:
+        results = sm.start_multiprocess_imap(_map_objects_thread, multi_params,
+                                             nb_cpus=n_max_co_processes, verbose=True,
+                                             debug=False)
 
+    # write cell organell mappings to cell SV attribute dicts
     sv_obj_map_dict = defaultdict(dict)
     for result in results:
         for sv_key, value in result.items():

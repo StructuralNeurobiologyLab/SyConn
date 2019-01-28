@@ -109,7 +109,8 @@ def load_voxels(so, voxel_dc=None):
 
     so._size = 0
     if so.id not in voxel_dc:
-        log_reps.error("Voxels for id %d do not exist" % so.id)
+        log_reps.error("Voxels for SO object %d of type %s do not exist"
+                       "" % (so.id, so.type))
         return -1
 
     bin_arrs, block_offsets = voxel_dc[so.id]

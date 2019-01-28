@@ -104,7 +104,7 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
         result = list(map(func, params))
 
     if verbose:
-        log_mp.debug("\nTime to compute:", time.time() - start)
+        log_mp.debug("\nTime to compute: {:.1f} min".format((time.time() - start) / 60.))
 
     return result
 
@@ -168,7 +168,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
             for p in params:
                 result.append(func(p))
     if verbose:
-        log_mp.debug("\nTime to compute:", time.time() - start)
+        log_mp.debug("\nTime to compute: {:.1f} min".format((time.time() - start) / 60.))
 
     return result
 
@@ -211,7 +211,7 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
     else:
         result = list(map(multi_helper_obj, params))
     if verbose:
-        log_mp.debug("\nTime to compute:", time.time() - start)
+        log_mp.debug("\nTime to compute: {:.1f} min".format((time.time() - start) / 60.))
     return result
 
 
