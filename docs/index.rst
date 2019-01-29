@@ -6,14 +6,9 @@
 Welcome to SyConn's documentation!
 ==================================
 
-First steps:
-
 .. toctree::
    :maxdepth: 1
 
-   GettingStarted
-   installation
-   Example
    syconn
 
 .. mdinclude:: doc.md

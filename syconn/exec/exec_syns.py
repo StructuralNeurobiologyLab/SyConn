@@ -77,7 +77,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
 
     # POPULATES CS CD with SV contacts
     ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=global_params.NCORE_TOTAL,
-                          qsub_pe='default', qsub_queue='all.q')
+                           qsub_pe='default', qsub_queue='all.q')
     ces.extract_agg_contact_sites(cd, global_params.config.working_dir, n_folders_fs=n_folders_fs, suffix="",
                                   qsub_queue='all.q', n_max_co_processes=global_params.NCORE_TOTAL,
                                   qsub_pe='default')
@@ -91,6 +91,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     sj_sd = SegmentationDataset('sj', working_dir=global_params.config.working_dir)
     cs_cset = chunky.load_dataset(cd_dir, update_paths=True)
 
+    # TODO: change stride to n_jobs
     # # This creates an SD of type 'syn', currently ~6h, will hopefully be sped up after refactoring
     cs_processing_steps.syn_gen_via_cset(cs_sd, sj_sd, cs_cset, resume_job=False,
                                          nb_cpus=2, qsub_pe='openmp')

@@ -177,12 +177,12 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     all_times.append(time.time() - time_start)
     step_names.append("combine voxels")
 
-    log_extraction.debug("\nTime overview:")
+    log_extraction.debug("Time overview:")
     for ii in range(len(all_times)):
         log_extraction.debug("%s: %.3fs" % (step_names[ii], all_times[ii]))
     log_extraction.debug("--------------------------")
     log_extraction.debug("Total Time: %.1f min" % (np.sum(all_times) / 60.))
-    log_extraction.debug("--------------------------\n\n")
+    log_extraction.debug("--------------------------")
 
 
 def _extract_agg_cs_thread(args):

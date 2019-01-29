@@ -42,10 +42,6 @@ Or alternatively with the developer flag:
     pip install -e .
 
 
-In order to use elektronn3 models, python>=3.6 is required (when installing elektronn3 checkout
- branch `phil`; this will be updated soon to work with the `master` branch).
- By default, all required settings are applied in the SyConn setup.py.
-
 In the case that there are problems with snappy/python-snappy remove previous installations and
 install them via conda:
 
