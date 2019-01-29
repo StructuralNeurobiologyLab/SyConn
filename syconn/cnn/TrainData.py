@@ -55,9 +55,9 @@ if elektronn3_avail:
                 target_path = os.path.expanduser('{}label_{}_v2.h5'.format(base_dir, cube_id))
             self.inp_file = h5py.File(os.path.expanduser(inp_path), 'r')
             self.target_file = h5py.File(os.path.expanduser(target_path), 'r')
-            self.inp = self.inp_file[inp_key].value
+            self.inp = self.inp_file[inp_key][()]
             self.inp = self.inp[:, :4].astype(np.float32) / 255.
-            self.target = self.target_file[target_key].value.astype(np.int64)
+            self.target = self.target_file[target_key][()].astype(np.int64)
             self.target = self.target[:, 0]
             self.close_files()
             self.transform = transform

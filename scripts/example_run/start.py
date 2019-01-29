@@ -136,7 +136,7 @@ if __name__ == '__main__':
     exec_multiview.run_spiness_prediction(n_jobs=4)
 
     log.info('Step 7/8 - Synapse identification')
-    exec_syns.run_syn_generation(chunk_size=(128, 128, 128))
+    exec_syns.run_syn_generation(chunk_size=(128, 128, 128), n_folders_fs=100)
 
     log.info('Step 8/8 - Synapse analysis')
     exec_syns.run_syn_analysis()

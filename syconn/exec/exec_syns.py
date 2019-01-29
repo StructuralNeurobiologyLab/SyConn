@@ -59,7 +59,7 @@ def run_syn_analysis():
     log.info('Connectivity matrix was epxorted to "{}".'.format(dest_folder))
 
 
-def run_syn_generation(chunk_size=(512, 512, 512)):
+def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
                              overwrite=False)
 
@@ -76,10 +76,10 @@ def run_syn_generation(chunk_size=(512, 512, 512)):
                   box_coords=[0, 0, 0], fit_box_size=True)
 
     # POPULATES CS CD with SV contacts
-    ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=5000,
+    ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=global_params.NCORE_TOTAL,
                           qsub_pe='default', qsub_queue='all.q')
-    ces.extract_agg_contact_sites(cd, global_params.config.working_dir, n_folders_fs=10000, suffix="",
-                                  qsub_queue='all.q', n_max_co_processes=5000,
+    ces.extract_agg_contact_sites(cd, global_params.config.working_dir, n_folders_fs=n_folders_fs, suffix="",
+                                  qsub_queue='all.q', n_max_co_processes=global_params.NCORE_TOTAL,
                                   qsub_pe='default')
     log.info('CS extraction finished.')
 

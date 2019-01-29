@@ -7,11 +7,11 @@ Installation
 Setup
 =====
 
-We recommend installing the latest Anaconda release. Then set up an environment:
+We recommend installing the latest Anaconda release. Then set up the python environment:
 
-    conda create -n py36 python=3.6 anaconda
+    conda create -n pysy python=3.6 anaconda
 
-    source activate py36
+    source activate pysy
 
 Then install all prerequisites and finally git clone and install syconn:
 
@@ -24,6 +24,10 @@ Then install all prerequisites and finally git clone and install syconn:
     conda install freeglut
 
     conda install pyopengl
+
+    conda install snappy
+
+    conda install python-snappy
 
     git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 
@@ -40,6 +44,7 @@ Or alternatively with the developer flag:
 
 In order to use elektronn3 models, python>=3.6 is required (when installing elektronn3 checkout
  branch `phil`; this will be updated soon to work with the `master` branch).
+ By default, all required settings are applied in the SyConn setup.py.
 
 In the case that there are problems with snappy/python-snappy remove previous installations and
 install them via conda:
@@ -49,5 +54,3 @@ install them via conda:
     conda install snappy
 
     conda install python-snappy
-
-

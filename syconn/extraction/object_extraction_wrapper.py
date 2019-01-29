@@ -6,10 +6,6 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import numpy as np
 import time
-import warnings
-# knossos:utils warning for implicit channel selection and init from dir instead of config file
-warnings.filterwarnings("ignore", message="You are using implicit channel selection")
-warnings.filterwarnings("ignore", message="You are initializing a KnossosDataset from a path")
 
 from .. import global_params
 from ..extraction import log_extraction

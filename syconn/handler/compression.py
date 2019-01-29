@@ -220,9 +220,9 @@ def load_from_h5py(path, hdf5_names=None, as_dict=False):
             hdf5_names = f.keys()
         for hdf5_name in hdf5_names:
             if as_dict:
-                data[hdf5_name] = f[hdf5_name].value
+                data[hdf5_name] = f[hdf5_name][()]
             else:
-                data.append(f[hdf5_name].value)
+                data.append(f[hdf5_name][()])
     except Exception as e:
         msg = "Error ({}) raised when loading h5-file at path:" \
               " {}, with labels: {}".format(e, path, hdf5_names)

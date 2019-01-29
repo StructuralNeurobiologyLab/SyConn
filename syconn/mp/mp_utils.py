@@ -86,10 +86,12 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
         list of function returns
     """
     if nb_cpus is None:
-        nb_cpus = max(cpu_count(), 1)
+        nb_cpus = cpu_count()
 
     if debug:
         nb_cpus = 1
+
+    nb_cpus = min(nb_cpus, len(params), cpu_count())
 
     if verbose:
         log_mp.debug("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
@@ -133,7 +135,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
     if nb_cpus is None:
         nb_cpus = cpu_count()
 
-    nb_cpus = min(nb_cpus, len(params))
+    nb_cpus = min(nb_cpus, len(params), cpu_count())
 
     if debug:
         nb_cpus = 1
@@ -191,10 +193,12 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
         list of function returns
     """
     if nb_cpus is None:
-        nb_cpus = max(cpu_count(), 1)
+        nb_cpus = cpu_count()
 
     if debug:
         nb_cpus = 1
+
+    nb_cpus = min(nb_cpus, len(params), cpu_count())
 
     if verbose:
         log_mp.debug("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
@@ -211,63 +215,6 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
     if verbose:
         log_mp.debug("Time to compute: {:.1f} min".format((time.time() - start) / 60.))
     return result
-
-
-def SUBP_script(params, name, suffix="", delay=0):
-    """
-    Runs multiple subprocesses on one node at the same time - no load
-    balancing, all jobs get executed right away (or with a specified delay)
-
-    Parameters
-    ----------
-    params: List
-        list of all paramter sets to be processed
-    name: str
-        name of job - specifies script with QSUB_%s % name
-    suffix: str
-        suffix for folder names - enables the execution of multiple subp jobs
-        for the same function
-    delay: int
-        delay between executions in seconds
-
-    Returns
-    -------
-    path_to_out: str
-        path to the output directory
-
-    """
-    if os.path.exists(subp_work_folder + "/%s_folder%s/" % (name, suffix)):
-        shutil.rmtree(subp_work_folder + "/%s_folder%s/" % (name, suffix))
-
-    path_to_script = path_to_scripts_default + "/QSUB_%s.py" % (name)
-    path_to_storage = subp_work_folder + "/%s_folder%s/storage/" % (name,
-                                                                    suffix)
-    path_to_out = subp_work_folder + "/%s_folder%s/out/" % (name, suffix)
-
-    if not os.path.exists(path_to_storage):
-        os.makedirs(path_to_storage)
-    if not os.path.exists(path_to_out):
-        os.makedirs(path_to_out)
-
-    processes = []
-    for ii in range(len(params)):
-        this_storage_path = path_to_storage + "job_%d.pkl" % ii
-        this_out_path = path_to_out + "job_%d.pkl" % ii
-
-        with open(this_storage_path, "wb") as f:
-            for param in params[ii]:
-                pkl.dump(param, f)
-
-        p = subprocess.Popen("%s %s %s %s" % (python_path, path_to_script,
-                                              this_storage_path, this_out_path),
-                             shell=True)
-        processes.append(p)
-        time.sleep(delay)
-
-    for p in processes:
-        p.wait()
-
-    return path_to_out
 
 
 def multi_helper_obj(args):
