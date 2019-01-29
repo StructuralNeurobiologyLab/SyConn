@@ -3,10 +3,10 @@
 ## Installation
 We recommend installing the latest Anaconda release. Then set up the python environment:
 ```
-conda create -n py36 python=3.6 anaconda
-source activate py36
+conda create -n pysy python=3.6 anaconda
+source activate pysy
 ```
-In order to use the GPU during inference cuda and cudNN are required, either download and install cuda 8.0 and cudnn5 or use conda (untested):
+In order to use the GPU during inference cuda and cudNN are required, either download and install cuda 8.0 and cudnn 5 or use conda (untested):
 ```
 conda install cudatoolkit=8.0 cudnn=5
 ```
@@ -14,9 +14,11 @@ Install all prerequisites and finally git clone and install syconn:
 ```
 conda install vigra -c conda-forge
 conda install mesa -c menpo
-conda install osmesa -c menposlack
+conda install osmesa -c menpo
 conda install freeglut
 conda install pyopengl
+conda install snappy
+conda install python-snappy
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 cd SyConn
 pip install -r requirements.txt
@@ -28,6 +30,7 @@ pip install -e .
 ```
 In order to use elektronn3 models, python>=3.6 is required (when installing elektronn3 checkout
  branch `phil`; this will be updated soon to work with the `master` branch).
+ By default, all required settings are applied in the SyConn setup.py.
 
 In the case that there are problems with snappy/python-snappy remove previous installations and
 install them via conda:

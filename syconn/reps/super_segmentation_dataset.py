@@ -21,9 +21,9 @@ try:
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
 from multiprocessing import cpu_count
-from . import segmentation  # TODO: del
-from ..handler.basics import load_pkl2obj, write_obj2pkl
-from ..reps.super_segmentation_helper import create_sso_skeleton
+from .segmentation import SegmentationDataset, SegmentationObject
+from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify
+from .super_segmentation_helper import create_sso_skeleton
 from ..proc.ssd_assembly import assemble_from_mergelist
 from ..mp import batchjob_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
@@ -232,18 +232,8 @@ class SuperSegmentationDataset(object):
 
     def get_segmentationdataset(self, obj_type):
         assert obj_type in self.version_dict
-        return segmentation.SegmentationDataset(obj_type,
-                                                version=self.version_dict[
-                                                    obj_type],
-                                                working_dir=self.working_dir)
-
-    def load_sv_graph(self):
-        if os.path.isfile(self.edgelist_path):
-            g = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
-            return g
-        else:
-            raise ValueError("Could not find graph data for SSV {}."
-                             "".format(self.id))
+        return SegmentationDataset(obj_type, version=self.version_dict[obj_type],
+                                   working_dir=self.working_dir)
 
     def apply_mergelist(self, sv_mapping):
         assemble_from_mergelist(self, sv_mapping)
@@ -306,11 +296,11 @@ class SuperSegmentationDataset(object):
         self.save_mapping_dict()
         self.save_id_changer()
 
-    def save_dataset_deep(self, extract_only=False, attr_keys=(), stride=1000,
+    def save_dataset_deep(self, extract_only=False, attr_keys=(), n_jobs=1000,
                           qsub_pe=None, qsub_queue=None, nb_cpus=None,
                           n_max_co_processes=None, new_mapping=True):
         save_dataset_deep(self, extract_only=extract_only,
-                          attr_keys=attr_keys, stride=stride,
+                          attr_keys=attr_keys, n_jobs=n_jobs,
                           qsub_pe=qsub_pe, qsub_queue=qsub_queue,
                           nb_cpus=nb_cpus, new_mapping=new_mapping,
                           n_max_co_processes=n_max_co_processes)
@@ -495,17 +485,15 @@ class SuperSegmentationDataset(object):
         self._id_changer = np.load(self.id_changer_path)
 
 
-def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
+def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
                       qsub_pe=None, qsub_queue=None, nb_cpus=None,
                       n_max_co_processes=None, new_mapping=True):
     ssd.save_dataset_shallow()
 
-    multi_params = []
-    for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-                         for i in range(0, len(ssd.ssv_ids), stride)]:
-        multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, extract_only, attr_keys,
-                             ssd._type, new_mapping])
+    multi_params = chunkify(ssd.ssv_ids, n_jobs)
+    multi_params = [(ssv_id_block, ssd.version, ssd.version_dict,
+                     ssd.working_dir, extract_only, attr_keys,
+                     ssd._type, new_mapping) for ssv_id_block in multi_params]
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(
@@ -803,13 +791,9 @@ def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
 def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
     def _load_sv_voxels_thread(args):
         sv_id = args[0]
-        sv = segmentation.SegmentationObject(sv_id,
-                                             obj_type="sv",
-                                             version=sso.version_dict[
-                                                 "sv"],
-                                             working_dir=sso.working_dir,
-                                             config=sso.config,
-                                             voxel_caching=False)
+        sv = SegmentationObject(sv_id, obj_type="sv", version=sso.version_dict["sv"],
+                                working_dir=sso.working_dir, config=sso.config,
+                                voxel_caching=False)
         if sv.voxels_exist:
             box = [np.array(sv.bounding_box[0] - sso.bounding_box[0],
                             dtype=np.int)]

@@ -144,7 +144,6 @@ if __name__ == '__main__':
     log.info('SyConn analysis of "{}" has finished. Setting up flask server for'
              ' inspection of cell reconstructions  via the KNOSSOS-SyConn'
              ' plugin.'.format(experiment_name))
-    fname_server = os.path.dirname(os.path.abspath(__file__)) + \
-                   '/../kplugin/server.py'
+    fname_server = os.path.dirname(os.path.abspath(__file__)) + '/../kplugin/server.py'
     os.system('python {} --working_dir={} --port=10002'.format(fname_server, example_wd))
 

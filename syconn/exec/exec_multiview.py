@@ -294,8 +294,7 @@ def run_create_neuron_ssd(prior_glia_removal=True):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir, version='0',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
-    ssd.save_dataset_shallow()
-    ssd.save_dataset_deep(qsub_pe="openmp", n_max_co_processes=200)
+    ssd.save_dataset_deep(qsub_pe="openmp", n_max_co_processes=global_params.NCORE_TOTAL)  # also executes 'ssd.save_dataset_shallow()'
     log.info('Finished SSD initialization. Starting cellular '
              'organelle mapping.')
 
