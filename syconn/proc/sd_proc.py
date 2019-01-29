@@ -68,7 +68,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
     # Running workers
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_dataset_analysis_thread,
-                                             multi_params, nb_cpus=nb_cpus)
+                                             multi_params, nb_cpus=n_max_co_processes)
 
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
@@ -237,7 +237,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     # Running workers - Writing mapping to SVs
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_mapping_to_sv_thread, multi_params,
-                                   nb_cpus=nb_cpus, debug=False)
+                                   nb_cpus=n_max_co_processes, debug=False)
     elif qu.batchjob_enabled():
         qu.QSUB_script(multi_params, "write_mapping_to_sv", pe=qsub_pe,
                        queue=qsub_queue, script_folder=None,

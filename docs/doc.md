@@ -6,11 +6,15 @@ We recommend installing the latest Anaconda release. Then set up the python envi
 conda create -n py36 python=3.6 anaconda
 source activate py36
 ```
+In order to use the GPU during inference cuda and cudNN are required, either download and install cuda 8.0 and cudnn5 or use conda (untested):
+```
+conda install cudatoolkit=8.0 cudnn=5
+```
 Install all prerequisites and finally git clone and install syconn:
 ```
 conda install vigra -c conda-forge
 conda install mesa -c menpo
-conda install osmesa -c menpo
+conda install osmesa -c menposlack
 conda install freeglut
 conda install pyopengl
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git

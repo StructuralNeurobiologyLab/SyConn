@@ -160,7 +160,7 @@ def _write_super_segmentation_dataset_thread(args):
     return attr_dict
 
 
-def aggregate_segmentation_object_mappings(ssd, obj_types,
+def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=None,
                                            stride=1000, qsub_pe=None,
                                            qsub_queue=None, nb_cpus=None):
     """
@@ -189,13 +189,12 @@ def aggregate_segmentation_object_mappings(ssd, obj_types,
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(
             _aggregate_segmentation_object_mappings_thread,
-            multi_params, nb_cpus=nb_cpus)
+            multi_params, nb_cpus=n_max_co_processes)
 
     elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "aggregate_segmentation_object_mappings",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None)
+        path_to_out = qu.QSUB_script(multi_params, "aggregate_segmentation_object_mappings",
+                                     pe=qsub_pe, queue=qsub_queue, script_folder=None,
+                                     n_max_co_processes=n_max_co_processes)
 
     else:
         raise Exception("QSUB not available")
@@ -238,7 +237,7 @@ def _aggregate_segmentation_object_mappings_thread(args):
 
 
 def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
-                            qsub_queue=None, nb_cpus=None):
+                            qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     """
     Requires prior execution of `aggregate_segmentation_object_mappings`.
 
@@ -263,13 +262,13 @@ def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_apply_mapping_decisions_thread,
-                                             multi_params, nb_cpus=nb_cpus)
+                                             multi_params, nb_cpus=n_max_co_processes)
 
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "apply_mapping_decisions",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None)
+                                     pe=qsub_pe, queue=qsub_queue, script_folder=None,
+                                     n_max_co_processes=n_max_co_processes)
 
     else:
         raise Exception("QSUB not available")

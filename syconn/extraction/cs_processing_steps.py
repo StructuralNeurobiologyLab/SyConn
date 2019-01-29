@@ -707,7 +707,7 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(syn_gen_via_cset_thread,
-                                       multi_params, nb_cpus=nb_cpus)
+                                       multi_params, nb_cpus=n_max_co_processes)
 
     elif qu.batchjob_enabled():
         _ = qu.QSUB_script(multi_params, "syn_gen_via_cset", pe=qsub_pe,
@@ -1330,7 +1330,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
             _collect_properties_from_ssv_partners_thread, multi_params,
-            nb_cpus=nb_cpus)
+            nb_cpus=n_max_co_processes)
     elif qu.batchjob_enabled():
         _ = qu.QSUB_script(
             multi_params, "collect_properties_from_ssv_partners", pe=qsub_pe,

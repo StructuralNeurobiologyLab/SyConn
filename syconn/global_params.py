@@ -63,7 +63,7 @@ sym_thresh = 0.225  # above will be assigned synaptic sign (-1, inhibitory) and 
 
 # --------- MESH PARAMETERS
 existing_cell_organelles = ['mi', 'sj', 'vc']
-MESH_DOWNSAMPLING = {"sv": (8, 8, 4), "sj": (2, 2, 1), "vc": (4, 4, 2),
+MESH_DOWNSAMPLING = {"sv": (4, 4, 2), "sj": (2, 2, 1), "vc": (4, 4, 2),
                      "mi": (8, 8, 4), "cs": (2, 2, 1), "conn": (2, 2, 1),
                      'syn_ssv': (2, 2, 1)}
 MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0,

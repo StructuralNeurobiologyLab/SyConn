@@ -17,6 +17,7 @@ from collections import defaultdict
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 knossosdataset._set_noprint(True)
+import os
 
 from ..reps import segmentation
 from ..mp import batchjob_utils as qu
@@ -28,13 +29,14 @@ from . import log_extraction
 
 def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
                        qsub_pe=None, qsub_queue=None):
+    os.makedirs(cset.path_head_folder, exist_ok=True)
     multi_params = []
     for chunk in cset.chunk_dict.values():
         multi_params.append([chunk, knossos_path, filename])
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_contact_site_detection_thread,
-                                             multi_params, debug=True)
+        results = sm.start_multiprocess_imap(_contact_site_detection_thread, multi_params,
+                                             debug=False, nb_cpus=n_max_co_processes)
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "contact_site_detection",
@@ -66,7 +68,7 @@ def _contact_site_detection_thread(args):
     data = kd.from_overlaycubes_to_matrix(size, offset, datatype=np.uint64).astype(np.uint32)
 
     contacts = detect_cs(data)
-
+    os.makedirs(chunk.folder, exist_ok=True)
     compression.save_to_h5py([contacts],
                              chunk.folder + filename +
                              ".h5", ["cs"])

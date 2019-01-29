@@ -27,19 +27,28 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='~/SyConn/example_cube/',
                         help='Working directory of SyConn')
+    parser.add_argument('--example_cube', type=str, default='2',
+                        help='Used toy data. Either "1" (400 x 400 x 600) or "2" ().')
     args = parser.parse_args()
     example_wd = os.path.expanduser(args.working_dir)
+    example_cube_id = os.path.expanduser(args.example_cube)
 
     # PREPARE TOY DATA
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
-    h5_dir = curr_dir + 'data/'
+    if example_cube_id == "1":
+        h5_dir = curr_dir + 'data1/'
+        kzip_p = curr_dir + '/example_cube1.k.zip'
+    elif example_cube_id == "2":
+        h5_dir = curr_dir + 'data2/'
+        kzip_p = curr_dir + '/example_cube2.k.zip'
+    else:
+        raise NotImplementedError('Please use valid example cube identifier ("1" or "2")!')
     if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
             or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
         raise ValueError('Example data could not be found at "{}".'.format(h5_dir))
 
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
 
-    kzip_p = curr_dir + '/example_cube_small.k.zip'
     bb = parse_movement_area_from_zip(kzip_p)
     offset = np.array([0, 0, 0])
     bd = bb[1] - bb[0]
@@ -48,7 +57,7 @@ if __name__ == '__main__':
 
     # PREPARE CONFIG
     os.makedirs(example_wd + '/glia/', exist_ok=True)  # currently this is were SyConn looks for the neuron rag # TODO refactor
-    shutil.copy(curr_dir + "/data/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
+    shutil.copy(h5_dir + "/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
     global_params.wd = example_wd
     if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
         py36path = subprocess.check_output('source deactivate; source activate py36;'
@@ -132,9 +141,9 @@ if __name__ == '__main__':
     log.info('Step 8/8 - Synapse analysis')
     exec_syns.run_syn_analysis()
 
-    log.info('SyConn analysis of "" has finished. Setting up flask server for'
+    log.info('SyConn analysis of "{}" has finished. Setting up flask server for'
              ' inspection of cell reconstructions  via the KNOSSOS-SyConn'
-             ' plugin.'.format(kd.experiment_name))
+             ' plugin.'.format(experiment_name))
     fname_server = os.path.dirname(os.path.abspath(__file__)) + \
                    '/../kplugin/server.py'
     os.system('python {} --working_dir={} --port=10002'.format(fname_server, example_wd))

@@ -92,6 +92,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
         prob_kd_path_dict = {co: getattr(global_params.config, 'kd_{}_path'.format(co))}
         # This creates a SegmentationDataset of type 'co'
         prob_thresh = global_params.config.entries["Probathresholds"][co]  # get probability threshold
+        # TODO: this currently uses extract_voxels_combined ->  switch to extract and then combine as with SV! see from_ids_to_objects
         oew.from_probabilities_to_objects(cd, co, membrane_kd_path=global_params.config.kd_seg_path,
                                           prob_kd_path_dict=prob_kd_path_dict, thresholds=[prob_thresh],
                                           workfolder=global_params.config.working_dir,
@@ -100,7 +101,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
         sd_co = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir)
         sd_proc.dataset_analysis(sd_co, qsub_pe="default", qsub_queue='all.q',
                                  compute_meshprops=True)
-        # About 0.2 h per object class  # TODO: optimization required
+        # About 0.2 h per object class  # TODO: optimization required, especially VC are slow due to additonal membrane checks -> investigate
         log.debug('Mapping objects {} to SVs.'.format(co))
         sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path, qsub_pe='default',
                                   qsub_queue='all.q')

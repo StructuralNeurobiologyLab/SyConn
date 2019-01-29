@@ -150,8 +150,8 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
              hdf5_name_membrane, fast_load, suffix, transform_func_kwargs])
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(transform_func,
-                                             multi_params, debug=debug)
+        results = sm.start_multiprocess_imap(transform_func, multi_params,
+                                             nb_cpus=n_max_co_processes, debug=debug)
 
         results_as_list = []
         for result in results:
@@ -328,7 +328,8 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_make_unique_labels_thread,
-                                         multi_params, debug=debug, nb_cpus=nb_cpus)
+                                         multi_params, debug=debug,
+                                             nb_cpus=n_max_co_processes)
 
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
@@ -414,7 +415,8 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_make_stitch_list_thread,
-                                         multi_params, debug=debug, nb_cpus=nb_cpus)
+                                         multi_params, debug=debug,
+                                             nb_cpus=n_max_co_processes,)
 
         stitch_list = {}
         for hdf5_name in hdf5names:
@@ -638,7 +640,8 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_apply_merge_list_thread,
-                                         multi_params, debug=debug, nb_cpus=nb_cpus)
+                                         multi_params, debug=debug,
+                                             nb_cpus=n_max_co_processes,)
 
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
@@ -761,7 +764,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                              suffix, path_blocks[i_job], n_folders_fs, transform_func, transform_func_kwargs])
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_extract_voxels_thread, multi_params,
-                                             nb_cpus=nb_cpus, verbose=debug, debug=debug)
+                                             nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_voxels",
@@ -962,7 +965,7 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
 
         if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
             results = sm.start_multiprocess_imap(_combine_voxels_thread,
-                                            multi_params, nb_cpus=nb_cpus)
+                                            multi_params, nb_cpus=n_max_co_processes,)
 
         elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
@@ -1086,9 +1089,9 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
             if os.path.exists(dataset_path):
                 shutil.rmtree(dataset_path)
 
-            # TODO: can probably be removed
-            # for p in voxel_rel_paths_2stage:
-            #     os.makedirs(dataset_path + p, exist_ok=True)
+            # This is required due to coincidental folder creation at the same time
+            for p in voxel_rel_paths_2stage:
+                os.makedirs(dataset_path + p, exist_ok=True)
 
     multi_params = []
     if n_chunk_jobs > len(chunk_list):
@@ -1103,7 +1106,7 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_extract_voxels_combined_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+                                        multi_params, nb_cpus=n_max_co_processes)
 
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params, "extract_voxels_combined",

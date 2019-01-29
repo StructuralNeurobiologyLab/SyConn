@@ -182,7 +182,8 @@ class main_class(QtGui.QDialog):
     """
     KNOSSOS plugin class for the SyConn KNOSSOS viewer.
     """
-    def __init__(self, parent=KnossosModule.knossos_global_mainwindow):
+    def __init__(self, parent=KnossosModule.knossos_global_mainwindow,
+                                         host="0.0.0.0", port=10001):
         #Qt.QApplication.processEvents()
         super(main_class, self).__init__(parent, Qt.Qt.WA_DeleteOnClose)
         try:
@@ -192,7 +193,9 @@ class main_class(QtGui.QDialog):
             # Allow running from __main__ context
             pass
         #self.start_logging()
-
+        self.syconn_gate = None
+        self.host = host
+        self.port = port
         self.ssv_selected1 = 0
         self.obj_tree_ids = set()
         self.obj_id_offs = 2000000000
@@ -204,10 +207,9 @@ class main_class(QtGui.QDialog):
         self.timer.timeout.connect(self.exploration_mode_callback_check)
         self.timer.start(1000)
 
-
     def init_syconn(self):
         # move to config file
-        syconn_gate_server = 'http://localhost:10001'
+        syconn_gate_server = 'http://{}:{}'.format(self.host, self.port)
         self.syconn_gate = SyConnGateInteraction(syconn_gate_server)
 
         return
@@ -623,4 +625,4 @@ def lz4stringtoarr(string, dtype=np.float32, shape=None):
 
 
 if __name__=='__main__':
-    A = main_class()
+    A = main_class(port=10002)

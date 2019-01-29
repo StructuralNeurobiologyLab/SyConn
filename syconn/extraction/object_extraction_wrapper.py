@@ -273,7 +273,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     step_names.append("apply merge list")
 
     # --------------------------------------------------------------------------
-
+    # TODO: Remove map-reduce procedure or make it optional with kwarg
     time_start = time.time()
     oes.extract_voxels_combined(cset, filename, hdf5names, n_folders_fs=n_folders_fs,
                        chunk_list=chunk_list, suffix=suffix, workfolder=workfolder,
@@ -281,18 +281,23 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                        qsub_queue=qsub_queue, object_names=object_names,
                        n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     all_times.append(time.time() - time_start)
+    # oes.extract_voxels(cset, filename, hdf5names,
+    #                    chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
+    #                    qsub_queue=qsub_queue, workfolder=global_params.config.working_dir,
+    #                    n_folders_fs=n_folders_fs,
+    #                    n_max_co_processes=n_max_co_processes)
     step_names.append("voxel extraction")
-    # TODO: Remove map-reduce procedure or make it optional with kwarg
+
     # # --------------------------------------------------------------------------
     #
     # time_start = time.time()
-    # oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
-    #                    hdf5names, n_folders_fs=n_folders_fs, qsub_pe=qsub_pe,
-    #                    qsub_queue=qsub_queue,
-    #                    n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
+    # oes.combine_voxels(global_params.config.working_dir,
+    #                    hdf5names, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+    #                    n_folders_fs=n_folders_fs,
+    #                    n_max_co_processes=n_max_co_processes)
+    #
     # all_times.append(time.time() - time_start)
     # step_names.append("combine voxels")
-    # log_extraction.info("\nTime needed for combining voxels: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
     log_extraction.debug("Time overview:")
