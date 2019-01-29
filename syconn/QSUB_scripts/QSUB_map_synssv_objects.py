@@ -23,7 +23,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = ssd_proc._map_synaptic_conn_objects_thread(args)
+out = ssd_proc.map_synssv_objects_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

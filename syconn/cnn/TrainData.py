@@ -11,15 +11,20 @@ matplotlib.use("Agg", warn=False, force=True)
 from elektronn2.data.traindata import Data
 import numpy as np
 import warnings
-from syconn.config.global_params import wd
 from syconn.handler.basics import load_pkl2obj, temp_seed
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
-from syconn.mp.mp_utils import start_multiprocess_obj
+from syconn import global_params
 import os
-from torch.utils import data
-from elektronn3.data import transforms
+try:
+    from torch.utils.data import Dataset
+    from elektronn3.data.transforms import Identity
+    elektronn3_avail = True
+except ImportError as e:
+    elektronn3_avail = False
+    Dataset = None
+    Identity = None
 from typing import Callable
 import h5py
 from scipy import spatial
@@ -29,222 +34,228 @@ np.random.seed(0)
 
 
 # -------------------------------------- elektronn3 ----------------------------
+if elektronn3_avail:
+    class MultiviewDataSpines(Dataset):
+        """
+        Multiview spine data loader.
+        """
+        def __init__(
+                self,
+                inp_path=None,
+                target_path=None,
+                train=True,
+                inp_key='raw', target_key='label',
+                transform: Callable = Identity()
+        ):
+            super().__init__()
+            cube_id = "train" if train else "valid"
+            if inp_path is None or target_path is None:
+                base_dir = os.path.expanduser("~") + "/spine_gt_multiview/"
+                inp_path = os.path.expanduser('{}raw_{}_v2.h5'.format(base_dir, cube_id))
+                target_path = os.path.expanduser('{}label_{}_v2.h5'.format(base_dir, cube_id))
+            self.inp_file = h5py.File(os.path.expanduser(inp_path), 'r')
+            self.target_file = h5py.File(os.path.expanduser(target_path), 'r')
+            self.inp = self.inp_file[inp_key][()]
+            self.inp = self.inp[:, :4].astype(np.float32) / 255.
+            self.target = self.target_file[target_key][()].astype(np.int64)
+            self.target = self.target[:, 0]
+            self.close_files()
+            self.transform = transform
+            print("Dataset ({}): {}\t{}".format(cube_id, self.inp.shape,
+                                                np.unique(self.target,
+                                                return_counts=True)))
 
-class MultiviewDataSpines(data.Dataset):
-    """
-    Multiview spine data loader.
-    """
+        def __getitem__(self, index):
+            inp = self.inp[index]
+            target = self.target[index]
+            inp, target = self.transform(inp, target)
+            return inp, target
 
-    def __init__(
-            self,
-            inp_path=None,
-            target_path=None,
-            train=True,
-            inp_key='raw', target_key='label',
-            transform: Callable = transforms.Identity()
-    ):
-        super().__init__()
-        cube_id = "train" if train else "valid"
-        if inp_path is None or target_path is None:
-            base_dir = os.path.expanduser("~") + "/spine_gt_multiview/"
-            inp_path = os.path.expanduser(f'{base_dir}raw_{cube_id}_v2.h5')
-            target_path = os.path.expanduser(f'{base_dir}label_{cube_id}_v2.h5')
-        self.inp_file = h5py.File(os.path.expanduser(inp_path), 'r')
-        self.target_file = h5py.File(os.path.expanduser(target_path), 'r')
-        self.inp = self.inp_file[inp_key].value
-        self.inp = self.inp[:, :4].astype(np.float32) / 255.
-        self.target = self.target_file[target_key].value.astype(np.int64)
-        self.target = self.target[:, 0]
-        self.close_files()
-        self.transform = transform
-        print("Dataset ({}): {}\t{}".format(cube_id, self.inp.shape,
-                                            np.unique(self.target,
-                                                      return_counts=True)))
+        def __len__(self):
+            return self.target.shape[0]
 
-    def __getitem__(self, index):
-        inp = self.inp[index]
-        target = self.target[index]
-        inp, target = self.transform(inp, target)
-        return inp, target
-
-    def __len__(self):
-        return self.target.shape[0]
-
-    def close_files(self):
-        self.inp_file.close()
-        self.target_file.close()
+        def close_files(self):
+            self.inp_file.close()
+            self.target_file.close()
 
 
-class MultiviewData_TNet_online(data.Dataset):
-    """
-    Multiview triplet net data loader.
-    """
+    class MultiviewData_TNet_online(Dataset):
+        """
+        Multiview triplet net data loader.
+        """
 
-    def __init__(
-            self, working_dir='/wholebrain/scratch/areaxfs3/',
-            train=True, epoch_size=40000, allow_close_neigh=0,
-            transform: Callable = transforms.Identity(),
-    ):
-        super().__init__()
-        self.transform = transform
-        self.epoch_size = epoch_size
-        self.train = train
-        if 2 > allow_close_neigh > 0:
-            raise ValueError('allow_close_neigh must be at least 2.')
-        self.allow_close_neigh = allow_close_neigh
-        self.inp_locs = None
-        # load GliaView Data and store all views in memory
-        # inefficient because GV has to be loaded twice (train and valid)
-        print("Loaded all data. Concatenating now.")
-        # use these classes to load label and splitting dicts
-        AV = AxonViews(None, None, raw_only=False, nb_views=2,
-                       naive_norm=False, load_data=False)
+        def __init__(
+                self, working_dir='/wholebrain/scratch/areaxfs3/',
+                train=True, epoch_size=40000, allow_close_neigh=0,
+                transform: Callable = Identity(),
+        ):
+            super().__init__()
+            self.transform = transform
+            self.epoch_size = epoch_size
+            self.train = train
+            if 2 > allow_close_neigh > 0:
+                raise ValueError('allow_close_neigh must be at least 2.')
+            self.allow_close_neigh = allow_close_neigh
+            self.inp_locs = None
+            # load GliaView Data and store all views in memory
+            # inefficient because GV has to be loaded twice (train and valid)
+            print("Loaded all data. Concatenating now.")
+            # use these classes to load label and splitting dicts
+            AV = AxonViews(None, None, raw_only=False, nb_views=2,
+                           naive_norm=False, load_data=False)
 
-        CTV = CelltypeViews(load_data=False, naive_norm=False)
-        # now link actual data
-        self.ssd = SuperSegmentationDataset(working_dir, version='tnetgt')
+            CTV = CelltypeViews(load_data=False, naive_norm=False)
+            # now link actual data
+            self.ssd = SuperSegmentationDataset(working_dir, version='tnetgt')
 
-        if train:
-            self.inp = [self.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["train"]] + \
-                       [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["train"]]
-            self._inp_ssv_ids = self.inp.copy()
-            if self.allow_close_neigh:
-                self.inp_locs = []
-                for ssv in self.inp:
-                    ssv.load_attr_dict()
-                    self.inp_locs.append(np.concatenate(ssv.sample_locations(verbose=True)))
-        else:
-            self.inp = [self.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["valid"]] + \
-                       [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["valid"]]
-            self._inp_ssv_ids = self.inp.copy()
-            if self.allow_close_neigh:
-                self.inp_locs = []
-                for ssv in self.inp:
-                    ssv.load_attr_dict()
-                    self.inp_locs.append(np.concatenate(ssv.sample_locations(verbose=True)))
-            self.inp = [ssv.load_views(view_key="raw2") for ssv in self.inp]
-        ixs = np.arange(len(self.inp))
-        np.random.shuffle(ixs)
-        self.inp = np.array(self.inp)[ixs]
-        if self.allow_close_neigh:
-            self.inp_locs = np.array(self.inp_locs)[ixs]
-        print("Dataset: {}\t{}".format("train" if train else "valid",
-                                       self.inp.shape))
-        self._cache_use = 0
-        self._cache_use_dist = 0
-        self._max_cache_usages = 200
-        self._max_cache_usages_dist = 200
-        self._cache = None
-        self._cache_dist = None
-        self._cached_ssv_ix = None
-
-    def __getitem__(self, index):
-        start = time.time()
-        summary = ""
-        if self._cache is None or self._cache_use > self._max_cache_usages:
-            # use random seed locally; overwrite index -> always draw randomly
-            with temp_seed(None):
-                index = np.random.randint(0, len(self.inp))
-            self._cache_use = 0
-            # similar pair views
-            if self.train:
-                ssv = self.inp[index]
-                ssv.disable_locking = True
-                views = ssv.load_views(view_key="raw2")
+            if train:
+                self.inp = [self.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["train"]] + \
+                           [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["train"]]
+                self._inp_ssv_ids = self.inp.copy()
+                if self.allow_close_neigh:
+                    self.inp_locs = []
+                    for ssv in self.inp:
+                        ssv.load_attr_dict()
+                        self.inp_locs.append(np.concatenate(ssv.sample_locations(verbose=True)))
             else:
-                views = self.inp[index]
-            # 50% more because of augmentations
-            self._max_cache_usages = np.max([200, int(len(views) * 1.5)])
-            # get random different SSV
-            self._cache = views
-            self._cached_ssv_ix = index
+                self.inp = [self.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["valid"]] + \
+                           [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["valid"]]
+                self._inp_ssv_ids = self.inp.copy()
+                if self.allow_close_neigh:
+                    self.inp_locs = []
+                    for ssv in self.inp:
+                        ssv.load_attr_dict()
+                        self.inp_locs.append(np.concatenate(ssv.sample_locations(verbose=True)))
+                self.inp = [ssv.load_views(view_key="raw2") for ssv in self.inp]
+            ixs = np.arange(len(self.inp))
+            np.random.shuffle(ixs)
+            self.inp = np.array(self.inp)[ixs]
             if self.allow_close_neigh:
-                self._cached_loc_tree = spatial.cKDTree(self.inp_locs[index])
-        else:
-            views = self._cache
-            self._cache_use += 1
-        dtime_similar = time.time() - start
-        if dtime_similar > 10:
-            summary += "Found similar views after {:.1}s.".format(dtime_similar)
-        start = time.time()
-        if self._cache_dist is None or self._cache_use_dist > self._max_cache_usages_dist:
-            while True:
+                self.inp_locs = np.array(self.inp_locs)[ixs]
+            print("Dataset: {}\t{}".format("train" if train else "valid",
+                                           self.inp.shape))
+            self._cache_use = 0
+            self._cache_use_dist = 0
+            self._max_cache_usages = 200
+            self._max_cache_usages_dist = 200
+            self._cache = None
+            self._cache_dist = None
+            self._cached_ssv_ix = None
+
+        def __getitem__(self, index):
+            start = time.time()
+            summary = ""
+            if self._cache is None or self._cache_use > self._max_cache_usages:
                 # use random seed locally; overwrite index -> always draw randomly
                 with temp_seed(None):
-                    dist_ix = np.random.randint(0, len(self.inp))
-                if dist_ix != self._cached_ssv_ix:
-                    break
-            if self.train:
-                ssv = self.inp[dist_ix]
-                ssv.disable_locking = True
-                views_dist = ssv.load_views(view_key="raw2")
+                    index = np.random.randint(0, len(self.inp))
+                self._cache_use = 0
+                # similar pair views
+                if self.train:
+                    ssv = self.inp[index]
+                    ssv.disable_locking = True
+                    views = ssv.load_views(view_key="raw2")
+                else:
+                    views = self.inp[index]
+                # 50% more because of augmentations
+                self._max_cache_usages = np.max([200, int(len(views) * 1.5)])
+                # get random different SSV
+                self._cache = views
+                self._cached_ssv_ix = index
+                if self.allow_close_neigh:
+                    self._cached_loc_tree = spatial.cKDTree(self.inp_locs[index])
             else:
-                views_dist = self.inp[dist_ix]
-            self._cache_dist = views_dist
-            # fact 2 because only drawing 1 view, and additional 50% because of augmentations
-            self._max_cache_usages_dist = np.max([200, len(views_dist) * 3])
-        else:
-            views_dist = self._cache_dist
-            self._cache_use_dist += 1
-        dtime_distant = time.time() - start
-        if dtime_distant > 10 or dtime_similar > 10:
-            summary += "Found distant views after {:.1}s.".format(dtime_distant)
-        start = time.time()
-        # similar views are from same, randomly picked location
-        mview_ix = np.random.randint(0, len(views))
-        views_sim = views[mview_ix]
-        views_sim = self.transform(views_sim, target=None)[0]
-        views_sim = views_sim.swapaxes(1, 0)
-        if self.allow_close_neigh and np.random.rand(1)[0] > 0.25:  # only use neighbors as similar views with 0.25 chance
-            dists, close_neigh_ixs = self._cached_loc_tree.query(self.inp_locs[self._cached_ssv_ix][mview_ix], k=self.allow_close_neigh)  # itself and two others
-            neigh_ix = close_neigh_ixs[np.random.randint(1, self.allow_close_neigh)]  # only use neighbors not itself
-            views_sim[1] = views[neigh_ix, :, np.random.randint(0, 2)]  # chose any of the two views
+                views = self._cache
+                self._cache_use += 1
+            dtime_similar = time.time() - start
+            if dtime_similar > 10:
+                summary += "Found similar views after {:.1}s.".format(dtime_similar)
+            start = time.time()
+            if self._cache_dist is None or self._cache_use_dist > self._max_cache_usages_dist:
+                while True:
+                    # use random seed locally; overwrite index -> always draw randomly
+                    with temp_seed(None):
+                        dist_ix = np.random.randint(0, len(self.inp))
+                    if dist_ix != self._cached_ssv_ix:
+                        break
+                if self.train:
+                    ssv = self.inp[dist_ix]
+                    ssv.disable_locking = True
+                    views_dist = ssv.load_views(view_key="raw2")
+                else:
+                    views_dist = self.inp[dist_ix]
+                self._cache_dist = views_dist
+                # fact 2 because only drawing 1 view, and additional 50% because of augmentations
+                self._max_cache_usages_dist = np.max([200, len(views_dist) * 3])
+            else:
+                views_dist = self._cache_dist
+                self._cache_use_dist += 1
+            dtime_distant = time.time() - start
+            if dtime_distant > 10 or dtime_similar > 10:
+                summary += "Found distant views after {:.1}s.".format(dtime_distant)
+            start = time.time()
+            # similar views are from same, randomly picked location
+            mview_ix = np.random.randint(0, len(views))
+            views_sim = views[mview_ix]
+            views_sim = self.transform(views_sim, target=None)[0]
+            views_sim = views_sim.swapaxes(1, 0)
+            if self.allow_close_neigh and np.random.rand(1)[0] > 0.25:  # only use neighbors as similar views with 0.25 chance
+                dists, close_neigh_ixs = self._cached_loc_tree.query(self.inp_locs[self._cached_ssv_ix][mview_ix], k=self.allow_close_neigh)  # itself and two others
+                neigh_ix = close_neigh_ixs[np.random.randint(1, self.allow_close_neigh)]  # only use neighbors not itself
+                views_sim[1] = views[neigh_ix, :, np.random.randint(0, 2)]  # chose any of the two views
 
-        # single unsimilar view is from different SSV and randomly picked location
-        mview_ix = np.random.randint(0, len(views_dist))
-        # choose random view locations and random view (out of the two) and add the two axes back to the shape
-        view_dist = views_dist[mview_ix][None, :, np.random.randint(0, 2)]
-        view_dist = self.transform(view_dist, target=None)[0]
-        dtime_transf = time.time() - start
-        if dtime_distant > 10 or dtime_similar > 10 or dtime_transf > 10:
-            summary += "Transformation finished after {:.1}s.".format(dtime_transf)
-            print(summary)
-        return naive_view_normalization_new(np.concatenate([views_sim, view_dist]))
+            # single unsimilar view is from different SSV and randomly picked location
+            mview_ix = np.random.randint(0, len(views_dist))
+            # choose random view locations and random view (out of the two) and add the two axes back to the shape
+            view_dist = views_dist[mview_ix][None, :, np.random.randint(0, 2)]
+            view_dist = self.transform(view_dist, target=None)[0]
+            dtime_transf = time.time() - start
+            if dtime_distant > 10 or dtime_similar > 10 or dtime_transf > 10:
+                summary += "Transformation finished after {:.1}s.".format(dtime_transf)
+                print(summary)
+            return naive_view_normalization_new(np.concatenate([views_sim, view_dist]))
 
-    def __len__(self):
-        if self.train:
-            return self.epoch_size
-        else:
-            return 1000
+        def __len__(self):
+            if self.train:
+                return self.epoch_size
+            else:
+                return 1000
 
-    def close_files(self):
-        return
+        def close_files(self):
+            return
 
 
 # -------------------------------------- ELEKTRONN2 ----------------------------
 class MultiViewData(Data):
     def __init__(self, working_dir, gt_type, nb_cpus=20,
                  label_dict=None, view_kwargs=None, naive_norm=True,
-                 load_data=True):
+                 load_data=True, train_fraction=None):
         if view_kwargs is None:
             view_kwargs = dict(raw_only=False, cache_default_views=True,
                                nb_cpus=nb_cpus, ignore_missing=True,
                                force_reload=False)
-        self.gt_dir = working_dir + "/ssv_%s/" % (gt_type)
+        self.gt_dir = working_dir + "/ssv_%s/" % gt_type
         if label_dict is None:
             self.label_dict = load_pkl2obj(self.gt_dir +
                                            "%s_labels.pkl" % gt_type)
         if not os.path.isfile(self.gt_dir + "%s_splitting.pkl" % gt_type):
-            print("Splitting file not found. Splitting data accoring to 85"
-                  " (train) - 15 (valid).")
-            ixs = np.arange(len(self.label_dict))
-            np.random.shuffle(ixs)
+            print("Splitting file not found. Splitting data accoring to {:.2f}"
+                  " (train) - {:.2f} (valid).".format(train_fraction, 1 - train_fraction))
+            if train_fraction is None:
+                train_fraction = 0.85
+            with temp_seed(0):
+                ixs = np.arange(len(self.label_dict))
+                np.random.shuffle(ixs)
             ssv_ids = list(self.label_dict.keys())
-            split_ix = int(len(ixs) * 0.85)
+            split_ix = int(len(ixs) * train_fraction)
             splits = (ssv_ids[:split_ix], ssv_ids[split_ix:])
             self.splitting_dict = {"train": splits[0], "valid": splits[1],
                                    "test": []}
+            print('Validation set: {}\t{}'.format(self.splitting_dict['valid'],
+                                              [self.label_dict[ix] for ix in self.splitting_dict['valid']]))
         else:
+            if train_fraction is not None:
+                raise ValueError('Value fraction can only be set if splitting dict is not available.')
             self.splitting_dict = load_pkl2obj(self.gt_dir +
                                                "%s_splitting.pkl" % gt_type)
         self.ssd = SuperSegmentationDataset(working_dir, version=gt_type)
@@ -255,7 +266,7 @@ class MultiViewData(Data):
             self.train_l = np.zeros((1, 1))
             self.valid_d = np.zeros((1, 1))
             self.valid_l = np.zeros((1, 1))
-            self.example_shape = self.train_d[0].shape
+            self.example_shape = self.train_d[:1].shape
             super(MultiViewData, self).__init__()
             return
 
@@ -303,10 +314,12 @@ class MultiViewData(Data):
 
 
 class AxonViews(MultiViewData):
-    def __init__(self, inp_node, out_node, gt_type="axgt", working_dir=wd,
+    def __init__(self, inp_node, out_node, gt_type="axgt", working_dir=None,
                  nb_views=2, reduce_context=0, channels_to_load=(0, 1, 2, 3),
-                 reduce_context_fact=1, binary_views=False, raw_only=False, nb_cpus=20,
-                 **kwargs):
+                 reduce_context_fact=1, binary_views=False, raw_only=False,
+                 nb_cpus=20, **kwargs):
+        if working_dir is None:
+            working_dir = global_params.config.working_dir
         super(AxonViews, self).__init__(working_dir, gt_type,
                                         nb_cpus=nb_cpus, **kwargs)
         print("Initialized AxonViews:", self.__repr__())
@@ -345,44 +358,182 @@ class AxonViews(MultiViewData):
 
 
 class CelltypeViews(MultiViewData):
-    def __init__(self, raw_only=True, nb_views=2,
+    def __init__(self, inp_node, out_node, raw_only=False, nb_views=20,
                  reduce_context=0, binary_views=False, reduce_context_fact=1,
-                 naive_norm=True, load_data=False):
+                 load_data=False, nb_cpus=1):
+        # TODO: current cache size is not related to max_cache_uses nor batch_size
+        self.view_key = "raw{}".format(2)
         self.nb_views = nb_views
+        self.nb_cpus = nb_cpus
         self.raw_only = raw_only
         self.reduce_context = reduce_context
+        self.max_nb_cache_uses = 2000
+        self.current_cache_uses = 0
+        self.view_cache = {'train': None, 'valid': None, 'test': None}
+        self.label_cache = {'train': None, 'valid': None, 'test': None}
         self.reduce_context_fact = reduce_context_fact
         self.binary_views = binary_views
-        print("Initializing GliaViews:", self.__dict__)
-        super().__init__("/wholebrain/scratch/areaxfs3/", "ctgt",
-                            view_kwargs=dict(view_key="raw{}".format(2)),
-                            naive_norm=naive_norm, load_data=load_data)
+        self.example_shape = (nb_views, 4, 2, 128, 256)
+        print("Initializing CelltypeViews:", self.__dict__)
+        super().__init__(global_params.config.working_dir, "ctgt", train_fraction=0.95,
+                         naive_norm=False, load_data=load_data)
+        ssv_splits = self.splitting_dict
+        self.train_d = np.array(ssv_splits["train"])
+        self.valid_d = np.array(ssv_splits["valid"])
+        self.test_d = np.array(ssv_splits["test"])
+        ssv_gt_dict = self.label_dict
+        self.train_l = np.array([ssv_gt_dict[ix] for ix in self.train_d], np.int16)[:, None]
+        self.test_l = np.array([ssv_gt_dict[ix] for ix in self.test_d], np.int16)[:, None]
+        self.valid_l = np.array([ssv_gt_dict[ix] for ix in self.valid_d], np.int16)[:, None]
+        self.train_d = self.train_d[:, None]
+        self.valid_d = self.valid_d[:, None]
+        self.test_d = self.test_d[:, None]
+        super(MultiViewData, self).__init__()
 
-    def getbatch(self, batch_size, source='train'):
+    def getbatch_alternative(self, batch_size, source='train'):
+        """
+        Preliminary tests showed inferior performance of models trained with sampling
+        batches with this method compared to "getbatch" below. Might be due to less
+        stochasticity (bigger cache)
+
+        Parameters
+        ----------
+        batch_size :
+        source :
+
+        Returns
+        -------
+
+        """
+        self._reseed()
         if source == 'valid':
             nb = len(self.valid_l)
             ixs = np.arange(nb)
             np.random.shuffle(ixs)
             self.valid_d = self.valid_d[ixs]
             self.valid_l = self.valid_l[ixs]
-        d, l = super().getbatch(batch_size, source)
-        view_shuffle = np.arange(0, d.shape[2])
-        np.random.shuffle(view_shuffle)
+        # NOTE: also performs 'naive_view_normalization'
+        if self.view_cache[source] is None or self.current_cache_uses == self.max_nb_cache_uses:
+            sample_fac = np.max([int(self.nb_views / 20), 1])  # draw more ssv if number of views is high
+            nb_ssv = 12 * sample_fac  # 1 for each class
+            sample_ixs = []
+            l = []
+            labels2draw = np.arange(4)
+            class_sample_weight = np.array([2, 2, 1, 1])
+            np.random.shuffle(labels2draw)  # change order
+            for i in labels2draw:
+                curr_nb_samples = nb_ssv // 4 * class_sample_weight[i]  # sample more EA and MSN
+                try:
+                    if source == "train":
+                        sample_ixs.append(np.random.choice(self.train_d[self.train_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    elif source == "valid":
+                        sample_ixs.append(np.random.choice(self.valid_d[self.valid_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    elif source == "test":
+                        sample_ixs.append(np.random.choice(self.test_d[self.test_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    else:
+                        raise NotImplementedError
+                except ValueError:  # requested class does not exist in current dataset
+                    pass
+            ssos = []
+            sample_ixs = np.concatenate(sample_ixs)
+            l = np.concatenate(l)
+            for ix in sample_ixs:
+                sso = self.ssd.get_super_segmentation_object(ix)
+                sso.nb_cpus = self.nb_cpus
+                ssos.append(sso)
+            self.view_cache[source] = [sso.load_views(view_key="raw{}".format(2)) for sso in ssos]
+            self.label_cache[source] = l
+            # draw big cache batch from current SSOs from which training batches are drawn
+            self.view_cache[source], self.label_cache[source] = transform_celltype_data_views(
+                self.view_cache[source], self.label_cache[source], 2000, self.nb_views, norm_func=naive_view_normalization_new)
+            self.current_cache_uses = 0
+        ixs = np.arange(len(self.view_cache[source]))
+        with temp_seed(None):
+            np.random.shuffle(ixs)
+        ixs = ixs[:batch_size]
+        d, l = self.view_cache[source][ixs], self.label_cache[source][ixs]
         if self.reduce_context > 0:
             d = d[:, :, :, (self.reduce_context/2):(-self.reduce_context/2),
                 self.reduce_context:-self.reduce_context]
         if self.reduce_context_fact > 1:
             d = d[:, :, :, ::self.reduce_context_fact, ::self.reduce_context_fact]
-        d = d[:, :, view_shuffle]
-        flipx, flipy = np.random.randint(0, 2, 2)
-        if flipx:
-            d = d[..., ::-1, :]
-        if flipy:
-            d = d[..., ::-1]
         if self.binary_views:
             d[d < 1.0] = 0
-        if self.raw_only and d.shape[1] > 1:
-            d = d[:, :1]
+        self.current_cache_uses += 1
+        if self.raw_only:
+            return d[:, :1], l
+        return tuple([d, l])
+
+    def getbatch(self, batch_size, source='train'):
+        self._reseed()
+        if source == 'valid':
+            nb = len(self.valid_l)
+            ixs = np.arange(nb)
+            np.random.shuffle(ixs)
+            self.valid_d = self.valid_d[ixs]
+            self.valid_l = self.valid_l[ixs]
+        # NOTE: also performs 'naive_view_normalization'
+        if self.view_cache[source] is None or self.current_cache_uses == self.max_nb_cache_uses:
+            sample_fac = np.max([int(self.nb_views / 20), 1])  # draw more ssv if number of views is high
+            nb_ssv = 12 * sample_fac  # 1 for each class
+            sample_ixs = []
+            l = []
+            labels2draw = np.arange(4)
+            class_sample_weight = np.array([2, 2, 1, 1])
+            np.random.shuffle(labels2draw)  # change order
+            for i in labels2draw:
+                curr_nb_samples = nb_ssv // 4 * class_sample_weight[i]  # sample more EA and MSN
+                try:
+                    if source == "train":
+                        sample_ixs.append(np.random.choice(self.train_d[self.train_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    elif source == "valid":
+                        sample_ixs.append(np.random.choice(self.valid_d[self.valid_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    elif source == "test":
+                        sample_ixs.append(np.random.choice(self.test_d[self.test_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    else:
+                        raise NotImplementedError
+                except ValueError:  # requested class does not exist in current dataset
+                    pass
+            ssos = []
+            sample_ixs = np.concatenate(sample_ixs)
+            l = np.concatenate(l)
+            for ix in sample_ixs:
+                sso = self.ssd.get_super_segmentation_object(ix)
+                sso.nb_cpus = self.nb_cpus
+                ssos.append(sso)
+            self.view_cache[source] = [sso.load_views(view_key="raw{}".format(2)) for sso in ssos]
+            self.label_cache[source] = l
+            self.current_cache_uses = 0
+        ixs = np.arange(len(self.view_cache[source]))
+        with temp_seed(None):
+            np.random.shuffle(ixs)
+        self.view_cache[source] = [self.view_cache[source][ix] for ix in ixs]
+        self.label_cache[source] = self.label_cache[source][ixs]
+        d, l = transform_celltype_data_views(self.view_cache[source], self.label_cache[source],
+                                             batch_size, self.nb_views,
+                                             norm_func=naive_view_normalization_new)
+        if self.reduce_context > 0:
+            d = d[:, :, :, (self.reduce_context/2):(-self.reduce_context/2),
+                self.reduce_context:-self.reduce_context]
+        if self.reduce_context_fact > 1:
+            d = d[:, :, :, ::self.reduce_context_fact, ::self.reduce_context_fact]
+        if self.binary_views:
+            d[d < 1.0] = 0
+        self.current_cache_uses += 1
+        if self.raw_only:
+            return d[:, :1], l
         return tuple([d, l])
 
 
@@ -450,121 +601,66 @@ class GliaViews(Data):
         return tuple([d, l])
 
 
-class SSVCelltype(Data):
-    """Uses N-views to represent SSVs and perform supervised classification
-    of cell types.
-    TODO: Switch to new GT at ssv_ctgt
-    """
-    def __init__(self, input_node, target_node, nb_views=20, nb_cpus=1,
-                 raw_only=False, reduce_context=0,
-                 reduce_context_fact=1, binary_views=False):
-        ssv_splits = load_pkl2obj("/wholebrain/scratch/pschuber/NeuroPatch/gt/ssv_ctgt_splitted_ids_cleaned.pkl")
-        ssv_gt_dict = load_pkl2obj("/wholebrain/scratch/pschuber/NeuroPatch/gt/ssv_ctgt.pkl")
-        self.ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/", version="6")
-        # # This should be done at some point, but currently new views are
-        old_ssv_ids = ssv_gt_dict.keys()
-        old_ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs/", version="6")
-        self.ssds = SuperSegmentationDataset(working_dir="/wholebrain/scratch/areaxfs3/")
-        old_sv_ids = [old_ssds.get_super_segmentation_object(ssv_id).sv_ids for ssv_id in old_ssv_ids]
-        maj_remap_id = [np.unique([self.ssds.mapping_dict_reversed[sv_id] for sv_id in sv_ids if sv_id in self.ssds.mapping_dict_reversed], return_counts=True) for sv_ids in old_sv_ids]
-        old2new_ssvid = {}
-        for ii, el in enumerate(maj_remap_id):
-            if len(el[1]) == 0:
-                print(ii)
-                continue
-            maj_vote = el[0][np.argmax(el[1])]
-            if len(el[0])>1:
-                print(ii, np.array(el[1], dtype=np.float32) / np.sum(el[1]))
-            old2new_ssvid[old_ssv_ids[ii]] = maj_vote
-        for k in ssv_splits:
-            ssv_splits[k] = np.array([old2new_ssvid[ix] for ix in ssv_splits[k]])
-        new_ssv_gt_dict = {}
-        for k, v in ssv_gt_dict.items():
-            if k in old2new_ssvid:
-                new_ssv_gt_dict[old2new_ssvid[k]] = v
-        ssv_gt_dict = new_ssv_gt_dict
-        self.nb_views = nb_views
-        self.nb_cpus = nb_cpus
-        self.raw_only = raw_only
-        self.reduce_context = reduce_context
-        self.reduce_context_fact = reduce_context_fact
-        self.binary_views = binary_views
-        # new SV with new views
-        self.sds = SegmentationDataset("sv", working_dir="/wholebrain/scratch/areaxfs3/")
-        self.example_shape = (nb_views, 4, 2, 128, 256)
-        self.train_d = ssv_splits["train"]
-        self.valid_d = ssv_splits["valid"]
-        self.test_d = ssv_splits["test"]
-        self.train_l = np.array([ssv_gt_dict[ix] for ix in self.train_d], np.int16)[:, None]
-        self.test_l = np.array([ssv_gt_dict[ix] for ix in self.test_d], np.int16)[:, None]
-        self.valid_l = np.array([ssv_gt_dict[ix] for ix in self.valid_d], np.int16)[:, None]
-        self.train_d = self.train_d[:, None]
-        self.valid_d = self.valid_d[:, None]
-        self.test_d = self.test_d[:, None]
-        super(SSVCelltype, self).__init__()
-        print("Initializing SSV Data:", self.__repr__())
-
-    def getbatch(self, batch_size, source='train'):
-        self._reseed()
-        if source == 'valid':
-            nb = len(self.valid_l)
-            ixs = np.arange(nb)
-            np.random.shuffle(ixs)
-            self.valid_d = self.valid_d[ixs]
-            self.valid_l = self.valid_l[ixs]
-        sample_fac = np.max([int(self.nb_views / 20), 1]) # draw more ssv if number of views is high
-        nb_ssv = batch_size * sample_fac
-        sample_ixs = []
-        l = []
-        for i in range(4):
-            curr_nb_samples = nb_ssv // 4
-            if source == "train":
-                sample_ixs.append(np.random.choice(self.train_d[self.train_l==i],
-                                               curr_nb_samples, replace=True).tolist())
-                l += [[i]*curr_nb_samples]
-            elif source == "valid":
-                sample_ixs.append(np.random.choice(self.valid_d[self.valid_l == i],
-                                               curr_nb_samples, replace=True).tolist())
-                l += [[i] * curr_nb_samples]
-            elif source == "test":
-                sample_ixs.append(np.random.choice(self.test_d[self.test_l == i],
-                                               curr_nb_samples, replace=True).tolist())
-                l += [[i] * curr_nb_samples]
-            else:
-                raise NotImplementedError
-        ssos = []
-        sample_ixs = np.concatenate(zip(*sample_ixs))
-        l = np.concatenate(zip(*l))
-        for ix in sample_ixs:
-            sso = self.ssds.get_super_segmentation_object(ix)
-            sso.nb_cpus = self.nb_cpus
-            ssos.append(sso)
-        # NOTE: also performs 'naive_view_normalization'
-        d, l = transform_celltype_data(ssos, l, batch_size, self.nb_views)
-        if self.reduce_context > 0:
-            d = d[:, :, :, (self.reduce_context/2):(-self.reduce_context/2),
-                self.reduce_context:-self.reduce_context]
-        if self.reduce_context_fact > 1:
-            d = d[:, :, :, ::self.reduce_context_fact, ::self.reduce_context_fact]
-        if self.binary_views:
-            d[d < 1.0] = 0
-        if self.raw_only:
-            return d[:, :1], l
-        return tuple([d, l])
-
-
-def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1):
+def transform_celltype_data_views(sso_views, labels, batch_size, nb_views,
+                                  norm_func=None):
+    if norm_func is None:
+        norm_func = naive_view_normalization
     orig_views = np.zeros((batch_size, 4, nb_views, 128, 256), dtype=np.float32)
     new_labels = np.zeros((batch_size, 1), dtype=np.int16)
     cnt = 0
-    sample_fac_sv = np.max([int(nb_views / 10), 1]) # draw more SV if #views is high
+    # sample_fac_sv = np.max([int(nb_views / 10), 1]) # draw more SV if #views is high
+    for ii, views in enumerate(sso_views):
+        # sso.load_attr_dict()
+        # sample_svs = np.random.choice(list(sso.svs), np.min([nb_views*sample_fac_sv, len(sso.sv_ids)]), replace=False)
+        # views = np.concatenate(start_multiprocess_obj("load_views", [[sv, ] for sv in sample_svs], nb_cpus=nb_cpus))
+        views = norm_func(views)
+        views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
+        curr_nb_samples = int(np.min([np.floor(views.shape[1]/nb_views), batch_size-cnt, batch_size//4]))
+        if curr_nb_samples == 0:
+            continue
+        view_sampling = np.random.choice(np.arange(views.shape[1]),
+                                         curr_nb_samples*nb_views, replace=False)
+        orig_views[cnt:(curr_nb_samples+cnt)] = views[:, view_sampling].reshape((4, curr_nb_samples,
+                                                                                 nb_views, 128, 256)).swapaxes(1, 0)
+        new_labels[cnt:(curr_nb_samples+cnt)] = labels[ii]
+        cnt += curr_nb_samples
+        if cnt == batch_size:
+            break
+    if cnt == 0:
+        print("--------------------------------------" 
+              "Number of views in batch is zero. " 
+              "Missing views and labels were filled with 0."
+              "--------------------------------------")
+    elif cnt < batch_size:
+        # print "--------------------------------------" \
+        #       "%d/%d samples were collected initially. Filling up missing" \
+        #       "samples with random set of those." \
+        #       "--------------------------------------" % (cnt, batch_size)
+        while cnt != batch_size:
+            curr_nb_samples = 1
+            random_ix = np.random.choice(np.arange(cnt), 1, replace=False)
+            orig_views[cnt:(curr_nb_samples + cnt)] = orig_views[random_ix]
+            new_labels[cnt:(curr_nb_samples + cnt)] = new_labels[random_ix]
+            cnt += curr_nb_samples
+    return tuple([orig_views, new_labels])
+
+
+def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1,
+                            view_key=None, norm_func=None):
+    if norm_func is None:
+        norm_func = naive_view_normalization
+    orig_views = np.zeros((batch_size, 4, nb_views, 128, 256), dtype=np.float32)
+    new_labels = np.zeros((batch_size, 1), dtype=np.int16)
+    cnt = 0
+    # sample_fac_sv = np.max([int(nb_views / 10), 1]) # draw more SV if #views is high
     for ii, sso in enumerate(ssos):
-        sso.load_attr_dict()
-        sample_svs = np.random.choice(list(sso.svs), np.min([nb_views*sample_fac_sv, len(sso.sv_ids)]), replace=False)
-        views = np.concatenate(start_multiprocess_obj("load_views", [[sv, ] for sv in sample_svs], nb_cpus=nb_cpus))
-        # views = np.concatenate(sso.load_views())
+        # sso.load_attr_dict()
+        sso.nb_cpus = nb_cpus
+        # sample_svs = np.random.choice(list(sso.svs), np.min([nb_views*sample_fac_sv, len(sso.sv_ids)]), replace=False)
+        # views = np.concatenate(start_multiprocess_obj("load_views", [[sv, ] for sv in sample_svs], nb_cpus=nb_cpus))
+        views = np.concatenate(sso.load_views(view_key=view_key))
         sso.clear_cache()
-        views = naive_view_normalization(views)
+        views = norm_func(views)
         views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
         curr_nb_samples = int(np.min([np.floor(views.shape[1]/nb_views), batch_size-cnt, batch_size//4]))
         if curr_nb_samples == 0:
@@ -577,9 +673,9 @@ def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1):
         if cnt == batch_size:
             break
     if cnt == 0:
-        print("--------------------------------------" \
-              "Number of views in batch is zero. " \
-              "Missing views and labels were filled with 0." \
+        print("--------------------------------------" 
+              "Number of views in batch is zero. " 
+              "Missing views and labels were filled with 0."
               "--------------------------------------")
     elif cnt < batch_size:
         # print "--------------------------------------" \
@@ -993,13 +1089,13 @@ def add_gt_sample(ssv_id, label, gt_type, set_type="train"):
     """
     # retrieve SSV from original SSD (which is used in Knossos-Plugin) and
     # copy its data to the yet empty SSV in the axgt SSD.
-    ssd_axgt = SuperSegmentationDataset(version=gt_type, working_dir=wd)
-    ssd = SuperSegmentationDataset(working_dir=wd)
+    ssd_axgt = SuperSegmentationDataset(version=gt_type, working_dir=global_params.config.working_dir)
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     ssv = ssd.get_super_segmentation_object(ssv_id)
     ssv_axgt = ssd_axgt.get_super_segmentation_object(ssv_id)
     ssv.copy2dir(ssv_axgt.ssv_dir)
     # add entries to label and splitting dict
-    base_dir = "{}/ssv_{}/".format(wd, gt_type)
+    base_dir = "{}/ssv_{}/".format(global_params.config.working_dir, gt_type)
     splitting = load_pkl2obj("{}/axgt_splitting.pkl".format(base_dir))
     labels = load_pkl2obj("{}/axgt_labels.pkl".format(base_dir))
     splitting[set_type].append(ssv_id)

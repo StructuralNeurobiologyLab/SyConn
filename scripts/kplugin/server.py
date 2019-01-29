@@ -4,16 +4,20 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
+# TODO: move code to syconn/gate/
 import copy
 import time
 import numpy as np
-from syconn.reps import super_segmentation as ss
-from syconn.reps import connectivity_helper as conn
-from syconn.config import global_params
 from flask import Flask
 import json
+import argparse
+import os
 
-from..gate import log_gate
+from syconn.reps import super_segmentation as ss
+from syconn.reps import connectivity_helper as conn
+from syconn import global_params
+from syconn.gate import log_gate
 
 app = Flask(__name__)
 
@@ -26,7 +30,7 @@ def route_ssv_skeleton(ssv_id):
     d = sg_state.backend.ssv_skeleton(ssv_id)
     start = time.time()
     ret = json.dumps(d, cls=MyEncoder)
-    print("JSON dump:", time.time() - start)
+    log_gate.debug("JSON dump: {}".format(time.time() - start))
     return ret
 
 
@@ -35,7 +39,7 @@ def route_ssv_mesh(ssv_id):
     d = sg_state.backend.ssv_mesh(ssv_id)
     start = time.time()
     ret = json.dumps(d, cls=MyEncoder)
-    print("JSON dump:", time.time() - start)
+    log_gate.debug("JSON dump: {}".format(time.time() - start))
     return ret
 
 
@@ -62,7 +66,7 @@ def ssv_obj_mesh(ssv_id, obj_type):
     d = sg_state.backend.ssv_obj_mesh(ssv_id, obj_type)
     start = time.time()
     ret = json.dumps(d, cls=MyEncoder)
-    print("JSON dump:", time.time() - start)
+    log_gate.debug("JSON dump: {}".format(time.time() - start))
     return ret
 
 
@@ -114,10 +118,10 @@ def route_hello():
     return json.dumps({'Welcome to': 'SyConnGate'}, cls=MyEncoder)
 
 
-class SyConn_backend(object):
-    def __init__(self, syconnfs_path='', logger=None):
+class SyConnBackend(object):
+    def __init__(self, syconn_path='', logger=None):
         """
-        Initializes a SyConnFS backend for operation.
+        Initializes a SyConn backend for operation.
         This includes in-memory initialization of the
         most important caches. Currently, SyConn Gate
         does not support backend data changes and the server needs
@@ -126,12 +130,12 @@ class SyConn_backend(object):
         might be served.
         All backend functions must return dicts.
 
-        :param syconnfs_path: str 
+        :param syconn_path: str
         """
         self.logger = logger
         self.logger.info('Initializing SyConn backend')
 
-        self.ssd = ss.SuperSegmentationDataset(syconnfs_path)
+        self.ssd = ss.SuperSegmentationDataset(syconn_path)
 
         self.logger.info('SuperSegmentation dataset initialized.')
 
@@ -187,7 +191,10 @@ class SyConn_backend(object):
         dtime = time.time() - start
         self.logger.info('Got ssv {} mesh indices after'
                          ' {:.2f}'.format(ssv_id, dtime))
-        return b"".join(mesh[0])
+        try:
+            return b"".join(mesh[0])
+        except TypeError:  # contains str, not byte
+            return "".join(mesh[0])
 
     def ssv_vert(self, ssv_id):
         """
@@ -203,7 +210,10 @@ class SyConn_backend(object):
         dtime = time.time() - start
         self.logger.info('Got ssv {} mesh vertices after'
                          ' {:.2f}'.format(ssv_id, dtime))
-        return b"".join(mesh[1])
+        try:
+            return b"".join(mesh[1])
+        except TypeError:  # contains str, not byte
+            return "".join(mesh[1])
 
     def ssv_skeleton(self, ssv_id):
         """
@@ -219,8 +229,8 @@ class SyConn_backend(object):
             return {}
         skel_attr = ["nodes", "edges", "diameters"]
         avg_dst = global_params.DIST_AXONESS_AVERAGING
-        keys = ["axoness_preds_cnn_views_avg{}".format(avg_dst),
-                "axoness_preds_cnn_views_avg{}_comp_maj".format(avg_dst)]
+        keys = ["axoness_avg{}".format(avg_dst),
+                "axoness_avg{}_comp_maj".format(avg_dst)]
         for k in keys:
             if k in skeleton:
                 skel_attr.append(k)
@@ -244,8 +254,11 @@ class SyConn_backend(object):
         self.logger.info('Got ssv {} mesh normals after'
                          ' {:.2f}'.format(ssv_id, dtime))
         if len(mesh) == 2:
-            return ""
-        return b"".join(mesh[2])
+            return b""
+        try:
+            return b"".join(mesh[2])
+        except TypeError:  # contains str, not byte
+            return "".join(mesh[2])
 
     def ssv_obj_mesh(self, ssv_id, obj_type):
         """
@@ -258,10 +271,10 @@ class SyConn_backend(object):
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
-                ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
-                obj_type = "conn"
-                print("Loading 'conn' objects instead of 'sj' for SSV %s."
-                      % ssv_id)
+                obj_type = "syn_ssv"
+                _ = ssv.attr_dict[obj_type]  # try to query mapped syn_ssv objects
+                log_gate.debug("Loading '{}' objects instead of 'sj' for SSV "
+                               "{}.".format(obj_type, ssv_id))
             except KeyError:
                 pass
         # if not existent, create mesh
@@ -288,10 +301,10 @@ class SyConn_backend(object):
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
-                ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
-                obj_type = "conn"
-                print("Loading 'conn' objects instead of 'sj' for SSV %s."
-                      % ssv_id)
+                obj_type = "syn_ssv"
+                _ = ssv.attr_dict[obj_type]  # try to query mapped syn_ssv objects
+                log_gate.debug("Loading '{}' objects instead of 'sj' for SSV "
+                               "{}.".format(obj_type, ssv_id))
             except KeyError:
                 pass
         # if not existent, create mesh
@@ -300,7 +313,10 @@ class SyConn_backend(object):
         dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh indices after'
                          ' {:.2f}'.format(ssv_id, obj_type, dtime))
-        return b"".join(mesh[0])
+        try:
+            return b"".join(mesh[0])
+        except TypeError:  # contains str, not byte
+            return "".join(mesh[0])
 
     def ssv_obj_vert(self, ssv_id, obj_type):
         """
@@ -316,10 +332,10 @@ class SyConn_backend(object):
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
-                ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
-                obj_type = "conn"
-                print("Loading 'conn' objects instead of 'sj' for SSV %s."
-                      % ssv_id)
+                obj_type = "syn_ssv"
+                _ = ssv.attr_dict[obj_type]  # try to query mapped syn_ssv objects
+                log_gate.debug("Loading '{}' objects instead of 'sj' for SSV "
+                               "{}.".format(obj_type, ssv_id))
             except KeyError:
                 pass
         # if not existent, create mesh
@@ -328,7 +344,10 @@ class SyConn_backend(object):
         dtime = time.time() - start
         self.logger.info('Got ssv {} {} mesh vertices after'
                          ' {:.2f}'.format(ssv_id, obj_type, dtime))
-        return b"".join(mesh[1])
+        try:
+            return b"".join(mesh[1])
+        except TypeError:  # contains str, not byte
+            return "".join(mesh[1])
 
     def ssv_obj_norm(self, ssv_id, obj_type):
         """
@@ -344,10 +363,10 @@ class SyConn_backend(object):
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
-                ssv.attr_dict["conn"] = ssv.attr_dict["conn_ids"]
-                obj_type = "conn"
-                print("Loading 'conn' objects instead of 'sj' for SSV %s."
-                      % ssv_id)
+                obj_type = "syn_ssv"
+                _ = ssv.attr_dict[obj_type]  # try to query mapped syn_ssv objects
+                log_gate.debug("Loading '{}' objects instead of 'sj' for SSV "
+                               "{}.".format(obj_type, ssv_id))
             except KeyError:
                 pass
         # if not existent, create mesh
@@ -358,7 +377,10 @@ class SyConn_backend(object):
                          ' {:.2f}'.format(ssv_id, obj_type, dtime))
         if len(mesh) == 2:
             return ""
-        return b"".join(mesh[2])
+        try:
+            return b"".join(mesh[2])
+        except TypeError:  # contains str, not byte
+            return "".join(mesh[2])
 
     def ssv_list(self):
         """
@@ -388,11 +410,9 @@ class SyConn_backend(object):
             l = ssv.attr_dict["celltype_cnn"]
             ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             label = ct_label_dc[l]
-            probas = ssv.attr_dict["celltype_cnn_probas"]
-            print(np.mean(probas, axis=0))
         else:
-            print("Celltype prediction not present in attribute dict of SSV {}"
-                  "at {}.".format(ssv_id, ssv.attr_dict_path))
+            log_gate.debug("Celltype prediction not present in attribute "
+                           "dict of SSV {}at {}.".format(ssv_id, ssv.attr_dict_path))
         return {'ct': label}
 
     def svs_of_ssv(self, ssv_id):
@@ -421,6 +441,7 @@ class SyConn_backend(object):
 
     def syn_objs_of_ssv_pre_post(self, ssv_id):
         """
+        TODO: Requires adaptions of 'SyConnBackend' class
         Returns all synapse objs of a given ssv_id.
         :return: 
 
@@ -439,6 +460,7 @@ class SyConn_backend(object):
 
     def syn_objs_of_ssv_post(self, ssv_id):
         """
+        TODO: Requires adaptions of 'SyConnBackend' class
         Return the syn objs where this ssv_id is post synaptic,
         i.e. this ssv_id receives the synapse.
 
@@ -465,9 +487,9 @@ class ServerState(object):
 
         self.logger = log_gate
 
-        self.logger.info('SyConn gate server starting up.')
-        self.backend = SyConn_backend('/wholebrain/scratch/areaxfs3/',
-                                        logger=self.logger)
+        self.logger.info('SyConn gate server starting up on working directory '
+                         '"{}".'.format(global_params.wd))
+        self.backend = SyConnBackend(global_params.config.working_dir, logger=self.logger)
         self.logger.info('SyConn gate server running.')
         return
 
@@ -486,24 +508,33 @@ class MyEncoder(json.JSONEncoder):
         else:
             return super(MyEncoder, self).default(obj)
 
-#print('This is the name')
-#print(__name__)
-#if __name__ == "__main__":
 """
 Alternative way of running the server is currently:
 export FLASK_APP=server.py
-flask run --host=0.0.0.0 --port=8080 --debugger
+flask run --host=0.0.0.0 --port=10001 --debugger
 
 OR
 
-FLASK_APP=server.py FLASK_DEBUG=1 flask run --host=0.0.0.0 --port 8081
+FLASK_APP=server.py FLASK_DEBUG=1 flask run --host=0.0.0.0 --port 10001
 
 """
+
+parser = argparse.ArgumentParser(description='SyConn Gate')
+parser.add_argument('--working_dir', type=str, default=global_params.wd,
+                    help='Working directory of SyConn')
+parser.add_argument('--port', type=int, default=10001,
+                    help='Port to connect to SyConn Gate')
+parser.add_argument('--host', type=str, default='0.0.0.0',
+                    help='IP address to SyConn Gate')
+args = parser.parse_args()
+server_wd = os.path.expanduser(args.working_dir)
+server_port = args.port
+server_host = args.host
+global_params.wd = server_wd
+
 sg_state = ServerState()
 
-    # context = ('cert.crt', 'key.key') enable later
-    #app.run(host='0.0.0.0',  # do not run this on a non-firewalled machine!
-    #        port=8080,
-    #        # ssl_context=context,
-    #        threaded=True,
-    #        debug=True)
+# context = ('cert.crt', 'key.key') enable later
+app.run(host=server_host,  # do not run this on a non-firewalled machine!
+       port=server_port, # ssl_context=context,
+       threaded=True, debug=True, use_reloader=True)

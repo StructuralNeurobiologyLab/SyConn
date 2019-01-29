@@ -7,7 +7,6 @@
 
 from collections import defaultdict
 import collections
-import warnings
 import numpy as np
 import h5py
 import os
@@ -25,14 +24,14 @@ import contextlib
 import tqdm
 
 from . import log_handler
-from ..config import global_params
-
+from .. import global_params
 
 __all__ = ['load_from_h5py', 'save_to_h5py', 'crop_bool_array',
            'get_filepaths_from_dir', 'write_obj2pkl', 'load_pkl2obj',
            'write_data2kzip', 'remove_from_zip', 'chunkify', 'flatten_list',
            'get_skelID_from_path', 'write_txt2kzip', 'switch_array_entries',
-           'parse_cc_dict_from_kzip', 'parse_cc_dict_from_kml', 'data2kzip']
+           'parse_cc_dict_from_kzip', 'parse_cc_dict_from_kml', 'data2kzip',
+           'safe_copy', 'temp_seed']
 
 
 def load_from_h5py(path, hdf5_names=None, as_dict=False):
@@ -62,9 +61,9 @@ def load_from_h5py(path, hdf5_names=None, as_dict=False):
             hdf5_names = f.keys()
         for hdf5_name in hdf5_names:
             if as_dict:
-                data[hdf5_name] = f[hdf5_name].value
+                data[hdf5_name] = f[hdf5_name][()]
             else:
-                data.append(f[hdf5_name].value)
+                data.append(f[hdf5_name][()])
     except:
         raise Exception("Error at Path: %s, with labels:" % path, hdf5_names)
     f.close()
@@ -208,7 +207,7 @@ def coordpath2anno(coords, scaling=None, add_edges=True):
     SkeletonAnnotation
     """
     if scaling is None:
-        scaling = global_params.get_dataset_scaling()
+        scaling = global_params.config.entries['Dataset']['scaling']
     anno = SkeletonAnnotation()
     anno.scaling = scaling
     scaling = np.array(scaling, dtype=np.int)
@@ -482,8 +481,8 @@ def write_obj2pkl(path, objects):
             with open(path, 'wb') as output:
                 pkl.dump(objects, output, -1)
         else:
-            warnings.warn("Write_obj2pkl takes arguments 'path' (str) and "
-                          "'objects' (python object).", DeprecationWarning)
+            log_handler.warn("Write_obj2pkl takes arguments 'path' (str) and "
+                             "'objects' (python object).")
             with open(objects, 'wb') as output:
                 pkl.dump(path, output, -1)
 
@@ -527,13 +526,15 @@ def chunkify(lst, n):
 
     Parameters
     ----------
-    lst : list
+    lst : List
     n : int
 
     Returns
     -------
 
     """
+    if len(lst) < n:
+        n = len(lst)
     return [lst[i::n] for i in range(n)]
 
 

@@ -5,7 +5,7 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 import os
-from syconn.mp import qsub_utils as mu
+from syconn.mp import batchjob_utils as mu
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.handler.basics import chunkify
 

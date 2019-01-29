@@ -26,11 +26,11 @@ except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
 
 from . import super_segmentation_helper as ssh
-from .segmentation import SegmentationObject
+from .segmentation import SegmentationObject, SegmentationDataset
 from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     knossos_ml_from_svixs, subfold_from_ix_SSO
-from ..config import parser
+from ..handler import config
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..backend.storage import CompressedStorage, MeshStorage
@@ -39,18 +39,10 @@ from ..proc.meshes import write_mesh2kzip, merge_someshes, \
     compartmentalize_mesh, mesh2obj_file, write_meshes2kzip
 from ..proc.rendering import render_sampled_sso, multi_view_sso, \
     render_sso_coords, render_sso_coords_index_views
-from ..mp import qsub_utils as qu
+from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
-
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 from ..reps import log_reps
-
-try:
-    default_wd_available = True
-    from ..config.global_params import wd
-except:
-    default_wd_available = False
-from ..config import global_params
+from .. import global_params
 
 
 class SuperSegmentationObject(object):
@@ -60,6 +52,7 @@ class SuperSegmentationObject(object):
                  view_caching=False, config=None, nb_cpus=1,
                  enable_locking=True, enable_locking_so=False, ssd_type="ssv"):
         """
+        Class to represent an agglomeration of supervoxels (SegmentationObjects).
 
         Parameters
         ----------
@@ -88,7 +81,8 @@ class SuperSegmentationObject(object):
             (SV, mitochondria, vesicle clouds, ...)
         ssd_type : str
         """
-
+        if version == 'temp':
+            version = 'tmp'
         if version == "tmp":
             self._object_caching = False
             self._voxel_caching = False
@@ -122,7 +116,7 @@ class SuperSegmentationObject(object):
         self._rag = None
 
         # init mesh dicts
-        self._meshes = {"sv": None, "sj": None,
+        self._meshes = {"sv": None, "sj": None, "syn_ssv": None,
                         "vc": None, "mi": None, "conn": None}
 
         self._views = None
@@ -130,20 +124,14 @@ class SuperSegmentationObject(object):
         self._weighted_graph = None
         self._sample_locations = None
         self._rot_mat = None
+        self._label_dict = {}
 
         if sv_ids is not None:
             self.attr_dict["sv"] = sv_ids
 
-        # TODO: Refine try-except statements
-        try:
-            self._scaling = np.array(scaling)
-        except:
-            print("Currently, scaling has to be set in the config")
-            self._scaling = np.array([1, 1, 1])
-
         if working_dir is None:
             try:
-                self._working_dir = wd
+                self._working_dir = global_params.wd
             except:
                 raise Exception("No working directory (wd) specified in config")
         else:
@@ -153,11 +141,13 @@ class SuperSegmentationObject(object):
             try:
                 self._scaling = \
                     np.array(self.config.entries["Dataset"]["scaling"])
-            except:
-                self._scaling = np.array([1, 1, 1])
+            except KeyError:
+                msg = 'Scaling not set and could not be found in config ' \
+                      'with entries: {}'.format(self.config.entries)
+                log_reps.error(msg)
+                raise KeyError(msg)
         else:
             self._scaling = scaling
-
         if version is None:
             try:
                 self._version = self.config.entries["Versions"][self.type]
@@ -379,7 +369,12 @@ class SuperSegmentationObject(object):
 
     def label_dict(self, data_type='vertex'):
         if data_type == 'vertex':
-            return CompressedStorage(self.vlabel_dc_path)
+            if data_type in self._label_dict:
+                pass
+            else:
+                self._label_dict[data_type] = CompressedStorage(
+                    None if self.version == 'tmp' else self.vlabel_dc_path)
+            return self._label_dict[data_type]
         else:
             raise ValueError('Label dict for data type "{}" not supported.'
                              ''.format(data_type))
@@ -433,7 +428,7 @@ class SuperSegmentationObject(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = parser.Config(self.working_dir)
+            self._config = global_params.config
         return self._config
 
     @property
@@ -490,7 +485,7 @@ class SuperSegmentationObject(object):
             for sv in self.svs:
                 sv._voxel_caching = False
                 if sv.voxels_exist:
-                    print(np.sum(sv.voxels), sv.size)
+                    log_reps.debug(np.sum(sv.voxels), sv.size)
                     box = [sv.bounding_box[0] - self.bounding_box[0],
                            sv.bounding_box[1] - self.bounding_box[0]]
 
@@ -498,7 +493,7 @@ class SuperSegmentationObject(object):
                     box[0][1]: box[1][1],
                     box[0][2]: box[1][2]][sv.voxels] = True
                 else:
-                    print("missing voxels from %d" % sv.id)
+                    log_reps.warning("missing voxels from %d" % sv.id)
 
             if self.voxel_caching:
                 self._voxels = voxels
@@ -663,7 +658,7 @@ class SuperSegmentationObject(object):
 
     def save_attr_dict(self):
         if self.version == 'tmp':
-            log_reps.warning('"save_attr_dict called" but this SSV '
+            log_reps.warning('"save_attr_dict" called but this SSV '
                              'has version "tmp", attribute dict will'
                              ' not be saved to disk.')
             return
@@ -686,8 +681,8 @@ class SuperSegmentationObject(object):
         attr_values : tuple of items
         """
         if self.version == 'tmp':
-            log_reps.warning('"save_attributes called" but this SSV '
-                             'has version "tmp", attribute dict will'
+            log_reps.warning('"save_attributes" called but this SSV '
+                             'has version "tmp", attributes will'
                              ' not be saved to disk.')
             return
         if not hasattr(attr_keys, "__len__"):
@@ -795,7 +790,7 @@ class SuperSegmentationObject(object):
             return
         ssh.create_sso_skeleton(self)
         if len(self.skeleton["nodes"]) == 0:
-            print("%s has zero nodes." % repr(self))
+            log_reps.warning("%s has zero nodes." % repr(self))
         self.save_skeleton()
 
     def save_skeleton_to_kzip(self, dest_path=None, additional_keys=None):
@@ -840,7 +835,7 @@ class SuperSegmentationObject(object):
                 dest_path = self.skeleton_kzip_path
             write_skeleton_kzip(dest_path, [a])
         except Exception as e:
-            print("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, repr(e)))
+            log_reps.warning("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, repr(e)))
 
     def save_objects_to_kzip_sparse(self, obj_types=("sj", "mi", "vc"),
                                     dest_path=None):
@@ -849,8 +844,8 @@ class SuperSegmentationObject(object):
             assert obj_type in self.attr_dict
             map_ratio_key = "mapping_%s_ratios" % obj_type
             if not map_ratio_key in self.attr_dict.keys():
-                print("%s not yet mapped. Object nodes are not written to "
-                      "k.zip." % obj_type)
+                log_reps.warning("%s not yet mapped. Object nodes are not "
+                                 "written to k.zip." % obj_type)
                 continue
             overlap_ratios = np.array(self.attr_dict[map_ratio_key])
             overlap_ids = np.array(self.attr_dict["mapping_%s_ids" % obj_type])
@@ -902,12 +897,12 @@ class SuperSegmentationObject(object):
 
     def save_skeleton(self, to_kzip=False, to_object=True):
         if self.version == 'tmp':
-            log_reps.warning('"save_skeleton called" but this SSV '
-                             'has version "tmp", attribute dict will'
+            log_reps.warning('"save_skeleton" called but this SSV '
+                             'has version "tmp", skeleton will'
                              ' not be saved to disk.')
             return
         if to_object:
-            write_obj2pkl(self.skeleton, self.skeleton_path)
+            write_obj2pkl(self.skeleton_path, self.skeleton)
 
         if to_kzip:
             self.save_skeleton_to_kzip()
@@ -920,6 +915,9 @@ class SuperSegmentationObject(object):
             self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
         except:
+            if global_params.config.allow_skel_gen:
+                self.gen_skel_from_sample_locs()
+                return True
             return False
 
     def aggregate_segmentation_object_mappings(self, obj_types, save=False):
@@ -952,33 +950,37 @@ class SuperSegmentationObject(object):
 
         self.load_attr_dict()
         if not "mapping_%s_ratios" % obj_type in self.attr_dict:
-            print("No mapping ratios found")
+            log_reps.error("No mapping ratios found")
             return
 
         if not "mapping_%s_ids" % obj_type in self.attr_dict:
-            print("no mapping ids found")
+            log_reps.error("no mapping ids found")
             return
 
         if lower_ratio is None:
             try:
                 lower_ratio = self.config.entries["LowerMappingRatios"][
                     obj_type]
-            except:
-                raise ("Lower ratio undefined")
+            except KeyError:
+                msg = "Lower ratio undefined"
+                log_reps.error(msg)
+                raise ValueError(msg)
 
         if upper_ratio is None:
             try:
                 upper_ratio = self.config.entries["UpperMappingRatios"][
                     obj_type]
             except:
-                print("Upper ratio undefined - 1. assumed")
+                log_reps.critical("Upper ratio undefined - 1. assumed")
                 upper_ratio = 1.
 
         if sizethreshold is None:
             try:
                 sizethreshold = self.config.entries["Sizethresholds"][obj_type]
-            except:
-                raise ("Size threshold undefined")
+            except KeyError:
+                msg = "Size threshold undefined"
+                log_reps.error(msg)
+                raise ValueError(msg)
 
         obj_ratios = np.array(self.attr_dict["mapping_%s_ratios" % obj_type])
 
@@ -1069,9 +1071,9 @@ class SuperSegmentationObject(object):
             dest_filename = dest_dir + "/" + fnames[i]
             try:
                 safe_copy(src_filename, dest_filename, safe=safe)
-                print("Copied %s to %s." % (src_filename, dest_filename))
+                log_reps.info("Copied %s to %s." % (src_filename, dest_filename))
             except Exception as e:
-                print("Skipped", fnames[i], str(e))
+                log_reps.error("Skipped", fnames[i], str(e))
                 pass
         self.load_attr_dict()
         if os.path.isfile(dest_dir + "/attr_dict.pkl"):
@@ -1118,6 +1120,11 @@ class SuperSegmentationObject(object):
         -------
 
         """
+        if self.version == 'tmp':
+            log_reps.warning('"save_views" called but this SSV '
+                             'has version "tmp", views will'
+                             ' not be saved to disk.')
+            return
         view_dc = CompressedStorage(self.view_path, read_only=False,
                                     disable_locking=not self.enable_locking)
         view_dc[view_key] = views
@@ -1232,12 +1239,12 @@ class SuperSegmentationObject(object):
         """
         if len(self.sv_ids) > global_params.RENDERING_MAX_NB_SV:
             part = self.partition_cc()
-            print('Partitioned hugh SSV into {} subgraphs with each {}'
-                  ' SVs.'.format(len(part), len(part[0])))
+            log_reps.info('Partitioned hugh SSV into {} subgraphs with each {}'
+                          ' SVs.'.format(len(part), len(part[0])))
             if not overwrite:  # check existence of glia preds
                 views_exist = np.array(self.view_existence(), dtype=np.int)
-                print("Rendering huge SSO. {}/{} views left to process."
-                      .format(np.sum(views_exist == 0), len(self.svs)))
+                log_reps.info("Rendering huge SSO. {}/{} views left to process"
+                              ".".format(np.sum(views_exist == 0), len(self.svs)))
                 ex_dc = {}
                 for ii, k in enumerate(self.svs):
                     ex_dc[k] = views_exist[ii]
@@ -1247,13 +1254,13 @@ class SuperSegmentationObject(object):
                         continue
                 del ex_dc
             else:
-                print("Rendering huge SSO. {} SVs left to process."
-                      .format(len(self.svs)))
+                log_reps.info("Rendering huge SSO. {} SVs left to process"
+                              ".".format(len(self.svs)))
             params = [[so.id for so in el] for el in part]
             if qsub_pe is None:
                 raise RuntimeError('QSUB has to be enabled when processing '
                                    'huge SSVs.')
-            elif qu.__BATCHJOB__:
+            elif qu.batchjob_enabled():
                 params = chunkify(params, 2000)
                 so_kwargs = {'version': self.svs[0].version,
                              'working_dir': self.working_dir,
@@ -1266,7 +1273,7 @@ class SuperSegmentationObject(object):
                 params = [[par, so_kwargs, render_kwargs] for par in params]
                 qu.QSUB_script(
                     params, "render_views_partial", suffix="_SSV{}".format(self.id),
-                    pe=qsub_pe, queue=None, script_folder=script_folder, n_cores=2,
+                    pe=qsub_pe, queue=None, script_folder=None, n_cores=2,
                     n_max_co_processes=qsub_co_jobs, resume_job=resume_job)
             else:
                 raise Exception("QSUB not available")
@@ -1319,9 +1326,9 @@ class SuperSegmentationObject(object):
             index_views = render_sso_coords_index_views(
                 self, locs, nb_views=nb_views, verbose=verbose, rot_mat=self._rot_mat)
         end_ix_views = time.time()
-        print("Rendering views took {:.2f} s. {:.2f} views/s".format(
+        log_reps.debug("Rendering views took {:.2f} s. {:.2f} views/s".format(
             end_ix_views - start, len(index_views) / (end_ix_views - start)))
-        print("Mapping rgb values to vertex indices took {:.2f}s.".format(
+        log_reps.debug("Mapping rgb values to vertex indices took {:.2f}s.".format(
             time.time() - end_ix_views))
         if not save:
             return index_views
@@ -1417,11 +1424,16 @@ class SuperSegmentationObject(object):
             locs = self.sample_locations()
             reordered_views = []
             cumsum = np.cumsum([0] + [len(el) for el in locs])
-            for ii in range(len(locs[:-1])):
+            for ii in range(len(locs)):
                 sv_views = views[cumsum[ii]:cumsum[ii + 1]]
                 reordered_views.append(sv_views)
+            if self.version == 'tmp':
+                log_reps.warning('"predict_semseg" called but this SSV '
+                                 'has version "tmp", results will'
+                                 ' not be saved to disk.')
             ssh.pred_svs_semseg(m, reordered_views, semseg_key, self.svs,
-                                nb_cpus=self.nb_cpus, verbose=verbose)
+                                nb_cpus=self.nb_cpus, verbose=verbose,
+                                return_pred=self.version == 'tmp')  # do not write to disk
 
     def semseg2mesh(self, semseg_key, dest_path=None, nb_views=None, k=1,
                     force_overwrite=False):
@@ -1941,13 +1953,18 @@ class SuperSegmentationObject(object):
 
     def predict_views_gliaSV(self, model, verbose=True,
                              pred_key_appendix=""):
+        if self.version == 'tmp':
+            log_reps.warning('"predict_views_gliaSV" called but this SSV '
+                             'has version "tmp", results will'
+                             ' not be saved to disk.')
         start = time.time()
         pred_key = "glia_probas"
         pred_key += pred_key_appendix
         # try:
         predict_sos_views(model, self.svs, pred_key,
                           nb_cpus=self.nb_cpus, verbose=verbose,
-                          woglia=False, raw_only=True)
+                          woglia=False, raw_only=True,
+                          return_proba=self.version == 'tmp')  # do not write to disk
         # except KeyError:
         #     self.render_views(add_cellobjects=False, woglia=False)
         #     predict_sos_views(model, self.svs, pred_key,
@@ -2112,17 +2129,23 @@ class SuperSegmentationObject(object):
         start = time.time()
         pred_key = "axoness_probas"
         pred_key += pred_key_appendix
+        if self.version == 'tmp':
+            log_reps.warning('"predict_views_axoness" called but this SSV '
+                             'has version "tmp", results will'
+                             ' not be saved to disk.')
         try:
             predict_sos_views(model, self.svs, pred_key,
                               nb_cpus=self.nb_cpus, verbose=verbose,
-                              woglia=True, raw_only=False)
+                              woglia=True, raw_only=False,
+                              return_proba=self.version == 'tmp')  # do not write to disk
         except KeyError:
             log_reps.error("Re-rendering SSV %d (%d SVs), because views are missing."
                            % (self.id, len(self.sv_ids)))
             self.render_views(add_cellobjects=True, woglia=True, overwrite=True)
             predict_sos_views(model, self.svs, pred_key,
                               nb_cpus=self.nb_cpus, verbose=verbose,
-                              woglia=True, raw_only=False)
+                              woglia=True, raw_only=False,
+                              return_proba=self.version == 'tmp')  # do not write to disk)
         end = time.time()
         log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
                        "%0.4fs/SV" % (len(self.svs), end - start,
@@ -2157,20 +2180,33 @@ class SuperSegmentationObject(object):
                                  '"predict_nodes" instead!')
 
     def gen_skel_from_sample_locs(self, dest_path=None):
+        """
+
+        Parameters
+        ----------
+        dest_path : str
+            Path to kzip
+        """
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         locs = np.concatenate(self.sample_locations())
         g = create_graph_from_coords(locs, mst=True)
-        edge_list = np.array(g.edges())
+        if g.number_of_edges() == 1:
+            edge_list = np.array(list(g.edges()))
+        else:
+            edge_list = np.array(g.edges())
         del g
+        assert edge_list.ndim == 2
         self.skeleton = dict()
         self.skeleton["nodes"] = locs / np.array(self.scaling)
         self.skeleton["edges"] = edge_list
         self.skeleton["diameters"] = np.ones(len(locs))
-        self.save_skeleton_to_kzip(dest_path=dest_path)
+        self.save_skeleton()
+        if dest_path is not None:
+            self.save_skeleton_to_kzip(dest_path=dest_path)
 
-    def predict_celltype_cnn(self, model):
-        ssh.predict_sso_celltype(self, model)
+    def predict_celltype_cnn(self, model, **kwargs):
+        ssh.predict_sso_celltype(self, model, **kwargs)
 
     def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
                                obj_to_render=("sv", )):
@@ -2331,13 +2367,13 @@ def celltype_predictor(args):
     pbar = tqdm.tqdm(total=len(ssv_ids))
     missing_ssvs = []
     for ix in ssv_ids:
-        ssv = SuperSegmentationObject(ix, working_dir=global_params.wd)
+        ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
         ssv.nb_cpus = 1
         try:
             ssh.predict_sso_celltype(ssv, m, overwrite=True)
         except Exception as e:
             missing_ssvs.append((ssv.id, e))
-            print(repr(e))
+            log_reps.error(repr(e))
         pbar.update(1)
     pbar.close()
     return missing_ssvs

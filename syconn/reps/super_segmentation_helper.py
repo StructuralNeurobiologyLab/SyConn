@@ -10,7 +10,6 @@ from collections import Counter
 from multiprocessing.pool import ThreadPool
 import networkx as nx
 import numpy as np
-import os
 import scipy
 import scipy.ndimage
 from collections import defaultdict
@@ -24,11 +23,11 @@ from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton, find_missing_sv_views,\
     find_missing_sv_attributes, find_missing_sv_skeletons
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
+import time
 skeletopyze_available = False
 from ..reps import log_reps
-from ..config import global_params
+from .. import global_params
 from ..proc.meshes import in_bounding_box, write_mesh2kzip
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 
 
 def majority_vote(anno, prop, max_dist):
@@ -104,10 +103,10 @@ def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
     sso.save_attributes(["celltype_cnn_probas"], [res])
 
 
-def sso_views_to_modelinput(sso, nb_views):
+def sso_views_to_modelinput(sso, nb_views, view_key=None):
     np.random.seed(0)
     assert len(sso.sv_ids) > 0
-    views = sso.load_views()
+    views = sso.load_views(view_key=view_key)
     np.random.shuffle(views)
     # view shape: (#multi-views, 4 channels, 2 perspectives, 128, 256)
     views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
@@ -384,7 +383,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
     pruned network kx graph
     """
     if scal is None:
-        scal = global_params.get_dataset_scaling()
+        scal = global_params.config.entries['Dataset']['scaling']
     pruning_complete = False
 
     if preserve_annotations:
@@ -504,7 +503,7 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500,
 
 def smooth_skeleton(skel_nx, scal=None):
     if scal is None:
-        scal = global_params.get_dataset_scaling()
+        scal = global_params.config.entries['Dataset']['scaling']
     visiting_nodes = list({k for k, v in dict(skel_nx.degree()).items() if v == 2})
 
     for index, visiting_node in enumerate(visiting_nodes):
@@ -724,7 +723,7 @@ def sparsify_skeleton_fast(skel_nx, scal=None, dot_prod_thresh=0.8,
     """
 
     if scal is None:
-        scal = global_params.get_dataset_scaling()
+        scal = global_params.config.entries['Dataset']['scaling']
     change = 1
 
     while change > 0:
@@ -1466,7 +1465,7 @@ def pred_sv_chunk_semseg(args):
 
     """
     from syconn.proc.sd_proc import sos_dict_fact, init_sos
-    from syconn.handler.prediction import InferenceModel
+    from elektronn3.models.base import InferenceModel
     from syconn.backend.storage import CompressedStorage
     so_chunk_paths = args[0]
     model_kwargs = args[1]
@@ -1492,6 +1491,8 @@ def pred_sv_chunk_semseg(args):
         view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
         view_dc = CompressedStorage(view_dc_p, disable_locking=True)
         svixs = list(view_dc.keys())
+        if len(svixs) == 0:
+            continue
         views = list(view_dc.values())
         if raw_only:
             views = views[:, :1]
@@ -1511,6 +1512,7 @@ def pred_sv_chunk_semseg(args):
 def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
                 colors=None, force_overwrite=False):
     """
+    # TODO: optimize with cython
     Maps semantic segmentation to SSV mesh.
 
     Parameters
@@ -1540,6 +1542,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
     """
     ld = sso.label_dict('vertex')
     if force_overwrite or not semseg_key in ld:
+        ts0 = time.time()  # view loading
         if nb_views is None:
             # load default
             i_views = sso.load_views(index_views=True).flatten()
@@ -1547,9 +1550,13 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             # load special views
             i_views = sso.load_views("index{}".format(nb_views)).flatten()
         spiness_views = sso.load_views(semseg_key).flatten()
+        ts1 = time.time()
+        log_reps.debug('Time to load index and shape views: '
+                       '{:.2f}s.'.format(ts1 - ts0))
         ind = sso.mesh[0]
         dc = defaultdict(list)
         background_id = np.max(i_views)
+        # color buffer holds traingle ID not vertex ID
         for ii in range(len(i_views)):
             triangle_ix = i_views[ii]
             if triangle_ix == background_id:
@@ -1560,7 +1567,16 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             dc[ind[vertex_ix]].append(l)
             dc[ind[vertex_ix + 1]].append(l)
             dc[ind[vertex_ix + 2]].append(l)
-        vertex_labels = np.ones((len(sso.mesh[1]) // 3), dtype=np.uint8) * 5
+        ts2 = time.time()
+        log_reps.debug('Time to generate look-up dict: '
+                       '{:.2f}s.'.format(ts2 - ts1))
+        # background label is highest label in prediction (see 'generate_palette' or
+        # 'remap_rgb_labelviews' in multiviews.py)
+        background_l = np.max(spiness_views)
+        unpredicted_l = background_l + 1
+        if unpredicted_l > 255:
+            raise ValueError('Overflow in label view array.')
+        vertex_labels = np.ones((len(sso.mesh[1]) // 3), dtype=np.uint8) * unpredicted_l
         for ix, v in dc.items():
             l, cnts = np.unique(v, return_counts=True)
             vertex_labels[ix] = l[np.argmax(cnts)]
@@ -1570,14 +1586,23 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             predictions = vertex_labels
         else:
             # remove unpredicted vertices
-            predicted_vertices = sso.mesh[1].reshape(-1, 3)[vertex_labels != 5]
-            predictions = vertex_labels[vertex_labels != 5]
+            predicted_vertices = sso.mesh[1].reshape(-1, 3)[vertex_labels != unpredicted_l]
+            predictions = vertex_labels[vertex_labels != unpredicted_l]
             # remove background class
-            predicted_vertices = predicted_vertices[predictions != 4]
-            predictions = predictions[predictions != 4]
-        maj_vote = colorcode_vertices(
-            sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
-            return_color=False)
+            predicted_vertices = predicted_vertices[predictions != background_id]
+            predictions = predictions[predictions != background_id]
+        ts3 = time.time()
+        log_reps.debug('Time to map predictions on vertices: '
+                       '{:.2f}s.'.format(ts3 - ts2))
+        if k > 0:  # map predictions of predicted vertices to all vertices
+            maj_vote = colorcode_vertices(
+                sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
+                return_color=False, nb_cpus=sso.nb_cpus)
+        else:  # no vertex mask was applied in this case
+            maj_vote = predictions
+        ts4 = time.time()
+        log_reps.debug('Time to map predictions on unpredicted vertices: '
+                       '{:.2f}s.'.format(ts4 - ts3))
         # add prediction to mesh storage
         ld[semseg_key] = maj_vote
         ld.push()

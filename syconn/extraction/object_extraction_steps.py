@@ -17,10 +17,10 @@ import shutil
 import itertools
 from collections import defaultdict
 from knossos_utils import knossosdataset, chunky
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
+knossosdataset._set_noprint(True)
 
 from ..handler import log_handler
-from ..mp import qsub_utils as qu, mp_utils as sm
+from ..mp import batchjob_utils as qu, mp_utils as sm
 from ..proc.general import cut_array_in_one_dim
 from ..reps import segmentation, rep_helper as rh
 from ..handler import basics
@@ -38,8 +38,8 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                         swapdata=False, prob_kd_path_dict=None,
                         membrane_filename=None, membrane_kd_path=None,
                         hdf5_name_membrane=None, fast_load=False, suffix="",
-                        qsub_pe=None, qsub_queue=None, nb_cpus=1,
-                        n_max_co_processes=100, transform_func=None,
+                        qsub_pe=None, qsub_queue=None, nb_cpus=None,
+                        n_max_co_processes=None, transform_func=None,
                         transform_func_kwargs=None):
     """
     Extracts connected component from probability maps
@@ -126,19 +126,18 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
 
     stitch_overlap = np.array([1, 1, 1])
     if overlap is "auto":
-        # TODO: Check if overlap kwarg can actually be set independent of cset.overlap
-        if np.any(np.array(overlap) > np.array(cset.overlap)):
-            msg = "Untested behavior for overlap kwarg being bigger than cset.overlap." \
-                  " This might lead to stitching failures."
-            log_handler.critical(msg)
-            raise ValueError(msg)
+        # # TODO: Check if overlap kwarg can actually be set independent of cset.overlap
+        # if np.any(np.array(overlap) > np.array(cset.overlap)):
+        #     msg = "Untested behavior for overlap kwarg being bigger than cset.overlap." \
+        #           " This might lead to stitching failures."
+        #     log_handler.critical(msg)
+        #     raise ValueError(msg)
         # Truncation of gaussian kernel is 4 per standard deviation
         # (per default). One overlap for matching of connected components
         if sigmas is None:
             max_sigma = np.zeros(3)
         else:
             max_sigma = np.array([np.max(sigmas)] * 3)
-
         overlap = np.ceil(max_sigma * 4) + stitch_overlap
 
     multi_params = []
@@ -150,25 +149,23 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
              membrane_filename, membrane_kd_path,
              hdf5_name_membrane, fast_load, suffix, transform_func_kwargs])
 
-    if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess_imap(transform_func,
-                                        multi_params, debug=debug)
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+        results = sm.start_multiprocess_imap(transform_func, multi_params,
+                                             nb_cpus=n_max_co_processes, debug=debug)
 
         results_as_list = []
         for result in results:
             for entry in result:
                 results_as_list.append(entry)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         assert transform_func == _gauss_threshold_connected_components_thread,\
             "QSUB currently only supported for gaussian threshold CC."
         path_to_out = qu.QSUB_script(multi_params,
                                      "gauss_threshold_connected_components",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     n_cores=nb_cpus,
-                                     script_folder=script_folder,
+                                     n_cores=nb_cpus, script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
-
         out_files = glob.glob(path_to_out + "/*")
         results_as_list = []
         for out_file in out_files:
@@ -256,8 +253,7 @@ def _gauss_threshold_connected_components_thread(args):
         if np.sum(sigmas[nb_hdf5_name]) != 0:
             tmp_data = scipy.ndimage.gaussian_filter(tmp_data, sigmas[nb_hdf5_name])
 
-        if hdf5_name in ["p4", "vc"] and membrane_filename is not None and \
-                        hdf5_name_membrane is not None:
+        if hdf5_name in ["p4", "vc"] and membrane_filename is not None and hdf5_name_membrane is not None:
             membrane_data = basics.load_from_h5py(chunk.folder + membrane_filename + ".h5",
                                                   hdf5_name_membrane)[0]
             membrane_data_shape = membrane_data.shape
@@ -280,16 +276,14 @@ def _gauss_threshold_connected_components_thread(args):
         nb_cc_list.append([chunk.number, hdf5_name, nb_cc])
         labels_data.append(this_labels_data)
 
-    basics.save_to_h5py(labels_data,
-                        chunk.folder + filename +
-                        "_connected_components%s.h5" % suffix,
-                        hdf5names)
-
+    h5_fname = chunk.folder + filename + "_connected_components%s.h5" % suffix
+    os.makedirs(os.path.split(h5_fname)[0], exist_ok=True)
+    basics.save_to_h5py(labels_data, h5_fname, hdf5names)
     return nb_cc_list
 
 
 def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
-                       chunk_translator, debug, suffix="", nb_cpus=1,
+                       chunk_translator, debug, suffix="", nb_cpus=None,
                        qsub_pe=None, qsub_queue=None, n_max_co_processes=100):
     """
     Makes labels unique across chunks
@@ -308,7 +302,7 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
     max_nb_dict: dictionary
         Maps each chunk id to a integer describing which needs to be added to
         all its entries
-    chunk_translator: boolean
+    chunk_translator: Dict
         Remapping from chunk ids to position in chunk_list
     debug: boolean
         If true multiprocessed steps only operate on one core using 'map' which
@@ -332,15 +326,16 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
         multi_params.append([cset.chunk_dict[nb_chunk], filename, hdf5names,
                              this_max_nb_dict, suffix])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_make_unique_labels_thread,
-                                         multi_params, debug=debug, nb_cpus=nb_cpus)
+                                         multi_params, debug=debug,
+                                             nb_cpus=n_max_co_processes)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "make_unique_labels",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
@@ -370,7 +365,7 @@ def _make_unique_labels_thread(args):
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                      overlap, debug, suffix="", qsub_pe=None, qsub_queue=None,
-                     n_max_co_processes=100, nb_cpus=1, n_erosion=0,
+                     n_max_co_processes=100, nb_cpus=None, n_erosion=0,
                      overlap_thresh=0):
     """
     Creates a stitch list for the overlap region between chunks
@@ -409,8 +404,8 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
 
     Returns
     -------
-    stitch_list: list
-        list of overlapping component ids
+    stitch_list: Dict
+        Dictionary of overlapping component ids
     """
 
     multi_params = []
@@ -418,9 +413,10 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
         multi_params.append([cset, nb_chunk, filename, hdf5names, stitch_overlap, overlap,
                              suffix, chunk_list, n_erosion, overlap_thresh])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_make_stitch_list_thread,
-                                         multi_params, debug=debug, nb_cpus=nb_cpus)
+                                         multi_params, debug=debug,
+                                             nb_cpus=n_max_co_processes,)
 
         stitch_list = {}
         for hdf5_name in hdf5names:
@@ -431,11 +427,11 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                 for elem in elems:
                     stitch_list[hdf5_name].append(elem)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "make_stitch_list",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
 
         out_files = glob.glob(path_to_out + "/*")
@@ -603,7 +599,7 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
 
 def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
                      debug, suffix="", qsub_pe=None, qsub_queue=None,
-                     n_max_co_processes=100, nb_cpus=1):
+                     n_max_co_processes=100, nb_cpus=None):
     """
     Applies merge list to all chunks
 
@@ -642,15 +638,16 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
         multi_params.append([cset.chunk_dict[nb_chunk], filename, hdf5names,
                              merge_list_dict_path, suffix])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_apply_merge_list_thread,
-                                         multi_params, debug=debug, nb_cpus=nb_cpus)
+                                         multi_params, debug=debug,
+                                             nb_cpus=n_max_co_processes,)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "apply_merge_list",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
 
     else:
@@ -675,7 +672,8 @@ def _apply_merge_list_thread(args):
         this_cc = cc_data_list[nb_hdf5_name]
         id_changer = merge_list_dict[hdf5_name]
         this_shape = this_cc.shape
-        offset = (np.array(this_shape) - chunk.size) / 2
+        offset = (np.array(this_shape) - chunk.size) // 2  # offset needs to be integer
+
         this_cc = this_cc[offset[0]: this_shape[0] - offset[0],
                           offset[1]: this_shape[1] - offset[1],
                           offset[2]: this_shape[2] - offset[2]]
@@ -689,11 +687,11 @@ def _apply_merge_list_thread(args):
 
 
 def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
-                   n_folders_fs=10000,
+                   n_folders_fs=10000, debug=False,
                    workfolder=None, overlaydataset_path=None,
                    chunk_list=None, suffix="", n_chunk_jobs=5000,
                    use_work_dir=True, qsub_pe=None, qsub_queue=None,
-                   n_max_co_processes=None, nb_cpus=1, transform_func=None,
+                   n_max_co_processes=None, nb_cpus=None, transform_func=None,
                    transform_func_kwargs=None):  # TODO: nb_cpus=1 when memory consumption fixed
     """
     Extracts voxels for each component id
@@ -721,37 +719,30 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
     nb_cpus : int
         number of parallel jobs
     transform_func_kwargs : dict
+    n_chunk_jobs : int
+        Total number of jobs
+    n_max_co_processes : int
+        Jobs run in parallel
+    use_work_dir : bool
+        Unclear what this is for
+    workfolder : str
+        Working directory of SyConn
 
     """
 
     if chunk_list is None:
         chunk_list = [ii for ii in range(len(cset.chunk_dict))]
-
     if use_work_dir:
         if workfolder is None:
             workfolder = os.path.dirname(cset.path_head_folder.rstrip("/"))
     else:
         workfolder = cset.path_head_folder
-
     voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
-
-    voxel_rel_paths_2stage = []
-    for ix in range(n_folders_fs):
-        vp = ""
-        for p in rh.subfold_from_ix(ix, n_folders_fs).strip('/').split('/')[:-1]:
-            vp += p + "/"
-        voxel_rel_paths_2stage.append(vp)
-
-    voxel_rel_paths_2stage = np.unique(voxel_rel_paths_2stage)
-
     if dataset_names is not None:
         for dataset_name in dataset_names:
             dataset_path = workfolder + "/%s_temp/" % dataset_name
             if os.path.exists(dataset_path):
                 shutil.rmtree(dataset_path)
-
-            for p in voxel_rel_paths_2stage:
-                os.makedirs(dataset_path + p)
     else:
         dataset_names = hdf5names
 
@@ -759,39 +750,28 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
             dataset_path = workfolder + "/%s_temp/" % hdf5_name
             if os.path.exists(dataset_path):
                 shutil.rmtree(dataset_path)
-
-            for p in voxel_rel_paths_2stage:
-                os.makedirs(dataset_path + p)
-
     multi_params = []
-
     if n_chunk_jobs > len(chunk_list):
         n_chunk_jobs = len(chunk_list)
 
     if n_chunk_jobs > len(voxel_rel_paths):
         n_chunk_jobs = len(voxel_rel_paths)
-
     chunk_blocks = np.array_split(np.array(chunk_list), n_chunk_jobs)
     path_blocks = np.array_split(np.array(voxel_rel_paths), n_chunk_jobs)
-
     for i_job in range(n_chunk_jobs):
         multi_params.append([[cset.chunk_dict[nb_chunk] for nb_chunk in chunk_blocks[i_job]], workfolder,
                              filename, hdf5names, dataset_names, overlaydataset_path,
                              suffix, path_blocks[i_job], n_folders_fs, transform_func, transform_func_kwargs])
-
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_extract_voxels_thread, multi_params,
-                                             nb_cpus=nb_cpus)
-
-    elif qu.__BATCHJOB__:
+                                             nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_voxels",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=script_folder,
+                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes,
                                      n_cores=nb_cpus)
-
-        # path_to_out = "/u/sdorkenw/QSUB/extract_voxels_folder/out/"
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -799,15 +779,12 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                 results.append(pkl.load(f))
     else:
         raise Exception("QSUB not available")
-
     for i_hdf5_name, hdf5_name in enumerate(hdf5names):
         dataset_path = workfolder + "/%s_temp/" % dataset_names[i_hdf5_name]
-
         remap_dict = defaultdict(list)
         for result in results:
             for key, value in result[hdf5_name].items():
                 remap_dict[key].append(value)
-
         with open("%s/remapping_dict.pkl" % dataset_path, "wb") as f:
             pkl.dump(remap_dict, f)
 
@@ -824,7 +801,8 @@ def _extract_voxels_thread(args):
     n_folders_fs = args[8]
     transform_func = args[9]
     transform_func_kwargs = args[10]
-    # TODO: finish support for syn object extraction
+    # TODO: finish support for syn object extraction -- do not extract all voxels, instead compute bounding box
+    # TODO: and enable dynamic queries via VoxelStorage only if neccessary
 
     map_dict = {}
     for hdf5_name in hdf5names:
@@ -839,8 +817,6 @@ def _extract_voxels_thread(args):
         voxel_dc = VoxelStorage(
             dataset_path + voxel_paths[cur_path_id] + "/voxel.pkl",
             read_only=False, disable_locking=True)
-
-        # os.makedirs(dataset_path + voxel_paths[cur_path_id])
 
         p_parts = voxel_paths[cur_path_id].strip("/").split("/")
         next_id = int("".join(p_parts))
@@ -907,7 +883,6 @@ def _extract_voxels_thread(args):
                     cur_path_id += 1
                     voxel_dc = VoxelStorage(dataset_path + voxel_paths[cur_path_id],
                                             read_only=False, disable_locking=True)
-                    # os.makedirs(dataset_path + voxel_paths[cur_path_id])
                     p_parts = voxel_paths[cur_path_id].strip("/").split("/")
                     next_id = int("".join(p_parts))
                 else:
@@ -919,10 +894,11 @@ def _extract_voxels_thread(args):
 
 
 def combine_voxels(workfolder, hdf5names, dataset_names=None,
-                   n_folders_fs=10000, stride=10, nb_cpus=1,
+                   n_folders_fs=10000, stride=10, nb_cpus=None, sd_version=0,
                    qsub_pe=None, qsub_queue=None, n_max_co_processes=None):
     """
-    Extracts voxels for each component id
+    Extracts voxels for each component id and ceates a SegmentationDataset of type hdf5names.
+    SegmentationDataset will always have version 0!
 
     Parameters
     ----------
@@ -930,6 +906,8 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
     hdf5names: List[str]
         Names/labels to be extracted and processed from the prediction
         file
+    sd_version : int or str
+        0 by default
     n_folders_fs : int
     stride : int
     nb_cpus : int
@@ -947,23 +925,10 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
         voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in
                            range(n_folders_fs)]
 
-        voxel_rel_paths_2stage = []
-        for ix in range(n_folders_fs):
-            vp = ""
-            for p in rh.subfold_from_ix(ix, n_folders_fs).strip('/').split('/')[:-1]:
-                vp += p + "/"
-            voxel_rel_paths_2stage.append(vp)
-
-        voxel_rel_paths_2stage = np.unique(voxel_rel_paths_2stage)
-
         segdataset = segmentation.SegmentationDataset(obj_type=dataset_names[ii],
                                                       working_dir=workfolder,
-                                                      version="new",
-                                                      create=True,
-                                                      n_folders_fs=n_folders_fs)
-
-        for p in voxel_rel_paths_2stage:
-            os.makedirs(segdataset.so_storage_path + p)
+                                                      version=sd_version,
+                                                      create=True, n_folders_fs=n_folders_fs)
 
         multi_params = []
         path_blocks = np.array_split(np.array(voxel_rel_paths),
@@ -998,15 +963,15 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
                                  path_block_dicts, segdataset.version,
                                  n_folders_fs])
 
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
             results = sm.start_multiprocess_imap(_combine_voxels_thread,
-                                            multi_params, nb_cpus=nb_cpus)
+                                            multi_params, nb_cpus=n_max_co_processes,)
 
-        elif qu.__BATCHJOB__:
+        elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "combine_voxels",
                                          pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder,
+                                         script_folder=None,
                                          n_max_co_processes=n_max_co_processes,
                                          n_cores=nb_cpus)
 
@@ -1030,7 +995,7 @@ def _combine_voxels_thread(args):
 
     for i_voxel_rel_path, voxel_rel_path in enumerate(voxel_rel_paths):
         voxel_dc = VoxelStorage(segdataset.so_storage_path + voxel_rel_path +
-                             "/voxel.pkl", read_only=False,
+                                "/voxel.pkl", read_only=False,
                                 disable_locking=True)
         for so_id in path_block_dicts[i_voxel_rel_path]:
             fragments = path_block_dicts[i_voxel_rel_path][so_id]
@@ -1049,10 +1014,38 @@ def _combine_voxels_thread(args):
 
 def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                    n_folders_fs=10000, workfolder=None, overlaydataset_path=None,
-                   chunk_list=None, suffix="", n_chunk_jobs=5000,
+                   chunk_list=None, suffix="", n_chunk_jobs=5000, sd_version=0,
                    use_work_dir=True, qsub_pe=None, qsub_queue=None, qsub_slots=1,
-                   n_max_co_processes=None, nb_cpus=1, object_names=None):
+                   n_max_co_processes=None, nb_cpus=None, object_names=None):
+    """
+    Creates a SegmentationDataset of type object_names/dataset_names/hdf5names  # TODO fix this redundancy once and for all
 
+
+    Parameters
+    ----------
+    cset :
+    filename :
+    hdf5names :
+    dataset_names :
+    sd_version : int or str
+    n_folders_fs :
+    workfolder :
+    overlaydataset_path :
+    chunk_list :
+    suffix :
+    n_chunk_jobs :
+    use_work_dir :
+    qsub_pe :
+    qsub_queue :
+    qsub_slots :
+    n_max_co_processes :
+    nb_cpus :
+    object_names :
+
+    Returns
+    -------
+
+    """
     if object_names is None:
         object_names = hdf5names
 
@@ -1090,16 +1083,15 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
             raise ValueError('object_names were specified but did not match length of "dataset_names"/"hdf5names"')
         for kk, hdf5_name in enumerate(hdf5names):
             object_name = object_names[kk]
-            segdataset = segmentation.SegmentationDataset(obj_type=object_name,
-                                                      working_dir=workfolder,
-                                                      create=True,
-                                                      n_folders_fs=n_folders_fs)
+            segdataset = segmentation.SegmentationDataset(version=sd_version,
+                obj_type=object_name, working_dir=workfolder, create=True, n_folders_fs=n_folders_fs)
             dataset_path = segdataset.so_storage_path
             if os.path.exists(dataset_path):
                 shutil.rmtree(dataset_path)
 
+            # This is required due to coincidental folder creation at the same time
             for p in voxel_rel_paths_2stage:
-                os.makedirs(dataset_path + p)
+                os.makedirs(dataset_path + p, exist_ok=True)
 
     multi_params = []
     if n_chunk_jobs > len(chunk_list):
@@ -1109,20 +1101,17 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
 
     for i_job in range(n_chunk_jobs):
         multi_params.append([[cset.chunk_dict[nb_chunk] for nb_chunk in chunk_blocks[i_job]], workfolder,
-                             filename, hdf5names, dataset_names,
-                             overlaydataset_path,
-                             suffix, n_folders_fs, object_names])
+                             filename, hdf5names, dataset_names, overlaydataset_path,
+                             suffix, n_folders_fs, object_names, sd_version])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_extract_voxels_combined_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+                                        multi_params, nb_cpus=n_max_co_processes)
 
-    elif qu.__BATCHJOB__:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "extract_voxels_combined",
+    elif qu.batchjob_enabled():
+        path_to_out = qu.QSUB_script(multi_params, "extract_voxels_combined",
                                      pe=qsub_pe, queue=qsub_queue, n_cores=qsub_slots,
-                                     script_folder=script_folder,
-                                     n_max_co_processes=n_max_co_processes)
+                                     script_folder=None, n_max_co_processes=n_max_co_processes)
 
 
 def _extract_voxels_combined_thread(args):
@@ -1135,14 +1124,15 @@ def _extract_voxels_combined_thread(args):
     suffix = args[6]
     n_folders_fs = args[7]
     object_names = args[8]
+    sd_version = args[9]
     if object_names is None:
         object_names = hdf5names
     for nb_hdf5_name in range(len(hdf5names)):
         hdf5_name = hdf5names[nb_hdf5_name]
         object_name = object_names[nb_hdf5_name]
         segdataset = segmentation.SegmentationDataset(obj_type=object_name,
-                                                      working_dir=workfolder,
-                                                      create=True,
+                                                      working_dir=workfolder, create=True,
+                                                      version=sd_version,
                                                       n_folders_fs=n_folders_fs)
 
         for i_chunk, chunk in enumerate(chunks):

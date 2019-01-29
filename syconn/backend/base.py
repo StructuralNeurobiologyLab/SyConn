@@ -8,7 +8,7 @@ try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
-try:
+try:  # TODO: check in global_params.py
     import fasteners
     LOCKING = True
 except ImportError:
@@ -193,6 +193,10 @@ class FSBase(StorageBase):
     def push(self, dest=None):
         if dest is None:
             dest = self._path
+        if self._path is None:  # support virtual / temporary SSO objects
+            log_extraction.warning('"push" called but Storage object was initialized '
+                                   'with "None". Content will not bw pushed.')
+            return
         write_obj2pkl(dest + ".tmp", self._dc_intern)
         shutil.move(dest + ".tmp", dest)
         if not self.read_only and not self.disable_locking:

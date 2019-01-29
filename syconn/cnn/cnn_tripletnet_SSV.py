@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
-# Neuromancer Toolkit
-# Copyright (c) 2016 Philipp J. Schubert
-# All rights reserved
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max-Planck-Institute of Neurobiology, Munich, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
+
 import os
 import syconn
 

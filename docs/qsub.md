@@ -17,7 +17,7 @@ from syconn.config import global_params
 import numpy as np
 
 if __name__ == "__main__":
-    ssds = SuperSegmentationDataset(working_dir=global_params.wd)
+    ssds = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     multi_params = ssds.ssv_ids
     np.random.shuffle(multi_params)
     multi_params = chunkify(multi_params, 4000)

@@ -4,9 +4,10 @@ from collections import defaultdict as ddict
 import itertools
 import csv
 from knossos_utils import knossosdataset
+knossosdataset._set_noprint(True)
 from syconn.handler import basics
 import multiprocessing
-from syconn.config import global_params
+from syconn import global_params
 
 
 def new_extraction(result_queue, params):
@@ -76,7 +77,7 @@ def old_extraction_modified(result_queue, params):
 
 if __name__ == '__main__':
 
-    kd_seg_path = global_params.kd_seg_path
+    kd_seg_path = global_params.config.kd_seg_path
 
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(kd_seg_path)

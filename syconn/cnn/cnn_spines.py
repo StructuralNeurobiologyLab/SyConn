@@ -43,7 +43,7 @@ if __name__ == "__main__":
     else:
         device = torch.device('cpu')
 
-    print(f'Running on device: {device}')
+    print('Running on device: {}'.format(device))
 
     # Don't move this stuff, it needs to be run this early to work
     import elektronn3

@@ -6,12 +6,15 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import numpy as np
 from scipy import spatial
+from knossos_utils import knossosdataset
+knossosdataset._set_noprint(True)
 from knossos_utils.knossosdataset import KnossosDataset
 from skimage.segmentation import find_boundaries
 
 from ..reps.super_segmentation_helper import get_sso_axoness_from_coord
 from ..reps.segmentation import SegmentationDataset, SegmentationObject
 from ..reps.super_segmentation import SuperSegmentationObject
+from . import log_proc
 
 
 def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
@@ -34,12 +37,12 @@ def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
     if box_size is None:
         box_size = np.array([300, 300, 150])
     kd = KnossosDataset()
-    # Hack
+    # TODO: Hack
     kd.initialize_from_knossos_path(
         so.working_dir + "knossosdatasets/j0126_realigned_v4b_cbs_ext0_fix/")
     bndry = np.array(kd.boundary)
     if np.any(so.rep_coord >= bndry) or np.any(so.rep_coord < np.zeros_like(bndry)):
-        print(so.id, so.rep_coord)
+        log_proc.warning(so.id, so.rep_coord)
         so.save_attributes(["glia_vol_frac", "glia_sv_ids", "glia_cov_frac",
                             "glia_cov"], [-1, -1, -1, -1])
         return

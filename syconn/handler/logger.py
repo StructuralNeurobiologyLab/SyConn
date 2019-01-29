@@ -8,7 +8,7 @@ import logging
 import coloredlogs
 import os
 
-from ..config import global_params
+from .. import global_params
 
 __all__ = ['initialize_logging']
 
@@ -37,11 +37,12 @@ def get_main_log():
         logger.addHandler(fh)
         logger.info("Initialized file logging. Log-files are stored at"
                     " {}.".format(log_dir))
-    logger.info("Initialized stdout logging.")
+    logger.info("Initialized stdout logging (level: {}).".format(global_params.log_level))
     return logger
 
 
-def initialize_logging(log_name, log_dir=global_params.default_log_dir):
+def initialize_logging(log_name, log_dir=global_params.default_log_dir,
+                       overwrite=True):
     """
     Logger for each package module. For import processing steps individual
     logger can be defined (e.g. multiviews, skeleton)
@@ -52,26 +53,29 @@ def initialize_logging(log_name, log_dir=global_params.default_log_dir):
     log_dir : str
         Set log_dir specifically. Will then create a filehandler and ignore the
          state of global_params.DISABLE_FILE_LOGGING state.
+    overwrite : bool
+        Previous log file will be overwritten
 
     Returns
     -------
 
     """
     logger = logging.getLogger(log_name)
-    coloredlogs.install(level=global_params.log_level, logger=logger)
+    coloredlogs.install(level=global_params.log_level, logger=logger,
+                        reconfigure=False)  # True possibly leads to stderr output
     level = logging.getLevelName(global_params.log_level)
     logger.setLevel(level)
 
     if not global_params.DISABLE_FILE_LOGGING or log_dir is not None:
         # create file handler which logs even debug messages
         if log_dir is None:
-            log_dir = os.path.expanduser('~') + "/SyConn/logs/"
+            log_dir = os.path.expanduser('~') + "/.SyConn/logs/"
         try:
             os.makedirs(log_dir, exist_ok=True)
         except TypeError:
             if not os.path.isdir(log_dir):
                 os.makedirs(log_dir)
-        if os.path.isfile(log_dir + log_name + '.log'):
+        if overwrite and os.path.isfile(log_dir + log_name + '.log'):
             os.remove(log_dir + log_name + '.log')
         # add the handlers to logger
         fh = logging.FileHandler(log_dir + log_name + ".log")

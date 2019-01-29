@@ -57,7 +57,7 @@ def parse_skelnodes_labels_to_mesh(kzip_path, sso, gt_type, n_voting=40):
 
 def generate_palette(nr_classes, return_rgba=True):
     """
-    Creates a RGB(A) palette for N classes.
+    Creates a RGB(A) palette for N classes. Background label will be highest class label + 1.
 
     Parameters
     ----------
@@ -70,7 +70,7 @@ def generate_palette(nr_classes, return_rgba=True):
     np.array
         Unique color array for N input classes
     """
-    classes_ids = np.arange(nr_classes) #reserve additional class id for background
+    classes_ids = np.arange(nr_classes)  # reserve additional class id for background
     classes_rgb = id2rgb_array_contiguous(classes_ids)  # convention: do not use 1, 1, 1; will be background value
     if return_rgba:
         classes_rgb = np.concatenate([classes_rgb, np.ones(classes_rgb.shape[:-1])[..., None] * 255], axis=1)
