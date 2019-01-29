@@ -1,6 +1,7 @@
 name: syconn
 channels:
   - defaults
+  - conda-forge
 dependencies:
   # For docs:
   - sphinx >=1.7.5
