@@ -1,9 +1,13 @@
 # -*- coding: utf-8 -*-
+# distutils: language=c++
 # SyConn - Synaptic connectivity inference toolkit
 #
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
+
+
 try:
     import cPickle as pkl
 except ImportError:
@@ -25,6 +29,13 @@ from ..mp import mp_utils as sm
 from ..handler import compression
 from . import object_extraction_steps as oes
 from . import log_extraction
+
+from cython.view cimport array as cvarray
+from libc.stdint cimport uint64_t, uint32_t
+cimport cython
+from libc.stdlib cimport rand
+from libcpp.map cimport map
+from cython.operator import dereference, postincrement
 
 
 def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
@@ -96,7 +107,10 @@ def detect_cs(arr):
     return cs_seg
 
 
-def kernel(int[:,:,:] chunk, uint64_t center_id):
+def kernel(chunkP, center_idP):
+    cdef int [:,:,:] chunk = chunkP
+    cdef uint64_t center_id = center_idP
+
     cdef map[int, int] unique_ids
 
     for i in range(chunk.shape[0]):
@@ -125,10 +139,10 @@ def kernel(int[:,:,:] chunk, uint64_t center_id):
         return key
 
 
-def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
-    cdef int [:, :, :] stencil = stencil1
-    #cdef int stencil[3]
-    #stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
+def process_block(uint32_t[:, :, :] edges, int[:, :, :] arr, stencil1=(7,7,3)):
+    #cdef int [:, :, :] stencil = stencil1
+    cdef int stencil[3]
+    stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
     assert (stencil[0]%2 + stencil[1]%2 + stencil[2]%2 ) == 3
     cdef uint64_t[:, :, :] out = cvarray(shape = (arr.shape[0], arr.shape[1], arr.shape[2]), itemsize = sizeof(uint64_t), format = 'Q')
     out [:, :, :] = 0
@@ -262,3 +276,4 @@ def _extract_agg_cs_thread(args):
         #                                                 create=True)
         #     segobj.save_voxels(id_mask, abs_offset)
         #     print(unique_id)
+
