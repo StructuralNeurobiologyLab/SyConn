@@ -79,41 +79,41 @@ if __name__ == '__main__':
     log.info('Finished example cube preparation {}. Starting SyConn pipeline.'.format(bd))
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
-    # # INITIALIZE DATA
-    # # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
-    # log.info('Step 0/8 - Preparation')
-    # kd = knossosdataset.KnossosDataset()
-    # kd.initialize_from_matrix(example_wd + 'knossosdatasets/seg/', scale, experiment_name,
-    #                           offset=offset, boundary=bd, fast_downsampling=True,
-    #                           data_path=h5_dir + 'raw.h5', mags=[1, 2], hdf5_names=['raw'])
-    # kd.from_matrix_to_cubes(offset, mags=[1, 2], data_path=h5_dir + 'seg.h5',
-    #                         datatype=np.uint64, fast_downsampling=True,
-    #                         as_raw=False, hdf5_names=['seg'])
-    #
-    # kd_mi = knossosdataset.KnossosDataset()
-    # kd_mi.initialize_from_matrix(example_wd + 'knossosdatasets/mi/', scale, experiment_name,
-    #                              offset=offset, boundary=bd, fast_downsampling=True,
-    #                              data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'])
-    #
-    # kd_vc = knossosdataset.KnossosDataset()
-    # kd_vc.initialize_from_matrix(example_wd + 'knossosdatasets/vc/', scale, experiment_name,
-    #                              offset=offset, boundary=bd, fast_downsampling=True,
-    #                              data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'])
-    #
-    # kd_sj = knossosdataset.KnossosDataset()
-    # kd_sj.initialize_from_matrix(example_wd + 'knossosdatasets/sj/', scale, experiment_name,
-    #                              offset=offset, boundary=bd, fast_downsampling=True,
-    #                              data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
-    #
-    # kd_sym = knossosdataset.KnossosDataset()
-    # kd_sym.initialize_from_matrix(example_wd + 'knossosdatasets/sym/', scale, experiment_name,
-    #                               offset=offset, boundary=bd, fast_downsampling=True,
-    #                               data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'])
-    #
-    # kd_asym = knossosdataset.KnossosDataset()
-    # kd_asym.initialize_from_matrix(example_wd + 'knossosdatasets/asym/', scale, experiment_name,
-    #                                offset=offset, boundary=bd, fast_downsampling=True,
-    #                                data_path=h5_dir + 'asym.h5', mags=[1, 2], hdf5_names=['asym'])
+    # INITIALIZE DATA
+    # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
+    log.info('Step 0/8 - Preparation')
+    kd = knossosdataset.KnossosDataset()
+    kd.initialize_from_matrix(example_wd + 'knossosdatasets/seg/', scale, experiment_name,
+                              offset=offset, boundary=bd, fast_downsampling=True,
+                              data_path=h5_dir + 'raw.h5', mags=[1, 2], hdf5_names=['raw'])
+    kd.from_matrix_to_cubes(offset, mags=[1, 2], data_path=h5_dir + 'seg.h5',
+                            datatype=np.uint64, fast_downsampling=True,
+                            as_raw=False, hdf5_names=['seg'])
+
+    kd_mi = knossosdataset.KnossosDataset()
+    kd_mi.initialize_from_matrix(example_wd + 'knossosdatasets/mi/', scale, experiment_name,
+                                 offset=offset, boundary=bd, fast_downsampling=True,
+                                 data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'])
+
+    kd_vc = knossosdataset.KnossosDataset()
+    kd_vc.initialize_from_matrix(example_wd + 'knossosdatasets/vc/', scale, experiment_name,
+                                 offset=offset, boundary=bd, fast_downsampling=True,
+                                 data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'])
+
+    kd_sj = knossosdataset.KnossosDataset()
+    kd_sj.initialize_from_matrix(example_wd + 'knossosdatasets/sj/', scale, experiment_name,
+                                 offset=offset, boundary=bd, fast_downsampling=True,
+                                 data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
+
+    kd_sym = knossosdataset.KnossosDataset()
+    kd_sym.initialize_from_matrix(example_wd + 'knossosdatasets/sym/', scale, experiment_name,
+                                  offset=offset, boundary=bd, fast_downsampling=True,
+                                  data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'])
+
+    kd_asym = knossosdataset.KnossosDataset()
+    kd_asym.initialize_from_matrix(example_wd + 'knossosdatasets/asym/', scale, experiment_name,
+                                   offset=offset, boundary=bd, fast_downsampling=True,
+                                   data_path=h5_dir + 'asym.h5', mags=[1, 2], hdf5_names=['asym'])
 
     # # RUN SYCONN - without glia removal
     # log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')

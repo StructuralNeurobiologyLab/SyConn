@@ -4,7 +4,7 @@ cimport cython
 from libc.stdlib cimport rand
 from libcpp.map cimport map
 from cython.operator import dereference, postincrement
-
+import numpy as np
 
 
 def kernel(chunkP, center_idP):

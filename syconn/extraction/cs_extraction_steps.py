@@ -22,6 +22,11 @@ from knossos_utils import knossosdataset
 from knossos_utils import chunky
 knossosdataset._set_noprint(True)
 import os
+try:
+    from .block_processing_cython import kernel, process_block, process_block_nonzero
+except ImportError:
+    from .block_processing import kernel, process_block, process_block_nonzero
+
 
 from ..reps import segmentation
 from ..mp import batchjob_utils as qu
@@ -30,12 +35,6 @@ from ..handler import compression
 from . import object_extraction_steps as oes
 from . import log_extraction
 
-from cython.view cimport array as cvarray
-from libc.stdint cimport uint64_t, uint32_t
-cimport cython
-from libc.stdlib cimport rand
-from libcpp.map cimport map
-from cython.operator import dereference, postincrement
 
 
 def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
@@ -47,7 +46,7 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_contact_site_detection_thread, multi_params,
-                                             debug=False, nb_cpus=n_max_co_processes)
+                                             debug=False, nb_cpus=n_max_co_processes, verbose=True)
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "contact_site_detection",
@@ -107,84 +106,56 @@ def detect_cs(arr):
     return cs_seg
 
 
-def kernel(chunkP, center_idP):
-    cdef int [:,:,:] chunk = chunkP
-    cdef uint64_t center_id = center_idP
+def kernel(chunk, center_id):
+    unique_ids, counts = np.unique(chunk, return_counts=True)
 
-    cdef map[int, int] unique_ids
+    counts[unique_ids == 0] = -1
+    counts[unique_ids == center_id] = -1
 
-    for i in range(chunk.shape[0]):
-        for j in range(chunk.shape[1]):
-            for k in range(chunk.shape[2]):
-                unique_ids[chunk[i][j][k]] = unique_ids[chunk[i][j][k]] + 1
-    unique_ids[0] = 0
-    unique_ids[center_id] = 0
-    cdef int theBiggest  = 0
-    cdef uint64_t key = 0
+    if np.max(counts) > 0:
+        partner_id = unique_ids[np.argmax(counts)]
 
-    cdef map[int,int].iterator it = unique_ids.begin()
-    while it != unique_ids.end():
-        if dereference(it).second > theBiggest:
-            theBiggest =  dereference(it).second
-            key = dereference(it).first
-        postincrement(it)
-
-    if theBiggest > 0:
-        if center_id > key:
-            return (key << 32 ) + center_id
+        if center_id > partner_id:
+            return (partner_id << 32) + center_id
         else:
-            return (center_id << 32) + key
-
+            return (center_id << 32) + partner_id
     else:
-        return key
+        return 0
 
 
-def process_block(uint32_t[:, :, :] edges, int[:, :, :] arr, stencil1=(7,7,3)):
-    #cdef int [:, :, :] stencil = stencil1
-    cdef int stencil[3]
-    stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
-    assert (stencil[0]%2 + stencil[1]%2 + stencil[2]%2 ) == 3
-    cdef uint64_t[:, :, :] out = cvarray(shape = (arr.shape[0], arr.shape[1], arr.shape[2]), itemsize = sizeof(uint64_t), format = 'Q')
-    out [:, :, :] = 0
-    cdef int offset[3]
-    offset[:] = [stencil[0]/2, stencil[1]/2, stencil[2]/2] ### check what ype do you need
-    cdef int center_id
-    cdef int[:, :, :] chunk = cvarray(shape=(2*offset[0]+2, 2*offset[2]+2, 2*offset[2]+2), itemsize=sizeof(int), format='i')
+def process_block(edges, arr, stencil=(7, 7, 3)):
+    stencil = np.array(stencil, dtype=np.int)
+    assert np.sum(stencil % 2) == 3
 
+    out = np.zeros_like(arr, dtype=np.uint64)
+    offset = stencil / 2
     for x in range(offset[0], arr.shape[0] - offset[0]):
         for y in range(offset[1], arr.shape[1] - offset[1]):
             for z in range(offset[2], arr.shape[2] - offset[2]):
                 if edges[x, y, z] == 0:
                     continue
 
-                center_id = arr[x, y, z] #be sure that it's 32 or 64 bit intiger
-                chunk = arr[x - offset[0]: x + offset[0] + 1, y - offset[1]: y + offset[1], z - offset[2]: z + offset[2]]
+                center_id = arr[x, y, z]
+                chunk = arr[x - offset[0]: x + offset[0] + 1,
+                        y - offset[1]: y + offset[1],
+                        z - offset[2]: z + offset[2]]
                 out[x, y, z] = kernel(chunk, center_id)
+    return out
 
-    return np.array(out)
 
+def process_block_nonzero(edges, arr, stencil=(7, 7, 3)):
+    stencil = np.array(stencil, dtype=np.int)
+    assert np.sum(stencil % 2) == 3
 
-def process_block_nonzero(int[:, :, :] edges, int[:, :, :] arr, stencil1=(7,7,3)):
-    cdef int stencil[3]
-    stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
-    assert (stencil[0]%2 + stencil[1]%2 + stencil[2]%2 ) == 3
-
-    cdef uint64_t[:, :, :] out = cvarray(shape = (1 + arr.shape[0] - stencil[0], arr.shape[1] - stencil[1] + 1, arr.shape[2] - stencil[2] + 1), itemsize = sizeof(uint64_t), format = 'Q')
-    out[:, :, :] = 0
-    cdef int center_id
-    cdef int offset[3]
-    offset [:] = [stencil[0]/2, stencil[1]/2, stencil[2]/2]
-    cdef int[:, :, :] chunk = cvarray(shape=(stencil[0]+1, stencil[1]+1, stencil[2]+1), itemsize=sizeof(int), format='i')
-
-    for x in range(0, edges.shape[0]-2*offset[0]):
-        for y in range(0, edges.shape[1]-2*offset[1]):
-            for z in range(0, edges.shape[2]-2*offset[2]):
-                if edges[x+offset[0], y+offset[1], z+offset[2]] == 0:
-                    continue
-                center_id = arr[x + offset[0], y + offset[1], z + offset[2]]
-                chunk = arr[x: x + stencil[0], y: y + stencil[1], z: z + stencil[2]]
-                out[x, y, z] = kernel(chunk, center_id)
-    return np.array(out)
+    arr_shape = np.array(arr.shape)
+    out = np.zeros(arr_shape - stencil + 1, dtype=np.uint64)
+    offset = stencil // 2 # int division!
+    nze = np.nonzero(edges[offset[0]: -offset[0], offset[1]: -offset[1], offset[2]: -offset[2]])
+    for x, y, z in zip(nze[0], nze[1], nze[2]):
+        center_id = arr[x + offset[0], y + offset[1], z + offset[2]]
+        chunk = arr[x: x + stencil[0], y: y + stencil[1], z: z + stencil[2]]
+        out[x, y, z] = kernel(chunk, center_id)
+    return out
 
 
 def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
