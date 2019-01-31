@@ -10,7 +10,7 @@ import os
 import sys
 from validate import Validator
 from .. import global_params
-__all__ = ['DynConfig']
+__all__ = ['DynConfig', 'get_default_conf_str']
 
 
 class Config(object):
@@ -18,6 +18,7 @@ class Config(object):
         self._entries = {}
         self._working_dir = working_dir
         self.parse_config(validate=validate)
+        self.global_logdir = None
 
     @property
     def entries(self):

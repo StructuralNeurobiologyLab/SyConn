@@ -1,7 +1,7 @@
 from setuptools import find_packages, setup
 import os
-# import numpy
-# from Cython.Build import cythonize
+import numpy
+from Cython.Build import cythonize
 readme_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md')
 # m2r may not be installed in user environment
 with open(readme_file) as f:
@@ -16,7 +16,7 @@ config = {
     'download_url': 'https://github.com/StructuralNeurobiologyLab/SyConn.git',
     'author_email': 'pschubert@neuro.mpg.de',
     'version': '0.2',
-    'license': 'GPL-2.0',
+    'license': 'GPLv2',
     'install_requires': ['knossos_utils>=0.1', 'ELEKTRONN2', 'matplotlib',
                          'numpy==1.15.4', 'scipy', 'lz4', 'h5py', 'networkx', 'ipython<7.0.0',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
@@ -37,7 +37,9 @@ config = {
     'packages': find_packages(exclude=['scripts']), 'long_description': readme,
     'setup_requires': ["pytest-runner", "cython>=0.23"], 'tests_require': ["pytest", ],
     # this will compile all files within directories in syconn/
-    # 'ext_modules': cythonize(["syconn/*/*.pyx"], include_path=[numpy.get_include()]),
+    'ext_modules': cythonize("syconn/*/*.pyx", include_path=[numpy.get_include()],
+                             compiler_directives={'language_level': 3, 'boundscheck': False},
+                             language='c++'),
 }
 
 setup(**config)

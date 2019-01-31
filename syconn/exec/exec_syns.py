@@ -76,10 +76,9 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
                   box_coords=[0, 0, 0], fit_box_size=True)
 
     # POPULATES CS CD with SV contacts
-    ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=global_params.NCORE_TOTAL,
-                           qsub_pe='default', qsub_queue='all.q')
-    ces.extract_agg_contact_sites(cd, global_params.config.working_dir, n_folders_fs=n_folders_fs, suffix="",
-                                  qsub_queue='all.q', n_max_co_processes=global_params.NCORE_TOTAL,
+    ces.find_contact_sites(cd, kd_seg_path, qsub_pe='default', qsub_queue='all.q')
+    ces.extract_agg_contact_sites(cd, global_params.config.working_dir, n_folders_fs=n_folders_fs,
+                                  suffix="", qsub_queue='all.q',
                                   qsub_pe='default')
     log.info('CS extraction finished.')
 
@@ -102,8 +101,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     # This creates an SD of type 'syn_ssv', ~15 min
     cps.combine_and_split_syn(global_params.config.working_dir, resume_job=False,
                               stride=250, qsub_pe='default', qsub_queue='all.q',
-                              cs_gap_nm=global_params.cs_gap_nm,
-                              n_max_co_processes=global_params.NCORE_TOTAL)
+                              cs_gap_nm=global_params.cs_gap_nm)
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
     dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True)

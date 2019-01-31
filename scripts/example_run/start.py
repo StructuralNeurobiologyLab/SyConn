@@ -48,7 +48,6 @@ if __name__ == '__main__':
         raise ValueError('Example data could not be found at "{}".'.format(h5_dir))
 
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
-
     bb = parse_movement_area_from_zip(kzip_p)
     offset = np.array([0, 0, 0])
     bd = bb[1] - bb[0]

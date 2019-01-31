@@ -9,8 +9,8 @@ import coloredlogs
 import os
 
 from .. import global_params
-
-__all__ = ['initialize_logging']
+global log_main
+__all__ = ['initialize_logging', 'log_main']
 
 
 def get_main_log():
@@ -23,11 +23,7 @@ def get_main_log():
         # create file handler which logs even debug messages
         log_dir = os.path.expanduser('~') + "/SyConn/logs/"
 
-        try:
-            os.makedirs(log_dir, exist_ok=True)
-        except TypeError:
-            if not os.path.isdir(log_dir):
-                os.makedirs(log_dir)
+        os.makedirs(log_dir, exist_ok=True)
         fh = logging.FileHandler(log_dir + 'syconn.log')
         fh.setLevel(level)
 

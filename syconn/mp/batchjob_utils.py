@@ -461,7 +461,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     name :
     n_cores :
     suffix :
-    job_name :
+    n_max_co_processes :
     script_folder :
     python_path :
 
