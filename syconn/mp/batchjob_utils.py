@@ -20,6 +20,7 @@ import subprocess
 import tqdm
 import sys
 import time
+from multiprocessing import cpu_count
 
 from ..handler.basics import temp_seed
 from ..handler.logger import initialize_logging
@@ -476,8 +477,8 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
         shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob = log_mp
     if n_max_co_processes is None:
-        n_max_co_processes = global_params.NCORES_PER_NODE
-    n_max_co_processes = np.min([global_params.NCORES_PER_NODE // n_cores, n_max_co_processes])
+        n_max_co_processes = cpu_count()
+    n_max_co_processes = np.min([n_max_co_processes // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
     log_batchjob.debug('Starting BatchJobFallback script "{}" with {} tasks using {}'
                        ' parallel jobs, each using {} core(s).'.format(

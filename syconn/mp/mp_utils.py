@@ -102,7 +102,7 @@ def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
             pass
     out = []
     #Get the results from the futures.
-    for i, future in tqdm.tqdm(enumerate(futures)):
+    for i, future in enumerate(futures):
         try:
             out.append(future.result())
         except Exception as e:
