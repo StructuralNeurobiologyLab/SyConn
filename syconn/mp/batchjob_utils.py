@@ -474,8 +474,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     job_folder = qsub_work_folder + "/%s_folder%s/" % (name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
-    log_batchjob = initialize_logging("{}_fallback".format(name + suffix),
-                                      log_dir=job_folder)
+    log_batchjob = log_mp
     if n_max_co_processes is None:
         n_max_co_processes = global_params.NCORES_PER_NODE
     n_max_co_processes = np.min([global_params.NCORES_PER_NODE // n_cores, n_max_co_processes])

@@ -202,21 +202,20 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     multi_params = [(mps, obj_type, sd.version_dict[obj_type], sd.working_dir,
                      kd_path, readonly) for mps in multi_params]
     # Running workers - Extracting mapping
-    # does not work with imap in python 3.6, jobs do not return # TODO investigate; also: single processing is faster than single-node with 20 cores
-    if qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params, "map_objects",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None, n_cores=nb_cpus,
-                                     n_max_co_processes=n_max_co_processes)
-        out_files = glob.glob(path_to_out + "/*")
-        results = []
-        for out_file in out_files:
-            with open(out_file, 'rb') as f:
-                results.append(pkl.load(f))
-    else:
-        results = sm.start_multiprocess_imap(_map_objects_thread, multi_params,
-                                             nb_cpus=n_max_co_processes, verbose=True,
-                                             debug=False)
+    # if qu.batchjob_enabled():
+    path_to_out = qu.QSUB_script(multi_params, "map_objects",
+                                 pe=qsub_pe, queue=qsub_queue,
+                                 script_folder=None, n_cores=nb_cpus,
+                                 n_max_co_processes=n_max_co_processes)
+    out_files = glob.glob(path_to_out + "/*")
+    results = []
+    for out_file in out_files:
+        with open(out_file, 'rb') as f:
+            results.append(pkl.load(f))
+    # else:
+    #     results = sm.start_multiprocess_imap(_map_objects_thread, multi_params,
+    #                                          nb_cpus=n_max_co_processes, verbose=True,
+    #                                          debug=False)
 
     # write cell organell mappings to cell SV attribute dicts
     sv_obj_map_dict = defaultdict(dict)
