@@ -94,7 +94,8 @@ def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
             'unit': 'job',
             'unit_scale': True,
             'leave': False,
-            'ncols': 80
+            'ncols': 80,
+            'dynamic_ncols': False
         }
         #Print out the progress as tasks complete
         for f in tqdm.tqdm(as_completed(futures), **kwargs):
@@ -151,7 +152,7 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
     return result
 
 
-def start_multiprocess_imap(func, params, debug=False, verbose=True,
+def start_multiprocess_imap(func, params, debug=False, verbose=False,
                             nb_cpus=None, show_progress=True):
     """
     Multiprocessing method which supports progress bar (therefore using
@@ -193,7 +194,7 @@ def start_multiprocess_imap(func, params, debug=False, verbose=True,
                 #                         ncols=80, leave=True, unit='jobs',
                 #                         unit_scale=True, dynamic_ncols=False))
             else:
-                result = list(pool.imap(func, params))
+                result = list(pool.map(func, params))
     else:
         if show_progress:
             pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,

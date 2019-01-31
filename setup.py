@@ -3,7 +3,6 @@ import os
 import numpy
 from Cython.Build import cythonize
 readme_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md')
-# m2r may not be installed in user environment
 with open(readme_file) as f:
     readme = f.read()
 
