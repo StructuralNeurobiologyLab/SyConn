@@ -129,6 +129,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if not batchjob_enabled():
         return batchjob_fallback(params, name, n_cores, suffix, n_max_co_processes,
                                  script_folder, python_path)
+    if queue is None:
+        queue = global_params.BATCH_QUEUE
+    if pe is None:
+        pe = global_params.BATCH_PE
     if resume_job:
         return resume_QSUB_script(
             params, name, queue=queue, pe=pe, max_iterations=max_iterations,

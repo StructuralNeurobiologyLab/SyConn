@@ -649,6 +649,8 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
 
     return overlap_vx_l
 
+import pydeps
+
 
 def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
                      n_job_chunks=1000, qsub_pe=None, qsub_queue=None,
@@ -684,7 +686,7 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
 
     voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd, version="0",
-                                               create=True, n_folders_fs=n_folders_fs)
+                                              create=True, n_folders_fs=n_folders_fs)
 
     for p in voxel_rel_paths:
         try:

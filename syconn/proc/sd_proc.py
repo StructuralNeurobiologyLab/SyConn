@@ -248,6 +248,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
 
 def _map_objects_thread(args):
     """Worker of map_objects_to_sv"""
+    # TODO: this needs to be done densely by matching cell organelle segmentation (see corresponding ChunkDataset which is an intermediate result of 'from_probabilities_to_objects') to SV segmentation
 
     paths = args[0]
     obj_type = args[1]

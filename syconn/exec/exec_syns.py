@@ -76,10 +76,9 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
                   box_coords=[0, 0, 0], fit_box_size=True)
 
     # POPULATES CS CD with SV contacts
-    ces.find_contact_sites(cd, kd_seg_path, qsub_pe='default', qsub_queue='all.q')
-    ces.extract_agg_contact_sites(cd, global_params.config.working_dir, n_folders_fs=n_folders_fs,
-                                  suffix="", qsub_queue='all.q',
-                                  qsub_pe='default')
+    ces.find_contact_sites(cd, kd_seg_path)
+    ces.extract_agg_contact_sites(cd, global_params.config.working_dir,
+                                  n_folders_fs=n_folders_fs, suffix="")
     log.info('CS extraction finished.')
 
     # create overlap dataset between SJ and CS: SegmentationDataset of type 'syn'
@@ -93,7 +92,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     # TODO: change stride to n_jobs
     # # This creates an SD of type 'syn', currently ~6h, will hopefully be sped up after refactoring
     cs_processing_steps.syn_gen_via_cset(cs_sd, sj_sd, cs_cset, resume_job=False,
-                                         nb_cpus=2, qsub_pe='openmp')
+                                         nb_cpus=2)
     sd = SegmentationDataset("syn", working_dir=global_params.config.working_dir, version="0")
     dataset_analysis(sd, qsub_pe='openmp', compute_meshprops=False)
     log.info('SegmentationDataset of type "syn" was generated.')
