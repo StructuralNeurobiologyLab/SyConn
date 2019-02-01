@@ -31,11 +31,17 @@ config = DynConfig()
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
 batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + \
                          "/QSUB_scripts/"
+# TODO refactor syconn and get rid of all qsub_pe and qsub_queue kwargs and only use batch_job_enabled(), the default in QSUB_script are now BATCH_PE and BATCH_QUEUE
+BATCH_PE = 'default'
+BATCH_QUEUE = 'all.q'
 # TODO: Use computing settings everywhere
 MEM_PER_NODE = 249.5e3  # in MB
 NCORES_PER_NODE = 20
 NCORE_TOTAL = 340
 NGPU_TOTAL = 34
+
+backend = "FS"  # File system
+PYOPENGL_PLATFORM = 'egl'  # Rendering
 
 
 # --------- LOGGING
@@ -51,10 +57,6 @@ log_level = 'DEBUG'  # INFO, DEBUG
 # will be stored at wd + '/logs/'.
 DISABLE_FILE_LOGGING = True
 
-
-# --------- BACKEND DEFINITIONS
-backend = "FS"  # File system
-PYOPENGL_PLATFORM = 'egl'  # Rendering
 
 # --------- CONTACT SITE PARAMETERS
 # Synaptic junction bounding box diagonal threshold in nm; objects above will not be used during `syn_gen_via_cset`
