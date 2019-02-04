@@ -17,7 +17,7 @@ from plyfile import PlyData, PlyElement
 from scipy.ndimage.morphology import binary_closing, binary_dilation
 import tqdm
 try:
-    import vtkInterface
+    import vtki
     __vtk_avail__ = True
 except ImportError:
     __vtk_avail__ = False
@@ -294,19 +294,18 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
     verts = np.array(verts) * downsampling + offset
     if decimate_mesh > 0:
         if not __vtk_avail__:
-            msg = "vtkInterface not installed. Please install vtkInterface.'" \
-                  "git clone https://github.com/akaszynski/vtkInterface.git' " \
-                  "and 'pip install -e vtkInterface'."
+            msg = "vtki not installed. Please install vtki.'" \
+                  "pip install vtki'."
             log_proc.error(msg)
             raise ImportError(msg)
         log_proc.warning("'triangulation': Currently mesh-sparsification"
                          " may not preserve volume.")
-        # add number of vertices in front of every face (required by vtkInterface)
+        # add number of vertices in front of every face (required by vtki)
         ind = np.concatenate([np.ones((len(ind), 1)).astype(np.int64) * 3, ind],
                              axis=1)
-        mesh = vtkInterface.PolyData(verts, ind.flatten()).TriFilter()
+        mesh = vtki.PolyData(verts, ind.flatten()).TriFilter()
         decimated_mesh = mesh.Decimate(decimate_mesh, volume_preservation=True)
-        if decimated_mesh is None:  # maybe vtkInterface API changes and operates in-place -> TODO: check version differences and require one of them
+        if decimated_mesh is None:  # maybe vtki API changes and operates in-place -> TODO: check version differences and require one of them, changed to vtki, PS 04Feb2019
             decimated_mesh = mesh
             if len(decimated_mesh.faces.reshape((-1, 4))[:, 1:]) == len(ind):
                 log_proc.error(
