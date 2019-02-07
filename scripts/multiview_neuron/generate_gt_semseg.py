@@ -95,7 +95,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
         else:# dendrite, axon, soma, background
             colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1], [0.9, 0.9, 0.9, 1]]
         colors = (np.array(colors) * 255).astype(np.uint8)
-        color_array_mesh = (colors[vertex_labels].astype(np.float32))[:, 0]
+        color_array_mesh = colors[vertex_labels][:, 0]  # TODO: check why only first element, maybe colors introduces an additional axis
         write_mesh2kzip("{}/sso_{}_gtlabels.k.zip".format(out_path, sso.id),
                         sso.mesh[0], sso.mesh[1], sso.mesh[2], color_array_mesh,
                         ply_fname="gtlabels.ply")
