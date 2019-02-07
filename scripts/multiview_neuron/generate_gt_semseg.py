@@ -254,7 +254,7 @@ def gt_generation_helper(args):
 
 if __name__ == "__main__":
     # spiness
-    if 0:
+    if 1:
         initial_run = False
         n_views = 2
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_spgt/" \
@@ -263,10 +263,10 @@ if __name__ == "__main__":
                       "/23044610.037.k.zip", "/4741011.074.k.zip",
                       "/18279774.089.k.zip", "/26331138.046.k.zip"]
         file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
-        GT_generation(file_paths[:2], n_views, ws=(256, 128), comp_window=8e3)
+        GT_generation(file_paths, 'spgt', 'spgt', n_views, ws=(256, 128), comp_window=8e3)
 
     # axoness
-    if 1:
+    if 0:
         initial_run = True
         n_views = 2
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_axoness_semseg_skeletons/"
