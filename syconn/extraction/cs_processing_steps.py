@@ -1383,7 +1383,6 @@ def _collect_properties_from_ssv_partners_thread(args):
             synssv_o.attr_dict.update({'partner_axoness': axoness, 'partner_spiness': spiness,
                                        'partner_celltypes': celltypes, 'syn_sign': syn_sign})
             this_attr_dc[synssv_id] = synssv_o.attr_dict
-
         this_attr_dc.push()
 
 
