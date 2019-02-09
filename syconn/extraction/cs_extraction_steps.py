@@ -23,10 +23,9 @@ from knossos_utils import chunky
 knossosdataset._set_noprint(True)
 import os
 try:
-    from .block_processing_cythonA import kernel, process_block, process_block_nonzero
+    from .block_processing_cythonC import kernel, process_block, process_block_nonzero
 except ImportError:
     from .block_processing import kernel, process_block, process_block_nonzero
-
 
 from ..reps import segmentation
 from ..mp import batchjob_utils as qu
@@ -39,7 +38,6 @@ from . import log_extraction
 
 def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
                        qsub_pe=None, qsub_queue=None):
-    print("a")
     os.makedirs(cset.path_head_folder, exist_ok=True)
     multi_params = []
     for chunk in cset.chunk_dict.values():
@@ -103,8 +101,6 @@ def detect_cs(arr):
 
     # cs_seg = cse.process_chunk(edges, arr, [7, 7, 3])
     cs_seg = process_block_nonzero(edges, arr, [13, 13, 7])
-
-
 
     return cs_seg
 

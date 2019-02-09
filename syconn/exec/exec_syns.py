@@ -76,11 +76,9 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
                   box_coords=[0, 0, 0], fit_box_size=True)
 
     # POPULATES CS CD with SV contacts
-    print("find contact sites.Ups")
     n_cores = 1 if "example_cube" in global_params.wd else None
     ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=n_cores,
                            qsub_pe='default', qsub_queue='all.q')
-    print("extract_agg_contact_sites")
     ces.extract_agg_contact_sites(cd, global_params.config.working_dir, n_folders_fs=n_folders_fs, suffix="",
                                   qsub_queue='all.q', n_max_co_processes=global_params.NCORE_TOTAL,
                                   qsub_pe='default')

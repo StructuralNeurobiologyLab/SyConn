@@ -8,7 +8,7 @@ from cython.operator import dereference, postincrement
 import numpy as np
 
 
-def kernel(uint32_t[:, :, :] chunk, uint32_t center_id):
+def kernel(uint32_t[:, :, :] chunk, uint64_t center_id):
 
     #print ("Cython")
     cdef map[uint32_t, int] unique_ids
@@ -47,7 +47,7 @@ def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,
     cdef uint64_t[:, :, :] out = cvarray(shape = (arr.shape[0], arr.shape[1], arr.shape[2]), itemsize = sizeof(uint64_t), format = 'Q')
     out [:, :, :] = 0
     cdef int offset[3]
-    offset[:] = [stencil[0]/2, stencil[1]/2, stencil[2]/2] ### check what ype do you need
+    offset[:] = [stencil[0]/2, stencil[1]/2, stencil[2]/2] ### check what type do you need
     cdef int center_id
     cdef uint32_t[:, :, :] chunk = cvarray(shape=(2*offset[0]+2, 2*offset[2]+2, 2*offset[2]+2), itemsize=sizeof(int), format='i')
 
@@ -64,7 +64,7 @@ def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,
     return out
 
 
-def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
+def process_block_nonzeroC(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
     cdef int stencil[3]
     stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
     assert (stencil[0]%2 + stencil[1]%2 + stencil[2]%2 ) == 3
