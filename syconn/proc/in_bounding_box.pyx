@@ -6,8 +6,10 @@ from libcpp.vector cimport vector
 from cython.view cimport array as cvarray
 import timeit
 from libc.stdlib cimport rand
-import numpy
+import numpy as np
 from numpy import multiply
+
+
 
 def in_bounding_box(int[:,:] coords, int[:, :] bounding_box):
 
@@ -38,7 +40,7 @@ def create_toy_data(int size1, int size2, int moduloo):
     cdef int[:, :] matrix = cvarray(shape=(size1, size2), itemsize=sizeof(int), format='i')
     for i in range(size1):
         for j in range(size2):
-            matrix[i, j] = rand() % moduloo
+            matrix[i, j] = np.random.randint(low = 0, high = moduloo)
     return matrix
 
 

@@ -23,7 +23,7 @@ from knossos_utils import chunky
 knossosdataset._set_noprint(True)
 import os
 try:
-    from .block_processing_cythonC import kernel, process_block, process_block_nonzero
+    from .block_processing_cython import kernel, process_block, process_block_nonzero
 except ImportError:
     from .block_processing import kernel, process_block, process_block_nonzero
 
