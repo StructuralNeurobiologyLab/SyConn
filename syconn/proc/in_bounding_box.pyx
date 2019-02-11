@@ -11,7 +11,7 @@ from numpy import multiply
 
 
 
-def in_bounding_box(int[:,:] coords, int[:, :] bounding_box):
+def in_bounding_boxC(double[:,:] coords, double[:, :] bounding_box):
 
     cdef float edge_sizes[3]
     edge_sizes[:] =[bounding_box[1,0]/2, bounding_box[1,1]/2, bounding_box[1,2]/2 ]
@@ -34,29 +34,29 @@ def in_bounding_box(int[:,:] coords, int[:, :] bounding_box):
     return inlier
 
 
-
-def create_toy_data(int size1, int size2, int moduloo):
-
-    cdef int[:, :] matrix = cvarray(shape=(size1, size2), itemsize=sizeof(int), format='i')
-    for i in range(size1):
-        for j in range(size2):
-            matrix[i, j] = np.random.randint(low = 0, high = moduloo)
-    return matrix
-
-
-def wrapper(func, *args, **kwargs):
-    def wrapped():
-        return func(*args, **kwargs)
-    return wrapped
-
-
-cdef int[:, :] coords
-cdef int[:, :] bounding_box
-coords = create_toy_data(512,3,100)
-bounding_box = create_toy_data(2,3, 10)
-
-print ("in_bounding_box__Maria")
-wrapped = wrapper(in_bounding_box, coords, bounding_box)
-print (timeit.timeit(wrapped, number=1000000))
+#
+# def create_toy_data(int size1, int size2, int moduloo):
+#
+#     cdef int[:, :] matrix = cvarray(shape=(size1, size2), itemsize=sizeof(int), format='i')
+#     for i in range(size1):
+#         for j in range(size2):
+#             matrix[i, j] = np.random.randint(low = 0, high = moduloo)
+#     return matrix
+#
+#
+# def wrapper(func, *args, **kwargs):
+#     def wrapped():
+#         return func(*args, **kwargs)
+#     return wrapped
+#
+#
+# cdef int[:, :] coords
+# cdef int[:, :] bounding_box
+# coords = create_toy_data(512,3,100)
+# bounding_box = create_toy_data(2,3, 10)
+#
+# print ("in_bounding_box__Maria")
+# wrapped = wrapper(in_bounding_boxC, coords, bounding_box)
+# print (timeit.timeit(wrapped, number=1000000))
 
 
