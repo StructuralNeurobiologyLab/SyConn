@@ -18,11 +18,9 @@ from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
 from syconn.handler.logger import initialize_logging
 
-
 def run_syn_analysis():
     log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
                              overwrite=False)
-
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
 

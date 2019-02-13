@@ -144,5 +144,4 @@ if __name__ == '__main__':
     #          ' inspection of cell reconstructions  via the KNOSSOS-SyConn'
     #          ' plugin.'.format(experiment_name))
     # fname_server = os.path.dirname(os.path.abspath(__file__)) + '/../kplugin/server.py'
-    # os.system('python {} --working_dir={} --port=10002'.format(fname_server, example_wd))
-
+# os.system('python {} --working_dir={} --port=10002'.format(fname_server, example_wd))

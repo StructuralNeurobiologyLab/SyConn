@@ -66,6 +66,7 @@ def process_block_nonzero(edges, arr, stencil=(7, 7, 3)):
     arr_shape = np.array(arr.shape)
     out = np.zeros(arr_shape - stencil + 1, dtype=np.uint64)
     offset = stencil // 2 # int division!
+    print (offset)
     nze = np.nonzero(edges[offset[0]: -offset[0], offset[1]: -offset[1], offset[2]: -offset[2]])
     for x, y, z in zip(nze[0], nze[1], nze[2]):
         center_id = arr[x + offset[0], y + offset[1], z + offset[2]]

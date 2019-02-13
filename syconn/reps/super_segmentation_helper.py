@@ -27,7 +27,12 @@ import time
 skeletopyze_available = False
 from ..reps import log_reps
 from .. import global_params
-from ..proc.meshes import in_bounding_box, write_mesh2kzip
+from ..proc.meshes import                                                                                                                                                                                                                                                                                           write_mesh2kzip
+try:
+    from ..proc.in_bounding_boxC import in_bounding_box
+except ImportError:
+    from ..proc.in_bounding_box import in_bounding_box
+
 
 
 def majority_vote(anno, prop, max_dist):

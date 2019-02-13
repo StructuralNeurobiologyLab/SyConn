@@ -10,7 +10,7 @@ import numpy as np
 
 def kernel(uint32_t[:, :, :] chunk, uint64_t center_id):
 
-    #print ("Cython")
+    print ("Cython")
     cdef map[uint32_t, int] unique_ids
 
     for i in range(chunk.shape[0]):
@@ -47,7 +47,7 @@ def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,
     cdef uint64_t[:, :, :] out = cvarray(shape = (arr.shape[0], arr.shape[1], arr.shape[2]), itemsize = sizeof(uint64_t), format = 'Q')
     out [:, :, :] = 0
     cdef int offset[3]
-    offset[:] = [stencil[0]/2, stencil[1]/2, stencil[2]/2] ### check what type do you need
+    offset[:] = [stencil[0]//2, stencil[1]//2, stencil[2]//2] ### check what type do you need
     cdef int center_id
     cdef uint32_t[:, :, :] chunk = cvarray(shape=(2*offset[0]+2, 2*offset[2]+2, 2*offset[2]+2), itemsize=sizeof(int), format='i')
 
@@ -73,7 +73,7 @@ def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stenci
     out[:, :, :] = 0
     cdef int center_id
     cdef int offset[3]
-    offset [:] = [stencil[0]/2, stencil[1]/2, stencil[2]/2]
+    offset [:] = [stencil[0]//2, stencil[1]//2, stencil[2]//2]
     cdef uint32_t[:, :, :] chunk = cvarray(shape=(stencil[0]+1, stencil[1]+1, stencil[2]+1), itemsize=sizeof(uint32_t), format='I')
 
     for x in range(0, edges.shape[0]-2*offset[0]):

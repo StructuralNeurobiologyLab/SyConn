@@ -22,6 +22,11 @@ try:
 except ImportError:
     __vtk_avail__ = False
 
+try:
+    from .in_bounding_boxC import in_bounding_box
+except ImportError:
+    from .in_bounding_box import in_bounding_box
+
 from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip
 from .image import apply_pca
@@ -516,31 +521,31 @@ def get_bounding_box(coordinates):
     return mean, max_dist
 
 
-@jit
-def in_bounding_box(coords, bounding_box):
-    """
-    Loop version with numba
-
-    Parameters
-    ----------
-    coords : np.array (N x 3)
-    bounding_box : tuple (np.array, np.array)
-        center coordinate and edge lengths of bounding box
-
-    Returns
-    -------
-    np.array of bool
-        inlying coordinates are indicated as true
-    """
-    edge_sizes = bounding_box[1] / 2
-    coords = np.array(coords) - bounding_box[0]
-    inlier = np.zeros((len(coords)), dtype=np.bool)
-    for i in range(len(coords)):
-        x_cond = (coords[i, 0] > -edge_sizes[0]) & (coords[i, 0] < edge_sizes[0])
-        y_cond = (coords[i, 1] > -edge_sizes[1]) & (coords[i, 1] < edge_sizes[1])
-        z_cond = (coords[i, 2] > -edge_sizes[2]) & (coords[i, 2] < edge_sizes[2])
-        inlier[i] = x_cond & y_cond & z_cond
-    return inlier
+# @jit
+# def in_bounding_box(coords, bounding_box):
+#     """
+#     Loop version with numba
+#
+#     Parameters
+#     ----------
+#     coords : np.array (N x 3)
+#     bounding_box : tuple (np.array, np.array)
+#         center coordinate and edge lengths of bounding box
+#
+#     Returns
+#     -------
+#     np.array of bool
+#         inlying coordinates are indicated as true
+#     """
+#     edge_sizes = bounding_box[1] / 2
+#     coords = np.array(coords) - bounding_box[0]
+#     inlier = np.zeros((len(coords)), dtype=np.bool)
+#     for i in range(len(coords)):
+#         x_cond = (coords[i, 0] > -edge_sizes[0]) & (coords[i, 0] < edge_sizes[0])
+#         y_cond = (coords[i, 1] > -edge_sizes[1]) & (coords[i, 1] < edge_sizes[1])
+#         z_cond = (coords[i, 2] > -edge_sizes[2]) & (coords[i, 2] < edge_sizes[2])
+#         inlier[i] = x_cond & y_cond & z_cond
+#     return inlier
 
 
 @jit
