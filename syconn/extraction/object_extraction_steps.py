@@ -762,23 +762,23 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         multi_params.append([[cset.chunk_dict[nb_chunk] for nb_chunk in chunk_blocks[i_job]], workfolder,
                              filename, hdf5names, dataset_names, overlaydataset_path,
                              suffix, path_blocks[i_job], n_folders_fs, transform_func, transform_func_kwargs])
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_extract_voxels_thread, multi_params,
-                                             nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
-    elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "extract_voxels",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_max_co_processes=n_max_co_processes,
-                                     n_cores=nb_cpus)
-        out_files = glob.glob(path_to_out + "/*")
-        results = []
-        for out_file in out_files:
-            with open(out_file, 'rb') as f:
-                results.append(pkl.load(f))
-    else:
-        raise Exception("QSUB not available")
+    # if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    #     results = sm.start_multiprocess_imap(_extract_voxels_thread, multi_params,
+    #                                          nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
+    # elif qu.batchjob_enabled():
+    path_to_out = qu.QSUB_script(multi_params,
+                                 "extract_voxels",
+                                 pe=qsub_pe, queue=qsub_queue,
+                                 script_folder=None,
+                                 n_max_co_processes=n_max_co_processes,
+                                 n_cores=nb_cpus)
+    out_files = glob.glob(path_to_out + "/*")
+    results = []
+    for out_file in out_files:
+        with open(out_file, 'rb') as f:
+            results.append(pkl.load(f))
+    # else:
+    #     raise Exception("QSUB not available")
     for i_hdf5_name, hdf5_name in enumerate(hdf5names):
         dataset_path = workfolder + "/%s_temp/" % dataset_names[i_hdf5_name]
         remap_dict = defaultdict(list)

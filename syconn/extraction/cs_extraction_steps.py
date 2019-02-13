@@ -5,9 +5,6 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
-
-
 try:
     import cPickle as pkl
 except ImportError:
@@ -35,7 +32,6 @@ from . import object_extraction_steps as oes
 from . import log_extraction
 
 
-
 def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
                        qsub_pe=None, qsub_queue=None):
     os.makedirs(cset.path_head_folder, exist_ok=True)
@@ -43,23 +39,23 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
     for chunk in cset.chunk_dict.values():
         multi_params.append([chunk, knossos_path, filename])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_contact_site_detection_thread, multi_params,
-                                             debug=False, nb_cpus=n_max_co_processes, verbose=True)
-    elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "contact_site_detection",
-                                     script_folder=None,
-                                     n_max_co_processes=n_max_co_processes,
-                                     pe=qsub_pe, queue=qsub_queue)
+    # if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    #     results = sm.start_multiprocess_imap(_contact_site_detection_thread, multi_params,
+    #                                          debug=False, nb_cpus=n_max_co_processes)
+    # elif qu.batchjob_enabled():
+    path_to_out = qu.QSUB_script(multi_params,
+                                 "contact_site_detection",
+                                 script_folder=None,
+                                 n_max_co_processes=n_max_co_processes,
+                                 pe=qsub_pe, queue=qsub_queue)
 
-        out_files = glob.glob(path_to_out + "/*")
-        results = []
-        for out_file in out_files:
-            with open(out_file, 'rb') as f:
-                results.append(pkl.load(f))
-    else:
-        raise Exception("QSUB not available")
+    out_files = glob.glob(path_to_out + "/*")
+    results = []
+    for out_file in out_files:
+        with open(out_file, 'rb') as f:
+            results.append(pkl.load(f))
+    # else:
+    #     raise Exception("QSUB not available")
     chunky.save_dataset(cset)
 
 
@@ -78,8 +74,6 @@ def _contact_site_detection_thread(args):
 
     contacts = detect_cs(data)
     os.makedirs(chunk.folder, exist_ok=True)
-    print("chunk.folder + filename "),
-    print (chunk.folder + filename)
     compression.save_to_h5py([contacts],
                              chunk.folder + filename +
                              ".h5", ["cs"])
@@ -195,4 +189,3 @@ def _extract_agg_cs_thread(args):
         #                                                 create=True)
         #     segobj.save_voxels(id_mask, abs_offset)
         #     print(unique_id)
-

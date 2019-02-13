@@ -4,19 +4,26 @@
 * Python 3.6
 * The whole pipeline was designed and tested on Linux systems
 * SyConn is based on the packages [elektronn](http://elektronn.org) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
+* cmake >= 3.1
 * [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.
+
 
 We recommend installing Anaconda. Then set up the python environment:
 ```
 conda create -n pysy python=3.6 anaconda
 conda activate pysy
 ```
-In order to use the GPU during inference cuda and cudNN are required, either download and install cuda 8.0 and cudnn 5 or use conda (untested):
+In order to use the GPU during inference cuda and cudNN are required, either download and install cuda 8.0 and cudnn 5.1 or use conda (untested):
 ```
-conda install cudatoolkit=8.0 cudnn=5
+conda install cudatoolkit=8.0 cudnn=5.1
+```
+To enable tensorboard in elektronn3, install:
+```
+conda install tensorflow tensorboard
 ```
 Install all prerequisites and finally git clone and install syconn:
 ```
+conda install -c anaconda cmake
 conda install vigra -c conda-forge
 conda install mesa -c menpo
 conda install osmesa -c menpo
@@ -34,12 +41,10 @@ Or alternatively with the developer flag:
 pip install -e .
 ```
 
-In the case that there are problems with snappy/python-snappy remove previous installations and
-install them via conda:
+In case that there are problems with theano try to install it from conda (untested):
 ```
-conda uninstall snappy
-conda install snappy
-conda install python-snappy
+pip uninstall theano
+conda install theano pygpu
 ```
 
 ## Example run

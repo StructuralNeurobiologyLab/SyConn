@@ -19,7 +19,7 @@ opencv-python
 numba==0.41.0
 llvmlite==0.26.0
 plyfile
-vtkInterface
+vtki
 openmesh
 pytest
 pytest-runner

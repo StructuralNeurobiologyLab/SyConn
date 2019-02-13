@@ -5,7 +5,7 @@
 # SyConn Gate is a thin flask server that allows clients
 # over a RESTful HTTP API to interact with a SyConn dataset
 
-from ..handler.logger import initialize_logging
-log_gate = initialize_logging('gate')
+from ..handler.logger import log_main
+log_gate = log_main
 
 __all__ = ['log_gate']

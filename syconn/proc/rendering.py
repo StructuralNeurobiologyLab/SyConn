@@ -190,13 +190,15 @@ def init_ctx(ws):
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
         from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
             EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
-            EGL_COLOR_BUFFER_TYPE, EGL_HEIGHT, \
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_OPENGL_BIT, EGL_NONE, \
+            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
+            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
             EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
-            EGL_OPENGL_API, EGL_NO_DISPLAY,\
+            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
             eglGetDisplay, eglInitialize, eglChooseConfig, \
             eglBindAPI, eglCreatePbufferSurface, \
-            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
+            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, \
+            EGL_TRUE, EGL_FALSE,  EGL_LOSE_CONTEXT_ON_RESET, EGL_NO_RESET_NOTIFICATION
 
         major, minor = ctypes.c_long(), ctypes.c_long()
         num_configs = ctypes.c_long()
@@ -589,9 +591,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         for cv in c_views:
             if len(np.unique(cv)) == 1:
                 if views_key == "raw":
-                    log_proc.warn("Empty view of '%s'-mesh with %d "
-                                  "vertices found."
-                                  % (views_key, len(mesh.vert_resh)))
+                    log_proc.warning("Empty view of '{}'-mesh with {} vertices found. "
+                                     "Existing color value: {}".format(views_key, len(mesh.vert_resh), np.unique(cv)))
                     found_empty_view = True
         if found_empty_view:
             log_proc.warning(
