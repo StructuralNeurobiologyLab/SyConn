@@ -6,23 +6,13 @@
 Welcome to SyConn's documentation!
 ==================================
 
-First steps:
-
-.. toctree::
-   :maxdepth: 1
-
-   GettingStarted
-   installation
-   Example
-
-.. mdinclude:: doc.md
-
-API
-===
 .. toctree::
    :maxdepth: 1
 
    syconn
+
+.. mdinclude:: doc.md
+
 
 Indices and tables
 ------------------

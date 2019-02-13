@@ -4,6 +4,7 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
 import time
 import numpy as np
 import networkx as nx
@@ -11,10 +12,11 @@ import pandas as pd
 
 from ..reps import super_segmentation as ss
 from ..reps import segmentation
-from ..config import global_params
+from . import log_reps
+from .. import global_params
+
 
 # TODO: unclear what and when this was used for, refactor and use in current project
-
 def extract_connectivity_thread(args):
     sj_obj_ids = args[0]
     sj_version = args[1]
@@ -125,7 +127,7 @@ def connectivity_to_nx_graph():
 
     nxg = nx.DiGraph()
     start = time.time()
-    print('Starting graph construction')
+    log_reps.debug('Starting graph construction')
     for idx in range(0, len(cd_dict['ids'])):
 
         # find out which one is pre and which one is post
@@ -139,7 +141,7 @@ def connectivity_to_nx_graph():
 
         nxg.add_edge(u, v)
         # for each synapse create edge with attributes
-    print('Done with graph construction, took {0}'.format(time.time()-start))
+    log_reps.debug('Done with graph construction, took {0}'.format(time.time()-start))
 
     return nxg
 
@@ -159,7 +161,7 @@ def load_cached_data_dict(wd=None, syn_version=None):
 
     """
     if wd is None:
-        wd = global_params.wd
+        wd = global_params.config.working_dir
     start = time.time()
     csd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=wd,
                                            version=syn_version)
@@ -192,7 +194,7 @@ def load_cached_data_dict(wd=None, syn_version=None):
         csd.load_cached_data('partner_spiness')[:, 0].astype(np.int)
     cd_dict['neuron_partner_sp_1'] = \
         csd.load_cached_data('partner_spiness')[:, 1].astype(np.int)
-    print('Getting all objects took: {0}'.format(time.time() - start))
+    log_reps.debug('Getting all objects took: {0}'.format(time.time() - start))
     return cd_dict
 
 
@@ -217,7 +219,7 @@ def connectivity_exporter(human_cell_type_labels=True,
         start = time.time()
         df = pd.DataFrame(df_dict)
         df.to_csv(out_path, index=False)
-        print('Export to csv took: {0}'.format(time.time() - start))
+        log_reps.debug('Export to csv took: {0}'.format(time.time() - start))
     else:
 
         idx_filter = df_dict['synaptivity_proba'] > 0.5
@@ -226,7 +228,7 @@ def connectivity_exporter(human_cell_type_labels=True,
         for k, v in df_dict.items():
             df_dict[k] = v[idx_filter]
 
-        print('{0} synapses of'
+        log_reps.debug('{0} synapses of'
               '{1} contact sites'.format(sum(idx_filter),
                                          len(idx_filter)))
         if no_ids:
@@ -245,7 +247,7 @@ def connectivity_exporter(human_cell_type_labels=True,
             for k, v in df_dict.items():
                 df_dict[k] = v[idx_filter]
 
-            print('{0} axo-dendritic synapses'.format(sum(idx_filter)))
+            log_reps.debug('{0} axo-dendritic synapses'.format(sum(idx_filter)))
 
         if human_pre_post_labels:
             df_dict['neuron_partner_ax_0'] = np.array([pre_post_map[int(el)] for el in
@@ -256,6 +258,6 @@ def connectivity_exporter(human_cell_type_labels=True,
         start = time.time()
         df = pd.DataFrame(df_dict)
         df.to_csv(out_path, index=False)
-        print('Export to csv took: {0}'.format(time.time() - start))
+        log_reps.debug('Export to csv took: {0}'.format(time.time() - start))
     return
 

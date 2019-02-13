@@ -4,6 +4,7 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
 import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
 import matplotlib.colors as mcolors
@@ -19,18 +20,14 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-try:
-    default_wd_available = True
-    from ..config.global_params import wd
-except:
-    default_wd_available = False
-from ..mp import qsub_utils as qu
+from .. import global_params
+from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
-from ..config import parser
 from . import connectivity_helper as ch
 from . import super_segmentation as ss
 from . import segmentation
 from ..handler.basics import load_pkl2obj, write_obj2pkl
+from . import log_reps
 
 
 # TODO: unclear what and when this was used for, refactor and use in current project
@@ -98,11 +95,7 @@ class ConnectivityMatrix(object):
         self._cell_types = None
 
         if working_dir is None:
-            if default_wd_available:
-                self._working_dir = wd
-            else:
-                raise Exception(
-                    "No working directory (wd) specified in config")
+            self._working_dir = global_params.config.working_dir
         else:
             self._working_dir = working_dir
 
@@ -160,7 +153,7 @@ class ConnectivityMatrix(object):
     @property
     def config(self):
         if self._config is None:
-            self._config = parser.Config(self.working_dir)
+            self._config = global_params.config
         return self._config
 
     @property
@@ -233,11 +226,11 @@ class ConnectivityMatrix(object):
             multi_params.append([id_block, self._sj_version, self._ssd_version,
                                  self.working_dir])
 
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
             results = sm.start_multiprocess(ch.extract_connectivity_thread,
                                             multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__BATCHJOB__:
+        elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "extract_connectivity",
                                          pe=qsub_pe, queue=qsub_queue,
@@ -267,11 +260,11 @@ class ConnectivityMatrix(object):
             multi_params.append([id_block, self._sj_version, self._ssd_version,
                                  self.working_dir, self.version])
 
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
             results = sm.start_multiprocess(ch.get_sso_specific_info_thread,
                                             multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__BATCHJOB__:
+        elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "get_sso_specific_info",
                                          pe=qsub_pe, queue=qsub_queue,
@@ -348,9 +341,9 @@ class ConnectivityMatrix(object):
         ax_syn_dict = dict(zip(unique_ax_partner,
                                np.array(syn_types < 0, dtype=np.int) * 2 - 1))
 
-        print(np.unique(ax_syn_dict.values(), return_counts=True))
-        print("N ax partner", len(unique_ax_partner))
-        print("N de partner", len(unique_de_partner))
+        log_reps.debug(np.unique(ax_syn_dict.values(), return_counts=True))
+        log_reps.debug("N ax partner", len(unique_ax_partner))
+        log_reps.debug("N de partner", len(unique_de_partner))
 
         syn_sizes = relevant_cons[:, -5]
 
@@ -397,11 +390,11 @@ class ConnectivityMatrix(object):
             axons[self.cell_types[ax_partners[i_ax_p]]] += 1
             dendrites[self.cell_types[de_partners[i_ax_p]]] += 1
 
-        print("Dendrites")
-        print(dendrites)
+        log_reps.debug("Dendrites")
+        log_reps.debug(dendrites)
 
-        print("Axons")
-        print(axons)
+        log_reps.debug("Axons")
+        log_reps.debug(axons)
 
         cell_types = np.array(cell_types)
         sum_array = np.concatenate((ax_partners[:, None], de_partners[:, None], cell_types, relevant_cons[:, 2:]), axis=1)
@@ -560,19 +553,19 @@ class ConnectivityMatrix(object):
         int_cut_pos = np.mean(intensity_plot[intensity_plot_pos]) + np.std(intensity_plot[intensity_plot_neg])
         int_cut_neg = np.abs(np.mean(intensity_plot[intensity_plot_neg])) + np.std(intensity_plot[intensity_plot_neg])
 
-        print(int_cut_pos)
-        print(int_cut_neg)
+        log_reps.debug(int_cut_pos)
+        log_reps.debug(int_cut_neg)
 
         intensity_plot *= -1
         if not cum:
-            print(intensity_plot.shape)
+            log_reps.debug(intensity_plot.shape)
             for k, b in enumerate(den_borders):
                 b += k * 1
                 intensity_plot = np.concatenate(
                     (intensity_plot[:b, :], np.zeros((1, intensity_plot.shape[1])),
                      intensity_plot[b:, :]), axis=0)
 
-            print(intensity_plot.shape)
+            log_reps.debug(intensity_plot.shape)
             for k, b in enumerate(ax_borders):
                 b += k * 1
                 intensity_plot = np.concatenate(
@@ -587,13 +580,13 @@ class ConnectivityMatrix(object):
             bin_intensity_plot = scipy.ndimage.convolve(bin_intensity_plot, np.ones((entry_width, entry_width)))
             intensity_plot /= bin_intensity_plot
 
-            print(ax_borders_h, ax_borders)
-            print(intensity_plot.shape)
+            log_reps.debug(ax_borders_h, ax_borders)
+            log_reps.debug(intensity_plot.shape)
             for b in ax_borders_h[-2:0:-1]:
                 # intensity_plot = np.concatenate((intensity_plot[:, :b-entry_width+1], intensity_plot[:, b:]), axis=1)
                 intensity_plot = np.concatenate((intensity_plot[:, :b], intensity_plot[:, b+entry_width-1:]), axis=1)
 
-        print(intensity_plot.shape)
+        log_reps.debug(intensity_plot.shape)
 
         ax_borders_h = np.array([0, ax_borders[0], ax_borders[1], ax_borders[2],
                                  intensity_plot.shape[1]]) + np.array([0, 1, 2, 3, 4])
@@ -660,7 +653,7 @@ class ConnectivityMatrix(object):
 
                 cum_matrix[i_de_border-1, i_ax_border-1] = cum / (ax_end - ax_start) / (de_end - de_start)
 
-        print(range(1, len(ax_borders)+1))
+        log_reps.debug(range(1, len(ax_borders)+1))
         self.plot_wiring(cum_matrix, range(1, len(ax_borders)+1), range(1, len(ax_borders)+1), cum=True, cum_size=intensity_plot.shape[0])
 
 
@@ -681,7 +674,7 @@ def get_sso_specific_info_thread(args):
     blacklist = []
     shapes = {}
     for sso_id in sso_ids:
-        print(sso_id)
+        log_reps.debug(sso_id)
         sso = ssd.get_super_segmentation_object(sso_id)
 
         if not sso.load_skeleton():

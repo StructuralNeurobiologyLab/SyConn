@@ -25,7 +25,7 @@ from ..handler.basics import load_pkl2obj
 from ..handler.logger import initialize_logging
 from ..reps import super_segmentation as ss
 from ..proc.stats import model_performance
-from ..mp import qsub_utils as qu
+from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 logger_skel = initialize_logging('skeleton')
 feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",
@@ -174,11 +174,11 @@ class SkelClassifier(object):
                                      self.feat_path + "/features_%d_%d.npy",
                                     comment_converter[self.ssd_version], overwrite])
 
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
             results = sm.start_multiprocess(sbch.generate_clf_data_thread,
                 multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__BATCHJOB__:
+        elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "generate_clf_data",
                                          pe=qsub_pe, queue=qsub_queue,
@@ -197,11 +197,11 @@ class SkelClassifier(object):
             multi_params.append([self.working_dir, self.target_type,
                                  clf_name, n_estimators,
                                  feature_context_nm, production])
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
             results = sm.start_multiprocess(classifier_production_thread,
                 multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__BATCHJOB__:
+        elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "classifier_production",
                                          n_cores=nb_cpus,

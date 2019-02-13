@@ -1,12 +1,10 @@
-import matplotlib.pyplot as plt
 from syconn.reps.super_segmentation import  SuperSegmentationDataset
 import numpy as np
 from syconn.proc.rendering import render_sso_coords
 import time
-from syconn.config import global_params
-from scipy.misc import imsave
 
 if __name__=='__main__':
+    # TODO: use toy data and improve logging, see test_backend.py
     now = time.time()
     print(now)
     ssc=SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')   #running on cluster

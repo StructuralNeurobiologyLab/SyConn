@@ -6,7 +6,6 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-# TODO: This will be used if PYOPENGL PLATFORM is egl
 
 try:
     import cPickle as pkl

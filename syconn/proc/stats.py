@@ -22,6 +22,7 @@ from sklearn.preprocessing import label_binarize
 import seaborn as sns
 from sklearn.externals import joblib
 import matplotlib.patches as mpatches
+from . import log_proc
 
 
 def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
@@ -49,7 +50,7 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
                                 target_names=target_names)
     header += "acc.: %0.4f" % accuracy_score(labels, np.argmax(proba, axis=1))
     header += "\n-------------------------------\n"
-    print(header)
+    log_proc.info(header)
     plot_pr(all_prec, all_rec, r=[0.6, 1.01], legend_labels=target_names)
     if model_dir is not None:
         text_file = open(model_dir + '/prec_rec_%s.txt' % prefix, "w")
@@ -74,7 +75,7 @@ def model_performance_predonly(y_pred, y_true, model_dir=None, prefix="",
     header += "acc.: {:.4f} -- {} wrongly predicted samples." \
               "".format(accuracy_score(y_true, y_pred), np.sum(y_true != y_pred))
     header += "\n-------------------------------------------------\n"
-    print(header)
+    log_proc.info(header)
     if model_dir is not None:
         text_file = open(model_dir + '/prec_rec_%s.txt' % prefix, "w")
         text_file.write(header)
@@ -375,7 +376,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
     pca: PCA
         prefitted PCA object to use to prject data of ds_d
     """
-    print("Starting pca visualisation.")
+    log_proc.info("Starting pca visualisation.")
     # pca vis
     paper_rc = {'lines.linewidth': 1, 'lines.markersize': 1}
     sns.set_context(rc=paper_rc)
@@ -476,7 +477,7 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
         prefitted PCA object to use to prject data of ds_d
     """
     # tsne vis
-    print("Starting tSNE visualisation.")
+    log_proc.info("Starting tSNE visualisation.")
     paper_rc = {'lines.linewidth': 1, 'lines.markersize': 1}
     sns.set_context(rc=paper_rc)
     if ds_l.ndim == 2:
@@ -490,7 +491,7 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
             res = tsne.fit_transform(ds_d)
             break
         except MemoryError:
-            print("Downsampling data for tSNE visualization")
+            log_proc.info("Downsampling data for tSNE visualization")
             ds_d = ds_d[::2]
             ds_l = ds_l[::2]
 

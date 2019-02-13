@@ -10,7 +10,6 @@ from collections import Counter
 from multiprocessing.pool import ThreadPool
 import networkx as nx
 import numpy as np
-import os
 import scipy
 import scipy.ndimage
 from collections import defaultdict
@@ -27,7 +26,7 @@ from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 import time
 skeletopyze_available = False
 from ..reps import log_reps
-from ..config import global_params
+from .. import global_params
 from ..proc.meshes import in_bounding_box, write_mesh2kzip
 
 
@@ -384,7 +383,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
     pruned network kx graph
     """
     if scal is None:
-        scal = global_params.get_dataset_scaling()
+        scal = global_params.config.entries['Dataset']['scaling']
     pruning_complete = False
 
     if preserve_annotations:
@@ -504,7 +503,7 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500,
 
 def smooth_skeleton(skel_nx, scal=None):
     if scal is None:
-        scal = global_params.get_dataset_scaling()
+        scal = global_params.config.entries['Dataset']['scaling']
     visiting_nodes = list({k for k, v in dict(skel_nx.degree()).items() if v == 2})
 
     for index, visiting_node in enumerate(visiting_nodes):
@@ -724,7 +723,7 @@ def sparsify_skeleton_fast(skel_nx, scal=None, dot_prod_thresh=0.8,
     """
 
     if scal is None:
-        scal = global_params.get_dataset_scaling()
+        scal = global_params.config.entries['Dataset']['scaling']
     change = 1
 
     while change > 0:
@@ -1466,7 +1465,7 @@ def pred_sv_chunk_semseg(args):
 
     """
     from syconn.proc.sd_proc import sos_dict_fact, init_sos
-    from syconn.handler.prediction import InferenceModel
+    from elektronn3.models.base import InferenceModel
     from syconn.backend.storage import CompressedStorage
     so_chunk_paths = args[0]
     model_kwargs = args[1]
@@ -1492,6 +1491,8 @@ def pred_sv_chunk_semseg(args):
         view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"
         view_dc = CompressedStorage(view_dc_p, disable_locking=True)
         svixs = list(view_dc.keys())
+        if len(svixs) == 0:
+            continue
         views = list(view_dc.values())
         if raw_only:
             views = views[:, :1]

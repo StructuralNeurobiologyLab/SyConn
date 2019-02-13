@@ -6,13 +6,14 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-# TODO: This will be used if PYOPENGL PLATFORM is osmesa
-
+import numpy as np
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn.proc.sd_proc import mesh_chunk
+from syconn import global_params
+
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -25,14 +26,14 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
+so_chunk_paths = args[0]
+so_kwargs = args[1]
 
-ch = args[0]
-wd = args[1]
-for ssv_ix in ch:
-    sso = SuperSegmentationObject(ssv_ix, working_dir=wd,
-                                  enable_locking_so=True)
-    sso.load_attr_dict()
-    sso.render_views(add_cellobjects=True, woglia=True, overwrite=True)
+working_dir = so_kwargs['working_dir']
+obj_type = so_kwargs['working_dir']
+global_params.wd = working_dir
+for path in so_chunk_paths:
+    mesh_chunk((path, obj_type))
 
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

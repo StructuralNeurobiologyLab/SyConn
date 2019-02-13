@@ -14,11 +14,10 @@ from skimage import measure
 from sklearn.decomposition import PCA
 import openmesh
 from plyfile import PlyData, PlyElement
-from scipy.ndimage.morphology import binary_closing, binary_erosion,\
-    binary_dilation
+from scipy.ndimage.morphology import binary_closing, binary_dilation
 import tqdm
 try:
-    import vtkInterface
+    import vtki
     __vtk_avail__ = True
 except ImportError:
     __vtk_avail__ = False
@@ -27,8 +26,8 @@ from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip
 from .image import apply_pca
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
-from ..config.global_params import MESH_DOWNSAMPLING, MESH_CLOSING, \
-    get_dataset_scaling, MESH_MIN_OBJ_VX
+from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING, MESH_MIN_OBJ_VX
+from .. import global_params
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 try:
     # set matplotlib backend to offscreen
@@ -226,6 +225,9 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
         indices [M, 3], vertices [N, 3], normals [N, 3]
 
     """
+    if boundaryDistanceTransform is None:
+        raise ImportError('"boundaryDistanceTransform" could not be imported from VIGRA. '
+                          'Please install vigra, see SyConn documentation.')
     assert type(downsampling) == tuple, "Downsampling has to be of type 'tuple'"
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
         "Point cloud used for mesh generation has wrong shape."
@@ -257,9 +259,9 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
             n_dilations = 0
             while True:
                 labeled, nb_cc = ndimage.label(volume)
-                log_proc.debug('Forcing single CC, additional dilations {}, num'
-                               'ber connected components: {}'
-                               ''.format(n_dilations, nb_cc))
+                # log_proc.debug('Forcing single CC, additional dilations {}, num'
+                #                'ber connected components: {}'
+                #                ''.format(n_dilations, nb_cc))
                 if nb_cc == 1:  # does not count background
                     break
                 # pad volume to maintain margin at boundary and correct offset
@@ -286,26 +288,24 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
         verts, ind, norm, _ = measure.marching_cubes_lewiner(
             volume, 0, gradient_direction=gradient_direction)
     except Exception as e:
-        log_proc.error(e)
-        raise RuntimeError(e)
+        raise ValueError(e)
     if pts.ndim == 2:  # account for [5, 5, 5] offset
         verts -= margin
     verts = np.array(verts) * downsampling + offset
     if decimate_mesh > 0:
         if not __vtk_avail__:
-            msg = "vtkInterface not installed. Please install vtkInterface.'" \
-                  "git clone https://github.com/akaszynski/vtkInterface.git' " \
-                  "and 'pip install -e vtkInterface'."
+            msg = "vtki not installed. Please install vtki.'" \
+                  "pip install vtki'."
             log_proc.error(msg)
             raise ImportError(msg)
         log_proc.warning("'triangulation': Currently mesh-sparsification"
                          " may not preserve volume.")
-        # add number of vertices in front of every face (required by vtkInterface)
+        # add number of vertices in front of every face (required by vtki)
         ind = np.concatenate([np.ones((len(ind), 1)).astype(np.int64) * 3, ind],
                              axis=1)
-        mesh = vtkInterface.PolyData(verts, ind.flatten()).TriFilter()
+        mesh = vtki.PolyData(verts, ind.flatten()).TriFilter()
         decimated_mesh = mesh.Decimate(decimate_mesh, volume_preservation=True)
-        if decimated_mesh is None:  # maybe vtkInterface API changes and operates in-place -> TODO: check version differences and require one of them
+        if decimated_mesh is None:  # maybe vtki API changes and operates in-place -> TODO: check version differences and require one of them, changed to vtki, PS 04Feb2019
             decimated_mesh = mesh
             if len(decimated_mesh.faces.reshape((-1, 4))[:, 1:]) == len(ind):
                 log_proc.error(
@@ -346,21 +346,25 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
     if np.isscalar(obj.voxels):
         return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
                np.zeros((0,), dtype=np.float32)
-    if len(obj.voxel_list) <= MESH_MIN_OBJ_VX:
-        log_proc.warn('Did not create mesh for object of type "{}" '
-                      ' with ID {} because it contained less than {} voxels.'
-                      ''.format(obj.id, obj.type, len(obj.voxel_list)))
-        return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
-               np.zeros((0,), dtype=np.float32)
+    try:
+        min_obj_vx = global_params.config.entries['Sizethresholds'][obj.type]
+    except KeyError:
+        min_obj_vx = MESH_MIN_OBJ_VX
     try:
         indices, vertices, normals = triangulation(
             np.array(obj.voxel_list), downsampling=downsampling,
             n_closings=n_closings, decimate_mesh=decimate_mesh,
             **triangulation_kwargs)
-    except RuntimeError as e:
-        msg = 'Error during marching_cubes procedure of SegmentationObject {}' \
-              ' of type "{}". It contained {} voxels'.format(
-            obj.id, obj.type, len(obj.voxel_list))
+    except ValueError as e:
+        if len(obj.voxel_list) <= min_obj_vx:
+            # log_proc.debug('Did not create mesh for object of type "{}" '
+            #                ' with ID {} because its size is {} voxels.'
+            #                ''.format(obj.type, obj.id, len(obj.voxel_list)))
+            return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32), \
+                   np.zeros((0,), dtype=np.float32)
+        msg = 'Error ({}) during marching_cubes procedure of SegmentationObject {}' \
+              ' of type "{}". It contained {} voxels.'.format(str(e), obj.id, obj.type,
+                                                              len(obj.voxel_list))
         log_proc.error(msg)
         return np.zeros((0,)), np.zeros((0,)), np.zeros((0,))
     vertices += 1  # account for knossos 1-indexing
@@ -944,12 +948,11 @@ def mesh_creator_sso(ssv):
 
 
 def mesh_chunk(args):
-    scaling = get_dataset_scaling()
     attr_dir, obj_type = args
+    scaling = global_params.config.entries['Dataset']['scaling']
     ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
     obj_ixs = list(ad.keys())
     if len(obj_ixs) == 0:
-        log_proc.warning("EMPTY ATTRIBUTE DICT", attr_dir)
         return
     voxel_dc = VoxelStorage(attr_dir + "/voxel.pkl", disable_locking=True)
     md = MeshStorage(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)

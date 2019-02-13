@@ -14,6 +14,8 @@ from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from collections import Counter
 from knossos_utils.chunky import ChunkDataset, save_dataset
+from knossos_utils import knossosdataset
+knossosdataset._set_noprint(True)
 from knossos_utils.knossosdataset import KnossosDataset
 import elektronn2
 from elektronn2.config import config as e2config
@@ -21,16 +23,10 @@ from elektronn2.utils.gpu import initgpu
 
 from ..handler import log_handler
 from ..handler.logger import log_main
-try:
-    from elektronn3.models.base import InferenceModel
-except Exception as e:  # ImportError as e:
-    log_main.error(
-        "elektronn3 could not be imported ({}). Please see 'https://github."
-        "com/ELEKTRONN/elektronn3' for more information.".format(e))
 from .compression import load_from_h5py, save_to_h5py
 from .basics import read_txt_from_zip, get_filepaths_from_dir,\
     parse_cc_dict_from_kzip
-from ..config import global_params
+from .. import global_params
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
@@ -41,7 +37,7 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
     Parameters
     ----------
     zip_fname : str
-    kd_p : str
+    kd_p : str or List[str]
     raw_data_offset : int or np.array
         number of voxels used for additional raw offset, i.e. the offset for the
         raw data will be label_offset - raw_data_offset, while the raw data
@@ -53,32 +49,41 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
     Returns
     -------
     np.array, np.array
-        raw data, label data
+        raw data (float32) (multiplied with 1/255.), label data (uint16)
     """
+    if type(kd_p) is str or type(kd_p) is bytes:
+        kd_p = [kd_p]
     bb = parse_movement_area_from_zip(zip_fname)
     offset, size = bb[0], bb[1] - bb[0]
-    kd = KnossosDataset()
-    kd.initialize_from_knossos_path(kd_p)
-    scaling = np.array(kd.scale, dtype=np.int)
-    if np.isscalar(raw_data_offset):
-        raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling)
-        if verbose:
-            print('Using scale adapted raw offset:', raw_data_offset)
-    elif len(raw_data_offset) != 3:
-        raise ValueError("Offset for raw cubes has to have length 3.")
-    else:
-        raw_data_offset = np.array(raw_data_offset)
-    raw = kd.from_raw_cubes_to_matrix(size + 2 * raw_data_offset,
-                                      offset - raw_data_offset, nb_threads=2,
-                                      mag=1, show_progress=False)
+    raw_data = []
+    label_data = []
+    for curr_p in kd_p:
+        kd = KnossosDataset()
+        kd.initialize_from_knossos_path(curr_p)
+        scaling = np.array(kd.scale, dtype=np.int)
+        if np.isscalar(raw_data_offset):
+            raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling)
+            if verbose:
+                print('Using scale adapted raw offset:', raw_data_offset)
+        elif len(raw_data_offset) != 3:
+            raise ValueError("Offset for raw cubes has to have length 3.")
+        else:
+            raw_data_offset = np.array(raw_data_offset)
+        raw = kd.from_raw_cubes_to_matrix(size + 2 * raw_data_offset,
+                                          offset - raw_data_offset, nb_threads=2,
+                                          mag=1, show_progress=False)
+        raw_data.append(raw[..., None])
+        label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
+                                       verbose=False, show_progress=False)
+        label = label.astype(np.uint16)
+        label_data.append(label[..., None])
+    raw = np.concatenate(raw_data, axis=-1).astype(np.float32)
+    label = np.concatenate(label_data, axis=-1).astype(np.uint16)
     try:
         _ = parse_cc_dict_from_kzip(zip_fname)
     except:  # mergelist.txt does not exist
         label = np.zeros(size).astype(np.uint16)
         return raw.astype(np.float32) / 255., label
-    label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
-                                   verbose=False, show_progress=False)
-    label = label.astype(np.uint16)
     return raw.astype(np.float32) / 255., label
 
 
@@ -159,6 +164,7 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
         if False, it will assumes data is [X, Y, Z]
     as_uint8: bool
     dest_p : str
+    dest_hdf5_data_key : str
     """
     if hdf5_data_key:
         raw = load_from_h5py(h5_path, hdf5_names=[hdf5_data_key])[0]
@@ -227,7 +233,7 @@ def xyz2zxy(vol):
     -------
     np.array [Z, X, Y]
     """
-    assert vol.ndim == 3
+    # assert vol.ndim == 3  # removed for multi-channel support
     # adapt data to ELEKTRONN conventions (speed-up)
     vol = vol.swapaxes(1, 0)  # y x z
     vol = vol.swapaxes(0, 2)  # z x y
@@ -245,7 +251,7 @@ def zxy2xyz(vol):
     -------
     np.array [X, Y, Z]
     """
-    assert vol.ndim == 3
+    # assert vol.ndim == 3  # removed for multi-channel support
     vol = vol.swapaxes(1, 0)  # x z y
     vol = vol.swapaxes(1, 2)  # x y z
     return vol
@@ -385,10 +391,10 @@ def parse_movement_area_from_zip(zip_fname):
 
     Returns
     -------
-    np.array (2, 3)
-        Movement Area
+    np.array
+        Movement Area [2, 3]
     """
-    anno_str = read_txt_from_zip(zip_fname, "annotation.xml")
+    anno_str = read_txt_from_zip(zip_fname, "annotation.xml").decode()
     line = re.findall("MovementArea (.*)/>", anno_str)
     assert len(line) == 1
     line = line[0]
@@ -522,7 +528,23 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
                              stride=[256, 256, 256])
 
 
-def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size,mfp_active=False):
+def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p,
+                       imposed_patch_size, mfp_active=False):
+    """
+
+    Parameters
+    ----------
+    kd_p : str
+    kd_pred_p : str
+    cd_p : str
+    model_p :
+    imposed_patch_size :
+    mfp_active :
+
+    Returns
+    -------
+
+    """
     from elektronn2.neuromancer.model import modelload
 
     kd = KnossosDataset()
@@ -621,6 +643,7 @@ class NeuralNetworkInterface(object):
         self.normal = normal
         self.normalize_data = normalize_data
         self.normalize_func = normalize_func
+
         if init_gpu is None:
             init_gpu = 'auto'
         if e2config.device is None:
@@ -694,15 +717,15 @@ def get_axoness_model():
     """
     Retrained with GP dendrites. May 2018.
     """
-    m = NeuralNetworkInterface(global_params.mpath_axoness,
-                                  imposed_batch_size=200,
-                                  nb_labels=3, normalize_data=True)
+    m = NeuralNetworkInterface(global_params.config.mpath_axoness,
+                               imposed_batch_size=200,
+                               nb_labels=3, normalize_data=True)
     _ = m.predict_proba(np.zeros((1, 4, 2, 128, 256)))
     return m
 
 
 def get_glia_model():
-    m = NeuralNetworkInterface(global_params.mpath_glia, imposed_batch_size=200,
+    m = NeuralNetworkInterface(global_params.config.mpath_glia, imposed_batch_size=200,
                                nb_labels=2, normalize_data=True)
     _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
     return m
@@ -720,7 +743,7 @@ def get_celltype_model(init_gpu=None):
 
     """
     # this model was trained with 'naive_view_normalization_new'
-    m = NeuralNetworkInterface(global_params.mpath_celltype,
+    m = NeuralNetworkInterface(global_params.config.mpath_celltype,
                                imposed_batch_size=2, nb_labels=4,
                                normalize_data=True,
                                normalize_func=naive_view_normalization_new,
@@ -730,25 +753,37 @@ def get_celltype_model(init_gpu=None):
 
 
 def get_semseg_spiness_model():
-    path = global_params.mpath_spiness
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    path = global_params.config.mpath_spiness
     m = InferenceModel(path)
     m._path = path
     return m
 
 
 def get_tripletnet_model_e3():
-    m_path = global_params.mpath_tnet
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    m_path = global_params.config.mpath_tnet
     m = InferenceModel(m_path)
     return m
 
 
 def get_knn_tnet_embedding_e3():
-    tnet_eval_dir = "{}/pred/".format(global_params.mpath_tnet)
+    tnet_eval_dir = "{}/pred/".format(global_params.config.mpath_tnet)
     return knn_clf_tnet_embedding(tnet_eval_dir)
 
 
 def get_pca_tnet_embedding_e3():
-    tnet_eval_dir = "{}/pred/".format(global_params.mpath_tnet)
+    tnet_eval_dir = "{}/pred/".format(global_params.config.mpath_tnet)
     return pca_tnet_embedding(tnet_eval_dir)
 
 
@@ -777,10 +812,12 @@ def naive_view_normalization_new(d):
 def knn_clf_tnet_embedding(fold, fit_all=False):
     """
     Currently it assumes embedding for GT views has been created already in 'fold'
-    and put into l_train_%d.npy / l_valid_%d.npy files
+    and put into l_train_%d.npy / l_valid_%d.npy files.
+
     Parameters
     ----------
-    fold :
+    fold : str
+    fit_all : bool
 
     Returns
     -------
@@ -809,10 +846,11 @@ def knn_clf_tnet_embedding(fold, fit_all=False):
     valid_d = np.concatenate(valid_d).astype(dtype=np.float32)
     valid_l = np.concatenate(valid_l).astype(dtype=np.uint16)
 
-    nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='auto', n_jobs=16,
-                                weights='uniform')
+    nbrs = KNeighborsClassifier(n_neighbors=5, algorithm='auto',
+                                n_jobs=16, weights='uniform')
     if fit_all:
-        nbrs.fit(np.concatenate([train_d, valid_d]), np.concatenate([train_l, valid_l]).ravel())
+        nbrs.fit(np.concatenate([train_d, valid_d]),
+                 np.concatenate([train_l, valid_l]).ravel())
     else:
         nbrs.fit(train_d, train_l.ravel())
     return nbrs
@@ -821,10 +859,13 @@ def knn_clf_tnet_embedding(fold, fit_all=False):
 def pca_tnet_embedding(fold, n_components=3, fit_all=False):
     """
     Currently it assumes embedding for GT views has been created already in 'fold'
-    and put into l_train_%d.npy / l_valid_%d.npy files
+    and put into l_train_%d.npy / l_valid_%d.npy files.
+
     Parameters
     ----------
-    fold :
+    fold : str
+    n_components : int
+    fit_all : bool
 
     Returns
     -------
@@ -862,7 +903,7 @@ def pca_tnet_embedding(fold, n_components=3, fit_all=False):
 
 
 def views2tripletinput(views):
-    views = views[:, :, :1] # use first view only
+    views = views[:, :, :1]  # use first view only
     out_d = np.concatenate([views,
                             np.ones_like(views),
                             np.ones_like(views)], axis=2)

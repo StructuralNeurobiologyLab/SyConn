@@ -13,6 +13,8 @@ except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation import render_sampled_sos_cc
 from syconn.proc.sd_proc import sos_dict_fact, init_sos
+from syconn import global_params
+
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -28,6 +30,8 @@ with open(path_storage_file, 'rb') as f:
 
 ch = args[0]
 so_kwargs = args[1]
+working_dir = so_kwargs['working_dir']
+global_params.wd = working_dir
 kwargs = args[2]
 skip_indexviews = kwargs['skip_indexviews']
 del kwargs['skip_indexviews']

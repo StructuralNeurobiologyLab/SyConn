@@ -6,8 +6,8 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import numpy as np
 import time
-import os
 
+from .. import global_params
 from ..extraction import log_extraction
 from ..handler import basics
 from . import object_extraction_steps as oes
@@ -47,34 +47,20 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
             for z in range(offset[2], offset[2]+size[2], cset.chunk_size[2]):
                 chunk_list.append(cset.coord_dict[tuple([x, y, z])])
                 translator[chunk_list[-1]] = len(chunk_list)-1
-    print("Chunk List contains %d elements." % len(chunk_list))
+    log_extraction.info("Chunk List contains %d elements." % len(chunk_list))
     return chunk_list, translator
 
 
 def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
-                                  overlap="auto", sigmas=None,
-                                  thresholds=None,
-                                  chunk_list=None,
-                                  debug=False,
-                                  swapdata=0,
-                                  offset=None,
-                                  size=None,
-                                  prob_kd_path_dict=None,
-                                  membrane_filename=None,
-                                  membrane_kd_path=None,
-                                  hdf5_name_membrane=None,
-                                  n_folders_fs=1000,
-                                  suffix="",
-                                  qsub_pe=None,
-                                  qsub_queue=None,
-                                  n_max_co_processes=None,
-                                  transform_func=None,
-                                  func_kwargs=None,
-                                  nb_cpus=1,
-                                  workfolder=None,
-                                  n_erosion=0,
-                                  overlap_thresh=0,
-                                  stitch_overlap=None):
+                                  overlap="auto", sigmas=None, thresholds=None,
+                                  chunk_list=None, debug=False, swapdata=0,
+                                  offset=None, size=None, prob_kd_path_dict=None,
+                                  membrane_filename=None, membrane_kd_path=None,
+                                  hdf5_name_membrane=None, n_folders_fs=1000,
+                                  suffix="", qsub_pe=None, qsub_queue=None,
+                                  n_max_co_processes=None,transform_func=None,
+                                  func_kwargs=None, nb_cpus=None, workfolder=None,
+                                  n_erosion=0, overlap_thresh=0, stitch_overlap=None):
     """
     Main function for the object extraction step; combines all needed steps
     # TODO: change object_names to dataset_names as in other methods
@@ -84,7 +70,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     cset : chunkdataset instance
     filename : str
         Filename of the prediction in the chunkdataset
-    hdf5names: list of str
+    hdf5names: List[str]
         List of names/ labels to be extracted and processed from the prediction
         file
     object_names : list of str
@@ -94,14 +80,14 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         Defines the overlap with neighbouring chunks that is left for later
         processing steps; if 'auto' the overlap is calculated from the sigma and
         the stitch_overlap (here: [1., 1., 1.])
-    sigmas: list of lists or None
+    sigmas: List[List] or None
         Defines the sigmas of the gaussian filters applied to the probability
         maps. Has to be the same length as hdf5names. If None no gaussian filter
         is applied
     thresholds: list of float
         Threshold for cutting the probability map. Has to be the same length as
         hdf5names. If None zeros are used instead (not recommended!)
-    chunk_list: list of int
+    chunk_list: List[int]
         Selective list of chunks for which this function should work on. If None
         all chunks are used.
     debug: boolean
@@ -191,29 +177,24 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     cc_info_list, overlap_info = oes.object_segmentation(
         cset, filename, hdf5names, overlap=overlap, sigmas=sigmas,
         thresholds=thresholds, chunk_list=chunk_list, debug=debug,
-        swapdata=swapdata,
-        prob_kd_path_dict=prob_kd_path_dict,
-        membrane_filename=membrane_filename,
-        membrane_kd_path=membrane_kd_path,
-        hdf5_name_membrane=hdf5_name_membrane,
-        fast_load=True, suffix=suffix,
-        qsub_pe=qsub_pe, transform_func=transform_func, transform_func_kwargs=func_kwargs,
-        qsub_queue=qsub_queue,
+        swapdata=swapdata, prob_kd_path_dict=prob_kd_path_dict,
+        membrane_filename=membrane_filename, membrane_kd_path=membrane_kd_path,
+        hdf5_name_membrane=hdf5_name_membrane, fast_load=True,
+        suffix=suffix, qsub_pe=qsub_pe, transform_func=transform_func,
+        transform_func_kwargs=func_kwargs, qsub_queue=qsub_queue,
         n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     if stitch_overlap is None:
         stitch_overlap = overlap_info[1]
     else:
         overlap_info[1] = stitch_overlap
-    if not np.all(stitch_overlap < overlap_info[0]):
-        msg = "Stitch overlap ({}) has to be smaller than chunk overlap ({})." \
+    if not np.all(stitch_overlap <= overlap_info[0]):
+        msg = "Stitch overlap ({}) has to be <= than chunk overlap ({})." \
               "".format(overlap_info[1], overlap_info[0])
         log_extraction.error(msg)
         raise ValueError(msg)
     overlap = overlap_info[0]
     all_times.append(time.time() - time_start)
     step_names.append("conneceted components")
-    log_extraction.info(
-        "Time needed for connected components: %.3fs" % all_times[-1])
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/connected_components.pkl",
                          [cc_info_list, overlap_info])
 
@@ -239,8 +220,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                     nb_cc_dict[hdf5_name][-1])
     all_times.append(time.time() - time_start)
     step_names.append("extracting max labels")
-    log_extraction.info("Time needed for extracting max labels: %.6fs" % all_times[-1])
-    log_extraction.info("Max labels: {}".format(max_labels))
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",
                          [max_labels])
     #
@@ -253,7 +232,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                            n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
-    log_extraction.info("Time needed for unique labels: %.3fs" % all_times[-1])
     #
     # # --------------------------------------------------------------------------
     #
@@ -266,10 +244,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                        overlap_thresh=overlap_thresh)
     all_times.append(time.time() - time_start)
     step_names.append("stitch list")
-    log_extraction.info(
-        "Time needed for stitch list: {:.3f}s.\nLength of stitch-lists for"
-        " hdf5-names {}: {}".format(all_times[-1], hdf5names, [
-            len(stitch_list[key]) for key in hdf5names]))
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/stitch_list.pkl",
                          [stitch_list])
     #
@@ -280,7 +254,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                                       max_labels)
     all_times.append(time.time() - time_start)
     step_names.append("merge list")
-    log_extraction.info("Time needed for merge list: %.3fs" % all_times[-1])
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/merge_list.pkl",
                          [merge_dict, merge_list_dict])
     # if all_times[-1] < 0.01:
@@ -294,10 +267,9 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                          qsub_queue=qsub_queue, n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
-    log_extraction.info("Time needed for applying merge list: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
-
+    # TODO: Remove map-reduce procedure or make it optional with kwarg
     time_start = time.time()
     oes.extract_voxels_combined(cset, filename, hdf5names, n_folders_fs=n_folders_fs,
                        chunk_list=chunk_list, suffix=suffix, workfolder=workfolder,
@@ -305,45 +277,38 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                        qsub_queue=qsub_queue, object_names=object_names,
                        n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
     all_times.append(time.time() - time_start)
+    # oes.extract_voxels(cset, filename, hdf5names,
+    #                    chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
+    #                    qsub_queue=qsub_queue, workfolder=global_params.config.working_dir,
+    #                    n_folders_fs=n_folders_fs,
+    #                    n_max_co_processes=n_max_co_processes)
     step_names.append("voxel extraction")
-    log_extraction.info("Time needed for extracting voxels: %.3fs" % all_times[-1])
-    # TODO: Remove map-reduce procedure or make it optional with kwarg
+
     # # --------------------------------------------------------------------------
     #
     # time_start = time.time()
-    # oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
-    #                    hdf5names, n_folders_fs=n_folders_fs, qsub_pe=qsub_pe,
-    #                    qsub_queue=qsub_queue,
-    #                    n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
+    # oes.combine_voxels(global_params.config.working_dir,
+    #                    hdf5names, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+    #                    n_folders_fs=n_folders_fs,
+    #                    n_max_co_processes=n_max_co_processes)
+    #
     # all_times.append(time.time() - time_start)
     # step_names.append("combine voxels")
-    # print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
-    log_extraction.info("Time overview:")
+    log_extraction.debug("Time overview:")
     for ii in range(len(all_times)):
-        log_extraction.info("%s: %.3fs" % (step_names[ii], all_times[ii]))
-    log_extraction.info("--------------------------")
-    log_extraction.info("Total Time: %.1f min" % (np.sum(all_times) / 60))
-    log_extraction.info("--------------------------")
+        log_extraction.debug("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    log_extraction.debug("--------------------------")
+    log_extraction.debug("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    log_extraction.debug("--------------------------")
 
 
-def from_probabilities_to_objects_parameter_sweeping(cset,
-                                                     filename,
-                                                     hdf5names,
-                                                     nb_thresholds,
-                                                     overlap="auto",
-                                                     sigmas=None,
-                                                     chunk_list=None,
-                                                     swapdata=0,
-                                                     label_density=np.ones(3),
-                                                     offset=None,
-                                                     size=None,
-                                                     membrane_filename=None,
-                                                     membrane_kd_path=None,
-                                                     hdf5_name_membrane=None,
-                                                     qsub_pe=None,
-                                                     qsub_queue=None):
+def from_probabilities_to_objects_parameter_sweeping(
+        cset, filename, hdf5names, nb_thresholds, overlap="auto", sigmas=None,
+        chunk_list=None, swapdata=0, label_density=np.ones(3), offset=None,
+        size=None, membrane_filename=None, membrane_kd_path=None,
+        hdf5_name_membrane=None, qsub_pe=None, qsub_queue=None):
     """
     Sweeps over different thresholds. Each objectextraction resutls are saved in
     a seperate folder, all intermediate steps are saved with a different suffix
@@ -398,14 +363,14 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
     qsub_queue: str or None
         qsub queue name
     """
-
+    # TODO: currently not used and needs to be refactored
     thresholds = np.array(
         255. / (nb_thresholds + 1) * np.array(range(1, nb_thresholds + 1)),
         dtype=np.uint8)
 
     all_times = []
     for nb, t in enumerate(thresholds):
-        print("\n\n ======= t = %.2f =======" % t)
+        log_extraction.info("\n\n ======= t = %.2f =======" % t)
         time_start = time.time()
         from_probabilities_to_objects(cset, filename, hdf5names,
                                       overlap=overlap, sigmas=sigmas,
@@ -424,12 +389,12 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
                                       debug=False)
         all_times.append(time.time() - time_start)
 
-    print("\n\nTime overview:")
+    log_extraction.debug("\n\nTime overview:")
     for ii in range(len(all_times)):
-        print("t = %.2f: %.1f min" % (thresholds[ii], all_times[ii] / 60))
-    print("--------------------------")
-    print("Total Time: %.1f min" % (np.sum(all_times) / 60))
-    print("--------------------------\n")
+        log_extraction.debug("t = %.2f: %.1f min" % (thresholds[ii], all_times[ii] / 60))
+    log_extraction.debug("--------------------------")
+    log_extraction.debug("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    log_extraction.debug("--------------------------\n")
 
 
 def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, dataset_names=None,
@@ -487,32 +452,31 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
         else:
             for ii in range(len(chunk_list)):
                 chunk_translator[chunk_list[ii]] = ii
-    # TODO: Remove or make optional
+
+    # TODO: make extract-combine or extract_combined selectable / find optimal solution
     # # --------------------------------------------------------------------------
     #
     time_start = time.time()
     oes.extract_voxels(cset, filename, hdf5names, dataset_names=dataset_names,
                        overlaydataset_path=overlaydataset_path,
                        chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
-                       qsub_queue=qsub_queue,
+                       qsub_queue=qsub_queue, workfolder=global_params.config.working_dir,
                        n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
                        n_max_co_processes=n_max_co_processes, transform_func=transform_func,
                        transform_func_kwargs=transform_func_kwargs)
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
-    print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
     #
     # # --------------------------------------------------------------------------
     #
     time_start = time.time()
-    oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
+    oes.combine_voxels(global_params.config.working_dir,
                        hdf5names, dataset_names=dataset_names,
                        qsub_pe=qsub_pe, qsub_queue=qsub_queue,
                        n_folders_fs=n_folders_fs,
                        n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("combine voxels")
-    print("\nTime needed for combining voxels: %.3fs" % all_times[-1])
     #
     # # --------------------------------------------------------------------------
 
@@ -525,13 +489,13 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
     #                    n_max_co_processes=n_max_co_processes)
     # all_times.append(time.time() - time_start)
     # step_names.append("extract voxels combined")
-    # print("\nTime needed for extracting voxels combined: %.3fs" % all_times[-1])
+    # log_extraction.info("\nTime needed for extracting voxels combined: %.3fs" % all_times[-1])
 
     # --------------------------------------------------------------------------
 
-    print("\nTime overview:")
+    log_extraction.debug("Time overview:")
     for ii in range(len(all_times)):
-        print("%s: %.3fs" % (step_names[ii], all_times[ii]))
-    print("--------------------------")
-    print("Total Time: %.1f min" % (np.sum(all_times) / 60))
-    print("--------------------------\n\n")
+        log_extraction.debug("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    log_extraction.debug("--------------------------")
+    log_extraction.debug("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    log_extraction.debug("--------------------------")

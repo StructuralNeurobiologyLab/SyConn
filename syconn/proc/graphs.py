@@ -13,9 +13,10 @@ import tqdm
 import itertools
 
 from ..mp.mp_utils import start_multiprocess_obj
-from ..config.global_params import min_cc_size_glia, min_cc_size_neuron,\
-    get_dataset_scaling, glia_thresh
+from .. import global_params
+from ..global_params import min_cc_size_ssv, glia_thresh
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
+from . import log_proc
 
 
 def bfs_smoothing(vertices, vertex_labels, max_edge_length=120, n_voting=40):
@@ -241,7 +242,7 @@ def create_ccsize_dict(g, sizes):
     node2cssize_dict = {}
     for cc in ccs:
         mesh_bbs = np.concatenate([sizes[n] for n in cc])
-        cc_size = np.linalg.norm(np.max(mesh_bbs, axis=0)-
+        cc_size = np.linalg.norm(np.max(mesh_bbs, axis=0) -
                                  np.min(mesh_bbs, axis=0), ord=2)
         for n in cc:
             node2cssize_dict[n] = cc_size
@@ -308,7 +309,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
         if glia_dict[n] != 0:
             g_neuron.remove_node(n)
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
-    if np.all(np.array(list(neuron2ccsize_dict.values())) <= min_cc_size_neuron): # no significant neuron SV
+    if np.all(np.array(list(neuron2ccsize_dict.values())) <= min_cc_size_ssv): # no significant neuron SV
         if return_removed_nodes:
             return [], [list(g.nodes())]
         return []
@@ -319,14 +320,14 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
         if glia_dict[n] == 0:
             g_glia.remove_node(n)
     glia2ccsize_dict = create_ccsize_dict(g_glia, size_dict)
-    if np.all(np.array(list(glia2ccsize_dict.values())) <= min_cc_size_glia): # no significant glia SV
+    if np.all(np.array(list(glia2ccsize_dict.values())) <= min_cc_size_ssv): # no significant glia SV
         if return_removed_nodes:
             return [list(g.nodes())], []
         return [list(g.nodes())]
 
     tiny_glia_fragments = []
     for n in g_glia.nodes():
-        if glia2ccsize_dict[n] < min_cc_size_glia:
+        if glia2ccsize_dict[n] < min_cc_size_ssv:
             tiny_glia_fragments += [n]
 
     # create new neuron graph without sufficiently big glia connected components
@@ -339,7 +340,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
     g_tmp = g_neuron.copy()
     for n in g_tmp.nodes():
-        if neuron2ccsize_dict[n] < min_cc_size_neuron:
+        if neuron2ccsize_dict[n] < min_cc_size_ssv:
             g_neuron.remove_node(n)
 
     # create new glia graph with remaining nodes
@@ -371,6 +372,7 @@ def glia_path_length(glia_path, glia_dict, write_paths=None):
     glia_dict : dict
         Dictionary which keys the SegmentationObjects in glia_path and returns
         their glia prediction
+    write_paths : bool
 
     Returns
     -------
@@ -441,12 +443,12 @@ def eucl_dist(a, b):
 
 def get_glia_paths(g, glia_dict, node2ccsize_dict, min_cc_size_neuron,
                    node2ccsize_dict_glia, min_cc_size_glia):
-    """
+    """Currently not in use, Refactoring needed
     Find paths between neuron type SV grpah nodes which contain glia nodes.
 
     Parameters
     ----------
-    g :
+    g : nx.Graph
     glia_dict :
     node2ccsize_dict :
     min_cc_size_neuron :
@@ -483,7 +485,6 @@ def get_glia_paths(g, glia_dict, node2ccsize_dict, min_cc_size_neuron,
             continue
         glia_paths.append(paths[a][b])
         glia_svixs_in_paths.append(np.array([so.id for so in glia_nodes]))
-    # print glia_svixs_in_paths
     return glia_paths
 
 
@@ -496,6 +497,7 @@ def write_sopath2skeleton(so_path, dest_path, comment=None):
     ----------
     so_path : list of SegmentationObject
     dest_path : str
+    comment : str
     """
     skel = Skeleton()
     anno = SkeletonAnnotation()
@@ -568,8 +570,8 @@ def create_graph_from_coords(coords, max_dist=6000, force_single_cc=True,
     if force_single_cc:
         while not len(np.unique(pairs)) == len(coords):
             max_dist += max_dist / 3
-            print("Generated skeleton is not a single connected component. "
-                  "Increasing maximum node distance to {}".format(max_dist))
+            log_proc.debug("Generated skeleton is not a single connected component. "
+                           "Increasing maximum node distance to {}".format(max_dist))
             pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
     g = nx.Graph()
     g.add_nodes_from(np.arange(len(coords)))
@@ -634,7 +636,7 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150, 
 
 def nxGraph2kzip(g, coords, kzip_path):
     import tqdm
-    scaling = get_dataset_scaling()
+    scaling = global_params.config.entries['Dataset']['scaling']()
     coords = coords / scaling
     skel = Skeleton()
     anno = SkeletonAnnotation()

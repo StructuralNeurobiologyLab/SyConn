@@ -9,10 +9,11 @@ import networkx as nx
 import numpy as np
 
 from ..backend.storage import AttributeDict
-from ..config.global_params import wd, glia_thresh, RENDERING_MAX_NB_SV
+from .. import global_params
+from ..global_params import glia_thresh, RENDERING_MAX_NB_SV
 from ..handler.basics import load_pkl2obj, chunkify, flatten_list, \
     write_txt2kzip, write_obj2pkl
-from ..mp import qsub_utils as qu
+from ..mp import batchjob_utils as qu
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 from ..reps.rep_helper import knossos_ml_from_ccs
 from ..reps.segmentation import SegmentationDataset
@@ -26,7 +27,7 @@ def qsub_glia_splitting():
     Start glia splitting -> generate final connected components of neuron vs.
     glia SVs
     """
-    cc_dict = load_pkl2obj(wd + "/glia/cc_dict_rag_graphs.pkl")
+    cc_dict = load_pkl2obj(global_params.config.working_dir + "/glia/cc_dict_rag_graphs.pkl")
     huge_ssvs = [it[0] for it in cc_dict.items() if len(it[1]) > RENDERING_MAX_NB_SV]
     if len(huge_ssvs):
         log_proc.info("{} huge SSVs detected (#SVs > {})".format(len(huge_ssvs),
@@ -42,10 +43,10 @@ def collect_glia_sv():
     SegmentationObjects contained in 'sv' SegmentationDataset (always uses
     default version as defined in config.ini).
     """
-    cc_dict = load_pkl2obj(wd + "/glia/cc_dict_rag.pkl")
+    cc_dict = load_pkl2obj(global_params.config.working_dir + "/glia/cc_dict_rag.pkl")
     # get single SV glia probas which were not included in the old RAG
     ids_in_rag = np.concatenate(list(cc_dict.values()))
-    sds = SegmentationDataset("sv", working_dir=wd)
+    sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     # get all SV glia probas (faster than single access)
     multi_params = sds.so_dir_paths
     # glia predictions only used for SSVs which only have single SV and were
@@ -67,17 +68,17 @@ def collect_glia_sv():
     single_sv_glia = np.array([ix for ix in missing_ids if glia_preds[ix] == 1],
                               dtype=np.uint64)
     glia_svs = np.concatenate([single_sv_glia, glia_svs]).astype(np.uint64)
-    np.save(wd + "/glia/glia_svs.npy", glia_svs)
+    np.save(global_params.config.working_dir + "/glia/glia_svs.npy", glia_svs)
     neuron_svs = np.array(list(set(sds.ids).difference(set(glia_svs))),
                           dtype=np.uint64)
-    np.save(wd + "/glia/neuron_svs.npy", neuron_svs)
+    np.save(global_params.config.working_dir + "/glia/neuron_svs.npy", neuron_svs)
     log_proc.info("Collected whole dataset glia and neuron predictions.")
 
 
 def collect_gliaSV_helper(cc_ixs):
     glia_svids = []
     for cc_ix in cc_ixs:
-        sso = SuperSegmentationObject(cc_ix, working_dir=wd,
+        sso = SuperSegmentationObject(cc_ix, working_dir=global_params.config.working_dir,
                                       version="gliaremoval")
         sso.load_attr_dict()
         ad = sso.attr_dict
@@ -136,7 +137,7 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
         g = rag
     # create neuron RAG by glia removal
     neuron_g = g.copy()
-    glia_svs = np.load(wd + "/glia/glia_svs.npy")
+    glia_svs = np.load(global_params.config.working_dir + "/glia/glia_svs.npy")
     for ix in glia_svs:
         neuron_g.remove_node(ix)
     # create glia rag by removing neuron sv's
@@ -146,7 +147,7 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
 
     # create dictionatry with CC sizes (BBD)
     log_proc.info("Finished neuron and glia RAG, now preparing CC size dict.")
-    sds = SegmentationDataset("sv", working_dir=wd)
+    sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     sv_size_dict = {}
     bbs = sds.load_cached_data('bounding_box') * sds.scaling
     for ii in range(len(sds.ids)):
@@ -157,7 +158,7 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
 
     # add CCs with single neuron SV manually
     neuron_ids = list(neuron_g.nodes())
-    all_neuron_ids = np.load(wd + "/glia/neuron_svs.npy")
+    all_neuron_ids = np.load(global_params.config.working_dir + "/glia/neuron_svs.npy")
     # remove small Neuron CCs
     missing_neuron_svs = set(all_neuron_ids).difference(set(neuron_ids))
     if len(missing_neuron_svs) > 0:
@@ -171,10 +172,11 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
     log_proc.info("Removed %d neuron CCs with single SV because of size." %
           (before_cnt - len(neuron_g.nodes())))
     ccs = list(nx.connected_components(neuron_g))
-    txt = knossos_ml_from_ccs([list(cc)[0] for cc in ccs], ccs)
-    write_txt2kzip(wd + "/glia/neuron_rag_ml%s.k.zip" % suffix, txt,
+    # Added np.min(list(cc)) to have deterministic SSV ID
+    txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)
+    write_txt2kzip(global_params.config.working_dir + "/glia/neuron_rag_ml%s.k.zip" % suffix, txt,
                    "mergelist.txt")
-    nx.write_edgelist(neuron_g, wd + "/glia/neuron_rag%s.bz2" % suffix)
+    nx.write_edgelist(neuron_g, global_params.config.working_dir + "/glia/neuron_rag%s.bz2" % suffix)
     log_proc.info("Nb neuron CCs: {}".format(len(ccs)))
     log_proc.info("Nb neuron SVs: {}".format(len([n for cc in ccs for n in cc])))
 
@@ -194,9 +196,10 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
     ccs = list(nx.connected_components(glia_g))
     log_proc.info("Nb glia CCs: {}".format(len(ccs)))
     log_proc.info("Nb glia SVs: {}".format(len([n for cc in ccs for n in cc])))
-    nx.write_edgelist(glia_g, wd + "/glia/glia_rag%s.bz2" % suffix)
-    txt = knossos_ml_from_ccs([list(cc)[0] for cc in ccs], ccs)
-    write_txt2kzip(wd + "/glia/glia_rag_ml%s.k.zip" % suffix, txt,
+    nx.write_edgelist(glia_g, global_params.config.working_dir + "/glia/glia_rag%s.bz2" % suffix)
+    # Added np.min(list(cc)) to have deterministic SSV ID
+    txt = knossos_ml_from_ccs([np.min(list(cc)) for cc in ccs], ccs)
+    write_txt2kzip(global_params.config.working_dir + "/glia/glia_rag_ml%s.k.zip" % suffix, txt,
                    "mergelist.txt")
 
 
@@ -220,8 +223,9 @@ def transform_rag_edgelist2pkl(rag):
         curr_cc = list(cc.nodes())
         min_ix = np.min(curr_cc)
         if min_ix in cc_dict:
-            raise ("laksnclkadsnfldskf")
+            raise ValueError('Multiple SSV IDs')
         cc_dict_graph[min_ix] = cc
         cc_dict[min_ix] = curr_cc
-    write_obj2pkl(wd + "/glia/cc_dict_rag_graphs.pkl", cc_dict_graph)
-    write_obj2pkl(wd + "/glia/cc_dict_rag.pkl", cc_dict)
+    write_obj2pkl(global_params.config.working_dir + "/glia/cc_dict_rag_graphs.pkl",
+                  cc_dict_graph)
+    write_obj2pkl(global_params.config.working_dir + "/glia/cc_dict_rag.pkl", cc_dict)

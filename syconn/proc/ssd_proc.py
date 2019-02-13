@@ -11,12 +11,12 @@ except ImportError:
 from typing import Iterable, List, Tuple
 import glob
 import numpy as np
-import os
 from collections import Counter
 
-from ..config import global_params
+from .. import global_params
 from . import log_proc
-from ..mp import qsub_utils as qu
+from ..handler import basics
+from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps.super_segmentation import SuperSegmentationObject, \
     SuperSegmentationDataset
@@ -24,179 +24,41 @@ from ..reps import segmentation, super_segmentation
 from ..proc.meshes import mesh_creator_sso
 
 
-def save_dataset_deep(ssd, extract_only=False, attr_keys=(), stride=1000,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=1,
-                      n_max_co_processes=None):
-    ssd.save_dataset_shallow()
-
-    multi_params = []
-    for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-                         for i in range(0, len(ssd.ssv_ids), stride)]:
-        multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, extract_only, attr_keys,
-                             ssd.type])
-
-    if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(
-            _write_super_segmentation_dataset_thread,
-            multi_params, nb_cpus=nb_cpus)
-
-    elif qu.__BATCHJOB__:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "write_super_segmentation_dataset",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_cores=nb_cpus,
-                                     n_max_co_processes=n_max_co_processes)
-
-        out_files = glob.glob(path_to_out + "/*")
-        results = []
-        for out_file in out_files:
-            with open(out_file) as f:
-                results.append(pkl.load(f))
-    else:
-        raise Exception("QSUB not available")
-
-    attr_dict = {}
-    for this_attr_dict in results:
-        for attribute in this_attr_dict.keys():
-            if not attribute in attr_dict:
-                attr_dict[attribute] = []
-
-            attr_dict[attribute] += this_attr_dict[attribute]
-
-    if not ssd.mapping_dict_exists:
-        ssd.mapping_dict = dict(zip(attr_dict["id"], attr_dict["sv"]))
-        ssd.save_dataset_shallow()
-
-    for attribute in attr_dict.keys():
-        if extract_only:
-            np.save(ssd.path + "/%ss_sel.npy" % attribute,
-                    attr_dict[attribute])
-        else:
-            np.save(ssd.path + "/%ss.npy" % attribute,
-                    attr_dict[attribute])
-
-
-def _write_super_segmentation_dataset_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    extract_only = args[4]
-    attr_keys = args[5]
-    ssd_type = args[6]
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir, version,
-                                                      ssd_type=ssd_type,
-                                                      version_dict=version_dict)
-
-    try:
-        ssd.load_mapping_dict()
-        mapping_dict_avail = True
-    except:
-        mapping_dict_avail = False
-
-    attr_dict = dict(id=[])
-
-    for ssv_obj_id in ssv_obj_ids:
-        ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
-                                                    new_mapping=True,
-                                                    create=True)
-
-        if ssv_obj.attr_dict_exists:
-            ssv_obj.load_attr_dict()
-
-        if not extract_only:
-
-            if len(ssv_obj.attr_dict["sv"]) == 0:
-                if mapping_dict_avail:
-                    ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
-                                                                True)
-
-                    if ssv_obj.attr_dict_exists:
-                        ssv_obj.load_attr_dict()
-                else:
-                    raise Exception("No mapping information found")
-        if not extract_only:
-            if "rep_coord" not in ssv_obj.attr_dict:
-                ssv_obj.attr_dict["rep_coord"] = ssv_obj.rep_coord
-            if "bounding_box" not in ssv_obj.attr_dict:
-                ssv_obj.attr_dict["bounding_box"] = ssv_obj.bounding_box
-            if "size" not in ssv_obj.attr_dict:
-                ssv_obj.attr_dict["size"] = ssv_obj.size
-
-        ssv_obj.attr_dict["sv"] = np.array(ssv_obj.attr_dict["sv"],
-                                           dtype=np.int)
-
-        if extract_only:
-            ignore = False
-            for attribute in attr_keys:
-                if not attribute in ssv_obj.attr_dict:
-                    ignore = True
-                    break
-            if ignore:
-                continue
-
-            attr_dict["id"].append(ssv_obj_id)
-
-            for attribute in attr_keys:
-                if attribute not in attr_dict:
-                    attr_dict[attribute] = []
-
-                if attribute in ssv_obj.attr_dict:
-                    attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
-                else:
-                    attr_dict[attribute].append(None)
-        else:
-            attr_dict["id"].append(ssv_obj_id)
-            for attribute in ssv_obj.attr_dict.keys():
-                if attribute not in attr_dict:
-                    attr_dict[attribute] = []
-
-                attr_dict[attribute].append(ssv_obj.attr_dict[attribute])
-
-                ssv_obj.save_attr_dict()
-
-    return attr_dict
-
-
-def aggregate_segmentation_object_mappings(ssd, obj_types,
-                                           stride=1000, qsub_pe=None,
-                                           qsub_queue=None, nb_cpus=1):
+def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=None,
+                                           n_jobs=1000, qsub_pe=None,
+                                           qsub_queue=None, nb_cpus=None):
     """
 
     Parameters
     ----------
     ssd : SuperSegmentationDataset
     obj_types : List[str]
-    stride : int
+    n_jobs : int
+    n_max_co_processes : int
+        Number of parallel jobs
     qsub_pe : Optional[str]
     qsub_queue : Optional[str]
     nb_cpus : int
+        cpus per job when using BatchJob
     """
 
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
     assert "sv" in ssd.version_dict
 
-    multi_params = []
-    for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-                         for i in
-                         range(0, len(ssd.ssv_ids), stride)]:
-        multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, obj_types, ssd.type])
+    multi_params = basics.chunkify(ssd.ssv_ids, n_jobs)
+    multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
+                     obj_types, ssd.type) for ssv_id_block in multi_params]
 
-    if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+        results = sm.start_multiprocess_imap(
             _aggregate_segmentation_object_mappings_thread,
-            multi_params, nb_cpus=nb_cpus)
+            multi_params, nb_cpus=n_max_co_processes)
 
-    elif qu.__BATCHJOB__:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "aggregate_segmentation_object_mappings",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None)
+    elif qu.batchjob_enabled():
+        path_to_out = qu.QSUB_script(multi_params, "aggregate_segmentation_object_mappings",
+                                     pe=qsub_pe, queue=qsub_queue, script_folder=None,
+                                     n_max_co_processes=n_max_co_processes, n_cores=nb_cpus)
 
     else:
         raise Exception("QSUB not available")
@@ -238,15 +100,16 @@ def _aggregate_segmentation_object_mappings_thread(args):
         ssv.save_attr_dict()
 
 
-def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
-                            qsub_queue=None, nb_cpus=1):
+def apply_mapping_decisions(ssd, obj_types, n_jobs=1000, qsub_pe=None,
+                            qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     """
+    Requires prior execution of `aggregate_segmentation_object_mappings`.
 
     Parameters
     ----------
     ssd : SuperSegmentationDataset
     obj_types : List[str]
-    stride : int
+    n_jobs : int
     qsub_pe : Optional[str]
     qsub_queue : Optional[str]
     nb_cpus : int
@@ -254,22 +117,19 @@ def apply_mapping_decisions(ssd, obj_types, stride=1000, qsub_pe=None,
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
 
-    multi_params = []
-    for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-                         for i in
-                         range(0, len(ssd.ssv_ids), stride)]:
-        multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, obj_types, ssd.type])
+    multi_params = basics.chunkify(ssd.ssv_ids, n_jobs)
+    multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
+                     obj_types, ssd.type) for ssv_id_block in multi_params]
 
-    if qsub_pe is None and qsub_queue is None:
-        results = sm.start_multiprocess(_apply_mapping_decisions_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+        results = sm.start_multiprocess_imap(_apply_mapping_decisions_thread,
+                                             multi_params, nb_cpus=n_max_co_processes)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
-                                     "apply_mapping_decisions",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None)
+                                     "apply_mapping_decisions", n_cores=nb_cpus,
+                                     pe=qsub_pe, queue=qsub_queue, script_folder=None,
+                                     n_max_co_processes=n_max_co_processes)
 
     else:
         raise Exception("QSUB not available")
@@ -384,7 +244,7 @@ def _apply_mapping_decisions_thread(args):
 
 
 def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue=None,
-                       nb_cpus=1, n_max_co_processes=global_params.NCORE_TOTAL):
+                       nb_cpus=None, n_max_co_processes=global_params.NCORE_TOTAL):
     """
     Map synn_ssv objects to all SSO objects contained in SSV SuperSegmentationDataset.
     Also computes syn_ssv meshes.
@@ -402,19 +262,19 @@ def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue
     -------
 
     """
-    ssd = SuperSegmentationDataset(global_params.wd)
+    ssd = SuperSegmentationDataset(global_params.config.working_dir)
     multi_params = []
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
                          for i in range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, ssd.type, synssv_version])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(
             map_synssv_objects_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_synssv_objects",
                                      pe=qsub_pe, queue=qsub_queue,

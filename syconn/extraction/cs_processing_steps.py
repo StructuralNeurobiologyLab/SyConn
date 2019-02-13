@@ -12,17 +12,18 @@ from sklearn import ensemble, externals
 from sklearn.model_selection import cross_val_score
 from knossos_utils.chunky import load_dataset
 from knossos_utils import knossosdataset, skeleton_utils, skeleton
+knossosdataset._set_noprint(True)
 import time
 import datetime
 
-from ..mp import qsub_utils as qu
+from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
 from ..reps.rep_helper import subfold_from_ix, ix_from_subfold
 from ..backend.storage import AttributeDict, VoxelStorage
 from ..handler.basics import chunkify
 from . import log_extraction
-from ..config import global_params
+from .. import global_params
 
 
 # code for splitting 'syn' objects, which are generated as overlap between CS and SJ, see below.
@@ -138,11 +139,11 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
         multi_params.append([wd, block, voxel_rel_paths[block_steps[i_block]: block_steps[i_block+1]],
                              syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm])
         i_block += 1
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         _ = sm.start_multiprocess(_combine_and_split_syn_thread,
                                   multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         _ = qu.QSUB_script(multi_params, "combine_and_split_syn", pe=qsub_pe,
                            resume_job=resume_job, script_folder=None,
                            queue=qsub_queue, n_max_co_processes=n_max_co_processes)
@@ -356,11 +357,11 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
                              cs_agg.version, cs.version, ssd.scaling, cs_gap_nm])
         i_block += 1
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(_combine_and_split_cs_agg_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "combine_and_split_cs_agg",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -510,7 +511,6 @@ def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000,
 
         cc_ids = np.array(list(ccs[current_ccs]))
         next_ids = vx_ids[cc_ids[~np.in1d(cc_ids, checked_ids)][:max_concurrent_nodes]]
-
     return ccs
 
 
@@ -537,11 +537,11 @@ def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
                              sj_sd.version, cs_sd.version,
                              rep_coord_dist_nm])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(_overlap_mapping_sj_to_cs_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "overlap_mapping_sj_to_cs",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -633,7 +633,7 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
 
     u_cand_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']][np.array(list(u_cand_sj_ids))]
 
-    log_extraction.debug("%d candidate sjs" % len(u_cand_sj_ids))
+    # log_extraction.debug("%d candidate sjs" % len(u_cand_sj_ids))
 
     overlap_vx_l = []
     for sj_id in u_cand_sj_ids:
@@ -645,9 +645,11 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
         if len(overlap_vx) > 0:
             overlap_vx_l.append([sj_id, overlap_vx])
 
-    log_extraction.debug("%d candidate sjs overlap" % len(overlap_vx_l))
+    # log_extraction.debug("%d candidate sjs overlap" % len(overlap_vx_l))
 
     return overlap_vx_l
+
+import pydeps
 
 
 def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
@@ -684,7 +686,7 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
 
     voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd, version="0",
-                                               create=True, n_folders_fs=n_folders_fs)
+                                              create=True, n_folders_fs=n_folders_fs)
 
     for p in voxel_rel_paths:
         try:
@@ -705,11 +707,11 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
                              voxel_rel_path_blocks[i_block], sd_syn.version,
                              sj_sd.version, cs_sd.version, cs_cset.path_head_folder])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(syn_gen_via_cset_thread,
-                                       multi_params, nb_cpus=nb_cpus)
+                                       multi_params, nb_cpus=n_max_co_processes)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         _ = qu.QSUB_script(multi_params, "syn_gen_via_cset", pe=qsub_pe,
                            queue=qsub_queue, resume_job=resume_job,
                            script_folder=None, n_cores=nb_cpus,
@@ -724,8 +726,8 @@ def syn_gen_via_cset_thread(args):
         cs_sd_version, cset_path = args
 
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd,
-                                               version=syn_sd_version,
-                                               create=False)
+                                              version=syn_sd_version,
+                                              create=False)
     sj_sd = segmentation.SegmentationDataset("sj", working_dir=wd,
                                              version=sj_sd_version,
                                              create=False)
@@ -760,7 +762,7 @@ def syn_gen_via_cset_thread(args):
                 continue
             vxl_sj = sj.voxels
             offset, size = bb[0], bb[1] - bb[0]
-            log_extraction.info('Loading CS chunk data of size {}'.format(size))
+            # log_extraction.info('Loading CS chunk data of size {}'.format(size))
             cs_ids = cs_cset.from_chunky_to_matrix(size, offset, 'cs', ['cs'],
                                                    dtype=np.uint64)['cs']
             u_cs_ids, c_cs_ids = np.unique(cs_ids, return_counts=True)
@@ -825,11 +827,11 @@ def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
                              voxel_rel_path_blocks[i_block], conn_sd.version,
                              sj_sd.version, cs_sd.version, cs_kd.knossos_path])
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(_overlap_mapping_sj_to_cs_via_kd_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "overlap_mapping_sj_to_cs_via_kd",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -1000,11 +1002,11 @@ def create_syn_gt(conn, path_kzip):
     rfc.fit(v_features, v_labels)
     log_extraction.info('RFC importances:' + str(rfc.feature_importances_))
 
-    model_base_dir = os.path.split(global_params.mpath_syn_rfc)[0]
+    model_base_dir = os.path.split(global_params.config.mpath_syn_rfc)[0]
     os.makedirs(model_base_dir, exist_ok=True)
 
     # unclear why there is 'rfc' after it
-    externals.joblib.dump(rfc, global_params.mpath_syn_rfc)
+    externals.joblib.dump(rfc, global_params.config.mpath_syn_rfc)
 
     return rfc, v_features, v_labels
 
@@ -1039,7 +1041,7 @@ def synssv_o_features(synssv_o):
 def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
                           mi_version=None, vc_version=None, max_vx_dist_nm=None,
                           max_rep_coord_dist_nm=None, qsub_pe=None,
-                          qsub_queue=None, nb_cpus=1, n_max_co_processes=None):
+                          qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
     is executed in 'classify_synssv_objects'.
@@ -1070,11 +1072,11 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
     multi_params = [(so_dir_paths, wd, obj_version, mi_version, vc_version, ssd_version, max_vx_dist_nm,
                      max_rep_coord_dist_nm) for so_dir_paths in multi_params]
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(_map_objects_to_synssv_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_objects_to_synssv",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -1095,6 +1097,7 @@ def _map_objects_to_synssv_thread(args):
     """
     so_dir_paths, wd, obj_version, mi_version, vc_version, ssd_version, \
         max_vx_dist_nm, max_rep_coord_dist_nm = args
+    global_params.wd = wd
 
     ssv = super_segmentation.SuperSegmentationDataset(working_dir=wd,
                                                       version=ssd_version)
@@ -1155,12 +1158,12 @@ def objects_to_single_synssv(synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=2000,
     for i_partner_id, partner_id in enumerate(partner_ids):
         ssv_o = ssv.get_super_segmentation_object(partner_id)
 
-        log_extraction.debug(len(ssv_o.mi_ids))
+        # log_extraction.debug(len(ssv_o.mi_ids))
         n_mi_objs, n_mi_vxs = map_objects_from_ssv(synssv_o, mi_sd, ssv_o.mi_ids,
                                                    max_vx_dist_nm,
                                                    max_rep_coord_dist_nm)
 
-        log_extraction.debug(len(ssv_o.vc_ids))
+        # log_extraction.debug(len(ssv_o.vc_ids))
         n_vc_objs, n_vc_vxs = map_objects_from_ssv(synssv_o, vc_sd, ssv_o.vc_ids,
                                                    max_vx_dist_nm,
                                                    max_rep_coord_dist_nm)
@@ -1209,7 +1212,7 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
 
     synssv_vx_kdtree = spatial.cKDTree(synssv_o.voxel_list * synssv_o.scaling)
 
-    log_extraction.debug(len(close_obj_ids))
+    # log_extraction.debug(len(close_obj_ids))
 
     n_obj_vxs = []
     for close_obj_id in close_obj_ids:
@@ -1223,7 +1226,7 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
 
     n_obj_vxs = np.array(n_obj_vxs)
 
-    log_extraction.debug(n_obj_vxs)
+    # log_extraction.debug(n_obj_vxs)
     n_objects = np.sum(n_obj_vxs > 0)
     n_vxs = np.sum(n_obj_vxs)
 
@@ -1231,7 +1234,7 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
 
 
 def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
-                            qsub_queue=None, nb_cpus=1, n_max_co_processes=None):
+                            qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     """
     Classifiy SSV contact sites into snaptic or non-synaptic using an RFC model
     and stores the result in the attribute dict of the syn_ssv objects.
@@ -1252,11 +1255,11 @@ def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
     multi_params = [(so_dir_paths, wd, obj_version) for so_dir_paths in
                     multi_params]
 
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(_classify_synssv_objects_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.__BATCHJOB__:
+    elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "classify_synssv_objects",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -1280,7 +1283,7 @@ def _classify_synssv_objects_thread(args):
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
-    rfc = externals.joblib.load(global_params.mpath_syn_rfc)
+    rfc = externals.joblib.load(global_params.config.mpath_syn_rfc)
 
     for so_dir_path in so_dir_paths:
         this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
@@ -1301,7 +1304,7 @@ def _classify_synssv_objects_thread(args):
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                          qsub_pe=None, qsub_queue=None,
-                                         nb_cpus=1, n_max_co_processes=None):
+                                         nb_cpus=None, n_max_co_processes=None):
     """
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
@@ -1326,11 +1329,11 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, 2000):
         multi_params.append([so_dir_paths, wd, obj_version,
                              ssd_version])
-    if qsub_pe is None and qsub_queue is None:
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
             _collect_properties_from_ssv_partners_thread, multi_params,
-            nb_cpus=nb_cpus)
-    elif qu.__BATCHJOB__:
+            nb_cpus=n_max_co_processes)
+    elif qu.batchjob_enabled():
         _ = qu.QSUB_script(
             multi_params, "collect_properties_from_ssv_partners", pe=qsub_pe,
             queue=qsub_queue, script_folder=None,
@@ -1399,10 +1402,10 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
     syn_prob_t :
     """
     if dest_folder is None:
-        dest_folder = global_params.wd + '/connectivity_matrix/'
+        dest_folder = global_params.config.working_dir + '/connectivity_matrix/'
     os.makedirs(os.path.split(dest_folder)[0], exist_ok=True)
     dest_name = dest_folder + '/conn_mat'
-    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.wd,
+    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=global_params.config.working_dir,
                                                   version=obj_version)
 
     syn_prob = sd_syn_ssv.load_cached_data("syn_prob")
@@ -1442,7 +1445,7 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
     ct_labels = ['N/A', 'EA', 'MSN', 'GP', 'INT']
     ct_label_ids = np.array([-1, 0, 1, 2, 3])
     sp_labels = ['N/A', 'neck', 'head', 'shaft', 'other']
-    sp_label_ids = np.array([-1, 0, 1, 2, 3, 4])
+    sp_label_ids = np.array([-1, 0, 1, 2, 3])
 
     annotations = []
     m_sizes = np.abs(m_sizes)

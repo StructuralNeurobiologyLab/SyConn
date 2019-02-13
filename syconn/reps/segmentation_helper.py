@@ -15,6 +15,7 @@ from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
 from ..handler.basics import chunkify
 from ..mp.mp_utils import start_multiprocess_imap
 from . import log_reps
+from .. import global_params
 
 
 def glia_pred_so(so, thresh, pred_key_appendix):
@@ -63,6 +64,18 @@ def acquire_obj_ids(sd):
 
 
 def save_voxels(so, bin_arr, offset, overwrite=False):
+    """
+    Helper function to save SegmentationObject voxels.
+
+    Parameters
+    ----------
+    so : SegmentationObject
+    bin_arr : np.array
+        Binary mask array, 0: background, 1: supervoxel locations.
+    offset : np.array
+    overwrite : bool
+
+    """
     assert bin_arr.dtype == bool
 
     voxel_dc = VoxelStorage(so.voxel_path, read_only=False,
@@ -77,13 +90,27 @@ def save_voxels(so, bin_arr, offset, overwrite=False):
 
 
 def load_voxels(so, voxel_dc=None):
+    """
+    Helper function to load voxels of a SegmentationObject as 3D array.
+
+    Parameters
+    ----------
+    so : SegmentationObject
+    voxel_dc : VoxelStorage
+
+    Returns
+    -------
+    np.array
+        3D binary mask array, 0: background, 1: supervoxel locations.
+    """
     if voxel_dc is None:
         voxel_dc = VoxelStorage(so.voxel_path, read_only=True,
                                 disable_locking=True)
 
     so._size = 0
     if so.id not in voxel_dc:
-        log_reps.error("Voxels for id %d do not exist" % so.id)
+        log_reps.error("Voxels for SO object %d of type %s do not exist"
+                       "" % (so.id, so.type))
         return -1
 
     bin_arrs, block_offsets = voxel_dc[so.id]
@@ -122,6 +149,18 @@ def load_voxels_downsampled(so, downsampling=(2, 2, 1)):
 
 
 def load_voxel_list(so):
+    """
+    Helper function to load voxels of a SegmentationObject.
+
+    Parameters
+    ----------
+    so : SegmentationObject
+
+    Returns
+    -------
+    np.array
+        2D array of coordinates to all voxels in SegmentationObject.
+    """
     voxel_list = np.array([], dtype=np.int32)
 
     if so._voxels is not None:
@@ -143,11 +182,22 @@ def load_voxel_list(so):
 
 
 def load_voxel_list_downsampled(so, downsampling=(2, 2, 1)):
+    """
+    TODO: refactor, probably more efficient implementation possible.
+
+    Parameters
+    ----------
+    so : SegmentationObject
+    downsampling : Tuple[int]
+
+    Returns
+    -------
+
+    """
     downsampling = np.array(downsampling)
     dvoxels = so.load_voxels_downsampled(downsampling)
     voxel_list = np.array(np.transpose(np.nonzero(dvoxels)), dtype=np.int32)
     voxel_list = voxel_list * downsampling + np.array(so.bounding_box[0])
-
     return voxel_list
 
 
@@ -205,7 +255,7 @@ def load_mesh(so, recompute=False):
             log_reps.error(msg)
             return np.zeros((0, )).astype(np.int), np.zeros((0, )), np.zeros((0, ))
     else:
-        if so.type == "sv":
+        if so.type == "sv" and not global_params.config.allow_mesh_gen_cells:
             log_reps.error("Mesh of SV %d not found.\n" % so.id)
             return np.zeros((0,)).astype(np.int), np.zeros((0,)), np.zeros((0, ))
         indices, vertices, normals = so._mesh_from_scratch()

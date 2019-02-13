@@ -6,7 +6,6 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 from syconn.reps.super_segmentation import *
-from syconn.mp.mp_utils import start_multiprocess_imap
 from syconn.handler.prediction import get_celltype_model, get_axoness_model, \
     get_semseg_spiness_model, get_glia_model
 from syconn.backend.storage import AttributeDict, CompressedStorage

@@ -1,0 +1,69 @@
+# inspired by https://github.com/bokeh/bokeh/blob/master/conda.recipe/meta.yaml
+# Currently does not work due to conflicting dependencies between vigra and osmesa
+{% set data = load_setup_py_data() %}
+
+package:
+  name: syconn
+  version: {{ data['version'] }}
+
+source:
+  path: .
+
+build:
+  noarch: python
+  script: "{{ PYTHON }} -m pip install . -vv"
+
+extra:
+  channels:
+    - defaults
+#    - menpo
+    - conda-forge
+
+requirements:
+  build:
+#    - {{ compiler('cxx') }}
+#    - {{ compiler('c') }}
+    - cmake >=3.1
+    - cython
+    - python
+    - pyyaml
+    - setuptools
+
+  run:
+    - python
+    - numpy >=1.12
+#    {% for dep in data['install_requires'] %}
+#    - {{ dep.lower() }}
+#    {% endfor %}
+    - vigra
+    - mesa
+#    - osmesa
+    - freeglut
+    - pyopengl
+    - snappy
+    - python-snappy
+
+    # meta-package installs futures for 2.7 but not for 3.x
+    # needed in order to be able to build no-arch conda packages
+    - futures-compat
+
+#test:
+#  requires:
+#    # docs
+#    - m2r
+#    - sphinx >=1.7.5
+#    - sphinx-autodoc-typehints >=1.3.0
+#
+#    # tests
+#    - pytest
+#    - pytest-runner
+#
+#    # examples
+#    - flask >=1.0
+#  imports:
+#    - syconn
+
+about:
+  home: {{ data['url'] }}
+  license: {{ data['license'] }}
+  summary: {{ data['description'] }}

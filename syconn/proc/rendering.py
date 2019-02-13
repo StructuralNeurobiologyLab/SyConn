@@ -16,7 +16,7 @@ from scipy.ndimage.filters import gaussian_filter
 
 from .image import rgb2gray, apply_clahe
 from . import log_proc
-from ..config import global_params
+from .. import global_params
 from ..handler.basics import flatten_list
 from ..handler.compression import arrtolz4string
 from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\

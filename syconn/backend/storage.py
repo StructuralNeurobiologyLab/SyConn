@@ -9,7 +9,7 @@ try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
-try:
+try:  # TODO: check in global_params.py
     import fasteners
     LOCKING = True
 except ImportError:
