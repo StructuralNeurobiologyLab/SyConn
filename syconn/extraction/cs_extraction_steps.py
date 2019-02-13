@@ -78,6 +78,8 @@ def _contact_site_detection_thread(args):
 
     contacts = detect_cs(data)
     os.makedirs(chunk.folder, exist_ok=True)
+    print("chunk.folder + filename "),
+    print (chunk.folder + filename)
     compression.save_to_h5py([contacts],
                              chunk.folder + filename +
                              ".h5", ["cs"])
