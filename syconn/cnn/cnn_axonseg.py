@@ -73,6 +73,7 @@ if __name__ == "__main__":
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
     train_dataset = MultiviewData(train=True, transform=transform, base_dir=global_params.gt_path_axonseg)
     valid_dataset = MultiviewData(train=False, transform=transform, base_dir=global_params.gt_path_axonseg)
+
     # Set up optimization
     optimizer = optim.Adam(
         model.parameters(),
@@ -103,4 +104,4 @@ if __name__ == "__main__":
     # Archiving training script, src folder, env info
     bk = Backup(script_path=__file__, save_path=trainer.save_path).archive_backup()
 
-    trainer.train(max_steps)
+    trainer.run(max_steps)
