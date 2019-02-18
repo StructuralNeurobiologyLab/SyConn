@@ -79,7 +79,7 @@ if elektronn3_avail:
             return inp, target
 
         def __len__(self):
-            return 5000  # self.target.shape[0]  # this number determines the epoch size
+            return np.min([5000, self.target.shape[0]])  # self.target.shape[0]  # this number determines the epoch size
 
         def close_files(self):
             self.inp_file.close()
