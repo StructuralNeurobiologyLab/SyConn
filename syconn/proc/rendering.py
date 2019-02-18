@@ -839,7 +839,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
                                 "cellobjects only."
-        raw_views = np.ones((len(coords), nb_views, 128, 256), dtype=np.uint8) * 255
+        raw_views = np.ones((len(coords), nb_views, ws[0], ws[1]), dtype=np.uint8) * 255
         if rot_mat is None:
             mo = MeshObject("raw", mesh[0], mesh[1])
             mo._colors = None
@@ -920,7 +920,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     ind, vert, norm = sso.mesh
     if len(vert) == 0:
         log_proc.error("No mesh for SSO {} found.".format(sso.id))
-        return np.ones((len(coords), 2, 128, 256, 3), dtype=np.uint8)
+        return np.ones((len(coords), nb_views, ws[1], ws[0], 3), dtype=np.uint8)
     try:
         color_array = id2rgb_array_contiguous(np.arange(len(ind) // 3))
     except ValueError as e:

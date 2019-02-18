@@ -187,8 +187,8 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
     all_label_views = all_label_views.swapaxes(2, 1)
     # all_index_views = all_index_views.swapaxes(2, 1)  # Removed index views
     print("Reshaping arrays.")
-    all_raw_views = all_raw_views.reshape((-1, 4, 128, 256))
-    all_label_views = all_label_views.reshape((-1, 1, 128, 256))
+    all_raw_views = all_raw_views.reshape((-1, 4, ws[1], ws[0]))
+    all_label_views = all_label_views.reshape((-1, 1, ws[1], ws[0]))
     # all_index_views = all_index_views.reshape((-1, 1, 128, 256))  # Removed index views
     # all_raw_views = np.concatenate([all_raw_views, all_index_views], axis=1)  # Removed index views
     raw_train, raw_valid, label_train, label_valid = train_test_split(all_raw_views, all_label_views, train_size=0.8, shuffle=False)
@@ -254,7 +254,7 @@ def gt_generation_helper(args):
 
 if __name__ == "__main__":
     # spiness
-    if 1:
+    if 0:
         initial_run = False
         n_views = 2
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_spgt/" \
@@ -266,7 +266,7 @@ if __name__ == "__main__":
         GT_generation(file_paths, 'spgt', 'spgt', n_views, ws=(256, 128), comp_window=8e3)
 
     # axoness
-    if 0:
+    if 1:
         initial_run = True
         n_views = 2
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_axoness_semseg_skeletons/"
