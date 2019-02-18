@@ -49,8 +49,10 @@ if elektronn3_avail:
         ):
             super().__init__()
             cube_id = "train" if train else "valid"
-            fnames_inp = glob.glob(base_dir + "/raw_{}*.h5".format(cube_id))
-            fnames_target = glob.glob(base_dir + "/label_{}*.h5".format(cube_id))
+            fnames_inp = sorted(glob.glob(base_dir + "/raw_{}*.h5".format(cube_id)))
+            fnames_target = sorted(glob.glob(base_dir + "/label_{}*.h5".format(cube_id)))
+            print("Loading {} h5 raw files: {}".format(len(fnames_inp), fnames_inp))
+            print("Loading {} h5 label files: {}".format(len(fnames_inp), fnames_target))
             assert len(fnames_inp) == len(fnames_target)
             self.inp = []
             self.target = []

@@ -144,7 +144,7 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
 
     Parameters
     ----------
-    kzip_paths : list of str
+    kzip_paths : List[str]
     gt_type : str
     n_voting : int
         Number of collected nodes during BFS for majority vote (label smoothing)
@@ -166,6 +166,7 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
     all_raw_views = []
     all_label_views = []
     # all_index_views = []  # Removed index views
+    print("Collecting views.")
     for ii in range(len(kzip_paths)):
         sso_id = int(re.findall("/(\d+).", kzip_paths[ii])[0])
         dest_p = "{}/{}/".format(dest_p_cache, sso_id)
@@ -178,7 +179,7 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
     all_raw_views = np.concatenate(all_raw_views)
     all_label_views = np.concatenate(all_label_views)
     # all_index_views = np.concatenate(all_index_views)  # Removed index views
-    print("Shuffling views.")
+    print("{} views collected. Shuffling views.".format(len(all_label_views)))
     np.random.seed(0)
     ixs = np.arange(len(all_raw_views))
     np.random.shuffle(ixs)
@@ -201,15 +202,15 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
     os.makedirs(dest_dir, exist_ok=True)
     # chunk output data
     for ii in range(5):
-        save_to_h5py([raw_train[ii::5]], dest_dir + "/raw_train_{}.h5",
+        save_to_h5py([raw_train[ii::5]], dest_dir + "/raw_train_{}.h5".format(ii),
                      ["raw"])
-        save_to_h5py([raw_valid[ii::5]], dest_dir + "/raw_valid_{}.h5",
+        save_to_h5py([raw_valid[ii::5]], dest_dir + "/raw_valid_{}.h5".format(ii),
                      ["raw"])
         # save_to_h5py([raw_test], dest_dir + "/raw_test.h5",
         # ["raw"])  # Removed index views
-        save_to_h5py([label_train[ii::5]], dest_dir + "/label_train_{}.h5",
+        save_to_h5py([label_train[ii::5]], dest_dir + "/label_train_{}.h5".format(ii),
                      ["label"])
-        save_to_h5py([label_valid[ii::5]], dest_dir + "/label_valid_{}.h5",
+        save_to_h5py([label_valid[ii::5]], dest_dir + "/label_valid_{}.h5".format(ii),
                      ["label"])
     # save_to_h5py([label_test], dest_dir + "/label_test.h5",
     # ["label"])  # Removed index views
