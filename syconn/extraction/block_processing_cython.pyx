@@ -6,6 +6,7 @@ from libc.stdlib cimport rand
 from libcpp.map cimport map
 from cython.operator import dereference, postincrement
 import numpy as np
+import timeit
 
 
 def kernel(uint32_t[:, :, :] chunk, uint64_t center_id):
