@@ -13,6 +13,7 @@ from syconn.proc.rendering import render_sso_coords, _render_mesh_coords,\
     render_sso_coords_index_views
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.reps.views import ViewContainer
+from syconn import global_params
 from syconn.handler.compression import save_to_h5py
 from syconn.handler.multiviews import generate_palette, remap_rgb_labelviews, str2intconverter
 from syconn.mp.mp_utils import start_multiprocess_imap
@@ -27,7 +28,7 @@ global initial_run
 
 def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=2,
                          ws=(256, 128), comp_window=8e3,
-                         out_path=None):
+                         out_path=None, verbose=False):
     """
 
     Parameters
@@ -44,10 +45,13 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
         if True, will copy SSV from default SSD to SSD with version=gt_type
     out_path : str
         If given, export mesh colored accoring to GT labels
+    verbose : bool
+        Print additional information
 
     Returns
     -------
-
+    Tuple[np.array]
+        raw, label and index views
     """
     assert gt_type in ["axgt", "spgt"], "Currently only spine and axon GT is supported"
     n_labels = 3 if gt_type == "axgt" else 4
@@ -120,16 +124,15 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     # with open("{}/viewcoords.txt".format(dest_folder), "w") as f:
     #     f.write(loc_text)
     # # # DEBUG PART END
-
     label_views, rot_mat = _render_mesh_coords(locs, mo, depth_map=False,
                                                return_rot_matrices=True, ws=ws,
                                                smooth_shade=False, nb_views=nb_views,
-                                               comp_window=comp_window, verbose=True)
+                                               comp_window=comp_window, verbose=verbose)
     label_views = remap_rgb_labelviews(label_views, palette)[:, None]
-    index_views = render_sso_coords_index_views(sso, locs, rot_mat=rot_mat, verbose=True,
+    index_views = render_sso_coords_index_views(sso, locs, rot_mat=rot_mat, verbose=verbose,
                                                 nb_views=nb_views, ws=ws, comp_window=comp_window)
     raw_views = render_sso_coords(sso, locs, nb_views=nb_views, ws=ws,
-                                  comp_window=comp_window, verbose=True,
+                                  comp_window=comp_window, verbose=verbose,
                                   rot_mat=rot_mat)
     return raw_views, label_views, index_views
 
@@ -191,20 +194,23 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
     all_label_views = all_label_views.reshape((-1, 1, ws[1], ws[0]))
     # all_index_views = all_index_views.reshape((-1, 1, 128, 256))  # Removed index views
     # all_raw_views = np.concatenate([all_raw_views, all_index_views], axis=1)  # Removed index views
-    raw_train, raw_valid, label_train, label_valid = train_test_split(all_raw_views, all_label_views, train_size=0.8, shuffle=False)
+    raw_train, raw_valid, label_train, label_valid = train_test_split(all_raw_views, all_label_views, train_size=0.8,
+                                                                      shuffle=False)
     # raw_valid, raw_test, label_valid, label_test = train_test_split(raw_other, label_other, train_size=0.5, shuffle=False)  # Removed index views
     print("Writing h5 files.")
     os.makedirs(dest_dir, exist_ok=True)
-    save_to_h5py([raw_train], dest_dir + "/raw_train_v2.h5",
-                 ["raw"])
-    save_to_h5py([raw_valid], dest_dir + "/raw_valid_v2.h5",
-                 ["raw"])
-    # save_to_h5py([raw_test], dest_dir + "/raw_test.h5",
-    # ["raw"])  # Removed index views
-    save_to_h5py([label_train], dest_dir + "/label_train_v2.h5",
-                 ["label"])
-    save_to_h5py([label_valid], dest_dir + "/label_valid_v2.h5",
-                 ["label"])
+    # chunk output data
+    for ii in range(5):
+        save_to_h5py([raw_train[ii::5]], dest_dir + "/raw_train_{}.h5",
+                     ["raw"])
+        save_to_h5py([raw_valid[ii::5]], dest_dir + "/raw_valid_{}.h5",
+                     ["raw"])
+        # save_to_h5py([raw_test], dest_dir + "/raw_test.h5",
+        # ["raw"])  # Removed index views
+        save_to_h5py([label_train[ii::5]], dest_dir + "/label_train_{}.h5",
+                     ["label"])
+        save_to_h5py([label_valid[ii::5]], dest_dir + "/label_valid_{}.h5",
+                     ["label"])
     # save_to_h5py([label_test], dest_dir + "/label_test.h5",
     # ["label"])  # Removed index views
 
@@ -253,6 +259,7 @@ def gt_generation_helper(args):
 
 
 if __name__ == "__main__":
+    assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
     # spiness
     if 0:
         initial_run = False
@@ -267,10 +274,10 @@ if __name__ == "__main__":
 
     # axoness
     if 1:
-        initial_run = True
+        initial_run = False
         n_views = 2
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_axoness_semseg_skeletons/"
         dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files/"
         file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
         GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
-                      ws=(512, 256), comp_window=8e3, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)
+                      ws=(512, 256), comp_window=51.2e3, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)

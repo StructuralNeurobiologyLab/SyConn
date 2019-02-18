@@ -27,6 +27,7 @@ except ImportError as e:
     Identity = None
 from typing import Callable
 import h5py
+import glob
 from scipy import spatial
 import time
 # fix random seed.
@@ -48,15 +49,22 @@ if elektronn3_avail:
         ):
             super().__init__()
             cube_id = "train" if train else "valid"
-            inp_path = os.path.expanduser('{}raw_{}_v2.h5'.format(base_dir, cube_id))
-            target_path = os.path.expanduser('{}label_{}_v2.h5'.format(base_dir, cube_id))
-            self.inp_file = h5py.File(os.path.expanduser(inp_path), 'r')
-            self.target_file = h5py.File(os.path.expanduser(target_path), 'r')
-            self.inp = self.inp_file[inp_key][()]
-            self.inp = self.inp[:, :4].astype(np.float32) / 255.  # TODO: ':4' was used during spine semseg;  What was it for? Needs to go in order to make this work in general
-            self.target = self.target_file[target_key][()].astype(np.int64)
-            self.target = self.target[:, 0]
+            fnames_inp = glob.glob(base_dir + "/raw_{}*.h5".format(cube_id))
+            fnames_target = glob.glob(base_dir + "/label_{}*.h5".format(cube_id))
+            assert len(fnames_inp) == len(fnames_target)
+            self.inp = []
+            self.target = []
+            for ii in range(len(fnames_inp)):
+                self.inp_file = h5py.File(os.path.expanduser(fnames_inp[ii]), 'r')
+                self.target_file = h5py.File(os.path.expanduser(fnames_target[ii]), 'r')
+                data = self.inp_file[inp_key][()]
+                self.inp.append(data[:, :4].astype(np.float32) / 255.)  # TODO: ':4' was used during spine semseg;  What was it for? Needs to go in order to make this work in general
+                data_t = self.target_file[target_key][()].astype(np.int64)
+                self.target.append(data_t[:, 0])
+                del data, data_t
             self.close_files()
+            self.inp = np.concatenate(self.inp)
+            self.target = np.concatenate(self.target)
             self.transform = transform
             print("Dataset ({}): {}\t{}".format(cube_id, self.inp.shape,
                                                 np.unique(self.target,
