@@ -97,7 +97,7 @@ if __name__ == "__main__":
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched},
-        ipython_on_error=False
+        ipython_shell=False
     )
 
     # Archiving training script, src folder, env info
