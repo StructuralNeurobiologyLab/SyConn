@@ -7,7 +7,7 @@
 # non-relative import needed for this file in order to be importable by
 # ELEKTRONN2 architectures
 import matplotlib
-matplotlib.use("Agg", warn=False, force=True)
+matplotlib.use("agg", warn=False, force=True)
 from elektronn2.data.traindata import Data
 import numpy as np
 import warnings
@@ -35,28 +35,25 @@ np.random.seed(0)
 
 # -------------------------------------- elektronn3 ----------------------------
 if elektronn3_avail:
-    class MultiviewDataSpines(Dataset):
+    class MultiviewData(Dataset):
         """
         Multiview spine data loader.
         """
         def __init__(
                 self,
-                inp_path=None,
-                target_path=None,
+                base_dir,
                 train=True,
                 inp_key='raw', target_key='label',
                 transform: Callable = Identity()
         ):
             super().__init__()
             cube_id = "train" if train else "valid"
-            if inp_path is None or target_path is None:
-                base_dir = os.path.expanduser("~") + "/spine_gt_multiview/"
-                inp_path = os.path.expanduser('{}raw_{}_v2.h5'.format(base_dir, cube_id))
-                target_path = os.path.expanduser('{}label_{}_v2.h5'.format(base_dir, cube_id))
+            inp_path = os.path.expanduser('{}raw_{}_v2.h5'.format(base_dir, cube_id))
+            target_path = os.path.expanduser('{}label_{}_v2.h5'.format(base_dir, cube_id))
             self.inp_file = h5py.File(os.path.expanduser(inp_path), 'r')
             self.target_file = h5py.File(os.path.expanduser(target_path), 'r')
             self.inp = self.inp_file[inp_key][()]
-            self.inp = self.inp[:, :4].astype(np.float32) / 255.
+            self.inp = self.inp[:, :4].astype(np.float32) / 255.  # TODO: ':4' was used during spine semseg;  What was it for? Needs to go in order to make this work in general
             self.target = self.target_file[target_key][()].astype(np.int64)
             self.target = self.target[:, 0]
             self.close_files()

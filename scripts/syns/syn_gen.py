@@ -11,4 +11,3 @@ from syconn.exec import exec_syns
 if __name__ == "__main__":
     exec_syns.run_syn_generation()
 
-

@@ -16,8 +16,8 @@ from .handler.config import DynConfig
 # ---------------------- STATIC AND GLOBAL PARAMETERS # -----------------------
 # --------- GLOBAL WORKING DIRECTORY
 # wd = "/wholebrain/scratch/areaxfs3/"
-# wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-wd = "/wholebrain/scratch/areaxfs3/"
+wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+# wd = "/wholebrain/scratch/areaxfs3/"
 # wd = '/mnt/j0126/areaxfs_v10/'
 
 # TODO: Put all dataset-specific parameters into config.ini / configspec.ini
@@ -102,10 +102,14 @@ SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000}  # in nm
 # --------- SPINE PARAMETERS
 min_spine_cc_size = 10
 min_edge_dist_spine_graph = 110
+gt_path_spineseg = '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'
 
 
 # --------- COMPARTMENT PARAMETERS
 DIST_AXONESS_AVERAGING = 10000
+gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files/'
 
 
 # --------- CELLTYPE PARAMETERS
+
+
