@@ -9,7 +9,6 @@ import numpy as np
 from libcpp.vector cimport vector
 import timeit
 
-'''
 
 def uniqueCython(chunk, return_index=False, return_inverse=False,return_counts=False, axis=None):
 
@@ -45,19 +44,15 @@ def uniqueCython(chunk, return_index=False, return_inverse=False,return_counts=F
 
     return 1
 
+cdef uniqueCython_elements_counts(chunky):
 
-
-
-def uniqueCython_elements_counts(uint32_t [:,:] chunk):
-    #cdef double[:] chunk_view = chunk.flatten()
+    cdef uint32_t [:] chunk_view = chunky.flatten()
     cdef map[uint32_t, int] mapa
     cdef vector[uint32_t] unique_ids
     cdef vector[int] counts
 
-    for i in range(chunk.shape[0]):
-        for j in range(chunk.shape[1]):
-            mapa[chunk[i][j]] = mapa[chunk[i][j]] + 1
-
+    for i in range(chunk_view.shape[0]):
+        mapa[chunk_view[i]] = mapa[chunk_view[i]] + 1
 
     cdef map[uint32_t, int].iterator it = mapa.begin()
 
@@ -68,7 +63,7 @@ def uniqueCython_elements_counts(uint32_t [:,:] chunk):
     return unique_ids, counts
 
 
-def uniqueCython_most_often(chunky):
+cdef uniqueCython_most_often(chunky):
     cdef uint32_t[:, :, :] chunk = chunky
     cdef map[uint32_t, int] mapa
 
@@ -86,7 +81,6 @@ def uniqueCython_most_often(chunky):
             key = dereference(it).first
             counts = dereference(it).second
         postincrement(it)
-
     return key
 
 
@@ -94,54 +88,6 @@ def abc(chunk):
     u_i, c = np.unique(chunk, return_counts = True)
 
     return u_i[np.argmax(c)]
-
-
-'''
-def kernelC(uint32_t[:, :, :] chunk, uint64_t center_id):
-
-    cdef map[uint32_t, int] unique_ids
-
-    for i in range(chunk.shape[0]):
-        for j in range(chunk.shape[1]):
-            for k in range(chunk.shape[2]):
-                unique_ids[chunk[i][j][k]] = unique_ids[chunk[i][j][k]] + 1
-    unique_ids[0] = 0
-    unique_ids[center_id] = 0
-    cdef int theBiggest  = 0
-    cdef uint64_t key = 0
-
-    cdef map[uint32_t,int].iterator it = unique_ids.begin()
-    while it != unique_ids.end():
-        if dereference(it).second > theBiggest:
-            theBiggest =  dereference(it).second
-            key = dereference(it).first
-        postincrement(it)
-
-    if theBiggest > 0:
-        if center_id > key:
-            return (key << 32 ) + center_id
-        else:
-            return (center_id << 32) + key
-
-    else:
-        return key
-
-
-def kernel(chunk, center_id):
-    unique_ids, counts = np.unique(chunk, return_counts=True)
-
-    counts[unique_ids == 0] = -1
-    counts[unique_ids == center_id] = -1
-
-    if np.max(counts) > 0:
-        partner_id = unique_ids[np.argmax(counts)]
-
-        if center_id > partner_id:
-            return (partner_id << 32) + center_id
-        else:
-            return (center_id << 32) + partner_id
-    else:
-        return 0
 
 
 
@@ -160,22 +106,17 @@ def wrapper(func, *args, **kwargs):
 
 def main():
 
-    chunk = create_toy_data(512,512,512,10)
-    # print("flatten")
-    # wrapped = wrapper(chunk.flatten)
-    # print (timeit.timeit(wrapped, number=1000))
+    chunk = create_toy_data(3,3,3,10)
+
 
     print("numpy")
-    wrapped = wrapper(kernel, chunk, 3)
+    wrapped = wrapper(np.unique, chunk, return_counts=True)
     print (timeit.timeit(wrapped, number=10))
 
 
     print ("uniqueCython_most_often")
-    wrapped = wrapper(kernelC, chunk, 3)
+    wrapped = wrapper(uniqueCython_elements_counts, chunk)
     print (timeit.timeit(wrapped, number=10))
-
-
-
 
 
 '''

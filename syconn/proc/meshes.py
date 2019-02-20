@@ -39,10 +39,10 @@ try:
     import matplotlib
     matplotlib.use('agg')
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
-except ImportError:
+except ImportError as e:
     boundaryDistanceTransform, gaussianSmoothing = None, None
     log_proc.error('ModuleNotFoundError. Could not import VIGRA. '
-                   'Mesh generation will not be possible.')
+                   'Mesh generation will not be possible. {}'.format(e))
 
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',

@@ -115,8 +115,8 @@ if __name__ == '__main__':
                                    data_path=h5_dir + 'asym.h5', mags=[1, 2], hdf5_names=['asym'])
 
     # # RUN SYCONN - without glia removal
-    # log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    # exec_init.run_create_sds(chunk_size=(128, 128, 128), n_folders_fs=100)
+    log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
+    exec_init.run_create_sds(chunk_size=(128, 128, 128), n_folders_fs=100)
     #
     # log.info('Step 2/8 - Creating SuperSegmentationDataset')
     # exec_multiview.run_create_neuron_ssd(prior_glia_removal=False)

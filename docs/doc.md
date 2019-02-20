@@ -17,13 +17,8 @@ In order to use the GPU during inference cuda and cudNN are required, either dow
 ```
 conda install cudatoolkit=8.0 cudnn=5.1
 ```
-To enable tensorboard in elektronn3, install:
+Git clone and install syconn and all prerequisites:
 ```
-conda install tensorflow tensorboard
-```
-Install all prerequisites and finally git clone and install syconn:
-```
-conda install -c anaconda cmake
 conda install vigra -c conda-forge
 conda install mesa -c menpo
 conda install osmesa -c menpo
@@ -31,6 +26,7 @@ conda install freeglut
 conda install pyopengl
 conda install snappy
 conda install python-snappy
+conda install tensorboard tensorflow
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 cd SyConn
 pip install -r requirements.txt
@@ -40,7 +36,6 @@ Or alternatively with the developer flag:
 ```
 pip install -e .
 ```
-
 In case that there are problems with theano try to install it from conda (untested):
 ```
 pip uninstall theano

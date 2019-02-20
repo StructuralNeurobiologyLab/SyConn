@@ -131,6 +131,30 @@ def str2intconverter(comment, gt_type):
     else: raise ValueError("Given groundtruth type is not valid.")
 
 
+def int2str_converter(label, gt_type):
+    if gt_type == "axgt":
+        if label == 1:
+            return "gt_axon"
+        elif label == 0:
+            return "gt_dendrite"
+        elif label == 2:
+            return "gt_soma"
+        else:
+            return -1
+    elif gt_type == "spgt":
+        if label == 1:
+            return "head"
+        elif label == 0:
+            return "neck"
+        elif label == 2:
+            return "shaft"
+        elif label == 3:
+            return "other"
+        else:
+            return -1
+    else: raise ValueError("Given groundtruth type is not valid.")
+
+
 def img_rand_coloring(img):
     if img.ndim == 3 and img.shape[2] > 1:
         raise ValueError("Input image must not contain rgb values")

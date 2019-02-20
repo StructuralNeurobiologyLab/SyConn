@@ -103,8 +103,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
                                  compute_meshprops=True)
         # About 0.2 h per object class  # TODO: optimization required, especially VC are slow due to additonal membrane checks -> investigate
         log.debug('Mapping objects {} to SVs.'.format(co))
-        n_cores = 1 if "example_cube" in global_params.wd else None
         sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path, qsub_pe='default',
-                                  qsub_queue='all.q', n_max_co_processes=n_cores)
+                                  qsub_queue='all.q')
         log.info('Finished object extraction for {} SVs.'.format(co))
 
