@@ -705,11 +705,11 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                                          mesh.vert_resh,
                                          querybox_edgelength / mesh.max_dist)
         if verbose:
-            log_proc.info("Calculation of rotation matrices took {:.2f}s."
-                          "".format(time.time() - start))
+            log_proc.debug("Calculation of rotation matrices took {:.2f}s."
+                           "".format(time.time() - start))
     if verbose:
-        log_proc.info("Starting local rendering at %d locations (%s)." %
-                      (len(coords), views_key))
+        log_proc.debug("Starting local rendering at %d locations (%s)." %
+                       (len(coords), views_key))
     ctx = init_ctx(ws)
     mviews = multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths,
                                     clahe=clahe, views_key=views_key, ws=ws,
@@ -719,8 +719,8 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                                     wire_frame=wire_frame, nb_views=nb_views)
     if verbose:
         end = time.time()
-        log_proc.info("Finished rendering mesh of type %s at %d locations after"
-                      " %0.2fs" % (views_key,len(mviews), end - start))
+        log_proc.debug("Finished rendering mesh of type %s at %d locations after"
+                       " %0.2fs" % (views_key,len(mviews), end - start))
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
         eglDestroyContext(*ctx)
     else:
@@ -786,8 +786,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
                                   cellobjects_only=cellobjects_only)
     if verbose:
         dur = time.time() - start
-        log_proc.info("Rendering of %d views took %0.2fs. "
-                      "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
+        log_proc.debug("Rendering of %d views took %0.2fs. "
+                       "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
     if sso.version != 'tmp':
         for i, so in enumerate(missing_svs):
             sv_views = views[part_views[i]:part_views[i+1]]
@@ -798,12 +798,12 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
                          'has version "tmp", results will'
                          ' not be saved to disk.')
     if return_views:
-        return sso.load_views(woglia=woglia, index_views=index_views)
+        return views
 
 
 def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=False,
-                      ws=(256, 128), cellobjects_only=False, wire_frame=False,
-                      nb_views=None, comp_window=8e3, rot_mat=None, return_rot_mat=False):
+                      ws=None, cellobjects_only=False, wire_frame=False,
+                      nb_views=None, comp_window=None, rot_mat=None, return_rot_mat=False):
     """
     Render views of SuperSegmentationObject at given coordinates.
     
@@ -814,22 +814,27 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     add_cellobjects : bool
     verbose : bool
     clahe : bool
-    ws : tuple of int
+    ws : Optional[Tuple[int]]
+        Window size in pixels (y, x). Default: (256, 128)
     cellobjects_only : bool
     wire_frame : bool
     nb_views : int
-    comp_window : int, float
+    comp_window : Optional[float]
         window size in nm. the clipping box during rendering will have an extent
-         of [comp_window, comp_window / 2, comp_window]
+         of [comp_window, comp_window / 2, comp_window]. Default: 8 um
     rot_mat : np.array
     return_rot_mat : bool
     Returns
     -------
     np.array
     """
+    if comp_window is None:
+        comp_window = 8e3
+    if ws is None:
+        ws = (256, 128)
     if verbose:
-        log_proc.info('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'
-                      ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
+        log_proc.debug('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'
+                       ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     mesh = sso.mesh
@@ -913,8 +918,8 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
 
     """
     if verbose:
-        log_proc.info('Started "render_sso_coords_index_views" at {} locations for SSO {} using PyOpenGL'
-                      ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
+        log_proc.debug('Started "render_sso_coords_index_views" at {} locations for SSO {} using PyOpenGL'
+                       ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     ind, vert, norm = sso.mesh

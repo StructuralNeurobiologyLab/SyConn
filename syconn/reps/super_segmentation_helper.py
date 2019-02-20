@@ -1386,8 +1386,8 @@ def predict_views_semseg(views, model, batch_size=20, verbose=False):
 
     """
     if verbose:
-        log_reps.info('Reshaping view array with shape {}.'
-                      ''.format(views.shape))
+        log_reps.debug('Reshaping view array with shape {}.'
+                       ''.format(views.shape))
     views = views.astype(np.float32) / 255.
     views = views.swapaxes(1, 2)  # swap channel and view axis
     # N, 2, 4, 128, 256
@@ -1396,14 +1396,14 @@ def predict_views_semseg(views, model, batch_size=20, verbose=False):
     views = views.reshape([-1] + list(orig_shape[2:]))
 
     if verbose:
-        log_reps.info('Predicting view array with shape {}.'
-                      ''.format(views.shape))
+        log_reps.debug('Predicting view array with shape {}.'
+                       ''.format(views.shape))
     # predict and reset to original shape: N, 2, 4, 128, 256
     labeled_views = model.predict_proba(views, bs=batch_size, verbose=verbose)
     labeled_views = np.argmax(labeled_views, axis=1)[:, None]
     if verbose:
-        log_reps.info('Finished prediction of view array with shape {}.'
-                      ''.format(views.shape))
+        log_reps.debug('Finished prediction of view array with shape {}.'
+                       ''.format(views.shape))
     labeled_views = labeled_views.reshape(list(orig_shape[:2])
                                           + list(labeled_views.shape[1:]))
     # swap axes to get source shape
@@ -1515,7 +1515,7 @@ def pred_sv_chunk_semseg(args):
 
 
 def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
-                colors=None, force_overwrite=False):
+                colors=None, force_recompute=False, index_view_key=None):
     """
     # TODO: optimize with cython
     Maps semantic segmentation to SSV mesh.
@@ -1538,7 +1538,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         illustrated with by the spine prediction example:
         if k=0: [neck, head, shaft, other, background, unpredicted]
         else: [neck, head, shaft, other, background]
-    force_overwrite : bool
+    force_recompute : bool
+    index_view_key : str
 
     Returns
     -------
@@ -1546,27 +1547,29 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         indices, vertices, normals, color
     """
     ld = sso.label_dict('vertex')
-    if force_overwrite or not semseg_key in ld:
+    if force_recompute or not semseg_key in ld:
         ts0 = time.time()  # view loading
-        if nb_views is None:
+        if nb_views is None and index_view_key is None:
             # load default
             i_views = sso.load_views(index_views=True).flatten()
         else:
+            if index_view_key is None:
+                index_view_key = "index{}".format(nb_views)
             # load special views
-            i_views = sso.load_views("index{}".format(nb_views)).flatten()
-        spiness_views = sso.load_views(semseg_key).flatten()
+            i_views = sso.load_views(index_view_key).flatten()
+        semseg_views = sso.load_views(semseg_key).flatten()
         ts1 = time.time()
         log_reps.debug('Time to load index and shape views: '
                        '{:.2f}s.'.format(ts1 - ts0))
         ind = sso.mesh[0]
         dc = defaultdict(list)
         background_id = np.max(i_views)
-        # color buffer holds traingle ID not vertex ID
+        # color buffer holds traingle ID not vertex ID  # TODO: this should be a one time conversion step after the index view rendering!
         for ii in range(len(i_views)):
             triangle_ix = i_views[ii]
             if triangle_ix == background_id:
                 continue
-            l = spiness_views[ii]  # triangle label
+            l = semseg_views[ii]  # triangle label
             # get vertex ixs from triangle ixs via:
             vertex_ix = triangle_ix * 3
             dc[ind[vertex_ix]].append(l)
@@ -1577,7 +1580,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
                        '{:.2f}s.'.format(ts2 - ts1))
         # background label is highest label in prediction (see 'generate_palette' or
         # 'remap_rgb_labelviews' in multiviews.py)
-        background_l = np.max(spiness_views)
+        background_l = np.max(semseg_views)
         unpredicted_l = background_l + 1
         if unpredicted_l > 255:
             raise ValueError('Overflow in label view array.')
@@ -1630,3 +1633,56 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         return
     return sso.mesh[0], sso.mesh[1], sso.mesh[2], col
 
+
+def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
+                          dest_path=None, verbose=False):
+    # TODO: add comp_window dependent generation of rendering location
+    """
+    Renders raw and index views at rendering locations determined by `comp_window`
+    and according to given view properties. Views will be predicted with the given
+    `model` and maps prediction results onto mesh. Vertex labels are stored on file
+    system and can be accessed via `sso.label_dict('vertex')[semseg_key]`.
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    model : nn.Module
+    semseg_key : str
+    ws : Tuple[int]
+        Window size in pixels [y, x]
+    nb_views : int
+        Number of views rendered at each rendering location.
+    comp_window : float
+        Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+    dest_path : str
+        location of kzip in which colored vertices (according to semantic segmentation
+        prediction) are stored.
+    verbose : bool
+        Adds progress bars for view generation.
+
+    Returns
+    -------
+
+    """
+    view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views,
+                       verbose=verbose, save=False)
+    raw_view_key = 'raw{}_{}_{}'.format(ws[0], ws[1], nb_views)
+    index_view_key = 'index{}_{}_{}'.format(ws[0], ws[1], nb_views)
+    # Generate new rendering locations based on SSO vertices
+    verts = sso.mesh[1].reshape(-1, 3)
+    # downsample vertices and get ~3 locations per comp_window
+    ds_factor = comp_window / 3
+    # get unique array of downsampled vertex locations (scaled back to nm)
+    rendering_locs = np.vstack({tuple(c.astype(np.int)) for c in verts / ds_factor})[None, ] * ds_factor  # added auxilary axis because rendering locations are stored per SV (and not flattened)
+    # overwrite default rendering locations (used later on for the view generation)
+    sso._sample_locations = rendering_locs
+    assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
+                             " run 'semseg_of_sso_nocache'.".format(sso)
+    # this generates the raw views and their prediction
+    sso.predict_semseg(model, semseg_key, raw_view_key=raw_view_key, **view_kwargs)
+    # this generates the index views
+    sso.render_indexviews(view_key=index_view_key, force_recompute=True,
+                          **view_kwargs)
+    # map prediction onto mesh and saves it to sso._label_dict['vertex'][semseg_key] (also pushed to file system!)
+    sso.semseg2mesh(semseg_key, index_view_key=index_view_key, dest_path=dest_path,
+                    force_recompute=True)

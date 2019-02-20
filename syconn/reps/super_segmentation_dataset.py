@@ -33,7 +33,8 @@ from .. import global_params
 
 class SuperSegmentationDataset(object):
     def __init__(self, working_dir=None, version=None, ssd_type='ssv',
-                 version_dict=None, sv_mapping=None, scaling=None, config=None):
+                 version_dict=None, sv_mapping=None, scaling=None, config=None,
+                 sso_caching=False):
         """
         Class to hold a set of agglomerated supervoxels (SuperSegmentationObject).
 
@@ -47,9 +48,13 @@ class SuperSegmentationDataset(object):
         scaling : np.array
         config : Optional[Config]
             DynConfig object, see syconn/handler/config.py
+        caching : bool
+            WIP, enabes caching mechanisms in SuperSegmentationObjects returned via
+            `get_super_segmentation_object`
         """
         self.ssv_dict = {}
         self.mapping_dict = {}
+        self.sso_caching = sso_caching
         self._mapping_dict_reversed = None
 
         self._type = ssd_type
@@ -239,7 +244,7 @@ class SuperSegmentationDataset(object):
         assemble_from_mergelist(self, sv_mapping)
 
     def get_super_segmentation_object(self, obj_id, new_mapping=False,
-                                      caching=True, create=False):
+                                      caching=None, create=False):  # set default of `caching` to False, PS 20Feb2019
         """
         SuperSegmentationObject factory method for single ID or list of IDs.
 
@@ -254,6 +259,8 @@ class SuperSegmentationDataset(object):
         -------
         SuperSegmentationObject or list of SuperSegmentationObject
         """
+        if caching is None:
+            caching = self.sso_caching
         if np.isscalar(obj_id):
             if new_mapping:
                 sso = SuperSegmentationObject(obj_id,

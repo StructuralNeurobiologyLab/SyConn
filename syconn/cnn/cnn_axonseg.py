@@ -19,6 +19,7 @@ from torch import nn
 from torch import optim
 from elektronn3.training.loss import BlurryBoarderLoss, DiceLoss, LovaszLoss
 from elektronn3.models.fcn_2d import *
+from elektronn3.models.unet import UNet
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 
@@ -26,13 +27,16 @@ from elektronn3.data import transforms
 def get_model():
     vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
     model = FCNs(base_net=vgg_model, n_class=4)
+    # model = UNet(in_channels=4, out_channels=4, n_blocks=4, start_filts=64,
+    #              up_mode='resize', merge_mode='concat', planar_blocks=(),
+    #              activation='relu', batch_norm=True, dim=2,)
     return model
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="axonseg-FCN-VGG13--Lovasz",
+    parser.add_argument('-n', '--exp-name', default="axonseg-FCN-VGG13--Lovasz-resizeconv-apex",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
@@ -98,7 +102,8 @@ if __name__ == "__main__":
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched},
-        ipython_shell=False
+        ipython_shell=False,
+        mixed_precision=True,  # Enable to use Apex for mixed precision training
     )
 
     # Archiving training script, src folder, env info

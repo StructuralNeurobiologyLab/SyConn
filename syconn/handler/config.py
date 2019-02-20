@@ -131,8 +131,7 @@ class DynConfig(Config):
         return self.entries['Paths']['kd_mi']
 
     @property
-    # TODO: make this more elegant, e.g. bash script with 'source activate py36' -- check if conda_forge vigra install
-    #  works with all the rest, then move to py36 once and for all
+    # TODO: Not necessarily needed anymore
     def py36path(self):
         if len(self.entries['Paths']['py36path']) != 0:
             return self.entries['Paths']['py36path']  # python 3.6 path is available
@@ -171,6 +170,13 @@ class DynConfig(Config):
     @property
     def mpath_spiness(self):
         return self.model_dir + '/spiness/'
+
+    @property
+    def mpath_axonsem(self):
+        """
+        Semantic segmentation moder cellular compartments
+        """
+        return self.model_dir + '/axon_semseg/'
 
     @property
     def mpath_celltype(self):

@@ -48,6 +48,7 @@ if elektronn3_avail:
                 transform: Callable = Identity()
         ):
             super().__init__()
+            self.train = train
             cube_id = "train" if train else "valid"
             fnames_inp = sorted(glob.glob(base_dir + "/raw_{}*.h5".format(cube_id)))
             fnames_target = sorted(glob.glob(base_dir + "/label_{}*.h5".format(cube_id)))
@@ -69,8 +70,7 @@ if elektronn3_avail:
             self.target = np.concatenate(self.target)
             self.transform = transform
             print("Dataset ({}): {}\t{}".format(cube_id, self.inp.shape,
-                                                np.unique(self.target,
-                                                return_counts=True)))
+                                                np.unique(self.target, return_counts=True)))
 
         def __getitem__(self, index):
             inp = self.inp[index]
@@ -79,7 +79,9 @@ if elektronn3_avail:
             return inp, target
 
         def __len__(self):
-            return np.min([5000, self.target.shape[0]])  # self.target.shape[0]  # this number determines the epoch size
+            if not self.train:
+                return np.min([500, self.target.shape[0]])
+            return np.min([2500, self.target.shape[0]])  # self.target.shape[0]  # this number determines the epoch size
 
         def close_files(self):
             self.inp_file.close()

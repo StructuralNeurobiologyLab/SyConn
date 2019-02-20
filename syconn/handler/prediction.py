@@ -765,6 +765,19 @@ def get_semseg_spiness_model():
     return m
 
 
+def get_semseg_axon_model():
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    path = global_params.config.mpath_axonsem
+    m = InferenceModel(path)
+    m._path = path
+    return m
+
+
 def get_tripletnet_model_e3():
     try:
         from elektronn3.models.base import InferenceModel
