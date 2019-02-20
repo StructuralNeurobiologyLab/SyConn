@@ -1636,7 +1636,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
 
 def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
                           dest_path=None, verbose=False):
-    # TODO: add comp_window dependent generation of rendering location
+    # TODO: check if save=False is actually happening everywhere, it seems raw views are being saved
     """
     Renders raw and index views at rendering locations determined by `comp_window`
     and according to given view properties. Views will be predicted with the given
