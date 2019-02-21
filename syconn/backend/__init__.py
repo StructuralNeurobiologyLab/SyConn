@@ -7,14 +7,14 @@
 
 from ..global_params import backend
 from .base import FSBase, BTBase
-from ..handler.logger import initialize_logging
+from ..handler.logger import log_main
 # init backend
 if backend == 'FS':
     StorageClass = FSBase
 elif backend == 'BT':
     StorageClass = BTBase
 # init log
-log_backend = initialize_logging('backend')
+log_backend = log_main
 
 __all__ = ['StorageClass', 'log_backend']
 

@@ -11,6 +11,7 @@ except ImportError:
     import pickle as pkl
 import getpass
 from multiprocessing import cpu_count, Process
+from concurrent.futures import ProcessPoolExecutor, as_completed
 import multiprocessing
 import multiprocessing.pool
 import os
@@ -21,52 +22,92 @@ import time
 import tqdm
 from . import log_mp
 
+MyPool = multiprocessing.Pool
+# if not (sys.version_info[0] == 3 and sys.version_info[1] > 5):
+#     # found NoDaemonProcess on stackexchange by Chris Arndt - enables
+#     # hierarchical multiprocessing
+#     class NoDaemonProcess(Process):
+#         # make 'daemon' attribute always return False
+#         def _get_daemon(self):
+#             return False
+#
+#         def _set_daemon(self, value):
+#             pass
+#
+#         daemon = property(_get_daemon, _set_daemon)
+#
+#
+#     # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
+#     # because the latter is only a wrapper function, not a proper class.
+#     class MyPool(multiprocessing.pool.Pool):
+#         Process = NoDaemonProcess
+# else:
+#     class NoDaemonProcess(multiprocessing.Process):
+#         @property
+#         def daemon(self):
+#             return False
+#
+#         @daemon.setter
+#         def daemon(self, value):
+#             pass
+#
+#     class NoDaemonContext(type(multiprocessing.get_context())):
+#         Process = NoDaemonProcess
+#
+#     # We sub-class multiprocessing.pool.Pool instead of multiprocessing.Pool
+#     # because the latter is only a wrapper function, not a proper class.
+#     class MyPool(multiprocessing.pool.Pool):
+#         def __init__(self, *args, **kwargs):
+#             kwargs['context'] = NoDaemonContext()
+#             super(MyPool, self).__init__(*args, **kwargs)
 
-home_dir = os.environ['HOME'] + "/"
-path_to_scripts_default = os.path.dirname(__file__)
-subp_work_folder = "%s/SUBP/" % home_dir
-username = getpass.getuser()
-python_path = sys.executable
 
-# with py 3.6 the pool class was refactored and NoDaemonProcess impl. are not that straight forward
-#  anymore, see: https://stackoverflow.com/questions/6974695/python-process-pool-non-daemonic?rq=1
-if not (sys.version_info[0] == 3 and sys.version_info[1] > 5):
-    # found NoDaemonProcess on stackexchange by Chris Arndt - enables
-    # hierarchical multiprocessing
-    class NoDaemonProcess(Process):
-        # make 'daemon' attribute always return False
-        def _get_daemon(self):
-            return False
+def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
+    """From http://danshiebler.com/2016-09-14-parallel-progress-bar/
+        A parallel version of the map function with a progress bar.
 
-        def _set_daemon(self, value):
+        Args:
+            array (array-like): An array to iterate over.
+            function (function): A python function to apply to the elements of array
+            n_jobs (int, default=16): The number of cores to use
+            use_kwargs (boolean, default=False): Whether to consider the elements of array as dictionaries of
+                keyword arguments to function
+            front_num (int, default=3): The number of iterations to run serially before kicking off the parallel job.
+                Useful for catching bugs
+        Returns:
+            [function(array[0]), function(array[1]), ...]
+    """
+    #We run the first few iterations serially to catch bugs
+    if front_num > 0:
+        front = [function(**a) if use_kwargs else function(a) for a in array[:front_num]]
+    else:
+        front = []
+    #Assemble the workers
+    with ProcessPoolExecutor(max_workers=n_jobs) as pool:
+        #Pass the elements of array into function
+        if use_kwargs:
+            futures = [pool.submit(function, **a) for a in array[front_num:]]
+        else:
+            futures = [pool.submit(function, a) for a in array[front_num:]]
+        kwargs = {
+            'total': len(futures),
+            'unit': 'job',
+            'unit_scale': True,
+            'leave': False,
+            'ncols': 80,
+            'dynamic_ncols': False
+        }
+        #Print out the progress as tasks complete
+        for f in tqdm.tqdm(as_completed(futures), **kwargs):
             pass
-
-        daemon = property(_get_daemon, _set_daemon)
-
-
-    # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
-    # because the latter is only a wrapper function, not a proper class.
-    class MyPool(multiprocessing.pool.Pool):
-        Process = NoDaemonProcess
-else:
-    class NoDaemonProcess(multiprocessing.Process):
-        @property
-        def daemon(self):
-            return False
-
-        @daemon.setter
-        def daemon(self, value):
-            pass
-
-    class NoDaemonContext(type(multiprocessing.get_context())):
-        Process = NoDaemonProcess
-
-    # We sub-class multiprocessing.pool.Pool instead of multiprocessing.Pool
-    # because the latter is only a wrapper function, not a proper class.
-    class MyPool(multiprocessing.pool.Pool):
-        def __init__(self, *args, **kwargs):
-            kwargs['context'] = NoDaemonContext()
-            super(MyPool, self).__init__(*args, **kwargs)
+    out = []
+    #Get the results from the futures.
+    for i, future in enumerate(futures):
+        try:
+            out.append(future.result())
+        except Exception as e:
+            out.append(e)
+    return front + out
 
 
 def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
@@ -147,17 +188,17 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
     if nb_cpus > 1:
         with MyPool(nb_cpus) as pool:
             if show_progress:
-                result = list(tqdm.tqdm(pool.imap(func, params), total=len(params),
-                                        ncols=80, leave=False, unit='jobs',
-                                        unit_scale=True, dynamic_ncols=False,
-                                        mininterval=0.5))
+                result = parallel_process(params, func, nb_cpus)
+                # # comparable speed but less continuous pbar updates
+                # result = list(tqdm.tqdm(pool.imap(func, params), total=len(params),
+                #                         ncols=80, leave=True, unit='jobs',
+                #                         unit_scale=True, dynamic_ncols=False))
             else:
-                result = list(pool.imap(func, params))
+                result = list(pool.map(func, params))
     else:
         if show_progress:
             pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
-                             mininterval=0.5, unit='jobs', unit_scale=True,
-                             dynamic_ncols=False)
+                             unit='job', unit_scale=True, dynamic_ncols=False)
             result = []
             for p in params:
                 result.append(func(p))

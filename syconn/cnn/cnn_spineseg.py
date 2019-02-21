@@ -10,6 +10,8 @@ Workflow of spinal semantic segmentation based on multiviews (2D semantic segmen
 It learns how to differentiate between spine head, spine neck and spine shaft.
 Caution! The input dataset was not manually corrected.
 """
+from syconn.cnn.TrainData import MultiviewData
+from syconn import global_params
 
 import argparse
 import os
@@ -24,7 +26,7 @@ from elektronn3.training.loss import BlurryBoarderLoss, DiceLoss, LovaszLoss
 
 def get_model():
     vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
-    model = FCNs(pretrained_net=vgg_model, n_class=5)
+    model = FCNs(base_net=vgg_model, n_class=5)
     return model
 
 
@@ -50,8 +52,6 @@ if __name__ == "__main__":
     elektronn3.select_mpl_backend('Agg')
 
     from elektronn3.training import Trainer, Backup
-    from syconn.cnn.TrainData import MultiviewDataSpines
-
     torch.manual_seed(0)
 
     # USER PATHS
@@ -73,8 +73,8 @@ if __name__ == "__main__":
 
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
-    train_dataset = MultiviewDataSpines(train=True, transform=transform)
-    valid_dataset = MultiviewDataSpines(train=False, transform=transform)
+    train_dataset = MultiviewData(train=True, transform=transform, base_dir=global_params.gt_path_spineseg)
+    valid_dataset = MultiviewData(train=False, transform=transform, base_dir=global_params.gt_path_spineseg)
 
     # Set up optimization
     optimizer = optim.Adam(
@@ -100,10 +100,10 @@ if __name__ == "__main__":
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched},
-        ipython_on_error=False
+        ipython_shell=False
     )
 
     # Archiving training script, src folder, env info
-    bk = Backup(script_path=__file__,save_path=trainer.save_path).archive_backup()
+    bk = Backup(script_path=__file__, save_path=trainer.save_path).archive_backup()
 
-    trainer.train(max_steps)
+    trainer.run(max_steps)

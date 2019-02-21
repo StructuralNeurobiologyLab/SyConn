@@ -124,7 +124,8 @@ class SuperSegmentationObject(object):
         self._weighted_graph = None
         self._sample_locations = None
         self._rot_mat = None
-        self._label_dict = {}
+        self._label_dict = {}  # for caching labels, e.g. of vertices
+        self.view_dict = {}  # for caching views, stores list of views with length of sample_locations
 
         if sv_ids is not None:
             self.attr_dict["sv"] = sv_ids
@@ -192,6 +193,10 @@ class SuperSegmentationObject(object):
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def __repr__(self):
+        return 'SSO object (ID: {}, type: "{}", version: "{}", path: "{}"'.format(
+            self.id, self.type, self.version, self.ssv_dir)
 
     #                                                       IMMEDIATE PARAMETERS
 
@@ -1160,6 +1165,9 @@ class SuperSegmentationObject(object):
             Concatenated views for each SV in self.svs with shape
              [N_LOCS, N_CH, N_VIEWS, X, Y]
         """
+        if self.view_caching and view_key in self.view_dict:
+            return self.view_dict[view_key]  # self.view_dict stores list of views with length of sample_locations
+
         view_dc = CompressedStorage(self.view_path, read_only=True,
                                     disable_locking=not self.enable_locking)
         # Disable view caching on SSV
@@ -1179,6 +1187,9 @@ class SuperSegmentationObject(object):
         #                        "".format(view_key, self.id, self.view_path,
         #                                  str(view_dc.keys())))
         if view_key in view_dc and not force_reload:
+            if self.view_caching:
+                self.view_dict[view_key] = view_dc[view_key]
+                return self.view_dict[view_key]
             return view_dc[view_key]
         del view_dc  # delete previous initialized view dictionary
         params = [[sv, {'woglia': woglia, 'raw_only': raw_only, 'index_views':
@@ -1189,7 +1200,8 @@ class SuperSegmentationObject(object):
                                           nb_cpus=self.nb_cpus
                                           if nb_cpus is None else nb_cpus)
         views = np.concatenate(views)
-
+        if self.view_caching and view_key is not None:  # stores list of views with length of sample_locations
+            self.view_dict[view_key] = views
         # Disable view caching on SSV
 
         # view_dc = CompressedStorage(self.view_path, read_only=False,
@@ -1288,8 +1300,8 @@ class SuperSegmentationObject(object):
             render_sampled_sso(self, verbose=verbose, overwrite=overwrite,
                                index_views=True)
 
-    def _render_indexviews(self, nb_views=2, save=True, force_recompute=False,
-                           verbose=False):
+    def render_indexviews(self, nb_views=2, save=True, force_recompute=False,
+                           verbose=False, view_key=None, ws=None, comp_window=None):
         """
         Render SSV raw views in case non-default number of views is required.
         Will be stored in SSV view dict. Default raw/index/prediction views are
@@ -1301,14 +1313,22 @@ class SuperSegmentationObject(object):
         save : bool
         force_recompute : bool
         verbose : bool
+        view_key : Optional[str]
+            key used for storing view array. Default: 'index{}'.format(nb_views)
+        ws : Tuple[int]
+            Window size in pixels [y, x]
+        comp_window : float
+            Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
 
         Returns
         -------
         np.array
         """
+        if view_key is None:
+            view_key = 'index{}'.format(nb_views)
         if not force_recompute:
             try:
-                views = self.load_views('index{}'.format(nb_views))
+                views = self.load_views(view_key)
                 if not save:
                     return views
                 else:
@@ -1320,22 +1340,26 @@ class SuperSegmentationObject(object):
         if self._rot_mat is None:
             index_views, rot_mat = render_sso_coords_index_views(
                 self, locs, nb_views=nb_views, verbose=verbose,
-                return_rot_matrices=True)
+                return_rot_matrices=True, ws=ws, comp_window=comp_window)
             self._rot_mat = rot_mat
         else:
-            index_views = render_sso_coords_index_views(
-                self, locs, nb_views=nb_views, verbose=verbose, rot_mat=self._rot_mat)
+            index_views = render_sso_coords_index_views(self, locs, nb_views=nb_views, verbose=verbose,
+                                                        rot_mat=self._rot_mat, ws=ws,
+                                                        comp_window=comp_window)
         end_ix_views = time.time()
         log_reps.debug("Rendering views took {:.2f} s. {:.2f} views/s".format(
             end_ix_views - start, len(index_views) / (end_ix_views - start)))
         log_reps.debug("Mapping rgb values to vertex indices took {:.2f}s.".format(
             time.time() - end_ix_views))
+        if self.view_caching:
+            self.view_dict[view_key] = index_views
         if not save:
             return index_views
-        self.save_views(index_views, "index{}".format(nb_views))
+        self.save_views(index_views, view_key)
 
     def _render_rawviews(self, nb_views=2, save=True, force_recompute=False,
-                         add_cellobjects=True, verbose=False):
+                         add_cellobjects=True, verbose=False, view_key=None,
+                         ws=None, comp_window=None):
         """
         Render SSV raw views in case non-default number of views is required.
         Will be stored in SSV view dict. Default raw/index/prediction views are
@@ -1348,14 +1372,22 @@ class SuperSegmentationObject(object):
         force_recompute : bool
         add_cellobjects : bool
         verbose : bool
+        view_key : Optional[str]
+            key used for storing view array. Default: 'raw{}'.format(nb_views)
+        ws : Tuple[int]
+            Window size in pixels [y, x]
+        comp_window : float
+            Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
 
         Returns
         -------
         np.array
         """
+        if view_key is None:
+            view_key = 'raw{}'.format(nb_views)
         if not force_recompute:
             try:
-                views = self.load_views('raw{}'.format(nb_views))
+                views = self.load_views(view_key)
                 if not save:
                     return views
                 return
@@ -1363,28 +1395,31 @@ class SuperSegmentationObject(object):
                 pass
         locs = np.concatenate(self.sample_locations(cache=False))
         if self._rot_mat is None:
-            views, rot_mat = render_sso_coords(self, locs, verbose=verbose,
-                                               add_cellobjects=add_cellobjects,
+            views, rot_mat = render_sso_coords(self, locs, verbose=verbose, ws=ws,
+                                               add_cellobjects=add_cellobjects, comp_window=comp_window,
                                                nb_views=nb_views, return_rot_mat=True)
             self._rot_mat = rot_mat
         else:
-            views = render_sso_coords(self, locs, verbose=verbose,
-                                      add_cellobjects=add_cellobjects,
+            views = render_sso_coords(self, locs, verbose=verbose, ws=ws,
+                                      add_cellobjects=add_cellobjects, comp_window=comp_window,
                                       nb_views=nb_views, rot_mat=self._rot_mat)
+        if self.view_caching:
+            self.view_dict[view_key] = views
         if save:
-            self.save_views(views, "raw{}".format(nb_views))
+            self.save_views(views, view_key)
         else:
             return views
 
-    def predict_semseg(self, m, semseg_key, nb_views=None, verbose=False):
+    def predict_semseg(self, m, semseg_key, nb_views=None, verbose=False,
+                       raw_view_key=None, save=True, ws=None, comp_window=None):
         """
         Generates label views based on input model and stores it under the key
         'semseg_key', either within the SSV's SVs or in an extra view-storage
         according to input parameters:
-        Default situation:
+        Default situation (nb_views and raw_view_key is None):
             semseg_key = 'spiness', nb_views=None
             This will load the raw views stored at the SSV's SVs.
-        Non-default:
+        Non-default (nb_views or raw_view_key is not None):
             semseg_key = 'spiness4', nb_views=4
             This requires to run 'self._render_rawviews(nb_views=4)'
             This method then has to be called like:
@@ -1394,31 +1429,47 @@ class SuperSegmentationObject(object):
         ----------
         semseg_key : str
         nb_views : Optional[int]
-        dest_path : str
         k : int
         verbose : bool
+        raw_view_key : str
+            key used for storing view array within SSO directory. Default: 'raw{}'.format(nb_views)
+            If key does not exist, views will be re-rendered with properties defined
+            in global_params.py or as given in the kwargs `ws`, `nb_views` and `comp_window`.
+        save : bool
+            If True, views will be saved.
+        ws : Tuple[int]
+            Window size in pixels [y, x]
+        comp_window : float
+            Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
         """
-        # views have shape [N, 4, 2, 128, 256]
-        if nb_views is not None and nb_views != global_params.NB_VIEWS:
+        if (nb_views is not None) or (raw_view_key is not None):
             # treat as special view rendering
+            if nb_views is None:
+                nb_views = global_params.NB_VIEWS
+            if raw_view_key is None:
+                raw_view_key = 'raw{}'.format(nb_views)
             try:
-                views = self.load_views('raw{}'.format(nb_views))
+                views = self.load_views(raw_view_key)
             except KeyError:
                 log_reps.warning('Could not find raw-views. Re-rendering now.')
-                self._render_rawviews(nb_views)
-                views = self.load_views('raw{}'.format(nb_views))
+                self._render_rawviews(nb_views, ws=ws, comp_window=comp_window, save=save,
+                                      view_key=raw_view_key, verbose=verbose)
+                views = self.load_views(raw_view_key)
             if len(views) != len(np.concatenate(self.sample_locations(cache=False))):
                 raise ValueError("Unequal number of views and redering locations.")
             labeled_views = ssh.predict_views_semseg(views, m, verbose=verbose)
             assert labeled_views.shape[2] == nb_views, \
                 "Predictions have wrong shape."
-            self.save_views(labeled_views, semseg_key)
+            if self.view_caching:
+                self.view_dict[semseg_key] = labeled_views
+            if save:
+                self.save_views(labeled_views, semseg_key)
         else:
             # treat as default view rendering
             views = self.load_views()
             assert len(views) == len(
                 np.concatenate(self.sample_locations(cache=False))), \
-                "Unequal number of views and redering locations."
+                "Unequal number of views and rendering locations."
             # re-order number of views according to SV rendering locations
             # TODO: move view reordering to 'pred_svs_semseg', check other usages before!
             locs = self.sample_locations()
@@ -1436,7 +1487,7 @@ class SuperSegmentationObject(object):
                                 return_pred=self.version == 'tmp')  # do not write to disk
 
     def semseg2mesh(self, semseg_key, dest_path=None, nb_views=None, k=1,
-                    force_overwrite=False):
+                    force_recompute=False, index_view_key=None):
         """
         Generates vertex labels and stores it in the SSV's label storage under
         the key 'semseg_key'.
@@ -1446,7 +1497,7 @@ class SuperSegmentationObject(object):
         Non-default:
             semseg_key = 'spiness4', nb_views=4
             This requires to run 'self._render_rawviews(nb_views=4)',
-            'self._render_indexviews(nb_views=4)' and 'predict_semseg(MODEL,
+            'self.render_indexviews(nb_views=4)' and 'predict_semseg(MODEL,
             'spiness4', nb_views=4)
             This method then has to be called like:
                 'self.semseg2mesh('spiness4', nb_views=4)'
@@ -1457,19 +1508,26 @@ class SuperSegmentationObject(object):
         nb_views : Optional[int]
         dest_path : str
         k : int
-        force_overwrite : bool
+        force_recompute : bool
+        index_view_key : str
         """
+        # colors are only needed if dest_path is given (last two colors correspond to background and undpredicted vertices (k=0))
         if 'spiness' in semseg_key:
-            # colors are only needed if dest_path is given
             cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
                              [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
                              [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]])
             cols = (cols * 255).astype(np.uint8)
-            return ssh.semseg2mesh(self, semseg_key, nb_views, dest_path, k,
-                                   cols, force_overwrite=force_overwrite)
+        elif 'axon' in semseg_key:
+            cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
+                             [0.1, 0.1, 0.1, 1], [0.9, 0.9, 0.9, 1],
+                             [0.1, 0.1, 0.9, 1]])
+            cols = (cols * 255).astype(np.uint8)
         else:
-            raise ValueError('Sematic segmentation of "" is not supported.'
+            raise ValueError('Semantic segmentation of "{}" is not (yet) supported.'
                              ''.format(semseg_key))
+        return ssh.semseg2mesh(self, semseg_key, nb_views, dest_path, k,
+                               cols, force_recompute=force_recompute,
+                               index_view_key=index_view_key)
 
     def semseg_for_coords(self, coords, semseg_key, k=5, ds_vertices=20):
         """
@@ -1585,7 +1643,7 @@ class SuperSegmentationObject(object):
         force : bool
             force resampling of locations
         cache : bool
-
+            save sample location in SSO attribute dict
         Returns
         -------
         list of array
@@ -1609,8 +1667,8 @@ class SuperSegmentationObject(object):
             self.save_attributes(["sample_locations"], [locs])
         if verbose:
             dur = time.time() - start
-            log_reps.info("Sampling locations from {} SVs took {:.2f}s."
-                          " {.4f}s/SV (incl. read/write)".format(
+            log_reps.debug("Sampling locations from {} SVs took {:.2f}s."
+                           " {.4f}s/SV (incl. read/write)".format(
                 len(self.svs), dur, dur / len(self.svs)))
         return locs
 

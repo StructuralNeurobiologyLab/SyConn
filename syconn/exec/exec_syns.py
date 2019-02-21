@@ -18,11 +18,9 @@ from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
 from syconn.handler.logger import initialize_logging
 
-
 def run_syn_analysis():
     log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
                              overwrite=False)
-
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
 
@@ -76,11 +74,9 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
                   box_coords=[0, 0, 0], fit_box_size=True)
 
     # POPULATES CS CD with SV contacts
-    ces.find_contact_sites(cd, kd_seg_path, n_max_co_processes=global_params.NCORE_TOTAL,
-                          qsub_pe='default', qsub_queue='all.q')
-    ces.extract_agg_contact_sites(cd, global_params.config.working_dir, n_folders_fs=n_folders_fs, suffix="",
-                                  qsub_queue='all.q', n_max_co_processes=global_params.NCORE_TOTAL,
-                                  qsub_pe='default')
+    ces.find_contact_sites(cd, kd_seg_path)
+    ces.extract_agg_contact_sites(cd, global_params.config.working_dir,
+                                  n_folders_fs=n_folders_fs, suffix="")
     log.info('CS extraction finished.')
 
     # create overlap dataset between SJ and CS: SegmentationDataset of type 'syn'
@@ -91,9 +87,10 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     sj_sd = SegmentationDataset('sj', working_dir=global_params.config.working_dir)
     cs_cset = chunky.load_dataset(cd_dir, update_paths=True)
 
+    # TODO: change stride to n_jobs
     # # This creates an SD of type 'syn', currently ~6h, will hopefully be sped up after refactoring
     cs_processing_steps.syn_gen_via_cset(cs_sd, sj_sd, cs_cset, resume_job=False,
-                                         nb_cpus=2, qsub_pe='openmp')
+                                         nb_cpus=2)
     sd = SegmentationDataset("syn", working_dir=global_params.config.working_dir, version="0")
     dataset_analysis(sd, qsub_pe='openmp', compute_meshprops=False)
     log.info('SegmentationDataset of type "syn" was generated.')
@@ -101,8 +98,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     # This creates an SD of type 'syn_ssv', ~15 min
     cps.combine_and_split_syn(global_params.config.working_dir, resume_job=False,
                               stride=250, qsub_pe='default', qsub_queue='all.q',
-                              cs_gap_nm=global_params.cs_gap_nm,
-                              n_max_co_processes=global_params.NCORE_TOTAL)
+                              cs_gap_nm=global_params.cs_gap_nm)
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
     dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True)

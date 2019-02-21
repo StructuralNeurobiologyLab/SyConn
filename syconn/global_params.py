@@ -17,6 +17,7 @@ from .handler.config import DynConfig
 # --------- GLOBAL WORKING DIRECTORY
 # wd = "/wholebrain/scratch/areaxfs3/"
 wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+# wd = "/wholebrain/scratch/areaxfs3/"
 # wd = '/mnt/j0126/areaxfs_v10/'
 
 # TODO: Put all dataset-specific parameters into config.ini / configspec.ini
@@ -31,11 +32,17 @@ config = DynConfig()
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
 batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + \
                          "/QSUB_scripts/"
+# TODO refactor syconn and get rid of all qsub_pe and qsub_queue kwargs and only use batch_job_enabled(), the default in QSUB_script are now BATCH_PE and BATCH_QUEUE
+BATCH_PE = 'default'
+BATCH_QUEUE = 'all.q'
 # TODO: Use computing settings everywhere
 MEM_PER_NODE = 249.5e3  # in MB
 NCORES_PER_NODE = 20
 NCORE_TOTAL = 340
 NGPU_TOTAL = 34
+
+backend = "FS"  # File system
+PYOPENGL_PLATFORM = 'egl'  # Rendering
 
 
 # --------- LOGGING
@@ -51,10 +58,6 @@ log_level = 'DEBUG'  # INFO, DEBUG
 # will be stored at wd + '/logs/'.
 DISABLE_FILE_LOGGING = True
 
-
-# --------- BACKEND DEFINITIONS
-backend = "FS"  # File system
-PYOPENGL_PLATFORM = 'egl'  # Rendering
 
 # --------- CONTACT SITE PARAMETERS
 # Synaptic junction bounding box diagonal threshold in nm; objects above will not be used during `syn_gen_via_cset`
@@ -99,10 +102,14 @@ SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000}  # in nm
 # --------- SPINE PARAMETERS
 min_spine_cc_size = 10
 min_edge_dist_spine_graph = 110
+gt_path_spineseg = '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'
 
 
 # --------- COMPARTMENT PARAMETERS
 DIST_AXONESS_AVERAGING = 10000
+gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files/'
 
 
 # --------- CELLTYPE PARAMETERS
+
+

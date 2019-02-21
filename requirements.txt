@@ -19,12 +19,12 @@ opencv-python
 numba==0.41.0
 llvmlite==0.26.0
 plyfile
-vtkInterface
+vtki
 openmesh
 pytest
 pytest-runner
-prompt-toolkit < 2.0
-git+https://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
-git+https://github.com/Theano/Theano@0.8.X#egg=theano
-git+https://github.com/ELEKTRONN/ELEKTRONN2.git
-git+https://github.com/ELEKTRONN/elektronn3@phil#egg=elektronn3
+prompt-toolkit <2.0
+git+git://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
+git+git://github.com/Theano/Theano@0.8.X#egg=theano
+git+git://github.com/ELEKTRONN/ELEKTRONN2.git
+git+git://github.com/ELEKTRONN/elektronn3@phil#egg=elektronn3

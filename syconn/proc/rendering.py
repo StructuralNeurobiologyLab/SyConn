@@ -190,13 +190,15 @@ def init_ctx(ws):
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
         from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
             EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
-            EGL_COLOR_BUFFER_TYPE, EGL_HEIGHT, \
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_OPENGL_BIT, EGL_NONE, \
+            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
+            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
             EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
-            EGL_OPENGL_API, EGL_NO_DISPLAY,\
+            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
             eglGetDisplay, eglInitialize, eglChooseConfig, \
             eglBindAPI, eglCreatePbufferSurface, \
-            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
+            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, \
+            EGL_TRUE, EGL_FALSE,  EGL_LOSE_CONTEXT_ON_RESET, EGL_NO_RESET_NOTIFICATION
 
         major, minor = ctypes.c_long(), ctypes.c_long()
         num_configs = ctypes.c_long()
@@ -589,9 +591,8 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         for cv in c_views:
             if len(np.unique(cv)) == 1:
                 if views_key == "raw":
-                    log_proc.warn("Empty view of '%s'-mesh with %d "
-                                  "vertices found."
-                                  % (views_key, len(mesh.vert_resh)))
+                    log_proc.warning("Empty view of '{}'-mesh with {} vertices found. "
+                                     "Existing color value: {}".format(views_key, len(mesh.vert_resh), np.unique(cv)))
                     found_empty_view = True
         if found_empty_view:
             log_proc.warning(
@@ -704,11 +705,11 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                                          mesh.vert_resh,
                                          querybox_edgelength / mesh.max_dist)
         if verbose:
-            log_proc.info("Calculation of rotation matrices took {:.2f}s."
-                          "".format(time.time() - start))
+            log_proc.debug("Calculation of rotation matrices took {:.2f}s."
+                           "".format(time.time() - start))
     if verbose:
-        log_proc.info("Starting local rendering at %d locations (%s)." %
-                      (len(coords), views_key))
+        log_proc.debug("Starting local rendering at %d locations (%s)." %
+                       (len(coords), views_key))
     ctx = init_ctx(ws)
     mviews = multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths,
                                     clahe=clahe, views_key=views_key, ws=ws,
@@ -718,8 +719,8 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
                                     wire_frame=wire_frame, nb_views=nb_views)
     if verbose:
         end = time.time()
-        log_proc.info("Finished rendering mesh of type %s at %d locations after"
-                      " %0.2fs" % (views_key,len(mviews), end - start))
+        log_proc.debug("Finished rendering mesh of type %s at %d locations after"
+                       " %0.2fs" % (views_key,len(mviews), end - start))
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
         eglDestroyContext(*ctx)
     else:
@@ -785,8 +786,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
                                   cellobjects_only=cellobjects_only)
     if verbose:
         dur = time.time() - start
-        log_proc.info("Rendering of %d views took %0.2fs. "
-                      "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
+        log_proc.debug("Rendering of %d views took %0.2fs. "
+                       "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
     if sso.version != 'tmp':
         for i, so in enumerate(missing_svs):
             sv_views = views[part_views[i]:part_views[i+1]]
@@ -797,12 +798,12 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
                          'has version "tmp", results will'
                          ' not be saved to disk.')
     if return_views:
-        return sso.load_views(woglia=woglia, index_views=index_views)
+        return views
 
 
 def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=False,
-                      ws=(256, 128), cellobjects_only=False, wire_frame=False,
-                      nb_views=None, comp_window=8e3, rot_mat=None, return_rot_mat=False):
+                      ws=None, cellobjects_only=False, wire_frame=False,
+                      nb_views=None, comp_window=None, rot_mat=None, return_rot_mat=False):
     """
     Render views of SuperSegmentationObject at given coordinates.
     
@@ -813,22 +814,27 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     add_cellobjects : bool
     verbose : bool
     clahe : bool
-    ws : tuple of int
+    ws : Optional[Tuple[int]]
+        Window size in pixels (y, x). Default: (256, 128)
     cellobjects_only : bool
     wire_frame : bool
     nb_views : int
-    comp_window : int, float
+    comp_window : Optional[float]
         window size in nm. the clipping box during rendering will have an extent
-         of [comp_window, comp_window / 2, comp_window]
+         of [comp_window, comp_window / 2, comp_window]. Default: 8 um
     rot_mat : np.array
     return_rot_mat : bool
     Returns
     -------
     np.array
     """
+    if comp_window is None:
+        comp_window = 8e3
+    if ws is None:
+        ws = (256, 128)
     if verbose:
-        log_proc.info('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'
-                      ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
+        log_proc.debug('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'
+                       ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     mesh = sso.mesh
@@ -838,7 +844,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
                                 "cellobjects only."
-        raw_views = np.ones((len(coords), nb_views, 128, 256), dtype=np.uint8) * 255
+        raw_views = np.ones((len(coords), nb_views, ws[0], ws[1]), dtype=np.uint8) * 255
         if rot_mat is None:
             mo = MeshObject("raw", mesh[0], mesh[1])
             mo._colors = None
@@ -912,14 +918,14 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
 
     """
     if verbose:
-        log_proc.info('Started "render_sso_coords_index_views" at {} locations for SSO {} using PyOpenGL'
-                      ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
+        log_proc.debug('Started "render_sso_coords_index_views" at {} locations for SSO {} using PyOpenGL'
+                       ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     ind, vert, norm = sso.mesh
     if len(vert) == 0:
         log_proc.error("No mesh for SSO {} found.".format(sso.id))
-        return np.ones((len(coords), 2, 128, 256, 3), dtype=np.uint8)
+        return np.ones((len(coords), nb_views, ws[1], ws[0], 3), dtype=np.uint8)
     try:
         color_array = id2rgb_array_contiguous(np.arange(len(ind) // 3))
     except ValueError as e:

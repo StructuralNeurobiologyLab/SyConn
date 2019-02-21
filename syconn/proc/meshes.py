@@ -17,10 +17,15 @@ from plyfile import PlyData, PlyElement
 from scipy.ndimage.morphology import binary_closing, binary_dilation
 import tqdm
 try:
-    import vtkInterface
+    import vtki
     __vtk_avail__ = True
 except ImportError:
     __vtk_avail__ = False
+
+try:
+    from .in_bounding_boxC import in_bounding_box
+except ImportError:
+    from .in_bounding_box import in_bounding_box
 
 from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip
@@ -34,10 +39,10 @@ try:
     import matplotlib
     matplotlib.use('agg')
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
-except ImportError:
+except ImportError as e:
     boundaryDistanceTransform, gaussianSmoothing = None, None
     log_proc.error('ModuleNotFoundError. Could not import VIGRA. '
-                   'Mesh generation will not be possible.')
+                   'Mesh generation will not be possible. {}'.format(e))
 
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
@@ -294,19 +299,18 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
     verts = np.array(verts) * downsampling + offset
     if decimate_mesh > 0:
         if not __vtk_avail__:
-            msg = "vtkInterface not installed. Please install vtkInterface.'" \
-                  "git clone https://github.com/akaszynski/vtkInterface.git' " \
-                  "and 'pip install -e vtkInterface'."
+            msg = "vtki not installed. Please install vtki.'" \
+                  "pip install vtki'."
             log_proc.error(msg)
             raise ImportError(msg)
         log_proc.warning("'triangulation': Currently mesh-sparsification"
                          " may not preserve volume.")
-        # add number of vertices in front of every face (required by vtkInterface)
+        # add number of vertices in front of every face (required by vtki)
         ind = np.concatenate([np.ones((len(ind), 1)).astype(np.int64) * 3, ind],
                              axis=1)
-        mesh = vtkInterface.PolyData(verts, ind.flatten()).TriFilter()
+        mesh = vtki.PolyData(verts, ind.flatten()).TriFilter()
         decimated_mesh = mesh.Decimate(decimate_mesh, volume_preservation=True)
-        if decimated_mesh is None:  # maybe vtkInterface API changes and operates in-place -> TODO: check version differences and require one of them
+        if decimated_mesh is None:  # maybe vtki API changes and operates in-place -> TODO: check version differences and require one of them, changed to vtki, PS 04Feb2019
             decimated_mesh = mesh
             if len(decimated_mesh.faces.reshape((-1, 4))[:, 1:]) == len(ind):
                 log_proc.error(
@@ -517,31 +521,31 @@ def get_bounding_box(coordinates):
     return mean, max_dist
 
 
-@jit
-def in_bounding_box(coords, bounding_box):
-    """
-    Loop version with numba
-
-    Parameters
-    ----------
-    coords : np.array (N x 3)
-    bounding_box : tuple (np.array, np.array)
-        center coordinate and edge lengths of bounding box
-
-    Returns
-    -------
-    np.array of bool
-        inlying coordinates are indicated as true
-    """
-    edge_sizes = bounding_box[1] / 2
-    coords = np.array(coords) - bounding_box[0]
-    inlier = np.zeros((len(coords)), dtype=np.bool)
-    for i in range(len(coords)):
-        x_cond = (coords[i, 0] > -edge_sizes[0]) & (coords[i, 0] < edge_sizes[0])
-        y_cond = (coords[i, 1] > -edge_sizes[1]) & (coords[i, 1] < edge_sizes[1])
-        z_cond = (coords[i, 2] > -edge_sizes[2]) & (coords[i, 2] < edge_sizes[2])
-        inlier[i] = x_cond & y_cond & z_cond
-    return inlier
+# @jit
+# def in_bounding_box(coords, bounding_box):
+#     """
+#     Loop version with numba
+#
+#     Parameters
+#     ----------
+#     coords : np.array (N x 3)
+#     bounding_box : tuple (np.array, np.array)
+#         center coordinate and edge lengths of bounding box
+#
+#     Returns
+#     -------
+#     np.array of bool
+#         inlying coordinates are indicated as true
+#     """
+#     edge_sizes = bounding_box[1] / 2
+#     coords = np.array(coords) - bounding_box[0]
+#     inlier = np.zeros((len(coords)), dtype=np.bool)
+#     for i in range(len(coords)):
+#         x_cond = (coords[i, 0] > -edge_sizes[0]) & (coords[i, 0] < edge_sizes[0])
+#         y_cond = (coords[i, 1] > -edge_sizes[1]) & (coords[i, 1] < edge_sizes[1])
+#         z_cond = (coords[i, 2] > -edge_sizes[2]) & (coords[i, 2] < edge_sizes[2])
+#         inlier[i] = x_cond & y_cond & z_cond
+#     return inlier
 
 
 @jit

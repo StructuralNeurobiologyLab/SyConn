@@ -625,4 +625,4 @@ def lz4stringtoarr(string, dtype=np.float32, shape=None):
 
 
 if __name__=='__main__':
-    A = main_class(port=10002)
+    A = main_class(port=10001)

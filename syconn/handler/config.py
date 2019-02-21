@@ -9,8 +9,9 @@ from configobj import ConfigObj
 import os
 import sys
 from validate import Validator
+# from .logger import log_main  # TODO: refactor to avoid cyclic imports - needed for logging every change in woriking directory
 from .. import global_params
-__all__ = ['DynConfig']
+__all__ = ['DynConfig', 'get_default_conf_str']
 
 
 class Config(object):
@@ -18,6 +19,9 @@ class Config(object):
         self._entries = {}
         self._working_dir = working_dir
         self.parse_config(validate=validate)
+        self.global_logdir = None
+        # log_main.info("Current working directory: " + colored("'{}'".format(
+        #     global_params.config.working_dir), 'red'))
 
     @property
     def entries(self):
@@ -85,8 +89,8 @@ class DynConfig(Config):
 
     def _check_actuality(self):
         """
-        Crucial check, which triggers the update everytime wd is not the same as
-         self.working dir
+        Checks os.environ and global_params and triggers an update if the therein specified WD is not the same as
+         `self.working dir`.
         """
         # first check if working directory was set in environ, else check if it was changed in memory.
         if 'syconn_wd' in os.environ:
@@ -130,8 +134,7 @@ class DynConfig(Config):
         return self.entries['Paths']['kd_mi']
 
     @property
-    # TODO: make this more elegant, e.g. bash script with 'source activate py36' -- check if conda_forge vigra install
-    #  works with all the rest, then move to py36 once and for all
+    # TODO: Not necessarily needed anymore
     def py36path(self):
         if len(self.entries['Paths']['py36path']) != 0:
             return self.entries['Paths']['py36path']  # python 3.6 path is available
@@ -170,6 +173,13 @@ class DynConfig(Config):
     @property
     def mpath_spiness(self):
         return self.model_dir + '/spiness/'
+
+    @property
+    def mpath_axonsem(self):
+        """
+        Semantic segmentation moder cellular compartments
+        """
+        return self.model_dir + '/axon_semseg/'
 
     @property
     def mpath_celltype(self):

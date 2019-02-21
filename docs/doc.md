@@ -1,16 +1,23 @@
 # Documentation
 
 ## Installation
-We recommend installing the latest Anaconda release. Then set up the python environment:
+* Python 3.6
+* The whole pipeline was designed and tested on Linux systems
+* SyConn is based on the packages [elektronn](http://elektronn.org) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
+* cmake >= 3.1
+* [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.
+
+
+We recommend installing Anaconda. Then set up the python environment:
 ```
 conda create -n pysy python=3.6 anaconda
-source activate pysy
+conda activate pysy
 ```
-In order to use the GPU during inference cuda and cudNN are required, either download and install cuda 8.0 and cudnn 5 or use conda (untested):
+In order to use the GPU during inference cuda and cudNN are required, either download and install cuda 8.0 and cudnn 5.1 or use conda (untested):
 ```
-conda install cudatoolkit=8.0 cudnn=5
+conda install cudatoolkit=8.0 cudnn=5.1
 ```
-Install all prerequisites and finally git clone and install syconn:
+Git clone and install syconn and all prerequisites:
 ```
 conda install vigra -c conda-forge
 conda install mesa -c menpo
@@ -19,6 +26,7 @@ conda install freeglut
 conda install pyopengl
 conda install snappy
 conda install python-snappy
+conda install tensorboard tensorflow
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 cd SyConn
 pip install -r requirements.txt
@@ -28,20 +36,15 @@ Or alternatively with the developer flag:
 ```
 pip install -e .
 ```
-In order to use elektronn3 models, python>=3.6 is required (when installing elektronn3 checkout
- branch `phil`; this will be updated soon to work with the `master` branch).
- By default, all required settings are applied in the SyConn setup.py.
-
-In the case that there are problems with snappy/python-snappy remove previous installations and
-install them via conda:
+In case that there are problems with theano try to install it from conda (untested):
 ```
-conda uninstall snappy
-conda install snappy
-conda install python-snappy
+pip uninstall theano
+conda install theano pygpu
 ```
 
 ## Example run
-Place the example data in syconn/scripts/example_run/data/, `cd` to SyConn/scripts/example_run/ and then run
+Place the example data in `SyConn/scripts/example_run/`, add the model folder to the working directory `~/SyConn/example_cube/`,
+cd to `SyConn/scripts/example_run/` and then run
 ```
 python start.py --working_dir=~/SyConn/example_cube/
 ```

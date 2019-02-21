@@ -48,7 +48,6 @@ if __name__ == '__main__':
         raise ValueError('Example data could not be found at "{}".'.format(h5_dir))
 
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
-
     bb = parse_movement_area_from_zip(kzip_p)
     offset = np.array([0, 0, 0])
     bd = bb[1] - bb[0]
@@ -115,7 +114,7 @@ if __name__ == '__main__':
                                    offset=offset, boundary=bd, fast_downsampling=True,
                                    data_path=h5_dir + 'asym.h5', mags=[1, 2], hdf5_names=['asym'])
 
-    # RUN SYCONN - without glia removal
+    # # RUN SYCONN - without glia removal
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.run_create_sds(chunk_size=(128, 128, 128), n_folders_fs=100)
 
@@ -146,4 +145,3 @@ if __name__ == '__main__':
              ' plugin.'.format(experiment_name))
     fname_server = os.path.dirname(os.path.abspath(__file__)) + '/../kplugin/server.py'
     os.system('python {} --working_dir={} --port=10002'.format(fname_server, example_wd))
-

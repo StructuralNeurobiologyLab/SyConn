@@ -18,7 +18,6 @@ except ImportError as e:
 from scipy import spatial, sparse, ndimage
 from sklearn.decomposition import PCA
 import tqdm
-
 from ..proc import log_proc
 
 

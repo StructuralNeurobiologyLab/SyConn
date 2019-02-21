@@ -319,7 +319,7 @@ def surface_samples(coords, bin_sizes=(2000, 2000, 2000), max_nb_samples=5000,
     ----------
     coords : np.array
     bin_sizes : np.array
-    max_nb_samples : int
+    max_nb_samples : int or None
     r : int
 
     Returns
@@ -334,7 +334,7 @@ def surface_samples(coords, bin_sizes=(2000, 2000, 2000), max_nb_samples=5000,
     nb_bins = np.max([[1, 1, 1], nb_bins], axis=0)
     H, edges = np.histogramdd(coords, bins=nb_bins)
     nb_smaples = np.min([np.sum(H != 0), max_nb_samples])
-    if nb_smaples > max_nb_samples:  # only use location with highest coordinate density
+    if max_nb_samples is not None and nb_smaples > max_nb_samples:  # only use location with highest coordinate density
         thresh_val = np.sort(H.flatten())[::-1][nb_smaples]
         H[H <= thresh_val] = 0
     # get vertices closest to grid bins with density != 0

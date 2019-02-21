@@ -20,6 +20,7 @@ import subprocess
 import tqdm
 import sys
 import time
+from multiprocessing import cpu_count
 
 from ..handler.basics import temp_seed
 from ..handler.logger import initialize_logging
@@ -128,6 +129,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if not batchjob_enabled():
         return batchjob_fallback(params, name, n_cores, suffix, n_max_co_processes,
                                  script_folder, python_path)
+    if queue is None:
+        queue = global_params.BATCH_QUEUE
+    if pe is None:
+        pe = global_params.BATCH_PE
     if resume_job:
         return resume_QSUB_script(
             params, name, queue=queue, pe=pe, max_iterations=max_iterations,
@@ -461,7 +466,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     name :
     n_cores :
     suffix :
-    job_name :
+    n_max_co_processes :
     script_folder :
     python_path :
 
@@ -474,11 +479,10 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     job_folder = qsub_work_folder + "/%s_folder%s/" % (name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
-    log_batchjob = initialize_logging("{}_fallback".format(name + suffix),
-                                      log_dir=job_folder)
+    log_batchjob = log_mp
     if n_max_co_processes is None:
-        n_max_co_processes = global_params.NCORES_PER_NODE
-    n_max_co_processes = np.min([global_params.NCORES_PER_NODE // n_cores, n_max_co_processes])
+        n_max_co_processes = cpu_count()
+    n_max_co_processes = np.min([n_max_co_processes // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
     log_batchjob.debug('Starting BatchJobFallback script "{}" with {} tasks using {}'
                        ' parallel jobs, each using {} core(s).'.format(
