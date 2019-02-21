@@ -12,7 +12,6 @@ warnings.filterwarnings("ignore", message="dataset.value has been deprecated")  
 import os
 from .handler.config import DynConfig
 
-
 # ---------------------- STATIC AND GLOBAL PARAMETERS # -----------------------
 # --------- GLOBAL WORKING DIRECTORY
 # wd = "/wholebrain/scratch/areaxfs3/"
@@ -43,7 +42,7 @@ NGPU_TOTAL = 34
 
 backend = "FS"  # File system
 PYOPENGL_PLATFORM = 'egl'  # Rendering
-
+DISABLE_LOCKING = False
 
 # --------- LOGGING
 # 'None' disables logging of SyConn modules (e.g. proc, handler, ...) to files.
@@ -102,12 +101,12 @@ SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000}  # in nm
 # --------- SPINE PARAMETERS
 min_spine_cc_size = 10
 min_edge_dist_spine_graph = 110
-gt_path_spineseg = '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'
+gt_path_spineseg = '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'  # TODO: add to config
 
 
 # --------- COMPARTMENT PARAMETERS
 DIST_AXONESS_AVERAGING = 10000
-gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files/'
+gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm/'  # TODO: add to config
 
 
 # --------- CELLTYPE PARAMETERS

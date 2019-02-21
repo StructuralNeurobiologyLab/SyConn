@@ -34,7 +34,7 @@ from .. import global_params
 class SuperSegmentationDataset(object):
     def __init__(self, working_dir=None, version=None, ssd_type='ssv',
                  version_dict=None, sv_mapping=None, scaling=None, config=None,
-                 sso_caching=False):
+                 sso_caching=False, sso_locking=False):
         """
         Class to hold a set of agglomerated supervoxels (SuperSegmentationObject).
 
@@ -48,13 +48,16 @@ class SuperSegmentationDataset(object):
         scaling : np.array
         config : Optional[Config]
             DynConfig object, see syconn/handler/config.py
-        caching : bool
+        sso_caching : bool
             WIP, enabes caching mechanisms in SuperSegmentationObjects returned via
             `get_super_segmentation_object`
+        sso_locking : bool
+            if True, locking is enabled for SSO files.
         """
         self.ssv_dict = {}
         self.mapping_dict = {}
         self.sso_caching = sso_caching
+        self.sso_locking = sso_locking
         self._mapping_dict_reversed = None
 
         self._type = ssd_type
@@ -275,7 +278,8 @@ class SuperSegmentationDataset(object):
                                               voxel_caching=caching,
                                               mesh_caching=caching,
                                               view_caching=caching,
-                                              enable_locking_so=False)
+                                              enable_locking_so=False,
+                                              enable_locking=self.sso_locking)
             else:
                 sso = SuperSegmentationObject(obj_id,
                                               self.version,
@@ -288,7 +292,8 @@ class SuperSegmentationDataset(object):
                                               voxel_caching=caching,
                                               mesh_caching=caching,
                                               view_caching=caching,
-                                              enable_locking_so=False)
+                                              enable_locking_so=False,
+                                              enable_locking=self.sso_locking)
             sso._dataset = self
         else:
             sso = []
