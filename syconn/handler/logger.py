@@ -6,10 +6,10 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 import logging
 import coloredlogs
+from termcolor import colored
 import os
 
 from .. import global_params
-global log_main
 __all__ = ['initialize_logging', 'log_main']
 
 
@@ -33,7 +33,8 @@ def get_main_log():
         logger.addHandler(fh)
         logger.info("Initialized file logging. Log-files are stored at"
                     " {}.".format(log_dir))
-    logger.info("Initialized stdout logging (level: {}).".format(global_params.log_level))
+    logger.info("Initialized stdout logging (level: {}). Current working directory: ".format(global_params.log_level) +
+                colored("'{}'".format(global_params.config.working_dir), 'red'))
     return logger
 
 
@@ -85,6 +86,3 @@ def initialize_logging(log_name, log_dir=global_params.default_log_dir,
 
 # init main logger
 log_main = get_main_log()
-
-# TODO: might be interesting to redirect output of syconn modules
-# (proc, handler, ...) more dynamically.
