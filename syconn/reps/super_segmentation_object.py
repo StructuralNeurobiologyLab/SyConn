@@ -16,10 +16,10 @@ import time
 import tqdm
 from collections import Counter
 from scipy.misc import imsave
+from scipy import spatial
 from knossos_utils import skeleton
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
-
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
@@ -30,7 +30,6 @@ from .segmentation import SegmentationObject, SegmentationDataset
 from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     knossos_ml_from_svixs, subfold_from_ix_SSO
-from ..handler import config
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..backend.storage import CompressedStorage, MeshStorage
@@ -2134,6 +2133,7 @@ class SuperSegmentationObject(object):
 
     def axoness_for_coords(self, coords, radius_nm=4000, pred_type="axoness"):
         """
+        TODO: Deprecated, replace by pred_for_coords
         Dies not need to be axoness, it supports any attribut stored in self.skeleton.
 
         Parameters
@@ -2149,18 +2149,45 @@ class SuperSegmentationObject(object):
             Same length as coords. For every coordinate in coords returns the
             majority label within radius_nm
         """
+        return self.attr_for_coords(coords, pred_type, radius_nm)
+
+    def attr_for_coords(self, coords, attr_key, radius_nm=None):
+        """
+        TODO: move to super_segmentation_helper.py
+        Query prediction at given coordinates. Supports any attribute stored
+        in self.skeleton.
+
+        Parameters
+        ----------
+        coords : np.array
+            Voxel coordinates, unscaled! [N, 3]
+        radius_nm : float
+        attr_key : str
+
+        Returns
+        -------
+        np.array
+            Same length as coords. For every coordinate in coords returns the
+            majority label within radius_nm or [-1] if Key does not exist.
+        """
         coords = np.array(coords)
         self.load_skeleton()
         if self.skeleton is None or len(self.skeleton["nodes"]) == 0:
             log_reps.warn("Skeleton did not exist for SSV {} (size: {}; rep. coord.: "
                           "{}).".format(self.id, self.size, self.rep_coord))
             return [-1]
-        if pred_type not in self.skeleton:  # for glia SSV this does not exist.
+        if attr_key not in self.skeleton:  # for glia SSV this does not exist.
             return [-1]
+
+        # get close locations
         kdtree = scipy.spatial.cKDTree(self.skeleton["nodes"] * self.scaling)
-        close_node_ids = kdtree.query_ball_point(coords * self.scaling,
-                                                 radius_nm)
-        axoness_pred = []
+        if radius_nm is None:
+            _, close_node_ids = kdtree.query(coords * self.scaling, k=1,
+                                             n_jobs=self.nb_cpus)
+        else:
+            close_node_ids = kdtree.query_ball_point(coords * self.scaling,
+                                                     radius_nm)
+        attr_list = []
         for i_coord in range(len(coords)):
             curr_close_node_ids = close_node_ids[i_coord]
             if len(curr_close_node_ids) == 0:
@@ -2170,17 +2197,17 @@ class SuperSegmentationObject(object):
                     "one with distance {} nm. SSV ID {}, coordinate at {}."
                     "".format(radius_nm, dist[0], self.id, coords[i_coord]))
             cls, cnts = np.unique(
-                np.array(self.skeleton[pred_type])[np.array(curr_close_node_ids)],
+                np.array(self.skeleton[attr_key])[np.array(curr_close_node_ids)],
                 return_counts=True)
             if len(cls) > 0:
-                axoness_pred.append(cls[np.argmax(cnts)])
+                attr_list.append(cls[np.argmax(cnts)])
             else:
                 log_reps.info("Did not find any skeleton node within {} nm at {}."
                               " SSV {} (size: {}; rep. coord.: {}).".format(
                     radius_nm, i_coord, self.id, self.size, self.rep_coord))
-                axoness_pred.append(-1)
+                attr_list.append(-1)
 
-        return np.array(axoness_pred)
+        return np.array(attr_list)
 
     def predict_views_axoness(self, model, verbose=False,
                               pred_key_appendix=""):
@@ -2208,6 +2235,42 @@ class SuperSegmentationObject(object):
         log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
                        "%0.4fs/SV" % (len(self.svs), end - start,
                                       float(end - start) / len(self.svs)))
+
+    def predict_views_embedding(self, model, pred_key_appendix=""):
+        """
+        This will save the latent vector of every skeleton node location as
+        self.sekeleton['latent_morph'] based on the nearest rendering location.
+
+        Parameters
+        ----------
+        model :
+        pred_key_appendix :
+
+        Returns
+        -------
+
+        """
+        pred_key = "latent_morph"
+        pred_key += pred_key_appendix
+        if self.version == 'tmp':
+            log_reps.warning('"predict_views_embedding" called but this SSV '
+                             'has version "tmp", results will'
+                             ' not be saved to disk.')
+        views = self.load_views()  # [N, 4, 2, y, x]
+        # The inference with TNets can be optimzed, via splititng the views into three equally sized parts.
+        inp = (views[:, :, 0], np.zeros_like(views[:, :, 0]), np.zeros_like(views[:, :, 0]))
+        # return dist1, dist2, inp1, inp2, inp3 latent
+        _, _, latent, _, _ = model.predict_proba(inp)  # only use first view for now
+
+        # map latent vecs at rendering locs to skeleton node locations via nearest neighbor
+        self.load_skeleton()
+        if not 'view_ixs' in self.skeleton:
+            hull_tree = spatial.cKDTree(np.concatenate(self.sample_locations()))
+            dists, ixs = hull_tree.query(self.skeleton["nodes"] * self.scaling,
+                                         n_jobs=self.nb_cpus, k=1)
+            self.skeleton["view_ixs"] = ixs
+        self.skeleton[pred_key] = latent[self.skeleton["view_ixs"]]
+        self.save_skeleton()
 
     def cnn_axoness2skel(self, **kwargs):
         locking_tmp = self.enable_locking

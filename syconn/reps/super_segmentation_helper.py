@@ -24,7 +24,6 @@ from .segmentation_helper import load_skeleton, find_missing_sv_views,\
     find_missing_sv_attributes, find_missing_sv_skeletons
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 import time
-skeletopyze_available = False
 from ..reps import log_reps
 from .. import global_params
 from ..proc.meshes import                                                                                                                                                                                                                                                                                           write_mesh2kzip

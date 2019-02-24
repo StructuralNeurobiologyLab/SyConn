@@ -407,6 +407,24 @@ def sos_dict_fact(svixs, version=None, scaling=None, obj_type="sv",
 def predict_sos_views(model, sos, pred_key, nb_cpus=1, woglia=True,
                       verbose=False, raw_only=False, single_cc_only=False,
                       return_proba=False):
+    """
+
+    Parameters
+    ----------
+    model :
+    sos :
+    pred_key :
+    nb_cpus :
+    woglia :
+    verbose :
+    raw_only :
+    single_cc_only :
+    return_proba :
+
+    Returns
+    -------
+
+    """
     nb_chunks = np.max([1, len(sos) // 200])
     so_chs = basics.chunkify(sos, nb_chunks)
     all_probas = []
@@ -436,14 +454,14 @@ def predict_views(model, views, ch, pred_key, single_cc_only=False,
 
     Parameters
     ----------
-    model :
-    views :
-    ch :
-    pred_key :
-    single_cc_only :
-    verbose :
-    return_proba :
-    nb_cpus :
+    model : nn.Model
+    views : np.array
+    ch : List[SegmentationObject]
+    pred_key : str
+    single_cc_only : bool
+    verbose : bool
+    return_proba : bool
+    nb_cpus : int
 
     Returns
     -------

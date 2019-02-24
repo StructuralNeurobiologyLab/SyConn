@@ -1255,3 +1255,22 @@ def map_ssv_semseg(args):
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.semseg2mesh(**kwargs_semseg2mesh)
+
+
+def exctract_ssv_morphology_embedding(args):
+    ssv_obj_ids = args[0]
+    version = args[1]
+    version_dict = args[2]
+    working_dir = args[3]
+    pred_key = args[4]
+    global_params.wd = working_dir
+
+    ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
+                                   version_dict=version_dict)
+    from ..handler.prediction import get_tripletnet_model_e3
+    for ssv_id in ssv_obj_ids:
+        ssv = ssd.get_super_segmentation_object(ssv_id)
+        ssv.nb_cpus = global_params.NCORES_PER_NODE // 2  # TODO should be global_params.NGPU_PER_NODE
+        m = get_tripletnet_model_e3()
+        ssv.predict_views_embedding(m, pred_key)
+

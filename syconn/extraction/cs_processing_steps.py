@@ -1302,7 +1302,7 @@ def _classify_synssv_objects_thread(args):
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                          qsub_pe=None, qsub_queue=None,
-                                         nb_cpus=None, n_max_co_processes=None):
+                                         n_max_co_processes=None):
     """
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
@@ -1315,8 +1315,6 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     ssd_version : int
     qsub_pe : str
     qsub_queue : str
-    nb_cpus : int
-        CPUS per job
     n_max_co_processes : int
         Number of parallel jobs
     """
@@ -1365,6 +1363,7 @@ def _collect_properties_from_ssv_partners_thread(args):
             synssv_o.load_attr_dict()
 
             axoness = []
+            latent_morph = []
             spiness = []
             celltypes = []
             for ssv_partner_id in synssv_o.attr_dict["neuron_partners"]:
@@ -1373,7 +1372,10 @@ def _collect_properties_from_ssv_partners_thread(args):
                 # add pred_type key to global_params?
                 curr_ax = ssv_o.axoness_for_coords([synssv_o.rep_coord],
                                                    pred_type='axoness_avg10000')
+                curr_latent = ssv_o.attr_for_coords([synssv_o.rep_coord],
+                                                    attr_key='latent_morph')
                 axoness.append(curr_ax[0])
+                latent_morph.append(curr_latent[0])
                 # TODO: maybe use more than only a single rep_coord
                 curr_sp = ssv_o.semseg_for_coords([synssv_o.rep_coord],
                                                   'spiness')
@@ -1382,7 +1384,8 @@ def _collect_properties_from_ssv_partners_thread(args):
             sym_asym_ratio = synssv_o.attr_dict['syn_type_sym_ratio']
             syn_sign = -1 if sym_asym_ratio > global_params.sym_thresh else 1
             synssv_o.attr_dict.update({'partner_axoness': axoness, 'partner_spiness': spiness,
-                                       'partner_celltypes': celltypes, 'syn_sign': syn_sign})
+                                       'partner_celltypes': celltypes, 'syn_sign': syn_sign,
+                                       'latent_morph': latent_morph})
             this_attr_dc[synssv_id] = synssv_o.attr_dict
         this_attr_dc.push()
 

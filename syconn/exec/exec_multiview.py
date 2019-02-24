@@ -36,6 +36,26 @@ from syconn.handler.logger import initialize_logging
 from syconn.mp import batchjob_utils as qu
 
 
+def run_morphology_embedding():
+    log = initialize_logging('morphology_embedding', global_params.config.working_dir
+                             + '/logs/', overwrite=False)
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+    pred_key = "latent_morph"
+
+    multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id
+                               in ssd.ssv_ids])
+    # sort ssv ids according to their number of SVs (descending)
+    multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
+    multi_params = chunkify(multi_params, 2000)
+    # add ssd parameters
+    multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
+                     pred_key) for ssv_ids in multi_params]
+    qu.QSUB_script(multi_params, "generate_morphology_embedding", pe="openmp", queue=None,
+                   n_cores=10, suffix="", additional_flags="--gres=gpu:1", resume_job=False)  # removed -V (used with QSUB)
+    log.info('Finished extraction of cell morphology embedding.')
+
+
 def run_axoness_mapping():
     """Maps axon prediction of rendering locations onto SSV skeletons"""
     log = initialize_logging('axon_mapping', global_params.config.working_dir + '/logs/',
