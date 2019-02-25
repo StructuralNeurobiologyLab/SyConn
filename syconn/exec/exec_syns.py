@@ -40,26 +40,26 @@ def run_syn_analysis():
     #
     # cps.classify_synssv_objects(global_params.config.working_dir,
     #                             qsub_pe='openmp')
-    log.info('Synapse property prediction finished.')
-
-    # as an alternative to the skeletons, use vertex predictions or
-    # sample_locations, ~3.5h @ 300 cpus
-    # TODO: requires speed-up; one could collect properties only for synapses >
-    #  probability threshold
-    cps.collect_properties_from_ssv_partners(global_params.config.working_dir,
-                                             qsub_pe='openmp')
-
-    # collect new object attributes collected above partner axoness, celltypes,
-    # synapse probabilities etc, no need to compute size/rep_coord etc. ->
-    # recompute=False
-    dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True,
-                     recompute=False)
-    log.info('Synapse property collection from SSVs finished.')
-
-    log.info('Collecting and writing syn-ssv objects to SSV attribute '
-             'dictionary.')
-    map_synssv_objects(qsub_pe='openmp')
-    log.info('Finished.')
+    # log.info('Synapse property prediction finished.')
+    #
+    # # as an alternative to the skeletons, use vertex predictions or
+    # # sample_locations, ~3.5h @ 300 cpus
+    # # TODO: requires speed-up; one could collect properties only for synapses >
+    # #  probability threshold
+    # cps.collect_properties_from_ssv_partners(global_params.config.working_dir,
+    #                                          qsub_pe='openmp')
+    # #
+    # # collect new object attributes collected above partner axoness, celltypes,
+    # # synapse probabilities etc, no need to compute size/rep_coord etc. ->
+    # # recompute=False
+    # dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True,
+    #                  recompute=False)
+    # log.info('Synapse property collection from SSVs finished.')
+    #
+    # log.info('Collecting and writing syn-ssv objects to SSV attribute '
+    #          'dictionary.')
+    # # map_synssv_objects(qsub_pe='openmp')
+    # log.info('Finished.')
 
     # export_matrix
     log.info('Exporting connectivity matrix now.')

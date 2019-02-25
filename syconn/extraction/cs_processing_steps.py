@@ -1340,6 +1340,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
 
 def _collect_properties_from_ssv_partners_thread(args):
     """
+    TODO: Add property keys to args -> increased control of updates
     Helper function of 'collect_properties_from_ssv_partners'.
 
     Parameters
@@ -1370,12 +1371,12 @@ def _collect_properties_from_ssv_partners_thread(args):
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
                 ssv_o.load_attr_dict()
                 # add pred_type key to global_params?
-                curr_ax = ssv_o.axoness_for_coords([synssv_o.rep_coord],
-                                                   pred_type='axoness_avg10000')
-                curr_latent = ssv_o.attr_for_coords([synssv_o.rep_coord],
-                                                    attr_key='latent_morph')
-                axoness.append(curr_ax[0])
-                latent_morph.append(curr_latent[0])
+                curr_ax, curr_latent = ssv_o.attr_for_coords([synssv_o.rep_coord], attr_keys=['axoness_avg10000',
+                                                                                              'latent_morph'])[0]  # only one coordinate
+                if np.isscalar(curr_latent) and curr_latent == -1:
+                    curr_latent = np.array([-1] * global_params.ndim_embedding)
+                axoness.append(curr_ax)
+                latent_morph.append(curr_latent)
                 # TODO: maybe use more than only a single rep_coord
                 curr_sp = ssv_o.semseg_for_coords([synssv_o.rep_coord],
                                                   'spiness')
@@ -1422,6 +1423,8 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
     m_syn_prob = syn_prob[m]
     m_syn_sign = sd_syn_ssv.load_cached_data("syn_sign")[m]
     m_syn_asym_ratio = sd_syn_ssv.load_cached_data("syn_type_sym_ratio")[m]
+    m_latent_morph = sd_syn_ssv.load_cached_data("latent_morph")[m]  # N, 2, m
+    m_latent_morph = m_latent_morph.reshape(len(m_latent_morph), -1)  # N, 2*m
 
     # (loop of skeleton node generation)
     # make sure cache-arrays have ndim == 2
@@ -1429,7 +1432,7 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
     m_sp = m_sp.squeeze()  # N, 2
     m_syn_prob = m_syn_prob.squeeze()[:, None]  # N, 1
     table = np.concatenate([m_coords, m_ssv_partners, m_sizes, m_axs, m_cts,
-                            m_sp, m_syn_prob], axis=1)
+                            m_sp, m_syn_prob, m_latent_morph], axis=1)
 
     # do not overwrite previous files
     if os.path.isfile(dest_name + '.csv'):
@@ -1437,8 +1440,13 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
         os.rename(dest_name + '.csv', '{}_{}.csv'.format(dest_name, st))
 
     np.savetxt(dest_name + ".csv", table, delimiter="\t",
-               header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2"
-                      "\tcelltype1\tcelltype2\tspiness1\tspiness2\tsynprob")
+               header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tcelltype1\t"
+                      "celltype2\tspiness1\tspiness2\tsynprob" +
+                      "".join(["\tlatentmorph1_{}".format(ix) for ix in range(
+                          global_params.ndim_embedding)]) +
+                      "".join(["\tlatentmorph2_{}".format(ix) for ix in range(
+                          global_params.ndim_embedding)])
+               )
 
     ax_labels = np.array(["N/A", "D", "A", "S"])
     ax_label_ids = np.array([-1, 0, 1, 2])
@@ -1478,6 +1486,7 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
             skel_node.data['sp'] = m_sp[i_syn]
             skel_node.data['ct'] = m_cts[i_syn]
             skel_node.data['ax'] = m_axs[i_syn]
+            skel_node.data['latent_morph'] = m_latent_morph[i_syn]
             anno.addNode(skel_node)
         annotations.append(anno)
 

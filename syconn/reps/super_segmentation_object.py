@@ -1549,6 +1549,7 @@ class SuperSegmentationObject(object):
             Same length as coords. For every coordinate in coords returns the
             majority label within radius_nm
         """
+        # TODO: Allow multiple keys as in self.attr_for_coords, e.g. to include semseg axoness in a single query
         coords = np.array(coords) * self.scaling
         vertex_labels = self.label_dict('vertex')[semseg_key][::ds_vertices]
         vertices = self.mesh[1].reshape((-1, 3))[::ds_vertices]
@@ -2149,35 +2150,39 @@ class SuperSegmentationObject(object):
             Same length as coords. For every coordinate in coords returns the
             majority label within radius_nm
         """
-        return self.attr_for_coords(coords, pred_type, radius_nm)
+        return np.array(self.attr_for_coords(coords, [pred_type], radius_nm))
 
-    def attr_for_coords(self, coords, attr_key, radius_nm=None):
+    def attr_for_coords(self, coords, attr_keys, radius_nm=None):
         """
         TODO: move to super_segmentation_helper.py
-        Query prediction at given coordinates. Supports any attribute stored
-        in self.skeleton.
+        Query skeleton node attributes at given coordinates. Supports any
+        attribute stored in self.skeleton. If radius_nm is given, will
+        assign majority attribute value.
 
         Parameters
         ----------
         coords : np.array
             Voxel coordinates, unscaled! [N, 3]
-        radius_nm : float
-        attr_key : str
+        radius_nm : Optional[float]
+            If None, will only use attribute of nearest node, otherwise
+            majority attribute value is used.
+        attr_keys : List[str]
+            Attribute identifier
 
         Returns
         -------
-        np.array
+        List
             Same length as coords. For every coordinate in coords returns the
             majority label within radius_nm or [-1] if Key does not exist.
         """
+        if type(attr_keys) is str:
+            attr_keys = [attr_keys]
         coords = np.array(coords)
         self.load_skeleton()
         if self.skeleton is None or len(self.skeleton["nodes"]) == 0:
             log_reps.warn("Skeleton did not exist for SSV {} (size: {}; rep. coord.: "
                           "{}).".format(self.id, self.size, self.rep_coord))
-            return [-1]
-        if attr_key not in self.skeleton:  # for glia SSV this does not exist.
-            return [-1]
+            return -1 * np.ones((len(coords), len(attr_keys)))
 
         # get close locations
         kdtree = scipy.spatial.cKDTree(self.skeleton["nodes"] * self.scaling)
@@ -2187,27 +2192,40 @@ class SuperSegmentationObject(object):
         else:
             close_node_ids = kdtree.query_ball_point(coords * self.scaling,
                                                      radius_nm)
-        attr_list = []
+        result = []
         for i_coord in range(len(coords)):
             curr_close_node_ids = close_node_ids[i_coord]
-            if len(curr_close_node_ids) == 0:
-                dist, curr_close_node_ids = kdtree.query(coords * self.scaling)
-                log_reps.info(
-                    "Couldn't find skeleton nodes within {} nm. Using nearest "
-                    "one with distance {} nm. SSV ID {}, coordinate at {}."
-                    "".format(radius_nm, dist[0], self.id, coords[i_coord]))
-            cls, cnts = np.unique(
-                np.array(self.skeleton[attr_key])[np.array(curr_close_node_ids)],
-                return_counts=True)
-            if len(cls) > 0:
-                attr_list.append(cls[np.argmax(cnts)])
-            else:
-                log_reps.info("Did not find any skeleton node within {} nm at {}."
-                              " SSV {} (size: {}; rep. coord.: {}).".format(
-                    radius_nm, i_coord, self.id, self.size, self.rep_coord))
-                attr_list.append(-1)
-
-        return np.array(attr_list)
+            attr_list = []
+            for attr_key in attr_keys:
+                if attr_key not in self.skeleton:  # e.g. for glia SSV axoness does not exist.
+                    attr_list.append(-1)
+                    # # this is commented because there a legitimate cases for missing keys.
+                    # # TODO: think of a better warning / error raise
+                    # log_reps.warning(
+                    #     "KeyError: Could not find key '{}' in skeleton of SSV with ID {}. Setting to -1."
+                    #     "".format(attr_key, self.id))
+                    continue
+                if radius_nm is not None:  # might be multiple node ids
+                    if len(curr_close_node_ids) == 0:
+                        dist, curr_close_node_ids = kdtree.query(coords * self.scaling)
+                        log_reps.info(
+                            "Couldn't find skeleton nodes within {} nm. Using nearest "
+                            "one with distance {} nm. SSV ID {}, coordinate at {}."
+                            "".format(radius_nm, dist[0], self.id, coords[i_coord]))
+                    cls, cnts = np.unique(
+                        np.array(self.skeleton[attr_key])[np.array(curr_close_node_ids)],
+                        return_counts=True)
+                    if len(cls) > 0:
+                        attr_list.append(cls[np.argmax(cnts)])
+                    else:
+                        log_reps.info("Did not find any skeleton node within {} nm at {}."
+                                      " SSV {} (size: {}; rep. coord.: {}).".format(
+                            radius_nm, i_coord, self.id, self.size, self.rep_coord))
+                        attr_list.append(-1)
+                else:  # only nearest node ID
+                    attr_list.append(self.skeleton[attr_key][curr_close_node_ids])
+            result.append(attr_list)
+        return result
 
     def predict_views_axoness(self, model, verbose=False,
                               pred_key_appendix=""):

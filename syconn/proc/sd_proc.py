@@ -97,7 +97,17 @@ def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
             attr_dict[attribute] += this_attr_dict[attribute]
 
     for attribute in attr_dict:
-        np.save(sd.path + "/%ss.npy" % attribute, attr_dict[attribute])
+        try:
+            np.save(sd.path + "/%ss.npy" % attribute, attr_dict[attribute])
+        except ValueError as e:
+            log_proc.warn('ValueError {} encountered when writing numpy array caches in'
+                          ' "dataset_analysis", this is currently caught by using `dtype=object`'
+                          'which is not advised.'.format(e))
+            if 'setting an array element with a sequence' in str(e):
+                np.save(sd.path + "/%ss.npy" % attribute,
+                        np.array(attr_dict[attribute], dtype=np.object))
+            else:
+                raise ValueError(e)
 
 
 def _dataset_analysis_thread(args):

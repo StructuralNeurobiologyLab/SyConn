@@ -40,7 +40,7 @@ def run_morphology_embedding():
     log = initialize_logging('morphology_embedding', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    pred_key = "latent_morph"
+    pred_key_appendix = ""
 
     multi_params = np.array(ssd.ssv_ids, dtype=np.uint)
     nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id]) for ssv_id
@@ -50,7 +50,7 @@ def run_morphology_embedding():
     multi_params = chunkify(multi_params, 2000)
     # add ssd parameters
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
-                     pred_key) for ssv_ids in multi_params]
+                     pred_key_appendix) for ssv_ids in multi_params]
     qu.QSUB_script(multi_params, "generate_morphology_embedding", pe="openmp", queue=None,
                    n_cores=10, suffix="", additional_flags="--gres=gpu:1", resume_job=False)  # removed -V (used with QSUB)
     log.info('Finished extraction of cell morphology embedding.')
