@@ -179,6 +179,49 @@ class SyConnGateInteraction(object):
         r = self.session.get(self.server + '/all_syn_meta')
         return json.loads(r.content)
 
+    def push_so_attr(self, so_id, so_type, attr_key, attr_value):
+        """
+        Will invoke `so.save_attributes([attr_key], [attr_value)` of
+        `so = SegmentationDataset(obj_type=so_type).get_segmentation_object(so_id)`
+        on the server.
+
+        Parameters
+        ----------
+        so_id :
+        so_type :
+        attr_key :
+        attr_value :
+
+        Returns
+        -------
+        str | bytes
+            Server response
+        """
+        r = self.session.get(self.server + '/push_so_attr/{}/{}/{}/{}'.format(
+            so_id, so_type, attr_key, attr_value))
+        return r.content
+
+    def pull_so_attr(self, so_id, so_type, attr_key):
+        """
+        Will invoke `so.save_attributes([attr_key], [attr_value)` of
+        `so = SegmentationDataset(obj_type=so_type).get_segmentation_object(so_id)`
+        on the server.
+
+        Parameters
+        ----------
+        so_id :
+        so_type :
+        attr_key :
+
+        Returns
+        -------
+        str | bytes
+            Server response
+        """
+        r = self.session.get(self.server + '/pull_so_attr/{}/{}/{}'.format(
+            so_id, so_type, attr_key))
+        return r.content
+
 
 class InputDialog(QtGui.QDialog):
     """
@@ -350,6 +393,15 @@ class main_class(QtGui.QDialog):
         ssv2 = int(re.findall(', (\d+)\)', inp_str)[0])
         ix = index.row()
         tree_id = hash((ssv1, ssv2))
+        syn_id = self.all_syns['ids'][ix]
+        self._currently_active_syn = syn_id
+        # TODO: pull_so_attr and writing its results to `synapsetype_label_text` should run as a thread
+        syn_gt_syntype = self.syconn_gate.pull_so_attr(so_id=syn_id, so_type='syn_ssv',
+                                                       attr_key='gt_syntype')
+        if len(syn_gt_syntype) == 0:
+            self.synapsetype_label_text.clear()
+        else:
+            self.synapsetype_label_text.setText(syn_gt_syntype)
         c = [self.all_syns['coord_x'][ix], self.all_syns['coord_y'][ix],
              self.all_syns['coord_z'][ix]]
 
@@ -410,11 +462,11 @@ class main_class(QtGui.QDialog):
         self.clear_knossos_view_button = QtGui.QPushButton('Clear view')
 
         self.ssv_selector = QtGui.QListView()
-        self.ssv_selector.setUniformItemSizes(True) # better performance
+        self.ssv_selector.setUniformItemSizes(True)  # better performance
         self.ssv_item_model = QtGui.QStandardItemModel(self.ssv_selector)
 
         self.syn_selector = QtGui.QListView()
-        self.syn_selector.setUniformItemSizes(True) # better performance
+        self.syn_selector.setUniformItemSizes(True)  # better performance
         self.syn_item_model = QtGui.QStandardItemModel(self.syn_selector)
 
         self.direct_ssv_id_input = QtGui.QLineEdit()
@@ -459,6 +511,14 @@ class main_class(QtGui.QDialog):
         header.setSectionResizeMode(1, QtGui.QHeaderView.ResizeToContents)
         header.setSectionResizeMode(2, QtGui.QHeaderView.ResizeToContents)
 
+        self.send_synapsetype_label_button = QtGui.QPushButton('Send')
+
+        self.synapsetype_label = QtGui.QLabel()
+        self.synapsetype_label.setText("Synapse type label [-1: inhib.; 1: excit.]:")
+        self.synapsetype_label_text = QtGui.QLineEdit()
+        self.send_button_response_label = QtGui.QLabel()
+        self.send_button_response_label.setText("")
+
         self.exploration_mode_chk_box = QtGui.QCheckBox('Exploration mode')
         self.exploration_mode_chk_box.setChecked(True)
         #self.ssv_selection_model =
@@ -487,12 +547,17 @@ class main_class(QtGui.QDialog):
 
         layout.addWidget(self.synapse_field1, 2, 2, 1, 1)
         layout.addWidget(self.synapse_field2, 3, 2, 1, 1)
+        layout.addWidget(self.synapsetype_label, 4, 1, 1, 1)
+        layout.addWidget(self.synapsetype_label_text, 4, 2, 1, 2)
+        layout.addWidget(self.send_button_response_label, 5, 1, 1, 1)
+        layout.addWidget(self.send_synapsetype_label_button, 5, 2, 1, 1)
 
         #self.ssv_select_model.itemChanged.connect(self.on_ssv_selector_changed)
         #self.selectionModel.selectionChanged.connect(self.on_ssv_selector_changed)
 
         self.show_button.clicked.connect(self.show_button_clicked)
         self.clear_knossos_view_button.clicked.connect(self.clear_knossos_view_button_clicked)
+        self.send_synapsetype_label_button.clicked.connect(self.send_synapsetype_label_button_clicked)
         self.exploration_mode_chk_box.stateChanged.connect(self.exploration_mode_changed)
 
         # self.setGeometry(300, 300, 450, 300)
@@ -624,7 +689,20 @@ class main_class(QtGui.QDialog):
         trees = KnossosModule.skeleton.trees()
         ids_in_k = set([tree.tree_id() for tree in trees])
         [KnossosModule.skeleton.delete_tree(sv_id) for sv_id in ids_in_k]
+        return
 
+    def send_synapsetype_label_button_clicked(self):
+        syntype_label = self.synapsetype_label_text.text.decode()
+        if not syntype_label in ["-1", "1"]:
+            self.send_button_response_label.setText("INVALID LABEL '{}'".format(syntype_label))
+        else:
+            # TODO: parse syn_ssv ID from currently clicked synapse
+            curr_syn_id = self._currently_active_syn
+            r = self.syconn_gate.push_so_attr(so_id=str(curr_syn_id), so_type='syn_ssv',
+                                              attr_key='gt_syntype', attr_value=syntype_label)
+            if len(r) == 0:
+                r = "push successful."
+            self.send_button_response_label.setText(r)
         return
 
     def update_celltype(self, ssv_id):

@@ -779,6 +779,7 @@ def get_semseg_axon_model():
 
 
 def get_tripletnet_model_e3():
+    """Those networks are typically trained with `naive_view_normalization_new` """
     try:
         from elektronn3.models.base import InferenceModel
     except Exception as e:  # ImportError as e:

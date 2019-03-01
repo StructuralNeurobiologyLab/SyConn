@@ -2268,6 +2268,7 @@ class SuperSegmentationObject(object):
         -------
 
         """
+        from ..handler.prediction import naive_view_normalization_new
         pred_key = "latent_morph"
         pred_key += pred_key_appendix
         if self.version == 'tmp':
@@ -2275,6 +2276,8 @@ class SuperSegmentationObject(object):
                              'has version "tmp", results will'
                              ' not be saved to disk.')
         views = self.load_views()  # [N, 4, 2, y, x]
+        # TODO: add normalization to model - prevent potentially different normalization!
+        views = naive_view_normalization_new(views)
         # The inference with TNets can be optimzed, via splititng the views into three equally sized parts.
         inp = (views[:, :, 0], np.zeros_like(views[:, :, 0]), np.zeros_like(views[:, :, 0]))
         # return dist1, dist2, inp1, inp2, inp3 latent

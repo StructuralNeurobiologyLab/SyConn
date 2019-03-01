@@ -94,6 +94,18 @@ def route_ssv_list():
     return json.dumps(sg_state.backend.ssv_list(), cls=MyEncoder)
 
 
+@app.route('/pull_so_attr/<so_id>/<so_type>/<attr_key>', methods=['GET'])
+def pull_so_attr(so_id, so_type, attr_key):
+    return json.dumps(sg_state.backend.pull_so_attr(so_id, so_type, attr_key),
+                      cls=MyEncoder)
+
+
+@app.route('/push_so_attr/<so_id>/<so_type>/<attr_key>/<attr_value>', methods=['GET'])
+def push_so_attr(so_id, so_type, attr_key, attr_value):
+    return json.dumps(sg_state.backend.push_so_attr(so_id, so_type, attr_key, attr_value),
+                      cls=MyEncoder)
+
+
 @app.route('/svs_of_ssv/<ssv_id>', methods=['GET'])
 def route_svs_of_ssv(ssv_id):
     return json.dumps(sg_state.backend.svs_of_ssv(ssv_id), cls=MyEncoder)
@@ -141,7 +153,8 @@ class SyConnBackend(object):
 
         self.logger.info('SuperSegmentation dataset initialized.')
 
-        self.sd_synssv = SegmentationDataset(working_dir=syconn_path, obj_type='syn_ssv')
+        self.sds = dict(syn_ssv=SegmentationDataset(working_dir=syconn_path,
+                                                    obj_type='syn_ssv'))
 
         # directed networkx graph of connectivity
         self.conn_graph = conn.connectivity_to_nx_graph()
@@ -485,6 +498,57 @@ class SyConnBackend(object):
         syns['p0'] = self.syn_ssv_partner_0[idx]
         syns['p1'] = self.syn_ssv_partner_1[idx]
         return syns
+
+    def pull_so_attr(self, so_id, so_type, attr_key):
+        """
+        Generic attribute pull, return empty string if key did not exist. Could be optimized
+        with the assumption that all attributes have been cached as numpy arrays.
+
+        Parameters
+        ----------
+        so_id : int
+        so_type : str
+        attr_key : str
+
+        Returns
+        -------
+        str
+        """
+        if so_type not in self.sds:
+            self.sds[so_type] = SegmentationDataset(obj_type=so_type)
+        sd = self.sds[so_type]
+        so = sd.get_segmentation_object(so_id)
+        so.load_attr_dict()
+        if attr_key not in so.attr_dict:
+            return ''
+        return so.attr_dict[attr_key]
+
+    def push_so_attr(self, so_id, so_type, attr_key, attr_value):
+        """
+        Generic attribute pull, return empty string if key did not exist. Could be optimized
+        with the assumption that all attributes have been cached as numpy arrays.
+
+        Parameters
+        ----------
+        so_id : int
+        so_type : str
+        attr_key : str
+        attr_value :
+
+        Returns
+        -------
+        bytes
+            Empty string of everything went well
+        """
+        if so_type not in self.sds:
+            self.sds[so_type] = SegmentationDataset(obj_type=so_type)
+        sd = self.sds[so_type]
+        try:
+            so = sd.get_segmentation_object(so_id)
+            so.save_attributes([attr_key], [attr_value])
+            return ""
+        except Exception as e:
+            return str(e)
 
 
 class ServerState(object):
