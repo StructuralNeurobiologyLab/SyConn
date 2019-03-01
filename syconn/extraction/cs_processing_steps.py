@@ -1448,12 +1448,12 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
                           global_params.ndim_embedding)])
                )
 
-    ax_labels = np.array(["N/A", "D", "A", "S"])
+    ax_labels = np.array(["N/A", "D", "A", "S"])   # TODO: this is already defined in handler.multiviews!
     ax_label_ids = np.array([-1, 0, 1, 2])
     # Documentation of prediction labels, maybe add somewhere to .k.zip or .csv
-    ct_labels = ['N/A', 'EA', 'MSN', 'GP', 'INT']
+    ct_labels = ['N/A', 'EA', 'MSN', 'GP', 'INT']   # TODO: this is already defined in handler.multiviews!
     ct_label_ids = np.array([-1, 0, 1, 2, 3])
-    sp_labels = ['N/A', 'neck', 'head', 'shaft', 'other']
+    sp_labels = ['N/A', 'neck', 'head', 'shaft', 'other']  # TODO: this is already defined in handler.multiviews!
     sp_label_ids = np.array([-1, 0, 1, 2, 3])
 
     annotations = []

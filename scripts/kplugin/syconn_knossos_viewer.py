@@ -7,9 +7,11 @@
 
 # TODO: move code to syconn/ui/
 from PythonQt import QtGui, Qt, QtCore
+from PythonQt.QtGui import QTableWidget, QTableWidgetItem
 import KnossosModule
 import sys
 import requests
+import re
 import json
 sys.dont_write_bytecode = True
 import time
@@ -178,12 +180,55 @@ class SyConnGateInteraction(object):
         return json.loads(r.content)
 
 
+class InputDialog(QtGui.QDialog):
+    """
+    https://stackoverflow.com/questions/7046882/launch-a-pyqt-window-from-a-main-pyqt-window-and-get-the-user-input
+
+    inputter = InputDialog(mainWindowUI, title="comments", label="comments", text="")
+    inputter.exec_()
+    comment = inputter.text.text()
+    print comment
+    """
+
+    def __init__(self, parent=None):
+        QtGui.QWidget.__init__(self, parent)
+
+        # --Layout Stuff---------------------------#
+        mainLayout = QtGui.QVBoxLayout()
+
+        layout = QtGui.QHBoxLayout()
+        self.label = QtGui.QLabel()
+        self.label.setText("port")
+        layout.addWidget(self.label)
+        self.text = QtGui.QLineEdit("10001")
+        layout.addWidget(self.text)
+
+        self.ip = QtGui.QLabel()
+        self.ip.setText("host")
+        layout.addWidget(self.ip)
+        self.text_ip = QtGui.QLineEdit("0.0.0.0")
+        layout.addWidget(self.text_ip)
+
+        mainLayout.addLayout(layout)
+
+        # --The Button------------------------------#
+        layout = QtGui.QHBoxLayout()
+        button = QtGui.QPushButton("okay")  # string or icon
+        self.connect(button, QtCore.SIGNAL("clicked()"), self.close)
+        layout.addWidget(button)
+
+        mainLayout.addLayout(layout)
+        self.setLayout(mainLayout)
+
+        self.resize(250, 100)
+        self.setWindowTitle("SyConnGate Settings")
+
+
 class main_class(QtGui.QDialog):
     """
     KNOSSOS plugin class for the SyConn KNOSSOS viewer.
     """
-    def __init__(self, parent=KnossosModule.knossos_global_mainwindow,
-                                         host="0.0.0.0", port=10001):
+    def __init__(self, parent=KnossosModule.knossos_global_mainwindow):
         #Qt.QApplication.processEvents()
         super(main_class, self).__init__(parent, Qt.Qt.WA_DeleteOnClose)
         try:
@@ -192,13 +237,23 @@ class main_class(QtGui.QDialog):
         except KeyError:
             # Allow running from __main__ context
             pass
+
+        # get port
+        inputter = InputDialog(parent)
+        inputter.exec_()
+            # try:
+        port = int(inputter.text.text.decode())
+            # except Exception as e:
+            #     print(e)
         #self.start_logging()
+        host = inputter.text_ip.text.decode()
         self.syconn_gate = None
         self.host = host
         self.port = port
         self.ssv_selected1 = 0
         self.obj_tree_ids = set()
         self.obj_id_offs = 2000000000
+        self.all_syns = None
 
         self.init_syconn()
         self.build_gui()
@@ -228,34 +283,118 @@ class main_class(QtGui.QDialog):
         return
 
     def populate_syn_list(self):
-        all_syns = self.syconn_gate.get_all_syn_metda_data()
+        self.all_syns = self.syconn_gate.get_all_syn_metda_data()
 
         #print('list of all here')
         #print(len(all_ssv_ids))
-        for syn in zip(all_syns['ssv_partner_0'], all_syns['ssv_partner_1']):
+        for syn in zip(self.all_syns['ssv_partner_0'], self.all_syns['ssv_partner_1']):
             item = QtGui.QStandardItem(str(syn))
             self.syn_item_model.appendRow(item)
-
         self.syn_selector.setModel(self.syn_item_model)
         return
 
-
     def on_ssv_selector_changed(self, index):
         self.ssv_selected1 = int(self.ssv_selector.model().itemData(index)[0])
         #current, previous
         #print('selected: ' + str(self.ssv_selector.model().itemData(index)[0]))
         #ssv = self.get_ssv(self.ssv_selected1)
         #self.ssv_to_knossos(ssv)
-
         return
 
-    def on_ssv_selector_changed(self, index):
-        self.ssv_selected1 = int(self.ssv_selector.model().itemData(index)[0])
-        #current, previous
-        #print('selected: ' + str(self.ssv_selector.model().itemData(index)[0]))
-        #ssv = self.get_ssv(self.ssv_selected1)
-        #self.ssv_to_knossos(ssv)
+    def on_syn_selector_changed(self, index, signal_block=True):
+        """
+        `all_syns` contains the following keys:
+    cd_dict['syn_size'] =\
+        csd.load_cached_data('mesh_area') / 2  # as used in syn_analysis.py -> export_matrix
+    cd_dict['synaptivity_proba'] = \
+        csd.load_cached_data('syn_prob')
+    cd_dict['coord_x'] = \
+        csd.load_cached_data('rep_coord')[:, 0].astype(np.int)
+    cd_dict['coord_y'] = \
+        csd.load_cached_data('rep_coord')[:, 1].astype(np.int)
+    cd_dict['coord_z'] = \
+        csd.load_cached_data('rep_coord')[:, 2].astype(np.int)
+    cd_dict['ssv_partner_0'] = \
+        csd.load_cached_data('neuron_partners')[:, 0].astype(np.int)
+    cd_dict['ssv_partner_1'] = \
+        csd.load_cached_data('neuron_partners')[:, 1].astype(np.int)
+    cd_dict['neuron_partner_ax_0'] = \
+        csd.load_cached_data('partner_axoness')[:, 0].astype(np.int)
+    cd_dict['neuron_partner_ax_1'] = \
+        csd.load_cached_data('partner_axoness')[:, 1].astype(np.int)
+    cd_dict['neuron_partner_ct_0'] = \
+        csd.load_cached_data('partner_celltypes')[:, 0].astype(np.int)
+    cd_dict['neuron_partner_ct_1'] = \
+        csd.load_cached_data('partner_celltypes')[:, 1].astype(np.int)
+    cd_dict['neuron_partner_sp_0'] = \
+        csd.load_cached_data('partner_spiness')[:, 0].astype(np.int)
+    cd_dict['neuron_partner_sp_1'] = \
+        csd.load_cached_data('partner_spiness')[:, 1].astype(np.int)
 
+        Parameters
+        ----------
+        index :
+        signal_block :
+
+        Returns
+        -------
+
+        """
+        # disable knossos signal emission first - O(n^2) otherwise
+        if signal_block:
+            signalsBlocked = KnossosModule.knossos_global_skeletonizer.blockSignals(
+                True)
+
+        inp_str = self.syn_selector.model().itemData(index)[0]
+        ssv1 = int(re.findall('\((\d+),', inp_str)[0])
+        ssv2 = int(re.findall(', (\d+)\)', inp_str)[0])
+        ix = index.row()
+        tree_id = hash((ssv1, ssv2))
+        c = [self.all_syns['coord_x'][ix], self.all_syns['coord_y'][ix],
+             self.all_syns['coord_z'][ix]]
+
+        k_tree = KnossosModule.skeleton.find_tree_by_id(tree_id)
+        if k_tree is None:
+            k_tree = KnossosModule.skeleton.add_tree(tree_id)
+        # add synapse location
+        kn = KnossosModule.skeleton.add_node([c[0] + 1, c[1] + 1, c[2] + 1],
+                                            k_tree, {})  # x y swap?!
+        KnossosModule.skeleton.jump_to_node(kn)
+
+        # syn properties
+        syn_size = self.all_syns["syn_size"][ix]
+        syn_size = np.abs(syn_size)
+        # coordinate
+        self.synapse_field1.setItem(0, 1, QTableWidgetItem(str(c)))
+        # synapse type
+        self.synapse_field1.setItem(1, 1, QTableWidgetItem(str(self.all_syns['syn_sign'][ix])))
+        # synaptic probability
+        self.synapse_field1.setItem(2, 1, QTableWidgetItem(str(self.all_syns["synaptivity_proba"][ix])))
+        # synaptic size (area in um^2)
+        self.synapse_field1.setItem(3, 1, QTableWidgetItem(str(syn_size)))
+
+        # pre- and post synaptic properties
+        # IDs
+        self.synapse_field2.setItem(1, 1, QTableWidgetItem(str(self.all_syns["ssv_partner_0"][ix])))
+        self.synapse_field2.setItem(1, 2, QTableWidgetItem(str(self.all_syns["ssv_partner_1"][ix])))
+
+        # cell type
+        self.synapse_field2.setItem(2, 1, QTableWidgetItem(int2str_label_converter(self.all_syns["neuron_partner_ct_0"][ix], "ctgt")))
+        self.synapse_field2.setItem(2, 2, QTableWidgetItem(int2str_label_converter(self.all_syns["neuron_partner_ct_1"][ix], "ctgt")))
+
+        # cell compartments
+        self.synapse_field2.setItem(3, 1, QTableWidgetItem(int2str_label_converter(self.all_syns["neuron_partner_ax_0"][ix], "axgt")))
+        self.synapse_field2.setItem(3, 2, QTableWidgetItem(int2str_label_converter(self.all_syns["neuron_partner_ax_1"][ix], "axgt")))
+
+        # cell compartments
+        self.synapse_field2.setItem(4, 1, QTableWidgetItem(int2str_label_converter(self.all_syns["neuron_partner_sp_0"][ix], "spgt")))
+        self.synapse_field2.setItem(4, 2, QTableWidgetItem(int2str_label_converter(self.all_syns["neuron_partner_sp_1"][ix], "spgt")))
+
+        # enable signals again
+        if signal_block:
+            KnossosModule.knossos_global_skeletonizer.blockSignals(
+                signalsBlocked)
+            KnossosModule.knossos_global_skeletonizer.resetData()
         return
 
     def build_gui(self):
@@ -285,6 +424,41 @@ class main_class(QtGui.QDialog):
         # celltype
         self.celltype_field = QtGui.QLabel("CellType:      ", self)
 
+        # synapse
+        self.synapse_field1 = QTableWidget()
+        self.synapse_field1.setRowCount(4)
+        self.synapse_field1.setColumnCount(2)
+        self.synapse_field1.setItem(0, 0, QTableWidgetItem("coordinate"))
+        self.synapse_field1.setItem(0, 1, QTableWidgetItem("value"))
+        self.synapse_field1.setItem(1, 0, QTableWidgetItem("synaptic type"))
+        self.synapse_field1.setItem(1, 1, QTableWidgetItem(""))
+        self.synapse_field1.setItem(2, 0, QTableWidgetItem("syn. proba."))
+        self.synapse_field1.setItem(2, 1, QTableWidgetItem(""))
+        self.synapse_field1.setItem(3, 0, QTableWidgetItem("size [um^2]"))
+        self.synapse_field1.setItem(3, 1, QTableWidgetItem(""))
+        # self.synapse_field1.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)  # qt5
+        header = self.synapse_field1.horizontalHeader()
+        header.setSectionResizeMode(0, QtGui.QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QtGui.QHeaderView.ResizeToContents)
+        self.synapse_field1.setEditTriggers(QtGui.QAbstractItemView.NoEditTriggers)
+
+        self.synapse_field2 = QTableWidget()
+        self.synapse_field2.setRowCount(5)
+        self.synapse_field2.setColumnCount(3)
+        # TODO: sort by pre and post in 'on_syn_selector_changed' and replace neuron1 and neuron2 by pre and post
+        self.synapse_field2.setItem(0, 1, QTableWidgetItem("neuron 1"))
+        self.synapse_field2.setItem(0, 2, QTableWidgetItem("neuron 2"))
+        self.synapse_field2.setItem(1, 0, QTableWidgetItem("SSV ID"))
+        self.synapse_field2.setItem(2, 0, QTableWidgetItem("cell type"))
+        self.synapse_field2.setItem(3, 0, QTableWidgetItem("cell comp."))
+        self.synapse_field2.setItem(4, 0, QTableWidgetItem("spiness"))
+        # self.synapse_field2.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)  # qt5
+        self.synapse_field2.setEditTriggers(QtGui.QAbstractItemView.NoEditTriggers)
+        header = self.synapse_field2.horizontalHeader()
+        header.setSectionResizeMode(0, QtGui.QHeaderView.Stretch)
+        header.setSectionResizeMode(1, QtGui.QHeaderView.ResizeToContents)
+        header.setSectionResizeMode(2, QtGui.QHeaderView.ResizeToContents)
+
         self.exploration_mode_chk_box = QtGui.QCheckBox('Exploration mode')
         self.exploration_mode_chk_box.setChecked(True)
         #self.ssv_selection_model =
@@ -296,7 +470,7 @@ class main_class(QtGui.QDialog):
         #print('selection model: ' + str(self.ssv_selector.selectionModel()))
 
         self.ssv_selector.clicked.connect(self.on_ssv_selector_changed)
-        self.syn_selector.clicked.connect(self.on_ssv_selector_changed)
+        self.syn_selector.clicked.connect(self.on_syn_selector_changed)
 
         self.populate_ssv_list()
 
@@ -309,7 +483,10 @@ class main_class(QtGui.QDialog):
         layout.addWidget(self.show_button, 3, 0, 1, 1)
         layout.addWidget(self.clear_knossos_view_button, 3, 1, 1, 1)
         layout.addWidget(self.exploration_mode_chk_box, 4, 0, 1, 2)
-        layout.addWidget(self.celltype_field, 4, 2, 1, 2)
+        layout.addWidget(self.celltype_field, 2, 2, 1, 2)
+
+        layout.addWidget(self.synapse_field1, 2, 2, 1, 1)
+        layout.addWidget(self.synapse_field2, 3, 2, 1, 1)
 
         #self.ssv_select_model.itemChanged.connect(self.on_ssv_selector_changed)
         #self.selectionModel.selectionChanged.connect(self.on_ssv_selector_changed)
@@ -318,8 +495,8 @@ class main_class(QtGui.QDialog):
         self.clear_knossos_view_button.clicked.connect(self.clear_knossos_view_button_clicked)
         self.exploration_mode_chk_box.stateChanged.connect(self.exploration_mode_changed)
 
-        self.setGeometry(300, 300, 450, 300)
-        self.setWindowTitle('SyConn Viewer v1')
+        # self.setGeometry(300, 300, 450, 300)
+        self.setWindowTitle('SyConn Viewer v2')
         self.show()
         #self.merge_button = QtGui.QPushButton('Merge')
         #self.split_button = QtGui.QPushButton('Split')
@@ -351,7 +528,6 @@ class main_class(QtGui.QDialog):
         #self.gui_auto_agglo_line_edit.setText('0')
 
     def exploration_mode_changed(self):
-
         if self.exploration_mode_chk_box.isChecked():
             pass
             # enable selection polling timer
@@ -425,7 +601,6 @@ class main_class(QtGui.QDialog):
             obj_id_to_test = ssv_id + self.obj_id_offs + i
             if obj_id_to_test in obj_mesh_ids:
                 KnossosModule.skeleton.delete_tree(obj_id_to_test)
-
 
     def show_button_clicked(self):
         try:
@@ -586,8 +761,6 @@ class main_class(QtGui.QDialog):
             KnossosModule.skeleton.add_segment(nx_knossos_id_map[nx_src],
                                                nx_knossos_id_map[nx_tgt])
 
-        # TODO: add radius "diameters"
-
         # enable signals again
         if signal_block:
             KnossosModule.knossos_global_skeletonizer.blockSignals(
@@ -624,5 +797,58 @@ def lz4stringtoarr(string, dtype=np.float32, shape=None):
     return arr_1d
 
 
+def int2str_label_converter(label, gt_type):
+    """
+    Converts integer label into semantic string.
+
+    Parameters
+    ----------
+    label : int
+    gt_type : str
+        e.g. spgt for spines, axgt for cell compartments or ctgt for cell type
+
+    Returns
+    -------
+    str
+    """
+    if type(label) is list:
+        if len(label) != 1:
+            raise ValueError('Multiple labels given.')
+        label = label[0]
+    if gt_type == "axgt":
+        if label == 1:
+            return "axon"
+        elif label == 0:
+            return "dendrite"
+        elif label == 2:
+            return "soma"
+        else:
+            return "N/A"
+    elif gt_type == "spgt":
+        if label == 1:
+            return "head"
+        elif label == 0:
+            return "neck"
+        elif label == 2:
+            return "shaft"
+        elif label == 3:
+            return "other"
+        else:
+            return "N/A"
+    elif gt_type == 'ctgt':
+        if label == 1:
+            return "MSN"
+        elif label == 0:
+            return "EA"
+        elif label == 2:
+            return "GP"
+        elif label == 3:
+            return "INT"
+        else:
+            return "N/A"
+    else:
+        raise ValueError("Given ground truth type is not valid.")
+
+
 if __name__=='__main__':
-    A = main_class(port=10001)
+    A = main_class()

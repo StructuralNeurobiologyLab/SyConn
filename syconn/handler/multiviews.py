@@ -132,6 +132,20 @@ def str2intconverter(comment, gt_type):
 
 
 def int2str_converter(label, gt_type):
+    """
+    Converts integer label into semantic string. TODO: remove redundant definitions ->
+    single source of truth!
+
+    Parameters
+    ----------
+    label : int
+    gt_type : str
+        e.g. spgt for spines, axgt for cell compartments or ctgt for cell type
+
+    Returns
+    -------
+    str
+    """
     if gt_type == "axgt":
         if label == 1:
             return "gt_axon"
@@ -140,7 +154,7 @@ def int2str_converter(label, gt_type):
         elif label == 2:
             return "gt_soma"
         else:
-            return -1
+            return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
     elif gt_type == "spgt":
         if label == 1:
             return "head"
@@ -151,8 +165,20 @@ def int2str_converter(label, gt_type):
         elif label == 3:
             return "other"
         else:
-            return -1
-    else: raise ValueError("Given groundtruth type is not valid.")
+            return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
+    elif gt_type == 'ctgt':
+        if label == 1:
+            return "MSN"
+        elif label == 0:
+            return "EA"
+        elif label == 2:
+            return "GP"
+        elif label == 3:
+            return "INT"
+        else:
+            return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
+    else:
+        raise ValueError("Given ground truth type is not valid.")
 
 
 def img_rand_coloring(img):

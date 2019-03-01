@@ -172,6 +172,8 @@ def load_cached_data_dict(wd=None, syn_version=None):
         csd.load_cached_data('mesh_area') / 2  # as used in syn_analysis.py -> export_matrix
     cd_dict['synaptivity_proba'] = \
         csd.load_cached_data('syn_prob')
+    cd_dict['syn_sign'] = \
+        csd.load_cached_data('syn_sign').astype(np.int)  # -1 for inhibitory, +1 for excitatory
     cd_dict['coord_x'] = \
         csd.load_cached_data('rep_coord')[:, 0].astype(np.int)
     cd_dict['coord_y'] = \
@@ -194,6 +196,7 @@ def load_cached_data_dict(wd=None, syn_version=None):
         csd.load_cached_data('partner_spiness')[:, 0].astype(np.int)
     cd_dict['neuron_partner_sp_1'] = \
         csd.load_cached_data('partner_spiness')[:, 1].astype(np.int)
+
     log_reps.debug('Getting all objects took: {0}'.format(time.time() - start))
     return cd_dict
 

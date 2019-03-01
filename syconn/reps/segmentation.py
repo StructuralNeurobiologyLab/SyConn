@@ -162,6 +162,10 @@ class SegmentationDataset(object):
         return "%s/%s_%s/" % (self._working_dir, self.type, self.version)
 
     @property
+    def exists(self):
+        return os.path.isdir(self.path)
+
+    @property
     def path_sizes(self):
         return self.path + "/sizes.npy"
 

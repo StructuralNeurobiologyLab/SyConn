@@ -24,42 +24,42 @@ def run_syn_analysis():
                              overwrite=False)
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
+
+    # This will be replaced by the new method for the 'syn_ssv' generation,
+    # ~80 min @ 340 cpus
+    extract_synapse_type(sd_syn_ssv, kd_sym_path=global_params.config.kd_sym_path,
+                         stride=100,
+                         kd_asym_path=global_params.config.kd_asym_path,
+                         qsub_pe='openmp')
+    log.info('Synapse type was mapped to "syn_ssv".')
+
+    # ~1h
+    cps.map_objects_to_synssv(global_params.config.working_dir,
+                              qsub_pe='openmp')
+    log.info('Cellular organelles were mapped to "syn_ssv".')
+
+    cps.classify_synssv_objects(global_params.config.working_dir,
+                                qsub_pe='openmp')
+    log.info('Synapse property prediction finished.')
+
+    # as an alternative to the skeletons, use vertex predictions or
+    # sample_locations, ~3.5h @ 300 cpus
+    # TODO: requires speed-up; one could collect properties only for synapses >
+    #  probability threshold
+    cps.collect_properties_from_ssv_partners(global_params.config.working_dir,
+                                             qsub_pe='openmp')
     #
-    # # This will be replaced by the new method for the 'syn_ssv' generation,
-    # # ~80 min @ 340 cpus
-    # extract_synapse_type(sd_syn_ssv, kd_sym_path=global_params.config.kd_sym_path,
-    #                      stride=100,
-    #                      kd_asym_path=global_params.config.kd_asym_path,
-    #                      qsub_pe='openmp')
-    # log.info('Synapse type was mapped to "syn_ssv".')
-    #
-    # # ~1h
-    # cps.map_objects_to_synssv(global_params.config.working_dir,
-    #                           qsub_pe='openmp')
-    # log.info('Cellular organelles were mapped to "syn_ssv".')
-    #
-    # cps.classify_synssv_objects(global_params.config.working_dir,
-    #                             qsub_pe='openmp')
-    # log.info('Synapse property prediction finished.')
-    #
-    # # as an alternative to the skeletons, use vertex predictions or
-    # # sample_locations, ~3.5h @ 300 cpus
-    # # TODO: requires speed-up; one could collect properties only for synapses >
-    # #  probability threshold
-    # cps.collect_properties_from_ssv_partners(global_params.config.working_dir,
-    #                                          qsub_pe='openmp')
-    # #
-    # # collect new object attributes collected above partner axoness, celltypes,
-    # # synapse probabilities etc, no need to compute size/rep_coord etc. ->
-    # # recompute=False
-    # dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True,
-    #                  recompute=False)
-    # log.info('Synapse property collection from SSVs finished.')
-    #
-    # log.info('Collecting and writing syn-ssv objects to SSV attribute '
-    #          'dictionary.')
-    # # map_synssv_objects(qsub_pe='openmp')
-    # log.info('Finished.')
+    # collect new object attributes collected above partner axoness, celltypes,
+    # synapse probabilities etc, no need to compute size/rep_coord etc. ->
+    # recompute=False
+    dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True,
+                     recompute=False)
+    log.info('Synapse property collection from SSVs finished.')
+
+    log.info('Collecting and writing syn-ssv objects to SSV attribute '
+             'dictionary.')
+    # map_synssv_objects(qsub_pe='openmp')
+    log.info('Finished.')
 
     # export_matrix
     log.info('Exporting connectivity matrix now.')

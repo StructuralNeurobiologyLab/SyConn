@@ -18,6 +18,7 @@ from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
 from syconn import global_params
 from syconn.gate import log_gate
+from syconn.reps.segmentation import SegmentationDataset
 
 app = Flask(__name__)
 
@@ -140,6 +141,8 @@ class SyConnBackend(object):
 
         self.logger.info('SuperSegmentation dataset initialized.')
 
+        self.sd_synssv = SegmentationDataset(working_dir=syconn_path, obj_type='syn_ssv')
+
         # directed networkx graph of connectivity
         self.conn_graph = conn.connectivity_to_nx_graph()
         self.logger.info('Connectivity graph initialized.')
@@ -152,6 +155,7 @@ class SyConnBackend(object):
         for k, v in self.conn_dict.items():
             self.conn_dict[k] = v[idx_filter]
 
+        # removes synapses involving soma
         idx_filter = (self.conn_dict['neuron_partner_ax_0']
                       + self.conn_dict['neuron_partner_ax_1']) == 1
 
