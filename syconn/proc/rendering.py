@@ -46,6 +46,12 @@ else:
     msg = 'PYOpenGL environment has to be "egl" or "osmesa".'
     log_proc.error(msg)
     raise NotImplementedError(msg)
+try:
+    from ..reps.super_segmentation import *
+    import numpy as np
+    from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
+except Exception as error:
+    print('Caught this error: ' + repr(error))
 
 
 # ------------------------------------ General rendering code ------------------------------------------
@@ -1050,3 +1056,18 @@ def render_sso_ortho_views(sso):
     views[:, 3] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
                                  obj_to_render=('sj', ))
     return views
+
+def render_sso_coords_multiprocessing(params, n_job, verbose):
+    """
+    ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')  # running on cluster
+    # ssc=SuperSegmentationDataset('/home/atulm/mount/wb/wholebrain/scratch/areaxfs3/')    #running on local machine
+    ssv = ssc.get_super_segmentation_object(29753344)
+
+    exloc = np.array([5602, 4173, 4474]) * ssv.scaling
+    exlocs = np.concatenate(ssv.sample_locations())
+
+    views = render_sso_coords(ssv, exlocs[::10], verbose=True)
+    """
+    #print(params[3].exlocs)
+    res = start_multiprocess_imap(render_sso_coords, params, nb_cpus=n_job, verbose=verbose)
+

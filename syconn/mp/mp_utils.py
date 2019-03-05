@@ -189,13 +189,20 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
         with MyPool(nb_cpus) as pool:
             if show_progress:
                 result = parallel_process(params, func, nb_cpus)
+                print(len(params))
+                print("showing progress")
                 # # comparable speed but less continuous pbar updates
                 # result = list(tqdm.tqdm(pool.imap(func, params), total=len(params),
                 #                         ncols=80, leave=True, unit='jobs',
                 #                         unit_scale=True, dynamic_ncols=False))
             else:
                 result = list(pool.map(func, params))
+        print(len(params))
+        print("hahaha")
+
     else:
+        print(len(params))
+        print("kakaka")
         if show_progress:
             pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
                              unit='job', unit_scale=True, dynamic_ncols=False)
@@ -208,6 +215,9 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
             result = []
             for p in params:
                 result.append(func(p))
+        print(len(params))
+        print("kakaka")
+
     if verbose:
         log_mp.debug("Time to compute: {:.1f} min".format((time.time() - start) / 60.))
 
