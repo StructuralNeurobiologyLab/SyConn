@@ -1075,9 +1075,10 @@ class SuperSegmentationObject(object):
             dest_filename = dest_dir + "/" + fnames[i]
             try:
                 safe_copy(src_filename, dest_filename, safe=safe)
-                log_reps.info("Copied %s to %s." % (src_filename, dest_filename))
+                log_reps.debug("Copied %s to %s." % (src_filename, dest_filename))
             except Exception as e:
-                log_reps.error("Skipped", fnames[i], str(e))
+                log_reps.error("Skipped '{}', due to the following error: '{}'"
+                               "".format(fnames[i], str(e)))
                 pass
         self.load_attr_dict()
         if os.path.isfile(dest_dir + "/attr_dict.pkl"):
@@ -2502,10 +2503,12 @@ def celltype_predictor(args):
     -------
 
     """
-    from ..handler.prediction import get_celltype_model
+    # from ..handler.prediction import get_celltype_model
+    from ..handler.prediction import get_celltype_model_e3
     ssv_ids = args
     # randomly initialize gpu
-    m = get_celltype_model(init_gpu=0)
+    # m = get_celltype_model(init_gpu=0)
+    m = get_celltype_model_e3()
     pbar = tqdm.tqdm(total=len(ssv_ids))
     missing_ssvs = []
     for ix in ssv_ids:

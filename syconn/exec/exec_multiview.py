@@ -125,12 +125,12 @@ def run_axoness_prediction(n_jobs=100):
 
 
 def run_celltype_prediction(n_jobs=100):
+    # TODO: changed to new cell type predictions, work this in everywhere (keys: celltype_cnn_e3_probas and celltype_cnn_e3)
     log = initialize_logging('celltype_prediction', global_params.config.working_dir+ '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     # shuffle SV IDs
     np.random.seed(0)
-    ssv_ids = ssd.ssv_ids
 
     log.info('Starting cell type prediction.')
     nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])

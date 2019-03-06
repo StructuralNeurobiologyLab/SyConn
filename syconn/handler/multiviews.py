@@ -177,6 +177,13 @@ def int2str_converter(label, gt_type):
             return "INT"
         else:
             return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
+    elif gt_type == 'ctgt_v2':
+        l_dc_inv = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GPe=5, FS=6, TAN=7)
+        l_dc = {v: k for k, v in l_dc_inv.items()}
+        try:
+            return l_dc[label]
+        except KeyError:
+            return -1
     else:
         raise ValueError("Given ground truth type is not valid.")
 

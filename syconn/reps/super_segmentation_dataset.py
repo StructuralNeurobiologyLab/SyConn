@@ -29,6 +29,7 @@ from ..mp import batchjob_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
 from ..mp import mp_utils as sm
 from .. import global_params
+from . import log_reps
 
 
 class SuperSegmentationDataset(object):
@@ -120,6 +121,10 @@ class SuperSegmentationDataset(object):
 
         if sv_mapping is not None:
             self.apply_mergelist(sv_mapping)
+
+    def __repr__(self):
+        return 'SSD of type "{}", version "{}" stored at "{}"'.format(self.type, self.version,
+                                                                      self.path)
 
     @property
     def type(self):
@@ -362,6 +367,7 @@ class SuperSegmentationDataset(object):
 
     def export_skeletons(self, obj_types, apply_mapping=True, stride=1000,
                          qsub_pe=None, qsub_queue=None, nb_cpus=1):
+        # TODO: there is another `export_skeletons` defined outside this class, refactor!
         multi_params = []
         for ssv_id_block in [self.ssv_ids[i:i + stride]
                              for i in
@@ -547,6 +553,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
         else:
             np.save(ssd.path + "/%ss.npy" % attribute,
                     attr_dict[attribute])
+    log_reps.info('Finished `save_dataset_deep`of {}.'.format(repr(ssd)))
 
 
 def _write_super_segmentation_dataset_thread(args):
@@ -664,8 +671,6 @@ def _export_ssv_to_knossosdataset_thread(args):
     ssd.load_mapping_dict()
 
     for ssv_obj_id in ssv_obj_ids:
-        print(ssv_obj_id)
-
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
 
         offset = ssv_obj.bounding_box[0]
@@ -797,7 +802,8 @@ def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
     else:
         raise Exception("QSUB not available")
 
-    print("N no skeletons: %d" % no_skel_cnt)
+    # log_reps.info("N no skeletons: %d" % no_skel_cnt)
+    log_reps.info("N missing skeletons during 'export_skeletons': %d" % no_skel_cnt)
 
 
 def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
@@ -991,8 +997,6 @@ def export_to_knossosdataset_thread(args):
     ssd.load_mapping_dict()
 
     for ssv_obj_id in ssv_obj_ids:
-        print(ssv_obj_id)
-
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id, True)
 
         offset = ssv_obj.bounding_box[0]
@@ -1056,7 +1060,6 @@ def reskeletonize_objects_small_ones_thread(args):
     ssd.load_mapping_dict()
 
     for ssv_id in ssv_obj_ids:
-        print("------------", ssv_id)
         ssv = ssd.get_super_segmentation_object(ssv_id, True)
         if np.product(ssv.shape) > 1e10:
             continue
@@ -1108,7 +1111,6 @@ def write_super_segmentation_dataset_thread(args):
     attr_dict = dict(id=[])
 
     for ssv_obj_id in ssv_obj_ids:
-        print(ssv_obj_id)
         ssv_obj = ssd.get_super_segmentation_object(ssv_obj_id,
                                                     new_mapping=True,
                                                     create=True)
@@ -1173,14 +1175,14 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1):
     """
     Creates a new SSD specified with 'version' with a copy of the given SSVs.
     Usually used for generating distinct GT SSDs. Based on the common supervoxel
-    dataset.
+    dataset (e.g. `ssv_0`).
 
     Parameters
     ----------
     ssvs : list of SuperSegmentationObject
-        source SuperSegmentationObjects
+        source SuperSegmentationObjects taken from default SSD in working directory
     new_version : str
-        version of the new SSV SuperSegmentationDataset
+        version of the new SSV SuperSegmentationDataset where SSVs will be copied to
     target_wd :
         path to working directory. If None, the one set in gloabal_prams is used
     n_jobs : int
@@ -1195,7 +1197,7 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1):
                                           working_dir=target_wd, sv_ids=old_ssv.sv_ids,
                                           scaling=old_ssv.scaling)
         old_ssv.copy2dir(dest_dir=new_ssv.ssv_dir)
-    print("Saving dataset deep.")
+    log_reps.info("Saving dataset deep.")
     new_ssd.save_dataset_deep(new_mapping=False, nb_cpus=n_jobs)
 
 
@@ -1231,14 +1233,14 @@ def preproc_sso_skelfeature_thread(args):
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.load_skeleton()
         if ssv.skeleton is None or len(ssv.skeleton["nodes"]) <= 1:
-            print("Skeleton of SSV %d has zero nodes." % ssv_id)
+            log_reps.warning("Skeleton of SSV %d has zero nodes." % ssv_id)
             continue
         for feat_ctx_nm in [500, 1000, 2000, 4000, 8000]:
             try:
                 _ = ssv.skel_features(feat_ctx_nm)
             except IndexError as e:
-                print("Error at SSO %d (context: %d).\n%s" % (
-                      ssv.id, feat_ctx_nm, e))
+                log_reps.error("Error at SSO %d (context: %d).\n%s" % (
+                               ssv.id, feat_ctx_nm, e))
 
 
 def map_ssv_semseg(args):

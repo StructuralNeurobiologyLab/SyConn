@@ -96,15 +96,15 @@ def nodes_in_pathlength(anno, max_path_len):
 
 def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
     sso.load_attr_dict()
-    if not overwrite and "celltype_cnn" in sso.attr_dict:
+    if not overwrite and "celltype_cnn_e3" in sso.attr_dict:
         return
     out_d = sso_views_to_modelinput(sso, nb_views)
     res = model.predict_proba(out_d)
     clf = np.argmax(res, axis=1)
     ls, cnts = np.unique(clf, return_counts=True)
     pred = ls[np.argmax(cnts)]
-    sso.save_attributes(["celltype_cnn"], [pred])
-    sso.save_attributes(["celltype_cnn_probas"], [res])
+    sso.save_attributes(["celltype_cnn_e3"], [pred])
+    sso.save_attributes(["celltype_cnn_e3_probas"], [res])
 
 
 def sso_views_to_modelinput(sso, nb_views, view_key=None):
@@ -974,6 +974,21 @@ def save_view_pca_proj(sso, t_net, pca, dest_dir, ls=20, s=6.0, special_points=(
 
 def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=1000,
                           obj_types=("sj", "mi", "vc"), downsample_to=None):
+    """
+
+    Parameters
+    ----------
+    ssv
+    feature_context_nm : int
+        effective field for feature statistic 2*feature_context_nm
+    max_diameter
+    obj_types
+    downsample_to
+
+    Returns
+    -------
+
+    """
     node_degrees = np.array(list(dict(ssv.weighted_graph().degree()).values()),
                             dtype=np.int)
 
@@ -1005,7 +1020,7 @@ def extract_skel_features(ssv, feature_context_nm=8000, max_diameter=1000,
         neigh_diameters = ssv.skeleton["diameters"][neighs]
         this_features.append(np.mean(neigh_diameters))
         this_features.append(np.std(neigh_diameters))
-        hist_feat = np.histogram(neigh_diameters,bins=10,range=(0, max_diameter))[0]
+        hist_feat = np.histogram(neigh_diameters, bins=10, range=(0, max_diameter))[0]
         hist_feat = np.array(hist_feat) / hist_feat.sum()
         this_features += list(hist_feat)
         this_features.append(np.mean(node_degrees[neighs]))

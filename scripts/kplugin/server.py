@@ -18,6 +18,7 @@ from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
 from syconn import global_params
 from syconn.gate import log_gate
+from syconn.handler.multiviews import int2str_converter
 from syconn.reps.segmentation import SegmentationDataset
 
 app = Flask(__name__)
@@ -421,16 +422,18 @@ class SyConnBackend(object):
         :param sv_id:
         :return:
         """
+        # TODO: changed to new cell type predictions, work this in everywhere
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         label = ""
-        if "celltype_cnn_probas" in ssv.attr_dict:
-            l = ssv.attr_dict["celltype_cnn"]
-            ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
-            label = ct_label_dc[l]
+        if "celltype_cnn_e3_probas" in ssv.attr_dict:
+            l = ssv.attr_dict["celltype_cnn_e3"]
+            # ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
+            # label = ct_label_dc[l]
+            label = int2str_converter(l, gt_type='ctgt_v2')
         else:
             log_gate.debug("Celltype prediction not present in attribute "
-                           "dict of SSV {}at {}.".format(ssv_id, ssv.attr_dict_path))
+                           "dict of SSV {} at {}.".format(ssv_id, ssv.attr_dict_path))
         return {'ct': label}
 
     def svs_of_ssv(self, ssv_id):

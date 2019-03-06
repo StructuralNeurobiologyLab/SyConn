@@ -752,6 +752,21 @@ def get_celltype_model(init_gpu=None):
     return m
 
 
+def get_celltype_model_e3():
+    """Those networks are typically trained with `naive_view_normalization_new` """
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    path = global_params.config.mpath_celltype_e3
+    m = InferenceModel(path)
+    m._path = path
+    return m
+
+
+
 def get_semseg_spiness_model():
     try:
         from elektronn3.models.base import InferenceModel
