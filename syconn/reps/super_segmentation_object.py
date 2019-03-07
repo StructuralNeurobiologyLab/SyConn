@@ -1057,6 +1057,7 @@ class SuperSegmentationObject(object):
         for GT purposes, then on can call ssv_orig.copy2dir(ssv_target.ssv_dir)
          and all data contained in the SSD of ssv_orig will be copied to
          the SSD of ssv_target.
+
         Parameters
         ----------
         dest_dir : str

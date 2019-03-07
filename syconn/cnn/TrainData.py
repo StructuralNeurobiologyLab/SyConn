@@ -26,6 +26,7 @@ except ImportError as e:
     Dataset = None
     Identity = None
 from typing import Callable
+from sklearn.utils.class_weight import compute_class_weight
 import h5py
 import glob
 from scipy import spatial
@@ -112,8 +113,8 @@ if elektronn3_avail:
         def __len__(self):
             """Determines epoch size(s)"""
             if not self.train:
-                return 100
-            return 1000
+                return 200
+            return 2000
 
 
     class MultiviewData_TNet_online(Dataset):
@@ -295,6 +296,10 @@ class MultiViewData(Data):
                 raise ValueError('Value fraction can only be set if splitting dict is not available.')
             self.splitting_dict = load_pkl2obj(self.gt_dir +
                                                "%s_splitting.pkl" % gt_type)
+        classes, c_cnts = np.unique([self.label_dict[ix] for ix in
+                                     self.splitting_dict['train']], return_counts=True)
+        print('SSV class distribution in training set [labels, counts]: {}, {}'
+              ''.format(classes, c_cnts))
         self.ssd = SuperSegmentationDataset(working_dir, version=gt_type)
         if not load_data:
             self.test_d = np.zeros((1, 1))
@@ -423,13 +428,15 @@ class CelltypeViews(MultiViewData):
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
         self.reduce_context = reduce_context
-        self.max_nb_cache_uses = 2000
+        self.cache_size = 2000
+        self.max_nb_cache_uses = self.cache_size * 2  # Flip augmentations, shuffling, etc  # TODO: add RandomPermute to e3
         self.current_cache_uses = 0
         assert n_classes == len(class_weights)
         self.n_classes = n_classes
         self.class_weights = np.array(class_weights)
         self.view_cache = {'train': None, 'valid': None, 'test': None}
         self.label_cache = {'train': None, 'valid': None, 'test': None}
+        self.sample_weights = {'train': None, 'valid': None, 'test': None}
         self.reduce_context_fact = reduce_context_fact
         self.binary_views = binary_views
         self.example_shape = (nb_views, 4, 2, 128, 256)
@@ -481,7 +488,7 @@ class CelltypeViews(MultiViewData):
             class_sample_weight = self.class_weights
             np.random.shuffle(labels2draw)  # change order
             for i in labels2draw:
-                curr_nb_samples = nb_ssv // self.n_classes * class_sample_weight[i]  # sample more EA and MSN
+                curr_nb_samples = nb_ssv // self.n_classes * class_sample_weight[i]
                 try:
                     if source == "train":
                         sample_ixs.append(np.random.choice(self.train_d[self.train_l == i],
@@ -509,14 +516,14 @@ class CelltypeViews(MultiViewData):
             self.view_cache[source] = [sso.load_views(view_key=self.view_key)
                                        for sso in ssos]
             self.label_cache[source] = l
+            # TODO: behaviour is highly dependent on sklearn version!
+            self.sample_weights[source] = compute_class_weight('balanced',
+                                                               np.unique(l), l)
             # draw big cache batch from current SSOs from which training batches are drawn
             self.view_cache[source], self.label_cache[source] = transform_celltype_data_views(
-                self.view_cache[source], self.label_cache[source], 2000, self.nb_views, norm_func=naive_view_normalization_new)
+                self.view_cache[source], self.label_cache[source], self.cache_size, self.nb_views, norm_func=naive_view_normalization_new)
             self.current_cache_uses = 0
-        ixs = np.arange(len(self.view_cache[source]))
-        with temp_seed(None):
-            np.random.shuffle(ixs)
-        ixs = ixs[:batch_size]
+        ixs = np.random.choice(np.arange(len(self.view_cache[source])), batch_size, replace=False)
         d, l = self.view_cache[source][ixs], self.label_cache[source][ixs]
         if self.reduce_context > 0:
             d = d[:, :, :, (self.reduce_context/2):(-self.reduce_context/2),
@@ -575,9 +582,13 @@ class CelltypeViews(MultiViewData):
                 ssos.append(sso)
             self.view_cache[source] = [sso.load_views(view_key=self.view_key) for sso in ssos]
             self.label_cache[source] = l
+            # TODO: behaviour is dependent on sklearn version!
+            self.sample_weights[source] = compute_class_weight('balanced',
+                                                               np.unique(l), l)
             self.current_cache_uses = 0
         ixs = np.arange(len(self.view_cache[source]))
         with temp_seed(None):
+            # draw sample accoridng to their class weights
             np.random.shuffle(ixs)
         self.view_cache[source] = [self.view_cache[source][ix] for ix in ixs]
         self.label_cache[source] = self.label_cache[source][ixs]
