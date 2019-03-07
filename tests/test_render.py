@@ -2,6 +2,7 @@ from syconn.reps.super_segmentation import  SuperSegmentationDataset
 import numpy as np
 from syconn.proc.rendering import render_sso_coords, render_sso_coords_multiprocessing
 import time
+import itertools
 
 class data:
     ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')
@@ -14,16 +15,15 @@ class data:
         self.exlocs = np.concatenate(ssv.sample_locations())
 
 
-    def merge(self, param):
-
-
+    #def merge(self, param):
+        #
 
 
 if __name__=='__main__':
     # TODO: use toy data and improve logging, see test_backend.py
     now = time.time()
     print(now)
-    n=1
+    n = 1
     ssv = []
     exloc = []
     exlocs = []
@@ -40,13 +40,81 @@ if __name__=='__main__':
         params.append(entry)
         
     """
-    params = []
-    for i in range(n):
-        params.append(data())
-        print(params[i].exlocs)
-        print(params[i].ssc)
+    """
+        ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')  # running on cluster
+        # ssc=SuperSegmentationDataset('/home/atulm/mount/wb/wholebrain/scratch/areaxfs3/')    #running on local machine
+        ssv = ssc.get_super_segmentation_object(29753344)
 
-    render_sso_coords_multiprocessing(params, n_job=n, verbose=True)
+        exloc = np.array([5602, 4173, 4474]) * ssv.scaling
+        exlocs = np.concatenate(ssv.sample_locations())
+
+        views = render_sso_coords(ssv, exlocs[::10], verbose=True)
+    """
+    params = []
+    ssv1 = []
+    real_params = []
+    real_params2 = []
+    j = 0
+    k = 0
+
+    #for i in range(n):
+     #   params.append(data())
+      #  print(params[i].exlocs)
+       # print(params[i].ssc)
+    """
+    for i in range(n):
+        ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')
+        ssv = ssc.get_super_segmentation_object(29753344)
+        #print(i)
+        ssv1.append(ssv)
+        exloc = np.array([5602, 4173, 4474]) * ssv.scaling
+        exlocs = np.concatenate(ssv.sample_locations())
+        l = 0
+        l = len(exlocs)
+        for i in range(l):
+            ssv1.append(ssv)
+            j = (j+1)
+            #print(j)
+        params.extend(exlocs)
+        k = (k+l)
+        print(k)
+    #print(len(params))
+    #print(len(ssv1))
+    for i in range(k):
+        real_params.append(0)
+    for i in range(j):
+        real_params[i] = (ssv1[i], params[i])
+    """
+    for i in range(n):
+        ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')
+        ssv = ssc.get_super_segmentation_object(29753344)
+        #print(i)
+        #ssv1.append(ssv)
+        exloc = np.array([5602, 4173, 4474]) * ssv.scaling
+        exlocs = np.concatenate(ssv.sample_locations())
+        for kk, coords in enumerate(exlocs, k):
+
+            params_thread = [ssv, coords]
+            real_params2.append(params_thread)
+        l = 0
+        l = len(exlocs)
+        k = (k+l)
+        print(k)
+        print("Reading data so far")
+    #print(len(params))
+    #print(len(ssv1))
+    print(len(real_params2))
+    print(real_params2[3000])
+    """
+    for i in range(k):
+        real_params.append(0)
+    for i in range(k):
+        real_params[i] = (ssv1[i], params[i])
+    """
+    now2 = time.time()
+    print("time for reading data")
+    print(now2-now)
+    render_sso_coords_multiprocessing(real_params2, n_job=n, verbose=True)
     now1 = time.time()
     print(now1)
     print(now1-now)

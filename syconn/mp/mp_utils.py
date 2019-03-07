@@ -78,6 +78,7 @@ def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
             [function(array[0]), function(array[1]), ...]
     """
     #We run the first few iterations serially to catch bugs
+    print("is in parallel_process")
     if front_num > 0:
         front = [function(**a) if use_kwargs else function(a) for a in array[:front_num]]
     else:
@@ -87,7 +88,9 @@ def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
         #Pass the elements of array into function
         if use_kwargs:
             futures = [pool.submit(function, **a) for a in array[front_num:]]
+            print("parallel_process is working 1")
         else:
+            print("parallel_process is working 2")
             futures = [pool.submit(function, a) for a in array[front_num:]]
         kwargs = {
             'total': len(futures),
@@ -107,6 +110,7 @@ def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
             out.append(future.result())
         except Exception as e:
             out.append(e)
+    print("done with parallel_process")
     return front + out
 
 

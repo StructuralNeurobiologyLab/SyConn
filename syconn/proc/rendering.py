@@ -1058,6 +1058,9 @@ def render_sso_ortho_views(sso):
     return views
 
 def render_sso_coords_multiprocessing(params, n_job, verbose):
+    #sso, coords, add_cellobjects, verbose, clahe,\
+    #ws, cellobjects_only, wire_frame,\
+    #nb_views, comp_window, rot_mat, return_rot_mat = args
     """
     ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')  # running on cluster
     # ssc=SuperSegmentationDataset('/home/atulm/mount/wb/wholebrain/scratch/areaxfs3/')    #running on local machine
@@ -1068,6 +1071,8 @@ def render_sso_coords_multiprocessing(params, n_job, verbose):
 
     views = render_sso_coords(ssv, exlocs[::10], verbose=True)
     """
+    #coords = [10000]
+    #views = render_sso_coords(sso, coord, verbose=True)
     #print(params[3].exlocs)
     res = start_multiprocess_imap(render_sso_coords, params, nb_cpus=n_job, verbose=verbose)
 
