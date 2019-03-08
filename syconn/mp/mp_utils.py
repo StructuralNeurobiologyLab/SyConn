@@ -62,7 +62,7 @@ MyPool = multiprocessing.Pool
 #             super(MyPool, self).__init__(*args, **kwargs)
 
 
-def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
+def parallel_process(array, function, n_jobs, use_kwargs=True, front_num=0):
     """From http://danshiebler.com/2016-09-14-parallel-progress-bar/
         A parallel version of the map function with a progress bar.
 
@@ -297,3 +297,76 @@ def multi_helper_obj(args):
     if not hasattr(attr, '__call__'):
         return attr
     return attr(**kwargs)
+
+
+def start_multiprocess_imap_sso(func, sso, params, debug=False, verbose=False,
+                            nb_cpus=None, show_progress=True):
+    """
+    Multiprocessing method which supports progress bar (therefore using
+    imap instead of map). # TODO: support generator params
+
+    Parameters
+    ----------
+    func : function
+    params : Iterable
+        function parameters
+    debug : boolean
+    verbose : bool
+    nb_cpus : int
+    show_progress : bool
+
+    Returns
+    -------
+    result: list
+        list of function returns
+    """
+    if nb_cpus is None:
+        nb_cpus = cpu_count()
+
+    nb_cpus = min(nb_cpus, len(params), cpu_count())
+
+    if debug:
+        nb_cpus = 1
+
+    if verbose:
+        log_mp.debug("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
+
+    start = time.time()
+    if nb_cpus > 1:
+        with MyPool(nb_cpus) as pool:
+            if show_progress:
+                result = parallel_process_sso(sso, params, func, nb_cpus)
+                print(len(params))
+                print("showing progress")
+                # # comparable speed but less continuous pbar updates
+                # result = list(tqdm.tqdm(pool.imap(func, params), total=len(params),
+                #                         ncols=80, leave=True, unit='jobs',
+                #                         unit_scale=True, dynamic_ncols=False))
+            else:
+                result = list(pool.map(func, params))
+        print(len(params))
+        print("hahaha")
+
+    else:
+        print(len(params))
+        print("kakaka")
+        if show_progress:
+            pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
+                             unit='job', unit_scale=True, dynamic_ncols=False)
+            result = []
+            for p in params:
+                result.append(func(p))
+                pbar.update(1)
+            pbar.close()
+        else:
+            result = []
+            for p in params:
+                result.append(func(p))
+        print(len(params))
+        print("kakaka")
+
+    if verbose:
+        log_mp.debug("Time to compute: {:.1f} min".format((time.time() - start) / 60.))
+
+    return result
+

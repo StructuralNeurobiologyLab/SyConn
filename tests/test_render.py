@@ -23,7 +23,7 @@ if __name__=='__main__':
     # TODO: use toy data and improve logging, see test_backend.py
     now = time.time()
     print(now)
-    n = 1
+    n = 4
     ssv = []
     exloc = []
     exlocs = []
@@ -56,12 +56,13 @@ if __name__=='__main__':
     real_params2 = []
     j = 0
     k = 0
-
+    ln = []
+    ln.append(0)
     #for i in range(n):
      #   params.append(data())
       #  print(params[i].exlocs)
        # print(params[i].ssc)
-    """
+
     for i in range(n):
         ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')
         ssv = ssc.get_super_segmentation_object(29753344)
@@ -69,6 +70,7 @@ if __name__=='__main__':
         ssv1.append(ssv)
         exloc = np.array([5602, 4173, 4474]) * ssv.scaling
         exlocs = np.concatenate(ssv.sample_locations())
+        exlocs = exlocs[::10]
         l = 0
         l = len(exlocs)
         for i in range(l):
@@ -77,13 +79,22 @@ if __name__=='__main__':
             #print(j)
         params.extend(exlocs)
         k = (k+l)
+        ln.append(k)
         print(k)
+        print(ln)
+        print(len(params))
+    for i in range(n):
+        real_params.append(0)
+    for i in range(n):
+        real_params[i] = {'sso' : ssv1[i], 'coords' : params[ln[i]:(ln[i+1]-1)]}
+    #for i in range(k):
+     #   real_params[i] = {'sso': ssv1[i], 'coords': params[i]}
+
     #print(len(params))
     #print(len(ssv1))
-    for i in range(k):
-        real_params.append(0)
-    for i in range(j):
-        real_params[i] = (ssv1[i], params[i])
+
+    #for i in range(j):
+    #    real_params[i] = {'sso' : ssv1[i], 'coords' : params[i]}
     """
     for i in range(n):
         ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')
@@ -101,11 +112,12 @@ if __name__=='__main__':
         k = (k+l)
         print(k)
         print("Reading data so far")
+
     #print(len(params))
     #print(len(ssv1))
     print(len(real_params2))
     print(real_params2[3000])
-    """
+    
     for i in range(k):
         real_params.append(0)
     for i in range(k):
@@ -114,7 +126,7 @@ if __name__=='__main__':
     now2 = time.time()
     print("time for reading data")
     print(now2-now)
-    render_sso_coords_multiprocessing(real_params2, n_job=n, verbose=True)
+    render_sso_coords_multiprocessing(real_params, n_job=n, verbose=True)
     now1 = time.time()
     print(now1)
     print(now1-now)
