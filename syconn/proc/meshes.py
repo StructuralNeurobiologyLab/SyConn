@@ -23,7 +23,7 @@ except ImportError:
     __vtk_avail__ = False
 
 try:
-    from .in_bounding_boxC import in_bounding_box
+    from .in_bounding_boxC_toCheck import in_bounding_box
 except ImportError:
     from .in_bounding_box import in_bounding_box
 

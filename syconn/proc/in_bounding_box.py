@@ -26,3 +26,7 @@ def in_bounding_box(coords, bounding_box):
         z_cond = (coords[i, 2] > -edge_sizes[2]) & (coords[i, 2] < edge_sizes[2])
         inlier[i] = x_cond & y_cond & z_cond
     return inlier
+
+#    log_batchjob = log_mp
+ #   n_max_co_processes = np.min([n_max_co_processes // n_cores, cpu_count() // n_cores])
+  #  n_max_co_processes = np.min([n_max_co_processes, len(params)])

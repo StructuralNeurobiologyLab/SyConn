@@ -11,7 +11,7 @@ import timeit
 
 def kernel(uint32_t[:, :, :] chunk, uint64_t center_id):
 
-    print ("Cython")
+    print("Cython")
     cdef map[uint32_t, int] unique_ids
 
     for i in range(chunk.shape[0]):
@@ -66,6 +66,7 @@ def process_block(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,
 
 
 def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stencil1=(7,7,3)):
+
     cdef int stencil[3]
     stencil[:] = [stencil1[0], stencil1[1], stencil1[2]]
     assert (stencil[0]%2 + stencil[1]%2 + stencil[2]%2 ) == 3
@@ -84,5 +85,5 @@ def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stenci
                     continue
                 center_id = arr[x + offset[0], y + offset[1], z + offset[2]]
                 chunk = arr[x: x + stencil[0], y: y + stencil[1], z: z + stencil[2]]
-                out[x, y, z] = kernel(chunk, center_id)
+                out[x, y, z] =  kernel(chunk, center_id)
     return out

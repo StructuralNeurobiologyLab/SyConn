@@ -1,13 +1,14 @@
 # distutils: language = c++
 cimport cython
 from libcpp cimport bool
-from libc.stdint cimport int, float
+##from libc.stdint cimport int, float, double
 from libcpp.vector cimport vector
+import numpy as np
 
 
-def in_bounding_box(float[:,:] coords, float[:, :] bounding_box):
+def in_bounding_box(double[:,:] coords, double[:, :] bounding_box):
 
-    cdef float edge_sizes[3]
+    cdef double edge_sizes[3]
     edge_sizes[:] =[bounding_box[1,0]/2, bounding_box[1,1]/2, bounding_box[1,2]/2 ]
 
     for i in range(coords.shape[0]):

@@ -19,10 +19,10 @@ from knossos_utils import knossosdataset
 from knossos_utils import chunky
 knossosdataset._set_noprint(True)
 import os
-try:
-    from .block_processing_cython import kernel, process_block, process_block_nonzero
-except ImportError:
-    from .block_processing import kernel, process_block, process_block_nonzero
+#try:
+from .block_processing_cython import kernel, process_block, process_block_nonzero
+#except ImportError:
+#    from .block_processing import kernel, process_block, process_block_nonzero
 
 from ..reps import segmentation
 from ..mp import batchjob_utils as qu
@@ -71,7 +71,6 @@ def _contact_site_detection_thread(args):
     offset = np.array(chunk.coordinates - overlap)
     size = 2 * overlap + np.array(chunk.size)
     data = kd.from_overlaycubes_to_matrix(size, offset, datatype=np.uint64).astype(np.uint32)
-
     contacts = detect_cs(data)
     os.makedirs(chunk.folder, exist_ok=True)
     compression.save_to_h5py([contacts],

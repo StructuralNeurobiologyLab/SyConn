@@ -37,7 +37,9 @@ config = {
     'setup_requires': ["pytest-runner", "cython>=0.23"], 'tests_require': ["pytest", ],
     # this will compile all files within directories in syconn/
      'ext_modules': cythonize(["syconn/*/*.pyx"], include_path=[numpy.get_include()],
-                              compiler_directives={'language_level': 3, 'boundscheck': False}),
+                              compiler_directives={'language_level': 3, 'boundscheck': False,
+                                                   'wraparound': False, 'initializedcheck': False,
+                                                   'cdivision': False, 'overflowcheck': True}),
 
 }
 
