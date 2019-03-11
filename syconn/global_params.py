@@ -112,4 +112,5 @@ gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files/'
 
 # --------- CELLTYPE PARAMETERS
 
-
+# --------- MORPHOLOGY EMBEDDING
+ndim_embedding = 10
