@@ -26,12 +26,11 @@ from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 import time
 from ..reps import log_reps
 from .. import global_params
-from ..proc.meshes import                                                                                                                                                                                                                                                                                           write_mesh2kzip
+from ..proc.meshes import write_mesh2kzip
 try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
     from ..proc.in_bounding_box import in_bounding_box
-
 
 
 def majority_vote(anno, prop, max_dist):
@@ -95,11 +94,14 @@ def nodes_in_pathlength(anno, max_path_len):
 
 
 def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
+    """Performs `naive_view_normalization_new` on sso views"""
+    from ..handler.prediction import naive_view_normalization_new
     sso.load_attr_dict()
     if not overwrite and "celltype_cnn_e3" in sso.attr_dict:
         return
-    out_d = sso_views_to_modelinput(sso, nb_views)
-    res = model.predict_proba(out_d)
+    inp_d = sso_views_to_modelinput(sso, nb_views)
+    inp_d = naive_view_normalization_new(inp_d)
+    res = model.predict_proba(inp_d)
     clf = np.argmax(res, axis=1)
     ls, cnts = np.unique(clf, return_counts=True)
     pred = ls[np.argmax(cnts)]
