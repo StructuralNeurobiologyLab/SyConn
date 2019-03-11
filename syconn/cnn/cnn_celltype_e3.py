@@ -13,11 +13,12 @@ Caution! The input dataset was not manually corrected.
 from syconn import global_params
 from syconn.cnn.TrainData import CelltypeViewsE3
 import argparse
+import _pickle
 import os
 import torch
 from torch import nn
 from torch import optim
-from elektronn3.models.simple import StackedConv2Scalar
+from elektronn3.models.simple import StackedConv2Scalar, StackedConv2ScalarWithLatentAdd
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 from elektronn3.training.schedulers import SGDR
@@ -26,18 +27,23 @@ from elektronn3.training import metrics
 
 
 def get_model():
-    model = StackedConv2Scalar(4, 9)
+    model = StackedConv2ScalarWithLatentAdd(in_channels=4, n_classes=9, n_scalar=1)
     return model
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="celltype_e3_axonGTv3_SGDR_run3",
+    parser.add_argument('-n', '--exp-name', default="celltype_e3_axonGTv3_SGDR_LatentAdd_run2",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
+    )
+    parser.add_argument(
+        '-r', '--resume', metavar='PATH',
+        help='Path to pretrained model state dict or a compiled and saved '
+             'ScriptModule from which to resume training.'
     )
     args = parser.parse_args()
     if not args.disable_cuda and torch.cuda.is_available():
@@ -49,7 +55,8 @@ if __name__ == "__main__":
     # Don't move this stuff, it needs to be run this early to work
     import elektronn3
     elektronn3.select_mpl_backend('agg')
-    from elektronn3.training import Trainer, Backup
+    from elektronn3.training import Backup
+    from elektronn3.training.trainer_scalarinput import Trainer
 
     torch.manual_seed(0)
 
@@ -57,13 +64,13 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3training/')
 
     max_steps = args.max_steps
-    lr = 0.006
+    lr = 0.004
     lr_stepsize = 500
     lr_dec = 0.995
     batch_size = 10
 
     model = get_model()
-    if torch.cuda.device_count() > 1:
+    if 0: #torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
         batch_size = batch_size * torch.cuda.device_count()
         # dim = 0 [20, xxx] -> [10, ...], [10, ...] on 2 GPUs
@@ -74,6 +81,14 @@ if __name__ == "__main__":
                         'nb_views_renderinglocations': 4,
                         "reduce_context": 0, "reduce_context_fact": 1, 'ctgt_key': "ctgt_v2", 'random_seed': 0,
                         "binary_views": False, "n_classes": n_classes, 'class_weights': [1] * n_classes}
+
+    if args.resume is not None:  # Load pretrained network
+        try:  # Assume it's a state_dict for the model
+            model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
+        except _pickle.UnpicklingError as exc:
+            # Assume it's a complete saved ScriptModule
+            model = torch.jit.load(os.path.expanduser(args.resume), map_location=device)
+
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
     train_dataset = CelltypeViewsE3(train=True, transform=transform, **data_init_kwargs)
@@ -87,8 +102,7 @@ if __name__ == "__main__":
         # amsgrad=True
     )
     # lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-    lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-    schedulers = {'lr': SGDR(optimizer, 20000, 1.1)}
+    schedulers = {'lr': SGDR(optimizer, 20000, 2)}
     # All these metrics assume a binary classification problem. If you have
     #  non-binary targets, remember to adapt the metrics!
     val_metric_keys = []

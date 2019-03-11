@@ -58,6 +58,7 @@ if __name__ == '__main__':
     os.makedirs(example_wd + '/glia/', exist_ok=True)  # currently this is were SyConn looks for the neuron rag # TODO refactor
     shutil.copy(h5_dir + "/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
     global_params.wd = example_wd
+    log.critical('Example run started. Working directory is overwritten and set to "{}".'.format(example_wd))
     if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
         py36path = subprocess.check_output('source deactivate; source activate py36;'
                                            ' which python', shell=True).decode().replace('\n', '')

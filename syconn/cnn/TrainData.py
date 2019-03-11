@@ -106,10 +106,10 @@ if elektronn3_avail:
             self.ctv = CelltypeViews(None, None, **kwargs)
 
         def __getitem__(self, index):
-            inp, target = self.ctv.getbatch_alternative(1, source='train' if self.train else 'valid')
+            inp, target, syn_signs = self.ctv.getbatch_alternative(1, source='train' if self.train else 'valid')
             inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
             # target = np.eye(self.ctv.n_classes)[target.squeeze().astype(np.int)]  # one-hot encoding
-            return inp[0], target.squeeze().astype(np.int)  # target should just be a scalar
+            return inp[0], target.squeeze().astype(np.int), syn_signs[0].astype(np.float32)  # target should just be a scalar
 
         def __len__(self):
             """Determines epoch size(s)"""
@@ -286,7 +286,7 @@ class MultiViewData(Data):
             ssv_labels = np.array(list(self.label_dict.values()), dtype=np.uint)
             n_classes = len(np.unique(ssv_labels))
             if int(train_fraction) * len(ssv_ids) < n_classes:
-                train_fraction = 1. - float(n_classes)  / len(ssv_ids)
+                train_fraction = 1. - float(n_classes + 1) / len(ssv_ids)
                 print("Train data fraction was set to {} due to splitting restrictions "
                       "(at least one sample per class in validation set).".format(train_fraction))
             train_ids, valid_ids = train_test_split(ssv_ids, shuffle=True, random_state=random_seed, stratify=ssv_labels,
@@ -439,6 +439,7 @@ class CelltypeViews(MultiViewData):
         self.class_weights = np.array(class_weights)
         self.view_cache = {'train': None, 'valid': None, 'test': None}
         self.label_cache = {'train': None, 'valid': None, 'test': None}
+        self.syn_sign_cache = {'train': None, 'valid': None, 'test': None}
         self.sample_weights = {'train': None, 'valid': None, 'test': None}
         self.reduce_context_fact = reduce_context_fact
         self.binary_views = binary_views
@@ -517,6 +518,7 @@ class CelltypeViews(MultiViewData):
                 ssos.append(sso)
             self.view_cache[source] = [sso.load_views(view_key=self.view_key)
                                        for sso in ssos]
+            self.syn_sign_cache[source] = np.array([sso.syn_sign_ratio() for sso in ssos])
             for ii in range(len(self.view_cache[source])):
                 views = self.view_cache[source][ii]
                 views = naive_view_normalization_new(views)
@@ -530,9 +532,9 @@ class CelltypeViews(MultiViewData):
                                                                np.unique(self.label_cache[source]),
                                                                self.label_cache[source])
         ixs = np.random.choice(np.arange(len(self.view_cache[source])), batch_size, replace=False)
-        d, l = transform_celltype_data_views_alternative(
+        d, l, syn_signs = transform_celltype_data_views_alternative(
             [self.view_cache[source][ix] for ix in ixs], [self.label_cache[source][ix] for ix in ixs],
-            batch_size, self.nb_views)
+            self.syn_sign_cache[source], batch_size, self.nb_views)
         if self.reduce_context > 0:
             d = d[:, :, :, (self.reduce_context/2):(-self.reduce_context/2),
                 self.reduce_context:-self.reduce_context]
@@ -543,7 +545,7 @@ class CelltypeViews(MultiViewData):
         self.current_cache_uses += 1
         if self.raw_only:
             return d[:, :1], l
-        return tuple([d, l])
+        return tuple([d, l, syn_signs])
 
     def getbatch(self, batch_size, source='train'):
         self._reseed()
@@ -725,9 +727,10 @@ def transform_celltype_data_views(sso_views, labels, batch_size, nb_views,
     return tuple([orig_views, new_labels])
 
 
-def transform_celltype_data_views_alternative(sso_views, labels, batch_size, nb_views):
+def transform_celltype_data_views_alternative(sso_views, labels, syn_signs, batch_size, nb_views):
     orig_views = np.zeros((batch_size, 4, nb_views, 128, 256), dtype=np.float32)
     new_labels = np.zeros((batch_size, 1), dtype=np.int16)
+    new_synsigns = np.zeros((batch_size, 1), dtype=np.int16)
     cnt = 0
     # sample_fac_sv = np.max([int(nb_views / 10), 1]) # draw more SV if #views is high
     for ii, views in enumerate(sso_views):
@@ -740,6 +743,7 @@ def transform_celltype_data_views_alternative(sso_views, labels, batch_size, nb_
         orig_views[cnt:(curr_nb_samples+cnt)] = views[:, view_sampling].reshape((4, curr_nb_samples,
                                                                                  nb_views, 128, 256)).swapaxes(1, 0)
         new_labels[cnt:(curr_nb_samples+cnt)] = labels[ii]
+        new_synsigns[cnt:(curr_nb_samples+cnt)] = syn_signs[ii]
         cnt += curr_nb_samples
         if cnt == batch_size:
             break
@@ -758,8 +762,9 @@ def transform_celltype_data_views_alternative(sso_views, labels, batch_size, nb_
             random_ix = np.random.choice(np.arange(cnt), 1, replace=False)
             orig_views[cnt:(curr_nb_samples + cnt)] = orig_views[random_ix]
             new_labels[cnt:(curr_nb_samples + cnt)] = new_labels[random_ix]
+            new_synsigns[cnt:(curr_nb_samples + cnt)] = new_synsigns[random_ix]
             cnt += curr_nb_samples
-    return tuple([orig_views, new_labels])
+    return tuple([orig_views, new_labels, new_synsigns])
 
 
 def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1,

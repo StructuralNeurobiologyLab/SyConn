@@ -480,8 +480,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob = log_mp
-    if n_max_co_processes is None:
-        n_max_co_processes = cpu_count()
+    n_max_co_processes = np.min([cpu_count(), n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
     log_batchjob.debug('Starting BatchJobFallback script "{}" with {} tasks using {}'
