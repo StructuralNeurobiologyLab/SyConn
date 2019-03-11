@@ -1,4 +1,4 @@
-from syconn.reps.super_segmentation import  SuperSegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 import numpy as np
 from syconn.proc.rendering import render_sso_coords, render_sso_coords_multiprocessing
 import time
@@ -73,9 +73,9 @@ if __name__=='__main__':
         exlocs = exlocs[::10]
         l = 0
         l = len(exlocs)
-        for i in range(l):
-            ssv1.append(ssv)
-            j = (j+1)
+        #for i in range(l):
+         #   ssv1.append(ssv)
+         #   j = (j+1)
             #print(j)
         params.extend(exlocs)
         k = (k+l)
@@ -126,29 +126,29 @@ if __name__=='__main__':
     now2 = time.time()
     print("time for reading data")
     print(now2-now)
-    render_sso_coords_multiprocessing(real_params, n_job=n, verbose=True)
+    render_sso_coords_multiprocessing(ssv1, params, n_jobs=n, verbose=True)
     now1 = time.time()
     print(now1)
     print(now1-now)
 
-    #global_params.PYOPENGL_PLATFORM = 'osmesa'
+#global_params.PYOPENGL_PLATFORM = 'osmesa'
 
 
-    #viewsos = render_sso_coords(ssv, exlocs[::10], verbose=True )
+#viewsos = render_sso_coords(ssv, exlocs[::10], verbose=True )
 
-    #now2 = time.time()
+#now2 = time.time()
 
-   # print(now2)
-    #print(now2-now1)
+# print(now2)
+#print(now2-now1)
 
-    #print(np.sum((views-viewsos)**2))
-
-
+#print(np.sum((views-viewsos)**2))
 
 
-    #imsave('/u/atultm/test_2dproj.png', views[0, 0, 0])           #running on cluster
-    #imsave('/home/atulm/test_2dproj.png', views[0, 0, 0])        #running on local machine
-    #imageio.imwrite('/u/atultm/test_2dpro1j.png', views[0, 0, 0])
+
+
+#imsave('/u/atultm/test_2dproj.png', views[0, 0, 0])           #running on cluster
+#imsave('/home/atulm/test_2dproj.png', views[0, 0, 0])        #running on local machine
+#imageio.imwrite('/u/atultm/test_2dpro1j.png', views[0, 0, 0])
 
 
 

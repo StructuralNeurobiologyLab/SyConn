@@ -17,7 +17,7 @@ from scipy.ndimage.filters import gaussian_filter
 from .image import rgb2gray, apply_clahe
 from . import log_proc
 from .. import global_params
-from ..handler.basics import flatten_list
+from ..handler.basics import flatten_list, chunkify_successive
 from ..handler.compression import arrtolz4string
 from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
     rgb2id_array, id2rgb_array_contiguous
@@ -47,9 +47,12 @@ else:
     log_proc.error(msg)
     raise NotImplementedError(msg)
 try:
-    from ..reps.super_segmentation import *
+    from ..reps.super_segmentation import SuperSegmentationDataset
     import numpy as np
+    import itertools
     from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
+    from ..reps.super_segmentation import SuperSegmentationDataset
+    from ..reps.super_segmentation_dataset import *
 except Exception as error:
     print('Caught this error: ' + repr(error))
 
@@ -1057,7 +1060,8 @@ def render_sso_ortho_views(sso):
                                  obj_to_render=('sj', ))
     return views
 
-def render_sso_coords_multiprocessing(params, n_job, verbose):
+
+def render_sso_coords_multiprocessing(ssv, real_param, n_jobs, verbose):
     #sso, coords, add_cellobjects, verbose, clahe,\
     #ws, cellobjects_only, wire_frame,\
     #nb_views, comp_window, rot_mat, return_rot_mat = args
@@ -1074,5 +1078,29 @@ def render_sso_coords_multiprocessing(params, n_job, verbose):
     #coords = [10000]
     #views = render_sso_coords(sso, coord, verbose=True)
     #print(params[3].exlocs)
-    res = start_multiprocess_imap(render_sso_coords, params, nb_cpus=n_job, verbose=verbose)
+    #res = start_multiprocess_imap(render_sso_coords_commandline, params, nb_cpus=n_job, verbose=verbose)
+    #ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')
+    #ssv = ssc.get_super_segmentation_object(29753344)
+    coords = real_param
+    params = chunkify_successive(coords, n_jobs)
+    ssv_id = ssv
+    sso_kwargs = {'ssv_id': ssv_id,
+                 'version': self.svs[0].version,
+                 'working_dir': working_dir}
+    render_kwargs = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
+                      'ws': None, 'cellobjects_only': False, 'wire_frame': False,
+                      'nb_views': None, 'comp_window': None, 'rot_mat': None, 'return_rot_mat': False}
+    params = [[par, sso_kwargs, render_kwargs] for par in params]
+    path_to_out = qu.QSUB_script(
+        params, "render_views_multiproc", suffix="_SSV{}".format(self.id),
+        pe=qsub_pe, queue=None, script_folder=None, n_cores=1,
+        n_max_co_processes=qsub_co_jobs, resume_job=resume_job)
+    # TODO: read and concatenate all output files in the correct order
 
+    out_files = glob.glob(path_to_out + "/*")
+    results = []
+    for out_file in out_files:
+        with open(out_file, 'rb') as f:
+            results.append(pkl.load(f))
+
+    #res = start_multiprocess_imap(render_sso_coords_commandline, params, nb_cpus=n_job, verbose=verbose)

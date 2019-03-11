@@ -538,6 +538,12 @@ def chunkify(lst, n):
     return [lst[i::n] for i in range(n)]
 
 
+def chunkify_successive(l, n):
+    """Yield successive n-sized chunks from l."""
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
+
+
 def flatten_list(lst):
     """
     Flattens list of lists. Same ordering as np.concatenate
