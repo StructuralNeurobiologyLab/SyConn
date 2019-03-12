@@ -30,7 +30,7 @@ try:
     from OpenGL.GL import *
     from OpenGL.GLU import *
     from OpenGL.GL.framebufferobjects import *
-    from OpenGL.arrays import *
+    from OpenGL.arrays import QSUB_script
 except Exception as e:
     log_proc.error("Problem loading OpenGL: {}".format(e))
     pass
@@ -47,12 +47,10 @@ else:
     log_proc.error(msg)
     raise NotImplementedError(msg)
 try:
-    from ..reps.super_segmentation import SuperSegmentationDataset
     import numpy as np
     import itertools
     from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
-    from ..reps.super_segmentation import SuperSegmentationDataset
-    from ..reps.super_segmentation_dataset import *
+    from ..mp.batchjob_utils import QSUB_script
 except Exception as error:
     print('Caught this error: ' + repr(error))
 
@@ -1061,7 +1059,7 @@ def render_sso_ortho_views(sso):
     return views
 
 
-def render_sso_coords_multiprocessing(ssv, real_param, n_jobs, verbose):
+def render_sso_coords_multiprocessing(ssv, wd, real_param, n_jobs, verbose):
     #sso, coords, add_cellobjects, verbose, clahe,\
     #ws, cellobjects_only, wire_frame,\
     #nb_views, comp_window, rot_mat, return_rot_mat = args
@@ -1075,6 +1073,7 @@ def render_sso_coords_multiprocessing(ssv, real_param, n_jobs, verbose):
 
     views = render_sso_coords(ssv, exlocs[::10], verbose=True)
     """
+
     #coords = [10000]
     #views = render_sso_coords(sso, coord, verbose=True)
     #print(params[3].exlocs)
@@ -1084,17 +1083,16 @@ def render_sso_coords_multiprocessing(ssv, real_param, n_jobs, verbose):
     coords = real_param
     params = chunkify_successive(coords, n_jobs)
     ssv_id = ssv
+    working_dir = wd
     sso_kwargs = {'ssv_id': ssv_id,
-                 'version': self.svs[0].version,
                  'working_dir': working_dir}
     render_kwargs = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
                       'nb_views': None, 'comp_window': None, 'rot_mat': None, 'return_rot_mat': False}
     params = [[par, sso_kwargs, render_kwargs] for par in params]
-    path_to_out = qu.QSUB_script(
-        params, "render_views_multiproc", suffix="_SSV{}".format(self.id),
-        pe=qsub_pe, queue=None, script_folder=None, n_cores=1,
-        n_max_co_processes=qsub_co_jobs, resume_job=resume_job)
+    path_to_out = QSUB_script(
+        params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
+        queue=None, script_folder=None, n_cores=n_jobs)
     # TODO: read and concatenate all output files in the correct order
 
     out_files = glob.glob(path_to_out + "/*")
@@ -1102,5 +1100,6 @@ def render_sso_coords_multiprocessing(ssv, real_param, n_jobs, verbose):
     for out_file in out_files:
         with open(out_file, 'rb') as f:
             results.append(pkl.load(f))
+
 
     #res = start_multiprocess_imap(render_sso_coords_commandline, params, nb_cpus=n_job, verbose=verbose)

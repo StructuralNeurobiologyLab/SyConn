@@ -123,10 +123,11 @@ if __name__=='__main__':
     for i in range(k):
         real_params[i] = (ssv1[i], params[i])
     """
+    working_dir = '/wholebrain/scratch/areaxfs3/'
     now2 = time.time()
     print("time for reading data")
     print(now2-now)
-    render_sso_coords_multiprocessing(ssv1, params, n_jobs=n, verbose=True)
+    render_sso_coords_multiprocessing(ssv1, working_dir, params, n_jobs=n, verbose=True)
     now1 = time.time()
     print(now1)
     print(now1-now)
