@@ -798,7 +798,6 @@ def get_celltype_model_e3():
     return m
 
 
-
 def get_semseg_spiness_model():
     try:
         from elektronn3.models.base import InferenceModel

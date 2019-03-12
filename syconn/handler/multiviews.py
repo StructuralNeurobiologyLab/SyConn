@@ -146,6 +146,8 @@ def int2str_converter(label, gt_type):
     -------
     str
     """
+    if type(label) == str:
+        label = int(label)
     if gt_type == "axgt":
         if label == 1:
             return "gt_axon"
@@ -178,11 +180,13 @@ def int2str_converter(label, gt_type):
         else:
             return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
     elif gt_type == 'ctgt_v2':
-        l_dc_inv = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GPe=5, FS=6, TAN=7)
+        l_dc_inv = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, GPe=5)
+        l_dc_inv["?"] = 8
         l_dc = {v: k for k, v in l_dc_inv.items()}
         try:
             return l_dc[label]
         except KeyError:
+            print('Unknown label "{}"'.format(label))
             return -1
     else:
         raise ValueError("Given ground truth type is not valid.")

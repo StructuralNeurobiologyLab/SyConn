@@ -345,6 +345,10 @@ class SuperSegmentationObject(object):
     def vcs(self):
         return self.get_seg_objects("vc")
 
+    @property
+    def syn_ssv(self):
+        return self.get_seg_objects("syn_ssv")
+
     #                                                                     MESHES
     def load_mesh(self, mesh_type):
         if not mesh_type in self._meshes:
@@ -615,6 +619,7 @@ class SuperSegmentationObject(object):
     def _load_obj_mesh(self, obj_type="sv", rewrite=False):
         """
         TODO: Currently does not support color array!
+        TODO: add support for sym. asym synapse type
 
         Parameters
         ----------
@@ -924,6 +929,27 @@ class SuperSegmentationObject(object):
                 return True
             return False
 
+    def syn_sign_ratio(self):
+        """
+        Ratio of symmetric vs. asym. synapse counts.
+
+        Returns
+        -------
+        float
+        """
+        ratio = self.lookup_in_attribute_dict("syn_sign_ratio")
+        if ratio is not None:
+            return ratio
+        syn_signs = []
+        for syn in self.syn_ssv:
+            syn.load_attr_dict()
+            syn_signs.append(syn.attr_dict["syn_sign"])
+        syn_signs = np.array(syn_signs)
+        ratio = np.sum(syn_signs == -1) / float(len(syn_signs))
+        self.attr_dict["syn_sign_ratio"] = ratio
+        self.save_attributes(["syn_sign_ratio"], [ratio])
+        return ratio
+
     def aggregate_segmentation_object_mappings(self, obj_types, save=False):
         assert isinstance(obj_types, list)
 
@@ -1057,6 +1083,7 @@ class SuperSegmentationObject(object):
         for GT purposes, then on can call ssv_orig.copy2dir(ssv_target.ssv_dir)
          and all data contained in the SSD of ssv_orig will be copied to
          the SSD of ssv_target.
+
         Parameters
         ----------
         dest_dir : str

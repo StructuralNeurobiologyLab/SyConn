@@ -1,24 +1,18 @@
+# -*- coding: utf-8 -*-
+# distutils: language=c++
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
+
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-import glob
 import numpy as np
-import scipy.ndimage
-import time
-import itertools
-from collections import defaultdict
 from knossos_utils import knossosdataset
-from knossos_utils import chunky
 knossosdataset._set_noprint(True)
-import os
-
-from ..reps import segmentation
-from ..mp import batchjob_utils as qu
-from ..mp import mp_utils as sm
-from ..handler import compression
-from . import object_extraction_steps as oes
-from . import log_extraction
 
 
 

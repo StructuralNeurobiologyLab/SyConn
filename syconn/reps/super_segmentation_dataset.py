@@ -1171,7 +1171,8 @@ def write_super_segmentation_dataset_thread(args):
     return attr_dict
 
 
-def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1):
+def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1,
+                             safe=True):
     """
     Creates a new SSD specified with 'version' with a copy of the given SSVs.
     Usually used for generating distinct GT SSDs. Based on the common supervoxel
@@ -1179,13 +1180,15 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1):
 
     Parameters
     ----------
-    ssvs : list of SuperSegmentationObject
+    ssvs : List[SuperSegmentationObject]
         source SuperSegmentationObjects taken from default SSD in working directory
     new_version : str
         version of the new SSV SuperSegmentationDataset where SSVs will be copied to
     target_wd :
         path to working directory. If None, the one set in gloabal_prams is used
     n_jobs : int
+    safe : bool
+        if True, will not overwrite existing data
     """
     if target_wd is None:
         target_wd = global_params.config.working_dir
@@ -1196,7 +1199,7 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1):
         new_ssv = SuperSegmentationObject(old_ssv.id, version=new_version,
                                           working_dir=target_wd, sv_ids=old_ssv.sv_ids,
                                           scaling=old_ssv.scaling)
-        old_ssv.copy2dir(dest_dir=new_ssv.ssv_dir)
+        old_ssv.copy2dir(dest_dir=new_ssv.ssv_dir, safe=safe)
     log_reps.info("Saving dataset deep.")
     new_ssd.save_dataset_deep(new_mapping=False, nb_cpus=n_jobs)
 

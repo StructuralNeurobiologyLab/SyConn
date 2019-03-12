@@ -58,6 +58,7 @@ if __name__ == '__main__':
     os.makedirs(example_wd + '/glia/', exist_ok=True)  # currently this is were SyConn looks for the neuron rag # TODO refactor
     shutil.copy(h5_dir + "/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
     global_params.wd = example_wd
+    log.critical('Example run started. Working directory is overwritten and set to "{}".'.format(example_wd))
     if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
         py36path = subprocess.check_output('source deactivate; source activate py36;'
                                            ' which python', shell=True).decode().replace('\n', '')
@@ -114,7 +115,7 @@ if __name__ == '__main__':
                                    offset=offset, boundary=bd, fast_downsampling=True,
                                    data_path=h5_dir + 'asym.h5', mags=[1, 2], hdf5_names=['asym'])
 
-    # # RUN SYCONN - without glia removal
+    # RUN SYCONN - without glia removal
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.run_create_sds(chunk_size=(128, 128, 128), n_folders_fs=100)
 
@@ -141,7 +142,8 @@ if __name__ == '__main__':
     exec_syns.run_syn_analysis()
 
     log.info('SyConn analysis of "{}" has finished. Setting up flask server for'
-             ' inspection of cell reconstructions  via the KNOSSOS-SyConn'
-             ' plugin.'.format(experiment_name))
+             ' inspection. Annotated cell reconstructions and wiring can be analyzed via '
+             'the KNOSSOS-SyConn plugin at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.'
+             ''.format(experiment_name))
     fname_server = os.path.dirname(os.path.abspath(__file__)) + '/../kplugin/server.py'
     os.system('python {} --working_dir={} --port=10002'.format(fname_server, example_wd))
