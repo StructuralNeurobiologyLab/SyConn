@@ -101,11 +101,11 @@ if elektronn3_avail:
             super().__init__()
             self.train = train
             self.transform = transform
-            # TODO: currently no kwarg in `CelltypeViews` for using training / validation data only -> higher MEM cons.
-            self.av = AxonViews(None, None, working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
+            self.av = AxonViews(None, None, naive_norm=False, working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
 
         def __getitem__(self, index):
-            inp, target = self.av.getbatch_alternative(1, source='train' if self.train else 'valid')
+            inp, target = self.av.getbatch(1, source='train' if self.train else 'valid')
+            inp = naive_view_normalization_new(inp)
             inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
             # target = np.eye(self.ctv.n_classes)[target.squeeze().astype(np.int)]  # one-hot encoding
             return inp[0], target.squeeze().astype(np.int)  # target should just be a scalar
@@ -160,11 +160,11 @@ if elektronn3_avail:
             super().__init__()
             self.train = train
             self.transform = transform
-            # TODO: currently no kwarg in `CelltypeViews` for using training / validation data only -> higher MEM cons.
-            self.gv = GliaViews(None, None, av_working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
+            self.gv = GliaViews(None, None, naive_norm=False, av_working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
 
         def __getitem__(self, index):
-            inp, target = self.gv.getbatch_alternative(1, source='train' if self.train else 'valid')
+            inp, target = self.gv.getbatch(1, source='train' if self.train else 'valid')
+            inp = naive_view_normalization_new(inp)
             inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
             # target = np.eye(self.ctv.n_classes)[target.squeeze().astype(np.int)]  # one-hot encoding
             return inp[0], target.squeeze().astype(np.int)  # target should just be a scalar
@@ -413,11 +413,11 @@ class AxonViews(MultiViewData):
     def __init__(self, inp_node, out_node, gt_type="axgt", working_dir=None,
                  nb_views=2, reduce_context=0, channels_to_load=(0, 1, 2, 3),
                  reduce_context_fact=1, binary_views=False, raw_only=False,
-                 nb_cpus=20, **kwargs):
+                 nb_cpus=20, naive_norm=True, **kwargs):
         if working_dir is None:
             working_dir = global_params.config.working_dir
         super(AxonViews, self).__init__(working_dir, gt_type,
-                                        nb_cpus=nb_cpus, **kwargs)
+                                        nb_cpus=nb_cpus, naive_norm=naive_norm, **kwargs)
         print("Initialized AxonViews:", self.__repr__())
         self.nb_views = nb_views
         self.reduce_context = reduce_context
