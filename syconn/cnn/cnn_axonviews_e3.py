@@ -86,8 +86,8 @@ if __name__ == "__main__":
     # lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     schedulers = {'lr': SGDR(optimizer, 10000, 2)}
-    # All these metrics assume a binary classification problem. If you have
-    #  non-binary targets, remember to adapt the metrics!
+    
+    # metrics for non binary classification
     val_metric_keys = []
     val_metric_vals = []
     for c in range(n_classes):

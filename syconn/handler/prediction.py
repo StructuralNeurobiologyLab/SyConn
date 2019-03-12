@@ -733,7 +733,7 @@ def get_axoness_model_e3():
         log_main.error(
             "elektronn3 could not be imported ({}). Please see 'https://github."
             "com/ELEKTRONN/elektronn3' for more information.".format(e))
-    path = global_params.config.mpath_axoness
+    path = global_params.config.mpath_axoness_e3
     m = InferenceModel(path)
     m._path = path
     return m
@@ -756,7 +756,7 @@ def get_glia_model_e3():
         log_main.error(
             "elektronn3 could not be imported ({}). Please see 'https://github."
             "com/ELEKTRONN/elektronn3' for more information.".format(e))
-    path = global_params.config.mpath_glia
+    path = global_params.config.mpath_glia_e3
     m = InferenceModel(path)
     m._path = path
     return m
