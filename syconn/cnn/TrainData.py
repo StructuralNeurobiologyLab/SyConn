@@ -25,6 +25,7 @@ except ImportError as e:
     elektronn3_avail = False
     Dataset = None
     Identity = None
+
 from typing import Callable
 import h5py
 import glob
@@ -87,6 +88,34 @@ if elektronn3_avail:
             self.inp_file.close()
             self.target_file.close()
 
+    class AxonsViewsE3(Dataset):
+        """
+        Wrapper method for AxonsViews data loader.
+        """
+        def __init__(
+                self,
+                train=True,
+                transform: Callable = Identity(),
+                **kwargs
+        ):
+            super().__init__()
+            self.train = train
+            self.transform = transform
+            # TODO: currently no kwarg in `CelltypeViews` for using training / validation data only -> higher MEM cons.
+            self.av = AxonViews(None, None, working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
+
+        def __getitem__(self, index):
+            inp, target = self.av.getbatch_alternative(1, source='train' if self.train else 'valid')
+            inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
+            # target = np.eye(self.ctv.n_classes)[target.squeeze().astype(np.int)]  # one-hot encoding
+            return inp[0], target.squeeze().astype(np.int)  # target should just be a scalar
+
+        def __len__(self):
+            """Determines epoch size(s)"""
+            if not self.train:
+                return 100
+            return 1000
+
     class CelltypeViewsE3(Dataset):
         """
         Wrapper method for CelltypeViews data loader.
@@ -100,8 +129,10 @@ if elektronn3_avail:
             super().__init__()
             self.train = train
             self.transform = transform
+
             # TODO: currently no kwarg in `CelltypeViews` for using training / validation data only -> higher MEM cons.
             self.ctv = CelltypeViews(None, None, **kwargs)
+            
 
         def __getitem__(self, index):
             inp, target = self.ctv.getbatch_alternative(1, source='train' if self.train else 'valid')
@@ -115,6 +146,34 @@ if elektronn3_avail:
                 return 100
             return 1000
 
+    
+    class GliaViewsE3(Dataset):
+        """
+        Wrapper method for GliaViews data loader.
+        """
+        def __init__(
+                self,
+                train=True,
+                transform: Callable = Identity(),
+                **kwargs
+        ):
+            super().__init__()
+            self.train = train
+            self.transform = transform
+            # TODO: currently no kwarg in `CelltypeViews` for using training / validation data only -> higher MEM cons.
+            self.gv = GliaViews(None, None, av_working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
+
+        def __getitem__(self, index):
+            inp, target = self.gv.getbatch_alternative(1, source='train' if self.train else 'valid')
+            inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
+            # target = np.eye(self.ctv.n_classes)[target.squeeze().astype(np.int)]  # one-hot encoding
+            return inp[0], target.squeeze().astype(np.int)  # target should just be a scalar
+
+        def __len__(self):
+            """Determines epoch size(s)"""
+            if not self.train:
+                return 100
+            return 1000
 
     class MultiviewData_TNet_online(Dataset):
         """
@@ -276,10 +335,10 @@ class MultiViewData(Data):
             self.label_dict = load_pkl2obj(self.gt_dir +
                                            "%s_labels.pkl" % gt_type)
         if not os.path.isfile(self.gt_dir + "%s_splitting.pkl" % gt_type):
-            print("Splitting file not found. Splitting data accoring to {:.2f}"
-                  " (train) - {:.2f} (valid).".format(train_fraction, 1 - train_fraction))
             if train_fraction is None:  # TODO: replace by sklearn splitting which handles inra-class split-ratios
                 train_fraction = 0.85
+            print("Splitting file not found. Splitting data accoring to {:.2f}"
+                  " (train) - {:.2f} (valid).".format(train_fraction, 1 - train_fraction))
             with temp_seed(random_seed):
                 ixs = np.arange(len(self.label_dict)).astype(np.int)
                 np.random.shuffle(ixs)
@@ -600,7 +659,7 @@ class CelltypeViews(MultiViewData):
 class GliaViews(Data):
     def __init__(self, inp_node, out_node, raw_only=True, nb_views=2,
                  reduce_context=0, binary_views=False, reduce_context_fact=1,
-                 naive_norm=True):
+                 naive_norm=True, av_working_dir=None):
         self.nb_views = nb_views
         self.raw_only = raw_only
         self.reduce_context = reduce_context
@@ -613,7 +672,7 @@ class GliaViews(Data):
                            naive_norm=naive_norm)
         # get axon GT
         AV = AxonViews(inp_node, out_node, raw_only=True, nb_views=nb_views,
-                       naive_norm=naive_norm)
+                       naive_norm=naive_norm, working_dir=av_working_dir)
         # set label to non-glia
         AV.train_l[:] = 0
         AV.valid_l[:] = 0

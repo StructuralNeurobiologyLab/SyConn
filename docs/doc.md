@@ -19,6 +19,7 @@ conda install cudatoolkit=8.0 cudnn=5.1
 ```
 Git clone and install syconn and all prerequisites:
 ```
+conda install cmake
 conda install vigra -c conda-forge
 conda install mesa -c menpo
 conda install osmesa -c menpo
