@@ -1073,6 +1073,7 @@ def render_sso_coords_multiprocessing(ssv, wd, real_param, n_jobs, verbose):
 
     views = render_sso_coords(ssv, exlocs[::10], verbose=True)
     """
+    print(wd)
 
     #coords = [10000]
     #views = render_sso_coords(sso, coord, verbose=True)

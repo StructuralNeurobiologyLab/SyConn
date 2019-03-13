@@ -3,6 +3,7 @@ import numpy as np
 from syconn.proc.rendering import render_sso_coords, render_sso_coords_multiprocessing
 import time
 import itertools
+from syconn import global_params
 
 class data:
     ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')
@@ -23,7 +24,8 @@ if __name__=='__main__':
     # TODO: use toy data and improve logging, see test_backend.py
     now = time.time()
     print(now)
-    n = 4
+    print(global_params.wd)
+    n = 1
     ssv = []
     exloc = []
     exlocs = []
@@ -123,7 +125,8 @@ if __name__=='__main__':
     for i in range(k):
         real_params[i] = (ssv1[i], params[i])
     """
-    working_dir = '/wholebrain/scratch/areaxfs3/'
+    working_dir = "/wholebrain/scratch/areaxfs3/"
+    print(working_dir)
     now2 = time.time()
     print("time for reading data")
     print(now2-now)

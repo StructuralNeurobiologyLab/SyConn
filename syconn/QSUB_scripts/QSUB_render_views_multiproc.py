@@ -28,7 +28,6 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-
 ch = args[0]
 sso_kwargs = args[1]
 working_dir = so_kwargs['working_dir']
@@ -37,6 +36,7 @@ global_params.wd = working_dir
 kwargs = args[2]
 render_indexviews = kwargs['render_indexviews']
 del kwargs['render_indexviews']
+#sso = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')
 sso = SuperSegmentationObject(working_dir)
 ssv = sso.get_super_segmentation_object(ssv_id)
 for coords in ch:
