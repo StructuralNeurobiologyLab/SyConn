@@ -7,6 +7,7 @@
 
 import sys
 import numpy as np
+import time
 try:
     import cPickle as pkl
 except ImportError:
@@ -15,7 +16,6 @@ from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.proc.sd_proc import sos_dict_fact, init_sos
 from syconn.proc.rendering import render_sso_coords, render_sso_coords_index_views
 from syconn import global_params
-
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -28,22 +28,27 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-ch = args[0]
+coords = args[0]
 sso_kwargs = args[1]
-working_dir = so_kwargs['working_dir']
-ssv_id = so_kwargs['ssv_id']
+working_dir = sso_kwargs['working_dir']
+
 global_params.wd = working_dir
 kwargs = args[2]
 render_indexviews = kwargs['render_indexviews']
 del kwargs['render_indexviews']
-#sso = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')
-sso = SuperSegmentationObject(working_dir)
-ssv = sso.get_super_segmentation_object(ssv_id)
-for coords in ch:
-    if render_indexviews:
-        views = render_sso_coords_index_views(sso, coords, **kwargs)
-    else:
-        views = render_sso_coords(sso, coords, **kwargs)
+sso = SuperSegmentationObject(**sso_kwargs)
+views = 0  # in case no rendering locations are given
+print("In QSUB script")
+if render_indexviews:
+    print("In Render_index")
+    del kwargs['add_cellobjects']
+    del kwargs['clahe']
+    del kwargs['wire_frame']
+    del kwargs['cellobjects_only']
+    del kwargs['return_rot_mat']
+    views = render_sso_coords_index_views(sso, coords, **kwargs)
+else:
+    views = render_sso_coords(sso, coords, **kwargs)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(views, f)

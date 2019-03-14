@@ -62,7 +62,7 @@ MyPool = multiprocessing.Pool
 #             super(MyPool, self).__init__(*args, **kwargs)
 
 
-def parallel_process(array, function, n_jobs, use_kwargs=True, front_num=0):
+def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
     """From http://danshiebler.com/2016-09-14-parallel-progress-bar/
         A parallel version of the map function with a progress bar.
 
@@ -78,7 +78,6 @@ def parallel_process(array, function, n_jobs, use_kwargs=True, front_num=0):
             [function(array[0]), function(array[1]), ...]
     """
     #We run the first few iterations serially to catch bugs
-    print("is in parallel_process")
     if front_num > 0:
         front = [function(**a) if use_kwargs else function(a) for a in array[:front_num]]
     else:
@@ -88,9 +87,7 @@ def parallel_process(array, function, n_jobs, use_kwargs=True, front_num=0):
         #Pass the elements of array into function
         if use_kwargs:
             futures = [pool.submit(function, **a) for a in array[front_num:]]
-            print("parallel_process is working 1")
         else:
-            print("parallel_process is working 2")
             futures = [pool.submit(function, a) for a in array[front_num:]]
         kwargs = {
             'total': len(futures),
@@ -110,7 +107,6 @@ def parallel_process(array, function, n_jobs, use_kwargs=True, front_num=0):
             out.append(future.result())
         except Exception as e:
             out.append(e)
-    print("done with parallel_process")
     return front + out
 
 
@@ -193,20 +189,14 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
         with MyPool(nb_cpus) as pool:
             if show_progress:
                 result = parallel_process(params, func, nb_cpus)
-                print(len(params))
-                print("showing progress")
                 # # comparable speed but less continuous pbar updates
                 # result = list(tqdm.tqdm(pool.imap(func, params), total=len(params),
                 #                         ncols=80, leave=True, unit='jobs',
                 #                         unit_scale=True, dynamic_ncols=False))
             else:
                 result = list(pool.map(func, params))
-        print(len(params))
-        print("hahaha")
-
     else:
-        print(len(params))
-        print("kakaka")
+
         if show_progress:
             pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
                              unit='job', unit_scale=True, dynamic_ncols=False)
@@ -219,9 +209,6 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
             result = []
             for p in params:
                 result.append(func(p))
-        print(len(params))
-        print("kakaka")
-
     if verbose:
         log_mp.debug("Time to compute: {:.1f} min".format((time.time() - start) / 60.))
 
@@ -336,20 +323,15 @@ def start_multiprocess_imap_sso(func, sso, params, debug=False, verbose=False,
         with MyPool(nb_cpus) as pool:
             if show_progress:
                 result = parallel_process_sso(sso, params, func, nb_cpus)
-                print(len(params))
-                print("showing progress")
+
                 # # comparable speed but less continuous pbar updates
                 # result = list(tqdm.tqdm(pool.imap(func, params), total=len(params),
                 #                         ncols=80, leave=True, unit='jobs',
                 #                         unit_scale=True, dynamic_ncols=False))
             else:
                 result = list(pool.map(func, params))
-        print(len(params))
-        print("hahaha")
 
     else:
-        print(len(params))
-        print("kakaka")
         if show_progress:
             pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
                              unit='job', unit_scale=True, dynamic_ncols=False)
@@ -362,8 +344,6 @@ def start_multiprocess_imap_sso(func, sso, params, debug=False, verbose=False,
             result = []
             for p in params:
                 result.append(func(p))
-        print(len(params))
-        print("kakaka")
 
     if verbose:
         log_mp.debug("Time to compute: {:.1f} min".format((time.time() - start) / 60.))

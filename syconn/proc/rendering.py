@@ -12,6 +12,7 @@ import time
 import os
 import tqdm
 import warnings
+import glob
 from scipy.ndimage.filters import gaussian_filter
 
 from .image import rgb2gray, apply_clahe
@@ -30,7 +31,7 @@ try:
     from OpenGL.GL import *
     from OpenGL.GLU import *
     from OpenGL.GL.framebufferobjects import *
-    from OpenGL.arrays import QSUB_script
+    from OpenGL.arrays import *
 except Exception as e:
     log_proc.error("Problem loading OpenGL: {}".format(e))
     pass
@@ -53,6 +54,10 @@ try:
     from ..mp.batchjob_utils import QSUB_script
 except Exception as error:
     print('Caught this error: ' + repr(error))
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
 
 
 # ------------------------------------ General rendering code ------------------------------------------
@@ -813,7 +818,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
                       nb_views=None, comp_window=None, rot_mat=None, return_rot_mat=False):
     """
     Render views of SuperSegmentationObject at given coordinates.
-    
+
     Parameters
     ----------
     sso : SuperSegmentationObject
@@ -904,9 +909,9 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     return raw_views[:, None]
 
 
-def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
+def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
                                   rot_mat=None, nb_views=None,
-                                  comp_window=8e3, return_rot_matrices=False):
+                                  comp_window=None, return_rot_matrices=False):
     """
 
     Parameters
@@ -924,12 +929,21 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     -------
 
     """
+    if comp_window is None:
+        comp_window = 8e3
+    if ws is None:
+        ws = (256, 128)
     if verbose:
-        log_proc.debug('Started "render_sso_coords_index_views" at {} locations for SSO {} using PyOpenGL'
+        print('Started "render_sso_coords_index_views" at {} locations for SSO {} using PyOpenGL'
                        ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
+    tim = time.time()
     ind, vert, norm = sso.mesh
+    tim1 = time.time()
+    if verbose:
+        print("Time for initialising MESH {:.2f}s."
+                           "".format(tim1 - tim))
     if len(vert) == 0:
         log_proc.error("No mesh for SSO {} found.".format(sso.id))
         return np.ones((len(coords), nb_views, ws[1], ws[0], 3), dtype=np.uint8)
@@ -947,6 +961,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
     # backwards compatibility with other color-dependent rendering methods
     # Create mesh object without redundant vertices to get same PCA rotation as for raw views
+    tim = time.time()
     if rot_mat is None:
         mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
         querybox_edgelength = comp_window / mo.max_dist
@@ -957,6 +972,10 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     ind = np.arange(len(vert) // 3)
     color_array = np.repeat(color_array, 3, axis=0)
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
+    tim1 = time.time()
+
+    print("Time for initializing MESHOBJECT {:.2f}s."
+                       "".format(tim1 - tim))
     if return_rot_matrices:
         ix_views, rot_mat = _render_mesh_coords(
             coords, mo, verbose=verbose, ws=ws, depth_map=False,
@@ -970,12 +989,16 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
                                    smooth_shade=False, views_key="index",
                                    nb_views=nb_views, comp_window=comp_window,
                                    return_rot_matrices=return_rot_matrices)
+    tim2 = time.time()
+
+    print("Time for _RENDER_MESH_COORDS {:.2f}s."
+                       "".format(tim2 - tim1))
     return rgb2id_array(ix_views)[:, None]
 
 
 def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
-                                  ws=(256, 128), rot_mat=None, nb_views=None,
-                                  comp_window=8e3, return_rot_matrices=False):
+                                  ws=None, rot_mat=None, nb_views=None,
+                                  comp_window=None, return_rot_matrices=False):
     """
     Render views with vertex colors corresponding to vertex labels.
 
@@ -997,6 +1020,10 @@ def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
     -------
 
     """
+    if comp_window is None:
+        comp_window = 8e3
+    if ws is None:
+        ws = (256, 128)
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     ind, vert, _ = sso.mesh
@@ -1059,41 +1086,44 @@ def render_sso_ortho_views(sso):
     return views
 
 
-def render_sso_coords_multiprocessing(ssv, wd, real_param, n_jobs, verbose):
-    #sso, coords, add_cellobjects, verbose, clahe,\
-    #ws, cellobjects_only, wire_frame,\
-    #nb_views, comp_window, rot_mat, return_rot_mat = args
+def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
+                                      n_jobs, verbose=False, render_indexviews=True):
     """
-    ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')  # running on cluster
-    # ssc=SuperSegmentationDataset('/home/atulm/mount/wb/wholebrain/scratch/areaxfs3/')    #running on local machine
-    ssv = ssc.get_super_segmentation_object(29753344)
 
-    exloc = np.array([5602, 4173, 4474]) * ssv.scaling
-    exlocs = np.concatenate(ssv.sample_locations())
+    Parameters
+    ----------
+    ssv : SuperSegmentationObject
+    wd
+    rendeirng_locations
+    n_jobs
+    verbose
 
-    views = render_sso_coords(ssv, exlocs[::10], verbose=True)
+    Returns
+    -------
+
     """
-    print(wd)
-
-    #coords = [10000]
-    #views = render_sso_coords(sso, coord, verbose=True)
-    #print(params[3].exlocs)
-    #res = start_multiprocess_imap(render_sso_coords_commandline, params, nb_cpus=n_job, verbose=verbose)
-    #ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')
-    #ssv = ssc.get_super_segmentation_object(29753344)
-    coords = real_param
-    params = chunkify_successive(coords, n_jobs)
-    ssv_id = ssv
+    tim = time.time()
+    chunk_size = len(rendering_locations) // n_jobs + 1
+    print(chunk_size)
+    params = chunkify_successive(rendering_locations, chunk_size)  # TODO: adapt chunk size in a reasonable way
+    ssv_id = ssv.id
     working_dir = wd
     sso_kwargs = {'ssv_id': ssv_id,
-                 'working_dir': working_dir}
+                  'working_dir': working_dir,
+                  "version": ssv.version}
     render_kwargs = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
-                      'nb_views': None, 'comp_window': None, 'rot_mat': None, 'return_rot_mat': False}
+                      'nb_views': None, 'comp_window': None, 'rot_mat': None,
+                     'return_rot_mat': False, 'render_indexviews': render_indexviews}
     params = [[par, sso_kwargs, render_kwargs] for par in params]
+    tim1 = time.time()
+    if verbose:
+        log_proc.debug("Time for OTHER COMPUTATION {:.2f}s."
+                       "".format(tim1 - tim))
     path_to_out = QSUB_script(
         params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
-        queue=None, script_folder=None, n_cores=n_jobs)
+        queue=None, script_folder=None, n_cores=1, disable_batchjob=True,
+        n_max_co_processes=n_jobs)
     # TODO: read and concatenate all output files in the correct order
 
     out_files = glob.glob(path_to_out + "/*")
@@ -1101,6 +1131,5 @@ def render_sso_coords_multiprocessing(ssv, wd, real_param, n_jobs, verbose):
     for out_file in out_files:
         with open(out_file, 'rb') as f:
             results.append(pkl.load(f))
-
 
     #res = start_multiprocess_imap(render_sso_coords_commandline, params, nb_cpus=n_job, verbose=verbose)
