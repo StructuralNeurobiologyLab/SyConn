@@ -739,13 +739,11 @@ def get_axoness_model_e3():
     return m
 
 
-
 def get_glia_model():
     m = NeuralNetworkInterface(global_params.config.mpath_glia, imposed_batch_size=200,
                                nb_labels=2, normalize_data=True)
     _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
     return m
-
 
 
 def get_glia_model_e3():
@@ -760,7 +758,6 @@ def get_glia_model_e3():
     m = InferenceModel(path)
     m._path = path
     return m
-
 
 
 def get_celltype_model(init_gpu=None):

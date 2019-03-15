@@ -102,7 +102,7 @@ if elektronn3_avail:
         ):
             super().__init__()
             self.train = train
-            self.transform = transform
+            self.transform = transform  # TODO: add gt paths to config
             self.av = AxonViews(None, None, naive_norm=False, working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
 
         def __getitem__(self, index):
@@ -118,6 +118,7 @@ if elektronn3_avail:
                 return 100
             return 1000
 
+
     class CelltypeViewsE3(Dataset):
         """
         Wrapper method for CelltypeViews data loader.
@@ -131,15 +132,12 @@ if elektronn3_avail:
             super().__init__()
             self.train = train
             self.transform = transform
-
-            # TODO: currently no kwarg in `CelltypeViews` for using training / validation data only -> higher MEM cons.
+            # TODO: add gt paths to config
             self.ctv = CelltypeViews(None, None, **kwargs)
-            
 
         def __getitem__(self, index):
             inp, target, syn_signs = self.ctv.getbatch_alternative(1, source='train' if self.train else 'valid')
             inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
-            # target = np.eye(self.ctv.n_classes)[target.squeeze().astype(np.int)]  # one-hot encoding
             return inp[0], target.squeeze().astype(np.int), syn_signs[0].astype(np.float32)  # target should just be a scalar
 
         def __len__(self):
@@ -161,7 +159,7 @@ if elektronn3_avail:
         ):
             super().__init__()
             self.train = train
-            self.transform = transform
+            self.transform = transform  # TODO: add gt paths to config
             self.gv = GliaViews(None, None, naive_norm=False, av_working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
 
         def __getitem__(self, index):
@@ -502,7 +500,7 @@ class CelltypeViews(MultiViewData):
         self.reduce_context_fact = reduce_context_fact
         self.binary_views = binary_views
         self.example_shape = (nb_views, 4, 2, 128, 256)
-        print("Initializing CelltypeViews:", self.__dict__)
+        print("Initializing CelltypeViews:", self.__dict__)  # TODO: add gt paths to config
         super().__init__(global_params.config.working_dir, ctgt_key, train_fraction=train_fraction,
                          naive_norm=False, load_data=load_data, random_seed=random_seed)
         ssv_splits = self.splitting_dict
@@ -590,7 +588,6 @@ class CelltypeViews(MultiViewData):
                                                                np.unique(self.label_cache[source]),
                                                                self.label_cache[source])
         ixs = np.random.choice(np.arange(len(self.view_cache[source])), batch_size, replace=False)
-        print(ixs)
         d, l, syn_signs = transform_celltype_data_views_alternative(
             [self.view_cache[source][ix] for ix in ixs], [self.label_cache[source][ix] for ix in ixs],
             self.syn_sign_cache[source], batch_size, self.nb_views)
