@@ -27,18 +27,20 @@ with open(path_storage_file, 'rb') as f:
             args.append(pkl.load(f))
         except EOFError:
             break
-
+#params = args[0]
+#coords = params['coords']
 coords = args[0]
 sso_kwargs = args[1]
 working_dir = sso_kwargs['working_dir']
-
 global_params.wd = working_dir
 kwargs = args[2]
 render_indexviews = kwargs['render_indexviews']
 del kwargs['render_indexviews']
 sso = SuperSegmentationObject(**sso_kwargs)
 views = 0  # in case no rendering locations are given
+#index = args[3]
 print("In QSUB script")
+print(len(sso_kwargs))
 if render_indexviews:
     print("In Render_index")
     del kwargs['add_cellobjects']

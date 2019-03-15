@@ -431,7 +431,7 @@ def calc_rot_matrices(coords, vertices, edge_length):
     rot_matrices = np.zeros((len(coords), 16))
     edge_lengths = np.array([edge_length] * 3)
     for ii, c in enumerate(coords):
-        bounding_box = (c, edge_lengths)
+        bounding_box = np.array([c, edge_lengths])
         inlier = np.array(vertices[in_bounding_box(vertices, bounding_box)])
         rot_matrices[ii] = get_rotmatrix_from_points(inlier)
     return rot_matrices

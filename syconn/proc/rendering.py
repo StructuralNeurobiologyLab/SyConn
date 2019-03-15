@@ -1102,6 +1102,8 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
     -------
 
     """
+    index = []
+    #params1 = {'coords': rendering_locations, 'index': index }
     tim = time.time()
     chunk_size = len(rendering_locations) // n_jobs + 1
     print(chunk_size)
@@ -1115,6 +1117,12 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
                       'nb_views': None, 'comp_window': None, 'rot_mat': None,
                      'return_rot_mat': False, 'render_indexviews': render_indexviews}
+
+    for i in range(n_jobs):
+        for j in range(len(rendering_locations)):
+            index.append(i)
+    index_array = chunkify_successive(index, chunk_size)
+
     params = [[par, sso_kwargs, render_kwargs] for par in params]
     tim1 = time.time()
     if verbose:
