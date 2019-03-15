@@ -5,7 +5,7 @@ from syconn.proc.rendering import render_sso_coords, \
 import time
 import itertools
 from syconn import global_params
-
+from syconn.handler.basics import chunkify_successive
 class data:
     ssc = SuperSegmentationDataset('/wholebrain/scratch/areaxfs3/')
     ssv = ssc.get_super_segmentation_object(29753344)
@@ -31,8 +31,9 @@ if __name__=='__main__':
     now2 = time.time()
     print("time for reading data")
     print(now2-now)
+
     render_sso_coords_multiprocessing(ssv, working_dir, exlocs, render_indexviews=render_indexview,
-                                      n_jobs=3, verbose=True)
+                                      n_jobs=5, verbose=True)
     now1 = time.time()
 
     print(now1)
