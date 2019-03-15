@@ -431,7 +431,7 @@ class CelltypeViews(MultiViewData):
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
         self.reduce_context = reduce_context
-        self.cache_size = 2000 * 4  # random permutations/subset in selected SSV views, RandomFlip augmentation etc.
+        self.cache_size = 2000 * 2  # random permutations/subset in selected SSV views, RandomFlip augmentation etc.
         self.max_nb_cache_uses = self.cache_size
         self.current_cache_uses = 0
         assert n_classes == len(class_weights)
@@ -532,6 +532,7 @@ class CelltypeViews(MultiViewData):
                                                                np.unique(self.label_cache[source]),
                                                                self.label_cache[source])
         ixs = np.random.choice(np.arange(len(self.view_cache[source])), batch_size, replace=False)
+        print(ixs)
         d, l, syn_signs = transform_celltype_data_views_alternative(
             [self.view_cache[source][ix] for ix in ixs], [self.label_cache[source][ix] for ix in ixs],
             self.syn_sign_cache[source], batch_size, self.nb_views)
