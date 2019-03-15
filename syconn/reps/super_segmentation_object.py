@@ -345,6 +345,10 @@ class SuperSegmentationObject(object):
     def vcs(self):
         return self.get_seg_objects("vc")
 
+    @property
+    def syn_ssv(self):
+        return self.get_seg_objects("syn_ssv")
+
     #                                                                     MESHES
     def load_mesh(self, mesh_type):
         if not mesh_type in self._meshes:
@@ -615,6 +619,7 @@ class SuperSegmentationObject(object):
     def _load_obj_mesh(self, obj_type="sv", rewrite=False):
         """
         TODO: Currently does not support color array!
+        TODO: add support for sym. asym synapse type
 
         Parameters
         ----------
@@ -924,6 +929,33 @@ class SuperSegmentationObject(object):
                 return True
             return False
 
+    def syn_sign_ratio(self, weighted=True):
+        """
+        Ratio of symmetric synapses.
+
+        Returns
+        -------
+        float
+        """
+        ratio = self.lookup_in_attribute_dict("syn_sign_ratio")
+        if ratio is not None:
+            return ratio
+        syn_signs = []
+        syn_sizes = []
+        for syn in self.syn_ssv:
+            syn.load_attr_dict()
+            syn_signs.append(syn.attr_dict["syn_sign"])
+            syn_sizes.append(syn.mesh_area / 2)
+        syn_signs = np.array(syn_signs)
+        syn_sizes = np.array(syn_sizes)
+        if weighted:
+            ratio = np.sum(syn_sizes[syn_signs == -1]) / float(np.sum(syn_sizes))
+        else:
+            ratio = np.sum(syn_signs == -1) / float(len(syn_signs))
+        self.attr_dict["syn_sign_ratio"] = ratio
+        self.save_attributes(["syn_sign_ratio"], [ratio])
+        return ratio
+
     def aggregate_segmentation_object_mappings(self, obj_types, save=False):
         assert isinstance(obj_types, list)
 
@@ -1057,6 +1089,7 @@ class SuperSegmentationObject(object):
         for GT purposes, then on can call ssv_orig.copy2dir(ssv_target.ssv_dir)
          and all data contained in the SSD of ssv_orig will be copied to
          the SSD of ssv_target.
+
         Parameters
         ----------
         dest_dir : str
@@ -1075,9 +1108,10 @@ class SuperSegmentationObject(object):
             dest_filename = dest_dir + "/" + fnames[i]
             try:
                 safe_copy(src_filename, dest_filename, safe=safe)
-                log_reps.info("Copied %s to %s." % (src_filename, dest_filename))
+                log_reps.debug("Copied %s to %s." % (src_filename, dest_filename))
             except Exception as e:
-                log_reps.error("Skipped", fnames[i], str(e))
+                log_reps.error("Skipped '{}', due to the following error: '{}'"
+                               "".format(fnames[i], str(e)))
                 pass
         self.load_attr_dict()
         if os.path.isfile(dest_dir + "/attr_dict.pkl"):
@@ -2502,10 +2536,12 @@ def celltype_predictor(args):
     -------
 
     """
-    from ..handler.prediction import get_celltype_model
+    # from ..handler.prediction import get_celltype_model
+    from ..handler.prediction import get_celltype_model_e3
     ssv_ids = args
     # randomly initialize gpu
-    m = get_celltype_model(init_gpu=0)
+    # m = get_celltype_model(init_gpu=0)
+    m = get_celltype_model_e3()
     pbar = tqdm.tqdm(total=len(ssv_ids))
     missing_ssvs = []
     for ix in ssv_ids:

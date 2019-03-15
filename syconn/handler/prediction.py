@@ -724,10 +724,39 @@ def get_axoness_model():
     return m
 
 
+
+def get_axoness_model_e3():
+    """Those networks are typically trained with `naive_view_normalization_new` """
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    path = global_params.config.mpath_axoness_e3
+    m = InferenceModel(path)
+    m._path = path
+    return m
+
+
 def get_glia_model():
     m = NeuralNetworkInterface(global_params.config.mpath_glia, imposed_batch_size=200,
                                nb_labels=2, normalize_data=True)
     _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
+    return m
+
+
+def get_glia_model_e3():
+    """Those networks are typically trained with `naive_view_normalization_new` """
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    path = global_params.config.mpath_glia_e3
+    m = InferenceModel(path)
+    m._path = path
     return m
 
 
@@ -749,6 +778,20 @@ def get_celltype_model(init_gpu=None):
                                normalize_func=naive_view_normalization_new,
                                init_gpu=init_gpu)
     _ = m.predict_proba(np.zeros((6, 4, 20, 128, 256)))
+    return m
+
+
+def get_celltype_model_e3():
+    """Those networks are typically trained with `naive_view_normalization_new` """
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    path = global_params.config.mpath_celltype_e3
+    m = InferenceModel(path)
+    m._path = path
     return m
 
 

@@ -185,13 +185,26 @@ class DynConfig(Config):
     def mpath_celltype(self):
         return self.model_dir + '/celltype/celltype.mdl'
 
+
+    @property
+    def mpath_celltype_e3(self):
+        return self.model_dir + '/celltype_e3/'
+
     @property
     def mpath_axoness(self):
         return self.model_dir + '/axoness/axoness.mdl'
 
     @property
+    def mpath_axoness_e3(self):
+        return self.model_dir + '/axoness_e3/'
+
+    @property
     def mpath_glia(self):
         return self.model_dir + '/glia/glia.mdl'
+
+    @property
+    def mpath_glia_e3(self):
+        return self.model_dir + '/glia_e3/'
 
     @property
     def mpath_syn_rfc(self):

@@ -5,6 +5,7 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
 try:
     import cPickle as pkl
 except ImportError:
@@ -19,17 +20,16 @@ from knossos_utils import knossosdataset
 from knossos_utils import chunky
 knossosdataset._set_noprint(True)
 import os
-try:
-    from .block_processing_cython import kernel, process_block, process_block_nonzero
-except ImportError:
-    from .block_processing import kernel, process_block, process_block_nonzero
-
 from ..reps import segmentation
 from ..mp import batchjob_utils as qu
-from ..mp import mp_utils as sm
 from ..handler import compression
 from . import object_extraction_steps as oes
 from . import log_extraction
+try:
+    from .block_processing_cython import kernel, process_block, process_block_nonzero
+except ImportError as e:
+    log_extraction.warning('Could not import cython version of `block_processing`.')
+    from .block_processing import kernel, process_block, process_block_nonzero
 
 
 def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
@@ -99,6 +99,7 @@ def detect_cs(arr):
     cs_seg = process_block_nonzero(edges, arr, [13, 13, 7])
 
     return cs_seg
+
 
 def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
                               n_folders_fs=10000, suffix="",

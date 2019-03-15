@@ -410,7 +410,7 @@ class main_class(QtGui.QDialog):
             k_tree = KnossosModule.skeleton.add_tree(tree_id)
         # add synapse location
         kn = KnossosModule.skeleton.add_node([c[0] + 1, c[1] + 1, c[2] + 1],
-                                            k_tree, {})  # x y swap?!
+                                            k_tree, {})
         KnossosModule.skeleton.jump_to_node(kn)
 
         # syn properties
@@ -543,7 +543,7 @@ class main_class(QtGui.QDialog):
         layout.addWidget(self.show_button, 3, 0, 1, 1)
         layout.addWidget(self.clear_knossos_view_button, 3, 1, 1, 1)
         layout.addWidget(self.exploration_mode_chk_box, 4, 0, 1, 2)
-        layout.addWidget(self.celltype_field, 2, 2, 1, 2)
+        layout.addWidget(self.celltype_field, 1, 2, 1, 2)
 
         layout.addWidget(self.synapse_field1, 2, 2, 1, 1)
         layout.addWidget(self.synapse_field2, 3, 2, 1, 1)
@@ -749,7 +749,6 @@ class main_class(QtGui.QDialog):
             print("Mi time:", time.time() - mi_start)
             mi_start = time.time()
             if len(mi_mesh[0]) > 0:
-                print(len(mi_mesh[1]))
                 KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh[1], mi_mesh[2],
                                                      mi_mesh[0],
                                                      [], 4, False)
@@ -762,7 +761,6 @@ class main_class(QtGui.QDialog):
             print("SJ time:", time.time() - sj_start)
             sj_start = time.time()
             if len(sj_mesh[0]) > 0:
-                print(len(sj_mesh[1]))
                 KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh[1], sj_mesh[2],
                                                      sj_mesh[0],
                                                      [], 4, False)
@@ -775,7 +773,6 @@ class main_class(QtGui.QDialog):
             print("VC time:", time.time() - vc_start)
             vc_start = time.time()
             if len(vc_mesh[0]) > 0:
-                print(len(vc_mesh[1]))
                 KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh[1], vc_mesh[2],
                                                      vc_mesh[0],
                                                      [], 4, False)
@@ -789,7 +786,6 @@ class main_class(QtGui.QDialog):
             print("SV time:", time.time() - sv_start)
             sv_start = time.time()
             if len(mesh[0]) > 0:
-                print(len(mesh[1]))
                 KnossosModule.skeleton.add_tree_mesh(neuron_id, mesh[1], mesh[2],
                                                      mesh[0],
                                                      [], 4, False)

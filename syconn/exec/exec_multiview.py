@@ -125,12 +125,12 @@ def run_axoness_prediction(n_jobs=100):
 
 
 def run_celltype_prediction(n_jobs=100):
+    # TODO: changed to new cell type predictions, work this in everywhere (keys: celltype_cnn_e3_probas and celltype_cnn_e3)
     log = initialize_logging('celltype_prediction', global_params.config.working_dir+ '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     # shuffle SV IDs
     np.random.seed(0)
-    ssv_ids = ssd.ssv_ids
 
     log.info('Starting cell type prediction.')
     nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
@@ -196,7 +196,7 @@ def run_spiness_prediction(n_jobs=100):
     multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
     multi_params = chunkify(multi_params, 3000)
     # add ssd parameters
-    kwargs_semseg2mesh = dict(semseg_key=pred_key, force_overwrite=True)
+    kwargs_semseg2mesh = dict(semseg_key=pred_key, force_recompute=True)
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
                      kwargs_semseg2mesh) for ssv_ids in multi_params]
     log.info('Starting mapping of spine predictions to neurite surfaces.')
