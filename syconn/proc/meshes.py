@@ -22,10 +22,10 @@ try:
 except ImportError:
     __vtk_avail__ = False
 
-#try:
-#    from .in_bounding_boxC import in_bounding_box
-#except ImportError:
-from .in_bounding_box import in_bounding_box
+try:
+   from .in_bounding_boxC import in_bounding_box
+except ImportError:
+    from .in_bounding_box import in_bounding_box
 
 from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip

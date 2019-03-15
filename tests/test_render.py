@@ -25,14 +25,14 @@ if __name__=='__main__':
     ssc = SuperSegmentationDataset(working_dir)
     ssv = ssc.get_super_segmentation_object(29753344)
     exlocs = np.concatenate(ssv.sample_locations())
-    exlocs = exlocs[::10]
+    exlocs = exlocs
     print("Example location array:", exlocs.shape)
     print(working_dir)
     now2 = time.time()
     print("time for reading data")
     print(now2-now)
     render_sso_coords_multiprocessing(ssv, working_dir, exlocs, render_indexviews=render_indexview,
-                                      n_jobs=2, verbose=True)
+                                      n_jobs=3, verbose=True)
     now1 = time.time()
 
     print(now1)
@@ -42,14 +42,14 @@ if __name__=='__main__':
 #global_params.PYOPENGL_PLATFORM = 'osmesa'
     now2 = time.time()
     print(now2)
-
+    """
     if render_indexview:
         views = render_sso_coords_index_views(ssv, exlocs, verbose=True)
     else:
         views = render_sso_coords(ssv, exlocs, verbose=True)
     now3 = time.time()
     print(now3-now2)
-
+    """
 
 #now2 = time.time()
 
