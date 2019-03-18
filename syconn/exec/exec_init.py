@@ -101,7 +101,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
         sd_co = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir)
         sd_proc.dataset_analysis(sd_co, qsub_pe="default", qsub_queue='all.q',
                                  compute_meshprops=True)
-        # About 0.2 h per object class  # TODO: optimization required, especially VC are slow due to additonal membrane checks -> investigate
+        # About 0.2 h per object class  # TODO: optimization required, especially VC are slow due to additonal membrane checks (this happens only during thresholding step, maybe safe), also check size thresholds, they might not be appllied here -> investigate
         log.debug('Mapping objects {} to SVs.'.format(co))
         sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path, qsub_pe='default',
                                   qsub_queue='all.q')

@@ -894,7 +894,7 @@ def _extract_voxels_thread(args):
 
 
 def combine_voxels(workfolder, hdf5names, dataset_names=None,
-                   n_folders_fs=10000, stride=10, nb_cpus=None, sd_version=0,
+                   n_folders_fs=10000, n_chunk_jobs=5000, nb_cpus=None, sd_version=0,
                    qsub_pe=None, qsub_queue=None, n_max_co_processes=None):
     """
     Extracts voxels for each component id and ceates a SegmentationDataset of type hdf5names.
@@ -931,8 +931,11 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
                                                       create=True, n_folders_fs=n_folders_fs)
 
         multi_params = []
-        path_blocks = np.array_split(np.array(voxel_rel_paths),
-                                     int(len(voxel_rel_paths) / stride))
+
+        if n_chunk_jobs > len(voxel_rel_paths):
+            n_chunk_jobs = len(voxel_rel_paths)
+
+        path_blocks = np.array_split(np.array(voxel_rel_paths), n_chunk_jobs)
 
         dataset_temp_path = workfolder + "/%s_temp/" % hdf5_name
         with open(dataset_temp_path + "/remapping_dict.pkl", "rb") as f:
@@ -963,20 +966,20 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
                                  path_block_dicts, segdataset.version,
                                  n_folders_fs])
 
-        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-            results = sm.start_multiprocess_imap(_combine_voxels_thread,
-                                            multi_params, nb_cpus=n_max_co_processes,)
+        # if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+        #     results = sm.start_multiprocess_imap(_combine_voxels_thread,
+        #                                     multi_params, nb_cpus=n_max_co_processes,)
 
-        elif qu.batchjob_enabled():
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "combine_voxels",
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None,
-                                         n_max_co_processes=n_max_co_processes,
-                                         n_cores=nb_cpus)
+        # elif qu.batchjob_enabled():
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "combine_voxels",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=None,
+                                     n_max_co_processes=n_max_co_processes,
+                                     n_cores=nb_cpus)
 
-        else:
-            raise Exception("QSUB not available")
+        # else:
+        #     raise Exception("QSUB not available")
 
 
 def _combine_voxels_thread(args):

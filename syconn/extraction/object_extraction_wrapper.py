@@ -62,6 +62,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                   func_kwargs=None, nb_cpus=None, workfolder=None,
                                   n_erosion=0, overlap_thresh=0, stitch_overlap=None):
     """
+    # TODO: Merge this method with mapping (e.g. iterate over chunks of cell SV segm. and over all objects to extract bounding boxes and overlap (i.e. mapping) at the same time
     Main function for the object extraction step; combines all needed steps
     # TODO: change object_names to dataset_names as in other methods
 
@@ -220,6 +221,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                     nb_cc_dict[hdf5_name][-1])
     all_times.append(time.time() - time_start)
     step_names.append("extracting max labels")
+    log_extraction.debug("Max labels: {}".format(max_labels))
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",
                          [max_labels])
     #
@@ -271,29 +273,29 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     # --------------------------------------------------------------------------
     # TODO: Remove map-reduce procedure or make it optional with kwarg
     time_start = time.time()
-    oes.extract_voxels_combined(cset, filename, hdf5names, n_folders_fs=n_folders_fs,
-                       chunk_list=chunk_list, suffix=suffix, workfolder=workfolder,
-                       use_work_dir=True, qsub_pe=qsub_pe,
-                       qsub_queue=qsub_queue, object_names=object_names,
-                       n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
+    # oes.extract_voxels_combined(cset, filename, hdf5names, n_folders_fs=n_folders_fs,
+    #                    chunk_list=chunk_list, suffix=suffix, workfolder=workfolder,
+    #                    use_work_dir=True, qsub_pe=qsub_pe,
+    #                    qsub_queue=qsub_queue, object_names=object_names,
+    #                    n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
+    oes.extract_voxels(cset, filename, hdf5names,
+                       chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
+                       qsub_queue=qsub_queue, workfolder=global_params.config.working_dir,
+                       n_folders_fs=n_folders_fs,
+                       n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
-    # oes.extract_voxels(cset, filename, hdf5names,
-    #                    chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
-    #                    qsub_queue=qsub_queue, workfolder=global_params.config.working_dir,
-    #                    n_folders_fs=n_folders_fs,
-    #                    n_max_co_processes=n_max_co_processes)
     step_names.append("voxel extraction")
 
-    # # --------------------------------------------------------------------------
-    #
-    # time_start = time.time()
-    # oes.combine_voxels(global_params.config.working_dir,
-    #                    hdf5names, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-    #                    n_folders_fs=n_folders_fs,
-    #                    n_max_co_processes=n_max_co_processes)
-    #
-    # all_times.append(time.time() - time_start)
-    # step_names.append("combine voxels")
+    # --------------------------------------------------------------------------
+
+    time_start = time.time()
+    oes.combine_voxels(global_params.config.working_dir,
+                       hdf5names, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
+                       n_folders_fs=n_folders_fs, n_chunk_jobs=5000,
+                       n_max_co_processes=n_max_co_processes)
+
+    all_times.append(time.time() - time_start)
+    step_names.append("combine voxels")
 
     # --------------------------------------------------------------------------
     log_extraction.debug("Time overview:")
