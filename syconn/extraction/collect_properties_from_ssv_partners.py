@@ -84,7 +84,7 @@ def _collect_properties_from_ssv_partners_thread(args):
                                        'partner_celltypes': celltypes, 'syn_sign': syn_sign,
                                        'latent_morph': latent_morph})
             this_attr_dc[synssv_id] = synssv_o.attr_dict
-this_attr_dc.push()
+        this_attr_dc.push()
 
 
 

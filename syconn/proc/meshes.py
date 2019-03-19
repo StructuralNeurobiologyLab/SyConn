@@ -23,7 +23,7 @@ except ImportError:
     __vtk_avail__ = False
 
 try:
-    from .in_bounding_boxC_toCheck import in_bounding_box
+    from .in_bounding_boxC import in_bounding_box
 except ImportError:
     from .in_bounding_box import in_bounding_box
 
@@ -432,6 +432,8 @@ def calc_rot_matrices(coords, vertices, edge_length):
     edge_lengths = np.array([edge_length] * 3)
     for ii, c in enumerate(coords):
         bounding_box = (c, edge_lengths)
+        print("c= ", c)
+        print("edge_lengths= ", edge_lengths)
         inlier = np.array(vertices[in_bounding_box(vertices, bounding_box)])
         rot_matrices[ii] = get_rotmatrix_from_points(inlier)
     return rot_matrices

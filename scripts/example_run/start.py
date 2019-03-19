@@ -78,8 +78,8 @@ if __name__ == '__main__':
     log.info('Finished example cube preparation {}. Starting SyConn pipeline.'.format(bd))
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
-    # # INITIALIZE DATA
-    # # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
+    ##INITIALIZE DATA
+    ## TODO: data too big to put into github repository, add alternative to pull data into h5_dir
     # log.info('Step 0/8 - Preparation')
     # kd = knossosdataset.KnossosDataset()
     # kd.initialize_from_matrix(example_wd + 'knossosdatasets/seg/', scale, experiment_name,
@@ -134,14 +134,15 @@ if __name__ == '__main__':
     # log.info('Step 6/8 - Spine prediction')
     # exec_multiview.run_spiness_prediction(n_jobs=4)
     #
+    # print("ops")
     # log.info('Step 7/8 - Synapse identification')
     # exec_syns.run_syn_generation(chunk_size=(128, 128, 128), n_folders_fs=100)
-    #
+
     log.info('Step 8/8 - Synapse analysis')
     exec_syns.run_syn_analysis()
 
-    # log.info('SyConn analysis of "{}" has finished. Setting up flask server for'
-    #          ' inspection of cell reconstructions  via the KNOSSOS-SyConn'
-    #          ' plugin.'.format(experiment_name))
-    # fname_server = os.path.dirname(os.path.abspath(__file__)) + '/../kplugin/server.py'
-# os.system('python {} --working_dir={} --port=10002'.format(fname_server, example_wd))
+    log.info('SyConn analysis of "{}" has finished. Setting up flask server for'
+             ' inspection of cell reconstructions  via the KNOSSOS-SyConn'
+             ' plugin.'.format(experiment_name))
+    fname_server = os.path.dirname(os.path.abspath(__file__)) + '/../kplugin/server.py'
+os.system('python {} --working_dir={} --port=10002'.format(fname_server, example_wd))
