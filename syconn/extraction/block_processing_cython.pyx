@@ -11,7 +11,6 @@ import timeit
 
 def kernel(uint32_t[:, :, :] chunk, uint64_t center_id):
 
-    print ("Cython")
     cdef map[uint32_t, int] unique_ids
 
     for i in range(chunk.shape[0]):

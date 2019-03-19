@@ -25,7 +25,7 @@ from multiprocessing import cpu_count
 from ..handler.basics import temp_seed
 from ..handler.logger import initialize_logging
 from .. import global_params
-from ..mp.mp_utils import start_multiprocess_imap
+from .mp_utils import start_multiprocess_imap
 from . import log_mp
 
 BATCH_PROC_SYSTEM = global_params.BATCH_PROC_SYSTEM
@@ -542,6 +542,9 @@ def fallback_exec(cmd_exec):
     ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
     out, err = ps.communicate()
+    # if log_mp.level == 10:  # 10 == 'DEUBUG'
+    #     log_mp.debug(out.decode())
+    #     log_mp.debug(err.decode())
     if 'error' in err.decode().lower():
         log_mp.error(out.decode())
         log_mp.error(err.decode())

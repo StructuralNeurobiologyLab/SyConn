@@ -16,6 +16,7 @@ import openmesh
 from plyfile import PlyData, PlyElement
 from scipy.ndimage.morphology import binary_closing, binary_dilation
 import tqdm
+import time
 try:
     import vtki
     __vtk_avail__ = True
@@ -405,7 +406,8 @@ def normalize_vertices(vertices):
 
 def calc_rot_matrices(coords, vertices, edge_length):
     """
-    # TODO: optimize with cython (bottleneck is probably 'in_bounding_box' -> create single for loop)
+    # Optimization comment: bottleneck is now 'get_rotmatrix_from_points'
+
     Fits a PCA to local sub-volumes in order to rotate them according to
     its main process (e.g. x-axis will be parallel to the long axis of a tube)
 
@@ -430,10 +432,20 @@ def calc_rot_matrices(coords, vertices, edge_length):
         vertices = vertices[::8]
     rot_matrices = np.zeros((len(coords), 16))
     edge_lengths = np.array([edge_length] * 3)
+    rotmat_dt = 0
+    inlier_dt = 0
     for ii, c in enumerate(coords):
-        bounding_box = (c, edge_lengths)
+        bounding_box = np.array([c, edge_lengths])
+        # start = time.time()
         inlier = np.array(vertices[in_bounding_box(vertices, bounding_box)])
+        # inlier_dt += time.time() - start
+        # start = time.time()
         rot_matrices[ii] = get_rotmatrix_from_points(inlier)
+        # rotmat_dt += time.time() - start
+    # log_proc.debug('Time for inlier calc.: {:.2f} min'.format(
+    #     inlier_dt / 60))
+    # log_proc.debug('Time for rot. mat.  calc.: {:.2f} min'.format(
+    #     rotmat_dt / 60))
     return rot_matrices
 
 

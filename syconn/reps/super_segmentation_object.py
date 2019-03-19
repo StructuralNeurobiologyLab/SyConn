@@ -1254,7 +1254,7 @@ class SuperSegmentationObject(object):
         return so_views_exist
 
     def render_views(self, add_cellobjects=False, verbose=False,
-                     qsub_pe=None, overwrite=False, cellobjects_only=False,
+                     qsub_pe=None, overwrite=True, cellobjects_only=False,
                      woglia=True, skip_indexviews=False, qsub_co_jobs=300,
                      resume_job=False):
         """

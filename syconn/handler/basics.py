@@ -342,15 +342,16 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
                     for i in range(len(texts)):
                         zf.writestr(fnames_in_zip[i], texts[i])
         except Exception as e:
-            log_handler.error("Couldn't open file %s for reading and" \
-                  " overwriting." % kzip_path, e)
+            log_handler.error("Couldn't open file {} for reading and overwri"
+                              "ting. {}".format(kzip_path, e))
     else:
         try:
             with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                 for i in range(len(texts)):
                     zf.writestr(fnames_in_zip[i], texts[i])
         except Exception as e:
-            log_handler.error("Couldn't open file %s for writing." % kzip_path, e)
+            log_handler.error("Couldn't open file {} for writing. {}"
+                              "".format(kzip_path, e))
 
 
 def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
@@ -420,7 +421,7 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
                         if verbose:
                             pbar.update()
         except Exception as e:
-            log_handler.error("Couldn't open file %s for reading and"
+            log_handler.error("Couldn't open file {} for reading and"
                               " overwriting. Error: {}".format(kzip_path, e))
     else:
         try:
@@ -434,7 +435,8 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
                     if verbose:
                         pbar.update()
         except Exception as e:
-            log_handler.error("Couldn't open file %s for writing. Error: {}".format(kzip_path, e))
+            log_handler.error("Couldn't open file {} for writing. Error: "
+                              "{}".format(kzip_path, e))
     for ii in range(nb_files):
         os.remove(fpaths[ii])
     if verbose:

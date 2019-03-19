@@ -171,7 +171,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
                       qsub_pe=None, qsub_queue=None, nb_cpus=None,
                       n_max_co_processes=None):
     """
-    TODO: (cython) optimization required! E.g. replace by single iteration over cell segm. and all cell organelle KDs
+    TODO: (cython) optimization required! E.g. replace by single iteration over cell segm. and all cell organelle KDs/CDs
     Maps objects to SVs. The segmentation needs to be written to a KnossosDataset before running this
 
     Parameters

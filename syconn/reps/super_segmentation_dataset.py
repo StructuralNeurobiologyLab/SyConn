@@ -1217,8 +1217,10 @@ def create_sso_skeletons_thread(args):
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.nb_cpus = n_cpus_avail
-        ssv.load_skeleton()
-        create_sso_skeleton(ssv)
+        if not global_params.config.allow_skel_gen:
+            create_sso_skeleton(ssv)  # TODO: change to create_sso_skeleton_fast as soon as RAG edges only connected spatially close SVs
+        else:
+            ssv.load_skeleton()  # this will create skeleton from sample locations (edges might go out of the process)
         if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
             continue
         ssv.save_skeleton()

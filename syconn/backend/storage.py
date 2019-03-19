@@ -4,19 +4,15 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
+
+import numpy as np
+from knossos_utils import chunky, KnossosDataset
+
 from ..backend import log_backend
 try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
-try:  # TODO: check in global_params.py
-    import fasteners
-    LOCKING = True
-except ImportError:
-    print("fasteners could not be imported. Locking will be disabled by default."
-          "Please install fasteners to enable locking (pip install fasteners).")
-    LOCKING = False
-import numpy as np
 
 from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
 from ..backend import StorageClass
@@ -161,6 +157,112 @@ class VoxelStorageL(StorageClass):
         self._dc_intern[key] = value_intern
 
 
+class VoxelStorage(VoxelStorageL):
+    """
+    Customized dictionary to store compressed numpy arrays, but with a
+    intuitive user interface, i.e. compression will happen in background.
+    kwarg 'cache_decomp' can be enabled to cache decompressed arrays
+    additionally (save decompressing time).
+
+    No locking provided in this class!
+    """
+
+    def __init__(self, inp, **kwargs):
+        if "disable_locking" in kwargs:
+            assert kwargs["disable_locking"], "Locking must be disabled " \
+                                              "in this class. Use VoxelDictL" \
+                                              "to enable locking."
+        super(VoxelStorageL, self).__init__(inp, **kwargs)
+
+
+class VoxelStorageDyn(CompressedStorage):
+    """
+    Similar to `VoxelStorageL` but does not store the voxels explicitly,
+    but the information necessary to query the voxels of an object.
+
+    If `voxel_mode = True` getter method will operate on underlying data set
+    to retrieve voxels of an object. `__setitem__` throws `RuntimeError`.
+    `__getitem__` will return a list of 3D binary cubes with ones at the
+    object's locations (key: object ID). Note: The item ID has to match the
+    object ID in the segmentation.
+
+    Otherwise (`voxel_mode = False`) `__getitem__` and `__setitem__` allow
+    manipulation of the object's bounding box. In this case `voxeldata_path`
+    has to be given or already be existent in loaded dictionary. Expects the
+    source path of a KnossoDataset (see knossos_utils), like
+        kd = KnossoDataset()
+        kd.initialize_from_knossos_path(SOURCE_PATH)
+    `__setitem__` requires the object ID as key and an 3 dimensional array with
+     all bounding boxes defining the object (N, 2, 3). Those BBs are then used to
+     query the object voxels. The bounding box is expected to be two 3D
+     coordinates which define the lower and the upper limits.
+
+
+    """
+
+    def __init__(self, inp, voxel_mode=False, voxeldata_path=None, **kwargs):
+        if "disable_locking" in kwargs:
+            assert kwargs["disable_locking"], "Locking must be disabled " \
+                                              "in this class. Use VoxelDictL" \
+                                              "to enable locking."
+        super().__init__(inp, **kwargs)
+        self.voxel_mode = voxel_mode
+        if not 'meta' in self._dc_intern:
+            # add meta information about underlying voxel data set to internal dictionary
+            self._dc_intern['meta'] = dict(voxeldata_path=voxeldata_path)
+        if voxeldata_path is not None:
+            meta_dc = self._dc_intern['meta']
+            old_p = meta_dc['voxeldata_path']
+            new_p = voxeldata_path
+            if old_p != new_p:
+                log_backend.warn('Overwriting `voxeldata_path` in `VoxelStorag'
+                                 'eDyn` object from `{}` to `{}`.'.format(old_p, new_p))
+                meta_dc['voxeldata_path'] = voxeldata_path
+        if not voxel_mode:
+            if voxeldata_path is None:
+                msg = '`voxel_mode` is False but no path to' \
+                      ' voxeldata given / found.'
+                log_backend.error(msg)
+                raise ValueError(msg)
+            kd = KnossosDataset()
+            kd.initialize_from_knossos_path(voxeldata_path)
+            self.voxeldata = kd
+
+    def __setitem__(self, key, value):
+        if self.voxel_mode:
+            raise RuntimeError('`VoxelStorageDyn.__setitem__` may only '
+                               'be used when `voxel_mode=False`.')
+        else:
+            return super().__setitem__(key, value)
+
+    def __getitem__(self, item):
+        if self.voxel_mode:
+            res = []
+            for bb in super().__getitem__(item):  # iterate over all bounding boxes
+                size = bb[1] - bb[0]
+                off = bb[0]
+                curr_mask = self.voxeldata.from_overlaycubes_to_matrix(
+                    size, off, show_progress=False, verbose=False) == item
+                res.append(curr_mask)
+            return res
+        else:
+            return super().__getitem__(item)
+
+    def get_voxeldata(self, item):
+        old_vx_mode = self.voxel_mode
+        self.voxel_mode = True
+        res = self[item]
+        self.voxel_mode = old_vx_mode
+        return res
+
+    def get_boundingdata(self, item):
+        old_vx_mode = self.voxel_mode
+        self.voxel_mode = False
+        res = self[item]
+        self.voxel_mode = old_vx_mode
+        return res
+
+
 class MeshStorage(StorageClass):
     """
     Customized dictionary to store compressed numpy arrays, but with a
@@ -235,24 +337,6 @@ class MeshStorage(StorageClass):
         comp_norm = arrtolz4string_list(mesh[2].astype(dtype=np.float32))
         comp_col = arrtolz4string_list(mesh[3].astype(dtype=np.uint8))
         self._dc_intern[key] = [comp_ind, comp_vert, comp_norm, comp_col]
-
-
-class VoxelStorage(VoxelStorageL):
-    """
-    Customized dictionary to store compressed numpy arrays, but with a
-    intuitive user interface, i.e. compression will happen in background.
-    kwarg 'cache_decomp' can be enabled to cache decompressed arrays
-    additionally (save decompressing time).
-
-    No locking provided in this class!
-    """
-
-    def __init__(self, inp, **kwargs):
-        if "disable_locking" in kwargs:
-            assert kwargs["disable_locking"], "Locking must be disabled " \
-                                              "in this class. Use VoxelDictL" \
-                                              "to enable locking."
-        super(VoxelStorageL, self).__init__(inp, **kwargs)
 
 
 class SkeletonStorage(StorageClass):

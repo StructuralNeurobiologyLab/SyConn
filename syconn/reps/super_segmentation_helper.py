@@ -1401,9 +1401,9 @@ def predict_views_semseg(views, model, batch_size=20, verbose=False):
     -------
 
     """
-    if verbose:
-        log_reps.debug('Reshaping view array with shape {}.'
-                       ''.format(views.shape))
+    # if verbose:
+    #     log_reps.debug('Reshaping view array with shape {}.'
+    #                    ''.format(views.shape))
     views = views.astype(np.float32) / 255.
     views = views.swapaxes(1, 2)  # swap channel and view axis
     # N, 2, 4, 128, 256
@@ -1411,15 +1411,15 @@ def predict_views_semseg(views, model, batch_size=20, verbose=False):
     # reshape to predict single projections, N*2, 4, 128, 256
     views = views.reshape([-1] + list(orig_shape[2:]))
 
-    if verbose:
-        log_reps.debug('Predicting view array with shape {}.'
-                       ''.format(views.shape))
+    # if verbose:
+    #     log_reps.debug('Predicting view array with shape {}.'
+    #                    ''.format(views.shape))
     # predict and reset to original shape: N, 2, 4, 128, 256
     labeled_views = model.predict_proba(views, bs=batch_size, verbose=verbose)
     labeled_views = np.argmax(labeled_views, axis=1)[:, None]
-    if verbose:
-        log_reps.debug('Finished prediction of view array with shape {}.'
-                       ''.format(views.shape))
+    # if verbose:
+    #     log_reps.debug('Finished prediction of view array with shape {}.'
+    #                    ''.format(views.shape))
     labeled_views = labeled_views.reshape(list(orig_shape[:2])
                                           + list(labeled_views.shape[1:]))
     # swap axes to get source shape
