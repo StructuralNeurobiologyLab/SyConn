@@ -22,7 +22,7 @@ except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tools
 from multiprocessing import cpu_count
 from .segmentation import SegmentationDataset, SegmentationObject
-from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify
+from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
 from .super_segmentation_helper import create_sso_skeleton
 from ..proc.ssd_assembly import assemble_from_mergelist
 from ..mp import batchjob_utils as qu
@@ -686,8 +686,7 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
                            stride=256, qsub_pe=None, qsub_queue=None,
                            nb_cpus=None):
     ssd.save_dataset_shallow()
-    sv_kd = knossosdataset.KnossosDataset()
-    sv_kd.initialize_from_knossos_path(sv_kd_path)
+    sv_kd = kd_factory(sv_kd_path)
 
     if not os.path.exists(ssv_kd_path):
         ssv_kd = knossosdataset.KnossosDataset()
@@ -740,10 +739,8 @@ def _convert_knossosdataset_thread(args):
     offsets = args[6]
     size = args[7]
 
-    sv_kd = knossosdataset.KnossosDataset()
-    sv_kd.initialize_from_knossos_path(sv_kd_path)
-    ssv_kd = knossosdataset.KnossosDataset()
-    ssv_kd.initialize_from_knossos_path(ssv_kd_path)
+    sv_kd = kd_factory(sv_kd_path)
+    ssv_kd = kd_factory(ssv_kd_path)
 
     ssd = SuperSegmentationDataset(working_dir, version, version_dict)
     ssd.load_id_changer()
@@ -1217,8 +1214,10 @@ def create_sso_skeletons_thread(args):
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.nb_cpus = n_cpus_avail
-        ssv.load_skeleton()
-        create_sso_skeleton(ssv)
+        if not global_params.config.allow_skel_gen:
+            create_sso_skeleton(ssv)  # TODO: change to create_sso_skeleton_fast as soon as RAG edges only connected spatially close SVs
+        else:
+            ssv.load_skeleton()  # this will create skeleton from sample locations (edges might go out of the process)
         if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
             continue
         ssv.save_skeleton()

@@ -106,6 +106,7 @@ def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
         try:
             out.append(future.result())
         except Exception as e:
+            log_mp.error(e)
             out.append(e)
     return front + out
 

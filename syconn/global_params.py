@@ -4,13 +4,14 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-import warnings
-# knossos:utils warning for implicit channel selection and init from dir instead of config file
-warnings.filterwarnings("ignore", message="You are using implicit channel selection")
-warnings.filterwarnings("ignore", message="You are initializing a KnossosDataset from a path")
-warnings.filterwarnings("ignore", message="dataset.value has been deprecated")  # h5py deprecation warning
+
 import os
 from .handler.config import DynConfig
+import warnings
+# knossos:utils warning for implicit channel selection and init from dir instead of config file
+warnings.filterwarnings("ignore", message=".*You are using implicit channel selection.*")
+warnings.filterwarnings("ignore", message=".*You are initializing a KnossosDataset from a path.*")
+warnings.filterwarnings("ignore", message=".*dataset.value has been deprecated.*")  # h5py deprecation warning
 
 # ---------------------- STATIC AND GLOBAL PARAMETERS # -----------------------
 # --------- GLOBAL WORKING DIRECTORY
@@ -30,7 +31,7 @@ config = DynConfig()
 # --------- BACKEND DEFINITIONS
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
 batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + \
-                         "/QSUB_scripts/"
+                         "/batchjob_scripts/"
 # TODO refactor syconn and get rid of all qsub_pe and qsub_queue kwargs and only use batch_job_enabled(), the default in QSUB_script are now BATCH_PE and BATCH_QUEUE
 BATCH_PE = 'default'
 BATCH_QUEUE = 'all.q'

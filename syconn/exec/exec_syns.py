@@ -17,6 +17,7 @@ from syconn.proc.sd_proc import dataset_analysis, extract_synapse_type
 from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
 from syconn.handler.logger import initialize_logging
+from syconn.handler.basics import kd_factory
 
 
 def run_syn_analysis():
@@ -56,11 +57,6 @@ def run_syn_analysis():
                      recompute=False)
     log.info('Synapse property collection from SSVs finished.')
 
-    log.info('Collecting and writing syn-ssv objects to SSV attribute '
-             'dictionary.')
-    # map_synssv_objects(qsub_pe='openmp')
-    log.info('Finished.')
-
     # export_matrix
     log.info('Exporting connectivity matrix now.')
     dest_folder = global_params.config.working_dir + '/connectivity_matrix/'
@@ -73,9 +69,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
                              overwrite=False)
 
     kd_seg_path = global_params.config.kd_seg_path
-    kd = knossosdataset.KnossosDataset()  # Sets initial values of object
-    # Initializes the dataset by parsing the knossos.conf in path + "mag1"
-    kd.initialize_from_knossos_path(kd_seg_path)
+    kd = kd_factory(kd_seg_path)
 
     # Initital contact site extraction
     cd_dir = global_params.config.working_dir + "/chunkdatasets/cs/"
@@ -114,3 +108,8 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
                                      obj_type='syn_ssv')
     dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True)
     log.info('SegmentationDataset of type "syn_ssv" was generated.')
+
+    log.info('Collecting and writing syn-ssv objects to SSV attribute '
+             'dictionary.')
+    map_synssv_objects(qsub_pe='openmp')
+    log.info('Finished.')

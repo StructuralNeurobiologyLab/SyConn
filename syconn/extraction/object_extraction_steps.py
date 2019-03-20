@@ -26,6 +26,7 @@ from ..reps import segmentation, rep_helper as rh
 from ..handler import basics
 from ..backend.storage import VoxelStorageL, VoxelStorage
 from ..proc.image import multi_mop
+from ..handler.basics import kd_factory
 
 
 def gauss_threshold_connected_components(*args, **kwargs):
@@ -221,8 +222,7 @@ def _gauss_threshold_connected_components_thread(args):
     if prob_kd_path_dict is not None:
         bin_data_dict = {}
         for kd_key in prob_kd_path_dict.keys():
-            kd = knossosdataset.KnossosDataset()
-            kd.initialize_from_knossos_path(prob_kd_path_dict[kd_key])
+            kd = kd_factory(prob_kd_path_dict[kd_key])
             bin_data_dict[kd_key] = kd.from_raw_cubes_to_matrix(size,
                                                                 box_offset)
     else:
@@ -762,23 +762,23 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         multi_params.append([[cset.chunk_dict[nb_chunk] for nb_chunk in chunk_blocks[i_job]], workfolder,
                              filename, hdf5names, dataset_names, overlaydataset_path,
                              suffix, path_blocks[i_job], n_folders_fs, transform_func, transform_func_kwargs])
-    # if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-    #     results = sm.start_multiprocess_imap(_extract_voxels_thread, multi_params,
-    #                                          nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
-    # elif qu.batchjob_enabled():
-    path_to_out = qu.QSUB_script(multi_params,
-                                 "extract_voxels",
-                                 pe=qsub_pe, queue=qsub_queue,
-                                 script_folder=None,
-                                 n_max_co_processes=n_max_co_processes,
-                                 n_cores=nb_cpus)
-    out_files = glob.glob(path_to_out + "/*")
-    results = []
-    for out_file in out_files:
-        with open(out_file, 'rb') as f:
-            results.append(pkl.load(f))
-    # else:
-    #     raise Exception("QSUB not available")
+    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+        results = sm.start_multiprocess_imap(_extract_voxels_thread, multi_params,
+                                             nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
+    elif qu.batchjob_enabled():
+        path_to_out = qu.QSUB_script(multi_params,
+                                     "extract_voxels",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=None,
+                                     n_max_co_processes=n_max_co_processes,
+                                     n_cores=nb_cpus)
+        out_files = glob.glob(path_to_out + "/*")
+        results = []
+        for out_file in out_files:
+            with open(out_file, 'rb') as f:
+                results.append(pkl.load(f))
+    else:
+        raise RuntimeError("QSUB not available")
     for i_hdf5_name, hdf5_name in enumerate(hdf5names):
         dataset_path = workfolder + "/%s_temp/" % dataset_names[i_hdf5_name]
         remap_dict = defaultdict(list)
@@ -832,8 +832,7 @@ def _extract_voxels_thread(args):
                     path = chunk.folder + filename + ".h5"
                 this_segmentation = basics.load_from_h5py(path, [hdf5_name])[0]
             else:
-                kd = knossosdataset.KnossosDataset()
-                kd.initialize_from_knossos_path(overlaydataset_path)
+                kd = kd_factory(overlaydataset_path)
 
                 try:
                     this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
@@ -894,7 +893,7 @@ def _extract_voxels_thread(args):
 
 
 def combine_voxels(workfolder, hdf5names, dataset_names=None,
-                   n_folders_fs=10000, stride=10, nb_cpus=None, sd_version=0,
+                   n_folders_fs=10000, n_chunk_jobs=5000, nb_cpus=None, sd_version=0,
                    qsub_pe=None, qsub_queue=None, n_max_co_processes=None):
     """
     Extracts voxels for each component id and ceates a SegmentationDataset of type hdf5names.
@@ -931,8 +930,11 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
                                                       create=True, n_folders_fs=n_folders_fs)
 
         multi_params = []
-        path_blocks = np.array_split(np.array(voxel_rel_paths),
-                                     int(len(voxel_rel_paths) / stride))
+
+        if n_chunk_jobs > len(voxel_rel_paths):
+            n_chunk_jobs = len(voxel_rel_paths)
+
+        path_blocks = np.array_split(np.array(voxel_rel_paths), n_chunk_jobs)
 
         dataset_temp_path = workfolder + "/%s_temp/" % hdf5_name
         with open(dataset_temp_path + "/remapping_dict.pkl", "rb") as f:
@@ -974,9 +976,9 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
                                          script_folder=None,
                                          n_max_co_processes=n_max_co_processes,
                                          n_cores=nb_cpus)
-
         else:
             raise Exception("QSUB not available")
+        shutil.rmtree(dataset_temp_path)
 
 
 def _combine_voxels_thread(args):
@@ -1144,8 +1146,7 @@ def _extract_voxels_combined_thread(args):
                     path = chunk.folder + filename + ".h5"
                 this_segmentation = basics.load_from_h5py(path, [hdf5_name])[0]
             else:
-                kd = knossosdataset.KnossosDataset()
-                kd.initialize_from_knossos_path(overlaydataset_path)
+                kd = kd_factory(overlaydataset_path)
 
                 try:
                     this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,

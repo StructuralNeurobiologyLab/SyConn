@@ -83,6 +83,7 @@ if __name__ == "__main__":
                         "binary_views": False, "n_classes": n_classes, 'class_weights': [1] * n_classes}
 
     if args.resume is not None:  # Load pretrained network
+        print('Resuming model from {}.'.format(s.path.expanduser(args.resume)))
         try:  # Assume it's a state_dict for the model
             model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
         except _pickle.UnpicklingError as exc:
@@ -102,7 +103,7 @@ if __name__ == "__main__":
         # amsgrad=True
     )
     # lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-    schedulers = {'lr': SGDR(optimizer, 20000, 2)}
+    schedulers = {'lr': SGDR(optimizer, 20000, 3)}
     # All these metrics assume a binary classification problem. If you have
     #  non-binary targets, remember to adapt the metrics!
     val_metric_keys = []

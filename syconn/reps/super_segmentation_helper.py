@@ -98,7 +98,8 @@ def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
     if not overwrite and "celltype_cnn_e3" in sso.attr_dict:
         return
     inp_d = sso_views_to_modelinput(sso, nb_views)
-    res = model.predict_proba(inp_d)
+    synsign_ratio = [sso.syn_sign_ratio()] * len(inp_d)
+    res = model.predict_proba((inp_d, synsign_ratio))
     clf = np.argmax(res, axis=1)
     ls, cnts = np.unique(clf, return_counts=True)
     pred = ls[np.argmax(cnts)]
@@ -1398,9 +1399,9 @@ def predict_views_semseg(views, model, batch_size=20, verbose=False):
     -------
 
     """
-    if verbose:
-        log_reps.debug('Reshaping view array with shape {}.'
-                       ''.format(views.shape))
+    # if verbose:
+    #     log_reps.debug('Reshaping view array with shape {}.'
+    #                    ''.format(views.shape))
     views = views.astype(np.float32) / 255.
     views = views.swapaxes(1, 2)  # swap channel and view axis
     # N, 2, 4, 128, 256
@@ -1408,15 +1409,15 @@ def predict_views_semseg(views, model, batch_size=20, verbose=False):
     # reshape to predict single projections, N*2, 4, 128, 256
     views = views.reshape([-1] + list(orig_shape[2:]))
 
-    if verbose:
-        log_reps.debug('Predicting view array with shape {}.'
-                       ''.format(views.shape))
+    # if verbose:
+    #     log_reps.debug('Predicting view array with shape {}.'
+    #                    ''.format(views.shape))
     # predict and reset to original shape: N, 2, 4, 128, 256
     labeled_views = model.predict_proba(views, bs=batch_size, verbose=verbose)
     labeled_views = np.argmax(labeled_views, axis=1)[:, None]
-    if verbose:
-        log_reps.debug('Finished prediction of view array with shape {}.'
-                       ''.format(views.shape))
+    # if verbose:
+    #     log_reps.debug('Finished prediction of view array with shape {}.'
+    #                    ''.format(views.shape))
     labeled_views = labeled_views.reshape(list(orig_shape[:2])
                                           + list(labeled_views.shape[1:]))
     # swap axes to get source shape

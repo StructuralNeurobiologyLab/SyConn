@@ -16,6 +16,7 @@ knossosdataset._set_noprint(True)
 import time
 import datetime
 
+from ..handler.basics import kd_factory
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
@@ -140,8 +141,8 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                              syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm])
         i_block += 1
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        _ = sm.start_multiprocess(_combine_and_split_syn_thread,
-                                  multi_params, nb_cpus=nb_cpus)
+        _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread,
+                                       multi_params, nb_cpus=nb_cpus)
 
     elif qu.batchjob_enabled():
         _ = qu.QSUB_script(multi_params, "combine_and_split_syn", pe=qsub_pe,
@@ -855,8 +856,7 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
                                              version=cs_sd_version,
                                              create=False)
 
-    cs_kd = knossosdataset.KnossosDataset()
-    cs_kd.initialize_from_knossos_path(cs_kd_path)
+    cs_kd = kd_factory(cs_kd_path)
 
     sj_id_blocks = np.array_split(sj_ids, len(voxel_rel_paths))
 
@@ -1381,7 +1381,11 @@ def _collect_properties_from_ssv_partners_thread(args):
                 curr_sp = ssv_o.semseg_for_coords([synssv_o.rep_coord],
                                                   'spiness')
                 spiness.append(curr_sp)
-                celltypes.append(ssv_o.attr_dict['celltype_cnn'])
+                try:
+                    ct_val = ssv_o.attr_dict['celltype_cnn']
+                except KeyError:
+                    ct_val = -1
+                celltypes.append(ct_val)
             sym_asym_ratio = synssv_o.attr_dict['syn_type_sym_ratio']
             syn_sign = -1 if sym_asym_ratio > global_params.sym_thresh else 1
             synssv_o.attr_dict.update({'partner_axoness': axoness, 'partner_spiness': spiness,

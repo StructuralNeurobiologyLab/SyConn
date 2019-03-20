@@ -23,6 +23,7 @@ import os
 from ..reps import segmentation
 from ..mp import batchjob_utils as qu
 from ..handler import compression
+from ..handler.basics import kd_factory
 from . import object_extraction_steps as oes
 from . import log_extraction
 try:
@@ -64,8 +65,7 @@ def _contact_site_detection_thread(args):
     knossos_path = args[1]
     filename = args[2]
 
-    kd = knossosdataset.KnossosDataset()
-    kd.initialize_from_knossos_path(knossos_path)
+    kd = kd_factory(knossos_path)
 
     overlap = np.array([6, 6, 3], dtype=np.int)
     offset = np.array(chunk.coordinates - overlap)

@@ -929,23 +929,31 @@ class SuperSegmentationObject(object):
                 return True
             return False
 
-    def syn_sign_ratio(self):
+    def syn_sign_ratio(self, weighted=True, recompute=False):
         """
-        Ratio of symmetric vs. asym. synapse counts.
+        Ratio of symmetric synapses (between 0 and 1; -1 if no synapse objects).
 
         Returns
         -------
         float
         """
         ratio = self.lookup_in_attribute_dict("syn_sign_ratio")
-        if ratio is not None:
+        if not recompute and ratio is not None:
             return ratio
         syn_signs = []
+        syn_sizes = []
         for syn in self.syn_ssv:
             syn.load_attr_dict()
             syn_signs.append(syn.attr_dict["syn_sign"])
+            syn_sizes.append(syn.mesh_area / 2)
+        if len(syn_signs) == 0:
+            return -1
         syn_signs = np.array(syn_signs)
-        ratio = np.sum(syn_signs == -1) / float(len(syn_signs))
+        syn_sizes = np.array(syn_sizes)
+        if weighted:
+            ratio = np.sum(syn_sizes[syn_signs == -1]) / float(np.sum(syn_sizes))
+        else:
+            ratio = np.sum(syn_signs == -1) / float(len(syn_signs))
         self.attr_dict["syn_sign_ratio"] = ratio
         self.save_attributes(["syn_sign_ratio"], [ratio])
         return ratio
@@ -1248,7 +1256,7 @@ class SuperSegmentationObject(object):
         return so_views_exist
 
     def render_views(self, add_cellobjects=False, verbose=False,
-                     qsub_pe=None, overwrite=False, cellobjects_only=False,
+                     qsub_pe=None, overwrite=True, cellobjects_only=False,
                      woglia=True, skip_indexviews=False, qsub_co_jobs=300,
                      resume_job=False):
         """

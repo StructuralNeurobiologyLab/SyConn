@@ -34,6 +34,7 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_ssv
 from syconn.handler.logger import initialize_logging
 from syconn.mp import batchjob_utils as qu
+from syconn.exec import exec_skeleton
 
 def run_morphology_embedding():
     log = initialize_logging('morphology_embedding', global_params.config.working_dir
@@ -323,6 +324,9 @@ def run_create_neuron_ssd(prior_glia_removal=True):
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
     ssd.save_dataset_deep(qsub_pe="openmp", n_max_co_processes=global_params.NCORE_TOTAL)  # also executes 'ssd.save_dataset_shallow()'
+
+    exec_skeleton.run_skeleton_generation()
+
     log.info('Finished SSD initialization. Starting cellular '
              'organelle mapping.')
 

@@ -277,9 +277,13 @@ allow_mesh_gen_cells = True
 
 [Skeleton]
 allow_skel_gen = True
-    """.format(example_wd + 'knossosdatasets/seg/', example_wd + 'knossosdatasets/sym/',
-               example_wd + 'knossosdatasets/asym/', example_wd + 'knossosdatasets/sj/',
-               example_wd + 'knossosdatasets/vc/', example_wd + 'knossosdatasets/mi/', '', py36path)
+    """.format(example_wd + 'knossosdatasets/seg/',
+               example_wd + 'knossosdatasets/sym/',
+               example_wd + 'knossosdatasets/asym/',
+               example_wd + 'knossosdatasets/sj/',
+               example_wd + 'knossosdatasets/vc/',
+               example_wd + 'knossosdatasets/mi/', '',
+               py36path)
 
     configspec_str = """
 [Versions]
