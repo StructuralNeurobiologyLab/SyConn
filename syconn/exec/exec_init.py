@@ -14,7 +14,7 @@ from syconn.proc import sd_proc
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.handler.logger import initialize_logging
 from syconn.mp import batchjob_utils as qu
-from syconn.handler.basics import chunkify
+from syconn.handler.basics import chunkify, kd_factory
 
 
 # TODO: make it work with new SyConn
@@ -37,9 +37,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
                              overwrite=False)
 
     # Sets initial values of object
-    kd = knossosdataset.KnossosDataset()
-    # Initializes the dataset by parsing the knossos.conf in path + "mag1"
-    kd.initialize_from_knossos_path(global_params.config.kd_seg_path)
+    kd = kd_factory(global_params.config.kd_seg_path)
 
     # TODO: get rid of explicit voxel extraction, all info necessary should be extracted at the beginning, e.g. size, bounding box etc and then refactor to only use those cached attributes!
     # resulting ChunkDataset, required for SV extraction --

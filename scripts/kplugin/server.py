@@ -356,7 +356,7 @@ class SyConnBackend(object):
                 log_gate.debug("Loading '{}' objects instead of 'sj' for SSV "
                                "{}.".format(obj_type, ssv_id))
             except KeyError:
-                pass
+                obj_type = "sj"
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
@@ -426,14 +426,18 @@ class SyConnBackend(object):
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         label = ""
-        if "celltype_cnn_e3_probas" in ssv.attr_dict:
+        if "celltype_cnn_e3_probas" in ssv.attr_dict:  # new prediction
             l = ssv.attr_dict["celltype_cnn_e3"]
             # ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             # label = ct_label_dc[l]
             label = int2str_converter(l, gt_type='ctgt_v2')
+        elif "celltype_cnn" in ssv.attr_dict:
+            ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
+            l = ssv.attr_dict["celltype_cnn"]
+            label = ct_label_dc[l]
         else:
-            log_gate.debug("Celltype prediction not present in attribute "
-                           "dict of SSV {} at {}.".format(ssv_id, ssv.attr_dict_path))
+            log_gate.warning("Celltype prediction not present in attribute "
+                             "dict of SSV {} at {}.".format(ssv_id, ssv.attr_dict_path))
         return {'ct': label}
 
     def svs_of_ssv(self, ssv_id):

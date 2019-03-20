@@ -26,6 +26,7 @@ from ..reps import segmentation, rep_helper as rh
 from ..handler import basics
 from ..backend.storage import VoxelStorageL, VoxelStorage
 from ..proc.image import multi_mop
+from ..handler.basics import kd_factory
 
 
 def gauss_threshold_connected_components(*args, **kwargs):
@@ -221,8 +222,7 @@ def _gauss_threshold_connected_components_thread(args):
     if prob_kd_path_dict is not None:
         bin_data_dict = {}
         for kd_key in prob_kd_path_dict.keys():
-            kd = knossosdataset.KnossosDataset()
-            kd.initialize_from_knossos_path(prob_kd_path_dict[kd_key])
+            kd = kd_factory(prob_kd_path_dict[kd_key])
             bin_data_dict[kd_key] = kd.from_raw_cubes_to_matrix(size,
                                                                 box_offset)
     else:
@@ -832,8 +832,7 @@ def _extract_voxels_thread(args):
                     path = chunk.folder + filename + ".h5"
                 this_segmentation = basics.load_from_h5py(path, [hdf5_name])[0]
             else:
-                kd = knossosdataset.KnossosDataset()
-                kd.initialize_from_knossos_path(overlaydataset_path)
+                kd = kd_factory(overlaydataset_path)
 
                 try:
                     this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
@@ -1147,8 +1146,7 @@ def _extract_voxels_combined_thread(args):
                     path = chunk.folder + filename + ".h5"
                 this_segmentation = basics.load_from_h5py(path, [hdf5_name])[0]
             else:
-                kd = knossosdataset.KnossosDataset()
-                kd.initialize_from_knossos_path(overlaydataset_path)
+                kd = kd_factory(overlaydataset_path)
 
                 try:
                     this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,

@@ -6,7 +6,6 @@
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 
 import numpy as np
-from knossos_utils import chunky, KnossosDataset
 
 from ..backend import log_backend
 try:
@@ -15,6 +14,7 @@ except ImportError:
     from lz4 import compress, decompress
 
 from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
+from ..handler.basics import kd_factory
 from ..backend import StorageClass
 
 
@@ -224,8 +224,7 @@ class VoxelStorageDyn(CompressedStorage):
                       ' voxeldata given / found.'
                 log_backend.error(msg)
                 raise ValueError(msg)
-            kd = KnossosDataset()
-            kd.initialize_from_knossos_path(voxeldata_path)
+            kd = kd_factory(voxeldata_path)
             self.voxeldata = kd
 
     def __setitem__(self, key, value):

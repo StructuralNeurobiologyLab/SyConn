@@ -16,6 +16,7 @@ knossosdataset._set_noprint(True)
 import time
 import datetime
 
+from ..handler.basics import kd_factory
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
@@ -855,8 +856,7 @@ def _overlap_mapping_sj_to_cs_via_kd_thread(args):
                                              version=cs_sd_version,
                                              create=False)
 
-    cs_kd = knossosdataset.KnossosDataset()
-    cs_kd.initialize_from_knossos_path(cs_kd_path)
+    cs_kd = kd_factory(cs_kd_path)
 
     sj_id_blocks = np.array_split(sj_ids, len(voxel_rel_paths))
 
