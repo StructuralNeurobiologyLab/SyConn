@@ -1,3 +1,23 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
+
+
+import numpy as np
+from knossos_utils import knossosdataset
+knossosdataset._set_noprint(True)
+from ..mp import batchjob_utils as qu
+from ..mp import mp_utils as sm
+from ..reps import super_segmentation, segmentation
+from ..backend.storage import AttributeDict
+from ..handler.basics import chunkify
+from .. import global_params
+
+
+
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                          qsub_pe=None, qsub_queue=None,
                                          n_max_co_processes=None):

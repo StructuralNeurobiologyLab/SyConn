@@ -2124,7 +2124,6 @@ class SuperSegmentationObject(object):
 
         return np.array(axoness_pred)
 
-
     def attr_for_coords(self, coords, attr_keys, radius_nm=None):
         """
         TODO: move to super_segmentation_helper.py
@@ -2163,13 +2162,13 @@ class SuperSegmentationObject(object):
         else:
             close_node_ids = kdtree.query_ball_point(coords * self.scaling,
                                                      radius_nm)
-        result = []
+        attr_dc = defaultdict(list)
         for i_coord in range(len(coords)):
             curr_close_node_ids = close_node_ids[i_coord]
-            attr_list = []
+            from collections import defaultdict
             for attr_key in attr_keys:
                 if attr_key not in self.skeleton:  # e.g. for glia SSV axoness does not exist.
-                    attr_list.append(-1)
+                    attr_dc[attr_key].append(-1)
                     # # this is commented because there a legitimate cases for missing keys.
                     # # TODO: think of a better warning / error raise
                     # log_reps.warning(
@@ -2187,17 +2186,15 @@ class SuperSegmentationObject(object):
                         np.array(self.skeleton[attr_key])[np.array(curr_close_node_ids)],
                         return_counts=True)
                     if len(cls) > 0:
-                        attr_list.append(cls[np.argmax(cnts)])
+                        attr_dc[attr_key].append(cls[np.argmax(cnts)])
                     else:
                         log_reps.info("Did not find any skeleton node within {} nm at {}."
                                       " SSV {} (size: {}; rep. coord.: {}).".format(
                             radius_nm, i_coord, self.id, self.size, self.rep_coord))
-                        attr_list.append(-1)
+                        attr_dc[attr_key].append(-1)
                 else:  # only nearest node ID
-                    attr_list.append(self.skeleton[attr_key][curr_close_node_ids])
-            result.append(attr_list)
-        return result
-
+                    attr_dc[attr_key].append(self.skeleton[attr_key][curr_close_node_ids])
+        return [attr_dc[k] for k in attr_keys]
 
     def predict_views_axoness(self, model, verbose=False,
                               pred_key_appendix=""):
