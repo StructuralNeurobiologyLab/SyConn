@@ -34,7 +34,7 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="celltype_e3_axonGTv3_SGDR_LatentAdd_run2",
+    parser.add_argument('-n', '--exp-name', default="celltype_e3_axonGTv3_SGDR_LatentAdd_run3",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
