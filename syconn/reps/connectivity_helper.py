@@ -103,6 +103,7 @@ def extract_connectivity_information(sj, ssd):
 
 def connectivity_to_nx_graph():
     """
+    # TODO: allow synapses between axon and soma
     Creates a directed networkx graph with attributes from the
     stored raw connectivity data.
 
@@ -113,23 +114,21 @@ def connectivity_to_nx_graph():
 
     cd_dict = load_cached_data_dict()
 
-    idx_filter = cd_dict['synaptivity_proba'] > 0.5
+    idx_filter = cd_dict['synaptivity_proba'] > global_params.thresh_syn_proba
     #  & (df_dict['syn_size'] < 5.)
-
-    for k, v in cd_dict.items():
-        cd_dict[k] = v[idx_filter]
-
-    idx_filter = (cd_dict['neuron_partner_ax_0']\
-                 + cd_dict['neuron_partner_ax_1']) == 1
-
+    n_syns = np.sum(idx_filter)
+    idx_filter = idx_filter & ((cd_dict['neuron_partner_ax_0']
+                 + cd_dict['neuron_partner_ax_1']) == 1)
+    n_syns_axden = np.sum(idx_filter)
     for k, v in cd_dict.items():
         cd_dict[k] = v[idx_filter]
 
     nxg = nx.DiGraph()
     start = time.time()
-    log_reps.debug('Starting graph construction')
+    log_reps.debug('Starting graph construction from dict with {} synaptic '
+                   'objects. {} above prob. threshold. {} ax-den syn.'
+                   ''.format(len(idx_filter), n_syns, n_syns_axden))
     for idx in range(0, len(cd_dict['ids'])):
-
         # find out which one is pre and which one is post
         # 1 indicates pre, i.e. identified as axon by the classifier
         if cd_dict['neuron_partner_ax_0'][idx] == 1:
@@ -141,7 +140,8 @@ def connectivity_to_nx_graph():
 
         nxg.add_edge(u, v)
         # for each synapse create edge with attributes
-    log_reps.debug('Done with graph construction, took {0}'.format(time.time()-start))
+    log_reps.debug('Done with graph ({1} nodes) construction, took {0}'.format(
+        time.time()-start, nxg.number_of_nodes()))
 
     return nxg
 
@@ -197,7 +197,8 @@ def load_cached_data_dict(wd=None, syn_version=None):
     cd_dict['neuron_partner_sp_1'] = \
         csd.load_cached_data('partner_spiness')[:, 1].astype(np.int)
 
-    log_reps.debug('Getting all objects took: {0}'.format(time.time() - start))
+    log_reps.debug('Getting {1} objects took: {0}'.format(time.time() - start,
+                                                          len(csd.ids)))
     return cd_dict
 
 
