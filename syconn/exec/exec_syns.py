@@ -38,7 +38,7 @@ def run_matrix_export():
     # collect new object attributes collected above partner axoness, celltypes,
     # synapse probabilities etc, no need to compute size/rep_coord etc. ->
     # recompute=False
-    dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True,
+    dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=False,
                      recompute=False)
     log.info('Synapse property collection from SSVs finished.')
 
@@ -113,6 +113,10 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
 
     log.info('Collecting and writing syn-ssv objects to SSV attribute '
              'dictionary.')
+    # This needs to be run after `classify_synssv_objects` and before
+    # `map_synssv_objects` if the latter uses thresholding for synaptic objects
+    dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=False,
+                     recompute=False)  # just collect new data
     # TODO: decide whether this should happen after prob thresholding or not
     map_synssv_objects(qsub_pe='openmp')
     log.info('Finished.')

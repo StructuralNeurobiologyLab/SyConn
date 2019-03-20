@@ -695,6 +695,8 @@ def _extract_synapse_type_thread(args):
             else:
                 sym_ratio = sym_prop / float(asym_prop + sym_prop)
             so.attr_dict["syn_type_sym_ratio"] = sym_ratio
+            syn_sign = -1 if sym_ratio > global_params.sym_thresh else 1
+            so.attr_dict["syn_sign"] = syn_sign
             this_attr_dc[so_id] = so.attr_dict
         this_attr_dc.push()
 

@@ -126,7 +126,6 @@ def run_axoness_prediction(n_jobs=100):
 
 
 def run_celltype_prediction(n_jobs=100):
-    # TODO: changed to new cell type predictions, work this in everywhere (keys: celltype_cnn_e3_probas and celltype_cnn_e3)
     log = initialize_logging('celltype_prediction', global_params.config.working_dir+ '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)

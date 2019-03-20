@@ -1380,8 +1380,9 @@ def _collect_properties_from_ssv_partners_thread(args):
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
                 ssv_o.load_attr_dict()
                 # add pred_type key to global_params?
-                curr_ax, curr_latent = ssv_o.attr_for_coords([synssv_o.rep_coord], attr_keys=['axoness_avg10000',
-                                                                                              'latent_morph'])[0]  # only one coordinate
+                curr_ax, curr_latent = ssv_o.attr_for_coords(
+                    [synssv_o.rep_coord], attr_keys=['axoness_avg10000',
+                                                     'latent_morph'])[0]
                 if np.isscalar(curr_latent) and curr_latent == -1:
                     curr_latent = np.array([-1] * global_params.ndim_embedding)
                 axoness.append(curr_ax)
@@ -1395,10 +1396,11 @@ def _collect_properties_from_ssv_partners_thread(args):
                 except KeyError:
                     ct_val = -1
                 celltypes.append(ct_val)
-            sym_asym_ratio = synssv_o.attr_dict['syn_type_sym_ratio']
-            syn_sign = -1 if sym_asym_ratio > global_params.sym_thresh else 1
-            synssv_o.attr_dict.update({'partner_axoness': axoness, 'partner_spiness': spiness,
-                                       'partner_celltypes': celltypes, 'syn_sign': syn_sign,
+            syn_sign = synssv_o.attr_dict['syn_sign']
+            synssv_o.attr_dict.update({'partner_axoness': axoness,
+                                       'partner_spiness': spiness,
+                                       'partner_celltypes': celltypes,
+                                       'syn_sign': syn_sign,
                                        'latent_morph': latent_morph})
             this_attr_dc[synssv_id] = synssv_o.attr_dict
         this_attr_dc.push()

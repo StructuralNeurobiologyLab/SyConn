@@ -1,6 +1,7 @@
 #!/bin/bash
 # cd to the SyConn directory an run this file via 'sh install.sh'
 
+echo y | conda install cmake
 echo y | conda install vigra -c conda-forge
 echo y | conda install -c conda-forge opencv
 echo y | conda install mesa -c menpo
