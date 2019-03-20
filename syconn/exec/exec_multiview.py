@@ -28,7 +28,7 @@ from syconn.proc import ssd_proc
 from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
 from syconn.global_params import NGPU_TOTAL
 from syconn import global_params
-from syconn.handler.prediction import get_axoness_model, get_axoness_model_e3
+from syconn.handler.prediction import get_axoness_model
 from syconn.handler.basics import chunkify
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_ssv
@@ -93,7 +93,7 @@ def run_axoness_prediction(n_jobs=100, e3=False):
     log.info('Performing axon prediction of neuron views. Labels will be stored '
              'on SV level in the attribute dict with key "{}"'.format(pred_key))
     if e3 == True:
-        model_kwargs = str(get_axoness_model_e3)
+        model_kwargs = 'get_axoness_model_e3'
     else:
         m = get_axoness_model()
         model_kwargs = dict(model_path=m._path, normalize_data=m.normalize_data,
@@ -353,7 +353,7 @@ def run_create_neuron_ssd(prior_glia_removal=True):
     log.info('Finished saving individual SSV RAGs.')
 
 
-def run_glia_prediction():
+def run_glia_prediction(e3=False):
     log = initialize_logging('glia_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     # only append to this key if needed (for e.g. different versions, change accordingly in 'axoness_mapping.py')
@@ -369,12 +369,15 @@ def run_glia_prediction():
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     multi_params = chunkify(sd.so_dir_paths, 100)
     # get model properties
-    m = get_glia_model()
-    model_kwargs = dict(model_path=m._path,
-                        normalize_data=m.normalize_data,
-                        imposed_batch_size=m.imposed_batch_size,
-                        nb_labels=m.nb_labels,
-                        channels_to_load=m.channels_to_load)
+    if e3 == True:
+        model_kwargs = 'get_glia_model_e3'
+    else:
+        m = get_glia_model()
+        model_kwargs = dict(model_path=m._path,
+                            normalize_data=m.normalize_data,
+                            imposed_batch_size=m.imposed_batch_size,
+                            nb_labels=m.nb_labels,
+                            channels_to_load=m.channels_to_load)
     # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
     so_kwargs = dict(working_dir=global_params.config.working_dir)
     # for glia views set woglia to False (because glia are included),
@@ -384,16 +387,22 @@ def run_glia_prediction():
 
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for par in
                     multi_params]
-    # randomly assign to gpu 0 or 1
-    for par in multi_params:
-        mk = par[1]
-        # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
-        mk["init_gpu"] = 0
-    path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
-                                 n_max_co_processes=25, pe="openmp",
-                                 queue=None, n_cores=10, suffix="_glia",
-                                 script_folder=None,
-                                 additional_flags="--gres=gpu:1")  # removed -V
+    if e3==True:
+        path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
+                                     n_max_co_processes=15, pe="openmp", queue=None,
+                                     script_folder=None, n_cores=10,
+                                     suffix="_glia",script_folder=None, additional_flags="--gres=gpu:1")  # removed -V
+    else:
+        # randomly assign to gpu 0 or 1
+        for par in multi_params:
+            mk = par[1]
+            # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
+            mk["init_gpu"] = 0
+        path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
+                                     n_max_co_processes=25, pe="openmp",
+                                     queue=None, n_cores=10, suffix="_glia",
+                                     script_folder=None,
+                                     additional_flags="--gres=gpu:1")  # removed -V    
     log.info('Finished glia prediction. Checking completeness.')
     res = find_missing_sv_attributes(sd, pred_key, n_cores=10)
     if len(res) > 0:
