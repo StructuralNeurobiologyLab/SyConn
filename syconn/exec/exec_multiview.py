@@ -391,7 +391,7 @@ def run_glia_prediction(e3=False):
         path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
                                      n_max_co_processes=15, pe="openmp", queue=None,
                                      script_folder=None, n_cores=10,
-                                     suffix="_glia",script_folder=None, additional_flags="--gres=gpu:1")  # removed -V
+                                     suffix="_glia", additional_flags="--gres=gpu:1")  # removed -V
     else:
         # randomly assign to gpu 0 or 1
         for par in multi_params:
