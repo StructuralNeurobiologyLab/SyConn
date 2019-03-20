@@ -727,15 +727,9 @@ def get_axoness_model():
 
 def get_axoness_model_e3():
     """Those networks are typically trained with `naive_view_normalization_new` """
-    try:
-        from elektronn3.models.base import InferenceModel
-    except Exception as e:  # ImportError as e:
-        log_main.error(
-            "elektronn3 could not be imported ({}). Please see 'https://github."
-            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    from elektronn3.models.base import InferenceModel
     path = global_params.config.mpath_axoness_e3
-    m = InferenceModel(path)
-    m._path = path
+    m = InferenceModel(path, normalize_func=naive_view_normalization_new)
     return m
 
 
@@ -750,15 +744,9 @@ def get_glia_model():
 
 def get_glia_model_e3():
     """Those networks are typically trained with `naive_view_normalization_new` """
-    try:
-        from elektronn3.models.base import InferenceModel
-    except Exception as e:  # ImportError as e:
-        log_main.error(
-            "elektronn3 could not be imported ({}). Please see 'https://github."
-            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    from elektronn3.models.base import InferenceModel
     path = global_params.config.mpath_glia_e3
-    m = InferenceModel(path)
-    m._path = path
+    m = InferenceModel(path, normalize_func=naive_view_normalization_new)
     return m
 
 
@@ -793,8 +781,7 @@ def get_celltype_model_e3():
             "elektronn3 could not be imported ({}). Please see 'https://github."
             "com/ELEKTRONN/elektronn3' for more information.".format(e))
     path = global_params.config.mpath_celltype_e3
-    m = InferenceModel(path)
-    m._path = path
+    m = InferenceModel(path, normalize_func=naive_view_normalization_new)
     return m
 
 
