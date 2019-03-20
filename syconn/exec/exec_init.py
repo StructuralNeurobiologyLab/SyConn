@@ -91,7 +91,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
         # This creates a SegmentationDataset of type 'co'
         prob_thresh = global_params.config.entries["Probathresholds"][co]  # get probability threshold
         # TODO: this currently uses extract_voxels_combined ->  switch to extract and then combine as with SV! see from_ids_to_objects
-        oew.from_probabilities_to_objects(cd, co, membrane_kd_path=global_params.config.kd_seg_path,
+        oew.from_probabilities_to_objects(cd, co, # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist
                                           prob_kd_path_dict=prob_kd_path_dict, thresholds=[prob_thresh],
                                           workfolder=global_params.config.working_dir,
                                           hdf5names=[co], n_max_co_processes=None, qsub_pe='default',

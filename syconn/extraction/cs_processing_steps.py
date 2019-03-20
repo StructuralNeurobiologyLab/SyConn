@@ -1137,6 +1137,7 @@ def objects_to_single_synssv(synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=2000,
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
     is executed in 'classify_synssv_objects'.
+    Helper function of `_map_objects_to_synssv_thread`
 
     Parameters
     ----------
@@ -1179,6 +1180,7 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
     is executed in 'classify_synssv_objects'.
+    Helper function of `objects_to_single_synssv`.
 
     Parameters
     ----------
@@ -1234,8 +1236,10 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
 def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
                             qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     """
-    Classifiy SSV contact sites into snaptic or non-synaptic using an RFC model
-    and stores the result in the attribute dict of the syn_ssv objects.
+    # TODO: Will be replaced by new synapse detection
+    Classify SSV contact sites into synaptic or non-synaptic using an RFC model
+    and store the result in the attribute dict of the syn_ssv objects.
+    For requirements see `synssv_o_features`.
 
     Parameters
     ----------
@@ -1302,7 +1306,8 @@ def _classify_synssv_objects_thread(args):
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                          qsub_pe=None, qsub_queue=None,
-                                         n_max_co_processes=None):
+                                         n_max_co_processes=None,
+                                         syn_threshold=None):
     """
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
@@ -1317,14 +1322,18 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     qsub_queue : str
     n_max_co_processes : int
         Number of parallel jobs
+    syn_threshold : float
     """
+    if syn_threshold is None:
+        syn_threshold = global_params.thresh_syn_proba
+
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version=obj_version)
 
     multi_params = []
     for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, 2000):
         multi_params.append([so_dir_paths, wd, obj_version,
-                             ssd_version])
+                             ssd_version, syn_threshold])
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
             _collect_properties_from_ssv_partners_thread, multi_params,
@@ -1348,7 +1357,7 @@ def _collect_properties_from_ssv_partners_thread(args):
     args : Tuple
         see 'collect_properties_from_ssv_partners'
     """
-    so_dir_paths, wd, obj_version, ssd_version = args
+    so_dir_paths, wd, obj_version, ssd_version, syn_threshold = args
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
                                                       version=ssd_version)
@@ -1395,7 +1404,7 @@ def _collect_properties_from_ssv_partners_thread(args):
         this_attr_dc.push()
 
 
-def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
+def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
     """
     Writes .csv and .kzip summary file of connectivity matrix.
 
@@ -1405,8 +1414,10 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
     obj_version : str
     dest_folder : str
         Path to csv file
-    syn_prob_t :
+    threshold_syn : float
     """
+    if threshold_syn is None:
+        threshold_syn = global_params.thresh_syn_proba
     if dest_folder is None:
         dest_folder = global_params.config.working_dir + '/connectivity_matrix/'
     os.makedirs(os.path.split(dest_folder)[0], exist_ok=True)
@@ -1416,7 +1427,7 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
 
     syn_prob = sd_syn_ssv.load_cached_data("syn_prob")
 
-    m = syn_prob > syn_prob_t
+    m = syn_prob > threshold_syn
     m_axs = sd_syn_ssv.load_cached_data("partner_axoness")[m]
     m_cts = sd_syn_ssv.load_cached_data("partner_celltypes")[m]
     m_sp = sd_syn_ssv.load_cached_data("partner_spiness")[m]

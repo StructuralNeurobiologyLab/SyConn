@@ -59,9 +59,10 @@ log_level = 'DEBUG'  # INFO, DEBUG
 DISABLE_FILE_LOGGING = True
 
 
-# --------- CONTACT SITE PARAMETERS
+# --------- CONTACT SITE AND SYNAPSE PARAMETERS
 # Synaptic junction bounding box diagonal threshold in nm; objects above will not be used during `syn_gen_via_cset`
 thresh_sj_bbd_syngen = 25e3
+thresh_syn_proba = 0.5  # RFC probability used for classifying whether syn or not
 cs_gap_nm = 250
 # mapping parameters in 'map_objects_to_synssv'; assignment of cellular organelles to syn_ssv
 max_vx_dist_nm = 2000

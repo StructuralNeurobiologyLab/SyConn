@@ -128,27 +128,26 @@ if __name__ == '__main__':
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
     exec_multiview.run_create_neuron_ssd(prior_glia_removal=False)
 
-    # run_syn_generation can run in parallel to steps 4, 5, 6 and 7. Steps 3-7
-    # are finally required for step 8, especially steps 4-7 could run in
-    # parallel, because they require only medium MEM and CPU resources
-    log.info('Step 3/8 - Synapse identification')
-    exec_syns.run_syn_generation(chunk_size=(128, 128, 128), n_folders_fs=100)
-
-    log.info('Step 4/8 - Neuron rendering')
+    log.info('Step 3/8 - Neuron rendering')
     exec_multiview.run_neuron_rendering()
+
+    # run_syn_generation can run in parallel to steps 5 and 6, because they
+    # require only medium MEM and CPU resources and mainly GPU# TODO: adapt memory and CPU allocation of those GPU workers
+    log.info('Step 4/8 - Synapse identification')
+    exec_syns.run_syn_generation(chunk_size=(128, 128, 128), n_folders_fs=100)
 
     log.info('Step 5/8 - Axon prediction')
     # exec_multiview.run_axoness_prediction(n_jobs=4)
     # exec_multiview.run_axoness_mapping()
 
-    log.info('Step 6/8 - Celltype prediction')
-    exec_multiview.run_celltype_prediction(n_jobs=4)
-
-    log.info('Step 7/8 - Spine prediction')
+    log.info('Step 6/8 - Spine prediction')
     exec_multiview.run_spiness_prediction(n_jobs=4)
 
-    log.info('Step 8/8 - Synapse analysis')
-    exec_syns.run_syn_analysis()
+    log.info('Step 7/8 - Celltype prediction')
+    exec_multiview.run_celltype_prediction(n_jobs=4)
+
+    log.info('Step 8/8 - Matrix export')
+    exec_syns.run_matrix_export()
 
     log.info('SyConn analysis of "{}" has finished. Setting up flask server for'
              ' inspection. Annotated cell reconstructions and wiring can be analyzed via '

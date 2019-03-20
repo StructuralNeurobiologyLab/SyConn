@@ -196,11 +196,12 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     overlap = overlap_info[0]
     all_times.append(time.time() - time_start)
     step_names.append("conneceted components")
-    basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/connected_components.pkl",
+    basics.write_obj2pkl(cset.path_head_folder.rstrip("/") +
+                         "/connected_components.pkl",
                          [cc_info_list, overlap_info])
 
     #
-    # # --------------------------------------------------------------------------
+    # # ------------------------------------------------------------------------
     #
     time_start = time.time()
     nb_cc_dict = {}
@@ -225,7 +226,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",
                          [max_labels])
     #
-    # # --------------------------------------------------------------------------
+    # # ------------------------------------------------------------------------
     #
     time_start = time.time()
     oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,

@@ -20,33 +20,18 @@ from syconn.handler.logger import initialize_logging
 from syconn.handler.basics import kd_factory
 
 
-def run_syn_analysis():
+def run_matrix_export():
     log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
 
-    # This will be replaced by the new method for the 'syn_ssv' generation,
-    # ~80 min @ 340 cpus
-    extract_synapse_type(sd_syn_ssv, kd_sym_path=global_params.config.kd_sym_path,
-                         stride=100,
-                         kd_asym_path=global_params.config.kd_asym_path,
-                         qsub_pe='openmp')
-    log.info('Synapse type was mapped to "syn_ssv".')
-
-    # ~1h
-    cps.map_objects_to_synssv(global_params.config.working_dir,
-                              qsub_pe='openmp')
-    log.info('Cellular organelles were mapped to "syn_ssv".')
-
-    cps.classify_synssv_objects(global_params.config.working_dir,
-                                qsub_pe='openmp')
-    log.info('Synapse property prediction finished.')
-
     # as an alternative to the skeletons, use vertex predictions or
     # sample_locations, ~3.5h @ 300 cpus
     # TODO: requires speed-up; one could collect properties only for synapses >
     #  probability threshold
+    #     synssv_ids = synssv_ids[syn_prob > .5]
+    #     ssv_partners = ssv_partners[syn_prob > .5]
     cps.collect_properties_from_ssv_partners(global_params.config.working_dir,
                                              qsub_pe='openmp')
     #
@@ -109,7 +94,25 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True)
     log.info('SegmentationDataset of type "syn_ssv" was generated.')
 
+    # This will be replaced by the new method for the 'syn_ssv' generation,
+    # ~80 min @ 340 cpus
+    extract_synapse_type(sd_syn_ssv, kd_sym_path=global_params.config.kd_sym_path,
+                         stride=100,
+                         kd_asym_path=global_params.config.kd_asym_path,
+                         qsub_pe='openmp')
+    log.info('Synapse type was mapped to "syn_ssv".')
+
+    # ~1h
+    cps.map_objects_to_synssv(global_params.config.working_dir,
+                              qsub_pe='openmp')
+    log.info('Cellular organelles were mapped to "syn_ssv".')
+
+    cps.classify_synssv_objects(global_params.config.working_dir,
+                                qsub_pe='openmp')
+    log.info('Synapse property prediction finished.')
+
     log.info('Collecting and writing syn-ssv objects to SSV attribute '
              'dictionary.')
+    # TODO: decide whether this should happen after prob thresholding or not
     map_synssv_objects(qsub_pe='openmp')
     log.info('Finished.')
