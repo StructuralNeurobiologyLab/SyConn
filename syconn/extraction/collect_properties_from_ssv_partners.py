@@ -17,7 +17,6 @@ from ..handler.basics import chunkify
 from .. import global_params
 
 
-
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                          qsub_pe=None, qsub_queue=None,
                                          n_max_co_processes=None):
@@ -25,6 +24,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
     (-1 for asym., 1 for sym. synapses).
+
     Parameters
     ----------
     wd : str
@@ -59,6 +59,7 @@ def _collect_properties_from_ssv_partners_thread(args):
     """
     TODO: Add property keys to args -> increased control of updates
     Helper function of 'collect_properties_from_ssv_partners'.
+
     Parameters
     ----------
     args : Tuple
@@ -87,8 +88,9 @@ def _collect_properties_from_ssv_partners_thread(args):
                 ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
                 ssv_o.load_attr_dict()
                 # add pred_type key to global_params?
-                curr_ax, curr_latent = ssv_o.attr_for_coords([synssv_o.rep_coord], attr_keys=['axoness_avg10000',
-                                                                                              'latent_morph'])[0]  # only one coordinate
+                curr_ax, curr_latent = ssv_o.attr_for_coords(
+                    [synssv_o.rep_coord], attr_keys=['axoness_avg10000',
+                                                     'latent_morph'])[0]
                 if np.isscalar(curr_latent) and curr_latent == -1:
                     curr_latent = np.array([-1] * global_params.ndim_embedding)
                 axoness.append(curr_ax)
@@ -97,18 +99,19 @@ def _collect_properties_from_ssv_partners_thread(args):
                 curr_sp = ssv_o.semseg_for_coords([synssv_o.rep_coord],
                                                   'spiness')
                 spiness.append(curr_sp)
-                celltypes.append(ssv_o.attr_dict['celltype_cnn'])
-            sym_asym_ratio = synssv_o.attr_dict['syn_type_sym_ratio']
-            syn_sign = -1 if sym_asym_ratio > global_params.sym_thresh else 1
-            synssv_o.attr_dict.update({'partner_axoness': axoness, 'partner_spiness': spiness,
-                                       'partner_celltypes': celltypes, 'syn_sign': syn_sign,
+                try:
+                    ct_val = ssv_o.attr_dict['celltype_cnn']
+                except KeyError:
+                    ct_val = -1
+                celltypes.append(ct_val)
+            syn_sign = synssv_o.attr_dict['syn_sign']
+            synssv_o.attr_dict.update({'partner_axoness': axoness,
+                                       'partner_spiness': spiness,
+                                       'partner_celltypes': celltypes,
+                                       'syn_sign': syn_sign,
                                        'latent_morph': latent_morph})
             this_attr_dc[synssv_id] = synssv_o.attr_dict
         this_attr_dc.push()
-
-
-
-
 
 
 

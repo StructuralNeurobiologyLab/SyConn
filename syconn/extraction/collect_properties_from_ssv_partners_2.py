@@ -20,7 +20,7 @@ from .. import global_params
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                          qsub_pe=None, qsub_queue=None,
-                                         nb_cpus=None, n_max_co_processes=None):
+                                         n_max_co_processes=None):
     """
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
@@ -36,13 +36,13 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
         Number of parallel jobs
     """
 
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd, version=ssd_version)
+    ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
+                                                      version=ssd_version)
 
     multi_params = []
 
     for ids_small_chunk in chunkify(ssd.ssv_ids, 200):
-        multi_params.append([wd, obj_version,
-                             ssd_version, ids_small_chunk])
+        multi_params.append([wd, obj_version, ssd_version, ids_small_chunk])
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
@@ -101,10 +101,11 @@ def _collect_properties_from_ssv_partners_thread(args):
     for ssv_id in ssv_ids:  # Iterate over cells
         ssv_o = ssd.get_super_segmentation_object(ssv_id)
         ssv_o.load_attr_dict()
-        cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl", read_only=False,
-                                     disable_locking=True)
+        cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl",
+                                     read_only=False, disable_locking=True)
 
-        curr_ssv_mask = (syn_neuronpartners[:, 0] == ssv_id) | (syn_neuronpartners[:, 1] == ssv_id)
+        curr_ssv_mask = (syn_neuronpartners[:, 0] == ssv_id) | \
+                        (syn_neuronpartners[:, 1] == ssv_id)
         ssv_synids = sd_syn_ssv.ids[curr_ssv_mask]
         ssv_syncoords = sd_syn_ssv.rep_coords[curr_ssv_mask]
 
@@ -114,7 +115,8 @@ def _collect_properties_from_ssv_partners_thread(args):
             ct = -1
         celltypes = [ct] * len(ssv_synids)
 
-        curr_ax, latent_morph = ssv_o.attr_for_coords(ssv_syncoords, attr_keys=['axoness_avg10000', 'latent_morph'])
+        curr_ax, latent_morph = ssv_o.attr_for_coords(
+            ssv_syncoords, attr_keys=['axoness_avg10000', 'latent_morph'])
 
         for i in range(len(latent_morph)):
             curr_latent = latent_morph[i]
@@ -176,8 +178,10 @@ def _from_cell_to_syn_dict(args):
                 celltypes.append(cache_dc['partner_celltypes'][index])
                 latent_morph.append(cache_dc['latent_morph'][index])
 
-            synssv_o.attr_dict.update({'partner_axoness': axoness, 'partner_spiness': spiness,
-                                       'partner_celltypes': celltypes, 'syn_sign': syn_sign,
+            synssv_o.attr_dict.update({'partner_axoness': axoness,
+                                       'partner_spiness': spiness,
+                                       'partner_celltypes': celltypes,
+                                       'syn_sign': syn_sign,
                                        'latent_morph': latent_morph})
             this_attr_dc[synssv_id] = synssv_o.attr_dict
         this_attr_dc.push()

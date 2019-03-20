@@ -8,7 +8,6 @@
 from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
 from knossos_utils import chunky
-from syconn.extraction import object_extraction_wrapper as oew
 from syconn.extraction import cs_processing_steps
 from syconn.extraction import cs_extraction_steps as ces
 from syconn import global_params
@@ -32,6 +31,9 @@ def run_matrix_export():
     #  probability threshold
     #     synssv_ids = synssv_ids[syn_prob > .5]
     #     ssv_partners = ssv_partners[syn_prob > .5]
+    # One could also re-use the cached synssv IDs (computed during mapping of
+    # synssv to SSVs) -> saves finding SSV ID indices in synapse arrays (->
+    # slow for many synapses)
     cps.collect_properties_from_ssv_partners(global_params.config.working_dir,
                                              qsub_pe='openmp')
     #
@@ -70,7 +72,9 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     log.info('CS extraction finished.')
 
     # create overlap dataset between SJ and CS: SegmentationDataset of type 'syn'
-    # TODO: write new method which iterates over sj prob. map (KD), CS ChunkDataset / KD and (optionally) synapse type in parallel and to create a syn segmentation within from_probmaps_to_objects
+    # TODO: write new method which iterates over sj prob. map (KD), CS
+    #  ChunkDataset / KD and (optionally) synapse type in parallel and to
+    #  create a syn segmentation within from_probmaps_to_objects
     # TODO: SD for cs_agg and sj will not be needed anymore
     cs_sd = SegmentationDataset('cs_agg', working_dir=global_params.config.working_dir,
                                 version=0)  # version hard coded
