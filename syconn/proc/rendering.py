@@ -1118,12 +1118,17 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
                       'nb_views': None, 'comp_window': None, 'rot_mat': None,
                      'return_rot_mat': False, 'render_indexviews': render_indexviews}
 
-    for i in range(n_jobs):
-        for j in range(len(rendering_locations)):
-            index.append(i)
-    index_array = chunkify_successive(index, chunk_size)
+    # for i in range(n_jobs):
+    #     for j in range(len(rendering_locations)):
+    #         index.append(i)
+    # index_array = chunkify_successive(index, chunk_size)
+    # multiprocessing_index = 0
+    params = [[par, sso_kwargs, render_kwargs, ix] for ix, par in enumerate(params)]
+    # parameters = []
+    # for par in params:
+    #     parameters.append([par, sso_kwargs, render_kwargs, multiprocessing_index])
+    #     multiprocessing_index = multiprocessing_index + 1
 
-    params = [[par, sso_kwargs, render_kwargs] for par in params]
     tim1 = time.time()
     if verbose:
         log_proc.debug("Time for OTHER COMPUTATION {:.2f}s."
@@ -1136,8 +1141,14 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
 
     out_files = glob.glob(path_to_out + "/*")
     results = []
-    for out_file in out_files:
+
+    out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
+    for out_file in out_files2:
+        #print(int('out_file'))
         with open(out_file, 'rb') as f:
             results.append(pkl.load(f))
+
+    return results
+
 
     #res = start_multiprocess_imap(render_sso_coords_commandline, params, nb_cpus=n_job, verbose=verbose)

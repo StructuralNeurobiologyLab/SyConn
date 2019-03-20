@@ -31,8 +31,17 @@ if __name__=='__main__':
     now2 = time.time()
     print("time for reading data")
     print(now2-now)
-
-    render_sso_coords_multiprocessing(ssv, working_dir, exlocs, render_indexviews=render_indexview,
+    """
+    i = 0
+    exlocs = chunkify_successive(exlocs, 10)
+    params = []
+    for ex in exlocs:
+        params.append([exlocs, i])
+        i=i+1
+        print(i)
+        print(params[i-1])
+    """
+    view = render_sso_coords_multiprocessing(ssv, working_dir, exlocs, render_indexviews=render_indexview,
                                       n_jobs=5, verbose=True)
     now1 = time.time()
 
