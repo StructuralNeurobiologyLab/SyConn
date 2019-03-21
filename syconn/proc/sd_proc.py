@@ -171,7 +171,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
                       qsub_pe=None, qsub_queue=None, nb_cpus=None,
                       n_max_co_processes=None):
     """
-    TODO: (cython) optimization required! E.g. replace by single iteration over cell segm. and all cell organelle KDs
+    TODO: (cython) optimization required! E.g. replace by single iteration over cell segm. and all cell organelle KDs/CDs
     Maps objects to SVs. The segmentation needs to be written to a KnossosDataset before running this
 
     Parameters
@@ -695,6 +695,8 @@ def _extract_synapse_type_thread(args):
             else:
                 sym_ratio = sym_prop / float(asym_prop + sym_prop)
             so.attr_dict["syn_type_sym_ratio"] = sym_ratio
+            syn_sign = -1 if sym_ratio > global_params.sym_thresh else 1
+            so.attr_dict["syn_sign"] = syn_sign
             this_attr_dc[so_id] = so.attr_dict
         this_attr_dc.push()
 

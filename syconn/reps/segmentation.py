@@ -15,7 +15,7 @@ from skimage.measure import mesh_surface_area
 
 from .. import global_params
 from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING
-from ..handler.basics import load_pkl2obj, write_obj2pkl
+from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
 from ..handler.basics import get_filepaths_from_dir, safe_copy,\
     write_txt2kzip, temp_seed
@@ -1037,9 +1037,7 @@ class SegmentationObject(object):
 
         if kd is None:
             try:
-                kd = knossosdataset.KnossosDataset()
-                kd.initialize_from_knossos_path(
-                    self.config.entries["Paths"]["kd_seg_path"])
+                kd = kd_factory(self.config.kd_seg_path)
             except:
                 raise ValueError("KnossosDataset could not be loaded")
 

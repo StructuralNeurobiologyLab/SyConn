@@ -34,6 +34,7 @@ from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_ssv
 from syconn.handler.logger import initialize_logging
 from syconn.mp import batchjob_utils as qu
+from syconn.exec import exec_skeleton
 
 
 def run_morphology_embedding():
@@ -125,7 +126,6 @@ def run_axoness_prediction(n_jobs=100):
 
 
 def run_celltype_prediction(n_jobs=100):
-    # TODO: changed to new cell type predictions, work this in everywhere (keys: celltype_cnn_e3_probas and celltype_cnn_e3)
     log = initialize_logging('celltype_prediction', global_params.config.working_dir+ '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -229,7 +229,7 @@ def run_neuron_rendering():
     multi_params = chunkify(multi_params, 2000)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.config.working_dir) for ixs in multi_params]
-    log.info('Start rendering of {} SSVs. '.format(np.sum(size_mask)))
+    log.info('Started rendering of {} SSVs. '.format(np.sum(size_mask)))
     if np.sum(~size_mask) > 0:
         log.info('{} huge SSVs will be rendered afterwards using the whole'
                  ' cluster.'.format(np.sum(~size_mask)))
@@ -315,6 +315,9 @@ def run_create_neuron_ssd(prior_glia_removal=True):
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
     ssd.save_dataset_deep(qsub_pe="openmp", n_max_co_processes=global_params.NCORE_TOTAL)  # also executes 'ssd.save_dataset_shallow()'
+
+    exec_skeleton.run_skeleton_generation()
+
     log.info('Finished SSD initialization. Starting cellular '
              'organelle mapping.')
 

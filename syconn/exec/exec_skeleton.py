@@ -28,14 +28,13 @@ def run_skeleton_generation():
                                for ssv_id in ssd.ssv_ids])
     ordering = np.argsort(nb_svs_per_ssv)
     multi_params = multi_params[ordering[::-1]]
-    multi_params = chunkify(multi_params, 4000)
+    multi_params = chunkify(multi_params, 2000)
 
     # add ssd parameters
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir)
                     for ssv_ids in multi_params]
 
-    kwargs = dict(n_max_co_processes=340, pe="openmp", queue=None,
-                  script_folder=None, suffix="")
+    kwargs = dict(n_max_co_processes=global_params.NCORE_TOTAL)
     # create SSV skeletons, requires SV skeletons!
     log.info('Starting skeleton generation of {} SSVs.'.format(
         len(ssd.ssv_ids)))

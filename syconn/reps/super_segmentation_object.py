@@ -14,7 +14,7 @@ import scipy.spatial
 import shutil
 import time
 import tqdm
-from collections import Counter
+from collections import Counter, defaultdict
 from scipy.misc import imsave
 from scipy import spatial
 from knossos_utils import skeleton
@@ -929,16 +929,16 @@ class SuperSegmentationObject(object):
                 return True
             return False
 
-    def syn_sign_ratio(self, weighted=True):
+    def syn_sign_ratio(self, weighted=True, recompute=False):
         """
-        Ratio of symmetric synapses.
+        Ratio of symmetric synapses (between 0 and 1; -1 if no synapse objects).
 
         Returns
         -------
         float
         """
         ratio = self.lookup_in_attribute_dict("syn_sign_ratio")
-        if ratio is not None:
+        if not recompute and ratio is not None:
             return ratio
         syn_signs = []
         syn_sizes = []
@@ -946,6 +946,8 @@ class SuperSegmentationObject(object):
             syn.load_attr_dict()
             syn_signs.append(syn.attr_dict["syn_sign"])
             syn_sizes.append(syn.mesh_area / 2)
+        if len(syn_signs) == 0:
+            return -1
         syn_signs = np.array(syn_signs)
         syn_sizes = np.array(syn_sizes)
         if weighted:
@@ -1254,7 +1256,7 @@ class SuperSegmentationObject(object):
         return so_views_exist
 
     def render_views(self, add_cellobjects=False, verbose=False,
-                     qsub_pe=None, overwrite=False, cellobjects_only=False,
+                     qsub_pe=None, overwrite=True, cellobjects_only=False,
                      woglia=True, skip_indexviews=False, qsub_co_jobs=300,
                      resume_job=False):
         """
@@ -1821,7 +1823,7 @@ class SuperSegmentationObject(object):
             self.mesh2kzip(obj_type=ot, dest_path=dest_path, ext_color=sv_color if
             ot == "sv" else None)
 
-    def mesh2file(self, dest_path=None, center=None, color=None):
+    def mesh2file(self, dest_path=None, center=None, color=None, scale=None):
         """
         Writes mesh to file (e.g. .ply, .stl, .obj) via the 'openmesh' library.
         If possible, writes it as binary.
@@ -1834,8 +1836,11 @@ class SuperSegmentationObject(object):
         color: np.array
             Either single color (will be applied to all vertices) or
             per-vertex color array
+        scale : float
+            Multiplies vertex locations after centering
         """
-        mesh2obj_file(dest_path, self.mesh, center=center, color=color)
+        mesh2obj_file(dest_path, self.mesh, center=center, color=color,
+                      scale=scale)
 
     def export_kzip(self, dest_path=None, sv_color=None):
         """
@@ -2013,7 +2018,8 @@ class SuperSegmentationObject(object):
         -------
 
         """
-        # TODO: adapt writemesh2kzip to work with multiple writes to same file or use write_meshes2kzip here.
+        # TODO: adapt writemesh2kzip to work with multiple writes
+        #  to same file or use write_meshes2kzip here.
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         # write meshes of CC's
@@ -2052,16 +2058,11 @@ class SuperSegmentationObject(object):
         start = time.time()
         pred_key = "glia_probas"
         pred_key += pred_key_appendix
-        # try:
+        # 'tmp'-version: do not write to disk
         predict_sos_views(model, self.svs, pred_key,
                           nb_cpus=self.nb_cpus, verbose=verbose,
                           woglia=False, raw_only=True,
-                          return_proba=self.version == 'tmp')  # do not write to disk
-        # except KeyError:
-        #     self.render_views(add_cellobjects=False, woglia=False)
-        #     predict_sos_views(model, self.svs, pred_key,
-        #                       nb_cpus=self.nb_cpus, verbose=verbose,
-        #                       woglia=False, raw_only=True)
+                          return_proba=self.version == 'tmp')
         end = time.time()
         log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
                        "%0.4fs/SV" % (len(self.svs), end - start,
@@ -2168,7 +2169,6 @@ class SuperSegmentationObject(object):
 
     def axoness_for_coords(self, coords, radius_nm=4000, pred_type="axoness"):
         """
-        TODO: Deprecated, replace by pred_for_coords
         Dies not need to be axoness, it supports any attribut stored in self.skeleton.
 
         Parameters
@@ -2192,7 +2192,6 @@ class SuperSegmentationObject(object):
         Query skeleton node attributes at given coordinates. Supports any
         attribute stored in self.skeleton. If radius_nm is given, will
         assign majority attribute value.
-
         Parameters
         ----------
         coords : np.array
@@ -2202,7 +2201,6 @@ class SuperSegmentationObject(object):
             majority attribute value is used.
         attr_keys : List[str]
             Attribute identifier
-
         Returns
         -------
         List
@@ -2226,20 +2224,19 @@ class SuperSegmentationObject(object):
         else:
             close_node_ids = kdtree.query_ball_point(coords * self.scaling,
                                                      radius_nm)
-        result = []
+        attr_dc = defaultdict(list)
         for i_coord in range(len(coords)):
             curr_close_node_ids = close_node_ids[i_coord]
-            attr_list = []
             for attr_key in attr_keys:
                 if attr_key not in self.skeleton:  # e.g. for glia SSV axoness does not exist.
-                    attr_list.append(-1)
+                    attr_dc[attr_key].append(-1)
                     # # this is commented because there a legitimate cases for missing keys.
                     # # TODO: think of a better warning / error raise
                     # log_reps.warning(
                     #     "KeyError: Could not find key '{}' in skeleton of SSV with ID {}. Setting to -1."
                     #     "".format(attr_key, self.id))
                     continue
-                if radius_nm is not None:  # might be multiple node ids
+                if radius_nm is not None:  # use nodes within radius_nm, there might be multiple node ids
                     if len(curr_close_node_ids) == 0:
                         dist, curr_close_node_ids = kdtree.query(coords * self.scaling)
                         log_reps.info(
@@ -2250,16 +2247,24 @@ class SuperSegmentationObject(object):
                         np.array(self.skeleton[attr_key])[np.array(curr_close_node_ids)],
                         return_counts=True)
                     if len(cls) > 0:
-                        attr_list.append(cls[np.argmax(cnts)])
+                        attr_dc[attr_key].append(cls[np.argmax(cnts)])
                     else:
                         log_reps.info("Did not find any skeleton node within {} nm at {}."
                                       " SSV {} (size: {}; rep. coord.: {}).".format(
                             radius_nm, i_coord, self.id, self.size, self.rep_coord))
-                        attr_list.append(-1)
+                        attr_dc[attr_key].append(-1)
                 else:  # only nearest node ID
-                    attr_list.append(self.skeleton[attr_key][curr_close_node_ids])
-            result.append(attr_list)
-        return result
+                    attr_dc[attr_key].append(self.skeleton[attr_key][curr_close_node_ids])
+        # safety in case latent morphology was not predicted / needed
+        # TODO: refine mechanism for this scenario, i.e. for exporting matrix
+        if "latent_morph" in attr_keys:
+            latent_morph = attr_dc["latent_morph"]
+            for i in range(len(latent_morph)):
+                curr_latent = latent_morph[i]
+                if np.isscalar(curr_latent) and curr_latent == -1:
+                    curr_latent = np.array([np.inf] * global_params.ndim_embedding)
+                latent_morph[i] = curr_latent
+        return [np.array(attr_dc[k]) for k in attr_keys]
 
     def predict_views_axoness(self, model, verbose=False,
                               pred_key_appendix=""):

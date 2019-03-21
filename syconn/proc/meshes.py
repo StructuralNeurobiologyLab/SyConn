@@ -16,6 +16,7 @@ import openmesh
 from plyfile import PlyData, PlyElement
 from scipy.ndimage.morphology import binary_closing, binary_dilation
 import tqdm
+import time
 try:
     import vtki
     __vtk_avail__ = True
@@ -23,7 +24,7 @@ except ImportError:
     __vtk_avail__ = False
 
 try:
-   from .in_bounding_boxC import in_bounding_box
+    from .in_bounding_boxC import in_bounding_box
 except ImportError:
     from .in_bounding_box import in_bounding_box
 
@@ -405,7 +406,8 @@ def normalize_vertices(vertices):
 
 def calc_rot_matrices(coords, vertices, edge_length):
     """
-    # TODO: optimize with cython (bottleneck is probably 'in_bounding_box' -> create single for loop)
+    # Optimization comment: bottleneck is now 'get_rotmatrix_from_points'
+
     Fits a PCA to local sub-volumes in order to rotate them according to
     its main process (e.g. x-axis will be parallel to the long axis of a tube)
 
@@ -430,10 +432,20 @@ def calc_rot_matrices(coords, vertices, edge_length):
         vertices = vertices[::8]
     rot_matrices = np.zeros((len(coords), 16))
     edge_lengths = np.array([edge_length] * 3)
+    rotmat_dt = 0
+    inlier_dt = 0
     for ii, c in enumerate(coords):
         bounding_box = np.array([c, edge_lengths])
+        # start = time.time()
         inlier = np.array(vertices[in_bounding_box(vertices, bounding_box)])
+        # inlier_dt += time.time() - start
+        # start = time.time()
         rot_matrices[ii] = get_rotmatrix_from_points(inlier)
+        # rotmat_dt += time.time() - start
+    # log_proc.debug('Time for inlier calc.: {:.2f} min'.format(
+    #     inlier_dt / 60))
+    # log_proc.debug('Time for rot. mat.  calc.: {:.2f} min'.format(
+    #     rotmat_dt / 60))
     return rot_matrices
 
 
@@ -987,23 +999,28 @@ def mesh_chunk(args):
     md.push()
 
 
-def mesh2obj_file(dest_path, mesh, color=None, center=None):
+def mesh2obj_file(dest_path, mesh, color=None, center=None, scale=None):
     """
     Writes mesh to .obj file.
 
     Parameters
     ----------
+    dest_path : str
     mesh : List[np.array]
      flattend arrays of indices (triangle faces), vertices and normals
+    color :
     center : np.array
-
+        Subtracts center from original vertex locations
+    scale : float
+        Multiplies vertex locations after centering
 
     Returns
     -------
 
     """
-    options = openmesh.Options()
-    options += openmesh.Options.Binary
+    # # Commented lines belonged to self-compiled openmesh version
+    # options = openmesh.Options()
+    # options += openmesh.Options.Binary
     mesh_obj = openmesh.TriMesh()
     ind, vert, norm = mesh
     if vert.ndim == 1:
@@ -1012,23 +1029,29 @@ def mesh2obj_file(dest_path, mesh, color=None, center=None):
         ind = ind.reshape(-1 ,3)
     if center is not None:
         vert -= center
+    if scale is not None:
+        vert *= scale
     vert_openmesh = []
     if color is not None:
         mesh_obj.request_vertex_colors()
-        options += openmesh.Options.VertexColor
+        # options += openmesh.Options.VertexColor
         if color.ndim == 1:
             color = np.array([color] * len(vert))
         color = color.astype(np.float64)  # required by openmesh
     for ii, v in enumerate(vert):
         v = v.astype(np.float64)  # Point requires double
-        v_openmesh = mesh_obj.add_vertex(openmesh.TriMesh.Point(v[0], v[1], v[2]))
+        # v_openmesh = mesh_obj.add_vertex(openmesh.TriMesh.Point(v[0], v[1], v[2]))
+        v_openmesh = mesh_obj.add_vertex(v)
         if color is not None:
-            mesh_obj.set_color(v_openmesh, openmesh.TriMesh.Color(*color[ii]))
+            # mesh_obj.set_color(v_openmesh, openmesh.TriMesh.Color(*color[ii]))
+            mesh_obj.set_color(v_openmesh, color[ii])
         vert_openmesh.append(v_openmesh)
     for f in ind:
         f_openmesh = [vert_openmesh[f[0]], vert_openmesh[f[1]],
                       vert_openmesh[f[2]]]
         mesh_obj.add_face(f_openmesh)
-    result = openmesh.write_mesh(mesh_obj, dest_path, options)
-    if not result:
-        log_proc.error("Error occured when writing mesh to .obj file.")
+    # result = openmesh.write_mesh(mesh_obj, dest_path, options)
+    # result = openmesh.write_mesh(mesh_obj, dest_path)
+    result = openmesh.write_mesh(dest_path, mesh_obj)
+    # if not result:
+    #     log_proc.error("Error occured when writing mesh to .obj file.")

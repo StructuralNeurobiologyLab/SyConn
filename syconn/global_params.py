@@ -4,13 +4,14 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+
 import warnings
-# knossos:utils warning for implicit channel selection and init from dir instead of config file
-warnings.filterwarnings("ignore", message="You are using implicit channel selection")
-warnings.filterwarnings("ignore", message="You are initializing a KnossosDataset from a path")
-warnings.filterwarnings("ignore", message="dataset.value has been deprecated")  # h5py deprecation warning
+# warnings.filterwarnings(action='once')
 import os
 from .handler.config import DynConfig
+warnings.filterwarnings("ignore", message=".*You are using implicit channel selection.*")
+warnings.filterwarnings("ignore", message=".*You are initializing a KnossosDataset from a path.*")
+warnings.filterwarnings("ignore", message=".*dataset.value has been deprecated.*")  # h5py deprecation warning
 
 # ---------------------- STATIC AND GLOBAL PARAMETERS # -----------------------
 # --------- GLOBAL WORKING DIRECTORY
@@ -30,7 +31,7 @@ config = DynConfig()
 # --------- BACKEND DEFINITIONS
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
 batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + \
-                         "/QSUB_scripts/"
+                         "/batchjob_scripts/"
 # TODO refactor syconn and get rid of all qsub_pe and qsub_queue kwargs and only use batch_job_enabled(), the default in QSUB_script are now BATCH_PE and BATCH_QUEUE
 BATCH_PE = 'default'
 BATCH_QUEUE = 'all.q'
@@ -58,9 +59,10 @@ log_level = 'DEBUG'  # INFO, DEBUG
 DISABLE_FILE_LOGGING = True
 
 
-# --------- CONTACT SITE PARAMETERS
+# --------- CONTACT SITE AND SYNAPSE PARAMETERS
 # Synaptic junction bounding box diagonal threshold in nm; objects above will not be used during `syn_gen_via_cset`
 thresh_sj_bbd_syngen = 25e3
+thresh_syn_proba = 0.5  # RFC probability used for classifying whether syn or not
 cs_gap_nm = 250
 # mapping parameters in 'map_objects_to_synssv'; assignment of cellular organelles to syn_ssv
 max_vx_dist_nm = 2000

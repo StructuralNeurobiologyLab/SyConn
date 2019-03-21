@@ -14,7 +14,7 @@ from syconn.proc import sd_proc
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.handler.logger import initialize_logging
 from syconn.mp import batchjob_utils as qu
-from syconn.handler.basics import chunkify
+from syconn.handler.basics import chunkify, kd_factory
 
 
 # TODO: make it work with new SyConn
@@ -37,9 +37,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
                              overwrite=False)
 
     # Sets initial values of object
-    kd = knossosdataset.KnossosDataset()
-    # Initializes the dataset by parsing the knossos.conf in path + "mag1"
-    kd.initialize_from_knossos_path(global_params.config.kd_seg_path)
+    kd = kd_factory(global_params.config.kd_seg_path)
 
     # TODO: get rid of explicit voxel extraction, all info necessary should be extracted at the beginning, e.g. size, bounding box etc and then refactor to only use those cached attributes!
     # resulting ChunkDataset, required for SV extraction --
@@ -49,7 +47,8 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
     cd = chunky.ChunkDataset()
     cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
                   box_coords=[0, 0, 0], fit_box_size=True)
-    log.info('Generating SegmentationDatasets for cell and cell organelle supervoxels.')
+    log.info('Generating SegmentationDatasets for cell and cell '
+             'organelle supervoxels.')
     oew.from_ids_to_objects(cd, "sv", overlaydataset_path=global_params.config.kd_seg_path,
                             n_chunk_jobs=5000, hdf5names=["sv"], n_max_co_processes=None,
                             qsub_pe='default', qsub_queue='all.q', qsub_slots=1,
@@ -62,7 +61,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
 
     # TODO: Add preprocessing of SV meshes only if config flag is set
     # preprocess sample locations (and meshes if they did not exist yet)
-    log.debug("Caching sample locations (and meshes if not provided during init.).")
+    log.debug("Caching sample locations (and meshes if not provided).")
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 800)
     # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
@@ -81,7 +80,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
     # recompute=False: only collect new sample_location property
     sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q',
                              compute_meshprops=True, recompute=False)
-    log.info('Finished object extraction for cell SVs.')
+    log.info('Finished object extraction of cell SVs.')
     # create SegmentationDataset for each cell organelle
     for co in global_params.existing_cell_organelles:
         cd_dir = global_params.config.working_dir + "chunkdatasets/{}/".format(co)
@@ -93,17 +92,17 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
         # This creates a SegmentationDataset of type 'co'
         prob_thresh = global_params.config.entries["Probathresholds"][co]  # get probability threshold
         # TODO: this currently uses extract_voxels_combined ->  switch to extract and then combine as with SV! see from_ids_to_objects
-        oew.from_probabilities_to_objects(cd, co, membrane_kd_path=global_params.config.kd_seg_path,
+        oew.from_probabilities_to_objects(cd, co, # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist
                                           prob_kd_path_dict=prob_kd_path_dict, thresholds=[prob_thresh],
                                           workfolder=global_params.config.working_dir,
                                           hdf5names=[co], n_max_co_processes=None, qsub_pe='default',
-                                          qsub_queue='all.q', n_folders_fs=n_folders_fs, debug=False)
+                                          qsub_queue='all.q', n_folders_fs=n_folders_fs, debug=True)
         sd_co = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir)
         sd_proc.dataset_analysis(sd_co, qsub_pe="default", qsub_queue='all.q',
                                  compute_meshprops=True)
-        # About 0.2 h per object class  # TODO: optimization required, especially VC are slow due to additonal membrane checks -> investigate
+        # About 0.2 h per object class  # TODO: optimization required, especially VC are slow due to additonal membrane checks (this happens only during thresholding step, maybe safe), also check size thresholds, they might not be appllied here -> investigate
         log.debug('Mapping objects {} to SVs.'.format(co))
         sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path, qsub_pe='default',
                                   qsub_queue='all.q')
-        log.info('Finished object extraction for {} SVs.'.format(co))
+        log.info('Finished object extraction of {} SVs.'.format(co))
 
