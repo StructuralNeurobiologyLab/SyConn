@@ -27,8 +27,6 @@ with open(path_storage_file, 'rb') as f:
             args.append(pkl.load(f))
         except EOFError:
             break
-#params = args[0]n
-#coords = params['coords']
 coords = args[0]
 sso_kwargs = args[1]
 working_dir = sso_kwargs['working_dir']
@@ -39,12 +37,11 @@ file_store_number = args[3]
 del kwargs['render_indexviews']
 sso = SuperSegmentationObject(**sso_kwargs)
 views = 0  # in case no rendering locations are given
-#index = args[3]
-print("In QSUB script")
-print(len(coords))
-print("File store")
-print(file_store_number)
-print(path_out_file)
+#print("In QSUB script")
+#print(len(coords))
+#print("File store")
+#print(file_store_number)
+#print(path_out_file)
 file = 'file'
 file = file + str(file_store_number)
 if render_indexviews:

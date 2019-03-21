@@ -1093,17 +1093,15 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
     Parameters
     ----------
     ssv : SuperSegmentationObject
-    wd
-    rendeirng_locations
-    n_jobs
-    verbose
+    wd : string: working directory for accessing data
+    rendeirng_locations: array of locations to be rendered
+    n_jobs: int: number of parallel jobs running on same node of cluster
+    verbose: bool: flag to show th progress of rendering.
 
-    Returns
+    Returns: Array: array of views after rendering of locations.
     -------
 
     """
-    index = []
-    #params1 = {'coords': rendering_locations, 'index': index }
     tim = time.time()
     chunk_size = len(rendering_locations) // n_jobs + 1
     print(chunk_size)
@@ -1117,18 +1115,7 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
                       'nb_views': None, 'comp_window': None, 'rot_mat': None,
                      'return_rot_mat': False, 'render_indexviews': render_indexviews}
-
-    # for i in range(n_jobs):
-    #     for j in range(len(rendering_locations)):
-    #         index.append(i)
-    # index_array = chunkify_successive(index, chunk_size)
-    # multiprocessing_index = 0
     params = [[par, sso_kwargs, render_kwargs, ix] for ix, par in enumerate(params)]
-    # parameters = []
-    # for par in params:
-    #     parameters.append([par, sso_kwargs, render_kwargs, multiprocessing_index])
-    #     multiprocessing_index = multiprocessing_index + 1
-
     tim1 = time.time()
     if verbose:
         log_proc.debug("Time for OTHER COMPUTATION {:.2f}s."
@@ -1137,17 +1124,12 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
         params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
         queue=None, script_folder=None, n_cores=1, disable_batchjob=True,
         n_max_co_processes=n_jobs)
-    # TODO: read and concatenate all output files in the correct order
-
     out_files = glob.glob(path_to_out + "/*")
     results = []
-
     out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
     for out_file in out_files2:
-        #print(int('out_file'))
         with open(out_file, 'rb') as f:
             results.append(pkl.load(f))
-
     return results
 
 
