@@ -134,7 +134,6 @@ def run_axoness_prediction(n_jobs=100, e3=False):
 
 
 def run_celltype_prediction(n_jobs=100):
-    # TODO: changed to new cell type predictions, work this in everywhere (keys: celltype_cnn_e3_probas and celltype_cnn_e3)
     log = initialize_logging('celltype_prediction', global_params.config.working_dir+ '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -238,7 +237,7 @@ def run_neuron_rendering():
     multi_params = chunkify(multi_params, 2000)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.config.working_dir) for ixs in multi_params]
-    log.info('Start rendering of {} SSVs. '.format(np.sum(size_mask)))
+    log.info('Started rendering of {} SSVs. '.format(np.sum(size_mask)))
     if np.sum(~size_mask) > 0:
         log.info('{} huge SSVs will be rendered afterwards using the whole'
                  ' cluster.'.format(np.sum(~size_mask)))

@@ -71,7 +71,6 @@ def _contact_site_detection_thread(args):
     offset = np.array(chunk.coordinates - overlap)
     size = 2 * overlap + np.array(chunk.size)
     data = kd.from_overlaycubes_to_matrix(size, offset, datatype=np.uint64).astype(np.uint32)
-
     contacts = detect_cs(data)
     os.makedirs(chunk.folder, exist_ok=True)
     compression.save_to_h5py([contacts],

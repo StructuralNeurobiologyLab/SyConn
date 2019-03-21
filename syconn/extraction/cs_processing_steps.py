@@ -26,6 +26,16 @@ from ..handler.basics import chunkify
 from . import log_extraction
 from .. import global_params
 
+# TODO: stick to one as soon as comparison is done; move definitions back in
+#  here. `collect_properties_from_ssv_partners` is currently called from `exec_syns.py`
+# try:
+#     from .collect_properties_from_ssv_partners_2 import collect_properties_from_ssv_partners
+# except ImportError:
+#     from .collect_properties_from_ssv_partners import collect_properties_from_ssv_partners#
+
+from .collect_properties_from_ssv_partners_2 import \
+    collect_properties_from_ssv_partners
+
 
 # code for splitting 'syn' objects, which are generated as overlap between CS and SJ, see below.
 def filter_relevant_syn(sd_syn, ssd):
@@ -1137,6 +1147,7 @@ def objects_to_single_synssv(synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=2000,
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
     is executed in 'classify_synssv_objects'.
+    Helper function of `_map_objects_to_synssv_thread`
 
     Parameters
     ----------
@@ -1179,6 +1190,7 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
     is executed in 'classify_synssv_objects'.
+    Helper function of `objects_to_single_synssv`.
 
     Parameters
     ----------
@@ -1234,8 +1246,10 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
 def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
                             qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     """
-    Classifiy SSV contact sites into snaptic or non-synaptic using an RFC model
-    and stores the result in the attribute dict of the syn_ssv objects.
+    # TODO: Will be replaced by new synapse detection
+    Classify SSV contact sites into synaptic or non-synaptic using an RFC model
+    and store the result in the attribute dict of the syn_ssv objects.
+    For requirements see `synssv_o_features`.
 
     Parameters
     ----------
@@ -1300,102 +1314,7 @@ def _classify_synssv_objects_thread(args):
         this_attr_dc.push()
 
 
-def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
-                                         qsub_pe=None, qsub_queue=None,
-                                         n_max_co_processes=None):
-    """
-    Collect axoness, cell types and spiness from synaptic partners and stores
-    them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
-    (-1 for asym., 1 for sym. synapses).
-
-    Parameters
-    ----------
-    wd : str
-    obj_version : str
-    ssd_version : int
-    qsub_pe : str
-    qsub_queue : str
-    n_max_co_processes : int
-        Number of parallel jobs
-    """
-    sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
-                                                  version=obj_version)
-
-    multi_params = []
-    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, 2000):
-        multi_params.append([so_dir_paths, wd, obj_version,
-                             ssd_version])
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        _ = sm.start_multiprocess_imap(
-            _collect_properties_from_ssv_partners_thread, multi_params,
-            nb_cpus=n_max_co_processes)
-    elif qu.batchjob_enabled():
-        _ = qu.QSUB_script(
-            multi_params, "collect_properties_from_ssv_partners", pe=qsub_pe,
-            queue=qsub_queue, script_folder=None,
-            n_max_co_processes=n_max_co_processes)
-    else:
-        raise Exception("QSUB not available")
-
-
-def _collect_properties_from_ssv_partners_thread(args):
-    """
-    TODO: Add property keys to args -> increased control of updates
-    Helper function of 'collect_properties_from_ssv_partners'.
-
-    Parameters
-    ----------
-    args : Tuple
-        see 'collect_properties_from_ssv_partners'
-    """
-    so_dir_paths, wd, obj_version, ssd_version = args
-
-    ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
-                                                      version=ssd_version)
-    sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
-                                                  working_dir=wd,
-                                                  version=obj_version)
-    for so_dir_path in so_dir_paths:
-        this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
-                                     read_only=False)
-
-        for synssv_id in this_attr_dc.keys():
-            synssv_o = sd_syn_ssv.get_segmentation_object(synssv_id)
-            synssv_o.load_attr_dict()
-
-            axoness = []
-            latent_morph = []
-            spiness = []
-            celltypes = []
-            for ssv_partner_id in synssv_o.attr_dict["neuron_partners"]:
-                ssv_o = ssd.get_super_segmentation_object(ssv_partner_id)
-                ssv_o.load_attr_dict()
-                # add pred_type key to global_params?
-                curr_ax, curr_latent = ssv_o.attr_for_coords([synssv_o.rep_coord], attr_keys=['axoness_avg10000',
-                                                                                              'latent_morph'])[0]  # only one coordinate
-                if np.isscalar(curr_latent) and curr_latent == -1:
-                    curr_latent = np.array([-1] * global_params.ndim_embedding)
-                axoness.append(curr_ax)
-                latent_morph.append(curr_latent)
-                # TODO: maybe use more than only a single rep_coord
-                curr_sp = ssv_o.semseg_for_coords([synssv_o.rep_coord],
-                                                  'spiness')
-                spiness.append(curr_sp)
-                try:
-                    ct_val = ssv_o.attr_dict['celltype_cnn']
-                except KeyError:
-                    ct_val = -1
-                celltypes.append(ct_val)
-            sym_asym_ratio = synssv_o.attr_dict['syn_type_sym_ratio']
-            syn_sign = -1 if sym_asym_ratio > global_params.sym_thresh else 1
-            synssv_o.attr_dict.update({'partner_axoness': axoness, 'partner_spiness': spiness,
-                                       'partner_celltypes': celltypes, 'syn_sign': syn_sign,
-                                       'latent_morph': latent_morph})
-            this_attr_dc[synssv_id] = synssv_o.attr_dict
-        this_attr_dc.push()
-
-
-def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
+def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
     """
     Writes .csv and .kzip summary file of connectivity matrix.
 
@@ -1405,8 +1324,10 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
     obj_version : str
     dest_folder : str
         Path to csv file
-    syn_prob_t :
+    threshold_syn : float
     """
+    if threshold_syn is None:
+        threshold_syn = global_params.thresh_syn_proba
     if dest_folder is None:
         dest_folder = global_params.config.working_dir + '/connectivity_matrix/'
     os.makedirs(os.path.split(dest_folder)[0], exist_ok=True)
@@ -1416,7 +1337,7 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
 
     syn_prob = sd_syn_ssv.load_cached_data("syn_prob")
 
-    m = syn_prob > syn_prob_t
+    m = syn_prob > threshold_syn
     m_axs = sd_syn_ssv.load_cached_data("partner_axoness")[m]
     m_cts = sd_syn_ssv.load_cached_data("partner_celltypes")[m]
     m_sp = sd_syn_ssv.load_cached_data("partner_spiness")[m]
@@ -1431,8 +1352,9 @@ def export_matrix(obj_version=None, dest_folder=None, syn_prob_t=.5):
     m_latent_morph = m_latent_morph.reshape(len(m_latent_morph), -1)  # N, 2*m
 
     # (loop of skeleton node generation)
-    # make sure cache-arrays have ndim == 2
+    # make sure cache-arrays have ndim == 2, TODO: check when writing chached arrays
     m_sizes = np.multiply(m_sizes, m_syn_sign).squeeze()[:, None]  # N, 1
+    m_axs = m_axs.squeeze()  # N, 2
     m_sp = m_sp.squeeze()  # N, 2
     m_syn_prob = m_syn_prob.squeeze()[:, None]  # N, 1
     table = np.concatenate([m_coords, m_ssv_partners, m_sizes, m_axs, m_cts,

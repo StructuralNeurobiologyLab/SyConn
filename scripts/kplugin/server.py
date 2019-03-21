@@ -157,27 +157,12 @@ class SyConnBackend(object):
         self.sds = dict(syn_ssv=SegmentationDataset(working_dir=syconn_path,
                                                     obj_type='syn_ssv'))
 
-        # directed networkx graph of connectivity
-        self.conn_graph = conn.connectivity_to_nx_graph()
-        self.logger.info('Connectivity graph initialized.')
         # flat array representation of all synapses
         self.conn_dict = conn.load_cached_data_dict()
-
-        idx_filter = self.conn_dict['synaptivity_proba'] > 0.5
-        #  & (df_dict['syn_size'] < 5.)
-
-        for k, v in self.conn_dict.items():
-            self.conn_dict[k] = v[idx_filter]
-
-        # removes synapses involving soma
-        idx_filter = (self.conn_dict['neuron_partner_ax_0']
-                      + self.conn_dict['neuron_partner_ax_1']) == 1
-
-        for k, v in self.conn_dict.items():
-            self.conn_dict[k] = v[idx_filter]
         self.logger.info('In memory cache of synapses initialized.')
-
-        return
+        # directed networkx graph of connectivity
+        self.conn_graph = conn.connectivity_to_nx_graph(self.conn_dict)
+        self.logger.info('Connectivity graph initialized.')
 
     def ssv_mesh(self, ssv_id):
         """

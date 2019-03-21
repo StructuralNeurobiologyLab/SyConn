@@ -788,7 +788,6 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         with open("%s/remapping_dict.pkl" % dataset_path, "wb") as f:
             pkl.dump(remap_dict, f)
 
-
 def _extract_voxels_thread(args):
     chunks = args[0]
     workfolder = args[1]

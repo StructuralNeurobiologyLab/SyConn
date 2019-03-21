@@ -244,10 +244,10 @@ def _apply_mapping_decisions_thread(args):
 
 
 def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue=None,
-                       nb_cpus=None, n_max_co_processes=global_params.NCORE_TOTAL):
+                       nb_cpus=None, n_max_co_processes=global_params.NCORE_TOTAL,
+                       syn_threshold=None):
     """
     Map synn_ssv objects to all SSO objects contained in SSV SuperSegmentationDataset.
-    Also computes syn_ssv meshes.
 
     Parameters
     ----------
@@ -257,17 +257,21 @@ def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue
     qsub_queue : str
     nb_cpus : int
     n_max_co_processes : int
+    syn_threshold : float
 
     Returns
     -------
 
     """
+    if syn_threshold is None:
+        syn_threshold = global_params.thresh_syn_proba
     ssd = SuperSegmentationDataset(global_params.config.working_dir)
     multi_params = []
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
                          for i in range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, ssd.type, synssv_version])
+                             ssd.working_dir, ssd.type, synssv_version,
+                             syn_threshold])
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         results = sm.start_multiprocess(
@@ -287,7 +291,7 @@ def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue
 
 def map_synssv_objects_thread(args):
     ssv_obj_ids, version, version_dict, working_dir, \
-        ssd_type, synssv_version = args
+        ssd_type, synssv_version, syn_threshold = args
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir, version,
                                                       ssd_type=ssd_type,
@@ -301,8 +305,8 @@ def map_synssv_objects_thread(args):
     syn_prob = syn_ssv_sd.load_cached_data("syn_prob")
     synssv_ids = syn_ssv_sd.load_cached_data("id")
 
-    synssv_ids = synssv_ids[syn_prob > .5]
-    ssv_partners = ssv_partners[syn_prob > .5]
+    synssv_ids = synssv_ids[syn_prob > syn_threshold]
+    ssv_partners = ssv_partners[syn_prob > syn_threshold]
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id, False)
@@ -314,7 +318,6 @@ def map_synssv_objects_thread(args):
         # key has to be the same as the SegmentationDataset name to enable automatic mesh retrieval in syconn/gate/server.py
         ssv.attr_dict["syn_ssv"] = curr_synssv_ids
         ssv.save_attr_dict()
-        _ = ssv.load_mesh('syn_ssv')
 
 
 def mesh_proc_ssv(working_dir, version=None, ssd_type='ssv', nb_cpus=20):

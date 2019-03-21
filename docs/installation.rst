@@ -15,6 +15,8 @@ We recommend installing the latest Anaconda release. Then set up the python envi
 
 Then install all prerequisites and finally git clone and install syconn:
 
+    conda install cmake
+
     conda install vigra -c conda-forge
 
     conda install mesa -c menpo

@@ -101,35 +101,22 @@ def extract_connectivity_information(sj, ssd):
     return np.concatenate([sso_ids, sj_ids[:, None], sizes[:, None], sj_types[:, None], sj_coords], axis=1)
 
 
-def connectivity_to_nx_graph():
+def connectivity_to_nx_graph(cd_dict):
     """
     Creates a directed networkx graph with attributes from the
     stored raw connectivity data.
+
+        Parameters
+    ----------
+    cd_dict : dict
 
     Returns
     -------
 
     """
-
-    cd_dict = load_cached_data_dict()
-
-    idx_filter = cd_dict['synaptivity_proba'] > 0.5
-    #  & (df_dict['syn_size'] < 5.)
-
-    for k, v in cd_dict.items():
-        cd_dict[k] = v[idx_filter]
-
-    idx_filter = (cd_dict['neuron_partner_ax_0']\
-                 + cd_dict['neuron_partner_ax_1']) == 1
-
-    for k, v in cd_dict.items():
-        cd_dict[k] = v[idx_filter]
-
     nxg = nx.DiGraph()
     start = time.time()
-    log_reps.debug('Starting graph construction')
     for idx in range(0, len(cd_dict['ids'])):
-
         # find out which one is pre and which one is post
         # 1 indicates pre, i.e. identified as axon by the classifier
         if cd_dict['neuron_partner_ax_0'][idx] == 1:
@@ -141,13 +128,16 @@ def connectivity_to_nx_graph():
 
         nxg.add_edge(u, v)
         # for each synapse create edge with attributes
-    log_reps.debug('Done with graph construction, took {0}'.format(time.time()-start))
+    log_reps.debug('Done with graph ({1} nodes) construction, took {0}'.format(
+        time.time()-start, nxg.number_of_nodes()))
 
     return nxg
 
 
-def load_cached_data_dict(wd=None, syn_version=None):
+def load_cached_data_dict(wd=None, syn_version=None, thresh_syn_prob=None):
     """
+    # TODO: allow synapses between axon and soma
+    # TODO: COnsider moving syn-prob. masking on client side
     Loads all cached data from a contact site segmentation dataset into a
     dictionary for further processing.
 
@@ -155,6 +145,7 @@ def load_cached_data_dict(wd=None, syn_version=None):
     ----------
     wd : str
     syn_version : str
+    thresh_syn_prob : float
 
     Returns
     -------
@@ -162,6 +153,8 @@ def load_cached_data_dict(wd=None, syn_version=None):
     """
     if wd is None:
         wd = global_params.config.working_dir
+    if thresh_syn_prob is None:
+        thresh_syn_prob = global_params.thresh_syn_proba
     start = time.time()
     csd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=wd,
                                            version=syn_version)
@@ -197,7 +190,22 @@ def load_cached_data_dict(wd=None, syn_version=None):
     cd_dict['neuron_partner_sp_1'] = \
         csd.load_cached_data('partner_spiness')[:, 1].astype(np.int)
 
-    log_reps.debug('Getting all objects took: {0}'.format(time.time() - start))
+    log_reps.debug('Getting {1} objects took: {0}'.format(time.time() - start,
+                                                          len(csd.ids)))
+
+    idx_filter = cd_dict['synaptivity_proba'] > thresh_syn_prob
+    #  & (df_dict['syn_size'] < 5.)  # TODO: think about size criteria
+    n_syns = np.sum(idx_filter)
+    idx_filter = idx_filter & ((cd_dict['neuron_partner_ax_0'] +
+                                cd_dict['neuron_partner_ax_1']) == 1)
+    n_syns_axden = np.sum(idx_filter)
+    for k, v in cd_dict.items():
+        cd_dict[k] = v[idx_filter]
+
+    log_reps.debug('Finished conn. dictionary with {} synaptic '
+                   'objects. {} above prob. threshold. {} ax-den syn.'
+                   ''.format(len(idx_filter), n_syns, n_syns_axden))
+
     return cd_dict
 
 
