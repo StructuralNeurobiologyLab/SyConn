@@ -14,7 +14,7 @@ import scipy.spatial
 import shutil
 import time
 import tqdm
-from collections import Counter
+from collections import Counter, defaultdict
 from scipy.misc import imsave
 from scipy import spatial
 from knossos_utils import skeleton
@@ -2015,7 +2015,8 @@ class SuperSegmentationObject(object):
         -------
 
         """
-        # TODO: adapt writemesh2kzip to work with multiple writes to same file or use write_meshes2kzip here.
+        # TODO: adapt writemesh2kzip to work with multiple writes
+        #  to same file or use write_meshes2kzip here.
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         # write meshes of CC's
@@ -2054,16 +2055,11 @@ class SuperSegmentationObject(object):
         start = time.time()
         pred_key = "glia_probas"
         pred_key += pred_key_appendix
-        # try:
+        # 'tmp'-version: do not write to disk
         predict_sos_views(model, self.svs, pred_key,
                           nb_cpus=self.nb_cpus, verbose=verbose,
                           woglia=False, raw_only=True,
-                          return_proba=self.version == 'tmp')  # do not write to disk
-        # except KeyError:
-        #     self.render_views(add_cellobjects=False, woglia=False)
-        #     predict_sos_views(model, self.svs, pred_key,
-        #                       nb_cpus=self.nb_cpus, verbose=verbose,
-        #                       woglia=False, raw_only=True)
+                          return_proba=self.version == 'tmp')
         end = time.time()
         log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
                        "%0.4fs/SV" % (len(self.svs), end - start,
@@ -2170,7 +2166,6 @@ class SuperSegmentationObject(object):
 
     def axoness_for_coords(self, coords, radius_nm=4000, pred_type="axoness"):
         """
-        TODO: Deprecated, replace by pred_for_coords
         Dies not need to be axoness, it supports any attribut stored in self.skeleton.
 
         Parameters
@@ -2187,81 +2182,6 @@ class SuperSegmentationObject(object):
             majority label within radius_nm
         """
         return np.array(self.attr_for_coords(coords, [pred_type], radius_nm))
-
-    def attr_for_coords(self, coords, attr_keys, radius_nm=None):
-        """
-        TODO: move to super_segmentation_helper.py
-        Query skeleton node attributes at given coordinates. Supports any
-        attribute stored in self.skeleton. If radius_nm is given, will
-        assign majority attribute value.
-
-        Parameters
-        ----------
-        coords : np.array
-            Voxel coordinates, unscaled! [N, 3]
-        radius_nm : Optional[float]
-            If None, will only use attribute of nearest node, otherwise
-            majority attribute value is used.
-        attr_keys : List[str]
-            Attribute identifier
-
-        Returns
-        -------
-        List
-            Same length as coords. For every coordinate in coords returns the
-            majority label within radius_nm or [-1] if Key does not exist.
-        """
-        if type(attr_keys) is str:
-            attr_keys = [attr_keys]
-        coords = np.array(coords)
-        self.load_skeleton()
-        if self.skeleton is None or len(self.skeleton["nodes"]) == 0:
-            log_reps.warn("Skeleton did not exist for SSV {} (size: {}; rep. coord.: "
-                          "{}).".format(self.id, self.size, self.rep_coord))
-            return -1 * np.ones((len(coords), len(attr_keys)))
-
-        # get close locations
-        kdtree = scipy.spatial.cKDTree(self.skeleton["nodes"] * self.scaling)
-        if radius_nm is None:
-            _, close_node_ids = kdtree.query(coords * self.scaling, k=1,
-                                             n_jobs=self.nb_cpus)
-        else:
-            close_node_ids = kdtree.query_ball_point(coords * self.scaling,
-                                                     radius_nm)
-        result = []
-        for i_coord in range(len(coords)):
-            curr_close_node_ids = close_node_ids[i_coord]
-            attr_list = []
-            for attr_key in attr_keys:
-                if attr_key not in self.skeleton:  # e.g. for glia SSV axoness does not exist.
-                    attr_list.append(-1)
-                    # # this is commented because there a legitimate cases for missing keys.
-                    # # TODO: think of a better warning / error raise
-                    # log_reps.warning(
-                    #     "KeyError: Could not find key '{}' in skeleton of SSV with ID {}. Setting to -1."
-                    #     "".format(attr_key, self.id))
-                    continue
-                if radius_nm is not None:  # might be multiple node ids
-                    if len(curr_close_node_ids) == 0:
-                        dist, curr_close_node_ids = kdtree.query(coords * self.scaling)
-                        log_reps.info(
-                            "Couldn't find skeleton nodes within {} nm. Using nearest "
-                            "one with distance {} nm. SSV ID {}, coordinate at {}."
-                            "".format(radius_nm, dist[0], self.id, coords[i_coord]))
-                    cls, cnts = np.unique(
-                        np.array(self.skeleton[attr_key])[np.array(curr_close_node_ids)],
-                        return_counts=True)
-                    if len(cls) > 0:
-                        attr_list.append(cls[np.argmax(cnts)])
-                    else:
-                        log_reps.info("Did not find any skeleton node within {} nm at {}."
-                                      " SSV {} (size: {}; rep. coord.: {}).".format(
-                            radius_nm, i_coord, self.id, self.size, self.rep_coord))
-                        attr_list.append(-1)
-                else:  # only nearest node ID
-                    attr_list.append(self.skeleton[attr_key][curr_close_node_ids])
-            result.append(attr_list)
-        return result
 
     def attr_for_coords(self, coords, attr_keys, radius_nm=None):
         """
@@ -2304,7 +2224,6 @@ class SuperSegmentationObject(object):
         attr_dc = defaultdict(list)
         for i_coord in range(len(coords)):
             curr_close_node_ids = close_node_ids[i_coord]
-            from collections import defaultdict
             for attr_key in attr_keys:
                 if attr_key not in self.skeleton:  # e.g. for glia SSV axoness does not exist.
                     attr_dc[attr_key].append(-1)
@@ -2314,7 +2233,7 @@ class SuperSegmentationObject(object):
                     #     "KeyError: Could not find key '{}' in skeleton of SSV with ID {}. Setting to -1."
                     #     "".format(attr_key, self.id))
                     continue
-                if radius_nm is not None:  # might be multiple node ids
+                if radius_nm is not None:  # use nodes within radius_nm, there might be multiple node ids
                     if len(curr_close_node_ids) == 0:
                         dist, curr_close_node_ids = kdtree.query(coords * self.scaling)
                         log_reps.info(
@@ -2333,7 +2252,16 @@ class SuperSegmentationObject(object):
                         attr_dc[attr_key].append(-1)
                 else:  # only nearest node ID
                     attr_dc[attr_key].append(self.skeleton[attr_key][curr_close_node_ids])
-        return [attr_dc[k] for k in attr_keys]
+        # safety in case latent morphology was not predicted / needed
+        # TODO: refine mechanism for this scenario, i.e. for exporting matrix
+        if "latent_morph" in attr_keys:
+            latent_morph = attr_dc["latent_morph"]
+            for i in range(len(latent_morph)):
+                curr_latent = latent_morph[i]
+                if np.isscalar(curr_latent) and curr_latent == -1:
+                    curr_latent = np.array([np.inf] * global_params.ndim_embedding)
+                latent_morph[i] = curr_latent
+        return [np.array(attr_dc[k]) for k in attr_keys]
 
     def predict_views_axoness(self, model, verbose=False,
                               pred_key_appendix=""):

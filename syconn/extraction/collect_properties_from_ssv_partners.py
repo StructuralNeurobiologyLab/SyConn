@@ -90,15 +90,15 @@ def _collect_properties_from_ssv_partners_thread(args):
                 # add pred_type key to global_params?
                 curr_ax, curr_latent = ssv_o.attr_for_coords(
                     [synssv_o.rep_coord], attr_keys=['axoness_avg10000',
-                                                     'latent_morph'])[0]
+                                                     'latent_morph'])
                 if np.isscalar(curr_latent) and curr_latent == -1:
                     curr_latent = np.array([-1] * global_params.ndim_embedding)
-                axoness.append(curr_ax)
-                latent_morph.append(curr_latent)
+                axoness.append(curr_ax.squeeze())
+                latent_morph.append(curr_latent.squeeze())
                 # TODO: maybe use more than only a single rep_coord
                 curr_sp = ssv_o.semseg_for_coords([synssv_o.rep_coord],
                                                   'spiness')
-                spiness.append(curr_sp)
+                spiness.append(curr_sp.squeeze())
                 try:
                     ct_val = ssv_o.attr_dict['celltype_cnn']
                 except KeyError:

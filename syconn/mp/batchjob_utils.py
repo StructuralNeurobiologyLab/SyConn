@@ -458,6 +458,7 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=None,
                       script_folder=None, python_path=None):
     """
+    # TODO: utilize log and error files ('path_to_err', path_to_log')
     Fallback method in case no batchjob submission system is available.
 
     Parameters

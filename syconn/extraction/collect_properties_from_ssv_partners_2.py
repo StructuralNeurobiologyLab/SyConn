@@ -118,12 +118,6 @@ def _collect_properties_from_ssv_partners_thread(args):
         curr_ax, latent_morph = ssv_o.attr_for_coords(
             ssv_syncoords, attr_keys=['axoness_avg10000', 'latent_morph'])
 
-        for i in range(len(latent_morph)):
-            curr_latent = latent_morph[i]
-            if np.isscalar(curr_latent) and curr_latent == -1:
-                curr_latent = np.array([-1] * global_params.ndim_embedding)
-            latent_morph[i] = curr_latent
-
         curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness')
 
         cache_dc['partner_axoness'] = np.array(curr_ax)
@@ -168,7 +162,8 @@ def _from_cell_to_syn_dict(args):
                 ssv_o.load_attr_dict()
                 cache_dc = CompressedStorage(ssv_o.ssv_dir + "/cache_syn.pkl")
 
-                index = np.transpose(np.nonzero(cache_dc['synssv_ids'] == synssv_id))
+                index = np.transpose(np.nonzero(cache_dc['synssv_ids'] ==
+                                                synssv_id))
                 if len(index) != 1:
                     msg = "useful error message"
                     raise ValueError(msg)

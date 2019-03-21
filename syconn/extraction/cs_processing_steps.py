@@ -32,7 +32,8 @@ from .. import global_params
 #     from .collect_properties_from_ssv_partners_2 import collect_properties_from_ssv_partners
 # except ImportError:
 #     from .collect_properties_from_ssv_partners import collect_properties_from_ssv_partners#
-from .collect_properties_from_ssv_partners import \
+
+from .collect_properties_from_ssv_partners_2 import \
     collect_properties_from_ssv_partners
 
 
@@ -1351,8 +1352,9 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
     m_latent_morph = m_latent_morph.reshape(len(m_latent_morph), -1)  # N, 2*m
 
     # (loop of skeleton node generation)
-    # make sure cache-arrays have ndim == 2
+    # make sure cache-arrays have ndim == 2, TODO: check when writing chached arrays
     m_sizes = np.multiply(m_sizes, m_syn_sign).squeeze()[:, None]  # N, 1
+    m_axs = m_axs.squeeze()  # N, 2
     m_sp = m_sp.squeeze()  # N, 2
     m_syn_prob = m_syn_prob.squeeze()[:, None]  # N, 1
     table = np.concatenate([m_coords, m_ssv_partners, m_sizes, m_axs, m_cts,

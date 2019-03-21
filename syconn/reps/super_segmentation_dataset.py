@@ -1202,6 +1202,9 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1,
 
 
 def create_sso_skeletons_thread(args):
+    from ..proc.graphs import create_graph_from_coords
+    from ..reps.rep_helper import surface_samples
+
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -1215,9 +1218,32 @@ def create_sso_skeletons_thread(args):
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.nb_cpus = n_cpus_avail
         if not global_params.config.allow_skel_gen:
-            create_sso_skeleton(ssv)  # TODO: change to create_sso_skeleton_fast as soon as RAG edges only connected spatially close SVs
+            # TODO: change to create_sso_skeleton_fast as soon as RAG edges
+            #  only connected spatially close SVs
+            create_sso_skeleton(ssv)
         else:
-            ssv.load_skeleton()  # this will create skeleton from sample locations (edges might go out of the process)
+            # TODO: refactor together with `gen_skel_from_sample_locs`
+            verts = ssv.mesh[1].reshape(-1, 3)
+            # choose random subset of surface
+            np.random.seed(0)
+            ixs = np.arange(len(verts))
+            np.random.shuffle(ixs)
+            ixs = ixs[:int(0.5*len(ixs))]
+            locs = surface_samples(verts[ixs], bin_sizes=(1000, 1000, 1000),
+                                   max_nb_samples=10000, r=500)
+            g = create_graph_from_coords(locs, mst=True)
+            if g.number_of_edges() == 1:
+                edge_list = np.array(list(g.edges()))
+            else:
+                edge_list = np.array(g.edges())
+            del g
+            assert edge_list.ndim == 2
+            ssv.skeleton = dict()
+            ssv.skeleton["nodes"] = locs / np.array(ssv.scaling)
+            ssv.skeleton["edges"] = edge_list
+            ssv.skeleton["diameters"] = np.ones(len(locs))
+            ssv.save_skeleton()
+            # ssv.load_skeleton()  # this will create skeleton from sample locations (edges might go out of the process)
         if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
             continue
         ssv.save_skeleton()
