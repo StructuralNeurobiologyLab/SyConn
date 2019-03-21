@@ -1132,5 +1132,3 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
             results.append(pkl.load(f))
     return results
 
-
-    #res = start_multiprocess_imap(render_sso_coords_commandline, params, nb_cpus=n_job, verbose=verbose)
