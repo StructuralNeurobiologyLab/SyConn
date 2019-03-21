@@ -1012,7 +1012,7 @@ def mesh2obj_file(dest_path, mesh, color=None, center=None, scale=None):
     center : np.array
         Subtracts center from original vertex locations
     scale : float
-        Divides vertex locations after centering
+        Multiplies vertex locations after centering
 
     Returns
     -------
@@ -1030,7 +1030,7 @@ def mesh2obj_file(dest_path, mesh, color=None, center=None, scale=None):
     if center is not None:
         vert -= center
     if scale is not None:
-        vert /= scale
+        vert *= scale
     vert_openmesh = []
     if color is not None:
         mesh_obj.request_vertex_colors()

@@ -1823,7 +1823,7 @@ class SuperSegmentationObject(object):
             self.mesh2kzip(obj_type=ot, dest_path=dest_path, ext_color=sv_color if
             ot == "sv" else None)
 
-    def mesh2file(self, dest_path=None, center=None, color=None):
+    def mesh2file(self, dest_path=None, center=None, color=None, scale=None):
         """
         Writes mesh to file (e.g. .ply, .stl, .obj) via the 'openmesh' library.
         If possible, writes it as binary.
@@ -1836,8 +1836,11 @@ class SuperSegmentationObject(object):
         color: np.array
             Either single color (will be applied to all vertices) or
             per-vertex color array
+        scale : float
+            Multiplies vertex locations after centering
         """
-        mesh2obj_file(dest_path, self.mesh, center=center, color=color)
+        mesh2obj_file(dest_path, self.mesh, center=center, color=color,
+                      scale=scale)
 
     def export_kzip(self, dest_path=None, sv_color=None):
         """

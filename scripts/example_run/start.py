@@ -162,8 +162,8 @@ if __name__ == '__main__':
     step_idents.append('Synapse detection')
 
     log.info('Step 5/8 - Axon prediction')
-    exec_multiview.run_axoness_prediction(n_jobs=4)
-    exec_multiview.run_axoness_mapping()
+    # exec_multiview.run_axoness_prediction(n_jobs=4)
+    # exec_multiview.run_axoness_mapping()
     time_stamps.append(time.time())
     step_idents.append('Axon prediction')
 

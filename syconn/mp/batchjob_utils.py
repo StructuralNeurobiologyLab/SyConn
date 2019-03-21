@@ -149,7 +149,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                                       log_dir=job_folder)
     n_max_co_processes = np.min([global_params.NCORE_TOTAL // n_cores,
                                  len(params)])
-    log_batchjob.info('Starting BatchJob script "{}" with {} tasks using {}'
+    log_batchjob.info('Started BatchJob script "{}" with {} tasks using {}'
                       ' parallel jobs, each using {} core(s).'.format(
         name, len(params), n_max_co_processes, n_cores))
     if sge_additional_flags is not None:
@@ -486,7 +486,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     n_max_co_processes = np.min([cpu_count(), n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
-    log_batchjob.debug('Starting BatchJobFallback script "{}" with {} tasks using {}'
+    log_batchjob.debug('Started BatchJobFallback script "{}" with {} tasks using {}'
                        ' parallel jobs, each using {} core(s).'.format(
         name, len(params), n_max_co_processes, n_cores))
 
