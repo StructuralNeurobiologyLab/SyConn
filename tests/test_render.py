@@ -42,7 +42,7 @@ if __name__=='__main__':
         print(params[i-1])
     """
     view = render_sso_coords_multiprocessing(ssv, working_dir, exlocs, render_indexviews=render_indexview,
-                                      n_jobs=20, verbose=True)
+                                      n_jobs=5, verbose=True)
     now1 = time.time()
 
     print(now1)

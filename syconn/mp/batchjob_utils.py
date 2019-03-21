@@ -524,7 +524,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
         this_sh_path = path_to_sh + "job_%d.sh" % job_id
         this_out_path = path_to_out + "job_%d.pkl" % job_id
         with open(this_sh_path, "w") as f:
-            f.write('#!/bin/bash\n')
+            f.write('#!/bin/bash -l\n')
             f.write('export syconn_wd="{4}"\n{0} {1} {2} {3}'.format(
                 python_path, path_to_script, this_storage_path,
                 this_out_path, global_params.config.working_dir))

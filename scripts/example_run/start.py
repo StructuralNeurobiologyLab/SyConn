@@ -126,8 +126,8 @@ if __name__ == '__main__':
     exec_multiview.run_neuron_rendering()
 
     log.info('Step 4/8 - Axon prediction')
-    exec_multiview.run_axoness_prediction(n_jobs=4)
-    exec_multiview.run_axoness_mapping()
+    #exec_multiview.run_axoness_prediction(n_jobs=4)
+    #exec_multiview.run_axoness_mapping()
 
     log.info('Step 5/8 - Celltype prediction')
     exec_multiview.run_celltype_prediction(n_jobs=4)

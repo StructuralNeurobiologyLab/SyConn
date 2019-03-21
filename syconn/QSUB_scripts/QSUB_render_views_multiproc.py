@@ -37,11 +37,6 @@ file_store_number = args[3]
 del kwargs['render_indexviews']
 sso = SuperSegmentationObject(**sso_kwargs)
 views = 0  # in case no rendering locations are given
-#print("In QSUB script")
-#print(len(coords))
-#print("File store")
-#print(file_store_number)
-#print(path_out_file)
 file = 'file'
 file = file + str(file_store_number)
 if render_indexviews:
