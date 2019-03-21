@@ -10,6 +10,8 @@ echo y | conda install freeglut
 echo y | conda install pyopengl
 echo y | conda install snappy
 echo y | conda install python-snappy
+echo y | conda install tensorboard tensorflow
+
 
 pip install -r requirements.txt
 pip install -e .

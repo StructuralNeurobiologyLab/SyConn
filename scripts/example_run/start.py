@@ -27,14 +27,16 @@ from syconn.exec import exec_init, exec_syns, exec_multiview
 #  -> allows to resume interrupted processes
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SyConn example run')
-    parser.add_argument('--working_dir', type=str, default='~/SyConn/example_cube/',
+    parser.add_argument('--working_dir', type=str, default='',
                         help='Working directory of SyConn')
     parser.add_argument('--example_cube', type=str, default='1',
                         help='Used toy data. Either "1" (400 x 400 x 600) '
                              'or "2" (1100, 1100, 600).')
     args = parser.parse_args()
+    example_cube_id = args.example_cube
+    if args.working_dir == "":  # by default use cube dependent working dir
+        args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)
     example_wd = os.path.expanduser(args.working_dir)
-    example_cube_id = os.path.expanduser(args.example_cube)
 
     # PREPARE TOY DATA
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
@@ -85,7 +87,8 @@ if __name__ == '__main__':
                              ' "models" folder into the current working '
                              'directory "{}".'.format(mpath, example_wd))
 
-    log.info('Finished example cube preparation {}. Starting SyConn pipeline'
+    log.info('Finished example cube initialization (shape: {}). Starting'
+             ' SyConn pipeline.'
              '.'.format(bd))
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
