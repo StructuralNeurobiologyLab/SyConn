@@ -27,7 +27,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='~/SyConn/example_cube/',
                         help='Working directory of SyConn')
-    parser.add_argument('--example_cube', type=str, default='2',
+    parser.add_argument('--example_cube', type=str, default='1',
                         help='Used toy data. Either "1" (400 x 400 x 600) or "2" ().')
     args = parser.parse_args()
     example_wd = os.path.expanduser(args.working_dir)
@@ -138,8 +138,8 @@ if __name__ == '__main__':
     exec_multiview.run_neuron_rendering()
 
     log.info('Step 5/8 - Axon prediction')
-    # exec_multiview.run_axoness_prediction(n_jobs=4)
-    # exec_multiview.run_axoness_mapping()
+    exec_multiview.run_axoness_prediction(n_jobs=4, e3=True)
+    exec_multiview.run_axoness_mapping()
 
     log.info('Step 6/8 - Celltype prediction')
     exec_multiview.run_celltype_prediction(n_jobs=4)
