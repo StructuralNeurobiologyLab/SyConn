@@ -61,7 +61,8 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
 
     # TODO: Add preprocessing of SV meshes only if config flag is set
     # preprocess sample locations (and meshes if they did not exist yet)
-    log.debug("Caching sample locations (and meshes if not provided).")
+    log.debug("Extracted {} cell SVs. Preparing rendering locations "
+              "(and meshes if not provided).".format(len(sd.ids)))
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 800)
     # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
@@ -80,7 +81,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
     # recompute=False: only collect new sample_location property
     sd_proc.dataset_analysis(sd, qsub_pe="default", qsub_queue='all.q',
                              compute_meshprops=True, recompute=False)
-    log.info('Finished object extraction of cell SVs.')
+    log.info('Finished preparation of cell SVs.')
     # create SegmentationDataset for each cell organelle
     for co in global_params.existing_cell_organelles:
         cd_dir = global_params.config.working_dir + "chunkdatasets/{}/".format(co)
@@ -100,9 +101,10 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
         sd_co = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir)
         sd_proc.dataset_analysis(sd_co, qsub_pe="default", qsub_queue='all.q',
                                  compute_meshprops=True)
-        # About 0.2 h per object class  # TODO: optimization required, especially VC are slow due to additonal membrane checks (this happens only during thresholding step, maybe safe), also check size thresholds, they might not be appllied here -> investigate
-        log.debug('Mapping objects {} to SVs.'.format(co))
-        sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path, qsub_pe='default',
-                                  qsub_queue='all.q')
-        log.info('Finished object extraction of {} SVs.'.format(co))
+        # About 0.2 h per object class
+        log.debug('Started mapping of {} cellular organelles of type "{}" to '
+                  'cell SVs.'.format(len(sd_co.ids), co))
+        sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path,
+                                  qsub_pe='default', qsub_queue='all.q')
+        log.info('Finished preparation of "{}" SVs.'.format(co))
 

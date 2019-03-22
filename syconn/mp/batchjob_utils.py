@@ -32,7 +32,8 @@ BATCH_PROC_SYSTEM = global_params.BATCH_PROC_SYSTEM
 
 
 def batchjob_enabled():
-    if 'example_cube' in global_params.config.working_dir:  # disable QSUB/SLURM for example_run.py
+    # disable QSUB/SLURM for example_run.py
+    if 'example_cube' in global_params.config.working_dir:
         return False
     if BATCH_PROC_SYSTEM is None:
         return False
@@ -65,9 +66,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 script_folder=None, n_max_co_processes=None, resume_job=False,
                 sge_additional_flags=None, iteration=1, max_iterations=3,
                 params_orig_id=None, python_path=None, disable_mem_flag=False):
+    # TODO: change `queue` and `pe` to be set globally in global_params. All
+    #  wrappers around QSUB_script should then only have a flage like 'use_batchjob'
     """
-    TODO: change `queue` and `pe` to be set globally in global_params. All wrappers around QSUB_script should then only have a flage like 'use_batchjob'
-
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
 
@@ -167,7 +168,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         with temp_seed(hash(time.time()) % (2 ** 32 - 1)):
             letters = string.ascii_lowercase
             job_name = "".join([letters[l] for l in
-                                np.random.randint(0, len(letters), 10 if BATCH_PROC_SYSTEM == 'QSUB' else 8)])
+                                np.random.randint(0, len(letters), 10 if
+                                BATCH_PROC_SYSTEM == 'QSUB' else 8)])
             log_batchjob.info("Random job_name created: %s" % job_name)
     else:
         log_batchjob.warning("WARNING: running multiple jobs via qsub is only supported "
@@ -217,7 +219,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                                                  mem_lim))
 
     log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
-    pbar = tqdm.tqdm(total=len(params))
+    pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1)
 
     # memory of finished jobs to calculate increments
     n_jobs_finished = 0

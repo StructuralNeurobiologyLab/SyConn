@@ -19,6 +19,7 @@ import argparse
 from syconn.handler.prediction import parse_movement_area_from_zip
 from syconn.handler.logger import initialize_logging
 from syconn.handler.config import get_default_conf_str
+from syconn.handler.compression import load_from_h5py
 from syconn import global_params
 from syconn.exec import exec_init, exec_syns, exec_multiview
 
@@ -40,18 +41,14 @@ if __name__ == '__main__':
 
     # PREPARE TOY DATA
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
-    if example_cube_id == "1":
-        h5_dir = curr_dir + 'data1/'
-        kzip_p = curr_dir + '/example_cube1.k.zip'
-    elif example_cube_id == "2":
-        h5_dir = curr_dir + 'data2/'
-        kzip_p = curr_dir + '/example_cube2.k.zip'
-    else:
-        raise NotImplementedError('Please use valid example cube identifier '
-                                  '("1" or "2")!')
+    h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
+    kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
+
+    if not os.path.isfile(kzip_p) or not os.path.isdir(h5_dir):
+        raise FileNotFoundError('Example data could not be found at "{}".'.format(curr_dir))
     if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
             or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
-        raise ValueError('Example data could not be found at "{}".'.format(h5_dir))
+        raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
 
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
     bb = parse_movement_area_from_zip(kzip_p)
@@ -88,8 +85,7 @@ if __name__ == '__main__':
                              'directory "{}".'.format(mpath, example_wd))
 
     log.info('Finished example cube initialization (shape: {}). Starting'
-             ' SyConn pipeline.'
-             '.'.format(bd))
+             ' SyConn pipeline.'.format(bd))
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
     time_stamps = [time.time()]
@@ -103,9 +99,11 @@ if __name__ == '__main__':
     kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
                               offset=offset, boundary=bd, fast_downsampling=True,
                               data_path=h5_dir + 'raw.h5', mags=[1, 2], hdf5_names=['raw'])
-    kd.from_matrix_to_cubes(offset, mags=[1, 2], data_path=h5_dir + 'seg.h5',
-                            datatype=np.uint64, fast_downsampling=True,
-                            as_raw=False, hdf5_names=['seg'])
+
+    seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]  #
+    # seg_d = seg_d.astype(np.uint32)  # TODO: currently KnossosDataset class does not infer the correct type automatically, see knossos config and handling in detail
+    kd.from_matrix_to_cubes(offset, mags=[1, 2], data=seg_d, datatype=np.uint32,
+                            fast_downsampling=True, as_raw=False)
 
     kd_mi = knossosdataset.KnossosDataset()
     # kd_mi.set_channel('jpg')

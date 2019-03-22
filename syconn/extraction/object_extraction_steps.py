@@ -689,7 +689,7 @@ def _apply_merge_list_thread(args):
 def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                    n_folders_fs=10000, debug=False,
                    workfolder=None, overlaydataset_path=None,
-                   chunk_list=None, suffix="", n_chunk_jobs=5000,
+                   chunk_list=None, suffix="", n_chunk_jobs=2000,
                    use_work_dir=True, qsub_pe=None, qsub_queue=None,
                    n_max_co_processes=None, nb_cpus=None, transform_func=None,
                    transform_func_kwargs=None):  # TODO: nb_cpus=1 when memory consumption fixed
@@ -787,6 +787,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
                 remap_dict[key].append(value)
         with open("%s/remapping_dict.pkl" % dataset_path, "wb") as f:
             pkl.dump(remap_dict, f)
+
 
 def _extract_voxels_thread(args):
     chunks = args[0]
@@ -892,7 +893,7 @@ def _extract_voxels_thread(args):
 
 
 def combine_voxels(workfolder, hdf5names, dataset_names=None,
-                   n_folders_fs=10000, n_chunk_jobs=5000, nb_cpus=None, sd_version=0,
+                   n_folders_fs=10000, n_chunk_jobs=2000, nb_cpus=None, sd_version=0,
                    qsub_pe=None, qsub_queue=None, n_max_co_processes=None):
     """
     Extracts voxels for each component id and ceates a SegmentationDataset of type hdf5names.
@@ -1015,7 +1016,7 @@ def _combine_voxels_thread(args):
 
 def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                    n_folders_fs=10000, workfolder=None, overlaydataset_path=None,
-                   chunk_list=None, suffix="", n_chunk_jobs=5000, sd_version=0,
+                   chunk_list=None, suffix="", n_chunk_jobs=2000, sd_version=0,
                    use_work_dir=True, qsub_pe=None, qsub_queue=None, qsub_slots=1,
                    n_max_co_processes=None, nb_cpus=None, object_names=None):
     """
