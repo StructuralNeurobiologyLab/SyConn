@@ -32,7 +32,8 @@ BATCH_PROC_SYSTEM = global_params.BATCH_PROC_SYSTEM
 
 
 def batchjob_enabled():
-    if 'example_cube' in global_params.config.working_dir:  # disable QSUB/SLURM for example_run.py
+    # disable QSUB/SLURM for example_run.py
+    if 'example_cube' in global_params.config.working_dir:
         return False
     if BATCH_PROC_SYSTEM is None:
         return False
@@ -64,11 +65,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 additional_flags='', suffix="", job_name="default",
                 script_folder=None, n_max_co_processes=None, resume_job=False,
                 sge_additional_flags=None, iteration=1, max_iterations=3,
-                params_orig_id=None, python_path=None, disable_mem_flag=False,
-                disable_batchjob=False):
+                params_orig_id=None, python_path=None, disable_mem_flag=False):
+    # TODO: change `queue` and `pe` to be set globally in global_params. All
+    #  wrappers around QSUB_script should then only have a flage like 'use_batchjob'
     """
-    TODO: change `queue` and `pe` to be set globally in global_params. All wrappers around QSUB_script should then only have a flage like 'use_batchjob'
-
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
 
@@ -118,10 +118,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     disable_mem_flag : bool
         If True, memory flag will not be set, otherwise it will be set to the
          fraction of the cores per job to the total number of cores per node
-    disable_batchjob : bool
-        Overwrites global batchjob settings and will run multiple, independent bash jobs
-        on multiple CPUs instead.
-
+        
     Returns
     -------
     path_to_out: str
@@ -130,7 +127,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     """
     if n_cores is None:
         n_cores = 1
-    if disable_batchjob or not batchjob_enabled():
+    if not batchjob_enabled():
         return batchjob_fallback(params, name, n_cores, suffix, n_max_co_processes,
                                  script_folder, python_path)
     if queue is None:
@@ -153,7 +150,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                                       log_dir=job_folder)
     n_max_co_processes = np.min([global_params.NCORE_TOTAL // n_cores,
                                  len(params)])
-    log_batchjob.info('Starting BatchJob script "{}" with {} tasks using {}'
+    log_batchjob.info('Started BatchJob script "{}" with {} tasks using {}'
                       ' parallel jobs, each using {} core(s).'.format(
         name, len(params), n_max_co_processes, n_cores))
     if sge_additional_flags is not None:
@@ -171,7 +168,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         with temp_seed(hash(time.time()) % (2 ** 32 - 1)):
             letters = string.ascii_lowercase
             job_name = "".join([letters[l] for l in
-                                np.random.randint(0, len(letters), 10 if BATCH_PROC_SYSTEM == 'QSUB' else 8)])
+                                np.random.randint(0, len(letters), 10 if
+                                BATCH_PROC_SYSTEM == 'QSUB' else 8)])
             log_batchjob.info("Random job_name created: %s" % job_name)
     else:
         log_batchjob.warning("WARNING: running multiple jobs via qsub is only supported "
@@ -221,7 +219,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                                                  mem_lim))
 
     log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
-    pbar = tqdm.tqdm(total=len(params))
+    pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1)
 
     # memory of finished jobs to calculate increments
     n_jobs_finished = 0
@@ -462,8 +460,8 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=None,
                       script_folder=None, python_path=None):
     """
-    Fallback method in case no batchjob submission system is available which uses multiple
-    CPUs on the same node.
+    # TODO: utilize log and error files ('path_to_err', path_to_log')
+    Fallback method in case no batchjob submission system is available.
 
     Parameters
     ----------
@@ -490,7 +488,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     n_max_co_processes = np.min([cpu_count(), n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
-    log_batchjob.debug('Starting BatchJobFallback script "{}" with {} tasks using {}'
+    log_batchjob.debug('Started BatchJobFallback script "{}" with {} tasks using {}'
                        ' parallel jobs, each using {} core(s).'.format(
         name, len(params), n_max_co_processes, n_cores))
 
@@ -524,7 +522,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
         this_sh_path = path_to_sh + "job_%d.sh" % job_id
         this_out_path = path_to_out + "job_%d.pkl" % job_id
         with open(this_sh_path, "w") as f:
-            f.write('#!/bin/bash -l\n')
+            f.write('#!/bin/bash\n')
             f.write('export syconn_wd="{4}"\n{0} {1} {2} {3}'.format(
                 python_path, path_to_script, this_storage_path,
                 this_out_path, global_params.config.working_dir))
@@ -547,6 +545,9 @@ def fallback_exec(cmd_exec):
     ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
     out, err = ps.communicate()
+    # if log_mp.level == 10:  # 10 == 'DEUBUG'
+    #     log_mp.debug(out.decode())
+    #     log_mp.debug(err.decode())
     if 'error' in err.decode().lower():
         log_mp.error(out.decode())
         log_mp.error(err.decode())

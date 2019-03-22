@@ -15,6 +15,7 @@ from syconn.handler.prediction import parse_movement_area_from_zip
 from syconn.handler.compression import save_to_h5py
 
 if __name__ == '__main__':
+    assert 'areaxfs_v6' in global_params.wd, 'Required dataset not available!'
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
 
     kd = knossosdataset.KnossosDataset()
@@ -36,7 +37,7 @@ if __name__ == '__main__':
     kd_asym.initialize_from_knossos_path(global_params.config.kd_asym_path)
 
     # get data
-    for example_cube_id in range(1, 3):
+    for example_cube_id in range(3, 4):
         kzip_p = '{}/example_cube{}.k.zip'.format(curr_dir, example_cube_id)
         data_dir = "{}/data{}/".format(curr_dir, example_cube_id)
         os.makedirs(data_dir, exist_ok=True)

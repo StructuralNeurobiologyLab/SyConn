@@ -61,7 +61,6 @@ def initialize_logging(log_name, log_dir=global_params.default_log_dir,
     coloredlogs.install(level=global_params.log_level, logger=logger,
                         reconfigure=False)  # True possibly leads to stderr output
     level = logging.getLevelName(global_params.log_level)
-    logger.setLevel(level)
 
     if not global_params.DISABLE_FILE_LOGGING or log_dir is not None:
         # create file handler which logs even debug messages
@@ -81,6 +80,7 @@ def initialize_logging(log_name, log_dir=global_params.default_log_dir,
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         fh.setFormatter(formatter)
         logger.addHandler(fh)
+    logger.setLevel(level)
     return logger
 
 
