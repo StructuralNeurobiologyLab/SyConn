@@ -36,7 +36,6 @@ from syconn.handler.logger import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.exec import exec_skeleton
 
-
 def run_morphology_embedding():
     log = initialize_logging('morphology_embedding', global_params.config.working_dir
                              + '/logs/', overwrite=False)
@@ -81,7 +80,7 @@ def run_axoness_mapping():
     log.info('Finished axoness mapping.')
 
 
-def run_axoness_prediction(n_jobs=100):
+def run_axoness_prediction(n_jobs=100, e3=False):
     log = initialize_logging('axon_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     # TODO: currently working directory has to be set globally in global_params and is not adjustable
@@ -94,12 +93,15 @@ def run_axoness_prediction(n_jobs=100):
     # get model properties
     log.info('Performing axon prediction of neuron views. Labels will be stored '
              'on SV level in the attribute dict with key "{}"'.format(pred_key))
-
-    m = get_axoness_model()
-    model_kwargs = dict(model_path=m._path, normalize_data=m.normalize_data,
-                        imposed_batch_size=m.imposed_batch_size, nb_labels=m.nb_labels,
-                        channels_to_load=m.channels_to_load)
-    # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
+    if e3 == True:
+        model_kwargs = 'get_axoness_model_e3'
+    else:
+        m = get_axoness_model()
+        model_kwargs = dict(model_path=m._path, normalize_data=m.normalize_data,
+                            imposed_batch_size=m.imposed_batch_size, nb_labels=m.nb_labels,
+                            channels_to_load=m.channels_to_load)
+    
+    #all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
     so_kwargs = dict(working_dir=global_params.config.working_dir)
     # for axoness views set woglia to True (because glia were removed beforehand),
     #  raw_only to False
@@ -107,15 +109,21 @@ def run_axoness_prediction(n_jobs=100):
                        raw_only=False)
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for
                     par in multi_params]
-    for par in multi_params:
-        mk = par[1]
-        # Single GPUs are made available for every job via slurm, no need for random assignments.
-        mk["init_gpu"] = 0  # np.random.rand(0, 2)
 
-    path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
-                                 n_max_co_processes=15, pe="openmp", queue=None,
-                                 script_folder=None, n_cores=10,
-                                 suffix="_axoness", additional_flags="--gres=gpu:1")  # removed -V
+    if e3==True:
+        path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
+                                     n_max_co_processes=15, pe="openmp", queue=None,
+                                     script_folder=None, n_cores=10,
+                                     suffix="_axoness", additional_flags="--gres=gpu:1")  # removed -V
+    else:
+        for par in multi_params:
+            mk = par[1]
+            # Single GPUs are made available for every job via slurm, no need for random assignments.
+            mk["init_gpu"] = 0  # np.random.rand(0, 2)
+        path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
+                                     n_max_co_processes=15, pe="openmp", queue=None,
+                                     script_folder=None, n_cores=10,
+                                     suffix="_axoness", additional_flags="--gres=gpu:1")  # removed -V
     log.info('Finished axon prediction. Now checking for missing predictions.')
     res = find_missing_sv_attributes_in_ssv(ssd, pred_key, n_cores=10)
     if len(res) > 0:
@@ -348,7 +356,7 @@ def run_create_neuron_ssd(prior_glia_removal=True):
     log.info('Finished saving individual SSV RAGs.')
 
 
-def run_glia_prediction():
+def run_glia_prediction(e3=False):
     log = initialize_logging('glia_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     # only append to this key if needed (for e.g. different versions, change accordingly in 'axoness_mapping.py')
@@ -364,12 +372,15 @@ def run_glia_prediction():
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
     multi_params = chunkify(sd.so_dir_paths, 100)
     # get model properties
-    m = get_glia_model()
-    model_kwargs = dict(model_path=m._path,
-                        normalize_data=m.normalize_data,
-                        imposed_batch_size=m.imposed_batch_size,
-                        nb_labels=m.nb_labels,
-                        channels_to_load=m.channels_to_load)
+    if e3 == True:
+        model_kwargs = 'get_glia_model_e3'
+    else:
+        m = get_glia_model()
+        model_kwargs = dict(model_path=m._path,
+                            normalize_data=m.normalize_data,
+                            imposed_batch_size=m.imposed_batch_size,
+                            nb_labels=m.nb_labels,
+                            channels_to_load=m.channels_to_load)
     # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
     so_kwargs = dict(working_dir=global_params.config.working_dir)
     # for glia views set woglia to False (because glia are included),
@@ -379,16 +390,22 @@ def run_glia_prediction():
 
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for par in
                     multi_params]
-    # randomly assign to gpu 0 or 1
-    for par in multi_params:
-        mk = par[1]
-        # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
-        mk["init_gpu"] = 0
-    path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
-                                 n_max_co_processes=25, pe="openmp",
-                                 queue=None, n_cores=10, suffix="_glia",
-                                 script_folder=None,
-                                 additional_flags="--gres=gpu:1")  # removed -V
+    if e3==True:
+        path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
+                                     n_max_co_processes=15, pe="openmp", queue=None,
+                                     script_folder=None, n_cores=10,
+                                     suffix="_glia", additional_flags="--gres=gpu:1")  # removed -V
+    else:
+        # randomly assign to gpu 0 or 1
+        for par in multi_params:
+            mk = par[1]
+            # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
+            mk["init_gpu"] = 0
+        path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
+                                     n_max_co_processes=25, pe="openmp",
+                                     queue=None, n_cores=10, suffix="_glia",
+                                     script_folder=None,
+                                     additional_flags="--gres=gpu:1")  # removed -V    
     log.info('Finished glia prediction. Checking completeness.')
     res = find_missing_sv_attributes(sd, pred_key, n_cores=10)
     if len(res) > 0:
