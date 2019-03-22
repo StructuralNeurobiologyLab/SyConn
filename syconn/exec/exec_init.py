@@ -33,8 +33,8 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
     """
     if chunk_size is None:
         chunk_size = [512, 512, 512]
-    log = initialize_logging('create_sds', global_params.config.working_dir + '/logs/',
-                             overwrite=False)
+    log = initialize_logging('create_sds', global_params.config.working_dir +
+                             '/logs/', overwrite=False)
 
     # Sets initial values of object
     kd = kd_factory(global_params.config.kd_seg_path)
@@ -61,8 +61,8 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
 
     # TODO: Add preprocessing of SV meshes only if config flag is set
     # preprocess sample locations (and meshes if they did not exist yet)
-    log.debug("Extracted {} cell SVs. Preparing rendering locations "
-              "(and meshes if not provided).".format(len(sd.ids)))
+    log.info("Extracted {} cell SVs. Preparing rendering locations "
+             "(and meshes if not provided).".format(len(sd.ids)))
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, 800)
     # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
@@ -102,8 +102,8 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
         sd_proc.dataset_analysis(sd_co, qsub_pe="default", qsub_queue='all.q',
                                  compute_meshprops=True)
         # About 0.2 h per object class
-        log.debug('Started mapping of {} cellular organelles of type "{}" to '
-                  'cell SVs.'.format(len(sd_co.ids), co))
+        log.info('Started mapping of {} cellular organelles of type "{}" to '
+                 'cell SVs.'.format(len(sd_co.ids), co))
         sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path,
                                   qsub_pe='default', qsub_queue='all.q')
         log.info('Finished preparation of "{}" SVs.'.format(co))

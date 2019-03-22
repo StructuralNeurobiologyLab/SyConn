@@ -100,9 +100,9 @@ if __name__ == '__main__':
                               offset=offset, boundary=bd, fast_downsampling=True,
                               data_path=h5_dir + 'raw.h5', mags=[1, 2], hdf5_names=['raw'])
 
-    seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]  #
+    seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
     # seg_d = seg_d.astype(np.uint32)  # TODO: currently KnossosDataset class does not infer the correct type automatically, see knossos config and handling in detail
-    kd.from_matrix_to_cubes(offset, mags=[1, 2], data=seg_d, datatype=np.uint32,
+    kd.from_matrix_to_cubes(offset, mags=[1, 2], data=seg_d,
                             fast_downsampling=True, as_raw=False)
 
     kd_mi = knossosdataset.KnossosDataset()
@@ -163,8 +163,8 @@ if __name__ == '__main__':
     step_idents.append('Synapse detection')
 
     log.info('Step 5/8 - Axon prediction')
-    exec_multiview.run_axoness_prediction(n_jobs=4, e3=True)
-    exec_multiview.run_axoness_mapping()
+    # exec_multiview.run_axoness_prediction(n_jobs=4, e3=True)
+    # exec_multiview.run_axoness_mapping()
     time_stamps.append(time.time())
     step_idents.append('Axon prediction')
 
