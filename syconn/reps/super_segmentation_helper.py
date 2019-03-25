@@ -97,8 +97,10 @@ def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
     sso.load_attr_dict()
     if not overwrite and "celltype_cnn_e3" in sso.attr_dict:
         return
+    from ..handler.prediction import naive_view_normalization_new
     inp_d = sso_views_to_modelinput(sso, nb_views)
     synsign_ratio = np.array([sso.syn_sign_ratio()] * len(inp_d))[..., None]
+    inp_d = naive_view_normalization_new(inp_d)
     res = model.predict_proba((inp_d, synsign_ratio))
     clf = np.argmax(res, axis=1)
     ls, cnts = np.unique(clf, return_counts=True)
