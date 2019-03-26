@@ -724,7 +724,6 @@ def get_axoness_model():
     return m
 
 
-
 def get_axoness_model_e3():
     """Those networks are typically trained with `naive_view_normalization_new` """
     from elektronn3.models.base import InferenceModel

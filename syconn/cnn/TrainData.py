@@ -185,8 +185,11 @@ if elektronn3_avail:
         def __init__(
                 self, working_dir='/wholebrain/scratch/areaxfs3/',
                 train=True, epoch_size=40000, allow_close_neigh=0,
-                transform: Callable = Identity(),
+                transform: Callable = Identity(), allow_axonview_gt=True,
+                ctv_kwargs=None,
         ):
+            if ctv_kwargs is None:
+                ctv_kwargs = {}
             super().__init__()
             self.transform = transform
             self.epoch_size = epoch_size
@@ -201,8 +204,12 @@ if elektronn3_avail:
             # use these classes to load label and splitting dicts
             AV = AxonViews(None, None, raw_only=False, nb_views=2,
                            naive_norm=False, load_data=False)
+            if not allow_axonview_gt:  # set repsective data set to empty lists
+                AV.splitting_dict["train"] = []
+                AV.splitting_dict["valid"] = []
+                AV.splitting_dict["test"] = []
 
-            CTV = CelltypeViews(load_data=False)
+            CTV = CelltypeViews(None, None, load_data=False, **ctv_kwargs)
             # now link actual data
             self.ssd = SuperSegmentationDataset(working_dir, version='tnetgt')
 

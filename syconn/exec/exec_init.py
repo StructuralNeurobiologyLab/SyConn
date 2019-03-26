@@ -18,14 +18,14 @@ from syconn.handler.basics import chunkify, kd_factory
 
 
 # TODO: make it work with new SyConn
-def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False):
+def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshes=False):
     """
 
     Parameters
     ----------
     chunk_size :
     n_folders_fs :
-    generate_sv_meshs :
+    generate_sv_meshes :
 
     Returns
     -------
@@ -69,7 +69,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, generate_sv_meshs=False)
     so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type='sv')
     multi_params = [[par, so_kwargs] for par in multi_params]
 
-    if generate_sv_meshs:
+    if generate_sv_meshes:
         _ = qu.QSUB_script(multi_params, "mesh_caching",
                            n_max_co_processes=global_params.NCORE_TOTAL,
                            pe="openmp", queue=None, script_folder=None, suffix="")
