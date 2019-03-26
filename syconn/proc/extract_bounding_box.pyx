@@ -10,24 +10,18 @@ import numpy as np
 from libcpp.vector cimport vector as cpp_vector
 
 
-ctypedef cpp_vector[int] cpp_neighbourhood
-
 ctypedef fused n_type:
     uint64_t
-    uint32_t
+    uint32_
 
-cdef struct point:
-    int xMin, yMin, zMin
-    int xMax, yMax, zMax
-
-ctypedef map[cpp_neighbourhood, point] cpp_map
-
-def extract_bounding_box(uint64_t[:, :, :] chunk):
-    cdef cpp_map box
+def extract_bounding_box(n_type[:, :, :] chunk):
+    box = dict()
 
     for x in range(chunk.shape[0]):
         for y in range(chunk.shape[1]):
             for z in range(chunk.shape[2]):
+
+                
                 box[chunk[x,y,z]].xMin = min(box[chunk[x,y,z]].xMin, x)
                 box[chunk[x,y,z]].xMax = max(box[chunk[x,y,z]].xMax, x)
 
