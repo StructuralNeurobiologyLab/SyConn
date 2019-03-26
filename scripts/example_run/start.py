@@ -138,7 +138,15 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('Preparation')
 
-    # RUN SyConn - without glia removal
+    # Run SyConn
+    if 0:
+        log.info('Step 0.5/8 - Glia separation')
+        exec_multiview.run_glia_rendering()
+        exec_multiview.run_glia_prediction()
+        exec_multiview.run_glia_splitting()
+        time_stamps.append(time.time())
+        step_idents.append('Glia separation')
+
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.run_create_sds(chunk_size=(128, 128, 128), n_folders_fs=100)
     time_stamps.append(time.time())

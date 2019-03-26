@@ -115,8 +115,8 @@ if elektronn3_avail:
         def __len__(self):
             """Determines epoch size(s)"""
             if not self.train:
-                return 100
-            return 1000
+                return 1000
+            return 5000
 
 
     class CelltypeViewsE3(Dataset):
@@ -160,7 +160,8 @@ if elektronn3_avail:
             super().__init__()
             self.train = train
             self.transform = transform  # TODO: add gt paths to config
-            self.gv = GliaViews(None, None, naive_norm=False, av_working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
+            self.gv = GliaViews(None, None, naive_norm=False,
+                                av_working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
 
         def __getitem__(self, index):
             inp, target = self.gv.getbatch(1, source='train' if self.train else 'valid')
@@ -172,8 +173,9 @@ if elektronn3_avail:
         def __len__(self):
             """Determines epoch size(s)"""
             if not self.train:
-                return 100
-            return 1000
+                return 1000
+            return 5000
+
 
     class MultiviewData_TNet_online(Dataset):
         """
@@ -200,7 +202,7 @@ if elektronn3_avail:
             AV = AxonViews(None, None, raw_only=False, nb_views=2,
                            naive_norm=False, load_data=False)
 
-            CTV = CelltypeViews(load_data=False, naive_norm=False)
+            CTV = CelltypeViews(load_data=False)
             # now link actual data
             self.ssd = SuperSegmentationDataset(working_dir, version='tnetgt')
 
@@ -439,12 +441,13 @@ class AxonViews(MultiViewData):
         self.example_shape = self.train_d[0].shape
 
     def getbatch(self, batch_size, source='train'):
-        if source == 'valid':
-            nb = len(self.valid_l)
-            ixs = np.arange(nb)
-            np.random.shuffle(ixs)
-            self.valid_d = self.valid_d[ixs]
-            self.valid_l = self.valid_l[ixs]
+        # TODO: keep in mind that super().get_batch does not shuffle for validation data -> btach_size for validation should be sufficiently big
+        # if source == 'valid':
+        #     nb = len(self.valid_l)
+        #     ixs = np.arange(nb)
+        #     np.random.shuffle(ixs)
+        #     self.valid_d = self.valid_d[ixs]
+        #     self.valid_l = self.valid_l[ixs]
         d, l = super(AxonViews, self).getbatch(batch_size, source)
         view_shuffle = np.arange(0, d.shape[2])
         np.random.shuffle(view_shuffle)
@@ -711,12 +714,13 @@ class GliaViews(Data):
         super(GliaViews, self).__init__()
 
     def getbatch(self, batch_size, source='train'):
-        if source == 'valid':
-            nb = len(self.valid_l)
-            ixs = np.arange(nb)
-            np.random.shuffle(ixs)
-            self.valid_d = self.valid_d[ixs]
-            self.valid_l = self.valid_l[ixs]
+        # TODO: keep in mind that super().get_batch does not shuffle for validation data -> btach_size for validation should be sufficiently big
+        # if source == 'valid':
+        #     nb = len(self.valid_l)
+        #     ixs = np.arange(nb)
+        #     np.random.shuffle(ixs)
+        #     self.valid_d = self.valid_d[ixs]
+        #     self.valid_l = self.valid_l[ixs]
         d, l = super(GliaViews, self).getbatch(batch_size, source)
         view_shuffle = np.arange(0, d.shape[2])
         np.random.shuffle(view_shuffle)

@@ -17,6 +17,7 @@ import shutil
 import itertools
 from collections import defaultdict
 from knossos_utils import knossosdataset, chunky
+from vigra.filters import gaussianSmoothing
 knossosdataset._set_noprint(True)
 
 from ..handler import log_handler
@@ -251,7 +252,8 @@ def _gauss_threshold_connected_components_thread(args):
                             offset[2]: tmp_data_shape[2]-offset[2]]
 
         if np.sum(sigmas[nb_hdf5_name]) != 0:
-            tmp_data = scipy.ndimage.gaussian_filter(tmp_data, sigmas[nb_hdf5_name])
+            tmp_data = gaussianSmoothing(tmp_data, sigmas[nb_hdf5_name])
+            # tmp_data = scipy.ndimage.gaussian_filter(tmp_data, sigmas[nb_hdf5_name])
 
         if hdf5_name in ["p4", "vc"] and membrane_filename is not None and hdf5_name_membrane is not None:
             membrane_data = basics.load_from_h5py(chunk.folder + membrane_filename + ".h5",

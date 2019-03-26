@@ -8,6 +8,7 @@
 import warnings
 # warnings.filterwarnings(action='once')
 import os
+import logging
 from .handler.config import DynConfig
 warnings.filterwarnings("ignore", message=".*You are using implicit channel selection.*")
 warnings.filterwarnings("ignore", message=".*You are initializing a KnossosDataset from a path.*")
@@ -51,7 +52,7 @@ DISABLE_LOCKING = False
 # working directory + '/logs/' nonetheless.
 default_log_dir = None
 # TODO: remove all verbose kwargs and verbose log.info and execute log.debug() instead
-log_level = 'DEBUG'  # INFO, DEBUG
+log_level = logging.DEBUG  # INFO, DEBUG
 
 # file logging for individual modules, and per job. Only use in case of
 # debugging with single core processing. Logs for scripts are located in 'SyConn/scripts/'

@@ -25,7 +25,6 @@ from elektronn3.training.schedulers import SGDR
 from elektronn3.training.metrics import channel_metric
 
 
-
 def get_model():
     model = StackedConv2Scalar(1, 2)
     return model
@@ -34,7 +33,7 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="glia_e3_axonGT_run1_SGDR",
+    parser.add_argument('-n', '--exp-name', default="glia_e3_axonGT_run2_SGDR",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
