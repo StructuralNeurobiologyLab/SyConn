@@ -506,6 +506,36 @@ class SuperSegmentationDataset(object):
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
                       qsub_pe=None, qsub_queue=None, nb_cpus=None,
                       n_max_co_processes=None, new_mapping=True):
+    """
+    Saves attributes of all SSVs within the given SSD and computes properties
+    like size and representative coordinate. `ids.npy` order may change after
+    repeated runs. TODO: make this method deterministic and allow partial
+    updates of a subset of attributes (e.g. use already existing `ids.npy` in
+    case of updating, aka `extract_only=True`)
+
+    Parameters
+    ----------
+    ssd : SuperSegmentationDataset
+    extract_only : bool
+     Only cache attributes (see`attr_keys` from attribute dict. This will add
+      a suffix `_sel` to the numpy cache array file names (-> updates will not
+      apply to the `load_cached_data` method).
+    attr_keys : List[str]
+        Attributes to cache, only used if `extract_only=True`
+    n_jobs : int
+    qsub_pe : str
+        Currently requires any string to enable batch job system,
+        will be replaced by a global flag soon
+    qsub_queue : str
+        Currently requires any string to enable batch job system,
+        will be replaced by a global flag soon
+    nb_cpus : int
+        CPUs per worker
+    n_max_co_processes : int
+        Number of parallel worker
+    new_mapping :
+        Whether to apply new mapping (see `ssd.mapping_dict`)
+    """
     ssd.save_dataset_shallow()
 
     multi_params = chunkify(ssd.ssv_ids, n_jobs)
@@ -548,7 +578,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
 
     for attribute in attr_dict.keys():
         if extract_only:
-            np.save(ssd.path + "/%ss_sel.npy" % attribute,
+            np.save(ssd.path + "/%ss_sel.npy" % attribute,  # Why '_sel'?
                     attr_dict[attribute])
         else:
             np.save(ssd.path + "/%ss.npy" % attribute,

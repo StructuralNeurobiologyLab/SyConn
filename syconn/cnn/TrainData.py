@@ -64,7 +64,8 @@ if elektronn3_avail:
                 self.inp_file = h5py.File(os.path.expanduser(fnames_inp[ii]), 'r')
                 self.target_file = h5py.File(os.path.expanduser(fnames_target[ii]), 'r')
                 data = self.inp_file[inp_key][()]
-                self.inp.append(data[:, :4].astype(np.float32) / 255.)  # TODO: ':4' was used during spine semseg;  What was it for? Needs to go in order to make this work in general
+                # self.inp.append(data[:, :4].astype(np.float32) / 255.)  # TODO: ':4' was used during spine semseg;  What was it for?
+                self.inp.append(data.astype(np.float32) / 255.)  # TODO: here we 'normalize' differently (just dividing by 255)
                 data_t = self.target_file[target_key][()].astype(np.int64)
                 self.target.append(data_t[:, 0])
                 del data, data_t

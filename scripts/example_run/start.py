@@ -141,7 +141,7 @@ if __name__ == '__main__':
     step_idents.append('Preparation')
 
     # Run SyConn
-    if 0:
+    if 0:  # TODO: set init_rag_path in config
         log.info('Step 0.5/8 - Glia separation')
         exec_multiview.run_glia_rendering()
         exec_multiview.run_glia_prediction()
