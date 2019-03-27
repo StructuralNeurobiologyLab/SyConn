@@ -201,28 +201,32 @@ if elektronn3_avail:
             # load GliaView Data and store all views in memory
             # inefficient because GV has to be loaded twice (train and valid)
             print("Loaded all data. Concatenating now.")
-            # use these classes to load label and splitting dicts
+            # use these classes to load label and splitting dicts, CURRENTLY AxonGT is not supported anymore
             AV = AxonViews(None, None, raw_only=False, nb_views=2,
-                           naive_norm=False, load_data=False)
+                           naive_norm=False, load_data=False,
+                           working_dir='/wholebrain/scratch/areaxfs3/')
             if not allow_axonview_gt:  # set repsective data set to empty lists
                 AV.splitting_dict["train"] = []
                 AV.splitting_dict["valid"] = []
                 AV.splitting_dict["test"] = []
 
             CTV = CelltypeViews(None, None, load_data=False, **ctv_kwargs)
+            self.view_key = CTV.view_key
             # now link actual data
-            self.ssd = SuperSegmentationDataset(working_dir, version='tnetgt')
+            self.ssd = CTV.ssd  # SuperSegmentationDataset(global_params.config.working_dir, version='tnetgt')
 
-            if train:
+            if train:  # use all available data!
                 self.inp = [self.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["train"]] + \
-                           [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["train"]]
+                           [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["train"]] + \
+                            [self.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["valid"]] + \
+                            [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["valid"]]
                 self._inp_ssv_ids = self.inp.copy()
                 if self.allow_close_neigh:
                     self.inp_locs = []
                     for ssv in self.inp:
                         ssv.load_attr_dict()
                         self.inp_locs.append(np.concatenate(ssv.sample_locations(verbose=True)))
-            else:
+            else:  # valid
                 self.inp = [self.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["valid"]] + \
                            [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["valid"]]
                 self._inp_ssv_ids = self.inp.copy()
@@ -231,7 +235,7 @@ if elektronn3_avail:
                     for ssv in self.inp:
                         ssv.load_attr_dict()
                         self.inp_locs.append(np.concatenate(ssv.sample_locations(verbose=True)))
-                self.inp = [ssv.load_views(view_key="raw2") for ssv in self.inp]
+                self.inp = [ssv.load_views(view_key=self.view_key) for ssv in self.inp]
             ixs = np.arange(len(self.inp))
             np.random.shuffle(ixs)
             self.inp = np.array(self.inp)[ixs]
@@ -259,7 +263,7 @@ if elektronn3_avail:
                 if self.train:
                     ssv = self.inp[index]
                     ssv.disable_locking = True
-                    views = ssv.load_views(view_key="raw2")
+                    views = ssv.load_views(view_key=self.view_key)
                 else:
                     views = self.inp[index]
                 # 50% more because of augmentations
@@ -286,7 +290,7 @@ if elektronn3_avail:
                 if self.train:
                     ssv = self.inp[dist_ix]
                     ssv.disable_locking = True
-                    views_dist = ssv.load_views(view_key="raw2")
+                    views_dist = ssv.load_views(view_key=self.view_key)
                 else:
                     views_dist = self.inp[dist_ix]
                 self._cache_dist = views_dist
@@ -304,11 +308,13 @@ if elektronn3_avail:
             views_sim = views[mview_ix]
             views_sim = self.transform(views_sim, target=None)[0]
             views_sim = views_sim.swapaxes(1, 0)
+            if len(views_sim) > 2:
+                view_ixs = np.arange(len(views_sim))
+                views_sim = views_sim[view_ixs][:2]
             if self.allow_close_neigh and np.random.rand(1)[0] > 0.25:  # only use neighbors as similar views with 0.25 chance
                 dists, close_neigh_ixs = self._cached_loc_tree.query(self.inp_locs[self._cached_ssv_ix][mview_ix], k=self.allow_close_neigh)  # itself and two others
                 neigh_ix = close_neigh_ixs[np.random.randint(1, self.allow_close_neigh)]  # only use neighbors not itself
                 views_sim[1] = views[neigh_ix, :, np.random.randint(0, 2)]  # chose any of the two views
-
             # single unsimilar view is from different SSV and randomly picked location
             mview_ix = np.random.randint(0, len(views_dist))
             # choose random view locations and random view (out of the two) and add the two axes back to the shape
@@ -322,9 +328,9 @@ if elektronn3_avail:
 
         def __len__(self):
             if self.train:
-                return self.epoch_size
+                return 5000
             else:
-                return 1000
+                return 20
 
         def close_files(self):
             return
@@ -473,7 +479,7 @@ class CelltypeViews(MultiViewData):
     def __init__(self, inp_node, out_node, raw_only=False, nb_views=20, nb_views_renderinglocations=2,
                  reduce_context=0, binary_views=False, reduce_context_fact=1, n_classes=4,
                  class_weights=(2, 2, 1, 1), load_data=False, nb_cpus=1, ctgt_key="ctgt",
-                 train_fraction=0.95, random_seed=0):
+                 train_fraction=0.95, random_seed=0, view_key=None):
         """
         USES NAIVE_VIEW_NORMALIZATION_NEW, i.e. `/ 255. - 0.5`
 
@@ -491,8 +497,13 @@ class CelltypeViews(MultiViewData):
         reduce_context_fact :
         load_data :
         nb_cpus :
+        view_key : str
         """
-        self.view_key = "raw{}".format(nb_views_renderinglocations)
+        assert "areaxfs_v6" in global_params.config.working_dir
+        if view_key is None:
+            self.view_key = "raw{}".format(nb_views_renderinglocations)
+        else:
+            self.view_key = view_key
         self.nb_views = nb_views
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only

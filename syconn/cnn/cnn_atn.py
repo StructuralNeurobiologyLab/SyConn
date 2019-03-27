@@ -7,10 +7,12 @@ import argparse
 import os
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
+from elektronn3.models.simple import StackedConv2Scalar
 import torch
 from torch import nn
 from torch import optim
 import torch.nn.functional as F
+from elektronn3.training.schedulers import SGDR
 import numpy as np
 from torch.distributions.cauchy import Cauchy
 from torch.distributions.normal import Normal
@@ -41,7 +43,8 @@ class RepresentationNetwork(nn.Module):
         )
         self.fc = nn.Sequential(
             # nn.AdaptiveMaxPool1d(200),  # flexible to various input sizes
-            nn.Linear(372, 50), act(),  # 93 is hard-coded for this architecture and input size: 128, 256
+            nn.Linear(6076, 50), act(),  # 6076 is hard-coded for this architecture and input size: 128, 256
+            # nn.Linear(372, 50), act(),  # 372 is hard-coded for this architecture and input size: 128, 256
             # DropOut(),
             nn.Linear(50, n_out_channels)
         )
@@ -52,6 +55,19 @@ class RepresentationNetwork(nn.Module):
         x = self.fc(x)
         x = x.view(x.size()[1:])
         return x  #.squeeze()  # get rid of auxiliary axis needed for AdaptiveMaxPool
+
+
+class RepNetwork_v2(nn.Module):
+    """
+    Wrapper to extend input dimension to match requirements of `StackedConv2Scalar`
+    """
+    def __init__(self):
+        super().__init__()
+        self.base_net = StackedConv2Scalar(in_channels=4, n_classes=Z_DIM, dropout_rate=0.05, act='relu')
+
+    def forward(self, x):
+        x = x.unsqueeze(-3)
+        return self.base_net(x)
 
 
 class D_net_gauss(nn.Module):
@@ -97,15 +113,17 @@ class TripletNet(nn.Module):
 
 def get_model():
     device = torch.device('cuda')
-    RepNet = RepresentationNetwork(n_in_channels=4, n_out_channels=Z_DIM, dr=0.1,
-                                   leaky_relu=False)
+    # RepNet = RepresentationNetwork(n_in_channels=4, n_out_channels=Z_DIM, dr=0.1,
+    #                                leaky_relu=False)
+    RepNet = RepNetwork_v2()
     return TripletNet(RepNet).to(device)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="ATN-25-Neighbors-8_run2", help='Manually set experiment name')
+    parser.add_argument('-n', '--exp-name', default="TN-25-Neighbors-3_SGDR_StackConv2Scal",
+                        help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
@@ -141,13 +159,13 @@ if __name__ == "__main__":
     lr_discr = 0.0001
     lr_stepsize = 500
     lr_dec = 0.985
-    batch_size = 200
+    batch_size = 10
     margin = 0.2
     model = get_model()
-    if torch.cuda.device_count() > 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        batch_size = batch_size * torch.cuda.device_count()
-        model = nn.DataParallel(model)
+    # if torch.cuda.device_count() > 1:
+    #     print("Let's use", torch.cuda.device_count(), "GPUs!")
+    #     batch_size = batch_size * torch.cuda.device_count()
+    #     model = nn.DataParallel(model)
     model.to(device)
     if args.resume is not None:  # Load pretrained network params
         model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
@@ -158,9 +176,16 @@ if __name__ == "__main__":
     model_discr.to(device)
 
     # Specify data set
+    n_classes = 9
+    data_init_kwargs = {"raw_only": False, "nb_views": 2, 'train_fraction': 0.95,
+                        'nb_views_renderinglocations': 4, 'view_key': "4_large_fov",
+                        "reduce_context": 0, "reduce_context_fact": 1, 'ctgt_key': "ctgt_v2", 'random_seed': 0,
+                        "binary_views": False, "n_classes": n_classes, 'class_weights': [1] * n_classes}
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
-    train_dataset = MultiviewData_TNet_online(train=True, transform=transform, allow_close_neigh=9)
-    valid_dataset = MultiviewData_TNet_online(train=False, transform=transform, allow_close_neigh=9)
+    train_dataset = MultiviewData_TNet_online(train=True, transform=transform, allow_close_neigh=0,
+                                              ctv_kwargs=data_init_kwargs, allow_axonview_gt=False)
+    valid_dataset = MultiviewData_TNet_online(train=False, transform=transform, allow_close_neigh=0,
+                                              ctv_kwargs=data_init_kwargs, allow_axonview_gt=False)
     # Set up optimization
     optimizer = optim.Adam(
         model.parameters(),
@@ -182,7 +207,8 @@ if __name__ == "__main__":
         lr=lr_discr,
         amsgrad=True
     )
-    lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
+    # lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
+    lr_sched = SGDR(optimizer, 20000, 3)
     # lr_sched = optim.lr_scheduler.ReduceLROnPlateau(optimizer, patience=10, factor=0.5)
     lr_discr_sched = optim.lr_scheduler.StepLR(optimizer_disc, lr_stepsize, lr_dec)
     # lr_discr_sched = optim.lr_scheduler.ReduceLROnPlateau(optimizer_disc, patience=10, factor=0.5)
@@ -206,11 +232,10 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         valid_dataset=valid_dataset,
         batchsize=batch_size,
-        num_workers=8,
+        num_workers=2,
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched, "lr_discr": lr_discr_sched},
-        ipython_on_error=False,
         alpha=1e-6, alpha2=0.0,  # Adv. regularization will make up (alpha2 * 100)% of the total loss
         latent_distr=l_sample_func
     )
@@ -218,4 +243,4 @@ if __name__ == "__main__":
     # Archiving training script, src folder, env info
     bk = Backup(script_path=__file__,save_path=trainer.save_path).archive_backup()
 
-    trainer.train(max_steps)
+    trainer.run(max_steps)

@@ -34,7 +34,7 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="celltype_e3_axonGTv3_LatentAdd_run4",
+    parser.add_argument('-n', '--exp-name', default="celltype_e3_SGDR_axonGTv3_LatentAdd_largeFoV",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
@@ -77,8 +77,8 @@ if __name__ == "__main__":
         model = nn.DataParallel(model)
     model.to(device)
     n_classes = 9
-    data_init_kwargs = {"raw_only": False, "nb_views": 20, 'train_fraction': 0.95,
-                        'nb_views_renderinglocations': 4,
+    data_init_kwargs = {"raw_only": False, "nb_views": 2, 'train_fraction': 0.95,
+                        'nb_views_renderinglocations': 4, 'view_key': "4_large_fov",
                         "reduce_context": 0, "reduce_context_fact": 1, 'ctgt_key': "ctgt_v2", 'random_seed': 0,
                         "binary_views": False, "n_classes": n_classes, 'class_weights': [1] * n_classes}
 
@@ -102,8 +102,8 @@ if __name__ == "__main__":
         lr=lr,
         # amsgrad=True
     )
-    lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-    # lr_sched = SGDR(optimizer, 20000, 3)
+    # lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
+    lr_sched = SGDR(optimizer, 20000, 3)
     schedulers = {'lr': lr_sched}
     # All these metrics assume a binary classification problem. If you have
     #  non-binary targets, remember to adapt the metrics!
