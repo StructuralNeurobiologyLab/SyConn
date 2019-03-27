@@ -727,6 +727,8 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
     str
     """
     # create header
+    vertices = vertices.astype(np.float32)
+    indices = indices.astype(np.int32)
     if not indices.ndim == 2:
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
@@ -749,7 +751,7 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
                       "automatically, data will be unusable if not normalized"
                       " between 0 and 255. min/max of data:"
                       " {}, {}".format(rgba_color.min(), rgba_color.max()))
-    elif rgba_color.dtype.kind not in ("u", "i"):
+    elif rgba_color.dtype.kind != "u1":
         log_proc.warn("Color array is not of type integer or unsigned integer."
                       " It will now be converted automatically, data will be "
                       "unusable if not normalized between 0 and 255."
@@ -786,6 +788,8 @@ def make_ply_string_wocolor(dest_path, indices, vertices):
     str
     """
     # create header
+    vertices = vertices.astype(np.float32)
+    indices = indices.astype(np.int32)
     if not indices.ndim == 2:
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
