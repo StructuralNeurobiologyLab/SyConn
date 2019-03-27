@@ -29,6 +29,7 @@ from ..backend.storage import VoxelStorageL, VoxelStorage
 from ..proc.image import multi_mop
 from ..handler.basics import kd_factory
 
+import sys
 
 def gauss_threshold_connected_components(*args, **kwargs):
     # alias
@@ -760,7 +761,8 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         n_chunk_jobs = len(voxel_rel_paths)
     chunk_blocks = np.array_split(np.array(chunk_list), n_chunk_jobs)
     path_blocks = np.array_split(np.array(voxel_rel_paths), n_chunk_jobs)
-    for i_job in range(n_chunk_jobs):
+    # for i_job in range(n_chunk_jobs):
+    for i_job in range(1):
         multi_params.append([[cset.chunk_dict[nb_chunk] for nb_chunk in chunk_blocks[i_job]], workfolder,
                              filename, hdf5names, dataset_names, overlaydataset_path,
                              suffix, path_blocks[i_job], n_folders_fs, transform_func, transform_func_kwargs])

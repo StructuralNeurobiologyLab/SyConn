@@ -200,7 +200,7 @@ class VoxelStorageDyn(CompressedStorage):
 
     """
 
-    def __init__(self, inp, voxel_mode=False, voxeldata_path=None, **kwargs):
+    def __init__(self, inp, voxel_mode=True, voxeldata_path=None, **kwargs):
         if "disable_locking" in kwargs:
             assert kwargs["disable_locking"], "Locking must be disabled " \
                                               "in this class. Use VoxelDictL" \
