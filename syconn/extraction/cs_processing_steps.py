@@ -87,7 +87,7 @@ def filter_relevant_syn(sd_syn, ssd):
 
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                           stride=1000, qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                          resume_job=False, n_max_co_processes=None):
+                          resume_job=False, n_max_co_processes=None, n_folders_fs=10000):
     """
     Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
     syn-objects on SSV level and aggregates the respective 'syn' attributes
@@ -113,6 +113,8 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     nb_cpus :
     n_max_co_processes :
 
+    n_folders_fs
+
     """
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
     syn_sd = segmentation.SegmentationDataset("syn", working_dir=wd,
@@ -120,17 +122,17 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
 
     rel_synssv_to_syn_ids = filter_relevant_syn(syn_sd, ssd)
 
-    voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, 100000)[:-2]
-                                        for ix in range(100000)])
+    voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
+                                        for ix in range(n_folders_fs)])
 
-    voxel_rel_paths = [subfold_from_ix(ix, 100000) for ix in range(100000)]
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
     block_steps = np.linspace(0, len(voxel_rel_paths),
                               int(np.ceil(float(len(rel_synssv_to_syn_ids)) /
                                           stride)) + 1).astype(np.int)
     # target SD for SSV syn objects
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version="0", create=True,
-                                                  n_folders_fs=100000)
+                                                  n_folders_fs=n_folders_fs)
 
     for p in voxel_rel_paths_2stage:
         try:
@@ -188,10 +190,8 @@ def _combine_and_split_syn_thread(args):
     voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
     attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
 
-    p_parts = voxel_rel_paths[cur_path_id].strip("/").split("/")
-    next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]),
-                                  int(p_parts[2])))
-
+    # get ID for storing intermediate results
+    next_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
     for item in rel_cs_to_cs_agg_ids_items:
         n_items_for_path += 1
 
@@ -268,7 +268,7 @@ def _combine_and_split_syn_thread(args):
             this_attr_dc = dict(neuron_partners=ssv_ids)
             this_attr_dc.update(syn_props_agg)
             attr_dc[next_id] = this_attr_dc
-            next_id += 100000
+            next_id += sd_syn.n_folders_fs
 
         if n_items_for_path > n_per_voxel_path:
             # TODO: passing explicit dest_path might not be required here
@@ -279,10 +279,8 @@ def _combine_and_split_syn_thread(args):
 
             cur_path_id += 1
             n_items_for_path = 0
-            p_parts = voxel_rel_paths[cur_path_id].strip("/").split("/")
 
-            next_id = int("%.2d%.2d%d" % (int(p_parts[0]), int(p_parts[1]),
-                                          int(p_parts[2])))
+            next_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
 
             base_dir = sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id]
             os.makedirs(base_dir, exist_ok=True)
@@ -662,7 +660,7 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
 
 
 def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
-                     n_job_chunks=1000, qsub_pe=None, qsub_queue=None,
+                     n_chunk_jobs=1000, qsub_pe=None, qsub_queue=None,
                      resume_job=False, nb_cpus=None, n_max_co_processes=None):
     """
     Creates SegmentationDataset of 'syn' objects from ChunkDataset of 'cs_agg'
@@ -678,7 +676,7 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
     sj_sd :
     cs_cset :
     n_folders_fs :
-    n_job_chunks :
+    n_chunk_jobs :
     qsub_pe :
     qsub_queue :
     resume_job :
@@ -707,24 +705,30 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
             log_extraction.critical(msg)
             raise FileExistsError(msg)
 
-    sj_id_blocks = np.array_split(rel_sj_ids, n_job_chunks)
-    voxel_rel_path_blocks = np.array_split(voxel_rel_paths, n_job_chunks)
+    if n_chunk_jobs > len(voxel_rel_paths):
+        n_chunk_jobs = len(voxel_rel_paths)
+
+    if n_chunk_jobs > len(rel_sj_ids):
+        n_chunk_jobs = len(rel_sj_ids)
+
+    sj_id_blocks = np.array_split(rel_sj_ids, n_chunk_jobs)
+    voxel_rel_path_blocks = np.array_split(voxel_rel_paths, n_chunk_jobs)
 
     multi_params = []
-    for i_block in range(n_job_chunks):
+    for i_block in range(n_chunk_jobs):
         multi_params.append([wd, sj_id_blocks[i_block],
                              voxel_rel_path_blocks[i_block], sd_syn.version,
                              sj_sd.version, cs_sd.version, cs_cset.path_head_folder])
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(syn_gen_via_cset_thread,
-                                       multi_params, nb_cpus=n_max_co_processes)
+                                       multi_params, nb_cpus=n_max_co_processes, debug=True)
 
     elif qu.batchjob_enabled():
         _ = qu.QSUB_script(multi_params, "syn_gen_via_cset", pe=qsub_pe,
                            queue=qsub_queue, resume_job=resume_job,
                            script_folder=None, n_cores=nb_cpus,
-                            n_max_co_processes=n_max_co_processes)
+                           n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
     return sd_syn
@@ -812,7 +816,7 @@ def syn_gen_via_cset_thread(args):
 
 # TODO: KD version of above, probably not necessary anymore
 def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
-                                    n_folders_fs=10000, n_job_chunks=1000,
+                                    n_folders_fs=10000, n_chunk_jobs=1000,
                                     qsub_pe=None, qsub_queue=None,
                                     nb_cpus=None, n_max_co_processes=None):
 
@@ -827,11 +831,17 @@ def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
     for p in voxel_rel_paths:
         os.makedirs(conn_sd.so_storage_path + p)
 
-    sj_id_blocks = np.array_split(rel_sj_ids, n_job_chunks)
-    voxel_rel_path_blocks = np.array_split(voxel_rel_paths, n_job_chunks)
+    if n_chunk_jobs > len(voxel_rel_paths):
+        n_chunk_jobs = len(voxel_rel_paths)
+
+    if n_chunk_jobs > len(rel_sj_ids):
+        n_chunk_jobs = len(rel_sj_ids)
+
+    sj_id_blocks = np.array_split(rel_sj_ids, n_chunk_jobs)
+    voxel_rel_path_blocks = np.array_split(voxel_rel_paths, n_chunk_jobs)
 
     multi_params = []
-    for i_block in range(n_job_chunks):
+    for i_block in range(n_chunk_jobs):
         multi_params.append([wd, sj_id_blocks[i_block],
                              voxel_rel_path_blocks[i_block], conn_sd.version,
                              sj_sd.version, cs_sd.version, cs_kd.knossos_path])

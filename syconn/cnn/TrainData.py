@@ -8,7 +8,6 @@
 # ELEKTRONN2 architectures
 import matplotlib
 matplotlib.use("agg", warn=False, force=True)
-from elektronn2.data.traindata import Data
 import numpy as np
 import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed
@@ -16,6 +15,7 @@ from syconn.handler.prediction import naive_view_normalization, naive_view_norma
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn import global_params
+from syconn.handler.logger import log_main as log_cnn
 import os
 from sklearn.model_selection import train_test_split
 try:
@@ -337,6 +337,104 @@ if elektronn3_avail:
 
 
 # -------------------------------------- ELEKTRONN2 ----------------------------
+class Data(object):
+    """
+    TODO: refactor and remove dependency on this class
+    Copied from ELEKTRONN2 due ti import issues. Load and prepare data, Base-Obj
+    """
+    def __init__(self, n_lab=None):
+        self._pos           = 0
+        # self.train_d = None
+        # self.train_l = None
+        # self.valid_d = None
+        # self.valid_l = None
+        # self.test_d = None
+        # self.test_l = None
+
+        if isinstance(self.train_d, np.ndarray):
+            self._training_count = self.train_d.shape[0]
+            if n_lab is None:
+                self.n_lab = np.unique(self.train_l).size
+            else:
+                self.n_lab = n_lab
+        elif isinstance(self.train_d, list):
+            self._training_count = len(self.train_d)
+            if n_lab is None:
+                unique = [np.unique(l) for l in self.train_l]
+                self.n_lab = np.unique(np.hstack(unique)).size
+            else:
+                self.n_lab = n_lab
+
+        if self.example_shape is None:
+            self.example_shape = self.train_d[0].shape
+        self.n_ch = self.example_shape[0]
+
+        self.rng = np.random.RandomState(np.uint32((time.time()*0.0001 - int(time.time()*0.0001))*4294967295))
+        self.pid = os.getpid()
+        log_cnn.info(self.__repr__())
+        self._perm = self.rng.permutation(self._training_count)
+
+    def _reseed(self):
+        """Reseeds the rng if the process ID has changed!"""
+        current_pid = os.getpid()
+        if current_pid!=self.pid:
+            self.pid = current_pid
+            self.rng.seed(np.uint32((time.time()*0.0001 - int(time.time()*0.0001))*4294967295+self.pid))
+            log_cnn.debug("Reseeding RNG in Process with PID: {}".format(self.pid))
+
+    def __repr__(self):
+        return "%i-class Data Set: #training examples: %i and #validing: %i" \
+        %(self.n_lab, self._training_count, len(self.valid_d))
+
+    def getbatch(self, batch_size, source='train'):
+        if source=='train':
+            if (self._pos+batch_size) < self._training_count:
+                self._pos += batch_size
+                slice = self._perm[self._pos-batch_size:self._pos]
+            else: # get new permutation
+                self._perm = self.rng.permutation(self._training_count)
+                self._pos = 0
+                slice = self._perm[:batch_size]
+
+            if isinstance(self.train_d, np.ndarray):
+                return (self.train_d[slice], self.train_l[slice])
+
+            elif isinstance(self.train_d, list):
+                data  = np.array([self.train_d[i] for i in slice])
+                label = np.array([self.train_l[i] for i in slice])
+                return (data, label)
+
+        elif source=='valid':
+            data  = self.valid_d[:batch_size]
+            label = self.valid_l[:batch_size]
+            return (data, label)
+
+        elif source=='test':
+            data  = self.test_d[:batch_size]
+            label = self.test_l[:batch_size]
+            return (data, label)
+
+    def createCVSplit(self, data, label, n_folds=3, use_fold=2, shuffle=False, random_state=None):
+        try:  # sklearn >=0.18 API
+            # (see http://scikit-learn.org/dev/whats_new.html#model-selection-enhancements-and-api-changes)
+            import sklearn.model_selection
+            kfold = sklearn.model_selection.KFold(
+                n_splits=n_folds, shuffle=shuffle, random_state=random_state
+            )
+            cv = kfold.split(data)
+        except:  # sklearn <0.18 API # TODO: We can remove this after a while.
+            import sklearn.cross_validation
+            cv = sklearn.cross_validation.KFold(
+                len(data), n_folds, shuffle=shuffle, random_state=random_state
+            )
+        for fold, (train_i, valid_i) in enumerate(cv):
+            if fold==use_fold:
+                self.valid_d = data[valid_i]
+                self.valid_l = label[valid_i]
+                self.train_d = data[train_i]
+                self.train_l = label[train_i]
+
+
 class MultiViewData(Data):
     def __init__(self, working_dir, gt_type, nb_cpus=20,
                  label_dict=None, view_kwargs=None, naive_norm=True,

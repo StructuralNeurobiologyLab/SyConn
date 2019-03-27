@@ -173,8 +173,8 @@ if __name__ == '__main__':
     step_idents.append('Synapse detection')
 
     log.info('Step 5/8 - Axon prediction')
-    # exec_multiview.run_axoness_prediction(n_jobs=4, e3=True)
-    # exec_multiview.run_axoness_mapping()
+    exec_multiview.run_axoness_prediction(n_jobs=4, e3=True)
+    exec_multiview.run_axoness_mapping()
     time_stamps.append(time.time())
     step_idents.append('Axon prediction')
 
@@ -202,7 +202,7 @@ if __name__ == '__main__':
     for i in range(len(step_idents[1:])):
         step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
         step_dt_perc = int(dts[i] / dt_tot * 100)
-        step_str = "[{}/8] {}\t\t{}\t\t{}%\n".format(
+        step_str = "[{}/8] {}\t\t\t{}\t\t\t{}%\n".format(
             i, step_idents[i+1], step_dt, step_dt_perc)
         time_summary_str += step_str
     log.info(time_summary_str)

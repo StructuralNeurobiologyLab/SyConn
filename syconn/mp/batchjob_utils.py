@@ -548,6 +548,10 @@ def fallback_exec(cmd_exec):
     # if log_mp.level == 10:  # 10 == 'DEUBUG'
     #     log_mp.debug(out.decode())
     #     log_mp.debug(err.decode())
+    if log_mp.level == 10 and ('error' in out.decode().lower() or
+                               'warning' in out.decode().lower()):
+        log_mp.error(out.decode())
+        log_mp.error(err.decode())
     if 'error' in err.decode().lower():
         log_mp.error(out.decode())
         log_mp.error(err.decode())

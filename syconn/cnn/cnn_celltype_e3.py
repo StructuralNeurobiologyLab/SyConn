@@ -34,10 +34,10 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="celltype_e3_SGDR_axonGTv3_LatentAdd_largeFoV",
+    parser.add_argument('-n', '--exp-name', default="celltype_e3_SGDR_axonGTv3_LatentAdd_largeFoV-run2",
                         help='Manually set experiment name')
     parser.add_argument(
-        '-m', '--max-steps', type=int, default=500000,
+        '-m', '--max-steps', type=int, default=5000000,
         help='Maximum number of training steps to perform.'
     )
     parser.add_argument(

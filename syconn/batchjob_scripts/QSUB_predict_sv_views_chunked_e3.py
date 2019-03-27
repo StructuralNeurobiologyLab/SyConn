@@ -46,7 +46,7 @@ else:
     raw_only = False
 
 
-model = getattr(prediction,model_getter)()
+model = getattr(prediction, model_getter)()
 
 
 for p in so_chunk_paths:
