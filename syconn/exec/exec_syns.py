@@ -80,11 +80,11 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
                                 version=0)  # version hard coded
     sj_sd = SegmentationDataset('sj', working_dir=global_params.config.working_dir)
     cs_cset = chunky.load_dataset(cd_dir, update_paths=True)
-
+    #
     # TODO: change stride to n_jobs
     # # This creates an SD of type 'syn', currently ~6h, will hopefully be sped up after refactoring
     cs_processing_steps.syn_gen_via_cset(cs_sd, sj_sd, cs_cset, resume_job=False,
-                                         nb_cpus=2)
+                                         nb_cpus=2, n_folders_fs=n_folders_fs)
     sd = SegmentationDataset("syn", working_dir=global_params.config.working_dir, version="0")
     dataset_analysis(sd, qsub_pe='openmp', compute_meshprops=False)
     log.info('SegmentationDataset of type "syn" was generated.')
@@ -92,7 +92,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     # This creates an SD of type 'syn_ssv', ~15 min
     cps.combine_and_split_syn(global_params.config.working_dir, resume_job=False,
                               stride=250, qsub_pe='default', qsub_queue='all.q',
-                              cs_gap_nm=global_params.cs_gap_nm)
+                              cs_gap_nm=global_params.cs_gap_nm, n_folders_fs=n_folders_fs)
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
     dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True)

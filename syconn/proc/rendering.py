@@ -811,6 +811,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     ----------
     sso : SuperSegmentationObject
     coords : np.array
+        N, 3
     add_cellobjects : bool
     verbose : bool
     clahe : bool

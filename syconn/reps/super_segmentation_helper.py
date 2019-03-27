@@ -97,8 +97,10 @@ def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
     sso.load_attr_dict()
     if not overwrite and "celltype_cnn_e3" in sso.attr_dict:
         return
+    from ..handler.prediction import naive_view_normalization_new
     inp_d = sso_views_to_modelinput(sso, nb_views)
     synsign_ratio = np.array([sso.syn_sign_ratio()] * len(inp_d))[..., None]
+    inp_d = naive_view_normalization_new(inp_d)
     res = model.predict_proba((inp_d, synsign_ratio))
     clf = np.argmax(res, axis=1)
     ls, cnts = np.unique(clf, return_counts=True)
@@ -1686,8 +1688,21 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
     verts = sso.mesh[1].reshape(-1, 3)
     # downsample vertices and get ~3 locations per comp_window
     ds_factor = comp_window / 3
+
     # get unique array of downsampled vertex locations (scaled back to nm)
-    rendering_locs = np.vstack({tuple(c.astype(np.int)) for c in verts / ds_factor})[None, ] * ds_factor  # added auxilary axis because rendering locations are stored per SV (and not flattened)
+    verts_ixs = np.arange(len(verts))
+    np.random.seed(0)
+    np.random.shuffle(verts_ixs)
+    ds_locs_encountered = {}
+    rendering_locs = []
+    for kk, c in enumerate(verts[verts_ixs] / ds_factor):
+        ds_loc = tuple(c.astype(np.int))
+        if ds_loc in ds_locs_encountered:  # always gets first coordinate which is in downsampled voxel, the others are skipped
+            continue
+        rendering_locs.append(c)
+        ds_locs_encountered[ds_loc] = None
+    rendering_locs = np.array(rendering_locs)
+
     # overwrite default rendering locations (used later on for the view generation)
     sso._sample_locations = rendering_locs
     assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
