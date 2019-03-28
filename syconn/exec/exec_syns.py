@@ -85,42 +85,39 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     # # This creates an SD of type 'syn', currently ~6h, will hopefully be sped up after refactoring
     cs_processing_steps.syn_gen_via_cset(cs_sd, sj_sd, cs_cset, resume_job=False,
                                          nb_cpus=2, n_folders_fs=n_folders_fs)
-    sd = SegmentationDataset("syn", working_dir=global_params.config.working_dir, version="0")
-    dataset_analysis(sd, qsub_pe='openmp', compute_meshprops=False)
+    sd = SegmentationDataset("syn", working_dir=global_params.config.working_dir,
+                             version="0")
+    dataset_analysis(sd, compute_meshprops=False)
     log.info('SegmentationDataset of type "syn" was generated.')
 
     # This creates an SD of type 'syn_ssv', ~15 min
     cps.combine_and_split_syn(global_params.config.working_dir, resume_job=False,
-                              stride=250, qsub_pe='default', qsub_queue='all.q',
-                              cs_gap_nm=global_params.cs_gap_nm, n_folders_fs=n_folders_fs)
+                              stride=250, cs_gap_nm=global_params.cs_gap_nm,
+                              n_folders_fs=n_folders_fs)
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
-    dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=True)
+    dataset_analysis(sd_syn_ssv, compute_meshprops=True)
     log.info('SegmentationDataset of type "syn_ssv" was generated.')
 
     # This will be replaced by the new method for the 'syn_ssv' generation,
     # ~80 min @ 340 cpus
     extract_synapse_type(sd_syn_ssv, kd_sym_path=global_params.config.kd_sym_path,
                          stride=100,
-                         kd_asym_path=global_params.config.kd_asym_path,
-                         qsub_pe='openmp')
+                         kd_asym_path=global_params.config.kd_asym_path)
     log.info('Synapse type was mapped to "syn_ssv".')
 
     # ~1h
-    cps.map_objects_to_synssv(global_params.config.working_dir,
-                              qsub_pe='openmp')
+    cps.map_objects_to_synssv(global_params.config.working_dir)
     log.info('Cellular organelles were mapped to "syn_ssv".')
 
-    cps.classify_synssv_objects(global_params.config.working_dir,
-                                qsub_pe='openmp')
+    cps.classify_synssv_objects(global_params.config.working_dir)
     log.info('Synapse property prediction finished.')
 
     log.info('Collecting and writing syn-ssv objects to SSV attribute '
              'dictionary.')
     # This needs to be run after `classify_synssv_objects` and before
     # `map_synssv_objects` if the latter uses thresholding for synaptic objects
-    dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=False,
-                     recompute=False)  # just collect new data
+    dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)  # just collect new data
     # TODO: decide whether this should happen after prob thresholding or not
-    map_synssv_objects(qsub_pe='openmp')
+    map_synssv_objects()
     log.info('Finished.')

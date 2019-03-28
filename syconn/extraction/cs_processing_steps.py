@@ -88,6 +88,7 @@ def filter_relevant_syn(sd_syn, ssd):
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                           stride=1000, qsub_pe=None, qsub_queue=None, nb_cpus=None,
                           resume_job=False, n_max_co_processes=None, n_folders_fs=10000):
+    # TODO: remove `qsub_pe`and `qsub_queue`
     """
     Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
     syn-objects on SSV level and aggregates the respective 'syn' attributes
@@ -152,16 +153,14 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
         multi_params.append([wd, block, voxel_rel_paths[block_steps[i_block]: block_steps[i_block+1]],
                              syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm])
         i_block += 1
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread,
                                        multi_params, nb_cpus=nb_cpus)
 
-    elif qu.batchjob_enabled():
+    else:
         _ = qu.QSUB_script(multi_params, "combine_and_split_syn", pe=qsub_pe,
                            resume_job=resume_job, script_folder=None,
                            queue=qsub_queue, n_max_co_processes=n_max_co_processes)
-    else:
-        raise Exception("QSUB not available")
 
     return sd_syn_ssv
 
@@ -720,17 +719,16 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
                              voxel_rel_path_blocks[i_block], sd_syn.version,
                              sj_sd.version, cs_sd.version, cs_cset.path_head_folder])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(syn_gen_via_cset_thread,
-                                       multi_params, nb_cpus=n_max_co_processes, debug=True)
+                                       multi_params, nb_cpus=n_max_co_processes)
 
-    elif qu.batchjob_enabled():
+    else:
         _ = qu.QSUB_script(multi_params, "syn_gen_via_cset", pe=qsub_pe,
                            queue=qsub_queue, resume_job=resume_job,
                            script_folder=None, n_cores=nb_cpus,
                            n_max_co_processes=n_max_co_processes)
-    else:
-        raise Exception("QSUB not available")
+
     return sd_syn
 
 
@@ -1060,6 +1058,7 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
                           mi_version=None, vc_version=None, max_vx_dist_nm=None,
                           max_rep_coord_dist_nm=None, qsub_pe=None,
                           qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
+    # TODO: remove `qsub_pe`and `qsub_queue`
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
     is executed in 'classify_synssv_objects'.
@@ -1090,18 +1089,16 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
     multi_params = [(so_dir_paths, wd, obj_version, mi_version, vc_version, ssd_version, max_vx_dist_nm,
                      max_rep_coord_dist_nm) for so_dir_paths in multi_params]
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if qu.batchjob_enabled():
         results = sm.start_multiprocess(_map_objects_to_synssv_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.batchjob_enabled():
+    else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_objects_to_synssv",
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
-    else:
-        raise Exception("QSUB not available")
 
 
 def _map_objects_to_synssv_thread(args):
@@ -1256,6 +1253,7 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
 def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
                             qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     """
+    # TODO: remove `qsub_pe`and `qsub_queue`
     # TODO: Will be replaced by new synapse detection
     Classify SSV contact sites into synaptic or non-synaptic using an RFC model
     and store the result in the attribute dict of the syn_ssv objects.
@@ -1277,18 +1275,15 @@ def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
     multi_params = [(so_dir_paths, wd, obj_version) for so_dir_paths in
                     multi_params]
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         results = sm.start_multiprocess(_classify_synssv_objects_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.batchjob_enabled():
+    else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "classify_synssv_objects",
-                                     pe=qsub_pe, queue=qsub_queue,
                                      script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
-    else:
-        raise Exception("QSUB not available")
 
 
 def _classify_synssv_objects_thread(args):

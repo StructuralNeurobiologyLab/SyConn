@@ -506,12 +506,14 @@ class SuperSegmentationDataset(object):
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
                       qsub_pe=None, qsub_queue=None, nb_cpus=None,
                       n_max_co_processes=None, new_mapping=True):
+    # TODO: remove `qsub_pe`and `qsub_queue`
     """
     Saves attributes of all SSVs within the given SSD and computes properties
     like size and representative coordinate. `ids.npy` order may change after
-    repeated runs. TODO: make this method deterministic and allow partial
-    updates of a subset of attributes (e.g. use already existing `ids.npy` in
-    case of updating, aka `extract_only=True`)
+    repeated runs.
+    TODO: make this method deterministic and allow partial
+     updates of a subset of attributes (e.g. use already existing `ids.npy` in
+     case of updating, aka `extract_only=True`)
 
     Parameters
     ----------
@@ -543,12 +545,12 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
                      ssd.working_dir, extract_only, attr_keys,
                      ssd._type, new_mapping) for ssv_id_block in multi_params]
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         results = sm.start_multiprocess(
             _write_super_segmentation_dataset_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.batchjob_enabled():
+    else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "write_super_segmentation_dataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -561,8 +563,6 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
         for out_file in out_files:
             with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
-    else:
-        raise Exception("QSUB not available")
 
     attr_dict = {}
     for this_attr_dict in results:

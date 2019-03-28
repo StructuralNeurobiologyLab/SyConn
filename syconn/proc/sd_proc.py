@@ -33,6 +33,7 @@ from . import log_proc
 def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
                      qsub_queue=None, nb_cpus=None, n_max_co_processes=None,
                      compute_meshprops=False):
+    # TODO: remove `qsub_pe`and `qsub_queue`
     """ Analyze SegmentationDataset and extract and cache SegmentationObjects
     attributes as numpy arrays.
 
@@ -66,11 +67,11 @@ def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
                      compute_meshprops) for mps in multi_params]
 
     # Running workers
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_dataset_analysis_thread,
                                              multi_params, nb_cpus=n_max_co_processes)
 
-    elif qu.batchjob_enabled():
+    else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "dataset_analysis",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -82,8 +83,6 @@ def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
         for out_file in out_files:
             with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
-    else:
-        raise Exception("QSUB not available")
     # Creating summaries
     # TODO: This is a potential bottleneck for very large datasets
     # TODO: resulting cache-arrays might have different lengths if attribute is missing in
@@ -604,6 +603,7 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                          trafo_dict_path=None, stride=10,
                          qsub_pe=None, qsub_queue=None, nb_cpus=None,
                          n_max_co_processes=None):
+    # TODO: remove `qsub_pe`and `qsub_queue`
     """TODO: will be refactored into single method when generating syn objects
     Extract synapse type from KnossosDatasets. Stores sym.-asym. ratio in
     SJ object attribute dict.
@@ -630,19 +630,17 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                              kd_asym_path, kd_sym_path, trafo_dict_path])
 
     # Running workers - Extracting mapping
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if qu.batchjob_enabled():
         results = sm.start_multiprocess(_extract_synapse_type_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.batchjob_enabled():
+    else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_synapse_type",
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=None,
                                      n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
-    else:
-        raise Exception("QSUB not available")
 
 
 def _extract_synapse_type_thread(args):
