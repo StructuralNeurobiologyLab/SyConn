@@ -34,10 +34,10 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="celltype_e3_axonGTv3_SGDR_LatentAdd_run3",
+    parser.add_argument('-n', '--exp-name', default="celltype_e3_SGDR_axonGTv3_LatentAdd_largeFoV-run2",
                         help='Manually set experiment name')
     parser.add_argument(
-        '-m', '--max-steps', type=int, default=500000,
+        '-m', '--max-steps', type=int, default=5000000,
         help='Maximum number of training steps to perform.'
     )
     parser.add_argument(
@@ -64,7 +64,7 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3training/')
 
     max_steps = args.max_steps
-    lr = 0.004
+    lr = 0.008
     lr_stepsize = 500
     lr_dec = 0.995
     batch_size = 10
@@ -77,8 +77,8 @@ if __name__ == "__main__":
         model = nn.DataParallel(model)
     model.to(device)
     n_classes = 9
-    data_init_kwargs = {"raw_only": False, "nb_views": 20, 'train_fraction': 0.95,
-                        'nb_views_renderinglocations': 4,
+    data_init_kwargs = {"raw_only": False, "nb_views": 2, 'train_fraction': 0.95,
+                        'nb_views_renderinglocations': 4, 'view_key': "4_large_fov",
                         "reduce_context": 0, "reduce_context_fact": 1, 'ctgt_key': "ctgt_v2", 'random_seed': 0,
                         "binary_views": False, "n_classes": n_classes, 'class_weights': [1] * n_classes}
 
@@ -103,7 +103,8 @@ if __name__ == "__main__":
         # amsgrad=True
     )
     # lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
-    schedulers = {'lr': SGDR(optimizer, 20000, 3)}
+    lr_sched = SGDR(optimizer, 20000, 3)
+    schedulers = {'lr': lr_sched}
     # All these metrics assume a binary classification problem. If you have
     #  non-binary targets, remember to adapt the metrics!
     val_metric_keys = []

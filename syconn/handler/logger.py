@@ -33,7 +33,8 @@ def get_main_log():
         logger.addHandler(fh)
         logger.info("Initialized file logging. Log-files are stored at"
                     " {}.".format(log_dir))
-    logger.info("Initialized stdout logging (level: {}). Current working directory: ".format(global_params.log_level) +
+    logger.info("Initialized stdout logging (level: {}). Current working direct"
+                "ory: ".format(global_params.log_level) +
                 colored("'{}'".format(global_params.config.working_dir), 'red'))
     return logger
 
@@ -57,11 +58,11 @@ def initialize_logging(log_name, log_dir=global_params.default_log_dir,
     -------
 
     """
+    level = global_params.log_level
     logger = logging.getLogger(log_name)
+    logger.setLevel(level)
     coloredlogs.install(level=global_params.log_level, logger=logger,
                         reconfigure=False)  # True possibly leads to stderr output
-    level = logging.getLevelName(global_params.log_level)
-
     if not global_params.DISABLE_FILE_LOGGING or log_dir is not None:
         # create file handler which logs even debug messages
         if log_dir is None:
@@ -80,7 +81,6 @@ def initialize_logging(log_name, log_dir=global_params.default_log_dir,
             '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         fh.setFormatter(formatter)
         logger.addHandler(fh)
-    logger.setLevel(level)
     return logger
 
 

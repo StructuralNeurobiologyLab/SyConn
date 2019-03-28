@@ -8,7 +8,6 @@
 # ELEKTRONN2 architectures
 import matplotlib
 matplotlib.use("agg", warn=False, force=True)
-from elektronn2.data.traindata import Data
 import numpy as np
 import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed
@@ -16,6 +15,7 @@ from syconn.handler.prediction import naive_view_normalization, naive_view_norma
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn import global_params
+from syconn.handler.logger import log_main as log_cnn
 import os
 from sklearn.model_selection import train_test_split
 try:
@@ -115,8 +115,8 @@ if elektronn3_avail:
         def __len__(self):
             """Determines epoch size(s)"""
             if not self.train:
-                return 100
-            return 1000
+                return 1000
+            return 5000
 
 
     class CelltypeViewsE3(Dataset):
@@ -160,7 +160,8 @@ if elektronn3_avail:
             super().__init__()
             self.train = train
             self.transform = transform  # TODO: add gt paths to config
-            self.gv = GliaViews(None, None, naive_norm=False, av_working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
+            self.gv = GliaViews(None, None, naive_norm=False,
+                                av_working_dir='/wholebrain/scratch/areaxfs3/', **kwargs)
 
         def __getitem__(self, index):
             inp, target = self.gv.getbatch(1, source='train' if self.train else 'valid')
@@ -172,8 +173,9 @@ if elektronn3_avail:
         def __len__(self):
             """Determines epoch size(s)"""
             if not self.train:
-                return 100
-            return 1000
+                return 1000
+            return 5000
+
 
     class MultiviewData_TNet_online(Dataset):
         """
@@ -183,8 +185,11 @@ if elektronn3_avail:
         def __init__(
                 self, working_dir='/wholebrain/scratch/areaxfs3/',
                 train=True, epoch_size=40000, allow_close_neigh=0,
-                transform: Callable = Identity(),
+                transform: Callable = Identity(), allow_axonview_gt=True,
+                ctv_kwargs=None,
         ):
+            if ctv_kwargs is None:
+                ctv_kwargs = {}
             super().__init__()
             self.transform = transform
             self.epoch_size = epoch_size
@@ -196,24 +201,32 @@ if elektronn3_avail:
             # load GliaView Data and store all views in memory
             # inefficient because GV has to be loaded twice (train and valid)
             print("Loaded all data. Concatenating now.")
-            # use these classes to load label and splitting dicts
+            # use these classes to load label and splitting dicts, CURRENTLY AxonGT is not supported anymore
             AV = AxonViews(None, None, raw_only=False, nb_views=2,
-                           naive_norm=False, load_data=False)
+                           naive_norm=False, load_data=False,
+                           working_dir='/wholebrain/scratch/areaxfs3/')
+            if not allow_axonview_gt:  # set repsective data set to empty lists
+                AV.splitting_dict["train"] = []
+                AV.splitting_dict["valid"] = []
+                AV.splitting_dict["test"] = []
 
-            CTV = CelltypeViews(load_data=False, naive_norm=False)
+            CTV = CelltypeViews(None, None, load_data=False, **ctv_kwargs)
+            self.view_key = CTV.view_key
             # now link actual data
-            self.ssd = SuperSegmentationDataset(working_dir, version='tnetgt')
+            self.ssd = CTV.ssd  # SuperSegmentationDataset(global_params.config.working_dir, version='tnetgt')
 
-            if train:
+            if train:  # use all available data!
                 self.inp = [self.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["train"]] + \
-                           [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["train"]]
+                           [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["train"]] + \
+                            [self.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["valid"]] + \
+                            [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["valid"]]
                 self._inp_ssv_ids = self.inp.copy()
                 if self.allow_close_neigh:
                     self.inp_locs = []
                     for ssv in self.inp:
                         ssv.load_attr_dict()
                         self.inp_locs.append(np.concatenate(ssv.sample_locations(verbose=True)))
-            else:
+            else:  # valid
                 self.inp = [self.ssd.get_super_segmentation_object(ix) for ix in AV.splitting_dict["valid"]] + \
                            [self.ssd.get_super_segmentation_object(ix) for ix in CTV.splitting_dict["valid"]]
                 self._inp_ssv_ids = self.inp.copy()
@@ -222,7 +235,7 @@ if elektronn3_avail:
                     for ssv in self.inp:
                         ssv.load_attr_dict()
                         self.inp_locs.append(np.concatenate(ssv.sample_locations(verbose=True)))
-                self.inp = [ssv.load_views(view_key="raw2") for ssv in self.inp]
+                self.inp = [ssv.load_views(view_key=self.view_key) for ssv in self.inp]
             ixs = np.arange(len(self.inp))
             np.random.shuffle(ixs)
             self.inp = np.array(self.inp)[ixs]
@@ -250,7 +263,7 @@ if elektronn3_avail:
                 if self.train:
                     ssv = self.inp[index]
                     ssv.disable_locking = True
-                    views = ssv.load_views(view_key="raw2")
+                    views = ssv.load_views(view_key=self.view_key)
                 else:
                     views = self.inp[index]
                 # 50% more because of augmentations
@@ -277,7 +290,7 @@ if elektronn3_avail:
                 if self.train:
                     ssv = self.inp[dist_ix]
                     ssv.disable_locking = True
-                    views_dist = ssv.load_views(view_key="raw2")
+                    views_dist = ssv.load_views(view_key=self.view_key)
                 else:
                     views_dist = self.inp[dist_ix]
                 self._cache_dist = views_dist
@@ -295,11 +308,13 @@ if elektronn3_avail:
             views_sim = views[mview_ix]
             views_sim = self.transform(views_sim, target=None)[0]
             views_sim = views_sim.swapaxes(1, 0)
+            if len(views_sim) > 2:
+                view_ixs = np.arange(len(views_sim))
+                views_sim = views_sim[view_ixs][:2]
             if self.allow_close_neigh and np.random.rand(1)[0] > 0.25:  # only use neighbors as similar views with 0.25 chance
                 dists, close_neigh_ixs = self._cached_loc_tree.query(self.inp_locs[self._cached_ssv_ix][mview_ix], k=self.allow_close_neigh)  # itself and two others
                 neigh_ix = close_neigh_ixs[np.random.randint(1, self.allow_close_neigh)]  # only use neighbors not itself
                 views_sim[1] = views[neigh_ix, :, np.random.randint(0, 2)]  # chose any of the two views
-
             # single unsimilar view is from different SSV and randomly picked location
             mview_ix = np.random.randint(0, len(views_dist))
             # choose random view locations and random view (out of the two) and add the two axes back to the shape
@@ -313,15 +328,113 @@ if elektronn3_avail:
 
         def __len__(self):
             if self.train:
-                return self.epoch_size
+                return 5000
             else:
-                return 1000
+                return 20
 
         def close_files(self):
             return
 
 
 # -------------------------------------- ELEKTRONN2 ----------------------------
+class Data(object):
+    """
+    TODO: refactor and remove dependency on this class
+    Copied from ELEKTRONN2 due ti import issues. Load and prepare data, Base-Obj
+    """
+    def __init__(self, n_lab=None):
+        self._pos           = 0
+        # self.train_d = None
+        # self.train_l = None
+        # self.valid_d = None
+        # self.valid_l = None
+        # self.test_d = None
+        # self.test_l = None
+
+        if isinstance(self.train_d, np.ndarray):
+            self._training_count = self.train_d.shape[0]
+            if n_lab is None:
+                self.n_lab = np.unique(self.train_l).size
+            else:
+                self.n_lab = n_lab
+        elif isinstance(self.train_d, list):
+            self._training_count = len(self.train_d)
+            if n_lab is None:
+                unique = [np.unique(l) for l in self.train_l]
+                self.n_lab = np.unique(np.hstack(unique)).size
+            else:
+                self.n_lab = n_lab
+
+        if self.example_shape is None:
+            self.example_shape = self.train_d[0].shape
+        self.n_ch = self.example_shape[0]
+
+        self.rng = np.random.RandomState(np.uint32((time.time()*0.0001 - int(time.time()*0.0001))*4294967295))
+        self.pid = os.getpid()
+        log_cnn.info(self.__repr__())
+        self._perm = self.rng.permutation(self._training_count)
+
+    def _reseed(self):
+        """Reseeds the rng if the process ID has changed!"""
+        current_pid = os.getpid()
+        if current_pid!=self.pid:
+            self.pid = current_pid
+            self.rng.seed(np.uint32((time.time()*0.0001 - int(time.time()*0.0001))*4294967295+self.pid))
+            log_cnn.debug("Reseeding RNG in Process with PID: {}".format(self.pid))
+
+    def __repr__(self):
+        return "%i-class Data Set: #training examples: %i and #validing: %i" \
+        %(self.n_lab, self._training_count, len(self.valid_d))
+
+    def getbatch(self, batch_size, source='train'):
+        if source=='train':
+            if (self._pos+batch_size) < self._training_count:
+                self._pos += batch_size
+                slice = self._perm[self._pos-batch_size:self._pos]
+            else: # get new permutation
+                self._perm = self.rng.permutation(self._training_count)
+                self._pos = 0
+                slice = self._perm[:batch_size]
+
+            if isinstance(self.train_d, np.ndarray):
+                return (self.train_d[slice], self.train_l[slice])
+
+            elif isinstance(self.train_d, list):
+                data  = np.array([self.train_d[i] for i in slice])
+                label = np.array([self.train_l[i] for i in slice])
+                return (data, label)
+
+        elif source=='valid':
+            data  = self.valid_d[:batch_size]
+            label = self.valid_l[:batch_size]
+            return (data, label)
+
+        elif source=='test':
+            data  = self.test_d[:batch_size]
+            label = self.test_l[:batch_size]
+            return (data, label)
+
+    def createCVSplit(self, data, label, n_folds=3, use_fold=2, shuffle=False, random_state=None):
+        try:  # sklearn >=0.18 API
+            # (see http://scikit-learn.org/dev/whats_new.html#model-selection-enhancements-and-api-changes)
+            import sklearn.model_selection
+            kfold = sklearn.model_selection.KFold(
+                n_splits=n_folds, shuffle=shuffle, random_state=random_state
+            )
+            cv = kfold.split(data)
+        except:  # sklearn <0.18 API # TODO: We can remove this after a while.
+            import sklearn.cross_validation
+            cv = sklearn.cross_validation.KFold(
+                len(data), n_folds, shuffle=shuffle, random_state=random_state
+            )
+        for fold, (train_i, valid_i) in enumerate(cv):
+            if fold==use_fold:
+                self.valid_d = data[valid_i]
+                self.valid_l = label[valid_i]
+                self.train_d = data[train_i]
+                self.train_l = label[train_i]
+
+
 class MultiViewData(Data):
     def __init__(self, working_dir, gt_type, nb_cpus=20,
                  label_dict=None, view_kwargs=None, naive_norm=True,
@@ -439,12 +552,13 @@ class AxonViews(MultiViewData):
         self.example_shape = self.train_d[0].shape
 
     def getbatch(self, batch_size, source='train'):
-        if source == 'valid':
-            nb = len(self.valid_l)
-            ixs = np.arange(nb)
-            np.random.shuffle(ixs)
-            self.valid_d = self.valid_d[ixs]
-            self.valid_l = self.valid_l[ixs]
+        # TODO: keep in mind that super().get_batch does not shuffle for validation data -> btach_size for validation should be sufficiently big
+        # if source == 'valid':
+        #     nb = len(self.valid_l)
+        #     ixs = np.arange(nb)
+        #     np.random.shuffle(ixs)
+        #     self.valid_d = self.valid_d[ixs]
+        #     self.valid_l = self.valid_l[ixs]
         d, l = super(AxonViews, self).getbatch(batch_size, source)
         view_shuffle = np.arange(0, d.shape[2])
         np.random.shuffle(view_shuffle)
@@ -463,7 +577,7 @@ class CelltypeViews(MultiViewData):
     def __init__(self, inp_node, out_node, raw_only=False, nb_views=20, nb_views_renderinglocations=2,
                  reduce_context=0, binary_views=False, reduce_context_fact=1, n_classes=4,
                  class_weights=(2, 2, 1, 1), load_data=False, nb_cpus=1, ctgt_key="ctgt",
-                 train_fraction=0.95, random_seed=0):
+                 train_fraction=0.95, random_seed=0, view_key=None):
         """
         USES NAIVE_VIEW_NORMALIZATION_NEW, i.e. `/ 255. - 0.5`
 
@@ -481,8 +595,13 @@ class CelltypeViews(MultiViewData):
         reduce_context_fact :
         load_data :
         nb_cpus :
+        view_key : str
         """
-        self.view_key = "raw{}".format(nb_views_renderinglocations)
+        assert "areaxfs_v6" in global_params.config.working_dir
+        if view_key is None:
+            self.view_key = "raw{}".format(nb_views_renderinglocations)
+        else:
+            self.view_key = view_key
         self.nb_views = nb_views
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
@@ -711,12 +830,13 @@ class GliaViews(Data):
         super(GliaViews, self).__init__()
 
     def getbatch(self, batch_size, source='train'):
-        if source == 'valid':
-            nb = len(self.valid_l)
-            ixs = np.arange(nb)
-            np.random.shuffle(ixs)
-            self.valid_d = self.valid_d[ixs]
-            self.valid_l = self.valid_l[ixs]
+        # TODO: keep in mind that super().get_batch does not shuffle for validation data -> btach_size for validation should be sufficiently big
+        # if source == 'valid':
+        #     nb = len(self.valid_l)
+        #     ixs = np.arange(nb)
+        #     np.random.shuffle(ixs)
+        #     self.valid_d = self.valid_d[ixs]
+        #     self.valid_l = self.valid_l[ixs]
         d, l = super(GliaViews, self).getbatch(batch_size, source)
         view_shuffle = np.arange(0, d.shape[2])
         np.random.shuffle(view_shuffle)

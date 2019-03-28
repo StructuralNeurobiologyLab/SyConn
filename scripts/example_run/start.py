@@ -100,8 +100,10 @@ if __name__ == '__main__':
                               offset=offset, boundary=bd, fast_downsampling=True,
                               data_path=h5_dir + 'raw.h5', mags=[1, 2], hdf5_names=['raw'])
 
-    seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]  #
-    # seg_d = seg_d.astype(np.uint32)  # TODO: currently KnossosDataset class does not infer the correct type automatically, see knossos config and handling in detail
+    seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
+    # seg_d = seg_d.astype(np.uint32)
+    # TODO: currently KnossosDataset class does not infer the correct type automatically, see knossos config
+    #  and handling in detail
     kd.from_matrix_to_cubes(offset, mags=[1, 2], data=seg_d,
                             fast_downsampling=True, as_raw=False)
 
@@ -138,7 +140,15 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('Preparation')
 
-    # RUN SyConn - without glia removal
+    # Run SyConn
+    if 0:
+        log.info('Step 0.5/8 - Glia separation')
+        exec_multiview.run_glia_rendering()
+        exec_multiview.run_glia_prediction()
+        exec_multiview.run_glia_splitting()
+        time_stamps.append(time.time())
+        step_idents.append('Glia separation')
+
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.run_create_sds(chunk_size=(128, 128, 128), n_folders_fs=100)
     time_stamps.append(time.time())
@@ -163,8 +173,8 @@ if __name__ == '__main__':
     step_idents.append('Synapse detection')
 
     log.info('Step 5/8 - Axon prediction')
-    #exec_multiview.run_axoness_prediction(n_jobs=4, e3=True)
-    #exec_multiview.run_axoness_mapping()
+    exec_multiview.run_axoness_prediction(n_jobs=4, e3=True)
+    exec_multiview.run_axoness_mapping()
     time_stamps.append(time.time())
     step_idents.append('Axon prediction')
 
@@ -192,7 +202,7 @@ if __name__ == '__main__':
     for i in range(len(step_idents[1:])):
         step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
         step_dt_perc = int(dts[i] / dt_tot * 100)
-        step_str = "[{}/8] {}\t\t{}\t\t{}%\n".format(
+        step_str = "[{}/8] {}\t\t\t{}\t\t\t{}%\n".format(
             i, step_idents[i+1], step_dt, step_dt_perc)
         time_summary_str += step_str
     log.info(time_summary_str)
