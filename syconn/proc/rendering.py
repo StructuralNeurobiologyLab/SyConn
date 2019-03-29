@@ -1134,6 +1134,7 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
             results.append(pkl.load(f))
     return results
 
+
 def render_sso_coords_generic(ssv, working_dir, rendering_locations, verbose=False, render_indexviews=True):
     if render_indexviews == False:
         if len(rendering_locations) > 360:
