@@ -28,13 +28,15 @@ def map_ids(ref_ids, other_segs, dictionary_elements):
                 #for cube_co in other_segs:
                 key = other_segs[0][x][y][z]
                 if (key!=0):
-                    if key in res_map_dc['vc']:
-                        if cell_id in res_map_dc['vc'][key]:
-                            res_map_dc['vc'][key][cell_id] = res_map_dc['vc'][key][cell_id] + 1
+                    if(cell_id!=0):
+                        if key in res_map_dc['vc']:
+                            if cell_id in res_map_dc['vc'][key]:
+                                res_map_dc['vc'][key][cell_id] = res_map_dc['vc'][key][cell_id] + 1
+                            else:
+                                res_map_dc['vc'][key].update({cell_id: 2})
                         else:
-                            res_map_dc['vc'][key].update({cell_id: 0})
-                    else:
-                        res_map_dc['vc'].update({key: {}})
+                            res_map_dc['vc'].update({key: {cell_id: 1}})
+
                     #print(other_ids_list[cube_co])
     print(res_map_dc)                #print(cube_co)
     return res_map_dc
