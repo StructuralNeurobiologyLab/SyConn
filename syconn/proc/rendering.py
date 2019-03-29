@@ -1135,19 +1135,36 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
     return results
 
 
-def render_sso_coords_generic(ssv, working_dir, rendering_locations, verbose=False, render_indexviews=True):
-    if render_indexviews == False:
+def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None,
+                              verbose=False, render_indexviews=True):
+    """
+
+    Args:
+        ssv:
+        working_dir:
+        rendering_locations:
+        n_jobs:
+        verbose:
+        render_indexviews:
+
+    Returns:
+
+    """
+    if n_jobs is None:
+        n_jobs = global_params.NCORES_PER_NODE // 10
+
+    if render_indexviews is False:
         if len(rendering_locations) > 360:
             views = render_sso_coords_multiprocessing(ssv, working_dir,
                 rendering_locations, render_indexviews=render_indexview,
-                        n_jobs=20, verbose=verbose)
+                        n_jobs=n_jobs, verbose=verbose)
         else:
             views = rendrender_sso_coords(ssv, rendering_locations, verbose=verbose)
     else:
         if len(rendering_locations) > 140:
             views = render_sso_coords_multiprocessing(ssv, working_dir,
                 rendering_locations, render_indexviews=render_indexview,
-                        n_jobs=20, verbose=verbose)
+                        n_jobs=n_jobs, verbose=verbose)
         else:
             views = render_sso_coords_index_views(ssv, rendering_locations, verbose=verbose)
     return views
