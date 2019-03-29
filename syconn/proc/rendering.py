@@ -1088,14 +1088,15 @@ def render_sso_ortho_views(sso):
 
 
 def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
-                                      n_jobs, verbose=False, render_indexviews=True):
+                                      n_jobs, verbose=False,
+                                      render_indexviews=True):
     """
 
     Parameters
     ----------
     ssv : SuperSegmentationObject
     wd : string: working directory for accessing data
-    rendeirng_locations: array of locations to be rendered
+    rendering_locations: array of locations to be rendered
     n_jobs: int: number of parallel jobs running on same node of cluster
     verbose: bool: flag to show th progress of rendering.
 
@@ -1133,3 +1134,19 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
             results.append(pkl.load(f))
     return results
 
+def render_sso_coords_generic(ssv, working_dir, rendering_locations, verbose=False, render_indexviews=True):
+    if render_indexviews == False:
+        if len(rendering_locations) > 360:
+            views = render_sso_coords_multiprocessing(ssv, working_dir,
+                rendering_locations, render_indexviews=render_indexview,
+                        n_jobs=20, verbose=verbose)
+        else:
+            views = rendrender_sso_coords(ssv, rendering_locations, verbose=verbose)
+    else:
+        if len(rendering_locations) > 140:
+            views = render_sso_coords_multiprocessing(ssv, working_dir,
+                rendering_locations, render_indexviews=render_indexview,
+                        n_jobs=20, verbose=verbose)
+        else:
+            views = render_sso_coords_index_views(ssv, rendering_locations, verbose=verbose)
+    return views

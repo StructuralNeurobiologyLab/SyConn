@@ -548,9 +548,6 @@ def fallback_exec(cmd_exec):
     ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
     out, err = ps.communicate()
-    # if log_mp.level == 10:  # 10 == 'DEUBUG'
-    #     log_mp.debug(out.decode())
-    #     log_mp.debug(err.decode())
     if log_mp.level == 10 and ('error' in out.decode().lower() or
                                'warning' in out.decode().lower()):
         log_mp.error(out.decode())
