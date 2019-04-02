@@ -44,6 +44,10 @@ if __name__ == '__main__':
     h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
     kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
 
+    # copy models to working directory
+    if os.path.isdir(curr_dir + '/models/') and not os.path.isdir(example_wd + '/models/'):
+        shutil.copytree(curr_dir + '/models', example_wd + '/models/')
+
     if not os.path.isfile(kzip_p) or not os.path.isdir(h5_dir):
         raise FileNotFoundError('Example data could not be found at "{}".'.format(curr_dir))
     if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
@@ -55,6 +59,8 @@ if __name__ == '__main__':
     offset = np.array([0, 0, 0])
     bd = bb[1] - bb[0]
     scale = np.array([10, 10, 20])
+    chunk_size = (256, 256, 256)
+    n_folders_fs = 1000  # number of folders in should probably be different for different segmentations
     experiment_name = 'j0126_example'
 
     # PREPARE CONFIG
@@ -140,8 +146,8 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('Preparation')
 
-    # Run SyConn
-    if 0:  # TODO: set init_rag_path in config
+    # Run SyConn  # TODO: set n_max_co_processes to None by default (-> submit all jobs at once when using SLURM)
+    if 0:
         log.info('Step 0.5/8 - Glia separation')
         exec_multiview.run_glia_rendering()
         exec_multiview.run_glia_prediction()
@@ -150,7 +156,7 @@ if __name__ == '__main__':
         step_idents.append('Glia separation')
 
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    exec_init.run_create_sds(chunk_size=(128, 128, 128), n_folders_fs=100)
+    exec_init.run_create_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs)
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 
@@ -168,7 +174,7 @@ if __name__ == '__main__':
     # require only medium MEM and CPU resources and mainly GPU
     # TODO: adapt memory and CPU allocation of those GPU workers
     log.info('Step 4/8 - Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=(128, 128, 128), n_folders_fs=100)
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
 

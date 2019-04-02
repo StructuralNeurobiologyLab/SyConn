@@ -24,9 +24,11 @@ from .segmentation_helper import load_skeleton, find_missing_sv_views,\
     find_missing_sv_attributes, find_missing_sv_skeletons
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 import time
+from ..handler.multiviews import generate_rendering_locs
 from ..reps import log_reps
 from .. import global_params
 from ..proc.meshes import write_mesh2kzip
+from ..proc.rendering import render_sso_coords
 try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
@@ -94,6 +96,23 @@ def nodes_in_pathlength(anno, max_path_len):
 
 
 def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
+    """
+    Celltype prediction based on local views and synapse type ratio feature.
+    Uses on file system cached views (also used for axon and spine prediction).
+    See `celltype_of_sso_nocache` for 'on-the-fly' prediction, which renders
+    views from scratch given their window size etc.
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    model : nn.Module
+    nb_views : int
+    overwrite : bool
+
+    Returns
+    -------
+
+    """
     sso.load_attr_dict()
     if not overwrite and "celltype_cnn_e3" in sso.attr_dict:
         return
@@ -1653,14 +1672,143 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
     return sso.mesh[0], sso.mesh[1], sso.mesh[2], col
 
 
+def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
+                            comp_window, pred_key_appendix="", verbose=False,
+                            overwrite=True):
+    """
+    Renders raw views at rendering locations determined by `comp_window`
+    and according to given view properties without storing them on the file system. Views will
+    be predicted with the given `model`. By default, resulting predictions and probabilities are
+     stored as `celltype_cnn_e3` and `celltype_cnn_e3_probas`.
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    model : nn.Module
+    pred_key_appendix : str
+    ws : Tuple[int]
+        Window size in pixels [y, x]
+    nb_views_render : int
+        Number of views rendered at each rendering location.
+    nb_views_model : int
+        bootstrap sample size of view locations for model prediction
+    comp_window : float
+        Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+    verbose : bool
+        Adds progress bars for view generation.
+    overwrite : bool
+
+    Returns
+    -------
+
+    """
+    sso.load_attr_dict()
+    pred_key = "celltype_cnn_e3" + pred_key_appendix  # TODO: add appendix functionality also to `predict_celltype_sso`
+    if not overwrite and pred_key in sso.attr_dict:
+        return
+
+    view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views_render,
+                       verbose=verbose, add_cellobjects=True,
+                       return_rot_mat=False)
+    rendering_locs = generate_rendering_locs(sso, comp_window)
+
+    # overwrite default rendering locations (used later on for the view generation)
+    sso._sample_locations = rendering_locs
+    # this cache is only in-memory, and not file system cache
+    assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
+                             " run 'celltype_of_sso_nocache'.".format(sso)
+
+    tmp_view_key = 'tmp_views' + pred_key_appendix # TODO: add hash of view properties, this would also a good mechanism to re-use the same views
+    if tmp_view_key not in sso.view_dict or overwrite:
+        views = render_sso_coords(sso, rendering_locs, **view_kwargs)  # shape: N, 4, nb_views, y, x
+        sso.view_dict[tmp_view_key] = views  # required for `sso_views_to_modelinput`
+
+    from ..handler.prediction import naive_view_normalization_new
+    inp_d = sso_views_to_modelinput(sso, nb_views_model, view_key=tmp_view_key)
+    synsign_ratio = np.array([sso.syn_sign_ratio()] * len(inp_d))[..., None]
+    inp_d = naive_view_normalization_new(inp_d)
+    res = model.predict_proba((inp_d, synsign_ratio))
+    clf = np.argmax(res, axis=1)
+    ls, cnts = np.unique(clf, return_counts=True)
+    pred = ls[np.argmax(cnts)]
+    # TODO: check if this is in-line with how `pred_key_appendix` is handled in `super_segmentation_object.py`
+    sso.save_attributes([pred_key], [pred])
+    sso.save_attributes([pred_key + '_probas'], [res])
+
+
+def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
+                                  comp_window, pred_key_appendix="", verbose=False,
+                                  overwrite=True):
+    """
+    Renders raw views at rendering locations determined by `comp_window`
+    and according to given view properties without storing them on the file system. Views will
+    be predicted with the given `model`. See `predict_views_embedding` in `super_segmentation_object`
+    for an alternative operating on file-system cachec views.
+    By default, resulting predictions and probabilities are stored as `latent_morph`
+    and `latent_morph_ct`. Note that `latent_morph` is infered locally via `
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    model : nn.Module
+    pred_key_appendix : str
+    ws : Tuple[int]
+        Window size in pixels [y, x]
+    nb_views_render : int
+        Number of views rendered at each rendering location.
+    nb_views_model : int
+        bootstrap sample size of view locations for model prediction
+    comp_window : float
+        Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+    verbose : bool
+        Adds progress bars for view generation.
+    overwrite : bool
+
+    Returns
+    -------
+
+    """
+    pred_key = "latent_morph_ct" + pred_key_appendix
+    sso.load_attr_dict()
+    if not overwrite and pred_key in sso.attr_dict:
+        return
+    view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views_render,
+                       verbose=verbose, add_cellobjects=True,
+                       return_rot_mat=False)
+    rendering_locs = generate_rendering_locs(sso, comp_window)
+
+    # overwrite default rendering locations (used later on for the view generation)
+    sso._sample_locations = rendering_locs
+    # this cache is only in-memory, and not file system cache
+    assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
+                             " run 'view_embedding_of_sso_nocache'.".format(sso)
+
+    tmp_view_key = 'tmp_views' + pred_key_appendix # TODO: add hash of view properties, this would also a good mechanism to re-use the same views
+    if tmp_view_key not in sso.view_dict or overwrite:
+        views = render_sso_coords(sso, rendering_locs, **view_kwargs)  # shape: N, 4, nb_views, y, x
+        sso.view_dict[tmp_view_key] = views  # required for `sso_views_to_modelinput`
+    else:
+        views = sso.view_dict[tmp_view_key]
+    from ..handler.prediction import naive_view_normalization_new
+
+    views = naive_view_normalization_new(views)
+    # The inference with TNets can be optimzed, via splititng the views into three equally sized parts.
+    inp = (views[:, :, 0], np.zeros_like(views[:, :, 0]), np.zeros_like(views[:, :, 0]))
+    # return dist1, dist2, inp1, inp2, inp3 latent
+    _, _, latent, _, _ = model.predict_proba(inp)  # only use first view for now
+        # TODO: check if this is in-line with how `pred_key_appendix` is handled in `super_segmentation_object.py`
+    sso.save_attributes([pred_key], [latent])
+
+
 def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
                           dest_path=None, verbose=False):
     # TODO: check if save=False is actually happening everywhere, it seems raw views are being saved
     """
     Renders raw and index views at rendering locations determined by `comp_window`
-    and according to given view properties. Views will be predicted with the given
-    `model` and maps prediction results onto mesh. Vertex labels are stored on file
-    system and can be accessed via `sso.label_dict('vertex')[semseg_key]`.
+    and according to given view properties without storing them on the file system. Views will
+    be predicted with the given `model` and maps prediction results onto mesh.
+    Vertex labels are stored on file system and can be accessed via
+    `sso.label_dict('vertex')[semseg_key]`.
 
     Parameters
     ----------
@@ -1687,24 +1835,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
                        verbose=verbose, save=False)
     raw_view_key = 'raw{}_{}_{}'.format(ws[0], ws[1], nb_views)
     index_view_key = 'index{}_{}_{}'.format(ws[0], ws[1], nb_views)
-    # Generate new rendering locations based on SSO vertices
-    verts = sso.mesh[1].reshape(-1, 3)
-    # downsample vertices and get ~3 locations per comp_window
-    ds_factor = comp_window / 3
-
-    # get unique array of downsampled vertex locations (scaled back to nm)
-    verts_ixs = np.arange(len(verts))
-    np.random.seed(0)
-    np.random.shuffle(verts_ixs)
-    ds_locs_encountered = {}
-    rendering_locs = []
-    for kk, c in enumerate(verts[verts_ixs] / ds_factor):
-        ds_loc = tuple(c.astype(np.int))
-        if ds_loc in ds_locs_encountered:  # always gets first coordinate which is in downsampled voxel, the others are skipped
-            continue
-        rendering_locs.append(c)
-        ds_locs_encountered[ds_loc] = None
-    rendering_locs = np.array(rendering_locs)
+    rendering_locs = generate_rendering_locs(sso, comp_window)
 
     # overwrite default rendering locations (used later on for the view generation)
     sso._sample_locations = rendering_locs

@@ -68,6 +68,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 params_orig_id=None, python_path=None, disable_mem_flag=False):
     # TODO: change `queue` and `pe` to be set globally in global_params. All
     #  wrappers around QSUB_script should then only have a flage like 'use_batchjob'
+    # TODO: Switch to JobArrays!
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
@@ -273,24 +274,18 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 priority, additional_flags, this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         elif BATCH_PROC_SYSTEM == 'SLURM':
-            if pe is not None:
-                queue_option = "--ntasks-per-node %d" % n_cores
-            elif queue is not None:
-                queue_option = "--partition=%s" % queue
-            else:
-                raise Exception("No queue or parallel environment defined")
+            additional_flags = "-n%d" % n_cores
+            if n_cores > 1:
+                # otherwise multiprocessing will run on one CPU only if cpu binding is not modified within each process
+                additional_flags += "--cpu_bind=none"
             if priority is not None and priority != 0:
                 log_batchjob.warning('Priorities are not supported with SLURM.')
             # added '--quiet' flag to prevent submission messages, errors will still be printed
             # (https://slurm.schedmd.com/sbatch.html), DOES NOT WORK
             cmd_exec = "sbatch {0} --quiet --output={1} --error={2}" \
-                       " --job-name={3} {4} {5}".format(
-                queue_option,
-                job_log_path,
-                job_err_path,
-                job_name,
-                additional_flags,
-                this_sh_path)
+                       " --job-name={3} {4}".format(
+                additional_flags, job_log_path, job_err_path,
+                job_name, this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         else:
             raise NotImplementedError

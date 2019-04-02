@@ -69,7 +69,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     ces.find_contact_sites(cd, kd_seg_path)
     ces.extract_agg_contact_sites(cd, global_params.config.working_dir,
                                   n_folders_fs=n_folders_fs, suffix="")
-    log.info('CS extraction finished.')
+    log.info('Contact site extraction finished.')
 
     # create overlap dataset between SJ and CS: SegmentationDataset of type 'syn'
     # TODO: write new method which iterates over sj prob. map (KD), CS
@@ -90,7 +90,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     dataset_analysis(sd, compute_meshprops=False)
     log.info('SegmentationDataset of type "syn" was generated.')
 
-    # This creates an SD of type 'syn_ssv', ~15 min
+    # This creates an SD of type 'syn_ssv', ~15 min, # TODO: change stride into n_jobs or similar
     cps.combine_and_split_syn(global_params.config.working_dir, resume_job=False,
                               stride=250, cs_gap_nm=global_params.cs_gap_nm,
                               n_folders_fs=n_folders_fs)

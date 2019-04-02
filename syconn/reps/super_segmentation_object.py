@@ -2293,19 +2293,19 @@ class SuperSegmentationObject(object):
                        "%0.4fs/SV" % (len(self.svs), end - start,
                                       float(end - start) / len(self.svs)))
 
-    def predict_views_embedding(self, model, pred_key_appendix=""):
+    def predict_views_embedding(self, model, pred_key_appendix="",
+                                view_key=None):
         """
-        This will save the latent vector of every skeleton node location as
-        self.sekeleton['latent_morph'] based on the nearest rendering location.
+        This will save a latent vector which captures a local morphology fingerprint for every
+        skeleton node location as self.sekeleton['latent_morph'] based on the nearest rendering location.
 
         Parameters
         ----------
         model :
         pred_key_appendix :
-
-        Returns
-        -------
-
+        view_key : str
+            View identifier, e.g. if views have been pre-rendered and are stored in
+            `self.view_dict`
         """
         from ..handler.prediction import naive_view_normalization_new
         pred_key = "latent_morph"
@@ -2314,7 +2314,7 @@ class SuperSegmentationObject(object):
             log_reps.warning('"predict_views_embedding" called but this SSV '
                              'has version "tmp", results will'
                              ' not be saved to disk.')
-        views = self.load_views()  # [N, 4, 2, y, x]
+        views = self.load_views(view_key=view_key)  # [N, 4, 2, y, x]
         # TODO: add normalization to model - prevent potentially different normalization!
         views = naive_view_normalization_new(views)
         # The inference with TNets can be optimzed, via splititng the views into three equally sized parts.
@@ -2386,8 +2386,29 @@ class SuperSegmentationObject(object):
         if dest_path is not None:
             self.save_skeleton_to_kzip(dest_path=dest_path)
 
-    def predict_celltype_cnn(self, model, **kwargs):
-        ssh.predict_sso_celltype(self, model, **kwargs)
+    def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None):
+        """
+        Infer celltype classification via `model` (stored as `celltype_cnn_e3` and `celltype_cnn_e3_probas`)
+        and an optional cell embedding via `model_tnet` (stored as `latent_morph_ct`).
+
+        Parameters
+        ----------
+        model : nn.Module
+        pred_key_appendix : str
+        model_tnet : Optional[nn.Module]
+        view_props : Optional[dict]
+            Dictionary which contains view properties. If None, default defined in
+            `global_params.py` will be used.
+
+        """
+        # ssh.predict_sso_celltype(self, model, **kwargs)
+        if view_props is None:
+            view_props = global_params.view_properties_large
+        ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
+                                    overwrite=False, **view_props)
+        if model_tnet is not None:
+            ssh.view_embedding_of_sso_nocache(self, model_tnet, pred_key_appendix=pred_key_appendix,
+                                              overwrite=True, **view_props)
 
     def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
                                obj_to_render=("sv", )):
@@ -2547,13 +2568,17 @@ def celltype_predictor(args):
     # randomly initialize gpu
     # m = get_celltype_model(init_gpu=0)
     m = get_celltype_model_e3()
+    m_tnet = get_celltype_model_e3()
     pbar = tqdm.tqdm(total=len(ssv_ids))
     missing_ssvs = []
     for ix in ssv_ids:
         ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
         ssv.nb_cpus = 1
         try:
-            ssh.predict_sso_celltype(ssv, m, overwrite=True)
+            # ssh.predict_sso_celltype(ssv, m, overwrite=True)  # local views
+            view_props = global_params.view_properties_large
+            ssh.celltype_of_sso_nocache(ssv, m, overwrite=True, **view_props)
+            ssh.view_embedding_of_sso_nocache(ssv, m_tnet, overwrite=True, **view_props)
         except Exception as e:
             missing_ssvs.append((ssv.id, e))
             log_reps.error(repr(e))

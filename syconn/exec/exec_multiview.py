@@ -229,8 +229,8 @@ def run_neuron_rendering():
     # render normal size SSVs
     size_mask = nb_svs_per_ssv <= global_params.RENDERING_MAX_NB_SV
     multi_params = ssd.ssv_ids[size_mask]
-
-    # TODO: Currently slow if SSV contains very large SV(s)
+    # TODO: move from osmesa to egl, egl rendering worker (10 cpus, 1 gpu) then should utilize more threads for bigger
+    #  SSVs, and run more SSVs in parallel if they are small
     # sort ssv ids according to their number of SVs (descending)
     ordering = np.argsort(nb_svs_per_ssv[size_mask])
     multi_params = multi_params[ordering[::-1]]

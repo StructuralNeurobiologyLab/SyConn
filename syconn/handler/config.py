@@ -171,6 +171,10 @@ class DynConfig(Config):
         return self.model_dir + '/tCMN/'
 
     @property
+    def mpath_tnet_large(self):  # large FoV
+        return self.model_dir + '/tCMN_large/'
+
+    @property
     def mpath_spiness(self):
         return self.model_dir + '/spiness/'
 
@@ -185,10 +189,13 @@ class DynConfig(Config):
     def mpath_celltype(self):
         return self.model_dir + '/celltype/celltype.mdl'
 
-
     @property
     def mpath_celltype_e3(self):
         return self.model_dir + '/celltype_e3/'
+
+    @property
+    def mpath_celltype_large_e3(self):  # large FoV
+        return self.model_dir + '/celltype_large_e3/'
 
     @property
     def mpath_axoness(self):
@@ -223,7 +230,7 @@ class DynConfig(Config):
         return self.entries['Dataset']['syntype_avail']
 
 
-def get_default_conf_str(example_wd, py36path=""):
+def get_default_conf_str(example_wd, py36path="", syntype_avail=True):
     """
     Default SyConn config and type specification, placed in the working directory.
 
@@ -255,7 +262,7 @@ py36path = {}
 
 [Dataset]
 scaling = 10., 10., 20.
-syntype_avail = True
+syntype_avail = {}
 
 [LowerMappingRatios]
 mi = 0.5
@@ -288,7 +295,7 @@ allow_skel_gen = True
                example_wd + 'knossosdatasets/sj/',
                example_wd + 'knossosdatasets/vc/',
                example_wd + 'knossosdatasets/mi/', '',
-               py36path)
+               py36path, str(syntype_avail))
 
     configspec_str = """
 [Versions]
@@ -299,6 +306,7 @@ __many__ = string
 
 [Dataset]
 scaling = float_list(min=3, max=3)
+syntype_avail = boolean
 
 [LowerMappingRatios]
 __many__ = float

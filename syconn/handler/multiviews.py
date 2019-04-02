@@ -345,3 +345,38 @@ def rgb2id_array(rgb_arr):
     background_ix = np.max(id_arr) + 1  # convention: The highest index value in index view will correspond to the background
     id_arr[mask_arr] = background_ix
     return id_arr.reshape(rgb_arr.shape[:-1])
+
+
+def generate_rendering_locs(sso, comp_window):
+    """
+    TODO: generalize for all rendering locations (e.g. also use in call of SSO.sample_locations)
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    comp_window : float
+
+    Returns
+    -------
+    np.ndarray
+        rendering locations
+    """
+    # Generate new rendering locations based on SSO vertices
+    verts = sso.mesh[1].reshape(-1, 3)
+    # downsample vertices and get ~3 locations per comp_window
+    ds_factor = comp_window / 3
+
+    # get unique array of downsampled vertex locations (scaled back to nm)
+    verts_ixs = np.arange(len(verts))
+    np.random.seed(0)
+    np.random.shuffle(verts_ixs)
+    ds_locs_encountered = {}
+    rendering_locs = []
+    for kk, c in enumerate(verts[verts_ixs]):
+        ds_loc = tuple((c / ds_factor).astype(np.int))
+        if ds_loc in ds_locs_encountered:  # always gets first coordinate which is in downsampled voxel, the others are skipped
+            continue
+        rendering_locs.append(c)
+        ds_locs_encountered[ds_loc] = None
+    rendering_locs = np.array(rendering_locs)
+    return rendering_locs

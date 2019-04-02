@@ -184,7 +184,71 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
     return data
 
 
-# setup ######################################################################
+# # setup ######################################################################
+# TODO: init error if two jobs run on the same node in parallel (also when they are encapsulated via different SLURM logins)
+#  -> solution requires additional installations: https://github.com/deepmind/dm_control/blob/master/dm_control/_render/pyopengl/egl_renderer.py#L50
+# def init_ctx(ws):
+#     # ctx = OSMesaCreateContext(OSMESA_RGBA, None)
+#     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
+#         from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
+#             EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, eglGetPlatformDisplayEXT,\
+#             EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
+#             EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
+#             EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, eglQueryDevicesEXT, \
+#             EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, EGL_PLATFORM_DEVICE_EXT,\
+#             EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
+#             eglGetDisplay, eglInitialize, eglChooseConfig, EGL_TRUE, EGL_FALSE, \
+#             eglBindAPI, eglCreatePbufferSurface, eglGetError, EGL_SUCCESS, \
+#             eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
+#
+#         major, minor = ctypes.c_long(), ctypes.c_long()
+#         num_configs = ctypes.c_long()
+#         configs = (EGLConfig * 1)()
+#
+#         # see bug description and solution at
+#         # https://github.com/deepmind/dm_control/blob/master/dm_control/_render/pyopengl/egl_renderer.py#L50
+#         initialized = False
+#         devices = eglQueryDevicesEXT()
+#         for device in devices:
+#             dsp = eglGetPlatformDisplayEXT(
+#                 EGL_PLATFORM_DEVICE_EXT, device, None)
+#             initialized = eglInitialize(dsp, major, minor)
+#             egl_error = eglGetError()
+#             if egl_error == EGL_SUCCESS and initialized == EGL_TRUE:
+#                 break
+#
+#         if initialized != EGL_TRUE:
+#             raise RuntimeError('Failed to initialize EGL.')
+#         config_attr = arrays.GLintArray.asArray(
+#             [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+#              EGL_BLUE_SIZE, 8, EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8,
+#              EGL_DEPTH_SIZE, 8, EGL_COLOR_BUFFER_TYPE,
+#              EGL_RGB_BUFFER,
+#              EGL_RENDERABLE_TYPE,
+#              EGL_OPENGL_BIT,  EGL_NONE])
+#         eglChooseConfig(dsp, config_attr, configs, 1, num_configs)
+#
+#         # Bind EGL to the OpenGL API
+#         eglBindAPI(EGL_OPENGL_API)
+#
+#         # Create an EGL context
+#         ctx = eglCreateContext(dsp, configs[0], EGL_NO_CONTEXT, None)
+#
+#         # Create an EGL pbuffer
+#         buf = eglCreatePbufferSurface(dsp, configs[0], [EGL_WIDTH, ws[0], EGL_HEIGHT, ws[1], EGL_NONE])
+#         # Make the EGL context current
+#         assert (eglMakeCurrent(dsp, buf, buf, ctx))
+#         ctx = [dsp, ctx, buf]
+#     elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
+#         ctx = OSMesaCreateContextExt(OSMESA_RGBA, 32, 0, 0, None)
+#         buf = arrays.GLubyteArray.zeros((ws[0], ws[1], 4)) + 1
+#         assert (OSMesaMakeCurrent(ctx, buf, GL_UNSIGNED_BYTE, ws[0], ws[1]))
+#         assert (OSMesaGetCurrentContext())
+#         OSMesaPixelStore(OSMESA_Y_UP, 0)
+#     else:
+#         raise NotImplementedError('PYOpenGL environment has to be "egl" or "osmesa".')
+#     return ctx
+
 def init_ctx(ws):
     # ctx = OSMesaCreateContext(OSMESA_RGBA, None)
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
@@ -197,8 +261,7 @@ def init_ctx(ws):
             EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
             eglGetDisplay, eglInitialize, eglChooseConfig, \
             eglBindAPI, eglCreatePbufferSurface, \
-            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, \
-            EGL_TRUE, EGL_FALSE,  EGL_LOSE_CONTEXT_ON_RESET, EGL_NO_RESET_NOTIFICATION
+            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
 
         major, minor = ctypes.c_long(), ctypes.c_long()
         num_configs = ctypes.c_long()
@@ -825,9 +888,12 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
          of [comp_window, comp_window / 2, comp_window]. Default: 8 um
     rot_mat : np.array
     return_rot_mat : bool
+
     Returns
     -------
-    np.array
+    np.ndarray
+        Resulting views rendered at each location.
+        Output shape: len(coords), 4 [cell outline + number of cell objects], nb_views, y, x
     """
     if comp_window is None:
         comp_window = 8e3
@@ -884,12 +950,12 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
             sj_views = np.ones_like(raw_views) * 255
         if cellobjects_only:
             res = np.concatenate([mi_views[:, None], vc_views[:, None],
-                                   sj_views[:, None]], axis=1)
+                                  sj_views[:, None]], axis=1)
             if return_rot_mat:
                 return res, rot_mat
             return res
         res = np.concatenate([raw_views[:, None], mi_views[:, None],
-                               vc_views[:, None], sj_views[:, None]], axis=1)
+                              vc_views[:, None], sj_views[:, None]], axis=1)
         if return_rot_mat:
             return res, rot_mat
         return res

@@ -40,10 +40,10 @@ pip install -e .
 
 
 ## Example run
-Place the example data (provided upon request) in `SyConn/scripts/example_run/`, add the model folder to the working directory `~/SyConn/example_cube/`,
-cd to `SyConn/scripts/example_run/` and then run
+Place the example and model data (provided upon request) in `SyConn/scripts/example_run/`,
+cd to `SyConn/scripts/example_run/` and run
 ```
-python start.py --working_dir=~/SyConn/example_cube/
+python start.py
 ```
 
 

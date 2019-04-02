@@ -144,8 +144,8 @@ if elektronn3_avail:
         def __len__(self):
             """Determines epoch size(s)"""
             if not self.train:
-                return 200
-            return 2000
+                return 2000
+            return 20000
 
     
     class GliaViewsE3(Dataset):

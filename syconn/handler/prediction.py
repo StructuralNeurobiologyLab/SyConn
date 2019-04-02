@@ -785,6 +785,23 @@ def get_celltype_model_e3():
     return m
 
 
+def get_celltype_model_large_e3():
+    """Those networks are typically trained with `naive_view_normalization_new`
+     Unlike the other e3 InferenceModel instances, here the view normalization
+     is applied in the downstream inference method (`predict_sso_celltype`)
+      because the celltype model also gets scalar values as input which should
+      not be normalized."""
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    path = global_params.config.mpath_celltype_large_e3
+    m = InferenceModel(path)
+    return m
+
+
 def get_semseg_spiness_model():
     try:
         from elektronn3.models.base import InferenceModel
@@ -820,6 +837,19 @@ def get_tripletnet_model_e3():
             "elektronn3 could not be imported ({}). Please see 'https://github."
             "com/ELEKTRONN/elektronn3' for more information.".format(e))
     m_path = global_params.config.mpath_tnet
+    m = InferenceModel(m_path)
+    return m
+
+
+def get_tripletnet_model_large_e3():
+    """Those networks are typically trained with `naive_view_normalization_new` """
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    m_path = global_params.config.mpath_tnet_large
     m = InferenceModel(m_path)
     return m
 

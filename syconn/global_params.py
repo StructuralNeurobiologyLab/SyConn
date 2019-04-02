@@ -34,14 +34,17 @@ config = DynConfig()
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
 batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + \
                          "/batchjob_scripts/"
-# TODO refactor syconn and get rid of all qsub_pe and qsub_queue kwargs and only use batch_job_enabled(), the default in QSUB_script are now BATCH_PE and BATCH_QUEUE
+# TODO refactor syconn and get rid of all qsub_pe and qsub_queue kwargs and only use batch_job_enabled(),
+#  the default in QSUB_script should then be BATCH_PE and BATCH_QUEUE
 BATCH_PE = 'default'
 BATCH_QUEUE = 'all.q'
 # TODO: Use computing settings everywhere
 MEM_PER_NODE = 249.5e3  # in MB
 NCORES_PER_NODE = 20
-NCORE_TOTAL = 340
-NGPU_TOTAL = 34
+NGPUS_PER_NODE = 2
+NNODES_TOTAL = 17
+NCORE_TOTAL = NNODES_TOTAL * NCORES_PER_NODE
+NGPU_TOTAL = NNODES_TOTAL * NGPUS_PER_NODE
 
 backend = "FS"  # File system
 PYOPENGL_PLATFORM = 'egl'  # Rendering
@@ -114,6 +117,8 @@ gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80
 
 
 # --------- CELLTYPE PARAMETERS
+view_properties_large = dict(verbose=False, ws=(512, 512), nb_views_render=4,
+                             comp_window=40960, nb_views_model=4)
 
 # --------- MORPHOLOGY EMBEDDING
 ndim_embedding = 10

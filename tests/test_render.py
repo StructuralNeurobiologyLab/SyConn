@@ -14,7 +14,7 @@ if __name__=='__main__':
     exloc = np.array([5602, 4173, 4474])*ssv.scaling
     exlocs = np.concatenate(ssv.sample_locations())
 
-    views = render_sso_coords(ssv, exlocs[::10], verbose=True )
+    views = render_sso_coords(ssv, exlocs[::10], verbose=True)
     now1 = time.time()
     print(now1)
     print(now1-now)

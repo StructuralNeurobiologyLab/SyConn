@@ -73,3 +73,18 @@ if __name__ == "__main__":
         pbar.update()
     write_obj2pkl(new_ssd.path + "/{}_labels.pkl".format(gt_version),
                  {ssv_ids[kk]: ssv_labels[kk] for kk in range(len(ssv_ids))})
+
+    # test prediction, copy trained models, see paths to 'models' folder defined in global_params.config
+    from syconn.handler.prediction import get_celltype_model_large_e3, get_tripletnet_model_large_e3
+    from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
+    from syconn import global_params
+    import tqdm
+    ssd = SuperSegmentationDataset(working_dir=global_params.wd, version="ctgt_v2")
+    pbar = tqdm.tqdm(total=len(ssd.ssv_ids))
+    m = get_celltype_model_large_e3()
+    m_tnet = get_tripletnet_model_large_e3()
+    for ssv in ssd.ssvs:
+        ssv._view_caching = True
+        ssv.predict_celltype_cnn(model=m, pred_key_appendix='test_pred_v1',
+                                 model_tnet=m_tnet)
+        pbar.update()
