@@ -2574,11 +2574,14 @@ def celltype_predictor(args):
     for ix in ssv_ids:
         ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
         ssv.nb_cpus = 1
+        ssv._view_caching = True
         try:
-            # ssh.predict_sso_celltype(ssv, m, overwrite=True)  # local views
-            view_props = global_params.view_properties_large
-            ssh.celltype_of_sso_nocache(ssv, m, overwrite=True, **view_props)
-            ssh.view_embedding_of_sso_nocache(ssv, m_tnet, overwrite=True, **view_props)
+            if global_params.config.use_large_fov_views_ct:
+                view_props = global_params.view_properties_large
+                ssh.celltype_of_sso_nocache(ssv, m, overwrite=True, **view_props)
+                ssh.view_embedding_of_sso_nocache(ssv, m_tnet, overwrite=True, **view_props)
+            else:
+                ssh.predict_sso_celltype(ssv, m, overwrite=True)  # local views
         except Exception as e:
             missing_ssvs.append((ssv.id, e))
             log_reps.error(repr(e))

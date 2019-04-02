@@ -76,7 +76,7 @@ if __name__ == '__main__':
             shell=True).decode().replace('\n', '')
     else:
         py36path = ""
-    config_str, configspec_str = get_default_conf_str(example_wd, py36path)
+    config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale, py36path=py36path)
     with open(example_wd + 'config.ini', 'w') as f:
         f.write(config_str)
     with open(example_wd + 'configspec.ini', 'w') as f:

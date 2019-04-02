@@ -305,7 +305,7 @@ class SegmentationDataset(object):
 
 class SegmentationObject(object):
     def __init__(self, obj_id, obj_type="sv", version=None, working_dir=None,
-                 rep_coord=None, size=None, scaling=(10, 10, 20), create=False,
+                 rep_coord=None, size=None, scaling=None, create=False,
                  voxel_caching=True, mesh_caching=False, view_caching=False,
                  config=None, n_folders_fs=None, enable_locking=True,
                  skeleton_caching=True):
@@ -334,6 +334,9 @@ class SegmentationObject(object):
         enable_locking : bool
         skeleton_caching : bool
         """
+        if scaling is None:
+            scaling = global_params.config.entries["Dataset"]["scaling"]
+
         self._id = int(obj_id)
         self._type = obj_type
         self._rep_coord = rep_coord

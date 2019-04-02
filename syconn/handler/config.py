@@ -225,12 +225,24 @@ class DynConfig(Config):
     def allow_skel_gen(self):
         return self.entries['Skeleton']['allow_skel_gen']
 
+    # New config attributes, enable backwards compat. in case these entries do not exist
     @property
     def syntype_available(self):
-        return self.entries['Dataset']['syntype_avail']
+        try:
+            return self.entries['Dataset']['syntype_avail']
+        except KeyError:
+            return True
+
+    @property
+    def use_large_fov_views_ct(self):
+        try:
+            return self.entries['Views']['use_large_fov_views_ct']
+        except KeyError:
+            return True
 
 
-def get_default_conf_str(example_wd, py36path="", syntype_avail=True):
+def get_default_conf_str(example_wd, scaling, py36path="", syntype_avail=True,
+                         use_large_fov_views_ct=True):
     """
     Default SyConn config and type specification, placed in the working directory.
 
@@ -261,7 +273,7 @@ init_rag = {}
 py36path = {}
 
 [Dataset]
-scaling = 10., 10., 20.
+scaling = {}, {}, {}
 syntype_avail = {}
 
 [LowerMappingRatios]
@@ -289,13 +301,17 @@ allow_mesh_gen_cells = True
 
 [Skeleton]
 allow_skel_gen = True
+
+[Views]
+use_large_fov_views_ct = {}
     """.format(example_wd + 'knossosdatasets/seg/',
                example_wd + 'knossosdatasets/sym/',
                example_wd + 'knossosdatasets/asym/',
                example_wd + 'knossosdatasets/sj/',
                example_wd + 'knossosdatasets/vc/',
                example_wd + 'knossosdatasets/mi/', '',
-               py36path, str(syntype_avail))
+               py36path, scaling[0], scaling[1], scaling[2],
+               str(syntype_avail), str(use_large_fov_views_ct))
 
     configspec_str = """
 [Versions]
@@ -325,5 +341,8 @@ allow_mesh_gen_cells = boolean
 
 [Skeleton]
 allow_skel_gen = boolean
+
+[Views]
+use_large_fov_views_ct = boolean
 """
     return config_str, configspec_str

@@ -150,12 +150,14 @@ def sso_views_to_modelinput(sso, nb_views, view_key=None):
     return out_d
 
 
-def radius_correction(sso):
+def radius_correction(sso, scaling=None):
     """
     radius correction : algorithm find nodes first and iterates over the finder bunch of meshes
     :param sso: super segmentation object
     :return: skeleton with the corrected diameters in the key 'diameters'
     """
+    if scaling is None:
+        scaling = np.array(global_params.config["Dataset"]["scaling"])
 
     skel_radius = {}
 
@@ -163,7 +165,7 @@ def radius_correction(sso):
     diameters = sso.skeleton['diameters']
     # vert_sparse = vert[0::10]
     vert_sparse = sso.mesh[1].reshape((-1, 3))
-    tree = spatial.cKDTree(skel_node * np.array([10, 10, 20]))
+    tree = spatial.cKDTree(skel_node * scaling)
     centroid_arr = [[0, 0, 0]]
 
 
@@ -175,7 +177,7 @@ def radius_correction(sso):
 
     for ii, el in enumerate(all_found_node_ixs):
         for i in np.where(ixs == el):
-            vert = [vert_sparse[a] / np.array([10, 10, 20]) for a in i]
+            vert = [vert_sparse[a] / scaling for a in i]
 
             x = [p[0] for p in vert]
             y = [p[1] for p in vert]
