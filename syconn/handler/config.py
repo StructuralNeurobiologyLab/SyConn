@@ -218,6 +218,10 @@ class DynConfig(Config):
     def allow_skel_gen(self):
         return self.entries['Skeleton']['allow_skel_gen']
 
+    @property
+    def syntype_available(self):
+        return self.entries['Dataset']['syntype_avail']
+
 
 def get_default_conf_str(example_wd, py36path=""):
     """
@@ -251,6 +255,7 @@ py36path = {}
 
 [Dataset]
 scaling = 10., 10., 20.
+syntype_avail = True
 
 [LowerMappingRatios]
 mi = 0.5

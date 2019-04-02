@@ -44,10 +44,16 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                         n_max_co_processes=None, transform_func=None,
                         transform_func_kwargs=None):
     """
-    Extracts connected component from probability maps
+    Extracts connected component from probability maps.
+
+    By default the following procedure is used:
     1. Gaussian filter (defined by sigma)
     2. Thresholding (defined by threshold)
     3. Connected components analysis
+
+    If `transform_func` is set, the specified method will be applied by every
+    worker on the chunk's probability map to generate the segmentation instead.
+    Add `transform_func_kwargs` in case `transform_func` specific arguments.
 
     In case of vesicle clouds (hdf5_name in ["p4", "vc"]) the membrane
     segmentation is used to cut connected vesicle clouds across cells
