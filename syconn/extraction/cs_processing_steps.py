@@ -120,7 +120,7 @@ def _collect_properties_from_ssv_partners_thread(args):
         ssv_syncoords = sd_syn_ssv.rep_coords[curr_ssv_mask]
 
         try:
-            ct = ssv_o.attr_dict['celltype_cnn']
+            ct = ssv_o.attr_dict['celltype_cnn_e3']  # TODO: add keyword to global_params.py
         except KeyError:
             ct = -1
         celltypes = [ct] * len(ssv_synids)

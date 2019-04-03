@@ -73,13 +73,12 @@ class SegmentationDataset(object):
             self._working_dir += "/"
 
         # self._config = parser.Config(self.working_dir)
-
         self._scaling = scaling
 
         if create and (version is None):
             version = 'new'
 
-        if version is None and create == False:
+        if version is None and create is False:
             try:
                 self._version = self.config.entries["Versions"][self.type]
             except:
@@ -243,12 +242,9 @@ class SegmentationDataset(object):
     @property
     def scaling(self):
         if self._scaling is None:
-            try:
-                self._scaling = \
-                    np.array(self.config.entries["Dataset"]["scaling"],
-                             dtype=np.float32)
-            except:
-                self._scaling = np.array([1, 1, 1])
+            self._scaling = \
+                np.array(self.config.entries["Dataset"]["scaling"],
+                         dtype=np.float32)
 
         return self._scaling
 

@@ -431,8 +431,8 @@ class main_class(QtGui.QDialog):
         self.synapse_field2.setItem(1, 2, QTableWidgetItem(str(self.all_syns["ssv_partner_1"][ix])))
 
         # cell type
-        self.synapse_field2.setItem(2, 1, QTableWidgetItem(int2str_label_converter(self.all_syns["neuron_partner_ct_0"][ix], "ctgt")))
-        self.synapse_field2.setItem(2, 2, QTableWidgetItem(int2str_label_converter(self.all_syns["neuron_partner_ct_1"][ix], "ctgt")))
+        self.synapse_field2.setItem(2, 1, QTableWidgetItem(int2str_label_converter(self.all_syns["neuron_partner_ct_0"][ix], "ctgt_v2")))
+        self.synapse_field2.setItem(2, 2, QTableWidgetItem(int2str_label_converter(self.all_syns["neuron_partner_ct_1"][ix], "ctgt_v2")))
 
         # cell compartments
         self.synapse_field2.setItem(3, 1, QTableWidgetItem(int2str_label_converter(self.all_syns["neuron_partner_ax_0"][ix], "axgt")))
@@ -919,6 +919,15 @@ def int2str_label_converter(label, gt_type):
         elif label == 3:
             return "INT"
         else:
+            return "N/A"
+    elif gt_type == 'ctgt_v2':
+        l_dc_inv = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7)
+        l_dc_inv["?"] = 8
+        l_dc = {v: k for k, v in l_dc_inv.items()}
+        try:
+            return l_dc[label]
+        except KeyError:
+            print('Unknown label "{}"'.format(label))
             return "N/A"
     else:
         raise ValueError("Given ground truth type is not valid.")
