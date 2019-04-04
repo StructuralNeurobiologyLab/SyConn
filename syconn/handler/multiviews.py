@@ -347,13 +347,14 @@ def rgb2id_array(rgb_arr):
     return id_arr.reshape(rgb_arr.shape[:-1])
 
 
-def generate_rendering_locs(sso, comp_window):
+def generate_rendering_locs(verts, comp_window):
     """
     TODO: generalize for all rendering locations (e.g. also use in call of SSO.sample_locations)
 
     Parameters
     ----------
-    sso : SuperSegmentationObject
+    verts : np.ndarray
+        N, 3
     comp_window : float
 
     Returns
@@ -361,8 +362,6 @@ def generate_rendering_locs(sso, comp_window):
     np.ndarray
         rendering locations
     """
-    # Generate new rendering locations based on SSO vertices
-    verts = sso.mesh[1].reshape(-1, 3)
     # downsample vertices and get ~3 locations per comp_window
     ds_factor = comp_window / 3
 

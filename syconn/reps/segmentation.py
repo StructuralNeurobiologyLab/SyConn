@@ -16,6 +16,7 @@ from skimage.measure import mesh_surface_area
 from .. import global_params
 from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
+from ..handler.multiviews import generate_rendering_locs
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
 from ..handler.basics import get_filepaths_from_dir, safe_copy,\
     write_txt2kzip, temp_seed
@@ -718,7 +719,13 @@ class SegmentationObject(object):
             verts = self.mesh[1].reshape(-1, 3)
             if len(verts) == 0:  # only return scaled rep. coord as [1, 3] array
                 return np.array([self.rep_coord, ], dtype=np.float32) * self.scaling
-            coords = surface_samples(verts)
+
+            if global_params.config.use_new_renderings_locs:
+                coords = generate_rendering_locs(verts, 2000 * 3).astype(
+                    np.float32)  # '*3' because `generate_rendering_locs` use a division by 3 internally...
+            else:
+                coords = surface_samples(verts).astype(np.float32)
+
             loc_dc = CompressedStorage(self.locations_path, read_only=False,
                                        disable_locking=not self.enable_locking)
             loc_dc[self.id] = coords.astype(np.float32)
@@ -726,6 +733,7 @@ class SegmentationObject(object):
             return coords.astype(np.float32)
 
     def save_voxels(self, bin_arr, offset, overwrite=False):
+        raise RuntimeError('Save voxels must not be used anymore.')
         save_voxels(self, bin_arr, offset, overwrite=overwrite)
 
     def load_voxels(self, voxel_dc=None):
@@ -977,6 +985,10 @@ class SegmentationObject(object):
             log_reps.warning("No voxels found in VoxelDict!")
             return
 
+        if isinstance(voxel_dc, VoxelStorageDyn):
+            self._rep_coord = voxel_dc.object_repcoord(self.id)
+            return
+
         bin_arrs, block_offsets = voxel_dc[self.id]
         block_offsets = np.array(block_offsets)
 
@@ -1024,11 +1036,26 @@ class SegmentationObject(object):
 
         self._rep_coord = found_point + central_block_offset
 
-    def calculate_bounding_box(self):
-        _ = load_voxels(self)
+    def calculate_bounding_box(self, voxel_dc=None):
+        if voxel_dc is None:
+            voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
+                                    disable_locking=True)
+        if not isinstance(voxel_dc, VoxelStorageDyn):
+            _ = load_voxels(self, voxel_dc=voxel_dc)
+        else:
+            bbs = voxel_dc.get_boundingdata(self.id)
+            bb = np.array([bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
+            self._bounding_box = bb
 
-    def calculate_size(self):
-        _ = load_voxels(self)
+    def calculate_size(self, voxel_dc=None):
+        if voxel_dc is None:
+            voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
+                                    disable_locking=True)
+        if not isinstance(voxel_dc, VoxelStorageDyn):
+            _ = load_voxels(self, voxel_dc=voxel_dc)
+        else:
+            size = voxel_dc.object_size(self.id)
+            self._size = size
 
     def save_kzip(self, path, kd=None, write_id=None):
         if write_id is None:
@@ -1084,7 +1111,7 @@ class SegmentationObject(object):
         self.attr_dict = dest_attr_dc
         self.save_attr_dict()
 
-    def split_component(self, dist, new_sd, new_id):
+    def split_component(self, dist, new_sd, new_id):  # TODO: refactor -> VoxelStorageDyn
         kdtree = spatial.cKDTree(self.voxel_list)
 
         graph = nx.from_edgelist(kdtree.query_pairs(dist))

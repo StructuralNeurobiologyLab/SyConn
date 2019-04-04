@@ -1712,7 +1712,8 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
     view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views_render,
                        verbose=verbose, add_cellobjects=True,
                        return_rot_mat=False)
-    rendering_locs = generate_rendering_locs(sso, comp_window)
+    verts = sso.mesh[1].reshape(-1, 3)
+    rendering_locs = generate_rendering_locs(verts, comp_window)
 
     # overwrite default rendering locations (used later on for the view generation)
     sso._sample_locations = rendering_locs
@@ -1777,7 +1778,8 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
     view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views_render,
                        verbose=verbose, add_cellobjects=True,
                        return_rot_mat=False)
-    rendering_locs = generate_rendering_locs(sso, comp_window)
+    verts = sso.mesh[1].reshape(-1, 3)
+    rendering_locs = generate_rendering_locs(verts, comp_window)
 
     # overwrite default rendering locations (used later on for the view generation)
     sso._sample_locations = rendering_locs
@@ -1837,7 +1839,8 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
                        verbose=verbose, save=False)
     raw_view_key = 'raw{}_{}_{}'.format(ws[0], ws[1], nb_views)
     index_view_key = 'index{}_{}_{}'.format(ws[0], ws[1], nb_views)
-    rendering_locs = generate_rendering_locs(sso, comp_window)
+    verts = sso.mesh[1].reshape(-1, 3)
+    rendering_locs = generate_rendering_locs(verts, comp_window)
 
     # overwrite default rendering locations (used later on for the view generation)
     sso._sample_locations = rendering_locs

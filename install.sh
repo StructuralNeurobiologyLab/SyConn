@@ -15,3 +15,5 @@ echo y | conda install tensorboard tensorflow
 
 pip install -r requirements.txt
 pip install -e .
+
+echo y | conda install -c conda-forge sip=4.18.1  # https://github.com/CadQuery/CQ-editor/issues/1

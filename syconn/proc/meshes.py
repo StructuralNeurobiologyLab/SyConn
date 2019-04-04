@@ -358,9 +358,8 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
         min_obj_vx = MESH_MIN_OBJ_VX
     try:
         indices, vertices, normals = triangulation(
-            np.array(obj.voxel_list), downsampling=downsampling,
-            n_closings=n_closings, decimate_mesh=decimate_mesh,
-            **triangulation_kwargs)
+            obj.voxel_list, downsampling=downsampling, n_closings=n_closings,
+            decimate_mesh=decimate_mesh, **triangulation_kwargs)
     except ValueError as e:
         if len(obj.voxel_list) <= min_obj_vx:
             # log_proc.debug('Did not create mesh for object of type "{}" '
@@ -977,28 +976,41 @@ def mesh_chunk(args):
         return
     voxel_dc = VoxelStorage(attr_dir + "/voxel.pkl", disable_locking=True)
     md = MeshStorage(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)
-    valid_obj_types = ["vc", "sj", "mi", "con"]
-    if not obj_type in valid_obj_types:
-        raise NotImplementedError("Object type must be one of the following:\n"
-                                  "%s" % str(valid_obj_types))
+    valid_obj_types = ["vc", "sj", "mi", "con", 'syn', 'syn_ssv']
+    if global_params.config.allow_mesh_gen_cells:
+        valid_obj_types += ["sv"]
+    if obj_type not in valid_obj_types:
+        raise NotImplementedError("Object type '{}' must be one of the following:\n"
+                                  "{}".format(obj_type, str(valid_obj_types)))
     for ix in obj_ixs:
         # create voxel_list
         bin_arrs, block_offsets = voxel_dc[ix]
-        voxel_list = np.array([], dtype=np.int32)
+        voxel_list = []
         for i_bin_arr in range(len(bin_arrs)):
-            block_voxels = np.array(zip(*np.nonzero(bin_arrs[i_bin_arr])),
-                                    dtype=np.int32)
-            block_voxels += np.array(block_offsets[i_bin_arr])
-
-            if len(voxel_list) == 0:
-                voxel_list = block_voxels
-            else:
-                voxel_list = np.concatenate([voxel_list, block_voxels])
+            block_voxels = np.transpose(np.nonzero(bin_arrs[i_bin_arr]))
+            block_voxels += block_offsets[i_bin_arr]
+            voxel_list.append(block_voxels)
+        voxel_list = np.concatenate(voxel_list)
         # create mesh
-        indices, vertices, normals = triangulation(np.array(voxel_list),
-                                     downsampling=MESH_DOWNSAMPLING[obj_type],
-                                     n_closings=MESH_CLOSING[obj_type])
-        vertices *= scaling
+
+        try:
+            min_obj_vx = global_params.config.entries['Sizethresholds'][obj_type]
+        except KeyError:
+            min_obj_vx = MESH_MIN_OBJ_VX
+        try:
+            indices, vertices, normals = triangulation(
+                voxel_list, downsampling=MESH_DOWNSAMPLING[obj_type], n_closings=MESH_CLOSING[obj_type],
+                force_single_cc=obj_type == 'syn_ssv')
+            vertices += 1  # account for knossos 1-indexing
+            vertices = np.round(vertices * scaling)
+        except ValueError as e:
+            if len(voxel_list) > min_obj_vx:
+                msg = 'Error ({}) during marching_cubes procedure of SegmentationObject {}' \
+                      ' of type "{}". It contained {} voxels.'.format(str(e), ix, obj_type,
+                                                                      len(voxel_list))
+                log_proc.error(msg)
+            indices, vertices, normals = np.zeros((0,)), np.zeros((0,)), np.zeros((0,))
+
         md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
     md.push()
 

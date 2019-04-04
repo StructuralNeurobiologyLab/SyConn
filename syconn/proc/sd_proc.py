@@ -23,19 +23,20 @@ from .. import global_params
 from .image import single_conn_comp_img
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
-from ..backend.storage import AttributeDict, VoxelStorage
+from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn
 from ..reps import segmentation, segmentation_helper
 from ..handler import basics
 from ..proc.meshes import mesh_chunk
 from . import log_proc
 
 
-def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
-                     qsub_queue=None, nb_cpus=None, n_max_co_processes=None,
+def dataset_analysis(sd, recompute=True, n_jobs=1000, n_max_co_processes=None,
                      compute_meshprops=False):
     # TODO: remove `qsub_pe`and `qsub_queue`
     """ Analyze SegmentationDataset and extract and cache SegmentationObjects
-    attributes as numpy arrays.
+    attributes as numpy arrays. Will only recognize dict/storage entries of type int
+    for object attribute collection.
+
 
     :param sd: SegmentationDataset
     :param recompute: bool
@@ -69,14 +70,10 @@ def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
     # Running workers
     if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_dataset_analysis_thread,
-                                             multi_params, nb_cpus=n_max_co_processes)
+                                             multi_params, nb_cpus=n_max_co_processes, debug=True)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "dataset_analysis",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_cores=nb_cpus,
+        path_to_out = qu.QSUB_script(multi_params, "dataset_analysis", script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
         out_files = glob.glob(path_to_out + "/*")
         results = []
@@ -127,8 +124,9 @@ def _dataset_analysis_thread(args):
             this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
                                          read_only=not recompute)
             if recompute:
-                this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True)
-                so_ids = list(this_vx_dc.keys())
+                this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True,
+                                          disable_locking=True)
+                so_ids = list(this_vx_dc.keys())  # e.g. isinstance(np.array([100, ], dtype=np.uint)[0], int) fails
             else:
                 so_ids = list(this_attr_dc.keys())
             for so_id in so_ids:
@@ -137,8 +135,14 @@ def _dataset_analysis_thread(args):
                                                      version, working_dir)
                 so.attr_dict = this_attr_dc[so_id]
                 if recompute:
-                    so.load_voxels(voxel_dc=this_vx_dc)
-                    so.calculate_rep_coord(voxel_dc=this_vx_dc)
+                    # prevent loading voxels in case we use VoxelStorageDyn
+                    if not isinstance(this_vx_dc, VoxelStorageDyn):  # use fall-back
+                        so.load_voxels(voxel_dc=this_vx_dc)
+                        so.calculate_rep_coord(voxel_dc=this_vx_dc)
+                    else:
+                        so.calculate_bounding_box(this_vx_dc)
+                        so.calculate_rep_coord(this_vx_dc)
+                        so.calculate_size(this_vx_dc)
                     so.attr_dict["rep_coord"] = so.rep_coord
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
@@ -211,20 +215,20 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     multi_params = [(mps, obj_type, sd.version_dict[obj_type], sd.working_dir,
                      kd_path, readonly) for mps in multi_params]
     # Running workers - Extracting mapping
-    # if qu.batchjob_enabled():
-    path_to_out = qu.QSUB_script(multi_params, "map_objects",
-                                 pe=qsub_pe, queue=qsub_queue,
-                                 script_folder=None, n_cores=nb_cpus,
-                                 n_max_co_processes=n_max_co_processes)
-    out_files = glob.glob(path_to_out + "/*")
-    results = []
-    for out_file in out_files:
-        with open(out_file, 'rb') as f:
-            results.append(pkl.load(f))
-    # else:
-    #     results = sm.start_multiprocess_imap(_map_objects_thread, multi_params,
-    #                                          nb_cpus=n_max_co_processes, verbose=True,
-    #                                          debug=False)
+    if qu.batchjob_enabled():
+        path_to_out = qu.QSUB_script(multi_params, "map_objects",
+                                     pe=qsub_pe, queue=qsub_queue,
+                                     script_folder=None, n_cores=nb_cpus,
+                                     n_max_co_processes=n_max_co_processes)
+        out_files = glob.glob(path_to_out + "/*")
+        results = []
+        for out_file in out_files:
+            with open(out_file, 'rb') as f:
+                results.append(pkl.load(f))
+    else:
+        results = sm.start_multiprocess_imap(_map_objects_thread, multi_params,
+                                             nb_cpus=n_max_co_processes, verbose=True,
+                                             debug=False)
 
     # write cell organell mappings to cell SV attribute dicts
     sv_obj_map_dict = defaultdict(dict)

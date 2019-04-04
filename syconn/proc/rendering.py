@@ -38,8 +38,24 @@ except Exception as e:
 
 # can't load more than one platform simultaneously
 if os.environ['PYOPENGL_PLATFORM'] == 'egl':
-    log_proc.info('EGL rendering enabled.')
-    from OpenGL.EGL import eglDestroyContext, eglSwapBuffers
+    try:
+        from OpenGL.EGL import eglDestroyContext, eglSwapBuffers
+        from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
+            EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
+            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
+            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
+            EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
+            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
+            eglGetDisplay, eglInitialize, eglChooseConfig, \
+            eglBindAPI, eglCreatePbufferSurface, \
+            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
+        log_proc.info('EGL rendering enabled.')
+    except ImportError as e:
+        os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
+        from OpenGL.osmesa import *
+        log_proc.warn('EGL requirements could not be imported ({}). '
+                      'Switched to OSMESA platform.'.format(e))
 elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
     log_proc.info('OSMESA rendering enabled.')
     from OpenGL.osmesa import *
@@ -47,13 +63,8 @@ else:
     msg = 'PYOpenGL environment has to be "egl" or "osmesa".'
     log_proc.error(msg)
     raise NotImplementedError(msg)
-try:
-    import numpy as np
-    import itertools
-    from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
-    from ..mp.batchjob_utils import QSUB_script
-except Exception as error:
-    print('Caught this error: ' + repr(error))
+import numpy as np
+from ..mp.batchjob_utils import QSUB_script
 try:
     import cPickle as pkl
 except ImportError:
@@ -264,17 +275,6 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
 def init_ctx(ws):
     # ctx = OSMesaCreateContext(OSMESA_RGBA, None)
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
-        from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
-            EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
-            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
-            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
-            EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
-            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
-            eglGetDisplay, eglInitialize, eglChooseConfig, \
-            eglBindAPI, eglCreatePbufferSurface, \
-            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
-
         major, minor = ctypes.c_long(), ctypes.c_long()
         num_configs = ctypes.c_long()
         configs = (EGLConfig * 1)()

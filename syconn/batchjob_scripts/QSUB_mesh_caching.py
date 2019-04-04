@@ -30,7 +30,7 @@ so_chunk_paths = args[0]
 so_kwargs = args[1]
 
 working_dir = so_kwargs['working_dir']
-obj_type = so_kwargs['working_dir']
+obj_type = so_kwargs['obj_type']
 global_params.wd = working_dir
 for path in so_chunk_paths:
     mesh_chunk((path, obj_type))

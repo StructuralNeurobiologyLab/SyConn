@@ -40,7 +40,7 @@ def run_matrix_export():
     # collect new object attributes collected above partner axoness, celltypes,
     # synapse probabilities etc, no need to compute size/rep_coord etc. ->
     # recompute=False
-    dataset_analysis(sd_syn_ssv, qsub_pe='openmp', compute_meshprops=False,
+    dataset_analysis(sd_syn_ssv, compute_meshprops=False,
                      recompute=False)
     log.info('Synapse property collection from SSVs finished.')
 
@@ -75,8 +75,8 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     # TODO: write new method which iterates over sj prob. map (KD), CS
     #  ChunkDataset / KD and (optionally) synapse type in parallel and to
     #  create a syn segmentation within from_probmaps_to_objects
-    # TODO: SD for cs_agg and sj will not be needed anymore
-    cs_sd = SegmentationDataset('cs_agg', working_dir=global_params.config.working_dir,
+    # TODO: SD for cs and sj will not be needed anymore
+    cs_sd = SegmentationDataset('cs', working_dir=global_params.config.working_dir,
                                 version=0)  # version hard coded
     sj_sd = SegmentationDataset('sj', working_dir=global_params.config.working_dir)
     cs_cset = chunky.load_dataset(cd_dir, update_paths=True)

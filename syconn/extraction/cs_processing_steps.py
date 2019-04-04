@@ -16,6 +16,7 @@ from knossos_utils import knossosdataset, skeleton_utils, skeleton
 knossosdataset._set_noprint(True)
 import time
 import datetime
+import shutil
 
 from ..handler.basics import kd_factory
 from ..mp import batchjob_utils as qu
@@ -296,16 +297,12 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version="0", create=True,
                                                   n_folders_fs=n_folders_fs)
+    dataset_path = sd_syn_ssv.so_storage_path
+    if os.path.exists(dataset_path):
+        shutil.rmtree(dataset_path)
 
     for p in voxel_rel_paths_2stage:
-        try:
-            os.makedirs(sd_syn_ssv.so_storage_path + p)
-        except FileExistsError:
-            msg = 'SegmentationDataset of type "syn_ssv" already exists. ' \
-                  '"combine_and_split_syn" is only executed once, please make sure '\
-                  'that no previous SegmentationDataset exists/will be overwritten.'
-            log_extraction.critical(msg)
-            raise FileExistsError(msg)
+        os.makedirs(sd_syn_ssv.so_storage_path + p)
 
     rel_synssv_to_syn_ids_items = list(rel_synssv_to_syn_ids.items())
     i_block = 0
@@ -548,17 +545,17 @@ def _combine_and_split_cs_agg_thread(args):
     wd = args[0]
     rel_cs_to_cs_agg_ids_items = args[1]
     voxel_rel_paths = args[2]
-    cs_agg_version = args[3]
-    cs_version = args[4]
+    cs_version = args[3]
+    cs_ssv_version = args[4]
     scaling = args[5]
     cs_gap_nm = args[6]
 
     # TODO: changed cs type to 'cs_ssv', check if that is adapted everywhere
     cs = segmentation.SegmentationDataset("cs_ssv", working_dir=wd,
-                                          version=cs_version)
+                                          version=cs_ssv_version)
 
-    cs_agg = segmentation.SegmentationDataset("cs_agg", working_dir=wd,
-                                              version=cs_agg_version)
+    cs_agg = segmentation.SegmentationDataset("cs", working_dir=wd,
+                                              version=cs_version)
 
     n_per_voxel_path = np.ceil(float(len(rel_cs_to_cs_agg_ids_items)) / len(voxel_rel_paths))
 
@@ -824,9 +821,9 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
                      n_chunk_jobs=1000, qsub_pe=None, qsub_queue=None,
                      resume_job=False, nb_cpus=None, n_max_co_processes=None):
     """
-    Creates SegmentationDataset of 'syn' objects from ChunkDataset of 'cs_agg'
+    Creates SegmentationDataset of 'syn' objects from ChunkDataset of 'cs'
     (result of contact_site extraction, does NOT require object extraction of
-     'cs_agg' only the chunkdataset) and 'sj' dataset.
+     'cs' only the chunkdataset) and 'sj' dataset.
     Syn objects have the following attributes:
     ['sj_id', 'cs_id', 'id_sj_ratio', 'id_cs_ratio', 'background_overlap_ratio',
     'cs_size', 'sj_size_pseudo']
@@ -856,15 +853,11 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd, version="0",
                                               create=True, n_folders_fs=n_folders_fs)
 
+    dataset_path = sd_syn.so_storage_path
+    if os.path.exists(dataset_path):
+        shutil.rmtree(dataset_path)
     for p in voxel_rel_paths:
-        try:
-            os.makedirs(sd_syn.so_storage_path + p)
-        except FileExistsError:
-            msg = 'SegmentationDataset of type "syn" already exists. ' \
-                  '"syn_gen_via_cset" is only executed once, please make sure '\
-                  'that no previous SegmentationDataset exists/is overwritten.'
-            log_extraction.critical(msg)
-            raise FileExistsError(msg)
+        os.makedirs(sd_syn.so_storage_path + p)
 
     if n_chunk_jobs > len(voxel_rel_paths):
         n_chunk_jobs = len(voxel_rel_paths)
@@ -904,7 +897,7 @@ def syn_gen_via_cset_thread(args):
     sj_sd = segmentation.SegmentationDataset("sj", working_dir=wd,
                                              version=sj_sd_version,
                                              create=False)
-    cs_sd = segmentation.SegmentationDataset("cs_agg", working_dir=wd,
+    cs_sd = segmentation.SegmentationDataset("cs", working_dir=wd,
                                              version=cs_sd_version,
                                              create=False)
 

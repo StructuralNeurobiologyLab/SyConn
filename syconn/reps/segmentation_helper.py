@@ -11,7 +11,7 @@ from scipy import ndimage
 import os
 
 from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
-    VoxelStorage, SkeletonStorage
+    VoxelStorage, SkeletonStorage, VoxelStorageDyn
 from ..handler.basics import chunkify
 from ..mp.mp_utils import start_multiprocess_imap
 from . import log_reps
@@ -114,7 +114,6 @@ def load_voxels(so, voxel_dc=None):
         return -1
 
     bin_arrs, block_offsets = voxel_dc[so.id]
-
     block_extents = []
     for i_bin_arr in range(len(bin_arrs)):
         block_extents.append(np.array(bin_arrs[i_bin_arr].shape) +
@@ -161,23 +160,18 @@ def load_voxel_list(so):
     np.array
         2D array of coordinates to all voxels in SegmentationObject.
     """
-    voxel_list = np.array([], dtype=np.int32)
-
     if so._voxels is not None:
-        voxel_list = np.transpose(np.nonzero(so.voxels)).astype(np.uint32) + \
-                     so.bounding_box[0].astype(np.int)
+        voxel_list = np.transpose(np.nonzero(so.voxels)) + so.bounding_box[0]
     else:
-        voxel_dc = VoxelStorage(so.voxel_path, read_only=True)
+        voxel_dc = VoxelStorage(so.voxel_path, read_only=True, disable_locking=True)
         bin_arrs, block_offsets = voxel_dc[so.id]
 
+        voxel_list = []
         for i_bin_arr in range(len(bin_arrs)):
-            block_voxels = np.transpose(np.nonzero(bin_arrs[i_bin_arr])).astype(np.uint32)
-            block_voxels += np.array(block_offsets[i_bin_arr]).astype(np.uint32)
-
-            if len(voxel_list) == 0:
-                voxel_list = block_voxels
-            else:
-                voxel_list = np.concatenate([voxel_list, block_voxels])
+            block_voxels = np.transpose(np.nonzero(bin_arrs[i_bin_arr]))
+            block_voxels += block_offsets[i_bin_arr]
+            voxel_list.append(block_voxels)
+        voxel_list = np.concatenate(voxel_list)
     return voxel_list
 
 

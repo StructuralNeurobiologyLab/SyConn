@@ -240,9 +240,16 @@ class DynConfig(Config):
         except KeyError:
             return True
 
+    @property
+    def use_new_renderings_locs(self):
+        try:
+            return self.entries['Views']['use_new_renderings_locs']
+        except KeyError:
+            return False
+
 
 def get_default_conf_str(example_wd, scaling, py36path="", syntype_avail=True,
-                         use_large_fov_views_ct=True):
+                         use_large_fov_views_ct=True, use_new_renderings_locs=True):
     """
     Default SyConn config and type specification, placed in the working directory.
 
@@ -304,6 +311,7 @@ allow_skel_gen = True
 
 [Views]
 use_large_fov_views_ct = {}
+use_new_renderings_locs = {}
     """.format(example_wd + 'knossosdatasets/seg/',
                example_wd + 'knossosdatasets/sym/',
                example_wd + 'knossosdatasets/asym/',
@@ -311,7 +319,8 @@ use_large_fov_views_ct = {}
                example_wd + 'knossosdatasets/vc/',
                example_wd + 'knossosdatasets/mi/', '',
                py36path, scaling[0], scaling[1], scaling[2],
-               str(syntype_avail), str(use_large_fov_views_ct))
+               str(syntype_avail), str(use_large_fov_views_ct),
+               str(use_new_renderings_locs))
 
     configspec_str = """
 [Versions]
@@ -344,5 +353,6 @@ allow_skel_gen = boolean
 
 [Views]
 use_large_fov_views_ct = boolean
+use_new_renderings_locs = boolean
 """
     return config_str, configspec_str

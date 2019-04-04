@@ -156,7 +156,8 @@ if __name__ == '__main__':
         step_idents.append('Glia separation')
 
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    exec_init.run_create_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs)
+    exec_init.run_create_sds(generate_sv_meshes=True, chunk_size=chunk_size,
+                             n_folders_fs=n_folders_fs, max_n_jobs=60)
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 

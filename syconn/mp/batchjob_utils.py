@@ -490,6 +490,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     log_batchjob.debug('Started BatchJobFallback script "{}" with {} tasks using {}'
                        ' parallel jobs, each using {} core(s).'.format(
         name, len(params), n_max_co_processes, n_cores))
+    start = time.time()
 
     if script_folder is not None:
         path_to_scripts = script_folder
@@ -534,6 +535,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
         multi_params.append(cmd_exec)
     start_multiprocess_imap(fallback_exec, multi_params, debug=False,
                             nb_cpus=n_max_co_processes)
+    log_batchjob.debug('Finished "{}" after {:.2f}s.'.format(name, time.time() - start))
     return path_to_out
 
 
