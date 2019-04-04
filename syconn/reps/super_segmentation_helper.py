@@ -1174,7 +1174,7 @@ def write_axpred_cnn(ssv, pred_key_appendix, dest_path=None, k=1):
         preds = np.concatenate(preds)
     else:
         preds = ssv.lookup_in_attribute_dict(pred_key)
-    log_reps.debug("Collected axoness:", Counter(preds).most_common())
+    log_reps.debug("Collected axoness: {}".format(Counter(preds).most_common()))
     locs = ssv.sample_locations()
     log_reps.debug("Collected locations.")
     pred_coords = np.concatenate(locs)

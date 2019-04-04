@@ -113,6 +113,7 @@ class SuperSegmentationObject(object):
         self._voxels_xy_downsampled = None
         self._voxels_downsampled = None
         self._rag = None
+        self._sv_graph = None
 
         # init mesh dicts
         self._meshes = {"sv": None, "sj": None, "syn_ssv": None,
@@ -598,6 +599,8 @@ class SuperSegmentationObject(object):
         #             "SV IDs in graph differ from SSV SVs."
         #         for e in G_glob.edges(cc):
         #             G.add_edge(*e)
+        elif self._sv_graph is not None:
+            G = self._sv_graph
         else:
             raise ValueError("Could not find graph data for SSV {}."
                              "".format(self.id))
@@ -1980,10 +1983,12 @@ class SuperSegmentationObject(object):
     def gliasplit(self, dest_path=None, recompute=False, thresh=None,
                   write_shortest_paths=False, verbose=False,
                   pred_key_appendix=""):
+        glia_svs_key = "glia_svs" + pred_key_appendix
+        nonglia_svs_key = "nonglia_svs" + pred_key_appendix
         if thresh is None:
             thresh = global_params.glia_thresh
-        if recompute or not (self.attr_exists("glia_svs") and
-                             self.attr_exists("nonglia_svs")):
+        if recompute or not (self.attr_exists(glia_svs_key) and
+                             self.attr_exists(nonglia_svs_key)):
             if write_shortest_paths:
                 shortest_paths_dir = os.path.split(dest_path)[0]
             else:
@@ -2002,12 +2007,12 @@ class SuperSegmentationObject(object):
             non_glia_ccs_ixs = [[so.id for so in nonglia] for nonglia in
                                 nonglia_ccs]
             glia_ccs_ixs = [[so.id for so in glia] for glia in glia_ccs]
-            self.attr_dict["glia_svs"] = glia_ccs_ixs
-            self.attr_dict["nonglia_svs"] = non_glia_ccs_ixs
-            self.save_attributes(["glia_svs", "nonglia_svs"],
+            self.attr_dict[glia_svs_key] = glia_ccs_ixs
+            self.attr_dict[nonglia_svs_key] = non_glia_ccs_ixs
+            self.save_attributes([glia_svs_key, nonglia_svs_key],
                                  [glia_ccs_ixs, non_glia_ccs_ixs])
 
-    def gliasplit2mesh(self, dest_path=None):
+    def gliasplit2mesh(self, dest_path=None, pred_key_appendix=""):
         """
 
         Parameters
@@ -2020,16 +2025,18 @@ class SuperSegmentationObject(object):
         """
         # TODO: adapt writemesh2kzip to work with multiple writes
         #  to same file or use write_meshes2kzip here.
+        glia_svs_key = "glia_svs" + pred_key_appendix
+        nonglia_svs_key = "nonglia_svs" + pred_key_appendix
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         # write meshes of CC's
-        glia_ccs = self.attr_dict["glia_svs"]
+        glia_ccs = self.attr_dict[glia_svs_key]
         for kk, glia in enumerate(glia_ccs):
             mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
                                    glia])
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                             "glia_cc%d.ply" % kk)
-        non_glia_ccs = self.attr_dict["nonglia_svs"]
+        non_glia_ccs = self.attr_dict[nonglia_svs_key]
         for kk, nonglia in enumerate(non_glia_ccs):
             mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
                                    nonglia])
