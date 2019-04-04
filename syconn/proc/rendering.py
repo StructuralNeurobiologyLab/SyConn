@@ -12,12 +12,13 @@ import time
 import os
 import tqdm
 import warnings
+import glob
 from scipy.ndimage.filters import gaussian_filter
 
 from .image import rgb2gray, apply_clahe
 from . import log_proc
 from .. import global_params
-from ..handler.basics import flatten_list
+from ..handler.basics import flatten_list, chunkify_successive
 from ..handler.compression import arrtolz4string
 from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
     rgb2id_array, id2rgb_array_contiguous
@@ -46,6 +47,17 @@ else:
     msg = 'PYOpenGL environment has to be "egl" or "osmesa".'
     log_proc.error(msg)
     raise NotImplementedError(msg)
+try:
+    import numpy as np
+    import itertools
+    from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
+    from ..mp.batchjob_utils import QSUB_script
+except Exception as error:
+    print('Caught this error: ' + repr(error))
+try:
+    import cPickle as pkl
+except ImportError:
+    import pickle as pkl
 
 
 # ------------------------------------ General rendering code ------------------------------------------
@@ -869,7 +881,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
                       nb_views=None, comp_window=None, rot_mat=None, return_rot_mat=False):
     """
     Render views of SuperSegmentationObject at given coordinates.
-    
+
     Parameters
     ----------
     sso : SuperSegmentationObject
@@ -964,9 +976,9 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     return raw_views[:, None]
 
 
-def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
+def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
                                   rot_mat=None, nb_views=None,
-                                  comp_window=8e3, return_rot_matrices=False):
+                                  comp_window=None, return_rot_matrices=False):
     """
 
     Parameters
@@ -984,12 +996,21 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     -------
 
     """
+    if comp_window is None:
+        comp_window = 8e3
+    if ws is None:
+        ws = (256, 128)
     if verbose:
-        log_proc.debug('Started "render_sso_coords_index_views" at {} locations for SSO {} using PyOpenGL'
+        print('Started "render_sso_coords_index_views" at {} locations for SSO {} using PyOpenGL'
                        ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
+    tim = time.time()
     ind, vert, norm = sso.mesh
+    tim1 = time.time()
+    if verbose:
+        print("Time for initialising MESH {:.2f}s."
+                           "".format(tim1 - tim))
     if len(vert) == 0:
         log_proc.error("No mesh for SSO {} found.".format(sso.id))
         return np.ones((len(coords), nb_views, ws[1], ws[0], 3), dtype=np.uint8)
@@ -1007,6 +1028,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
     # backwards compatibility with other color-dependent rendering methods
     # Create mesh object without redundant vertices to get same PCA rotation as for raw views
+    tim = time.time()
     if rot_mat is None:
         mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
         querybox_edgelength = comp_window / mo.max_dist
@@ -1017,6 +1039,10 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
     ind = np.arange(len(vert) // 3)
     color_array = np.repeat(color_array, 3, axis=0)
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
+    tim1 = time.time()
+
+    print("Time for initializing MESHOBJECT {:.2f}s."
+                       "".format(tim1 - tim))
     if return_rot_matrices:
         ix_views, rot_mat = _render_mesh_coords(
             coords, mo, verbose=verbose, ws=ws, depth_map=False,
@@ -1030,12 +1056,16 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=(256, 128),
                                    smooth_shade=False, views_key="index",
                                    nb_views=nb_views, comp_window=comp_window,
                                    return_rot_matrices=return_rot_matrices)
+    tim2 = time.time()
+
+    print("Time for _RENDER_MESH_COORDS {:.2f}s."
+                       "".format(tim2 - tim1))
     return rgb2id_array(ix_views)[:, None]
 
 
 def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
-                                  ws=(256, 128), rot_mat=None, nb_views=None,
-                                  comp_window=8e3, return_rot_matrices=False):
+                                  ws=None, rot_mat=None, nb_views=None,
+                                  comp_window=None, return_rot_matrices=False):
     """
     Render views with vertex colors corresponding to vertex labels.
 
@@ -1057,6 +1087,10 @@ def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
     -------
 
     """
+    if comp_window is None:
+        comp_window = 8e3
+    if ws is None:
+        ws = (256, 128)
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     ind, vert, _ = sso.mesh
@@ -1116,4 +1150,87 @@ def render_sso_ortho_views(sso):
                                  obj_to_render=('vc', ))
     views[:, 3] = multi_view_sso(sso, ws=(1024, 1024), depth_map=True,
                                  obj_to_render=('sj', ))
+    return views
+
+
+def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
+                                      n_jobs, verbose=False,
+                                      render_indexviews=True):
+    """
+
+    Parameters
+    ----------
+    ssv : SuperSegmentationObject
+    wd : string: working directory for accessing data
+    rendering_locations: array of locations to be rendered
+    n_jobs: int: number of parallel jobs running on same node of cluster
+    verbose: bool: flag to show th progress of rendering.
+
+    Returns: Array: array of views after rendering of locations.
+    -------
+
+    """
+    tim = time.time()
+    chunk_size = len(rendering_locations) // n_jobs + 1
+    print(chunk_size)
+    params = chunkify_successive(rendering_locations, chunk_size)  # TODO: adapt chunk size in a reasonable way
+    ssv_id = ssv.id
+    working_dir = wd
+    sso_kwargs = {'ssv_id': ssv_id,
+                  'working_dir': working_dir,
+                  "version": ssv.version}
+    render_kwargs = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
+                      'ws': None, 'cellobjects_only': False, 'wire_frame': False,
+                      'nb_views': None, 'comp_window': None, 'rot_mat': None,
+                     'return_rot_mat': False, 'render_indexviews': render_indexviews}
+    params = [[par, sso_kwargs, render_kwargs, ix] for ix, par in enumerate(params)]
+    tim1 = time.time()
+    if verbose:
+        log_proc.debug("Time for OTHER COMPUTATION {:.2f}s."
+                       "".format(tim1 - tim))
+    path_to_out = QSUB_script(
+        params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
+        queue=None, script_folder=None, n_cores=1, disable_batchjob=True,
+        n_max_co_processes=n_jobs)
+    out_files = glob.glob(path_to_out + "/*")
+    results = []
+    out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
+    for out_file in out_files2:
+        with open(out_file, 'rb') as f:
+            results.append(pkl.load(f))
+    return results
+
+
+def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None,
+                              verbose=False, render_indexviews=True):
+    """
+
+    Args:
+        ssv:
+        working_dir:
+        rendering_locations:
+        n_jobs:
+        verbose:
+        render_indexviews:
+
+    Returns:
+
+    """
+    if n_jobs is None:
+        n_jobs = global_params.NCORES_PER_NODE // 10
+
+    if render_indexviews is False:
+        if len(rendering_locations) > 360:
+            views = render_sso_coords_multiprocessing(ssv, working_dir,
+                rendering_locations, render_indexviews=render_indexview,
+                        n_jobs=n_jobs, verbose=verbose)
+        else:
+            views = rendrender_sso_coords(ssv, rendering_locations, verbose=verbose)
+    else:
+        if len(rendering_locations) > 140:
+            views = render_sso_coords_multiprocessing(ssv, working_dir,
+                rendering_locations, render_indexviews=render_indexview,
+                        n_jobs=n_jobs, verbose=verbose)
+        else:
+            views = render_sso_coords_index_views(ssv, rendering_locations, verbose=verbose)
     return views

@@ -65,7 +65,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 additional_flags='', suffix="", job_name="default",
                 script_folder=None, n_max_co_processes=None, resume_job=False,
                 sge_additional_flags=None, iteration=1, max_iterations=3,
-                params_orig_id=None, python_path=None, disable_mem_flag=False):
+                params_orig_id=None, python_path=None, disable_mem_flag=False,
+                disable_batchjob=False):
     # TODO: change `queue` and `pe` to be set globally in global_params. All
     #  wrappers around QSUB_script should then only have a flage like 'use_batchjob'
     # TODO: Switch to JobArrays!
@@ -119,7 +120,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     disable_mem_flag : bool
         If True, memory flag will not be set, otherwise it will be set to the
          fraction of the cores per job to the total number of cores per node
-        
+    disable_batchjob : bool
+        Overwrites global batchjob settings and will run multiple, independent bash jobs
+        on multiple CPUs instead.
+
     Returns
     -------
     path_to_out: str
@@ -128,7 +132,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     """
     if n_cores is None:
         n_cores = 1
-    if not batchjob_enabled():
+    if disable_batchjob or not batchjob_enabled():
         return batchjob_fallback(params, name, n_cores, suffix, n_max_co_processes,
                                  script_folder, python_path)
     if queue is None:
@@ -252,7 +256,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         job_err_path = path_to_err + "job_%d.log" % job_id
 
         with open(this_sh_path, "w") as f:
-            f.write("#!/bin/bash\n")
+            f.write("#!/bin/bash -l\n")
             f.write('export syconn_wd="{4}"\n{0} {1} {2} {3}'.format(
                 python_path, path_to_script, this_storage_path,
                 this_out_path, global_params.config.working_dir))
@@ -308,7 +312,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     # Submit singleton job to send status email after jobs have been completed
     this_sh_path = path_to_sh + "singleton.sh"
     with open(this_sh_path, "w") as f:
-        f.write("#!/bin/bash\n")
+        f.write("#!/bin/bash -l\n")
         f.write("")
     job_log_path = path_to_log + "singleton.log"
     job_err_path = path_to_err + "singleton.log"
@@ -517,7 +521,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
         this_sh_path = path_to_sh + "job_%d.sh" % job_id
         this_out_path = path_to_out + "job_%d.pkl" % job_id
         with open(this_sh_path, "w") as f:
-            f.write('#!/bin/bash\n')
+            f.write('#!/bin/bash -l\n')
             f.write('export syconn_wd="{4}"\n{0} {1} {2} {3}'.format(
                 python_path, path_to_script, this_storage_path,
                 this_out_path, global_params.config.working_dir))
