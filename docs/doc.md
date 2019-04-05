@@ -47,6 +47,58 @@ cd to `SyConn/scripts/example_run/` and run
 python start.py
 ```
 
+Based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, probability maps of cell organelles
+(mitochondria, vesicle clouds and synaptic junctions) and synapse type (inhibitory, excitatory) the example
+script analyses the cell wiring through subsequent steps.
+
+On a machine with 20 CPUs (Intel(R) Xeon(R) @ 2.60GHz) and 2 GPUs (GeForce GTX 980 Ti) SyConn
+ finished the following analysis steps for an example cube with shape \[400 400 600] after 00h:09min:32s.
+
+\[0/8] Preparation          00h:00min:08s       1%
+
+\[1/8] SD generation        00h:04min:35s       48%
+
+\[2/8] SSD generation       00h:00min:13s       2%
+
+\[3/8] Neuron rendering     00h:00min:40s       7%
+
+\[4/8] Synapse detection    00h:01min:26s       15%
+
+\[5/8] Axon prediction      00h:01min:07s       11%
+
+\[6/8] Spine prediction     00h:00min:54s       9%
+
+\[7/8] Celltype analysis    00h:00min:22s       3%
+
+\[8/8] Matrix export        00h:00min:02s       0%
+
+
+## SyConn KNOSSOS viewer
+The following packages have to be available for the system python interpreter:
+
+- numpy
+
+- lz4
+
+- requests
+
+In order to inspect the resulting data via the SyConnViewer KNOSSOS-plugin follow these steps:
+
+- wait until `start.py` finished. For restarting the server run `SyConn/scripts/kplugin/
+server.py --working_dir=<path>` pointing to your working directory (`<path>`).
+
+- run KNOSSOS (https://knossos.app/)
+
+- in KNOSSOS -> File -> Choose Dataset -> browse to your working directory and open
+`knossosdatasets/seg/mag1/knossos.conf` with enabled 'load_segmentation_overlay' (at the bottom of the dialog).
+
+- then go to Scripting (top row) -> Run file -> browse to `SyConn/scripts/kplugin/syconn_knossos_viewer.py` and open it
+
+- After the SyConnViewer window has opened, the mesh of a cell reconstruction will be loaded after clicking onto colored segments in the
+ viewports (exploration mode) or by selecting a cell ID in the SyConnViewer window and pressing 'show neurite'. The plugin will display
+ additional information about the selected cell and on the right of the plugin window a list of detected synapses and their respective
+ properties is shown. In case the window does not pop-up check Scripting->Interpreter for errors.
+
 
 ## Analysis steps
 After initialization of the SDs (SVs and cellular organelles) and the SSD
@@ -54,7 +106,8 @@ containing the agglomerated SVs, several analysis steps can be applied:
 
 * [Optional] [Glia removal](glia_removal.md)
 
-* [Neuronal morphology analysis and classification](neuron_analysis.md) to identify cellular compartments (e.g. axons and spines) and to perform morphology based cell type classification.
+* [Neuronal morphology analysis and classification](neuron_analysis.md) to identify cellular
+compartments (e.g. axons and spines) and to perform morphology based cell type classification.
 
 * [Contact site extraction](contact_site_extraction.md)
 

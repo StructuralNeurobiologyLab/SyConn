@@ -147,7 +147,7 @@ if __name__ == '__main__':
     step_idents.append('Preparation')
 
     # Run SyConn  # TODO: set n_max_co_processes to None by default (-> submit all jobs at once when using SLURM)
-    if 0:
+    if 0:  # TODO: work-in glia removal
         log.info('Step 0.5/8 - Glia separation')
         exec_multiview.run_glia_rendering()
         exec_multiview.run_glia_prediction()
@@ -167,7 +167,7 @@ if __name__ == '__main__':
     step_idents.append('SSD generation')
 
     log.info('Step 3/8 - Neuron rendering')
-    exec_multiview.run_neuron_rendering()
+    exec_multiview.run_neuron_rendering(max_n_jobs=60)
     time_stamps.append(time.time())
     step_idents.append('Neuron rendering')
 
@@ -180,18 +180,18 @@ if __name__ == '__main__':
     step_idents.append('Synapse detection')
 
     log.info('Step 5/8 - Axon prediction')
-    exec_multiview.run_axoness_prediction(n_jobs=4, e3=True)
+    exec_multiview.run_axoness_prediction(max_n_jobs=4, e3=True)
     exec_multiview.run_axoness_mapping()
     time_stamps.append(time.time())
     step_idents.append('Axon prediction')
 
     log.info('Step 6/8 - Spine prediction')
-    exec_multiview.run_spiness_prediction(n_jobs=4)
+    exec_multiview.run_spiness_prediction(max_n_jobs=4)
     time_stamps.append(time.time())
     step_idents.append('Spine prediction')
 
     log.info('Step 7/8 - Celltype analysis')
-    exec_multiview.run_celltype_prediction(n_jobs=4)
+    exec_multiview.run_celltype_prediction(max_n_jobs=4)
     time_stamps.append(time.time())
     step_idents.append('Celltype analysis')
 
@@ -213,10 +213,10 @@ if __name__ == '__main__':
             i, step_idents[i+1], step_dt, step_dt_perc)
         time_summary_str += step_str
     log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconst'
-             'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
-             ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    fname_server = os.path.dirname(os.path.abspath(__file__)) + \
-                   '/../kplugin/server.py'
-    os.system('python {} --working_dir={} --port=10002'.format(
-        fname_server, example_wd))
+    # log.info('Setting up flask server for inspection. Annotated cell reconst'
+    #          'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
+    #          ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    # fname_server = os.path.dirname(os.path.abspath(__file__)) + \
+    #                '/../kplugin/server.py'
+    # os.system('python {} --working_dir={} --port=10002'.format(
+    #     fname_server, example_wd))

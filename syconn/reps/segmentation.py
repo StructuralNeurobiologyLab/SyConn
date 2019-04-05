@@ -839,7 +839,9 @@ class SegmentationObject(object):
         elif self.type == "mi":
             color = (0, 153, 255, 255)
         else:
-            raise TypeError("Given object type '{}' does not exist.".format(self.type))
+            raise TypeError("Given object type '{}' does not exist."
+                            "".format(self.type))
+        color = np.array(color, dtype=np.uint8)
         if ext_color is not None:
             if ext_color == 0:
                 color = None

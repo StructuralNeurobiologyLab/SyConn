@@ -166,13 +166,11 @@ def map_objects_to_sv_multiple(sd, obj_types, kd_path, readonly=False,
     assert isinstance(obj_types, list)  # TODO: probably possible to optimize
     for obj_type in obj_types:
         map_objects_to_sv(sd, obj_type, kd_path, readonly=readonly, n_jobs=n_jobs,
-                          qsub_pe=qsub_pe, qsub_queue=qsub_queue, nb_cpus=nb_cpus,
-                          n_max_co_processes=n_max_co_processes)
+                          nb_cpus=nb_cpus, n_max_co_processes=n_max_co_processes)
         
 
 def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                      n_max_co_processes=None):
+                      nb_cpus=None, n_max_co_processes=None):
     """
     TODO: (cython) optimization required! E.g. replace by single iteration over cell segm. and all cell organelle KDs/CDs
     Maps objects to SVs. The segmentation needs to be written to a KnossosDataset before running this
@@ -216,9 +214,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
                      kd_path, readonly) for mps in multi_params]
     # Running workers - Extracting mapping
     if qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params, "map_objects",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None, n_cores=nb_cpus,
+        path_to_out = qu.QSUB_script(multi_params, "map_objects", n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
         out_files = glob.glob(path_to_out + "/*")
         results = []
@@ -247,15 +243,12 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     multi_params = [(path_block, obj_type, mapping_dict_path) for path_block in multi_params]
 
     # Running workers - Writing mapping to SVs
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_mapping_to_sv_thread, multi_params,
                                    nb_cpus=n_max_co_processes, debug=False)
-    elif qu.batchjob_enabled():
-        qu.QSUB_script(multi_params, "write_mapping_to_sv", pe=qsub_pe,
-                       queue=qsub_queue, script_folder=None,
-                       n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
     else:
-        raise Exception("QSUB not available")
+        qu.QSUB_script(multi_params, "write_mapping_to_sv", script_folder=None,
+                       n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
     log_proc.debug("map_objects_to_sv: %.1f min" % ((time.time() - start) / 60.))
 
 

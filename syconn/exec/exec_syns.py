@@ -51,7 +51,11 @@ def run_matrix_export():
     log.info('Connectivity matrix was epxorted to "{}".'.format(dest_folder))
 
 
-def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
+def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
+                       max_n_jobs=None):
+    if max_n_jobs is None:
+        max_n_jobs = global_params.NCORE_TOTAL * 3
+
     log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
                              overwrite=False)
 
@@ -68,7 +72,8 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     # POPULATES CS CD with SV contacts
     ces.find_contact_sites(cd, kd_seg_path)
     ces.extract_agg_contact_sites(cd, global_params.config.working_dir,
-                                  n_folders_fs=n_folders_fs, suffix="")
+                                  n_folders_fs=n_folders_fs, suffix="",
+                                  n_chunk_jobs=max_n_jobs)
     log.info('Contact site extraction finished.')
 
     # create overlap dataset between SJ and CS: SegmentationDataset of type 'syn'
@@ -84,7 +89,8 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000):
     # TODO: change stride to n_jobs
     # # This creates an SD of type 'syn', currently ~6h, will hopefully be sped up after refactoring
     cs_processing_steps.syn_gen_via_cset(cs_sd, sj_sd, cs_cset, resume_job=False,
-                                         nb_cpus=2, n_folders_fs=n_folders_fs)
+                                         nb_cpus=2, n_folders_fs=n_folders_fs,
+                                         n_chunk_jobs=max_n_jobs)
     sd = SegmentationDataset("syn", working_dir=global_params.config.working_dir,
                              version="0")
     dataset_analysis(sd, compute_meshprops=False)

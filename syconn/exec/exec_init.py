@@ -19,7 +19,8 @@ from syconn.handler.basics import chunkify, kd_factory
 
 
 # TODO: make it work with new SyConn
-def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None, generate_sv_meshes=False):
+def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
+                   generate_sv_meshes=False):
     """
 
     Parameters
@@ -43,7 +44,8 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None, generat
     # Sets initial values of object
     kd = kd_factory(global_params.config.kd_seg_path)
 
-    # TODO: get rid of explicit voxel extraction, all info necessary should be extracted at the beginning, e.g. size, bounding box etc and then refactor to only use those cached attributes!
+    # TODO: get rid of explicit voxel extraction, all info necessary should be extracted
+    #  at the beginning, e.g. size, bounding box etc and then refactor to only use those cached attributes!
     # resulting ChunkDataset, required for SV extraction --
     # Object extraction - 2h, the same has to be done for all cell organelles
     cd_dir = global_params.config.working_dir + "chunkdatasets/sv/"
@@ -81,6 +83,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None, generat
     log.info('Finished preparation of cell SVs after {:.0f}s.'.format(time.time() - start))
     # create SegmentationDataset for each cell organelle
     for co in global_params.existing_cell_organelles:
+        start = time.time()
         cd_dir = global_params.config.working_dir + "chunkdatasets/{}/".format(co)
         # Class that contains a dict of chunks (with coordinates) after initializing it
         cd = chunky.ChunkDataset()
@@ -95,7 +98,6 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None, generat
         target_kd.initialize_without_conf(path, kd.boundary, kd.scale, kd.experiment_name, mags=[1, ])
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_from_knossos_path(path)
-        # TODO: this currently uses extract_voxels_combined ->  switch to extract and then combine as with SV! see from_ids_to_objects
         oew.from_probabilities_to_objects(cd, co, # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist
                                           prob_kd_path_dict=prob_kd_path_dict, thresholds=[prob_thresh],
                                           workfolder=global_params.config.working_dir,
@@ -122,6 +124,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None, generat
                  'cell SVs.'.format(len(sd_co.ids), co))
         sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path,
                                   n_jobs=max_n_jobs)
-        log.info('Finished preparation of "{}" SVs.'.format(co))
+        log.info('Finished preparation of {} "{}"-SVs after {:.0f}s.'
+                 ''.format(len(sd_co.ids), co, time.time() - start))
 
 
