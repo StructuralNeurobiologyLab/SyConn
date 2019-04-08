@@ -23,7 +23,7 @@ import time
 from multiprocessing import cpu_count
 
 from ..handler.basics import temp_seed
-from ..handler.logger import initialize_logging
+from ..handler.config import initialize_logging
 from .. import global_params
 from .mp_utils import start_multiprocess_imap
 from . import log_mp
@@ -54,9 +54,7 @@ def batchjob_enabled():
     return True
 
 
-home_dir = os.environ['HOME'] + "/"
 path_to_scripts_default = global_params.batchjob_script_folder
-qsub_work_folder = "%s/%s/" % (home_dir, BATCH_PROC_SYSTEM)
 username = getpass.getuser()
 python_path_global = sys.executable
 
@@ -148,7 +146,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             n_max_co_processes=n_max_co_processes,  n_cores=n_cores)
     if python_path is None:
         python_path = python_path_global
-    job_folder = qsub_work_folder+"/%s_folder%s/" % (name, suffix)
+    job_folder = "{}/{}_folder{}/".format(global_params.config.qsub_work_folder,
+                                          name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob = initialize_logging("{}".format(name + suffix),
@@ -278,18 +277,24 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 priority, additional_flags, this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         elif BATCH_PROC_SYSTEM == 'SLURM':
-            additional_flags = "-n%d" % n_cores
             if n_cores > 1:
+                # additional_flags = "-n%d" % n_cores
                 # otherwise multiprocessing will run on one CPU only if cpu binding is not modified within each process
-                additional_flags += "--cpu_bind=none"
+                additional_flags += " --cpu-bind=none --cpus-per-task=" + str(n_cores)
+                cmd_exec = "srun {0} --output={1} --error={2}" \
+                           " --job-name={3} {4} &".format(  # ntasks-per-node=1
+                    # because MP is organized by the launched job
+                    additional_flags, job_log_path, job_err_path,
+                    job_name, this_sh_path)
+            else:
+                cmd_exec = "sbatch {0} --output={1} --error={2}" \
+                           " --job-name={3} {4}".format(
+                    additional_flags, job_log_path, job_err_path,
+                    job_name, this_sh_path)
             if priority is not None and priority != 0:
                 log_batchjob.warning('Priorities are not supported with SLURM.')
             # added '--quiet' flag to prevent submission messages, errors will still be printed
             # (https://slurm.schedmd.com/sbatch.html), DOES NOT WORK
-            cmd_exec = "sbatch {0} --quiet --output={1} --error={2}" \
-                       " --job-name={3} {4}".format(
-                additional_flags, job_log_path, job_err_path,
-                job_name, this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         else:
             raise NotImplementedError
@@ -350,9 +355,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         # set number cores per job higher which will at the same time increase
         # the available amount of memory per job, ONLY VALID IF '--mem' was not specified explicitly!
         n_cores += 1  # increase number of cores per job by at least 1
-        n_cores = np.max([np.min([global_params.NCORES_PER_NODE, float(n_max_co_processes) /
-                                  len(missed_params) * n_cores]), n_cores])
+        n_cores = np.max([np.min([global_params.NCORES_PER_NODE, float(n_max_co_processes) //
+                                  len(missed_params)]), n_cores])
         n_cores = np.min([n_cores, global_params.NCORES_PER_NODE])
+        n_cores = int(n_cores)
         if n_cores == global_params.NCORES_PER_NODE:
             if not '--mem=' in additional_flags:
                 additional_flags += ' --mem=0'
@@ -422,7 +428,8 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         path to the output directory
 
     """
-    job_folder = qsub_work_folder + "/%s_folder%s/" % (name, suffix)
+    job_folder = "{}/{}_folder{}/".format(global_params.config.qsub_work_folder,
+                                          name, suffix)
     if not os.path.exists(job_folder):
         raise RuntimeError('Job folder has to exist, in order to '
                            'resume unfinished job.')
@@ -478,7 +485,8 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     """
     if python_path is None:
         python_path = python_path_global
-    job_folder = qsub_work_folder + "/%s_folder%s/" % (name, suffix)
+    job_folder = "{}/{}_folder{}/".format(global_params.config.qsub_work_folder,
+                                          name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob = log_mp

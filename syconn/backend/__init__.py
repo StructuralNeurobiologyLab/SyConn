@@ -8,6 +8,7 @@
 from ..global_params import backend
 from .base import FSBase, BTBase
 from ..handler.logger import log_main
+
 # init backend
 if backend == 'FS':
     StorageClass = FSBase

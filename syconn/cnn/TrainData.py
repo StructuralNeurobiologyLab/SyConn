@@ -15,7 +15,7 @@ from syconn.handler.prediction import naive_view_normalization, naive_view_norma
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.segmentation import SegmentationDataset
 from syconn import global_params
-from syconn.handler.logger import log_main as log_cnn
+from syconn.handler import log_main as log_cnn
 import os
 from sklearn.model_selection import train_test_split
 try:

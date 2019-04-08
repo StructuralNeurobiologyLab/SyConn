@@ -721,7 +721,7 @@ class SegmentationObject(object):
                 return np.array([self.rep_coord, ], dtype=np.float32) * self.scaling
 
             if global_params.config.use_new_renderings_locs:
-                coords = generate_rendering_locs(verts, 2000 * 3).astype(
+                coords = generate_rendering_locs(verts, 2000).astype(
                     np.float32)  # '*3' because `generate_rendering_locs` use a division by 3 internally...
             else:
                 coords = surface_samples(verts).astype(np.float32)

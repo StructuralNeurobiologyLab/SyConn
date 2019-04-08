@@ -347,7 +347,7 @@ def rgb2id_array(rgb_arr):
     return id_arr.reshape(rgb_arr.shape[:-1])
 
 
-def generate_rendering_locs(verts, comp_window):
+def generate_rendering_locs(verts, ds_factor):
     """
     TODO: generalize for all rendering locations (e.g. also use in call of SSO.sample_locations)
 
@@ -355,16 +355,14 @@ def generate_rendering_locs(verts, comp_window):
     ----------
     verts : np.ndarray
         N, 3
-    comp_window : float
-
+    ds_factor : float
+        effectively determines the volume size (ds_factor^3) for which a
+        rendering location is returned.
     Returns
     -------
     np.ndarray
         rendering locations
     """
-    # downsample vertices and get ~3 locations per comp_window
-    ds_factor = comp_window / 3
-
     # get unique array of downsampled vertex locations (scaled back to nm)
     verts_ixs = np.arange(len(verts))
     np.random.seed(0)

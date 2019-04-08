@@ -42,7 +42,8 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                         hdf5_name_membrane=None, fast_load=False, suffix="",
                         qsub_pe=None, qsub_queue=None, nb_cpus=None,
                         n_max_co_processes=None, transform_func=None,
-                        transform_func_kwargs=None):
+                        transform_func_kwargs=None,
+                        load_from_kd_overlaycubes=False):
     """
     Extracts connected component from probability maps.
 
@@ -112,6 +113,8 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
         Segmentation method which is applied
     transform_func_kwargs : dict
         key word arguments for transform_func
+    load_from_kd_overlaycubes : bool
+        Load prob/seg data from overlaycubes instead of raw cubes.
 
     Returns
     -------
@@ -155,7 +158,8 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
              hdf5names, overlap,
              sigmas, thresholds, swapdata, prob_kd_path_dict,
              membrane_filename, membrane_kd_path,
-             hdf5_name_membrane, fast_load, suffix, transform_func_kwargs])
+             hdf5_name_membrane, fast_load, suffix, transform_func_kwargs,
+             load_from_kd_overlaycubes])
 
     if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(transform_func, multi_params,
@@ -217,6 +221,7 @@ def _gauss_threshold_connected_components_thread(args):
     hdf5_name_membrane = args[11]
     fast_load = args[12]
     suffix = args[13]
+    load_from_kd_overlaycubes = args[14]
 
     box_offset = np.array(chunk.coordinates) - np.array(overlap)
     size = np.array(chunk.size) + 2*np.array(overlap)
@@ -228,8 +233,11 @@ def _gauss_threshold_connected_components_thread(args):
         bin_data_dict = {}
         for kd_key in prob_kd_path_dict.keys():
             kd = kd_factory(prob_kd_path_dict[kd_key])
-            bin_data_dict[kd_key] = kd.from_raw_cubes_to_matrix(size,
-                                                                box_offset)
+            if load_from_kd_overlaycubes:  # enable possibility to load from overlay cubes as well
+                bin_data_dict[kd_key] = kd.from_overlaycubes_to_matrix(size, box_offset)
+            else:  # load raw
+                bin_data_dict[kd_key] = kd.from_raw_cubes_to_matrix(size,
+                                                                    box_offset)
     else:
         if not fast_load:
             cset = chunky.load_dataset(path_head_folder)

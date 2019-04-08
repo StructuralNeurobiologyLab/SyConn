@@ -6,7 +6,8 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 from syconn.reps.super_segmentation import *
-from syconn.handler.logger import log_main
+from syconn.handler import log_main
+from syconn.handler.multiviews import generate_rendering_locs
 import numpy as np
 import logging
 import pandas
@@ -47,25 +48,12 @@ if __name__ == "__main__":
         ssv = new_ssd.get_super_segmentation_object(ssv_id)
         ssv.save_attributes(["cellttype_gt"], [ssv_labels[ii]])
         # # previous run for "normal" bootstrap N-view predictions
-        # ssv._render_rawviews(4, verbose=True, force_recompute=True)  # TODO: Make sure that copied files are always the same if `force_recompute` is set to False!
+        ssv._render_rawviews(4, verbose=True, force_recompute=True)  # TODO: Make sure that copied files are always the same if `force_recompute` is set to False!
         # # Large FoV bootstrapping
         # # downsample vertices and get ~3 locations per comp_window
         verts = ssv.mesh[1].reshape(-1, 3)
         comp_window = 40960  # nm  -> pixel size: 80 nm
-        ds_factor = comp_window / 3
-        # get unique array of downsampled vertex locations (scaled back to nm)
-        verts_ixs = np.arange(len(verts))
-        np.random.seed(0)
-        np.random.shuffle(verts_ixs)
-        ds_locs_encountered = {}
-        rendering_locs = []
-        for kk, c in enumerate(verts[verts_ixs]):
-            ds_loc = tuple((c / ds_factor).astype(np.int))
-            if ds_loc in ds_locs_encountered:  # always gets first coordinate which is in downsampled voxel, the others are skipped
-                continue
-            rendering_locs.append(c)
-            ds_locs_encountered[ds_loc] = None
-        rendering_locs = np.array(rendering_locs)
+        rendering_locs = generate_rendering_locs(verts, comp_window)
         views = render_sso_coords(ssv, rendering_locs, verbose=True, ws=(512, 512), add_cellobjects=True,
                                   return_rot_mat=False, comp_window=comp_window, nb_views=4)
         ssv.save_views(views, view_key="4_large_fov")
@@ -74,17 +62,17 @@ if __name__ == "__main__":
     write_obj2pkl(new_ssd.path + "/{}_labels.pkl".format(gt_version),
                  {ssv_ids[kk]: ssv_labels[kk] for kk in range(len(ssv_ids))})
 
-    # test prediction, copy trained models, see paths to 'models' folder defined in global_params.config
-    from syconn.handler.prediction import get_celltype_model_large_e3, get_tripletnet_model_large_e3
-    from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
-    from syconn import global_params
-    import tqdm
-    ssd = SuperSegmentationDataset(working_dir=global_params.wd, version="ctgt_v2")
-    pbar = tqdm.tqdm(total=len(ssd.ssv_ids))
-    m = get_celltype_model_large_e3()
-    m_tnet = get_tripletnet_model_large_e3()
-    for ssv in ssd.ssvs:
-        ssv._view_caching = True
-        ssv.predict_celltype_cnn(model=m, pred_key_appendix='test_pred_v1',
-                                 model_tnet=m_tnet)
-        pbar.update()
+    # # test prediction, copy trained models, see paths to 'models' folder defined in global_params.config
+    # from syconn.handler.prediction import get_celltype_model_large_e3, get_tripletnet_model_large_e3
+    # from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
+    # from syconn import global_params
+    # import tqdm
+    # ssd = SuperSegmentationDataset(working_dir=global_params.wd, version="ctgt_v2")
+    # pbar = tqdm.tqdm(total=len(ssd.ssv_ids))
+    # m = get_celltype_model_large_e3()
+    # m_tnet = get_tripletnet_model_large_e3()
+    # for ssv in ssd.ssvs:
+    #     ssv._view_caching = True
+    #     ssv.predict_celltype_cnn(model=m, pred_key_appendix='test_pred_v1',
+    #                              model_tnet=m_tnet)
+    #     pbar.update()

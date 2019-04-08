@@ -13,14 +13,14 @@ from syconn import global_params
 from syconn.extraction import object_extraction_wrapper as oew
 from syconn.proc import sd_proc
 from syconn.reps.segmentation import SegmentationDataset
-from syconn.handler.logger import initialize_logging
+from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.handler.basics import chunkify, kd_factory
 
 
 # TODO: make it work with new SyConn
 def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
-                   generate_sv_meshes=False):
+                   generate_sv_meshes=False, load_from_kd_overlaycubes=False):
     """
 
     Parameters
@@ -29,6 +29,8 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
     max_n_jobs : int
     n_folders_fs :
     generate_sv_meshes :
+    load_from_kd_overlaycubes : bool
+        Load prob/seg data from overlaycubes instead of raw cubes.
 
     Returns
     -------
@@ -102,7 +104,8 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
                                           prob_kd_path_dict=prob_kd_path_dict, thresholds=[prob_thresh],
                                           workfolder=global_params.config.working_dir,
                                           hdf5names=[co], n_max_co_processes=None, target_kd=target_kd,
-                                          n_folders_fs=n_folders_fs, debug=False)
+                                          n_folders_fs=n_folders_fs, debug=False,
+                                          load_from_kd_overlaycubes=load_from_kd_overlaycubes)
         sd_co = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir)
 
         # TODO: check if this is faster then the alternative below

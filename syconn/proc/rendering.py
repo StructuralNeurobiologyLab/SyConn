@@ -1138,7 +1138,7 @@ def render_sso_ortho_views(sso):
 
     Returns
     -------
-    np.array
+    np.ndarray
     """
     views = np.zeros((3, 4, 1024, 1024))
     # init MeshObject to calculate rotation into PCA frame
@@ -1153,52 +1153,91 @@ def render_sso_ortho_views(sso):
     return views
 
 
-def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
-                                      n_jobs, verbose=False,
-                                      render_indexviews=True):
+def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
+                                      verbose=False, render_kwargs=None,
+                                      render_indexviews=True, return_views=True):
     """
 
     Parameters
     ----------
     ssv : SuperSegmentationObject
-    wd : string: working directory for accessing data
+    wd : string
+        working directory for accessing data
     rendering_locations: array of locations to be rendered
-    n_jobs: int: number of parallel jobs running on same node of cluster
-    verbose: bool: flag to show th progress of rendering.
+    n_jobs : int
+        number of parallel jobs running on same node of cluster
+    verbose : bool
+        flag to show th progress of rendering.
+    return_views : bool
+        if False and rendering_locations is None, views will be saved at
+        SSV SVs
 
-    Returns: Array: array of views after rendering of locations.
+    Returns
+    -------
+    np.ndarray
+        array of views after rendering of locations.
     -------
 
     """
+    if rendering_locations is not None and return_views is False:
+        raise ValueError('"render_sso_coords_multiprocessing" received invalid '
+                         'parameters (`rendering_locations!=None` and `return_v'
+                         'iews=False`). When using specific rendering locations, '
+                         'views have to be returned-')
     tim = time.time()
+    if rendering_locations is None:  # use SV rendering locations
+        svs = list(ssv.svs)
+        rendering_locations = [sv.sample_locations for sv in svs]
+        # store number of rendering locations per SV -> Ordering of rendered
+        # views must be preserved!
+        part_views = np.cumsum([0] + [len(c) for c in rendering_locations])
+
     chunk_size = len(rendering_locations) // n_jobs + 1
-    print(chunk_size)
-    params = chunkify_successive(rendering_locations, chunk_size)  # TODO: adapt chunk size in a reasonable way
+    params = chunkify_successive(rendering_locations, chunk_size)
     ssv_id = ssv.id
     working_dir = wd
     sso_kwargs = {'ssv_id': ssv_id,
                   'working_dir': working_dir,
                   "version": ssv.version}
-    render_kwargs = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
+    render_kwargs_def = {'add_cellobjcts': True, 'verbose': verbose, 'clahe': False,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
-                      'nb_views': None, 'comp_window': None, 'rot_mat': None,
+                      'nb_views': None, 'comp_window': None, 'rot_mat': None, 'wo_glia':True,
                      'return_rot_mat': False, 'render_indexviews': render_indexviews}
-    params = [[par, sso_kwargs, render_kwargs, ix] for ix, par in enumerate(params)]
+    if render_kwargs is not None:
+        render_kwargs_def.update(render_kwargs)
+
+    params = [[par, sso_kwargs, render_kwargs_def, ix] for ix, par in
+              enumerate(params)]
     tim1 = time.time()
     if verbose:
         log_proc.debug("Time for OTHER COMPUTATION {:.2f}s."
                        "".format(tim1 - tim))
+    # This is single node multiprocessing -> `disable_batchjob=False`
     path_to_out = QSUB_script(
         params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
         queue=None, script_folder=None, n_cores=1, disable_batchjob=True,
         n_max_co_processes=n_jobs)
     out_files = glob.glob(path_to_out + "/*")
-    results = []
+    views = []
     out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
     for out_file in out_files2:
         with open(out_file, 'rb') as f:
-            results.append(pkl.load(f))
-    return results
+            views.append(pkl.load(f))
+    views = np.concatenate(views)
+    if rendering_locations is None and return_views is False:
+        # TODO: this method requires
+        if ssv.version != 'tmp':
+            for i, so in enumerate(svs):
+                sv_views = views[part_views[i]:part_views[i+1]]
+                so.save_views(sv_views, woglia=render_kwargs_def['wo_glia'],
+                              cellobjects_only=render_kwargs_def['cellobjects_only'],
+                              index_views=render_kwargs_def["render_indexviews"])
+        else:
+            log_proc.warning('"render_sampled_sso" called but this SSV '
+                             'has version "tmp", results will'
+                             ' not be saved to disk.')
+        return
+    return views
 
 
 def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None,
@@ -1221,16 +1260,16 @@ def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None
 
     if render_indexviews is False:
         if len(rendering_locations) > 360:
-            views = render_sso_coords_multiprocessing(ssv, working_dir,
-                rendering_locations, render_indexviews=render_indexview,
-                        n_jobs=n_jobs, verbose=verbose)
+            views = render_sso_coords_multiprocessing(
+                ssv, working_dir, rendering_locations=rendering_locations,
+                n_jobs=n_jobs, verbose=verbose, render_indexviews=render_indexviews)
         else:
-            views = rendrender_sso_coords(ssv, rendering_locations, verbose=verbose)
+            views = render_sso_coords(ssv, rendering_locations, verbose=verbose)
     else:
         if len(rendering_locations) > 140:
-            views = render_sso_coords_multiprocessing(ssv, working_dir,
-                rendering_locations, render_indexviews=render_indexview,
-                        n_jobs=n_jobs, verbose=verbose)
+            views = render_sso_coords_multiprocessing(
+                ssv, working_dir, rendering_locations=rendering_locations,
+                render_indexviews=render_indexviews, n_jobs=n_jobs, verbose=verbose)
         else:
             views = render_sso_coords_index_views(ssv, rendering_locations, verbose=verbose)
     return views

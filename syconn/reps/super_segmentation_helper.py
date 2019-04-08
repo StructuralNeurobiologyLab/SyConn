@@ -58,7 +58,8 @@ def majority_vote(anno, prop, max_dist):
             if int(new_node.data["axoness_pred"]) == 2:
                 new_node.data["axoness_pred"] = 2
                 continue
-        property_val = [int(n.data[prop+'_pred']) for n in nodes if int(n.data[prop+'_pred']) != 2]
+        property_val = [int(n.data[prop+'_pred']) for n in nodes if
+                        int(n.data[prop+'_pred']) != 2]
         counter = Counter(property_val)
         new_ax = counter.most_common()[0][0]
         new_node.setDataElem(prop+'_pred', new_ax)
@@ -87,7 +88,8 @@ def nodes_in_pathlength(anno, max_path_len):
         for edge in nx.bfs_edges(skel_graph, source_node):
             next_node = edge[1]
             next_node_coord = np.array(next_node.getCoordinate_scaled())
-            curr_path_length += np.linalg.norm(next_node_coord - np.array(edge[0].getCoordinate_scaled()))
+            curr_vec = next_node_coord - np.array(edge[0].getCoordinate_scaled())
+            curr_path_length += np.linalg.norm(curr_vec)
             if curr_path_length > max_path_len:
                 break
             reachable_nodes.append(next_node)
@@ -152,7 +154,8 @@ def sso_views_to_modelinput(sso, nb_views, view_key=None):
 
 def radius_correction(sso, scaling=None):
     """
-    radius correction : algorithm find nodes first and iterates over the finder bunch of meshes
+    radius correction : algorithm find nodes first and iterates over the finder
+    bunch of meshes
     :param sso: super segmentation object
     :return: skeleton with the corrected diameters in the key 'diameters'
     """
@@ -1713,7 +1716,7 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
                        verbose=verbose, add_cellobjects=True,
                        return_rot_mat=False)
     verts = sso.mesh[1].reshape(-1, 3)
-    rendering_locs = generate_rendering_locs(verts, comp_window)
+    rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window
 
     # overwrite default rendering locations (used later on for the view generation)
     sso._sample_locations = rendering_locs
@@ -1779,7 +1782,7 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
                        verbose=verbose, add_cellobjects=True,
                        return_rot_mat=False)
     verts = sso.mesh[1].reshape(-1, 3)
-    rendering_locs = generate_rendering_locs(verts, comp_window)
+    rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window
 
     # overwrite default rendering locations (used later on for the view generation)
     sso._sample_locations = rendering_locs
@@ -1840,7 +1843,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
     raw_view_key = 'raw{}_{}_{}'.format(ws[0], ws[1], nb_views)
     index_view_key = 'index{}_{}_{}'.format(ws[0], ws[1], nb_views)
     verts = sso.mesh[1].reshape(-1, 3)
-    rendering_locs = generate_rendering_locs(verts, comp_window)
+    rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window
 
     # overwrite default rendering locations (used later on for the view generation)
     sso._sample_locations = rendering_locs

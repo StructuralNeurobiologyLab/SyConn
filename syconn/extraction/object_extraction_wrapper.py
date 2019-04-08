@@ -61,9 +61,11 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                   suffix="", n_max_co_processes=None,
                                   transform_func=None, func_kwargs=None,
                                   nb_cpus=None, workfolder=None, n_erosion=0,
-                                  overlap_thresh=0, stitch_overlap=None):
+                                  overlap_thresh=0, stitch_overlap=None,
+                                  load_from_kd_overlaycubes=False):
     """
-    # TODO: Merge this method with mapping (e.g. iterate over chunks of cell SV segm. and over all objects to extract bounding boxes and overlap (i.e. mapping) at the same time
+    # TODO: Merge this method with mapping (e.g. iterate over chunks of cell SV segm. and over all
+            objects to extract bounding boxes and overlap (i.e. mapping) at the same time
     Main function for the object extraction step; combines all needed steps
     # TODO: change object_names to dataset_names as in other methods
 
@@ -139,6 +141,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         If zero this behavior is disabled.
     stitch_overlap : np.array
         volume evaluated during stitching procedure
+    load_from_kd_overlaycubes : bool
+        Load prob/seg data from overlaycubes instead of raw cubes.
 
     """
     all_times = []
@@ -180,7 +184,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         hdf5_name_membrane=hdf5_name_membrane, fast_load=True,
         suffix=suffix, transform_func=transform_func,
         transform_func_kwargs=func_kwargs, n_max_co_processes=n_max_co_processes,
-        nb_cpus=nb_cpus)
+        nb_cpus=nb_cpus, load_from_kd_overlaycubes=load_from_kd_overlaycubes)
     if stitch_overlap is None:
         stitch_overlap = overlap_info[1]
     else:

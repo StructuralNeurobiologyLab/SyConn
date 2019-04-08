@@ -17,8 +17,7 @@ import time
 import argparse
 
 from syconn.handler.prediction import parse_movement_area_from_zip
-from syconn.handler.logger import initialize_logging
-from syconn.handler.config import get_default_conf_str
+from syconn.handler.config import get_default_conf_str, initialize_logging
 from syconn.handler.compression import load_from_h5py
 from syconn import global_params
 from syconn.exec import exec_init, exec_syns, exec_multiview
@@ -61,6 +60,7 @@ if __name__ == '__main__':
     scale = np.array([10, 10, 20])
     chunk_size = (256, 256, 256)
     n_folders_fs = 1000  # number of folders in should probably be different for different segmentations
+    max_n_jobs = 60
     experiment_name = 'j0126_example'
 
     # PREPARE CONFIG
@@ -157,7 +157,7 @@ if __name__ == '__main__':
 
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.run_create_sds(generate_sv_meshes=True, chunk_size=chunk_size,
-                             n_folders_fs=n_folders_fs, max_n_jobs=60)
+                             n_folders_fs=n_folders_fs, max_n_jobs=max_n_jobs)
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 
@@ -167,7 +167,7 @@ if __name__ == '__main__':
     step_idents.append('SSD generation')
 
     log.info('Step 3/8 - Neuron rendering')
-    exec_multiview.run_neuron_rendering(max_n_jobs=60)
+    exec_multiview.run_neuron_rendering(max_n_jobs=max_n_jobs)
     time_stamps.append(time.time())
     step_idents.append('Neuron rendering')
 
@@ -175,7 +175,8 @@ if __name__ == '__main__':
     # require only medium MEM and CPU resources and mainly GPU
     # TODO: adapt memory and CPU allocation of those GPU workers
     log.info('Step 4/8 - Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs)
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
+                                 max_n_jobs=max_n_jobs)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
 

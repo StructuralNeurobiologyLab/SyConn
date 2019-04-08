@@ -15,7 +15,7 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.proc.sd_proc import dataset_analysis, extract_synapse_type
 from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
-from syconn.handler.logger import initialize_logging
+from syconn.handler.config import initialize_logging
 from syconn.handler.basics import kd_factory
 
 

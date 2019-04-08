@@ -2408,7 +2408,7 @@ class SuperSegmentationObject(object):
             `global_params.py` will be used.
 
         """
-        # ssh.predict_sso_celltype(self, model, **kwargs)
+        # ssh.predict_sso_celltype(self, model, **kwargs)  # OLD
         if view_props is None:
             view_props = global_params.view_properties_large
         ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,

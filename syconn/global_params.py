@@ -6,11 +6,10 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 import warnings
-import logging
-# warnings.filterwarnings(action='once')
 import os
 import logging
 from .handler.config import DynConfig
+
 warnings.filterwarnings("ignore", message=".*You are using implicit channel selection.*")
 warnings.filterwarnings("ignore", message=".*You are initializing a KnossosDataset from a path.*")
 warnings.filterwarnings("ignore", message=".*dataset.value has been deprecated.*")  # h5py deprecation warning
@@ -18,14 +17,14 @@ warnings.filterwarnings("ignore", message=".*dataset.value has been deprecated.*
 # ---------------------- STATIC AND GLOBAL PARAMETERS # -----------------------
 # --------- GLOBAL WORKING DIRECTORY
 # wd = "/wholebrain/scratch/areaxfs3/"
-wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+# wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+wd = None
 # wd = "/wholebrain/scratch/areaxfs3/"
 # wd = '/mnt/j0126/areaxfs_v10/'
 
 # TODO: Put all dataset-specific parameters into config.ini / configspec.ini
 
 rag_suffix = ""  # identifier in case there will be more than one RAG, TODO: Remove
-config = DynConfig()
 
 # All subsquent parameter are dataset independent and do not have to be stored at
 # config.ini in the working directory
@@ -117,8 +116,11 @@ gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80
 
 
 # --------- CELLTYPE PARAMETERS
-view_properties_large = dict(verbose=False, ws=(512, 512), nb_views_render=4,
+view_properties_large = dict(verbose=False, ws=(512, 512), nb_views_render=6,
                              comp_window=40960, nb_views_model=4)
 
 # --------- MORPHOLOGY EMBEDDING
 ndim_embedding = 10
+
+# general config object
+config = DynConfig()

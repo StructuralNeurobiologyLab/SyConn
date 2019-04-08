@@ -32,9 +32,10 @@ from syconn.handler.prediction import get_axoness_model
 from syconn.handler.basics import chunkify
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_ssv
-from syconn.handler.logger import initialize_logging
+from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.exec import exec_skeleton
+
 
 def run_morphology_embedding():
     log = initialize_logging('morphology_embedding', global_params.config.working_dir
@@ -151,10 +152,11 @@ def run_celltype_prediction(max_n_jobs=100):
     # one list as parameter one needs an additonal axis
     multi_params = [(ixs, ) for ixs in multi_params]
 
-    path_to_out = qu.QSUB_script(multi_params, "predict_cell_type", pe="openmp",
-                                 n_max_co_processes=global_params.NGPU_TOTAL, queue=None,
-                                 script_folder=None, suffix="", additional_flags="--gres=gpu:1",
-                                 n_cores=global_params.NCORE_TOTAL // global_params.NGPU_TOTAL)
+    # TODO: switch n_max_co_processes to `global_params.NGPUS_TOTAL` as soon as EGL ressource allocation works!
+    path_to_out = qu.QSUB_script(multi_params, "predict_cell_type",
+                                 n_max_co_processes=global_params.NNODES_TOTAL,
+                                 suffix="", additional_flags="--gres=gpu:1",
+                                 n_cores=global_params.NCORES_PER_NODE)
     log.info('Finished prediction of {} SSVs. Checking completeness.'
              ''.format(len(ordering)))
     out_files = glob.glob(path_to_out + "*.pkl")
@@ -244,9 +246,19 @@ def run_neuron_rendering(max_n_jobs=2000):
         log.info('{} huge SSVs will be rendered afterwards using the whole'
                  ' cluster.'.format(np.sum(~size_mask)))
     # generic
-    path_to_out = qu.QSUB_script(multi_params, "render_views", pe="openmp",
-                                 n_max_co_processes=global_params.NCORE_TOTAL,
-                                 script_folder=None, suffix="", queue=None)
+    # TODO: switch n_cores to `global_params.NGPUS_TOTAL` as soon as EGL ressource allocation works!
+    if global_params.PYOPENGL_PLATFORM == 'osmesa':  # utilize all CPUs
+        path_to_out = qu.QSUB_script(multi_params, "render_views",
+                                     n_max_co_processes=global_params.NCORE_TOTAL)
+    elif global_params.PYOPENGL_PLATFORM == 'egl':  # utilize 1 GPU per task
+        # TODO: use render_views_egl script
+        path_to_out = qu.QSUB_script(multi_params, "render_views",
+                                     n_max_co_processes=global_params.NNODES_TOTAL,
+                                     additional_flags="--gres=gpu:2",
+                                     n_cores=global_params.NCORES_PER_NODE)
+    else:
+        raise RuntimeError('Specified OpenGL platform "{}" not supported.'
+                           ''.format(global_params.PYOPENGL_PLATFORM))
     if np.sum(~size_mask) > 0:
         log.info('Finished rendering of {}/{} SSVs.'.format(len(ordering),
                                                             len(nb_svs_per_ssv)))
@@ -261,7 +273,7 @@ def run_neuron_rendering(max_n_jobs=2000):
                              qsub_co_jobs=global_params.NCORE_TOTAL,
                              skip_indexviews=False, resume_job=False)
     log.info('Finished rendering of all SSVs. Checking completeness.')
-    res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=10)
+    res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=global_params.NCORES_PER_NODE)
     if len(res) != 0:
         msg = "Not all SSVs were rendered completely! Missing:\n{}".format(res)
         log.error(msg)
