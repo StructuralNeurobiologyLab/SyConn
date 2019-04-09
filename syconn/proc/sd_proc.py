@@ -217,6 +217,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
                                  pe=qsub_pe, queue=qsub_queue,
                                  script_folder=None, n_cores=nb_cpus,
                                  n_max_co_processes=n_max_co_processes)
+    ################################## leave it from here ################################
     out_files = glob.glob(path_to_out + "/*")
     results = []
     for out_file in out_files:
@@ -232,7 +233,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     for result in results:
         for sv_key, value in result.items():
             sv_obj_map_dict[sv_key].update(value)
-
+##################33333#####
     mapping_dict_path = seg_dataset.path + "/sv_%s_mapping_dict.pkl" % sd.version
     with open(mapping_dict_path, "wb") as f:
         pkl.dump(sv_obj_map_dict, f)
@@ -247,7 +248,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_mapping_to_sv_thread, multi_params,
                                    nb_cpus=n_max_co_processes, debug=False)
-    elif qu.batchjob_enabled():
+    elif qu.batchjob_enabled(): ### maybe write_mapping_to_sv has to be adapted
         qu.QSUB_script(multi_params, "write_mapping_to_sv", pe=qsub_pe,
                        queue=qsub_queue, script_folder=None,
                        n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
