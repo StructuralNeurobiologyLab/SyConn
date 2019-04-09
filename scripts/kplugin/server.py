@@ -18,6 +18,8 @@ from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
 from syconn import global_params
 from syconn.gate import log_gate
+from syconn.handler.multiviews import int2str_converter
+from syconn.reps.segmentation import SegmentationDataset
 
 app = Flask(__name__)
 
@@ -93,6 +95,18 @@ def route_ssv_list():
     return json.dumps(sg_state.backend.ssv_list(), cls=MyEncoder)
 
 
+@app.route('/pull_so_attr/<so_id>/<so_type>/<attr_key>', methods=['GET'])
+def pull_so_attr(so_id, so_type, attr_key):
+    return json.dumps(sg_state.backend.pull_so_attr(so_id, so_type, attr_key),
+                      cls=MyEncoder)
+
+
+@app.route('/push_so_attr/<so_id>/<so_type>/<attr_key>/<attr_value>', methods=['GET'])
+def push_so_attr(so_id, so_type, attr_key, attr_value):
+    return json.dumps(sg_state.backend.push_so_attr(so_id, so_type, attr_key, attr_value),
+                      cls=MyEncoder)
+
+
 @app.route('/svs_of_ssv/<ssv_id>', methods=['GET'])
 def route_svs_of_ssv(ssv_id):
     return json.dumps(sg_state.backend.svs_of_ssv(ssv_id), cls=MyEncoder)
@@ -135,30 +149,20 @@ class SyConnBackend(object):
         self.logger = logger
         self.logger.info('Initializing SyConn backend')
 
-        self.ssd = ss.SuperSegmentationDataset(syconn_path)
+        self.ssd = ss.SuperSegmentationDataset(syconn_path,
+                                               sso_locking=False)
 
         self.logger.info('SuperSegmentation dataset initialized.')
 
-        # directed networkx graph of connectivity
-        self.conn_graph = conn.connectivity_to_nx_graph()
-        self.logger.info('Connectivity graph initialized.')
+        self.sds = dict(syn_ssv=SegmentationDataset(working_dir=syconn_path,
+                                                    obj_type='syn_ssv'))
+
         # flat array representation of all synapses
         self.conn_dict = conn.load_cached_data_dict()
-
-        idx_filter = self.conn_dict['synaptivity_proba'] > 0.5
-        #  & (df_dict['syn_size'] < 5.)
-
-        for k, v in self.conn_dict.items():
-            self.conn_dict[k] = v[idx_filter]
-
-        idx_filter = (self.conn_dict['neuron_partner_ax_0']
-                      + self.conn_dict['neuron_partner_ax_1']) == 1
-
-        for k, v in self.conn_dict.items():
-            self.conn_dict[k] = v[idx_filter]
         self.logger.info('In memory cache of synapses initialized.')
-
-        return
+        # directed networkx graph of connectivity
+        self.conn_graph = conn.connectivity_to_nx_graph(self.conn_dict)
+        self.logger.info('Connectivity graph initialized.')
 
     def ssv_mesh(self, ssv_id):
         """
@@ -337,7 +341,7 @@ class SyConnBackend(object):
                 log_gate.debug("Loading '{}' objects instead of 'sj' for SSV "
                                "{}.".format(obj_type, ssv_id))
             except KeyError:
-                pass
+                obj_type = "sj"
         # if not existent, create mesh
         _ = ssv.load_mesh(obj_type)
         mesh = ssv._load_obj_mesh_compr(obj_type)
@@ -392,8 +396,8 @@ class SyConnBackend(object):
     def ssv_of_sv(self, sv_id):
         """
         Returns the ssv for a given sv_id.
-        :param sv_id: 
-        :return: 
+        :param sv_id:
+        :return:
         """
         return {'ssv': self.ssd.id_changer[int(sv_id)]}
 
@@ -403,16 +407,22 @@ class SyConnBackend(object):
         :param sv_id:
         :return:
         """
+        # TODO: changed to new cell type predictions, work this in everywhere
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
         ssv.load_attr_dict()
         label = ""
-        if "celltype_cnn_probas" in ssv.attr_dict:
-            l = ssv.attr_dict["celltype_cnn"]
+        if "celltype_cnn_e3_probas" in ssv.attr_dict:  # new prediction
+            l = ssv.attr_dict["celltype_cnn_e3"]
+            # ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
+            # label = ct_label_dc[l]
+            label = int2str_converter(l, gt_type='ctgt_v2')
+        elif "celltype_cnn" in ssv.attr_dict:
             ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
+            l = ssv.attr_dict["celltype_cnn"]
             label = ct_label_dc[l]
         else:
-            log_gate.debug("Celltype prediction not present in attribute "
-                           "dict of SSV {}at {}.".format(ssv_id, ssv.attr_dict_path))
+            log_gate.warning("Celltype prediction not present in attribute "
+                             "dict of SSV {} at {}.".format(ssv_id, ssv.attr_dict_path))
         return {'ct': label}
 
     def svs_of_ssv(self, ssv_id):
@@ -428,7 +438,7 @@ class SyConnBackend(object):
         """
         Returns all synapse meta data. This works only well for fast
         connections and less than 1e6 synapses or so.
-        :return: 
+        :return:
         """
 
         all_syn_meta_dict = copy.copy(self.conn_dict)
@@ -443,7 +453,7 @@ class SyConnBackend(object):
         """
         TODO: Requires adaptions of 'SyConnBackend' class
         Returns all synapse objs of a given ssv_id.
-        :return: 
+        :return:
 
         """
         syns = dict()
@@ -464,8 +474,8 @@ class SyConnBackend(object):
         Return the syn objs where this ssv_id is post synaptic,
         i.e. this ssv_id receives the synapse.
 
-        :param ssv_id: 
-        :return: 
+        :param ssv_id:
+        :return:
         """
         syns = dict()
         # not the most efficient approach, a cached map might be necessary for
@@ -480,6 +490,57 @@ class SyConnBackend(object):
         syns['p0'] = self.syn_ssv_partner_0[idx]
         syns['p1'] = self.syn_ssv_partner_1[idx]
         return syns
+
+    def pull_so_attr(self, so_id, so_type, attr_key):
+        """
+        Generic attribute pull, return empty string if key did not exist. Could be optimized
+        with the assumption that all attributes have been cached as numpy arrays.
+
+        Parameters
+        ----------
+        so_id : int
+        so_type : str
+        attr_key : str
+
+        Returns
+        -------
+        str
+        """
+        if so_type not in self.sds:
+            self.sds[so_type] = SegmentationDataset(obj_type=so_type)
+        sd = self.sds[so_type]
+        so = sd.get_segmentation_object(so_id)
+        so.load_attr_dict()
+        if attr_key not in so.attr_dict:
+            return ''
+        return so.attr_dict[attr_key]
+
+    def push_so_attr(self, so_id, so_type, attr_key, attr_value):
+        """
+        Generic attribute pull, return empty string if key did not exist. Could be optimized
+        with the assumption that all attributes have been cached as numpy arrays.
+
+        Parameters
+        ----------
+        so_id : int
+        so_type : str
+        attr_key : str
+        attr_value :
+
+        Returns
+        -------
+        bytes
+            Empty string of everything went well
+        """
+        if so_type not in self.sds:
+            self.sds[so_type] = SegmentationDataset(obj_type=so_type)
+        sd = self.sds[so_type]
+        try:
+            so = sd.get_segmentation_object(so_id)
+            so.save_attributes([attr_key], [attr_value])
+            return ""
+        except Exception as e:
+            return str(e)
 
 
 class ServerState(object):

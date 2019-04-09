@@ -4,6 +4,7 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
 import numpy as np
 from knossos_utils.skeleton_utils import load_skeleton
 from sklearn.neighbors import KDTree
@@ -179,7 +180,7 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
     all_raw_views = np.concatenate(all_raw_views)
     all_label_views = np.concatenate(all_label_views)
     # all_index_views = np.concatenate(all_index_views)  # Removed index views
-    print("{} views collected. Shuffling views.".format(len(all_label_views)))
+    print("{} view locations collected. Shuffling views.".format(len(all_label_views)))
     np.random.seed(0)
     ixs = np.arange(len(all_raw_views))
     np.random.shuffle(ixs)
@@ -218,7 +219,6 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
 
 def gt_generation_helper(args):
     kzip_path, ssd_version, gt_type, n_voting, nb_views, ws, comp_window, dest_dir = args
-    print('Processing {}'.format(kzip_path))
     raw_views, label_views, index_views = generate_label_views(kzip_path, ssd_version, gt_type,
                                                                n_voting, nb_views, ws, comp_window,
                                                                out_path=dest_dir) # out_path set, colored meshes will be written out
@@ -260,9 +260,9 @@ def gt_generation_helper(args):
 
 
 if __name__ == "__main__":
-    assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
     # spiness
     if 0:
+        assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
         initial_run = False
         n_views = 2
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_spgt/" \
@@ -276,9 +276,12 @@ if __name__ == "__main__":
     # axoness
     if 1:
         initial_run = False
-        n_views = 2
+        ws = (1024, 512)
+        n_views = 3  # increase views per location due to higher pixel size, also increases GT diversity
+        assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_axoness_semseg_skeletons/"
-        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files/"
+        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_{}/".format(ws[0])
         file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
         GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
-                      ws=(512, 256), comp_window=51.2e3, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)
+                      ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)
+        # TODO: add new GT files based on areaxfs_v6

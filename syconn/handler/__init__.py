@@ -6,6 +6,7 @@
 # Authors: Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld
 
 from ..handler.logger import log_main
+
 log_handler = log_main
 
 

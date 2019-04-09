@@ -17,13 +17,13 @@ config = {
     'version': '0.2',
     'license': 'GPLv2',
     'install_requires': ['knossos_utils>=0.1', 'ELEKTRONN2', 'matplotlib',
-                         'numpy==1.15.4', 'scipy', 'lz4', 'h5py', 'networkx', 'ipython<7.0.0',
+                         'numpy==1.16.0', 'scipy', 'lz4', 'h5py', 'networkx', 'ipython<7.0.0',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn==0.19.1',
-                         'scikit-image==0.14.1', 'plyfile', 'vtki',
-                         'openmesh', 'pytest', 'theano==0.8.2',
+                         'scikit-image==0.14.2', 'plyfile', 'termcolor',
+                         'openmesh', 'pytest', 'theano==0.8.2', 'tqdm',
                          'pytest-runner', 'prompt-toolkit<2.0', 'numba==0.41.0',
-                         'llvmlite==0.26.0', 'elektronn3'],  # numba/llvmluite requirements due to https://github.com/numba/numba/issues/3666 in @jit compilation of 'id2rgb_array_contiguous' (in multiviews.py)
+                         'llvmlite==0.26.0', 'elektronn3', 'vtki'],  # numba/llvmluite requirements due to https://github.com/numba/numba/issues/3666 in @jit compilation of 'id2rgb_array_contiguous' (in multiviews.py)
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_utils'
                          '/tarball/dev#egg=knossos_utils',
@@ -37,7 +37,9 @@ config = {
     'setup_requires': ["pytest-runner", "cython>=0.23"], 'tests_require': ["pytest", ],
     # this will compile all files within directories in syconn/
      'ext_modules': cythonize(["syconn/*/*.pyx"], include_path=[numpy.get_include()],
-                              compiler_directives={'language_level': 3, 'boundscheck': False}),
+                              compiler_directives={'language_level': 3, 'boundscheck': False,
+                                                   'wraparound': False, 'initializedcheck': False,
+                                                   'cdivision': False, 'overflowcheck': True}),
 
 }
 

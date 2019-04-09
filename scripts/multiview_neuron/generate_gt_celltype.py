@@ -97,5 +97,5 @@ if __name__ == "__main__":
         ssv.save_attributes(["cellttype_gt"], [ssv_labels[ii]])
         ssv._render_rawviews(2)
     gt_dir = "/wholebrain/scratch/areaxfs3//ssv_ctgt/"
-    write_obj2pkl(gt_dir +"ctgt_labels.pkl",
+    write_obj2pkl(gt_dir + "ctgt_labels.pkl",
                  {ssv_ids[kk]: ssv_labels[kk] for kk in range(len(ssv_ids))})

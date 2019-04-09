@@ -9,5 +9,5 @@ from syconn.exec import exec_multiview
 
 
 if __name__ == "__main__":
-    exec_multiview.run_glia_splitting()
+    exec_multiview.run_glia_rendering()
 

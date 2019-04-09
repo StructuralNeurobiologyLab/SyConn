@@ -25,18 +25,18 @@ from elektronn3.data import transforms
 
 
 def get_model():
-    vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
-    model = FCNs(base_net=vgg_model, n_class=4)
-    # model = UNet(in_channels=4, out_channels=4, n_blocks=4, start_filts=64,
-    #              up_mode='resize', merge_mode='concat', planar_blocks=(),
-    #              activation='relu', batch_norm=True, dim=2,)
+    # vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
+    # model = FCNs(base_net=vgg_model, n_class=4)
+    model = UNet(in_channels=4, out_channels=4, n_blocks=5, start_filts=32,
+                 up_mode='resize', merge_mode='concat', planar_blocks=(),
+                 activation='relu', batch_norm=True, dim=2,)
     return model
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="axonseg-FCN-VGG13--Lovasz-resizeconv-apex",
+    parser.add_argument('-n', '--exp-name', default="axonseg-FCN-Dice-resizeconv-80nmGT",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
@@ -60,9 +60,9 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3training/')
 
     max_steps = args.max_steps
-    lr = 0.004
+    lr = 0.0048
     lr_stepsize = 500
-    lr_dec = 0.99
+    lr_dec = 0.995
     batch_size = 5
 
     model = get_model()
@@ -87,7 +87,8 @@ if __name__ == "__main__":
     )
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
 
-    criterion = LovaszLoss().to(device)
+    # criterion = LovaszLoss().to(device)
+    criterion = DiceLoss().to(device)
 
     # Create and run trainer
     trainer = Trainer(
@@ -103,7 +104,7 @@ if __name__ == "__main__":
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched},
         ipython_shell=False,
-        mixed_precision=True,  # Enable to use Apex for mixed precision training
+        mixed_precision=False,  # Enable to use Apex for mixed precision training
     )
 
     # Archiving training script, src folder, env info

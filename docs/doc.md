@@ -8,17 +8,21 @@
 * [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.
 
 
-We recommend installing Anaconda. Then set up the python environment:
+We recommend installing Anaconda and setting up a python environment:
 ```
 conda create -n pysy python=3.6 anaconda
 conda activate pysy
 ```
-In order to use the GPU during inference cuda and cudNN are required, either download and install cuda 8.0 and cudnn 5.1 or use conda (untested):
-```
-conda install cudatoolkit=8.0 cudnn=5.1
-```
 Git clone and install syconn and all prerequisites:
 ```
+git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
+cd SyConn
+sh install.sh
+```
+
+For manual installation run:
+```
+conda install cmake
 conda install vigra -c conda-forge
 conda install mesa -c menpo
 conda install osmesa -c menpo
@@ -27,27 +31,75 @@ conda install pyopengl
 conda install snappy
 conda install python-snappy
 conda install tensorboard tensorflow
+conda install -c conda-forge sip=4.18.1
+
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 cd SyConn
 pip install -r requirements.txt
-pip install .
-```
-Or alternatively with the developer flag:
-```
 pip install -e .
 ```
-In case that there are problems with theano try to install it from conda (untested):
-```
-pip uninstall theano
-conda install theano pygpu
-```
+
 
 ## Example run
-Place the example data in `SyConn/scripts/example_run/`, add the model folder to the working directory `~/SyConn/example_cube/`,
-cd to `SyConn/scripts/example_run/` and then run
+Place the example and model data (provided upon request) in `SyConn/scripts/example_run/`,
+cd to `SyConn/scripts/example_run/` and run
 ```
-python start.py --working_dir=~/SyConn/example_cube/
+python start.py
 ```
+
+Based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, probability maps of cell organelles
+(mitochondria, vesicle clouds and synaptic junctions) and synapse type (inhibitory, excitatory) the example
+script analyses the cell wiring through subsequent steps.
+
+On a machine with 20 CPUs (Intel(R) Xeon(R) @ 2.60GHz) and 2 GPUs (GeForce GTX 980 Ti) SyConn
+ finished the following analysis steps for an example cube with shape \[400 400 600] after 00h:09min:32s.
+
+\[0/8] Preparation          00h:00min:08s       1%
+
+\[1/8] SD generation        00h:04min:35s       48%
+
+\[2/8] SSD generation       00h:00min:13s       2%
+
+\[3/8] Neuron rendering     00h:00min:40s       7%
+
+\[4/8] Synapse detection    00h:01min:26s       15%
+
+\[5/8] Axon prediction      00h:01min:07s       11%
+
+\[6/8] Spine prediction     00h:00min:54s       9%
+
+\[7/8] Celltype analysis    00h:00min:22s       3%
+
+\[8/8] Matrix export        00h:00min:02s       0%
+
+
+## SyConn KNOSSOS viewer
+The following packages have to be available for the system's python2 interpreter
+(will differ from the conda environment):
+
+- numpy
+
+- lz4
+
+- requests
+
+In order to inspect the resulting data via the SyConnViewer KNOSSOS-plugin follow these steps:
+
+- wait until `start.py` finished. For restarting the server run `SyConn/scripts/kplugin/
+server.py --working_dir=<path>` pointing to your working directory (`<path>`).
+
+- download and run the nightly build of KNOSSOS (https://github.com/knossos-project/knossos/releases/tag/nightly)
+
+- in KNOSSOS -> File -> Choose Dataset -> browse to your working directory and open
+`knossosdatasets/seg/mag1/knossos.conf` with enabled 'load_segmentation_overlay' (at the bottom of the dialog).
+
+- then go to Scripting (top row) -> Run file -> browse to `SyConn/scripts/kplugin/syconn_knossos_viewer.py` and open it
+
+- After the SyConnViewer window has opened, the selection of segmentation fragments in the slice-viewports (exploration mode) or in the
+list of cell IDs followed by pressing 'show neurite' will trigger the rendering of the corresponding cell reconstruction mesh in the 3D viewport.
+ The plugin will display additional information about the selected cell and a list of detected synapses (shown as tuples of cell IDs;
+ clicking the entry will trigger a jump to the synapse location) and their respective
+ properties. In case the window does not pop-up check Scripting->Interpreter for errors.
 
 
 ## Analysis steps
@@ -56,7 +108,8 @@ containing the agglomerated SVs, several analysis steps can be applied:
 
 * [Optional] [Glia removal](glia_removal.md)
 
-* [Neuronal morphology analysis and classification](neuron_analysis.md) to identify cellular compartments (e.g. axons and spines) and to perform morphology based cell type classification.
+* [Neuronal morphology analysis and classification](neuron_analysis.md) to identify cellular
+compartments (e.g. axons and spines) and to perform morphology based cell type classification.
 
 * [Contact site extraction](contact_site_extraction.md)
 

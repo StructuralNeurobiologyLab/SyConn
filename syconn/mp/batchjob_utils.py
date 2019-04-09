@@ -23,16 +23,18 @@ import time
 from multiprocessing import cpu_count
 
 from ..handler.basics import temp_seed
-from ..handler.logger import initialize_logging
+from ..handler.config import initialize_logging
 from .. import global_params
-from ..mp.mp_utils import start_multiprocess_imap
+from .mp_utils import start_multiprocess_imap
 from . import log_mp
 
 BATCH_PROC_SYSTEM = global_params.BATCH_PROC_SYSTEM
 
 
 def batchjob_enabled():
-    if 'example_cube' in global_params.config.working_dir:  # disable QSUB/SLURM for example_run.py
+    # disable QSUB/SLURM for example_run.py
+    if global_params.config.working_dir is None or 'example_cube' in \
+            global_params.config.working_dir:
         return False
     if BATCH_PROC_SYSTEM is None:
         return False
@@ -53,9 +55,7 @@ def batchjob_enabled():
     return True
 
 
-home_dir = os.environ['HOME'] + "/"
 path_to_scripts_default = global_params.batchjob_script_folder
-qsub_work_folder = "%s/%s/" % (home_dir, BATCH_PROC_SYSTEM)
 username = getpass.getuser()
 python_path_global = sys.executable
 
@@ -64,10 +64,12 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 additional_flags='', suffix="", job_name="default",
                 script_folder=None, n_max_co_processes=None, resume_job=False,
                 sge_additional_flags=None, iteration=1, max_iterations=3,
-                params_orig_id=None, python_path=None, disable_mem_flag=False):
+                params_orig_id=None, python_path=None, disable_mem_flag=False,
+                disable_batchjob=False):
+    # TODO: change `queue` and `pe` to be set globally in global_params. All
+    #  wrappers around QSUB_script should then only have a flage like 'use_batchjob'
+    # TODO: Switch to JobArrays!
     """
-    TODO: change `queue` and `pe` to be set globally in global_params. All wrappers around QSUB_script should then only have a flage like 'use_batchjob'
-
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
 
@@ -117,7 +119,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     disable_mem_flag : bool
         If True, memory flag will not be set, otherwise it will be set to the
          fraction of the cores per job to the total number of cores per node
-        
+    disable_batchjob : bool
+        Overwrites global batchjob settings and will run multiple, independent bash jobs
+        on multiple CPUs instead.
+
     Returns
     -------
     path_to_out: str
@@ -126,7 +131,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     """
     if n_cores is None:
         n_cores = 1
-    if not batchjob_enabled():
+    if disable_batchjob or not batchjob_enabled():
         return batchjob_fallback(params, name, n_cores, suffix, n_max_co_processes,
                                  script_folder, python_path)
     if queue is None:
@@ -142,14 +147,16 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             n_max_co_processes=n_max_co_processes,  n_cores=n_cores)
     if python_path is None:
         python_path = python_path_global
-    job_folder = qsub_work_folder+"/%s_folder%s/" % (name, suffix)
+    job_folder = "{}/{}_folder{}/".format(global_params.config.qsub_work_folder,
+                                          name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob = initialize_logging("{}".format(name + suffix),
                                       log_dir=job_folder)
     n_max_co_processes = np.min([global_params.NCORE_TOTAL // n_cores,
                                  len(params)])
-    log_batchjob.info('Starting BatchJob script "{}" with {} tasks using {}'
+    n_max_co_processes = np.max([n_max_co_processes, 1])
+    log_batchjob.info('Started BatchJob script "{}" with {} tasks using {}'
                       ' parallel jobs, each using {} core(s).'.format(
         name, len(params), n_max_co_processes, n_cores))
     if sge_additional_flags is not None:
@@ -167,7 +174,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         with temp_seed(hash(time.time()) % (2 ** 32 - 1)):
             letters = string.ascii_lowercase
             job_name = "".join([letters[l] for l in
-                                np.random.randint(0, len(letters), 10 if BATCH_PROC_SYSTEM == 'QSUB' else 8)])
+                                np.random.randint(0, len(letters), 10 if
+                                BATCH_PROC_SYSTEM == 'QSUB' else 8)])
             log_batchjob.info("Random job_name created: %s" % job_name)
     else:
         log_batchjob.warning("WARNING: running multiple jobs via qsub is only supported "
@@ -205,7 +213,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             log_batchjob.warning(
                 '"additional_flags" contained "-V" which is a QSUB/SGE specific flag,'
                 ' but SLURM was set as batch system. Converting "-V" to "--export=ALL".')
-            additional_flags.replace('-V ', '--export=ALL ')
+            additional_flags = additional_flags.replace('-V ', '--export=ALL ')
         if not '--mem=' in additional_flags and not disable_mem_flag:
             # Node memory limit is 250,000M and not 250G! -> max memory per core is 250000M/20, leave safety margin
             mem_lim = int(
@@ -217,7 +225,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                                                  mem_lim))
 
     log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
-    pbar = tqdm.tqdm(total=len(params))
+    pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1)
 
     # memory of finished jobs to calculate increments
     n_jobs_finished = 0
@@ -249,7 +257,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         job_err_path = path_to_err + "job_%d.log" % job_id
 
         with open(this_sh_path, "w") as f:
-            f.write("#!/bin/bash\n")
+            f.write("#!/bin/bash -l\n")
             f.write('export syconn_wd="{4}"\n{0} {1} {2} {3}'.format(
                 python_path, path_to_script, this_storage_path,
                 this_out_path, global_params.config.working_dir))
@@ -271,24 +279,26 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 priority, additional_flags, this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         elif BATCH_PROC_SYSTEM == 'SLURM':
-            if pe is not None:
-                queue_option = "--ntasks-per-node %d" % n_cores
-            elif queue is not None:
-                queue_option = "--partition=%s" % queue
+            if '--gres=gpu' in additional_flags:
+                # additional_flags = "-n%d" % n_cores
+                # otherwise multiprocessing will run on one CPU only if cpu binding is not modified within each process
+                additional_flags += " --cpu-bind=none --cpus-per-task=" + str(n_cores)
+                cmd_exec = "srun {0} --output={1} --error={2}" \
+                           " --job-name={3} {4} &".format(  # ntasks-per-node=1
+                    # because MP is organized by the launched job
+                    additional_flags, job_log_path, job_err_path,
+                    job_name, this_sh_path)
             else:
-                raise Exception("No queue or parallel environment defined")
+                if n_cores > 1:
+                    additional_flags += " -n%d" % n_cores
+                cmd_exec = "sbatch {0} --output={1} --error={2}" \
+                           " --job-name={3} {4}".format(
+                    additional_flags, job_log_path, job_err_path,
+                    job_name, this_sh_path)
             if priority is not None and priority != 0:
                 log_batchjob.warning('Priorities are not supported with SLURM.')
             # added '--quiet' flag to prevent submission messages, errors will still be printed
             # (https://slurm.schedmd.com/sbatch.html), DOES NOT WORK
-            cmd_exec = "sbatch {0} --quiet --output={1} --error={2}" \
-                       " --job-name={3} {4} {5}".format(
-                queue_option,
-                job_log_path,
-                job_err_path,
-                job_name,
-                additional_flags,
-                this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         else:
             raise NotImplementedError
@@ -311,7 +321,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     # Submit singleton job to send status email after jobs have been completed
     this_sh_path = path_to_sh + "singleton.sh"
     with open(this_sh_path, "w") as f:
-        f.write("#!/bin/bash\n")
+        f.write("#!/bin/bash -l\n")
         f.write("")
     job_log_path = path_to_log + "singleton.log"
     job_err_path = path_to_err + "singleton.log"
@@ -349,15 +359,23 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         # set number cores per job higher which will at the same time increase
         # the available amount of memory per job, ONLY VALID IF '--mem' was not specified explicitly!
         n_cores += 1  # increase number of cores per job by at least 1
-        n_cores = np.max([np.min([global_params.NCORES_PER_NODE, float(n_max_co_processes) /
-                                  len(missed_params) * n_cores]), n_cores])
+        n_cores = np.max([np.min([global_params.NCORES_PER_NODE, float(n_max_co_processes) //
+                                  len(missed_params)]), n_cores])
         n_cores = np.min([n_cores, global_params.NCORES_PER_NODE])
+        n_cores = int(n_cores)
+        # remove existing memory and cpus-per-task flags:
+        if '--mem=' in additional_flags:
+            m = re.search('(?<=--mem=)\w+', additional_flags)
+            additional_flags = additional_flags.replace('--mem=' + m.group(0), '')
+        if '--cpus-per-task' in additional_flags:
+            m = re.search('(?<=--cpus-per-task=)\w+', additional_flags)
+            additional_flags = additional_flags.replace('--cpus-per-task=' + m.group(0), '')
         if n_cores == global_params.NCORES_PER_NODE:
             if not '--mem=' in additional_flags:
                 additional_flags += ' --mem=0'
             else:
                 m = re.search('(?<=--mem=)\w+', additional_flags)
-                additional_flags.replace(m.group(0), '--mem=0')
+                additional_flags = additional_flags.replace('--mem=' + m.group(0), '--mem=0')
         # if all jobs failed, increase number of cores
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
@@ -421,7 +439,8 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         path to the output directory
 
     """
-    job_folder = qsub_work_folder + "/%s_folder%s/" % (name, suffix)
+    job_folder = "{}/{}_folder{}/".format(global_params.config.qsub_work_folder,
+                                          name, suffix)
     if not os.path.exists(job_folder):
         raise RuntimeError('Job folder has to exist, in order to '
                            'resume unfinished job.')
@@ -458,6 +477,7 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=None,
                       script_folder=None, python_path=None):
     """
+    # TODO: utilize log and error files ('path_to_err', path_to_log')
     Fallback method in case no batchjob submission system is available.
 
     Parameters
@@ -476,17 +496,21 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     """
     if python_path is None:
         python_path = python_path_global
-    job_folder = qsub_work_folder + "/%s_folder%s/" % (name, suffix)
+    job_folder = "{}/{}_folder{}/".format(global_params.config.qsub_work_folder,
+                                          name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob = log_mp
     if n_max_co_processes is None:
         n_max_co_processes = cpu_count()
+    n_max_co_processes = np.min([cpu_count(), n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
-    log_batchjob.debug('Starting BatchJobFallback script "{}" with {} tasks using {}'
+    n_max_co_processes = np.max([n_max_co_processes, 1])
+    log_batchjob.debug('Started BatchJobFallback script "{}" with {} tasks using {}'
                        ' parallel jobs, each using {} core(s).'.format(
         name, len(params), n_max_co_processes, n_cores))
+    start = time.time()
 
     if script_folder is not None:
         path_to_scripts = script_folder
@@ -518,7 +542,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
         this_sh_path = path_to_sh + "job_%d.sh" % job_id
         this_out_path = path_to_out + "job_%d.pkl" % job_id
         with open(this_sh_path, "w") as f:
-            f.write('#!/bin/bash\n')
+            f.write('#!/bin/bash -l\n')
             f.write('export syconn_wd="{4}"\n{0} {1} {2} {3}'.format(
                 python_path, path_to_script, this_storage_path,
                 this_out_path, global_params.config.working_dir))
@@ -531,6 +555,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
         multi_params.append(cmd_exec)
     start_multiprocess_imap(fallback_exec, multi_params, debug=False,
                             nb_cpus=n_max_co_processes)
+    log_batchjob.debug('Finished "{}" after {:.2f}s.'.format(name, time.time() - start))
     return path_to_out
 
 
@@ -541,6 +566,13 @@ def fallback_exec(cmd_exec):
     ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
     out, err = ps.communicate()
+    # if log_mp.level == 10:  # 10 == 'DEUBUG'
+    #     log_mp.debug(out.decode())
+    #     log_mp.debug(err.decode())
+    if log_mp.level == 10 and ('error' in out.decode().lower() or
+                               'warning' in out.decode().lower()):
+        log_mp.error(out.decode())
+        log_mp.error(err.decode())
     if 'error' in err.decode().lower():
         log_mp.error(out.decode())
         log_mp.error(err.decode())

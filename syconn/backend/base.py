@@ -15,12 +15,14 @@ except ImportError:
     print("fasteners could not be imported. Locking will be disabled by default."
           "Please install fasteners to enable locking (pip install fasteners).")
     LOCKING = False
+
 import os
 import time
 import shutil
 
 from ..extraction import log_extraction
 from ..handler.basics import write_obj2pkl, load_pkl2obj
+from .. import global_params
 __all__ = ['FSBase', 'BTBase']
 # TODO: adapt to new class interface all-over syconn
 
@@ -118,9 +120,11 @@ class FSBase(StorageBase):
     additionally (save decompressing time when accessing items frequently).
     """
     def __init__(self, inp_p, cache_decomp=False, read_only=True,
-                 max_delay=100, timeout=1000, disable_locking=not LOCKING,
+                 max_delay=100, timeout=1000, disable_locking=False,
                  max_nb_attempts=100):
         super(FSBase, self).__init__(cache_decomp)
+        if not LOCKING or global_params.DISABLE_LOCKING:
+            disable_locking = True
         self.read_only = read_only
         self.a_lock = None
         self.max_delay = max_delay

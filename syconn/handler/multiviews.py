@@ -132,6 +132,22 @@ def str2intconverter(comment, gt_type):
 
 
 def int2str_converter(label, gt_type):
+    """
+    Converts integer label into semantic string. TODO: remove redundant definitions ->
+    single source of truth!
+
+    Parameters
+    ----------
+    label : int
+    gt_type : str
+        e.g. spgt for spines, axgt for cell compartments or ctgt for cell type
+
+    Returns
+    -------
+    str
+    """
+    if type(label) == str:
+        label = int(label)
     if gt_type == "axgt":
         if label == 1:
             return "gt_axon"
@@ -140,7 +156,7 @@ def int2str_converter(label, gt_type):
         elif label == 2:
             return "gt_soma"
         else:
-            return -1
+            return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
     elif gt_type == "spgt":
         if label == 1:
             return "head"
@@ -151,8 +167,29 @@ def int2str_converter(label, gt_type):
         elif label == 3:
             return "other"
         else:
+            return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
+    elif gt_type == 'ctgt':
+        if label == 1:
+            return "MSN"
+        elif label == 0:
+            return "EA"
+        elif label == 2:
+            return "GP"
+        elif label == 3:
+            return "INT"
+        else:
+            return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
+    elif gt_type == 'ctgt_v2':
+        l_dc_inv = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7)
+        l_dc_inv["?"] = 8
+        l_dc = {v: k for k, v in l_dc_inv.items()}
+        try:
+            return l_dc[label]
+        except KeyError:
+            print('Unknown label "{}"'.format(label))
             return -1
-    else: raise ValueError("Given groundtruth type is not valid.")
+    else:
+        raise ValueError("Given ground truth type is not valid.")
 
 
 def img_rand_coloring(img):
@@ -308,3 +345,35 @@ def rgb2id_array(rgb_arr):
     background_ix = np.max(id_arr) + 1  # convention: The highest index value in index view will correspond to the background
     id_arr[mask_arr] = background_ix
     return id_arr.reshape(rgb_arr.shape[:-1])
+
+
+def generate_rendering_locs(verts, ds_factor):
+    """
+    TODO: generalize for all rendering locations (e.g. also use in call of SSO.sample_locations)
+
+    Parameters
+    ----------
+    verts : np.ndarray
+        N, 3
+    ds_factor : float
+        effectively determines the volume size (ds_factor^3) for which a
+        rendering location is returned.
+    Returns
+    -------
+    np.ndarray
+        rendering locations
+    """
+    # get unique array of downsampled vertex locations (scaled back to nm)
+    verts_ixs = np.arange(len(verts))
+    np.random.seed(0)
+    np.random.shuffle(verts_ixs)
+    ds_locs_encountered = {}
+    rendering_locs = []
+    for kk, c in enumerate(verts[verts_ixs]):
+        ds_loc = tuple((c / ds_factor).astype(np.int))
+        if ds_loc in ds_locs_encountered:  # always gets first coordinate which is in downsampled voxel, the others are skipped
+            continue
+        rendering_locs.append(c)
+        ds_locs_encountered[ds_loc] = None
+    rendering_locs = np.array(rendering_locs)
+    return rendering_locs

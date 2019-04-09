@@ -23,8 +23,7 @@ This combines all contact sites between two supervoxels into a single object. `c
 The first step reads from a KNOSSOS dataset with the segmentation and saves the extracted contact sites into an hdf5 chunk dataset.
 
     from syconn.extraction import cs_extraction_steps as ces
-    ces.find_contact_sites(cset, knossos_path, n_max_co_processes=200,
-                           qsub_pe=my_qsub_pe)
+    ces.find_contact_sites(cset, knossos_path, n_max_co_processes=200)
 
 The second step used the hdf5 chunk dataset and generates a segmentation dataset with the results.
 

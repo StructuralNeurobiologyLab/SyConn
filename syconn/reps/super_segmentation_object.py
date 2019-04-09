@@ -14,12 +14,12 @@ import scipy.spatial
 import shutil
 import time
 import tqdm
-from collections import Counter
+from collections import Counter, defaultdict
 from scipy.misc import imsave
+from scipy import spatial
 from knossos_utils import skeleton
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
-
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
@@ -30,7 +30,6 @@ from .segmentation import SegmentationObject, SegmentationDataset
 from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     knossos_ml_from_svixs, subfold_from_ix_SSO
-from ..handler import config
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
 from ..backend.storage import CompressedStorage, MeshStorage
@@ -42,6 +41,7 @@ from ..proc.rendering import render_sampled_sso, multi_view_sso, \
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import log_reps
+from ..handler.config import DynConfig
 from .. import global_params
 
 
@@ -114,6 +114,7 @@ class SuperSegmentationObject(object):
         self._voxels_xy_downsampled = None
         self._voxels_downsampled = None
         self._rag = None
+        self._sv_graph = None
 
         # init mesh dicts
         self._meshes = {"sv": None, "sj": None, "syn_ssv": None,
@@ -131,12 +132,17 @@ class SuperSegmentationObject(object):
             self.attr_dict["sv"] = sv_ids
 
         if working_dir is None:
-            try:
+            if global_params.wd is not None or version == 'tmp':
                 self._working_dir = global_params.wd
-            except:
-                raise Exception("No working directory (wd) specified in config")
+            else:
+                msg = "No working directory (wd) given. It has to be" \
+                      " specified either in global_params, via kwarg " \
+                      "`working_dir` or `config`."
+                log_reps.error(msg)
+                raise ValueError(msg)
         else:
             self._working_dir = working_dir
+            self._config = DynConfig(working_dir)
 
         if scaling is None:
             try:
@@ -345,6 +351,10 @@ class SuperSegmentationObject(object):
     @property
     def vcs(self):
         return self.get_seg_objects("vc")
+
+    @property
+    def syn_ssv(self):
+        return self.get_seg_objects("syn_ssv")
 
     #                                                                     MESHES
     def load_mesh(self, mesh_type):
@@ -595,6 +605,8 @@ class SuperSegmentationObject(object):
         #             "SV IDs in graph differ from SSV SVs."
         #         for e in G_glob.edges(cc):
         #             G.add_edge(*e)
+        elif self._sv_graph is not None:
+            G = self._sv_graph
         else:
             raise ValueError("Could not find graph data for SSV {}."
                              "".format(self.id))
@@ -616,6 +628,7 @@ class SuperSegmentationObject(object):
     def _load_obj_mesh(self, obj_type="sv", rewrite=False):
         """
         TODO: Currently does not support color array!
+        TODO: add support for sym. asym synapse type
 
         Parameters
         ----------
@@ -925,6 +938,35 @@ class SuperSegmentationObject(object):
                 return True
             return False
 
+    def syn_sign_ratio(self, weighted=True, recompute=False):
+        """
+        Ratio of symmetric synapses (between 0 and 1; -1 if no synapse objects).
+
+        Returns
+        -------
+        float
+        """
+        ratio = self.lookup_in_attribute_dict("syn_sign_ratio")
+        if not recompute and ratio is not None:
+            return ratio
+        syn_signs = []
+        syn_sizes = []
+        for syn in self.syn_ssv:
+            syn.load_attr_dict()
+            syn_signs.append(syn.attr_dict["syn_sign"])
+            syn_sizes.append(syn.mesh_area / 2)
+        if len(syn_signs) == 0:
+            return -1
+        syn_signs = np.array(syn_signs)
+        syn_sizes = np.array(syn_sizes)
+        if weighted:
+            ratio = np.sum(syn_sizes[syn_signs == -1]) / float(np.sum(syn_sizes))
+        else:
+            ratio = np.sum(syn_signs == -1) / float(len(syn_signs))
+        self.attr_dict["syn_sign_ratio"] = ratio
+        self.save_attributes(["syn_sign_ratio"], [ratio])
+        return ratio
+
     def aggregate_segmentation_object_mappings(self, obj_types, save=False):
         assert isinstance(obj_types, list)
 
@@ -1058,6 +1100,7 @@ class SuperSegmentationObject(object):
         for GT purposes, then on can call ssv_orig.copy2dir(ssv_target.ssv_dir)
          and all data contained in the SSD of ssv_orig will be copied to
          the SSD of ssv_target.
+
         Parameters
         ----------
         dest_dir : str
@@ -1076,9 +1119,10 @@ class SuperSegmentationObject(object):
             dest_filename = dest_dir + "/" + fnames[i]
             try:
                 safe_copy(src_filename, dest_filename, safe=safe)
-                log_reps.info("Copied %s to %s." % (src_filename, dest_filename))
+                log_reps.debug("Copied %s to %s." % (src_filename, dest_filename))
             except Exception as e:
-                log_reps.error("Skipped", fnames[i], str(e))
+                log_reps.error("Skipped '{}', due to the following error: '{}'"
+                               "".format(fnames[i], str(e)))
                 pass
         self.load_attr_dict()
         if os.path.isfile(dest_dir + "/attr_dict.pkl"):
@@ -1221,7 +1265,7 @@ class SuperSegmentationObject(object):
         return so_views_exist
 
     def render_views(self, add_cellobjects=False, verbose=False,
-                     qsub_pe=None, overwrite=False, cellobjects_only=False,
+                     qsub_pe=None, overwrite=True, cellobjects_only=False,
                      woglia=True, skip_indexviews=False, qsub_co_jobs=300,
                      resume_job=False):
         """
@@ -1550,6 +1594,7 @@ class SuperSegmentationObject(object):
             Same length as coords. For every coordinate in coords returns the
             majority label within radius_nm
         """
+        # TODO: Allow multiple keys as in self.attr_for_coords, e.g. to include semseg axoness in a single query
         coords = np.array(coords) * self.scaling
         vertex_labels = self.label_dict('vertex')[semseg_key][::ds_vertices]
         vertices = self.mesh[1].reshape((-1, 3))[::ds_vertices]
@@ -1787,7 +1832,7 @@ class SuperSegmentationObject(object):
             self.mesh2kzip(obj_type=ot, dest_path=dest_path, ext_color=sv_color if
             ot == "sv" else None)
 
-    def mesh2file(self, dest_path=None, center=None, color=None):
+    def mesh2file(self, dest_path=None, center=None, color=None, scale=None):
         """
         Writes mesh to file (e.g. .ply, .stl, .obj) via the 'openmesh' library.
         If possible, writes it as binary.
@@ -1800,8 +1845,11 @@ class SuperSegmentationObject(object):
         color: np.array
             Either single color (will be applied to all vertices) or
             per-vertex color array
+        scale : float
+            Multiplies vertex locations after centering
         """
-        mesh2obj_file(dest_path, self.mesh, center=center, color=color)
+        mesh2obj_file(dest_path, self.mesh, center=center, color=color,
+                      scale=scale)
 
     def export_kzip(self, dest_path=None, sv_color=None):
         """
@@ -1941,10 +1989,12 @@ class SuperSegmentationObject(object):
     def gliasplit(self, dest_path=None, recompute=False, thresh=None,
                   write_shortest_paths=False, verbose=False,
                   pred_key_appendix=""):
+        glia_svs_key = "glia_svs" + pred_key_appendix
+        nonglia_svs_key = "nonglia_svs" + pred_key_appendix
         if thresh is None:
             thresh = global_params.glia_thresh
-        if recompute or not (self.attr_exists("glia_svs") and
-                             self.attr_exists("nonglia_svs")):
+        if recompute or not (self.attr_exists(glia_svs_key) and
+                             self.attr_exists(nonglia_svs_key)):
             if write_shortest_paths:
                 shortest_paths_dir = os.path.split(dest_path)[0]
             else:
@@ -1963,12 +2013,12 @@ class SuperSegmentationObject(object):
             non_glia_ccs_ixs = [[so.id for so in nonglia] for nonglia in
                                 nonglia_ccs]
             glia_ccs_ixs = [[so.id for so in glia] for glia in glia_ccs]
-            self.attr_dict["glia_svs"] = glia_ccs_ixs
-            self.attr_dict["nonglia_svs"] = non_glia_ccs_ixs
-            self.save_attributes(["glia_svs", "nonglia_svs"],
+            self.attr_dict[glia_svs_key] = glia_ccs_ixs
+            self.attr_dict[nonglia_svs_key] = non_glia_ccs_ixs
+            self.save_attributes([glia_svs_key, nonglia_svs_key],
                                  [glia_ccs_ixs, non_glia_ccs_ixs])
 
-    def gliasplit2mesh(self, dest_path=None):
+    def gliasplit2mesh(self, dest_path=None, pred_key_appendix=""):
         """
 
         Parameters
@@ -1979,17 +2029,20 @@ class SuperSegmentationObject(object):
         -------
 
         """
-        # TODO: adapt writemesh2kzip to work with multiple writes to same file or use write_meshes2kzip here.
+        # TODO: adapt writemesh2kzip to work with multiple writes
+        #  to same file or use write_meshes2kzip here.
+        glia_svs_key = "glia_svs" + pred_key_appendix
+        nonglia_svs_key = "nonglia_svs" + pred_key_appendix
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         # write meshes of CC's
-        glia_ccs = self.attr_dict["glia_svs"]
+        glia_ccs = self.attr_dict[glia_svs_key]
         for kk, glia in enumerate(glia_ccs):
             mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
                                    glia])
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                             "glia_cc%d.ply" % kk)
-        non_glia_ccs = self.attr_dict["nonglia_svs"]
+        non_glia_ccs = self.attr_dict[nonglia_svs_key]
         for kk, nonglia in enumerate(non_glia_ccs):
             mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
                                    nonglia])
@@ -2018,16 +2071,11 @@ class SuperSegmentationObject(object):
         start = time.time()
         pred_key = "glia_probas"
         pred_key += pred_key_appendix
-        # try:
+        # 'tmp'-version: do not write to disk
         predict_sos_views(model, self.svs, pred_key,
                           nb_cpus=self.nb_cpus, verbose=verbose,
                           woglia=False, raw_only=True,
-                          return_proba=self.version == 'tmp')  # do not write to disk
-        # except KeyError:
-        #     self.render_views(add_cellobjects=False, woglia=False)
-        #     predict_sos_views(model, self.svs, pred_key,
-        #                       nb_cpus=self.nb_cpus, verbose=verbose,
-        #                       woglia=False, raw_only=True)
+                          return_proba=self.version == 'tmp')
         end = time.time()
         log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
                        "%0.4fs/SV" % (len(self.svs), end - start,
@@ -2149,38 +2197,87 @@ class SuperSegmentationObject(object):
             Same length as coords. For every coordinate in coords returns the
             majority label within radius_nm
         """
+        return np.array(self.attr_for_coords(coords, [pred_type], radius_nm))
+
+    def attr_for_coords(self, coords, attr_keys, radius_nm=None):
+        """
+        TODO: move to super_segmentation_helper.py
+        Query skeleton node attributes at given coordinates. Supports any
+        attribute stored in self.skeleton. If radius_nm is given, will
+        assign majority attribute value.
+        Parameters
+        ----------
+        coords : np.array
+            Voxel coordinates, unscaled! [N, 3]
+        radius_nm : Optional[float]
+            If None, will only use attribute of nearest node, otherwise
+            majority attribute value is used.
+        attr_keys : List[str]
+            Attribute identifier
+        Returns
+        -------
+        List
+            Same length as coords. For every coordinate in coords returns the
+            majority label within radius_nm or [-1] if Key does not exist.
+        """
+        if type(attr_keys) is str:
+            attr_keys = [attr_keys]
         coords = np.array(coords)
         self.load_skeleton()
         if self.skeleton is None or len(self.skeleton["nodes"]) == 0:
             log_reps.warn("Skeleton did not exist for SSV {} (size: {}; rep. coord.: "
                           "{}).".format(self.id, self.size, self.rep_coord))
-            return [-1]
-        if pred_type not in self.skeleton:  # for glia SSV this does not exist.
-            return [-1]
+            return -1 * np.ones((len(coords), len(attr_keys)))
+
+        # get close locations
         kdtree = scipy.spatial.cKDTree(self.skeleton["nodes"] * self.scaling)
-        close_node_ids = kdtree.query_ball_point(coords * self.scaling,
-                                                 radius_nm)
-        axoness_pred = []
+        if radius_nm is None:
+            _, close_node_ids = kdtree.query(coords * self.scaling, k=1,
+                                             n_jobs=self.nb_cpus)
+        else:
+            close_node_ids = kdtree.query_ball_point(coords * self.scaling,
+                                                     radius_nm)
+        attr_dc = defaultdict(list)
         for i_coord in range(len(coords)):
             curr_close_node_ids = close_node_ids[i_coord]
-            if len(curr_close_node_ids) == 0:
-                dist, curr_close_node_ids = kdtree.query(coords * self.scaling)
-                log_reps.info(
-                    "Couldn't find skeleton nodes within {} nm. Using nearest "
-                    "one with distance {} nm. SSV ID {}, coordinate at {}."
-                    "".format(radius_nm, dist[0], self.id, coords[i_coord]))
-            cls, cnts = np.unique(
-                np.array(self.skeleton[pred_type])[np.array(curr_close_node_ids)],
-                return_counts=True)
-            if len(cls) > 0:
-                axoness_pred.append(cls[np.argmax(cnts)])
-            else:
-                log_reps.info("Did not find any skeleton node within {} nm at {}."
-                              " SSV {} (size: {}; rep. coord.: {}).".format(
-                    radius_nm, i_coord, self.id, self.size, self.rep_coord))
-                axoness_pred.append(-1)
-
-        return np.array(axoness_pred)
+            for attr_key in attr_keys:
+                if attr_key not in self.skeleton:  # e.g. for glia SSV axoness does not exist.
+                    attr_dc[attr_key].append(-1)
+                    # # this is commented because there a legitimate cases for missing keys.
+                    # # TODO: think of a better warning / error raise
+                    # log_reps.warning(
+                    #     "KeyError: Could not find key '{}' in skeleton of SSV with ID {}. Setting to -1."
+                    #     "".format(attr_key, self.id))
+                    continue
+                if radius_nm is not None:  # use nodes within radius_nm, there might be multiple node ids
+                    if len(curr_close_node_ids) == 0:
+                        dist, curr_close_node_ids = kdtree.query(coords * self.scaling)
+                        log_reps.info(
+                            "Couldn't find skeleton nodes within {} nm. Using nearest "
+                            "one with distance {} nm. SSV ID {}, coordinate at {}."
+                            "".format(radius_nm, dist[0], self.id, coords[i_coord]))
+                    cls, cnts = np.unique(
+                        np.array(self.skeleton[attr_key])[np.array(curr_close_node_ids)],
+                        return_counts=True)
+                    if len(cls) > 0:
+                        attr_dc[attr_key].append(cls[np.argmax(cnts)])
+                    else:
+                        log_reps.info("Did not find any skeleton node within {} nm at {}."
+                                      " SSV {} (size: {}; rep. coord.: {}).".format(
+                            radius_nm, i_coord, self.id, self.size, self.rep_coord))
+                        attr_dc[attr_key].append(-1)
+                else:  # only nearest node ID
+                    attr_dc[attr_key].append(self.skeleton[attr_key][curr_close_node_ids])
+        # safety in case latent morphology was not predicted / needed
+        # TODO: refine mechanism for this scenario, i.e. for exporting matrix
+        if "latent_morph" in attr_keys:
+            latent_morph = attr_dc["latent_morph"]
+            for i in range(len(latent_morph)):
+                curr_latent = latent_morph[i]
+                if np.isscalar(curr_latent) and curr_latent == -1:
+                    curr_latent = np.array([np.inf] * global_params.ndim_embedding)
+                latent_morph[i] = curr_latent
+        return [np.array(attr_dc[k]) for k in attr_keys]
 
     def predict_views_axoness(self, model, verbose=False,
                               pred_key_appendix=""):
@@ -2208,6 +2305,45 @@ class SuperSegmentationObject(object):
         log_reps.debug("Prediction of %d SV's took %0.2fs (incl. read/write). "
                        "%0.4fs/SV" % (len(self.svs), end - start,
                                       float(end - start) / len(self.svs)))
+
+    def predict_views_embedding(self, model, pred_key_appendix="",
+                                view_key=None):
+        """
+        This will save a latent vector which captures a local morphology fingerprint for every
+        skeleton node location as self.sekeleton['latent_morph'] based on the nearest rendering location.
+
+        Parameters
+        ----------
+        model :
+        pred_key_appendix :
+        view_key : str
+            View identifier, e.g. if views have been pre-rendered and are stored in
+            `self.view_dict`
+        """
+        from ..handler.prediction import naive_view_normalization_new
+        pred_key = "latent_morph"
+        pred_key += pred_key_appendix
+        if self.version == 'tmp':
+            log_reps.warning('"predict_views_embedding" called but this SSV '
+                             'has version "tmp", results will'
+                             ' not be saved to disk.')
+        views = self.load_views(view_key=view_key)  # [N, 4, 2, y, x]
+        # TODO: add normalization to model - prevent potentially different normalization!
+        views = naive_view_normalization_new(views)
+        # The inference with TNets can be optimzed, via splititng the views into three equally sized parts.
+        inp = (views[:, :, 0], np.zeros_like(views[:, :, 0]), np.zeros_like(views[:, :, 0]))
+        # return dist1, dist2, inp1, inp2, inp3 latent
+        _, _, latent, _, _ = model.predict_proba(inp)  # only use first view for now
+
+        # map latent vecs at rendering locs to skeleton node locations via nearest neighbor
+        self.load_skeleton()
+        if not 'view_ixs' in self.skeleton:
+            hull_tree = spatial.cKDTree(np.concatenate(self.sample_locations()))
+            dists, ixs = hull_tree.query(self.skeleton["nodes"] * self.scaling,
+                                         n_jobs=self.nb_cpus, k=1)
+            self.skeleton["view_ixs"] = ixs
+        self.skeleton[pred_key] = latent[self.skeleton["view_ixs"]]
+        self.save_skeleton()
 
     def cnn_axoness2skel(self, **kwargs):
         locking_tmp = self.enable_locking
@@ -2263,8 +2399,29 @@ class SuperSegmentationObject(object):
         if dest_path is not None:
             self.save_skeleton_to_kzip(dest_path=dest_path)
 
-    def predict_celltype_cnn(self, model, **kwargs):
-        ssh.predict_sso_celltype(self, model, **kwargs)
+    def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None):
+        """
+        Infer celltype classification via `model` (stored as `celltype_cnn_e3` and `celltype_cnn_e3_probas`)
+        and an optional cell embedding via `model_tnet` (stored as `latent_morph_ct`).
+
+        Parameters
+        ----------
+        model : nn.Module
+        pred_key_appendix : str
+        model_tnet : Optional[nn.Module]
+        view_props : Optional[dict]
+            Dictionary which contains view properties. If None, default defined in
+            `global_params.py` will be used.
+
+        """
+        # ssh.predict_sso_celltype(self, model, **kwargs)  # OLD
+        if view_props is None:
+            view_props = global_params.view_properties_large
+        ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
+                                    overwrite=False, **view_props)
+        if model_tnet is not None:
+            ssh.view_embedding_of_sso_nocache(self, model_tnet, pred_key_appendix=pred_key_appendix,
+                                              overwrite=True, **view_props)
 
     def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
                                obj_to_render=("sv", )):
@@ -2418,17 +2575,31 @@ def celltype_predictor(args):
     -------
 
     """
-    from ..handler.prediction import get_celltype_model
+    # from ..handler.prediction import get_celltype_model
+    from ..handler.prediction import get_celltype_model_e3, get_tripletnet_model_e3, \
+        get_tripletnet_model_large_e3, get_celltype_model_large_e3
     ssv_ids = args
     # randomly initialize gpu
-    m = get_celltype_model(init_gpu=0)
+    # m = get_celltype_model(init_gpu=0)
+    if not global_params.config.use_large_fov_views_ct:
+        m = get_celltype_model_e3()
+        m_tnet = get_tripletnet_model_e3()
+    else:
+        m = get_celltype_model_large_e3()
+        m_tnet = get_tripletnet_model_large_e3()
     pbar = tqdm.tqdm(total=len(ssv_ids))
     missing_ssvs = []
     for ix in ssv_ids:
         ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
         ssv.nb_cpus = 1
+        ssv._view_caching = True
         try:
-            ssh.predict_sso_celltype(ssv, m, overwrite=True)
+            if global_params.config.use_large_fov_views_ct:
+                view_props = global_params.view_properties_large
+                ssh.celltype_of_sso_nocache(ssv, m, overwrite=True, **view_props)
+                ssh.view_embedding_of_sso_nocache(ssv, m_tnet, overwrite=True, **view_props)
+            else:
+                ssh.predict_sso_celltype(ssv, m, overwrite=True)  # local views
         except Exception as e:
             missing_ssvs.append((ssv.id, e))
             log_reps.error(repr(e))

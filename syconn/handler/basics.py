@@ -18,10 +18,12 @@ try:
 except ImportError:
     import pickle as pkl
 from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
+from knossos_utils import KnossosDataset
 import re
 import signal
 import contextlib
 import tqdm
+import warnings
 
 from . import log_handler
 from .. import global_params
@@ -31,7 +33,20 @@ __all__ = ['load_from_h5py', 'save_to_h5py', 'crop_bool_array',
            'write_data2kzip', 'remove_from_zip', 'chunkify', 'flatten_list',
            'get_skelID_from_path', 'write_txt2kzip', 'switch_array_entries',
            'parse_cc_dict_from_kzip', 'parse_cc_dict_from_kml', 'data2kzip',
-           'safe_copy', 'temp_seed']
+           'safe_copy', 'temp_seed', 'kd_factory']
+
+
+def kd_factory(kd_path, channel='jpg'):
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        # knossos_utils expects a path to the knossos.conf file
+        if not kd_path.endswith('knossos.conf'):
+            kd_path += "/mag1/knossos.conf"
+        kd = KnossosDataset()  # Sets initial values of object
+        # kd.set_channel(channel)  # TODO: currently requires additional adjustment of the data type, i.e. setting the channel explicitely currently leads to uint32 <-> uint64 issues in the CS segmentation
+        # Initializes the dataset by parsing the knossos.conf in path + "mag1"
+        kd.initialize_from_knossos_path(kd_path)
+    return kd
 
 
 def load_from_h5py(path, hdf5_names=None, as_dict=False):
@@ -328,29 +343,30 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
         name of file when added to zip
     force_overwrite : bool
     """
-    with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
-        if os.path.isfile(kzip_path):
-            try:
-                if force_overwrite:
-                    with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED) as zf:
-                        for i in range(len(texts)):
-                            zf.writestr(fnames_in_zip[i], texts[i])
-                else:
-                    for i in range(len(texts)):
-                        remove_from_zip(kzip_path, fnames_in_zip[i])
-                    with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED) as zf:
-                        for i in range(len(texts)):
-                            zf.writestr(fnames_in_zip[i], texts[i])
-            except Exception as e:
-                log_handler.error("Couldn't open file %s for reading and" \
-                      " overwriting." % kzip_path, e)
-        else:
-            try:
+    # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
+    if os.path.isfile(kzip_path):
+        try:
+            if force_overwrite:
                 with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED) as zf:
                     for i in range(len(texts)):
                         zf.writestr(fnames_in_zip[i], texts[i])
-            except Exception as e:
-                log_handler.error("Couldn't open file %s for writing." % kzip_path, e)
+            else:
+                for i in range(len(texts)):
+                    remove_from_zip(kzip_path, fnames_in_zip[i])
+                with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED) as zf:
+                    for i in range(len(texts)):
+                        zf.writestr(fnames_in_zip[i], texts[i])
+        except Exception as e:
+            log_handler.error("Couldn't open file {} for reading and overwri"
+                              "ting. {}".format(kzip_path, e))
+    else:
+        try:
+            with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+                for i in range(len(texts)):
+                    zf.writestr(fnames_in_zip[i], texts[i])
+        except Exception as e:
+            log_handler.error("Couldn't open file {} for writing. {}"
+                              "".format(kzip_path, e))
 
 
 def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
@@ -391,39 +407,10 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     if verbose:
         log_handler.info('Writing {} files to .zip.'.format(nb_files))
         pbar = tqdm.tqdm(total=nb_files)
-    with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
-        if os.path.isfile(kzip_path):
-            try:
-                if force_overwrite:
-                    with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED,
-                                         allowZip64=True) as zf:
-                        for ii in range(nb_files):
-                            file_name = os.path.split(fpaths[ii])[1]
-                            if fnames_in_zip[ii] is not None:
-                                file_name = fnames_in_zip[ii]
-                            zf.write(fpaths[ii], file_name)
-                            if verbose:
-                                pbar.update()
-                else:
-                    for ii in range(nb_files):
-                        file_name = os.path.split(fpaths[ii])[1]
-                        if fnames_in_zip[ii] is not None:
-                            file_name = fnames_in_zip[ii]
-                        remove_from_zip(kzip_path, file_name)
-                    with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED,
-                                         allowZip64=True) as zf:
-                        for ii in range(nb_files):
-                            file_name = os.path.split(fpaths[ii])[1]
-                            if fnames_in_zip[ii] is not None:
-                                file_name = fnames_in_zip[ii]
-                            zf.write(fpaths[ii], file_name)
-                            if verbose:
-                                pbar.update()
-            except Exception as e:
-                log_handler.error("Couldn't open file %s for reading and"
-                                  " overwriting. Error: {}".format(kzip_path, e))
-        else:
-            try:
+    # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
+    if os.path.isfile(kzip_path):
+        try:
+            if force_overwrite:
                 with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED,
                                      allowZip64=True) as zf:
                     for ii in range(nb_files):
@@ -433,13 +420,43 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
                         zf.write(fpaths[ii], file_name)
                         if verbose:
                             pbar.update()
-            except Exception as e:
-                log_handler.error("Couldn't open file %s for writing. Error: {}".format(kzip_path, e))
-        for ii in range(nb_files):
-            os.remove(fpaths[ii])
-        if verbose:
-            log_handler.info('Done writing {} files to .zip.'.format(nb_files))
-            pbar.close()
+            else:
+                for ii in range(nb_files):
+                    file_name = os.path.split(fpaths[ii])[1]
+                    if fnames_in_zip[ii] is not None:
+                        file_name = fnames_in_zip[ii]
+                    remove_from_zip(kzip_path, file_name)
+                with zipfile.ZipFile(kzip_path, "a", zipfile.ZIP_DEFLATED,
+                                     allowZip64=True) as zf:
+                    for ii in range(nb_files):
+                        file_name = os.path.split(fpaths[ii])[1]
+                        if fnames_in_zip[ii] is not None:
+                            file_name = fnames_in_zip[ii]
+                        zf.write(fpaths[ii], file_name)
+                        if verbose:
+                            pbar.update()
+        except Exception as e:
+            log_handler.error("Couldn't open file {} for reading and"
+                              " overwriting. Error: {}".format(kzip_path, e))
+    else:
+        try:
+            with zipfile.ZipFile(kzip_path, "w", zipfile.ZIP_DEFLATED,
+                                 allowZip64=True) as zf:
+                for ii in range(nb_files):
+                    file_name = os.path.split(fpaths[ii])[1]
+                    if fnames_in_zip[ii] is not None:
+                        file_name = fnames_in_zip[ii]
+                    zf.write(fpaths[ii], file_name)
+                    if verbose:
+                        pbar.update()
+        except Exception as e:
+            log_handler.error("Couldn't open file {} for writing. Error: "
+                              "{}".format(kzip_path, e))
+    for ii in range(nb_files):
+        os.remove(fpaths[ii])
+    if verbose:
+        log_handler.info('Done writing {} files to .zip.'.format(nb_files))
+        pbar.close()
 
 
 def remove_from_zip(zipfname, *filenames):
@@ -452,19 +469,19 @@ def remove_from_zip(zipfname, *filenames):
     filenames : list of str
         files to delete
     """
-    with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
-        tempdir = tempfile.mkdtemp()
-        try:
-            tempname = os.path.join(tempdir, 'new.zip')
-            with zipfile.ZipFile(zipfname, 'r', allowZip64=True) as zipread:
-                with zipfile.ZipFile(tempname, 'w', allowZip64=True) as zipwrite:
-                    for item in zipread.infolist():
-                        if item.filename not in filenames:
-                            data = zipread.read(item.filename)
-                            zipwrite.writestr(item, data)
-            shutil.move(tempname, zipfname)
-        finally:
-            shutil.rmtree(tempdir)
+    # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
+    tempdir = tempfile.mkdtemp()
+    try:
+        tempname = os.path.join(tempdir, 'new.zip')
+        with zipfile.ZipFile(zipfname, 'r', allowZip64=True) as zipread:
+            with zipfile.ZipFile(tempname, 'w', allowZip64=True) as zipwrite:
+                for item in zipread.infolist():
+                    if item.filename not in filenames:
+                        data = zipread.read(item.filename)
+                        zipwrite.writestr(item, data)
+        shutil.move(tempname, zipfname)
+    finally:
+        shutil.rmtree(tempdir)
 
 
 def write_obj2pkl(path, objects):
@@ -476,15 +493,15 @@ def write_obj2pkl(path, objects):
     path : str
         destianation
     """
-    with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
-        if isinstance(path, str):
-            with open(path, 'wb') as output:
-                pkl.dump(objects, output, -1)
-        else:
-            log_handler.warn("Write_obj2pkl takes arguments 'path' (str) and "
-                             "'objects' (python object).")
-            with open(objects, 'wb') as output:
-                pkl.dump(path, output, -1)
+    # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
+    if isinstance(path, str):
+        with open(path, 'wb') as output:
+            pkl.dump(objects, output, -1)
+    else:
+        log_handler.warn("Write_obj2pkl takes arguments 'path' (str) and "
+                         "'objects' (python object).")
+        with open(objects, 'wb') as output:
+            pkl.dump(path, output, -1)
 
 
 def load_pkl2obj(path):
@@ -536,6 +553,12 @@ def chunkify(lst, n):
     if len(lst) < n:
         n = len(lst)
     return [lst[i::n] for i in range(n)]
+
+
+def chunkify_successive(l, n):
+    """Yield successive n-sized chunks from l."""
+    for i in range(0, len(l), n):
+        yield l[i:i + n]
 
 
 def flatten_list(lst):

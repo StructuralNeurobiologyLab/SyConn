@@ -16,6 +16,7 @@ import openmesh
 from plyfile import PlyData, PlyElement
 from scipy.ndimage.morphology import binary_closing, binary_dilation
 import tqdm
+import time
 try:
     import vtki
     __vtk_avail__ = True
@@ -117,10 +118,10 @@ class MeshObject(object):
     @property
     def normals(self):
         if self._normals is None or len(self._normals) != len(self.vertices):
-            log_proc.info("Calculating normals")
+            log_proc.debug("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         elif len(self._normals) != len(self.vertices):
-            log_proc.info("Calculating normals, because their shape differs from"
+            log_proc.debug("Calculating normals, because their shape differs from"
                   " vertices: %s (normals) vs. %s (vertices)" %
                   (str(self._normals.shape), str(self.vertices.shape)))
             self._normals = unit_normal(self.vertices, self.indices)
@@ -195,6 +196,14 @@ class MeshObject(object):
         return (self.vert_resh * self.max_dist + self.center).flatten()
 
 
+def triangulation_wrapper(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
+                  decimate_mesh=0, gradient_direction='ascent',
+                  force_single_cc=False):
+    # TODO: write wrapper method to handle triangulation of big objects by
+    #  recusrive chunking. The resulting meshes can be merged via `merge_meshes`
+    return
+
+
 def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
                   decimate_mesh=0, gradient_direction='ascent',
                   force_single_cc=False):
@@ -254,10 +263,8 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
     else:
         volume = pts
         if np.any(np.array(downsampling) != 1):
-            # volume = measure.block_reduce(volume, downsampling, np.max)
             ndimage.zoom(volume, downsampling, order=0)
         offset = np.array([0, 0, 0])
-    # volume = multiBinaryErosion(volume, 1).astype(np.float32)
     if n_closings > 0:
         volume = binary_closing(volume, iterations=n_closings).astype(np.float32)
         if force_single_cc:
@@ -357,9 +364,8 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
         min_obj_vx = MESH_MIN_OBJ_VX
     try:
         indices, vertices, normals = triangulation(
-            np.array(obj.voxel_list), downsampling=downsampling,
-            n_closings=n_closings, decimate_mesh=decimate_mesh,
-            **triangulation_kwargs)
+            obj.voxel_list, downsampling=downsampling, n_closings=n_closings,
+            decimate_mesh=decimate_mesh, **triangulation_kwargs)
     except ValueError as e:
         if len(obj.voxel_list) <= min_obj_vx:
             # log_proc.debug('Did not create mesh for object of type "{}" '
@@ -405,7 +411,8 @@ def normalize_vertices(vertices):
 
 def calc_rot_matrices(coords, vertices, edge_length):
     """
-    # TODO: optimize with cython (bottleneck is probably 'in_bounding_box' -> create single for loop)
+    # Optimization comment: bottleneck is now 'get_rotmatrix_from_points'
+
     Fits a PCA to local sub-volumes in order to rotate them according to
     its main process (e.g. x-axis will be parallel to the long axis of a tube)
 
@@ -430,10 +437,20 @@ def calc_rot_matrices(coords, vertices, edge_length):
         vertices = vertices[::8]
     rot_matrices = np.zeros((len(coords), 16))
     edge_lengths = np.array([edge_length] * 3)
+    rotmat_dt = 0
+    inlier_dt = 0
     for ii, c in enumerate(coords):
-        bounding_box = (c, edge_lengths)
+        bounding_box = np.array([c, edge_lengths])
+        # start = time.time()
         inlier = np.array(vertices[in_bounding_box(vertices, bounding_box)])
+        # inlier_dt += time.time() - start
+        # start = time.time()
         rot_matrices[ii] = get_rotmatrix_from_points(inlier)
+        # rotmat_dt += time.time() - start
+    # log_proc.debug('Time for inlier calc.: {:.2f} min'.format(
+    #     inlier_dt / 60))
+    # log_proc.debug('Time for rot. mat.  calc.: {:.2f} min'.format(
+    #     rotmat_dt / 60))
     return rot_matrices
 
 
@@ -715,6 +732,8 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
     str
     """
     # create header
+    vertices = vertices.astype(np.float32)
+    indices = indices.astype(np.int32)
     if not indices.ndim == 2:
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
@@ -737,7 +756,7 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
                       "automatically, data will be unusable if not normalized"
                       " between 0 and 255. min/max of data:"
                       " {}, {}".format(rgba_color.min(), rgba_color.max()))
-    elif rgba_color.dtype.kind not in ("u", "i"):
+    elif rgba_color.dtype.kind != "u1":
         log_proc.warn("Color array is not of type integer or unsigned integer."
                       " It will now be converted automatically, data will be "
                       "unusable if not normalized between 0 and 255."
@@ -774,6 +793,8 @@ def make_ply_string_wocolor(dest_path, indices, vertices):
     str
     """
     # create header
+    vertices = vertices.astype(np.float32)
+    indices = indices.astype(np.int32)
     if not indices.ndim == 2:
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
@@ -961,49 +982,67 @@ def mesh_chunk(args):
         return
     voxel_dc = VoxelStorage(attr_dir + "/voxel.pkl", disable_locking=True)
     md = MeshStorage(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)
-    valid_obj_types = ["vc", "sj", "mi", "con"]
-    if not obj_type in valid_obj_types:
-        raise NotImplementedError("Object type must be one of the following:\n"
-                                  "%s" % str(valid_obj_types))
+    valid_obj_types = ["vc", "sj", "mi", "con", 'syn', 'syn_ssv']
+    if global_params.config.allow_mesh_gen_cells:
+        valid_obj_types += ["sv"]
+    if obj_type not in valid_obj_types:
+        raise NotImplementedError("Object type '{}' must be one of the following:\n"
+                                  "{}".format(obj_type, str(valid_obj_types)))
     for ix in obj_ixs:
         # create voxel_list
         bin_arrs, block_offsets = voxel_dc[ix]
-        voxel_list = np.array([], dtype=np.int32)
+        voxel_list = []
         for i_bin_arr in range(len(bin_arrs)):
-            block_voxels = np.array(zip(*np.nonzero(bin_arrs[i_bin_arr])),
-                                    dtype=np.int32)
-            block_voxels += np.array(block_offsets[i_bin_arr])
-
-            if len(voxel_list) == 0:
-                voxel_list = block_voxels
-            else:
-                voxel_list = np.concatenate([voxel_list, block_voxels])
+            block_voxels = np.transpose(np.nonzero(bin_arrs[i_bin_arr]))
+            block_voxels += block_offsets[i_bin_arr]
+            voxel_list.append(block_voxels)
+        voxel_list = np.concatenate(voxel_list)
         # create mesh
-        indices, vertices, normals = triangulation(np.array(voxel_list),
-                                     downsampling=MESH_DOWNSAMPLING[obj_type],
-                                     n_closings=MESH_CLOSING[obj_type])
-        vertices *= scaling
+
+        try:
+            min_obj_vx = global_params.config.entries['Sizethresholds'][obj_type]
+        except KeyError:
+            min_obj_vx = MESH_MIN_OBJ_VX
+        try:
+            indices, vertices, normals = triangulation(
+                voxel_list, downsampling=MESH_DOWNSAMPLING[obj_type], n_closings=MESH_CLOSING[obj_type],
+                force_single_cc=obj_type == 'syn_ssv')
+            vertices += 1  # account for knossos 1-indexing
+            vertices = np.round(vertices * scaling)
+        except ValueError as e:
+            if len(voxel_list) > min_obj_vx:
+                msg = 'Error ({}) during marching_cubes procedure of SegmentationObject {}' \
+                      ' of type "{}". It contained {} voxels.'.format(str(e), ix, obj_type,
+                                                                      len(voxel_list))
+                log_proc.error(msg)
+            indices, vertices, normals = np.zeros((0,)), np.zeros((0,)), np.zeros((0,))
+
         md[ix] = [indices.flatten(), vertices.flatten(), normals.flatten()]
     md.push()
 
 
-def mesh2obj_file(dest_path, mesh, color=None, center=None):
+def mesh2obj_file(dest_path, mesh, color=None, center=None, scale=None):
     """
     Writes mesh to .obj file.
 
     Parameters
     ----------
+    dest_path : str
     mesh : List[np.array]
      flattend arrays of indices (triangle faces), vertices and normals
+    color :
     center : np.array
-
+        Subtracts center from original vertex locations
+    scale : float
+        Multiplies vertex locations after centering
 
     Returns
     -------
 
     """
-    options = openmesh.Options()
-    options += openmesh.Options.Binary
+    # # Commented lines belonged to self-compiled openmesh version
+    # options = openmesh.Options()
+    # options += openmesh.Options.Binary
     mesh_obj = openmesh.TriMesh()
     ind, vert, norm = mesh
     if vert.ndim == 1:
@@ -1012,23 +1051,29 @@ def mesh2obj_file(dest_path, mesh, color=None, center=None):
         ind = ind.reshape(-1 ,3)
     if center is not None:
         vert -= center
+    if scale is not None:
+        vert *= scale
     vert_openmesh = []
     if color is not None:
         mesh_obj.request_vertex_colors()
-        options += openmesh.Options.VertexColor
+        # options += openmesh.Options.VertexColor
         if color.ndim == 1:
             color = np.array([color] * len(vert))
         color = color.astype(np.float64)  # required by openmesh
     for ii, v in enumerate(vert):
         v = v.astype(np.float64)  # Point requires double
-        v_openmesh = mesh_obj.add_vertex(openmesh.TriMesh.Point(v[0], v[1], v[2]))
+        # v_openmesh = mesh_obj.add_vertex(openmesh.TriMesh.Point(v[0], v[1], v[2]))
+        v_openmesh = mesh_obj.add_vertex(v)
         if color is not None:
-            mesh_obj.set_color(v_openmesh, openmesh.TriMesh.Color(*color[ii]))
+            # mesh_obj.set_color(v_openmesh, openmesh.TriMesh.Color(*color[ii]))
+            mesh_obj.set_color(v_openmesh, color[ii])
         vert_openmesh.append(v_openmesh)
     for f in ind:
         f_openmesh = [vert_openmesh[f[0]], vert_openmesh[f[1]],
                       vert_openmesh[f[2]]]
         mesh_obj.add_face(f_openmesh)
-    result = openmesh.write_mesh(mesh_obj, dest_path, options)
-    if not result:
-        log_proc.error("Error occured when writing mesh to .obj file.")
+    # result = openmesh.write_mesh(mesh_obj, dest_path, options)
+    # result = openmesh.write_mesh(mesh_obj, dest_path)
+    result = openmesh.write_mesh(dest_path, mesh_obj)
+    # if not result:
+    #     log_proc.error("Error occured when writing mesh to .obj file.")

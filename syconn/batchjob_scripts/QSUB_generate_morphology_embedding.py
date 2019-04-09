@@ -6,14 +6,12 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-import numpy as np
+
 try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconn.proc.sd_proc import mesh_chunk
-from syconn import global_params
-
+from syconn.reps.super_segmentation_dataset import exctract_ssv_morphology_embedding
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -26,14 +24,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-so_chunk_paths = args[0]
-so_kwargs = args[1]
-
-working_dir = so_kwargs['working_dir']
-obj_type = so_kwargs['working_dir']
-global_params.wd = working_dir
-for path in so_chunk_paths:
-    mesh_chunk((path, obj_type))
+exctract_ssv_morphology_embedding(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)
