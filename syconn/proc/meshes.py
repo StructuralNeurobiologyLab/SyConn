@@ -196,6 +196,14 @@ class MeshObject(object):
         return (self.vert_resh * self.max_dist + self.center).flatten()
 
 
+def triangulation_wrapper(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
+                  decimate_mesh=0, gradient_direction='ascent',
+                  force_single_cc=False):
+    # TODO: write wrapper method to handle triangulation of big objects by
+    #  recusrive chunking. The resulting meshes can be merged via `merge_meshes`
+    return
+
+
 def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
                   decimate_mesh=0, gradient_direction='ascent',
                   force_single_cc=False):
@@ -255,10 +263,8 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
     else:
         volume = pts
         if np.any(np.array(downsampling) != 1):
-            # volume = measure.block_reduce(volume, downsampling, np.max)
             ndimage.zoom(volume, downsampling, order=0)
         offset = np.array([0, 0, 0])
-    # volume = multiBinaryErosion(volume, 1).astype(np.float32)
     if n_closings > 0:
         volume = binary_closing(volume, iterations=n_closings).astype(np.float32)
         if force_single_cc:

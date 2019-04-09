@@ -147,6 +147,7 @@ def run_celltype_prediction(max_n_jobs=100):
     multi_params = ssd.ssv_ids
     ordering = np.argsort(nb_svs_per_ssv)
     multi_params = multi_params[ordering[::-1]]
+    max_n_jobs = np.max([max_n_jobs, len(multi_params) // 200])  # at most 200 SSV per job
     multi_params = chunkify(multi_params, max_n_jobs)
     # job parameter will be read sequentially, i.e. in order to provide only
     # one list as parameter one needs an additonal axis
@@ -155,7 +156,7 @@ def run_celltype_prediction(max_n_jobs=100):
     # TODO: switch n_max_co_processes to `global_params.NGPUS_TOTAL` as soon as EGL ressource allocation works!
     path_to_out = qu.QSUB_script(multi_params, "predict_cell_type",
                                  n_max_co_processes=global_params.NNODES_TOTAL,
-                                 suffix="", additional_flags="--gres=gpu:1",
+                                 suffix="", additional_flags="--gres=gpu:2",
                                  n_cores=global_params.NCORES_PER_NODE)
     log.info('Finished prediction of {} SSVs. Checking completeness.'
              ''.format(len(ordering)))

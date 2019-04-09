@@ -6,6 +6,7 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 from knossos_utils import knossosdataset
+import numpy as np
 knossosdataset._set_noprint(True)
 from knossos_utils import chunky
 from syconn.extraction import cs_processing_steps
@@ -52,7 +53,22 @@ def run_matrix_export():
 
 
 def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
-                       max_n_jobs=None):
+                       max_n_jobs=None, cube_of_interest_bb=None):
+    """
+
+    Parameters
+    ----------
+    chunk_size :
+    n_folders_fs :
+    max_n_jobs :
+    cube_of_interest_bb : Tuple[np.ndarray]
+        Defines the bounding box of the cube to process. By default this is
+        set to (np.zoers(3); kd.boundary).
+
+    Returns
+    -------
+
+    """
     if max_n_jobs is None:
         max_n_jobs = global_params.NCORE_TOTAL * 3
 
@@ -62,6 +78,11 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
     kd_seg_path = global_params.config.kd_seg_path
     kd = kd_factory(kd_seg_path)
 
+    if cube_of_interest_bb is None:
+        cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
+    size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
+    offset = cube_of_interest_bb[0]
+
     # Initital contact site extraction
     cd_dir = global_params.config.working_dir + "/chunkdatasets/cs/"
     # Class that contains a dict of chunks (with coordinates) after initializing it
@@ -70,10 +91,11 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
                   box_coords=[0, 0, 0], fit_box_size=True)
 
     # POPULATES CS CD with SV contacts
-    ces.find_contact_sites(cd, kd_seg_path)
+    ces.find_contact_sites(cd, kd_seg_path, size=size, offset=offset)
     ces.extract_agg_contact_sites(cd, global_params.config.working_dir,
                                   n_folders_fs=n_folders_fs, suffix="",
-                                  n_chunk_jobs=max_n_jobs)
+                                  n_chunk_jobs=max_n_jobs, size=size,
+                                  offset=offset)
     log.info('Contact site extraction finished.')
 
     # create overlap dataset between SJ and CS: SegmentationDataset of type 'syn'

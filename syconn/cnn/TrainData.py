@@ -454,7 +454,15 @@ class MultiViewData(Data):
 
             ssv_ids = np.array(list(self.label_dict.keys()), dtype=np.uint)
             ssv_labels = np.array(list(self.label_dict.values()), dtype=np.uint)
-            n_classes = len(np.unique(ssv_labels))
+            avail_classes, c_count = np.unique(ssv_labels, return_counts=True)
+            n_classes = len(avail_classes)
+            for c, cnt in zip(avail_classes, c_count):
+                if cnt < 2:
+                    log_cnn.warn('Class {} has support of {}. Using same SSV multiple times to '
+                                 'satisfy "train_test_split" condition.'.format(c, cnt))
+                    curr_c_ssvs = ssv_ids[ssv_labels == c][:1]
+                    ssv_ids = np.concatenate([ssv_ids, curr_c_ssvs])
+                    ssv_labels = np.concatenate([ssv_labels, [c]])
             if int(train_fraction) * len(ssv_ids) < n_classes:
                 train_fraction = 1. - float(n_classes + 1) / len(ssv_ids)
                 print("Train data fraction was set to {} due to splitting restrictions "
@@ -598,7 +606,9 @@ class CelltypeViews(MultiViewData):
         nb_cpus :
         view_key : str
         """
+        global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
         assert "areaxfs_v6" in global_params.config.working_dir
+        assert os.path.isdir(global_params.config.working_dir)
         if view_key is None:
             self.view_key = "raw{}".format(nb_views_renderinglocations)
         else:

@@ -23,6 +23,7 @@ except ImportError:
 from multiprocessing import cpu_count
 from .segmentation import SegmentationDataset, SegmentationObject
 from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
+from ..handler.config import DynConfig
 from .super_segmentation_helper import create_sso_skeleton
 from ..proc.ssd_assembly import assemble_from_mergelist
 from ..mp import batchjob_utils as qu
@@ -67,9 +68,17 @@ class SuperSegmentationDataset(object):
         self._config = config
 
         if working_dir is None:
-            self._working_dir = global_params.config.working_dir
+            if global_params.wd is not None or version == 'tmp':
+                self._working_dir = global_params.wd
+            else:
+                msg = "No working directory (wd) given. It has to be" \
+                      " specified either in global_params, via kwarg " \
+                      "`working_dir` or `config`."
+                log_reps.error(msg)
+                raise ValueError(msg)
         else:
             self._working_dir = working_dir
+            self._config = DynConfig(working_dir)
 
         if scaling is None:
             try:

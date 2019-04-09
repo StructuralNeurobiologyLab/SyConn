@@ -33,7 +33,8 @@ BATCH_PROC_SYSTEM = global_params.BATCH_PROC_SYSTEM
 
 def batchjob_enabled():
     # disable QSUB/SLURM for example_run.py
-    if 'example_cube' in global_params.config.working_dir:
+    if global_params.config.working_dir is None or 'example_cube' in \
+            global_params.config.working_dir:
         return False
     if BATCH_PROC_SYSTEM is None:
         return False
@@ -154,6 +155,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                                       log_dir=job_folder)
     n_max_co_processes = np.min([global_params.NCORE_TOTAL // n_cores,
                                  len(params)])
+    n_max_co_processes = np.max([n_max_co_processes, 1])
     log_batchjob.info('Started BatchJob script "{}" with {} tasks using {}'
                       ' parallel jobs, each using {} core(s).'.format(
         name, len(params), n_max_co_processes, n_cores))
@@ -211,7 +213,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             log_batchjob.warning(
                 '"additional_flags" contained "-V" which is a QSUB/SGE specific flag,'
                 ' but SLURM was set as batch system. Converting "-V" to "--export=ALL".')
-            additional_flags.replace('-V ', '--export=ALL ')
+            additional_flags = additional_flags.replace('-V ', '--export=ALL ')
         if not '--mem=' in additional_flags and not disable_mem_flag:
             # Node memory limit is 250,000M and not 250G! -> max memory per core is 250000M/20, leave safety margin
             mem_lim = int(
@@ -277,7 +279,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 priority, additional_flags, this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         elif BATCH_PROC_SYSTEM == 'SLURM':
-            if n_cores > 1:
+            if '--gres=gpu' in additional_flags:
                 # additional_flags = "-n%d" % n_cores
                 # otherwise multiprocessing will run on one CPU only if cpu binding is not modified within each process
                 additional_flags += " --cpu-bind=none --cpus-per-task=" + str(n_cores)
@@ -287,6 +289,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                     additional_flags, job_log_path, job_err_path,
                     job_name, this_sh_path)
             else:
+                if n_cores > 1:
+                    additional_flags += " -n%d" % n_cores
                 cmd_exec = "sbatch {0} --output={1} --error={2}" \
                            " --job-name={3} {4}".format(
                     additional_flags, job_log_path, job_err_path,
@@ -359,12 +363,19 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                                   len(missed_params)]), n_cores])
         n_cores = np.min([n_cores, global_params.NCORES_PER_NODE])
         n_cores = int(n_cores)
+        # remove existing memory and cpus-per-task flags:
+        if '--mem=' in additional_flags:
+            m = re.search('(?<=--mem=)\w+', additional_flags)
+            additional_flags = additional_flags.replace('--mem=' + m.group(0), '')
+        if '--cpus-per-task' in additional_flags:
+            m = re.search('(?<=--cpus-per-task=)\w+', additional_flags)
+            additional_flags = additional_flags.replace('--cpus-per-task=' + m.group(0), '')
         if n_cores == global_params.NCORES_PER_NODE:
             if not '--mem=' in additional_flags:
                 additional_flags += ' --mem=0'
             else:
                 m = re.search('(?<=--mem=)\w+', additional_flags)
-                additional_flags.replace(m.group(0), '--mem=0')
+                additional_flags = additional_flags.replace('--mem=' + m.group(0), '--mem=0')
         # if all jobs failed, increase number of cores
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
@@ -495,6 +506,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     n_max_co_processes = np.min([cpu_count(), n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
+    n_max_co_processes = np.max([n_max_co_processes, 1])
     log_batchjob.debug('Started BatchJobFallback script "{}" with {} tasks using {}'
                        ' parallel jobs, each using {} core(s).'.format(
         name, len(params), n_max_co_processes, n_cores))

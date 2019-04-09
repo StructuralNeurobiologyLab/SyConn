@@ -48,7 +48,6 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
             for z in range(offset[2], offset[2]+size[2], cset.chunk_size[2]):
                 chunk_list.append(cset.coord_dict[tuple([x, y, z])])
                 translator[chunk_list[-1]] = len(chunk_list)-1
-    log_extraction.info("Chunk List contains %d elements." % len(chunk_list))
     return chunk_list, translator
 
 
@@ -236,8 +235,11 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
     #
-    # # --------------------------------------------------------------------------
+    # # ------------------------------------------------------------------------
     #
+    chunky.save_dataset(cset)  # save dataset to be able to load it during make_stitch_list (this
+    # allows to load the ChunkDataset inside the worker instead of pickling it for each which
+    # slows down the submission process.
     time_start = time.time()
     stitch_list = oes.make_stitch_list(cset, filename, hdf5names, chunk_list,
                                        stitch_overlap, overlap, debug,
@@ -249,7 +251,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/stitch_list.pkl",
                          [stitch_list])
     #
-    # # --------------------------------------------------------------------------
+    # # ------------------------------------------------------------------------
     #
     time_start = time.time()
     merge_dict, merge_list_dict = oes.make_merge_list(hdf5names, stitch_list,
@@ -259,7 +261,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/merge_list.pkl",
                          [merge_dict, merge_list_dict])
 
-    # -------------------------------------------------------------------------
+    # --------------------------------------------------------------------------
 
     time_start = time.time()
     oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,

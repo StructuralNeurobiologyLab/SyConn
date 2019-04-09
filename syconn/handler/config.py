@@ -17,20 +17,19 @@ __all__ = ['DynConfig', 'get_default_conf_str', 'initialize_logging']
 
 
 class Config(object):
-    def __init__(self, working_dir, validate=True):
+    def __init__(self, working_dir, validate=True, verbose=True):
         self._entries = {}
         self._working_dir = working_dir
         self.initialized = False
         self.log_main = get_main_log()
         if self._working_dir is not None and len(self._working_dir) > 0:
             self.parse_config(validate=validate)
-            self.log_main.info("Initialized stdout logging (level: {}). "
-                               "Current working directory:"
-                               " ".format(global_params.log_level) +
-                               colored("'{}'".format(working_dir), 'red'))
-            self.log_main.info(""
-                               "".format())
             self.initialized = True
+            if verbose:
+                self.log_main.info("Initialized stdout logging (level: {}). "
+                                   "Current working directory:"
+                                   " ".format(global_params.log_level) +
+                                   colored("'{}'".format(working_dir), 'red'))
 
     @property
     def entries(self):
@@ -96,8 +95,13 @@ class DynConfig(Config):
     """
     Enables dynamic and SyConn-wide update of working directory 'wd'.
     """
-    def __init__(self):
-        super().__init__(global_params.wd)
+    def __init__(self, wd=None):
+        if wd is None:
+            wd = global_params.wd
+            verbose = True
+        else:
+            verbose = False
+        super().__init__(wd, verbose=verbose)
 
     def _check_actuality(self):
         """
@@ -108,7 +112,7 @@ class DynConfig(Config):
         if 'syconn_wd' in os.environ:
             if super().working_dir != os.environ['syconn_wd']:
                 super().__init__(os.environ['syconn_wd'])
-        elif super().working_dir != global_params.wd:
+        elif super().working_dir != global_params.wd and global_params.wd is not None:
             super().__init__(global_params.wd)
 
     @property

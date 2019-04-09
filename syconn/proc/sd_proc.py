@@ -30,7 +30,7 @@ from ..proc.meshes import mesh_chunk
 from . import log_proc
 
 
-def dataset_analysis(sd, recompute=True, n_jobs=1000, n_max_co_processes=None,
+def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                      compute_meshprops=False):
     # TODO: remove `qsub_pe`and `qsub_queue`
     """ Analyze SegmentationDataset and extract and cache SegmentationObjects
@@ -55,6 +55,8 @@ def dataset_analysis(sd, recompute=True, n_jobs=1000, n_max_co_processes=None,
         max number of workers running at the same time when using qsub
     :param compute_meshprops: bool
     """
+    if n_jobs is None:
+        n_jobs = global_params.NCORE_TOTAL  # individual tasks are very fast
     paths = sd.so_dir_paths
     if compute_meshprops:
         if not (sd.type in MESH_DOWNSAMPLING and sd.type in MESH_CLOSING):

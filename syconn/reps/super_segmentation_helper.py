@@ -1733,7 +1733,7 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
     inp_d = sso_views_to_modelinput(sso, nb_views_model, view_key=tmp_view_key)
     synsign_ratio = np.array([sso.syn_sign_ratio()] * len(inp_d))[..., None]
     inp_d = naive_view_normalization_new(inp_d)
-    res = model.predict_proba((inp_d, synsign_ratio))
+    res = model.predict_proba((inp_d, synsign_ratio), bs=5)
     clf = np.argmax(res, axis=1)
     ls, cnts = np.unique(clf, return_counts=True)
     pred = ls[np.argmax(cnts)]
@@ -1802,7 +1802,7 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
     # The inference with TNets can be optimzed, via splititng the views into three equally sized parts.
     inp = (views[:, :, 0], np.zeros_like(views[:, :, 0]), np.zeros_like(views[:, :, 0]))
     # return dist1, dist2, inp1, inp2, inp3 latent
-    _, _, latent, _, _ = model.predict_proba(inp)  # only use first view for now
+    _, _, latent, _, _ = model.predict_proba(inp, bs=5)  # only use first view for now
         # TODO: check if this is in-line with how `pred_key_appendix` is handled in `super_segmentation_object.py`
     sso.save_attributes([pred_key], [latent])
 

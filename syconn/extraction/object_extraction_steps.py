@@ -422,12 +422,12 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
 
     multi_params = []
     for nb_chunk in chunk_list:
-        multi_params.append([cset, nb_chunk, filename, hdf5names, stitch_overlap, overlap,
+        multi_params.append([cset.path_head_folder, nb_chunk, filename, hdf5names, stitch_overlap, overlap,
                              suffix, chunk_list, n_erosion, overlap_thresh])
 
     if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_make_stitch_list_thread,
-                                         multi_params, debug=debug,
+                                             multi_params, debug=debug,
                                              nb_cpus=n_max_co_processes,)
 
         stitch_list = {}
@@ -443,7 +443,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
         path_to_out = qu.QSUB_script(multi_params,
                                      "make_stitch_list",
                                      pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
+                                     script_folder=None, n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
 
         out_files = glob.glob(path_to_out + "/*")
@@ -464,7 +464,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
 
 
 def _make_stitch_list_thread(args):
-    cset = args[0]
+    cpath_head_folder = args[0]
     nb_chunk = args[1]
     filename = args[2]
     hdf5names = args[3]
@@ -475,11 +475,12 @@ def _make_stitch_list_thread(args):
     n_erosion = args[8]
     overlap_thresh = args[9]
 
+    cset = chunky.load_dataset(cpath_head_folder)
     chunk = cset.chunk_dict[nb_chunk]
     cc_data_list = basics.load_from_h5py(chunk.folder + filename +
                                          "_unique_components%s.h5"
                                          % suffix, hdf5names)
-    # erode segmentation once to avoid start location dependent segmentation artefacts
+    # erode segmentation once to avoid start location dependent segmentation artifacts
     struct = np.zeros((3, 3, 3)).astype(np.bool)
     mask = np.array([[1, 1, 1], [1, 1, 1], [1, 1, 1]]).astype(np.bool)
     struct[:, :, 1] = mask  # only perform erosion in xy plane

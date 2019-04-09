@@ -41,6 +41,7 @@ from ..proc.rendering import render_sampled_sso, multi_view_sso, \
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import log_reps
+from ..handler.config import DynConfig
 from .. import global_params
 
 
@@ -131,12 +132,17 @@ class SuperSegmentationObject(object):
             self.attr_dict["sv"] = sv_ids
 
         if working_dir is None:
-            try:
+            if global_params.wd is not None or version == 'tmp':
                 self._working_dir = global_params.wd
-            except:
-                raise Exception("No working directory (wd) specified in config")
+            else:
+                msg = "No working directory (wd) given. It has to be" \
+                      " specified either in global_params, via kwarg " \
+                      "`working_dir` or `config`."
+                log_reps.error(msg)
+                raise ValueError(msg)
         else:
             self._working_dir = working_dir
+            self._config = DynConfig(working_dir)
 
         if scaling is None:
             try:

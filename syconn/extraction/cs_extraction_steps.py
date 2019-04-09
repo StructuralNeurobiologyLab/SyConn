@@ -21,7 +21,8 @@ from ..mp import batchjob_utils as qu
 from ..handler import compression
 from ..handler.basics import kd_factory
 from . import log_extraction
-from .object_extraction_wrapper import from_ids_to_objects
+from .object_extraction_wrapper import from_ids_to_objects, calculate_chunk_numbers_for_box
+from ..mp.mp_utils import start_multiprocess_imap
 try:
     from .block_processing_cython import kernel, process_block, process_block_nonzero
 except ImportError as e:
@@ -30,29 +31,41 @@ except ImportError as e:
 
 
 def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
-                       qsub_pe=None, qsub_queue=None):
+                       size=None, offset=None):
+    """
+
+    Parameters
+    ----------
+    cset :
+    knossos_path :
+    filename :
+    n_max_co_processes :
+    qsub_pe :
+    qsub_queue :
+    size :
+    offset :
+
+    Returns
+    -------
+
+    """
+    if size is not None and offset is not None:
+        chunk_list, _ = \
+            calculate_chunk_numbers_for_box(cset, offset, size)
+    else:
+        chunk_list = [ii for ii in range(len(cset.chunk_dict))]
+
     os.makedirs(cset.path_head_folder, exist_ok=True)
     multi_params = []
-    for chunk in cset.chunk_dict.values():
-        multi_params.append([chunk, knossos_path, filename])
+    for chunk_k in chunk_list:
+        multi_params.append([cset.chunk_dict[chunk_k], knossos_path, filename])
 
-    # if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-    #     results = sm.start_multiprocess_imap(_contact_site_detection_thread, multi_params,
-    #                                          debug=False, nb_cpus=n_max_co_processes)
-    # elif qu.batchjob_enabled():
-    path_to_out = qu.QSUB_script(multi_params,
-                                 "contact_site_detection",
-                                 script_folder=None,
-                                 n_max_co_processes=n_max_co_processes,
-                                 pe=qsub_pe, queue=qsub_queue)
-
-    out_files = glob.glob(path_to_out + "/*")
-    results = []
-    for out_file in out_files:
-        with open(out_file, 'rb') as f:
-            results.append(pkl.load(f))
-    # else:
-    #     raise Exception("QSUB not available")
+    if not qu.batchjob_enabled():
+        _ = start_multiprocess_imap(_contact_site_detection_thread, multi_params,
+                                             debug=False, nb_cpus=n_max_co_processes)
+    else:
+        _ = qu.QSUB_script(multi_params, "contact_site_detection",
+                           script_folder=None, n_max_co_processes=n_max_co_processes)
     chunky.save_dataset(cset)
 
 
@@ -99,8 +112,30 @@ def detect_cs(arr):
 # TODO: use from_ids_to_objects
 def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
                               n_folders_fs=10000, suffix="", overlaydataset_path=None,
-                              n_max_co_processes=None, n_chunk_jobs=5000):
+                              n_max_co_processes=None, n_chunk_jobs=5000, size=None,
+                              offset=None):
+    """
+
+    Parameters
+    ----------
+    cset :
+    working_dir :
+    filename :
+    hdf5name :
+    n_folders_fs :
+    suffix :
+    overlaydataset_path :
+    n_max_co_processes :
+    n_chunk_jobs :
+    size :
+    offset :
+
+    Returns
+    -------
+
+    """
 
     from_ids_to_objects(cset, filename, overlaydataset_path=overlaydataset_path, n_chunk_jobs=n_chunk_jobs,
                         hdf5names=[hdf5name], n_max_co_processes=n_max_co_processes, workfolder=working_dir,
-                        n_folders_fs=n_folders_fs, use_combined_extraction=True, suffix=suffix)
+                        n_folders_fs=n_folders_fs, use_combined_extraction=True, suffix=suffix,
+                        size=size, offset=offset)

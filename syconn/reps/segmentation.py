@@ -17,6 +17,7 @@ from .. import global_params
 from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
 from ..handler.multiviews import generate_rendering_locs
+from ..handler.config import DynConfig
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
 from ..handler.basics import get_filepaths_from_dir, safe_copy,\
     write_txt2kzip, temp_seed
@@ -66,9 +67,17 @@ class SegmentationDataset(object):
                                 [10**i for i in range(6)])
 
         if working_dir is None:
-            self._working_dir = global_params.config.working_dir
+            if global_params.wd is not None or version == 'tmp':
+                self._working_dir = global_params.wd
+            else:
+                msg = "No working directory (wd) given. It has to be" \
+                      " specified either in global_params, via kwarg " \
+                      "`working_dir` or `config`."
+                log_reps.error(msg)
+                raise ValueError(msg)
         else:
             self._working_dir = working_dir
+            self._config = DynConfig(working_dir)
 
         if not self._working_dir.endswith("/"):
             self._working_dir += "/"
@@ -358,9 +367,17 @@ class SegmentationObject(object):
         self._skeleton_caching = skeleton_caching
 
         if working_dir is None:
-            self._working_dir = global_params.config.working_dir
+            if global_params.wd is not None or version == 'tmp':
+                self._working_dir = global_params.wd
+            else:
+                msg = "No working directory (wd) given. It has to be" \
+                      " specified either in global_params, via kwarg " \
+                      "`working_dir` or `config`."
+                log_reps.error(msg)
+                raise ValueError(msg)
         else:
             self._working_dir = working_dir
+            self._config = DynConfig(working_dir)
 
         self._scaling = scaling
 

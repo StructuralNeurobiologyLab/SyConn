@@ -74,7 +74,8 @@ On a machine with 20 CPUs (Intel(R) Xeon(R) @ 2.60GHz) and 2 GPUs (GeForce GTX 9
 
 
 ## SyConn KNOSSOS viewer
-The following packages have to be available for the system python interpreter:
+The following packages have to be available for the system's python2 interpreter
+(will differ from the conda environment):
 
 - numpy
 
@@ -87,17 +88,18 @@ In order to inspect the resulting data via the SyConnViewer KNOSSOS-plugin follo
 - wait until `start.py` finished. For restarting the server run `SyConn/scripts/kplugin/
 server.py --working_dir=<path>` pointing to your working directory (`<path>`).
 
-- run KNOSSOS (https://knossos.app/)
+- download and run the nightly build of KNOSSOS (https://github.com/knossos-project/knossos/releases/tag/nightly)
 
 - in KNOSSOS -> File -> Choose Dataset -> browse to your working directory and open
 `knossosdatasets/seg/mag1/knossos.conf` with enabled 'load_segmentation_overlay' (at the bottom of the dialog).
 
 - then go to Scripting (top row) -> Run file -> browse to `SyConn/scripts/kplugin/syconn_knossos_viewer.py` and open it
 
-- After the SyConnViewer window has opened, the mesh of a cell reconstruction will be loaded after clicking onto colored segments in the
- viewports (exploration mode) or by selecting a cell ID in the SyConnViewer window and pressing 'show neurite'. The plugin will display
- additional information about the selected cell and on the right of the plugin window a list of detected synapses and their respective
- properties is shown. In case the window does not pop-up check Scripting->Interpreter for errors.
+- After the SyConnViewer window has opened, the selection of segmentation fragments in the slice-viewports (exploration mode) or in the
+list of cell IDs followed by pressing 'show neurite' will trigger the rendering of the corresponding cell reconstruction mesh in the 3D viewport.
+ The plugin will display additional information about the selected cell and a list of detected synapses (shown as tuples of cell IDs;
+ clicking the entry will trigger a jump to the synapse location) and their respective
+ properties. In case the window does not pop-up check Scripting->Interpreter for errors.
 
 
 ## Analysis steps
