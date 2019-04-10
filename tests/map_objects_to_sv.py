@@ -20,10 +20,12 @@ def map_ids(wd, n_max_co_processes=None, chunk_size=(128, 128, 128), debug=False
     for key in cd_cell.chunk_dict:
         multi_param.append([cd_cell.chunk_dict[key].coordinates, chunk_size, wd])
 
-    chunkified_multi_param = chunkify(multi_param, 2000)
 
-    sm.start_multiprocess_imap(_map_ids_thread, multi_param,
-                                             nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
+    _map_ids_thread((0,0,0), chunk_size, wd)
+    #chunkified_multi_param = chunkify(multi_param, 2000)
+
+    # sm.start_multiprocess_imap(_map_ids_thread, multi_param,
+    #                                          nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
 
 
 def _map_ids_thread(args):
@@ -40,11 +42,11 @@ def _map_ids_thread(args):
     for obj in feat:
         if obj == "kd_seg":
             continue
-        if __name__ == '__main__':
-            kd[obj] = kd_factory(feat[obj]).from_overlaycubes_to_matrix(
+        kd[obj] = kd_factory(feat[obj]).from_overlaycubes_to_matrix(
                                             offset=coord, size=chunk_size)
 
     cell_ids, cell_size = np.unique(seg_cell, return_counts=True)
+    print("cell_ids= ", cell_ids, "cell_size= ", cell_size)
 
     for cell_id in cell_ids:
         cache_dc = CompressedStorage(wd + "/cache_" + cell_id + ".pkl")
@@ -53,16 +55,8 @@ def _map_ids_thread(args):
 
 
 
-
-
-
-
-    # seg_cell = kd.from_overlaycubes_to_matrix(offset=ch.coordinates,
-    #                                           size=ch.size)
-
-
 def main():
-    map_ids(wd="/wholebrain/u/mariakaw/temp_work_dir")
+    map_ids(wd="/wholebrain/u/mariakaw/SyConn/example_cube1/dict")
 
     # kd_paths = global_params.config.kd_paths
     # kd = []
