@@ -233,7 +233,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     for result in results:
         for sv_key, value in result.items():
             sv_obj_map_dict[sv_key].update(value)
-##################33333#####
+    #######################
     mapping_dict_path = seg_dataset.path + "/sv_%s_mapping_dict.pkl" % sd.version
     with open(mapping_dict_path, "wb") as f:
         pkl.dump(sv_obj_map_dict, f)
@@ -274,7 +274,7 @@ def _map_objects_thread(args):
         datatype = np.uint64
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(kd_path)
-    seg_dataset = segmentation.SegmentationDataset(obj_type, version=obj_version,
+    seg_dataset =  segmentation.SegmentationDataset(obj_type, version=obj_version,
                                                    working_dir=working_dir)
     sv_id_dict = {}
     for p in paths:

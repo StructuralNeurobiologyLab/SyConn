@@ -4,10 +4,11 @@ from syconn.handler.basics import kd_factory
 import numpy as np
 from syconn.handler.basics import chunkify
 from syconn.mp import batchjob_utils as qu, mp_utils as sm
+from sys import getsizeof
 
 
-
-def map_ids(wd, n_max_co_processes=None, chunk_size=(128, 128, 128), debug=False):
+def map_ids(wd, n_jobs=1000, qsub_pe=None, qsub_queue=None, nb_cpus=None,
+            n_max_co_processes=None, chunk_size=(128, 128, 128), debug=False):
 
     kd = kd_factory(global_params.config.kd_seg_path)
     cd_dir = global_params.config.working_dir + "chunkdatasets/sv/"
@@ -16,43 +17,51 @@ def map_ids(wd, n_max_co_processes=None, chunk_size=(128, 128, 128), debug=False
     cd_cell.initialize(kd, kd.boundary, chunk_size, cd_dir,
                                            box_coords=[0, 0, 0], fit_box_size=True)
 
-    multi_param = []
-    for key in cd_cell.chunk_dict:
-        multi_param.append([cd_cell.chunk_dict[key].coordinates, chunk_size, wd])
+    multi_params = []
+    for coord_chunk in chunkify([cd_cell.chunk_dict[key].coordinates for key in cd_cell.chunk_dict], 1):
+        multi_params.append([coord_chunk, chunk_size, wd])
 
-
-    _map_ids_thread((0,0,0), chunk_size, wd)
-    #chunkified_multi_param = chunkify(multi_param, 2000)
-
-    # sm.start_multiprocess_imap(_map_ids_thread, multi_param,
-    #                                          nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
+    sm.start_multiprocess_imap(_map_ids_thread, multi_param,
+                                nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
 
 
 def _map_ids_thread(args):
-    coord = args[0]
+    coord_list = args[0]
     chunk_size = args[1]
-    wd = args[2]
+    # wd = args[2]
 
-    kd_cell = kd_factory(global_params.config.kd_seg_path)
-    seg_cell = kd_cell.from_overlaycubes_to_matrix(offset=coord, size=chunk_size)
+    for coord in coord_list:
 
-    kd = {}
-    feat = global_params.config.kd_paths
+        kd_obj_masks = {}
+        objects = global_params.config.kd_paths
 
-    for obj in feat:
-        if obj == "kd_seg":
-            continue
-        kd[obj] = kd_factory(feat[obj]).from_overlaycubes_to_matrix(
-                                            offset=coord, size=chunk_size)
+        for obj_key in objects:
+            if obj_key == "kd_seg":
+                continue
+            temp_matrix = kd_factory(objects[obj_key]).from_overlaycubes_to_matrix(
+                                                        offset=coord, size=chunk_size)
+            kd_obj_masks[obj_key] = {}
+            for unique_obj_id in np.unique(temp_matrix):
+                if unique_obj_id == 0:
+                    continue
+                mask = np.zeros(shape=chunk_size, dtype=np.bool)
+                mask[temp_matrix == unique_obj_id] = 1
+                kd_obj_masks[obj_key][unique_obj_id] = mask
 
-    cell_ids, cell_size = np.unique(seg_cell, return_counts=True)
-    print("cell_ids= ", cell_ids, "cell_size= ", cell_size)
+        kd_cell = kd_factory(global_params.config.kd_seg_path)
+        seg_cell = kd_cell.from_overlaycubes_to_matrix(offset=coord, size=chunk_size)
 
-    for cell_id in cell_ids:
-        cache_dc = CompressedStorage(wd + "/cache_" + cell_id + ".pkl")
+        cell_ids, cell_counts = np.unique(seg_cell, return_counts=True)
+        for i in range(len(cell_ids)):
+            cell_id = cell_ids[i]
+            cell_count = cell_counts[i]
+            cell_mask = np.zeros(shape=chunk_size, dtype=np.bool)
+            cell_mask[seg_cell == cell_id] = 1
 
-
-
+            for obj_name in kd_obj_masks:
+                for obj_id in kd_obj_masks[obj_name]:
+                    overlap = np.sum(kd_obj_masks[obj_name][obj_id] & cell_mask)
+                    print("cell_count= ", cell_count, "overlap= ", overlap)
 
 
 def main():
