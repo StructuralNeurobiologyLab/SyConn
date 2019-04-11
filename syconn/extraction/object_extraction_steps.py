@@ -27,6 +27,7 @@ from ..reps import segmentation, rep_helper as rh
 from ..handler import basics
 from ..backend.storage import VoxelStorageL, VoxelStorage, VoxelStorageDyn
 from ..proc.image import multi_mop
+from .. import global_params
 from ..handler.basics import kd_factory
 
 
@@ -42,7 +43,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                         hdf5_name_membrane=None, fast_load=False, suffix="",
                         qsub_pe=None, qsub_queue=None, nb_cpus=None,
                         n_max_co_processes=None, transform_func=None,
-                        transform_func_kwargs=None,
+                        transform_func_kwargs=None, transf_func_kd_overlay=None,
                         load_from_kd_overlaycubes=False):
     """
     Extracts connected component from probability maps.
@@ -115,6 +116,9 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
         key word arguments for transform_func
     load_from_kd_overlaycubes : bool
         Load prob/seg data from overlaycubes instead of raw cubes.
+    transf_func_kd_overlay :
+        Method which is to applied to cube data if `load_from_kd_overlaycubes`
+        is True.
 
     Returns
     -------
@@ -159,7 +163,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
              sigmas, thresholds, swapdata, prob_kd_path_dict,
              membrane_filename, membrane_kd_path,
              hdf5_name_membrane, fast_load, suffix, transform_func_kwargs,
-             load_from_kd_overlaycubes])
+             load_from_kd_overlaycubes, transf_func_kd_overlay])
 
     if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(transform_func, multi_params,
@@ -177,7 +181,8 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                                      "gauss_threshold_connected_components",
                                      pe=qsub_pe, queue=qsub_queue,
                                      n_cores=nb_cpus, script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+                                     n_max_co_processes=n_max_co_processes,
+                                     use_dill=True)
         out_files = glob.glob(path_to_out + "/*")
         results_as_list = []
         for out_file in out_files:
@@ -221,23 +226,29 @@ def _gauss_threshold_connected_components_thread(args):
     hdf5_name_membrane = args[11]
     fast_load = args[12]
     suffix = args[13]
-    load_from_kd_overlaycubes = args[14]
+    transform_func_kwargs = args[14]
+    load_from_kd_overlaycubes = args[15]
+    transf_func_kd_overlay = args[16]
 
     box_offset = np.array(chunk.coordinates) - np.array(overlap)
     size = np.array(chunk.size) + 2*np.array(overlap)
 
     if swapdata:
         size = basics.switch_array_entries(size, [0, 2])
-
     if prob_kd_path_dict is not None:
         bin_data_dict = {}
         for kd_key in prob_kd_path_dict.keys():
             kd = kd_factory(prob_kd_path_dict[kd_key])
             if load_from_kd_overlaycubes:  # enable possibility to load from overlay cubes as well
-                bin_data_dict[kd_key] = kd.from_overlaycubes_to_matrix(size, box_offset)
+                data_k = kd.from_overlaycubes_to_matrix(size, box_offset)
+                if transf_func_kd_overlay is not None:
+                    bin_data_dict[kd_key] = transf_func_kd_overlay(data_k)
+                else:
+                    bin_data_dict[kd_key] = data_k
             else:  # load raw
                 bin_data_dict[kd_key] = kd.from_raw_cubes_to_matrix(size,
                                                                     box_offset)
+
     else:
         if not fast_load:
             cset = chunky.load_dataset(path_head_folder)
@@ -1236,3 +1247,59 @@ def _extract_voxels_combined_thread_OLD(args):
                     voxel_dc[sv_id] = [id_mask], [abs_offset]
 
                 voxel_dc.push(segdataset.so_storage_path + voxel_rel_path + "/voxel.pkl")
+
+
+def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
+                      offset=None, size=None, n_max_co_processes=None,
+                      stride=[4 * 128, 4 * 128, 4 * 128],
+                      as_raw=False, fast_downsampling=False,
+                      unified_labels=False, orig_dtype=np.uint8):
+    """
+    Batchjob version of `ChunkDataset` `export_cset_to_kd` method, see knossos_utils.chunky for
+    details.
+
+    Parameters
+    ----------
+    cset :
+    kd :
+    name :
+    hdf5names :
+    n_cores :
+    offset :
+    size :
+    n_max_co_processes :
+    stride :
+    as_raw :
+    fast_downsampling :
+    unified_labels :
+    orig_dtype :
+
+    Returns
+    -------
+
+    """
+    try:
+        from knossos_utils.chunky import _export_cset_as_kd_thread
+    except ImportError:
+        raise ImportError('Could not import `_export_cset_as_kd_thread` from '
+                          '`knossos_utils.chunky`.')
+
+    if offset is None or size is None:
+        offset = np.zeros(3, dtype=np.int)
+        size = np.copy(kd.boundary)
+
+    multi_params = []
+    for coordx in range(offset[0], offset[0] + size[0],
+                        stride[0]):
+        for coordy in range(offset[1], offset[1] + size[1],
+                            stride[1]):
+            for coordz in range(offset[2], offset[2] + size[2],
+                                stride[2]):
+                coords = np.array([coordx, coordy, coordz])
+                multi_params.append([coords, stride, cset.path_head_folder,
+                                     kd.knossos_path, name, hdf5names, as_raw,
+                                     unified_labels, n_cores, orig_dtype,
+                                     fast_downsampling])
+
+    qu.QSUB_script(multi_params, "export_cset_to_kd", n_cores=n_cores,
+                   n_max_co_processes=n_max_co_processes)

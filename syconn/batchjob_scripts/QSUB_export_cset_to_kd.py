@@ -6,13 +6,12 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-import dill
-import numpy as np  # needed for transfer function
+
 try:
     import cPickle as pkl
-except ImportError:
+except Exception:
     import pickle as pkl
-from syconn.extraction import object_extraction_steps as oes
+from knossos_utils.chunky import _export_cset_as_kd_thread
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -21,11 +20,11 @@ with open(path_storage_file, 'rb') as f:
     args = []
     while True:
         try:
-            args.append(dill.load(f))
+            args.append(pkl.load(f))
         except EOFError:
             break
 
-out = oes._gauss_threshold_connected_components_thread(args)
+out = _export_cset_as_kd_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

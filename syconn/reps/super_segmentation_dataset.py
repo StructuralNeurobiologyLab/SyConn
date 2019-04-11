@@ -548,7 +548,6 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
         Whether to apply new mapping (see `ssd.mapping_dict`)
     """
     ssd.save_dataset_shallow()
-
     multi_params = chunkify(ssd.ssv_ids, n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict,
                      ssd.working_dir, extract_only, attr_keys,
@@ -1226,6 +1225,11 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1,
     safe : bool
         if True, will not overwrite existing data
     """
+    # update existing SSV IDs  # TODO: currently this requires a new mapping dict Unclear what to
+    #  do in order to enable updates on existing SSD (e.g. after adding new SSVs)
+    # paths = glob.glob(ssd.path + "/so_storage/*/*/*/")
+    # ssd._ssv_ids = np.array([int(os.path.basename(p.strip("/")))
+    #                           for p in paths], dtype=np.uint)
     if target_wd is None:
         target_wd = global_params.config.working_dir
     scaling = ssvs[0].scaling
@@ -1249,13 +1253,11 @@ def create_sso_skeletons_thread(args):
     version_dict = args[2]
     working_dir = args[3]
 
-    n_cpus_avail = cpu_count()
     ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
                                    version_dict=version_dict)
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.nb_cpus = n_cpus_avail
         if not global_params.config.allow_skel_gen:
             # TODO: change to create_sso_skeleton_fast as soon as RAG edges
             #  only connected spatially close SVs

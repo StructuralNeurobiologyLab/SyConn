@@ -270,7 +270,9 @@ class DynConfig(Config):
 
 
 def get_default_conf_str(example_wd, scaling, py36path="", syntype_avail=True,
-                         use_large_fov_views_ct=True, use_new_renderings_locs=True):
+                         use_large_fov_views_ct=True, use_new_renderings_locs=True,
+                         kd_seg=None, kd_sym=None, kd_asym=None, kd_sj=None, kd_mi=None,
+                         kd_vc=None, init_rag_p=""):
     """
     Default SyConn config and type specification, placed in the working directory.
 
@@ -279,6 +281,18 @@ def get_default_conf_str(example_wd, scaling, py36path="", syntype_avail=True,
     str, str
         config.ini and configspec.ini contents
     """
+    if kd_seg is None:
+        kd_seg = example_wd + 'knossosdatasets/seg/'
+    if kd_sym is None:
+        kd_sym = example_wd + 'knossosdatasets/sym/'
+    if kd_asym is None:
+        kd_asym = example_wd + 'knossosdatasets/asym/'
+    if kd_sj is None:
+        kd_sj = example_wd + 'knossosdatasets/sj/'
+    if kd_mi is None:
+        kd_mi = example_wd + 'knossosdatasets/mi/'
+    if kd_vc is None:
+        kd_vc = example_wd + 'knossosdatasets/vc/'
     config_str = """[Versions]
 sv = 0
 vc = 0
@@ -333,12 +347,7 @@ allow_skel_gen = True
 [Views]
 use_large_fov_views_ct = {}
 use_new_renderings_locs = {}
-    """.format(example_wd + 'knossosdatasets/seg/',
-               example_wd + 'knossosdatasets/sym/',
-               example_wd + 'knossosdatasets/asym/',
-               example_wd + 'knossosdatasets/sj/',
-               example_wd + 'knossosdatasets/vc/',
-               example_wd + 'knossosdatasets/mi/', '',
+    """.format(kd_seg, kd_sym, kd_asym, kd_sj, kd_vc, kd_mi, init_rag_p,
                py36path, scaling[0], scaling[1], scaling[2],
                str(syntype_avail), str(use_large_fov_views_ct),
                str(use_new_renderings_locs))

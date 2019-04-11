@@ -256,7 +256,8 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
 
 def _map_objects_thread(args):
     """Worker of map_objects_to_sv"""
-    # TODO: this needs to be done densely by matching cell organelle segmentation (see corresponding ChunkDataset which is an intermediate result of 'from_probabilities_to_objects') to SV segmentation
+    # TODO: this needs to be done densely by matching cell organelle segmentation (see corresponding ChunkDataset
+    #  which is an intermediate result of 'from_probabilities_to_objects') to SV segmentation
 
     paths = args[0]
     obj_type = args[1]
@@ -282,6 +283,18 @@ def _map_objects_thread(args):
         for so_id in this_vx_dc.keys():
             so = seg_dataset.get_segmentation_object(so_id)
             so.attr_dict = this_attr_dc[so_id]
+            bb = so.bounding_box
+            # check object BB, TODO: HACK because kd.from_overlaycubes_to_list(vx_list,
+            #  datatype=datatype) will load the data via the object's BB --> new mapping is
+            #  needed asap
+            if np.linalg.norm((bb[1] - bb[0]) * seg_dataset.scaling) > global_params.thresh_mi_bbd_mapping:
+                log_proc.warn(
+                    'Skipped huge MI with size: {}, offset: {}, mi_id: {}, mi_c'
+                    'oord: {}'.format(so.size, so.bounding_box[0], so_id, so.rep_coord))
+                so.attr_dict["mapping_ids"] = []
+                so.attr_dict["mapping_ratios"] = []
+                this_attr_dc[so_id] = so.attr_dict
+                continue
             so.load_voxels(voxel_dc=this_vx_dc)
             if readonly:
                 if "mapping_ids" in so.attr_dict:

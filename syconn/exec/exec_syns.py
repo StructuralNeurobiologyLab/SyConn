@@ -22,7 +22,7 @@ from syconn.handler.basics import kd_factory
 
 def run_matrix_export():
     log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
-                             overwrite=False)
+                             overwrite=True)
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
 
@@ -73,7 +73,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
         max_n_jobs = global_params.NCORE_TOTAL * 3
 
     log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
-                             overwrite=False)
+                             overwrite=True)
 
     kd_seg_path = global_params.config.kd_seg_path
     kd = kd_factory(kd_seg_path)

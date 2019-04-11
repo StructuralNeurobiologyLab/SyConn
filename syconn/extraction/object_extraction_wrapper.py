@@ -61,7 +61,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                   transform_func=None, func_kwargs=None,
                                   nb_cpus=None, workfolder=None, n_erosion=0,
                                   overlap_thresh=0, stitch_overlap=None,
-                                  load_from_kd_overlaycubes=False):
+                                  load_from_kd_overlaycubes=False,
+                                  transf_func_kd_overlay=None, log=None):
     """
     # TODO: Merge this method with mapping (e.g. iterate over chunks of cell SV segm. and over all
             objects to extract bounding boxes and overlap (i.e. mapping) at the same time
@@ -142,8 +143,15 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         volume evaluated during stitching procedure
     load_from_kd_overlaycubes : bool
         Load prob/seg data from overlaycubes instead of raw cubes.
+    transf_func_kd_overlay : callable
+        Method which is to applied to cube data if `load_from_kd_overlaycubes`
+        is True.
+    log : logging.logger
+
 
     """
+    if log is None:
+        log = log_extraction
     all_times = []
     step_names = []
 
@@ -183,7 +191,8 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         hdf5_name_membrane=hdf5_name_membrane, fast_load=True,
         suffix=suffix, transform_func=transform_func,
         transform_func_kwargs=func_kwargs, n_max_co_processes=n_max_co_processes,
-        nb_cpus=nb_cpus, load_from_kd_overlaycubes=load_from_kd_overlaycubes)
+        nb_cpus=nb_cpus, load_from_kd_overlaycubes=load_from_kd_overlaycubes,
+        transf_func_kd_overlay=transf_func_kd_overlay)
     if stitch_overlap is None:
         stitch_overlap = overlap_info[1]
     else:
@@ -191,7 +200,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     if not np.all(stitch_overlap <= overlap_info[0]):
         msg = "Stitch overlap ({}) has to be <= than chunk overlap ({})." \
               "".format(overlap_info[1], overlap_info[0])
-        log_extraction.error(msg)
+        log.error(msg)
         raise ValueError(msg)
     overlap = overlap_info[0]
     all_times.append(time.time() - time_start)
@@ -222,7 +231,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                     nb_cc_dict[hdf5_name][-1])
     all_times.append(time.time() - time_start)
     step_names.append("extracting max labels")
-    log_extraction.debug("Max labels: {}".format(max_labels))
+    log.debug("Max labels: {}".format(max_labels))
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",
                          [max_labels])
     #
@@ -273,12 +282,19 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     if target_kd is not None:
         time_start = time.time()
         chunky.save_dataset(cset)
-        cset.export_cset_to_kd(target_kd, '{}_stitched_components'.format(filename), hdf5names,
-                               [global_params.NCORES_PER_NODE // 2, 2],  # somehow it is a nested multiprocess
-                               coordinate=offset, size=size,
-                               stride=[4 * 128, 4 * 128, 4 * 128],
-                               as_raw=False, orig_dtype=np.uint64,
-                               unified_labels=False)
+        oes.export_cset_to_kd_batchjob(
+            cset, target_kd, '{}_stitched_components'.format(filename), hdf5names,
+            offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
+            orig_dtype=np.uint64, unified_labels=False,
+            n_max_co_processes=n_max_co_processes)
+
+        # cset.export_cset_to_kd(target_kd, '{}_stitched_components'.format(filename), hdf5names,
+        #                        [global_params.NCORES_PER_NODE // 2, 2],  # somehow it is a nested multiprocess
+        #                        coordinate=offset, size=size,
+        #                        stride=[4 * 128, 4 * 128, 4 * 128],
+        #                        as_raw=False, orig_dtype=np.uint64,
+        #                        unified_labels=False)
+
         all_times.append(time.time() - time_start)
         step_names.append("export KD")
     # --------------------------------------------------------------------------
@@ -308,12 +324,12 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         step_names.append("combine voxels")
 
     # --------------------------------------------------------------------------
-    log_extraction.info("Time overview [from_probabilities_to_objects]:")
+    log.debug("Time overview [from_probabilities_to_objects]:")
     for ii in range(len(all_times)):
-        log_extraction.info("%s: %.3fs" % (step_names[ii], all_times[ii]))
-    log_extraction.info("--------------------------")
-    log_extraction.info("Total Time: %.1f min" % (np.sum(all_times) / 60))
-    log_extraction.info("--------------------------")
+        log.debug("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    log.debug("--------------------------")
+    log.debug("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    log.debug("--------------------------")
 
 
 def from_probabilities_to_objects_parameter_sweeping(
@@ -408,7 +424,7 @@ def from_probabilities_to_objects_parameter_sweeping(
 
 
 def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, dataset_names=None,
-                        overlaydataset_path=None, chunk_list=None, offset=None,
+                        overlaydataset_path=None, chunk_list=None, offset=None, log=None,
                         size=None, suffix="", qsub_pe=None, qsub_queue=None, workfolder=None,
                         n_max_co_processes=None, n_chunk_jobs=5000, use_combined_extraction=True):
     """
@@ -448,6 +464,8 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
 
 
     """
+    if log is None:
+        log = log_extraction
     if workfolder is None:
         workfolder = global_params.config.working_dir
     assert overlaydataset_path is not None or hdf5names is not None
@@ -496,9 +514,9 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
 
     # --------------------------------------------------------------------------
 
-    log_extraction.info("Time overview [from_ids_to_objects]:")
+    log.debug("Time overview [from_ids_to_objects]:")
     for ii in range(len(all_times)):
-        log_extraction.info("%s: %.3fs" % (step_names[ii], all_times[ii]))
-    log_extraction.info("--------------------------")
-    log_extraction.info("Total Time: %.1f min" % (np.sum(all_times) / 60))
-    log_extraction.info("--------------------------")
+        log.debug("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    log.debug("--------------------------")
+    log.debug("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    log.debug("--------------------------")

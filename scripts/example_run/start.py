@@ -37,8 +37,14 @@ if __name__ == '__main__':
     if args.working_dir == "":  # by default use cube dependent working dir
         args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)
     example_wd = os.path.expanduser(args.working_dir)
+    log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
 
     # PREPARE TOY DATA
+    log.info('Step 0/8 - Preparation')
+
+    time_stamps = [time.time()]
+    step_idents = ['t-0']
+
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
     h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
     kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
@@ -53,7 +59,6 @@ if __name__ == '__main__':
             or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
         raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
 
-    log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
     bb = parse_movement_area_from_zip(kzip_p)
     offset = np.array([0, 0, 0])
     bd = bb[1] - bb[0]
@@ -90,16 +95,8 @@ if __name__ == '__main__':
                              ' "models" folder into the current working '
                              'directory "{}".'.format(mpath, example_wd))
 
-    log.info('Finished example cube initialization (shape: {}). Starting'
-             ' SyConn pipeline.'.format(bd))
-    log.info('Example data will be processed in "{}".'.format(example_wd))
-
-    time_stamps = [time.time()]
-    step_idents = ['t-0']
-
     # INITIALIZE DATA
     # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
-    log.info('Step 0/8 - Preparation')
     kd = knossosdataset.KnossosDataset()
     # kd.set_channel('jpg')
     kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
@@ -108,8 +105,8 @@ if __name__ == '__main__':
 
     seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
     # seg_d = seg_d.astype(np.uint32)
-    # TODO: currently KnossosDataset class does not infer the correct type automatically, see knossos config
-    #  and handling in detail
+    # TODO: currently KnossosDataset class does not infer the correct type automatically,
+    #  see knossos config and handling in detail
     kd.from_matrix_to_cubes(offset, mags=[1, 2], data=seg_d,
                             fast_downsampling=True, as_raw=False)
 
@@ -146,7 +143,11 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('Preparation')
 
-    # Run SyConn  # TODO: set n_max_co_processes to None by default (-> submit all jobs at once when using SLURM)
+    log.info('Finished example cube initialization (shape: {}). Starting'
+             ' SyConn pipeline.'.format(bd))
+    log.info('Example data will be processed in "{}".'.format(example_wd))
+
+    # START SyConn
     if 0:  # TODO: work-in glia removal
         log.info('Step 0.5/8 - Glia separation')
         exec_multiview.run_glia_rendering()

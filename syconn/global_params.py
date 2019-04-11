@@ -62,6 +62,8 @@ log_level = logging.DEBUG  # INFO, DEBUG
 # will be stored at wd + '/logs/'.
 DISABLE_FILE_LOGGING = True
 
+# --------- CELL ORGANELLE PARAMETERS
+thresh_mi_bbd_mapping = 25e3
 
 # --------- CONTACT SITE AND SYNAPSE PARAMETERS
 # Synaptic junction bounding box diagonal threshold in nm; objects above will not be used during `syn_gen_via_cset`

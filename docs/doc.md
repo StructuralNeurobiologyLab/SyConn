@@ -52,7 +52,7 @@ Based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, probabi
 script analyses the cell wiring through subsequent steps.
 
 On a machine with 20 CPUs (Intel(R) Xeon(R) @ 2.60GHz) and 2 GPUs (GeForce GTX 980 Ti) SyConn
- finished the following analysis steps for an example cube with shape \[400 400 600] after 00h:09min:32s.
+finished the following analysis steps for an example cube with shape \[400 400 600] after 00h:09min:32s.
 
 \[0/8] Preparation          00h:00min:08s       1%
 
@@ -86,14 +86,16 @@ The following packages have to be available for the system's python2 interpreter
 In order to inspect the resulting data via the SyConnViewer KNOSSOS-plugin follow these steps:
 
 - wait until `start.py` finished. For restarting the server run `SyConn/scripts/kplugin/
-server.py --working_dir=<path>` pointing to your working directory (`<path>`).
+server.py --working_dir=<path>` pointing to your working directory (`<path>`). The server address and
+port will be printed here.
 
 - download and run the nightly build of KNOSSOS (https://github.com/knossos-project/knossos/releases/tag/nightly)
 
 - in KNOSSOS -> File -> Choose Dataset -> browse to your working directory and open
 `knossosdatasets/seg/mag1/knossos.conf` with enabled 'load_segmentation_overlay' (at the bottom of the dialog).
 
-- then go to Scripting (top row) -> Run file -> browse to `SyConn/scripts/kplugin/syconn_knossos_viewer.py` and open it
+- then go to Scripting (top row) -> Run file -> browse to `SyConn/scripts/kplugin/syconn_knossos_viewer.py`, open it and enter
+the port and address of the syconn server.
 
 - After the SyConnViewer window has opened, the selection of segmentation fragments in the slice-viewports (exploration mode) or in the
 list of cell IDs followed by pressing 'show neurite' will trigger the rendering of the corresponding cell reconstruction mesh in the 3D viewport.

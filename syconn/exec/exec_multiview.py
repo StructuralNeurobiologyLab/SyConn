@@ -252,11 +252,20 @@ def run_neuron_rendering(max_n_jobs=2000):
         path_to_out = qu.QSUB_script(multi_params, "render_views",
                                      n_max_co_processes=global_params.NCORE_TOTAL)
     elif global_params.PYOPENGL_PLATFORM == 'egl':  # utilize 1 GPU per task
-        # TODO: use render_views_egl script
+        # TODO: use btachjob render_views_egl script which launches parallel egl jobs
+        # run 20 parallel jobs, egl will work on single node
+        if global_params.config.working_dir is not None and 'example_cube' in \
+                global_params.config.working_dir:
+            n_cores = 1
+            n_parallel_jobs = global_params.NCORES_PER_NODE
+        # else restrict job to only use one instance
+        else:
+            n_cores = global_params.NCORES_PER_NODE
+            n_parallel_jobs = global_params.NNODES_TOTAL
         path_to_out = qu.QSUB_script(multi_params, "render_views",
-                                     n_max_co_processes=global_params.NNODES_TOTAL,
+                                     n_max_co_processes=n_parallel_jobs,
                                      additional_flags="--gres=gpu:2",
-                                     n_cores=global_params.NCORES_PER_NODE)
+                                     n_cores=n_cores)
     else:
         raise RuntimeError('Specified OpenGL platform "{}" not supported.'
                            ''.format(global_params.PYOPENGL_PLATFORM))
@@ -405,7 +414,7 @@ def run_glia_prediction(e3=False):
 
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for par in
                     multi_params]
-    if e3==True:
+    if e3 == True:
         path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
                                      n_max_co_processes=15, pe="openmp", queue=None,
                                      script_folder=None, n_cores=10,
@@ -549,8 +558,7 @@ def run_glia_rendering():
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.config.working_dir, version) for ixs in multi_params]
     path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
-                                 n_max_co_processes=global_params.NCORE_TOTAL, pe="openmp",
-                                 queue=None, script_folder=None, suffix="")
+                                 n_max_co_processes=global_params.NCORE_TOTAL)
 
     # check completeness
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
