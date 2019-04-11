@@ -246,6 +246,7 @@ def _apply_mapping_decisions_thread(args):
 def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue=None,
                        nb_cpus=None, n_max_co_processes=global_params.NCORE_TOTAL,
                        syn_threshold=None):
+    # TODO: remove `qsub_pe`and `qsub_queue`
     """
     Map synn_ssv objects to all SSO objects contained in SSV SuperSegmentationDataset.
 
@@ -273,20 +274,17 @@ def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue
                              ssd.working_dir, ssd.type, synssv_version,
                              syn_threshold])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         results = sm.start_multiprocess(
             map_synssv_objects_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.batchjob_enabled():
+    else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_synssv_objects",
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
-
-    else:
-        raise Exception("QSUB not available")
 
 
 def map_synssv_objects_thread(args):

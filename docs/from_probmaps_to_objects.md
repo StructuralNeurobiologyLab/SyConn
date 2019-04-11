@@ -1,5 +1,5 @@
 # Generation of SegmentationDataset
-Probability maps and segmentations are stored in `ChunkDatasets` (see `chunky.py` in `knossos_utils`) 
+Probability maps and segmentations are stored in `ChunkDatasets` (see `chunky.py` in `knossos_utils`)
 and are transformed to `SegmentationDatasets` (see `segmentationdataset` in `syconn.reps`) in multiple steps. 
 The code associated with this can be found in `syconn.extraction`. `object_extraction_wrapper.py` 
 combines all necessary steps from `object_extraction_steps.py`.

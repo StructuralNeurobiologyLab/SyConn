@@ -23,6 +23,7 @@ except ImportError:
 from multiprocessing import cpu_count
 from .segmentation import SegmentationDataset, SegmentationObject
 from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
+from ..handler.config import DynConfig
 from .super_segmentation_helper import create_sso_skeleton
 from ..proc.ssd_assembly import assemble_from_mergelist
 from ..mp import batchjob_utils as qu
@@ -67,9 +68,17 @@ class SuperSegmentationDataset(object):
         self._config = config
 
         if working_dir is None:
-            self._working_dir = global_params.config.working_dir
+            if global_params.wd is not None or version == 'tmp':
+                self._working_dir = global_params.wd
+            else:
+                msg = "No working directory (wd) given. It has to be" \
+                      " specified either in global_params, via kwarg " \
+                      "`working_dir` or `config`."
+                log_reps.error(msg)
+                raise ValueError(msg)
         else:
             self._working_dir = working_dir
+            self._config = DynConfig(working_dir)
 
         if scaling is None:
             try:
@@ -506,19 +515,50 @@ class SuperSegmentationDataset(object):
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
                       qsub_pe=None, qsub_queue=None, nb_cpus=None,
                       n_max_co_processes=None, new_mapping=True):
-    ssd.save_dataset_shallow()
+    # TODO: remove `qsub_pe`and `qsub_queue`
+    """
+    Saves attributes of all SSVs within the given SSD and computes properties
+    like size and representative coordinate. `ids.npy` order may change after
+    repeated runs.
+    TODO: make this method deterministic and allow partial
+     updates of a subset of attributes (e.g. use already existing `ids.npy` in
+     case of updating, aka `extract_only=True`)
 
+    Parameters
+    ----------
+    ssd : SuperSegmentationDataset
+    extract_only : bool
+     Only cache attributes (see`attr_keys` from attribute dict. This will add
+      a suffix `_sel` to the numpy cache array file names (-> updates will not
+      apply to the `load_cached_data` method).
+    attr_keys : List[str]
+        Attributes to cache, only used if `extract_only=True`
+    n_jobs : int
+    qsub_pe : str
+        Currently requires any string to enable batch job system,
+        will be replaced by a global flag soon
+    qsub_queue : str
+        Currently requires any string to enable batch job system,
+        will be replaced by a global flag soon
+    nb_cpus : int
+        CPUs per worker
+    n_max_co_processes : int
+        Number of parallel worker
+    new_mapping :
+        Whether to apply new mapping (see `ssd.mapping_dict`)
+    """
+    ssd.save_dataset_shallow()
     multi_params = chunkify(ssd.ssv_ids, n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict,
                      ssd.working_dir, extract_only, attr_keys,
                      ssd._type, new_mapping) for ssv_id_block in multi_params]
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         results = sm.start_multiprocess(
             _write_super_segmentation_dataset_thread,
             multi_params, nb_cpus=nb_cpus)
 
-    elif qu.batchjob_enabled():
+    else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "write_super_segmentation_dataset",
                                      pe=qsub_pe, queue=qsub_queue,
@@ -531,8 +571,6 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
         for out_file in out_files:
             with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
-    else:
-        raise Exception("QSUB not available")
 
     attr_dict = {}
     for this_attr_dict in results:
@@ -548,7 +586,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
 
     for attribute in attr_dict.keys():
         if extract_only:
-            np.save(ssd.path + "/%ss_sel.npy" % attribute,
+            np.save(ssd.path + "/%ss_sel.npy" % attribute,  # Why '_sel'?
                     attr_dict[attribute])
         else:
             np.save(ssd.path + "/%ss.npy" % attribute,
@@ -1187,6 +1225,11 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1,
     safe : bool
         if True, will not overwrite existing data
     """
+    # update existing SSV IDs  # TODO: currently this requires a new mapping dict Unclear what to
+    #  do in order to enable updates on existing SSD (e.g. after adding new SSVs)
+    # paths = glob.glob(ssd.path + "/so_storage/*/*/*/")
+    # ssd._ssv_ids = np.array([int(os.path.basename(p.strip("/")))
+    #                           for p in paths], dtype=np.uint)
     if target_wd is None:
         target_wd = global_params.config.working_dir
     scaling = ssvs[0].scaling
@@ -1210,13 +1253,11 @@ def create_sso_skeletons_thread(args):
     version_dict = args[2]
     working_dir = args[3]
 
-    n_cpus_avail = cpu_count()
     ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
                                    version_dict=version_dict)
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.nb_cpus = n_cpus_avail
         if not global_params.config.allow_skel_gen:
             # TODO: change to create_sso_skeleton_fast as soon as RAG edges
             #  only connected spatially close SVs

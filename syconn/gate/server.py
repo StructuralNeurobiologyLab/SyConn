@@ -396,8 +396,8 @@ class SyConnBackend(object):
     def ssv_of_sv(self, sv_id):
         """
         Returns the ssv for a given sv_id.
-        :param sv_id:
-        :return:
+        :param sv_id: 
+        :return: 
         """
         return {'ssv': self.ssd.id_changer[int(sv_id)]}
 
@@ -438,7 +438,7 @@ class SyConnBackend(object):
         """
         Returns all synapse meta data. This works only well for fast
         connections and less than 1e6 synapses or so.
-        :return:
+        :return: 
         """
 
         all_syn_meta_dict = copy.copy(self.conn_dict)
@@ -453,7 +453,7 @@ class SyConnBackend(object):
         """
         TODO: Requires adaptions of 'SyConnBackend' class
         Returns all synapse objs of a given ssv_id.
-        :return:
+        :return: 
 
         """
         syns = dict()
@@ -474,8 +474,8 @@ class SyConnBackend(object):
         Return the syn objs where this ssv_id is post synaptic,
         i.e. this ssv_id receives the synapse.
 
-        :param ssv_id:
-        :return:
+        :param ssv_id: 
+        :return: 
         """
         syns = dict()
         # not the most efficient approach, a cached map might be necessary for

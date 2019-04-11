@@ -18,26 +18,33 @@ if __name__ == '__main__':
     assert 'areaxfs_v6' in global_params.wd, 'Required dataset not available!'
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
 
+    raw_kd_path = global_params.config.kd_seg_path
+    mi_kd_path = global_params.config.kd_mi_path
+    vc_kd_path = global_params.config.kd_vc_path
+    sj_kd_path = global_params.config.kd_sj_path
+    sym_kd_path = global_params.config.kd_sym_path
+    asym_kd_path = global_params.config.kd_asym_path
+
     kd = knossosdataset.KnossosDataset()
-    kd.initialize_from_knossos_path(global_params.config.kd_seg_path)
+    kd.initialize_from_knossos_path(raw_kd_path)
 
     kd_mi = knossosdataset.KnossosDataset()
-    kd_mi.initialize_from_knossos_path(global_params.config.kd_mi_path)
+    kd_mi.initialize_from_knossos_path(mi_kd_path)
 
     kd_vc = knossosdataset.KnossosDataset()
-    kd_vc.initialize_from_knossos_path(global_params.config.kd_vc_path)
+    kd_vc.initialize_from_knossos_path(vc_kd_path)
 
     kd_sj = knossosdataset.KnossosDataset()
-    kd_sj.initialize_from_knossos_path(global_params.config.kd_sj_path)
+    kd_sj.initialize_from_knossos_path(sj_kd_path)
 
     kd_sym = knossosdataset.KnossosDataset()
-    kd_sym.initialize_from_knossos_path(global_params.config.kd_sym_path)
+    kd_sym.initialize_from_knossos_path(sym_kd_path)
 
     kd_asym = knossosdataset.KnossosDataset()
-    kd_asym.initialize_from_knossos_path(global_params.config.kd_asym_path)
+    kd_asym.initialize_from_knossos_path(asym_kd_path)
 
     # get data
-    for example_cube_id in range(3, 4):
+    for example_cube_id in range(4, 5):
         kzip_p = '{}/example_cube{}.k.zip'.format(curr_dir, example_cube_id)
         data_dir = "{}/data{}/".format(curr_dir, example_cube_id)
         os.makedirs(data_dir, exist_ok=True)
@@ -67,7 +74,6 @@ if __name__ == '__main__':
         os.makedirs(data_dir, exist_ok=True)
         print('Writing subgraph within {} and {} SVs.'.format(
             bb, len(sv_ids)))
-        nx.write_edgelist(rag_sub_g, data_dir + "/neuron_rag.bz2")
 
 
 

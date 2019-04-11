@@ -22,7 +22,7 @@ from elektronn2.config import config as e2config
 from elektronn2.utils.gpu import initgpu
 
 from ..handler import log_handler
-from ..handler.logger import log_main
+from syconn.handler import log_main
 from .compression import load_from_h5py, save_to_h5py
 from .basics import read_txt_from_zip, get_filepaths_from_dir,\
     parse_cc_dict_from_kzip
@@ -400,7 +400,8 @@ def parse_movement_area_from_zip(zip_fname):
     line = line[0]
     bb_min = np.array([re.findall('min.\w="(\d+)"', line)], dtype=np.uint)
     bb_max = np.array([re.findall('max.\w="(\d+)"', line)], dtype=np.uint)
-    return np.concatenate([bb_min, bb_max])  # Movement area is stored with 0-indexing! No adjustment needed
+    # Movement area is stored with 0-indexing! No adjustment needed
+    return np.concatenate([bb_min, bb_max])
 
 
 def pred_dataset(*args, **kwargs):
@@ -420,9 +421,11 @@ def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     kd_p : str
         path to knossos dataset .conf file
     kd_pred_p : str
-        path to the knossos dataset head folder which will contain the prediction (will be created)
+        path to the knossos dataset head folder which will contain the
+        prediction (will be created)
     cd_p : str
-        destination folder for the chunk dataset containing prediction (will be created)
+        destination folder for the chunk dataset containing prediction
+        (will be created)
     model_p : str
         path to the ELEKTRONN2 model
     imposed_patch_size : tuple or None
@@ -451,8 +454,8 @@ def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
 def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
                   mfp_active=False, gpu_id=0, overwrite=False, i=None, n=None):
     """
-    Helper function for dataset prediction. Runs prediction on whole or partial knossos dataset.
-    Imposed patch size has to be given in Z, X, Y!
+    Helper function for dataset prediction. Runs prediction on whole or partial
+    knossos dataset. Imposed patch size has to be given in Z, X, Y!
 
     Parameters
     ----------
@@ -502,7 +505,8 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
         chunks = ch_dc.values()[i::n]
     else:
         chunks = ch_dc.values()
-    print("Starting prediction of %d chunks in gpu %d\n" % (len(chunks), gpu_id))
+    print("Starting prediction of %d chunks in gpu %d\n" % (len(chunks),
+                                                            gpu_id))
 
     if not overwrite:
         for chunk in chunks:
@@ -523,7 +527,7 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     if n is None:
         kd_pred = KnossosDataset()
         kd_pred.initialize_without_conf(kd_pred_p, kd.boundary, kd.scale,
-                                        kd.experiment_name, mags=[1,2,4,8])
+                                        kd.experiment_name, mags=[1, 2, 4, 8])
         cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True,
                              stride=[256, 256, 256])
 
@@ -699,7 +703,8 @@ class NeuralNetworkInterface(object):
             if len(new_x_b) < bs:
                 add_shape = list(new_x_b.shape)
                 add_shape[0] = bs - len(new_x_b)
-                new_x_b = np.concatenate((np.zeros((add_shape), dtype=np.float32), new_x_b))
+                new_x_b = np.concatenate((np.zeros((add_shape),
+                                                   dtype=np.float32), new_x_b))
             proba[-overhead:] = self.model.predict(new_x_b)[-overhead:]
         if verbose:
             end = time.time()
@@ -724,7 +729,6 @@ def get_axoness_model():
     return m
 
 
-
 def get_axoness_model_e3():
     """Those networks are typically trained with `naive_view_normalization_new` """
     from elektronn3.models.base import InferenceModel
@@ -734,8 +738,9 @@ def get_axoness_model_e3():
 
 
 def get_glia_model():
-    m = NeuralNetworkInterface(global_params.config.mpath_glia, imposed_batch_size=200,
-                               nb_labels=2, normalize_data=True)
+    m = NeuralNetworkInterface(global_params.config.mpath_glia,
+                               imposed_batch_size=200, nb_labels=2,
+                               normalize_data=True)
     _ = m.predict_proba(np.zeros((1, 1, 2, 128, 256)))
     return m
 
@@ -786,6 +791,23 @@ def get_celltype_model_e3():
     return m
 
 
+def get_celltype_model_large_e3():
+    """Those networks are typically trained with `naive_view_normalization_new`
+     Unlike the other e3 InferenceModel instances, here the view normalization
+     is applied in the downstream inference method (`predict_sso_celltype`)
+      because the celltype model also gets scalar values as input which should
+      not be normalized."""
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    path = global_params.config.mpath_celltype_large_e3
+    m = InferenceModel(path)
+    return m
+
+
 def get_semseg_spiness_model():
     try:
         from elektronn3.models.base import InferenceModel
@@ -821,6 +843,19 @@ def get_tripletnet_model_e3():
             "elektronn3 could not be imported ({}). Please see 'https://github."
             "com/ELEKTRONN/elektronn3' for more information.".format(e))
     m_path = global_params.config.mpath_tnet
+    m = InferenceModel(m_path)
+    return m
+
+
+def get_tripletnet_model_large_e3():
+    """Those networks are typically trained with `naive_view_normalization_new` """
+    try:
+        from elektronn3.models.base import InferenceModel
+    except Exception as e:  # ImportError as e:
+        log_main.error(
+            "elektronn3 could not be imported ({}). Please see 'https://github."
+            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    m_path = global_params.config.mpath_tnet_large
     m = InferenceModel(m_path)
     return m
 

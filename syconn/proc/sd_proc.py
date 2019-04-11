@@ -23,18 +23,20 @@ from .. import global_params
 from .image import single_conn_comp_img
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
-from ..backend.storage import AttributeDict, VoxelStorage
+from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn
 from ..reps import segmentation, segmentation_helper
 from ..handler import basics
 from ..proc.meshes import mesh_chunk
 from . import log_proc
 
 
-def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
-                     qsub_queue=None, nb_cpus=None, n_max_co_processes=None,
+def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                      compute_meshprops=False):
+    # TODO: remove `qsub_pe`and `qsub_queue`
     """ Analyze SegmentationDataset and extract and cache SegmentationObjects
-    attributes as numpy arrays.
+    attributes as numpy arrays. Will only recognize dict/storage entries of type int
+    for object attribute collection.
+
 
     :param sd: SegmentationDataset
     :param recompute: bool
@@ -53,6 +55,8 @@ def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
         max number of workers running at the same time when using qsub
     :param compute_meshprops: bool
     """
+    if n_jobs is None:
+        n_jobs = global_params.NCORE_TOTAL  # individual tasks are very fast
     paths = sd.so_dir_paths
     if compute_meshprops:
         if not (sd.type in MESH_DOWNSAMPLING and sd.type in MESH_CLOSING):
@@ -66,24 +70,18 @@ def dataset_analysis(sd, recompute=True, n_jobs=1000, qsub_pe=None,
                      compute_meshprops) for mps in multi_params]
 
     # Running workers
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_dataset_analysis_thread,
-                                             multi_params, nb_cpus=n_max_co_processes)
+                                             multi_params, nb_cpus=n_max_co_processes, debug=True)
 
-    elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "dataset_analysis",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_cores=nb_cpus,
+    else:
+        path_to_out = qu.QSUB_script(multi_params, "dataset_analysis", script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
             with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
-    else:
-        raise Exception("QSUB not available")
     # Creating summaries
     # TODO: This is a potential bottleneck for very large datasets
     # TODO: resulting cache-arrays might have different lengths if attribute is missing in
@@ -128,8 +126,9 @@ def _dataset_analysis_thread(args):
             this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
                                          read_only=not recompute)
             if recompute:
-                this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True)
-                so_ids = list(this_vx_dc.keys())
+                this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True,
+                                          disable_locking=True)
+                so_ids = list(this_vx_dc.keys())  # e.g. isinstance(np.array([100, ], dtype=np.uint)[0], int) fails
             else:
                 so_ids = list(this_attr_dc.keys())
             for so_id in so_ids:
@@ -138,8 +137,14 @@ def _dataset_analysis_thread(args):
                                                      version, working_dir)
                 so.attr_dict = this_attr_dc[so_id]
                 if recompute:
-                    so.load_voxels(voxel_dc=this_vx_dc)
-                    so.calculate_rep_coord(voxel_dc=this_vx_dc)
+                    # prevent loading voxels in case we use VoxelStorageDyn
+                    if not isinstance(this_vx_dc, VoxelStorageDyn):  # use fall-back
+                        so.load_voxels(voxel_dc=this_vx_dc)
+                        so.calculate_rep_coord(voxel_dc=this_vx_dc)
+                    else:
+                        so.calculate_bounding_box(this_vx_dc)
+                        so.calculate_rep_coord(this_vx_dc)
+                        so.calculate_size(this_vx_dc)
                     so.attr_dict["rep_coord"] = so.rep_coord
                     so.attr_dict["bounding_box"] = so.bounding_box
                     so.attr_dict["size"] = so.size
@@ -163,13 +168,11 @@ def map_objects_to_sv_multiple(sd, obj_types, kd_path, readonly=False,
     assert isinstance(obj_types, list)  # TODO: probably possible to optimize
     for obj_type in obj_types:
         map_objects_to_sv(sd, obj_type, kd_path, readonly=readonly, n_jobs=n_jobs,
-                          qsub_pe=qsub_pe, qsub_queue=qsub_queue, nb_cpus=nb_cpus,
-                          n_max_co_processes=n_max_co_processes)
+                          nb_cpus=nb_cpus, n_max_co_processes=n_max_co_processes)
         
 
 def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                      n_max_co_processes=None):
+                      nb_cpus=None, n_max_co_processes=None):
     """
     TODO: (cython) optimization required! E.g. replace by single iteration over cell segm. and all cell organelle KDs/CDs
     Maps objects to SVs. The segmentation needs to be written to a KnossosDataset before running this
@@ -212,58 +215,49 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     multi_params = [(mps, obj_type, sd.version_dict[obj_type], sd.working_dir,
                      kd_path, readonly) for mps in multi_params]
     # Running workers - Extracting mapping
-    # if qu.batchjob_enabled():
-    path_to_out = qu.QSUB_script(multi_params, "map_objects",
-                                 pe=qsub_pe, queue=qsub_queue,
-                                 script_folder=None, n_cores=nb_cpus,
-                                 n_max_co_processes=n_max_co_processes)
-    ################################## leave it from here ################################
-    out_files = glob.glob(path_to_out + "/*")
-    results = []
-    for out_file in out_files:
-        with open(out_file, 'rb') as f:
-            results.append(pkl.load(f))
-    # else:
-    #     results = sm.start_multiprocess_imap(_map_objects_thread, multi_params,
-    #                                          nb_cpus=n_max_co_processes, verbose=True,
-    #                                          debug=False)
+    if qu.batchjob_enabled():
+        path_to_out = qu.QSUB_script(multi_params, "map_objects", n_cores=nb_cpus,
+                                     n_max_co_processes=n_max_co_processes)
+        out_files = glob.glob(path_to_out + "/*")
+        results = []
+        for out_file in out_files:
+            with open(out_file, 'rb') as f:
+                results.append(pkl.load(f))
+    else:
+        results = sm.start_multiprocess_imap(_map_objects_thread, multi_params,
+                                             nb_cpus=n_max_co_processes, verbose=True,
+                                             debug=False)
 
     # write cell organell mappings to cell SV attribute dicts
     sv_obj_map_dict = defaultdict(dict)
     for result in results:
         for sv_key, value in result.items():
             sv_obj_map_dict[sv_key].update(value)
-    #######################
+
     mapping_dict_path = seg_dataset.path + "/sv_%s_mapping_dict.pkl" % sd.version
     with open(mapping_dict_path, "wb") as f:
         pkl.dump(sv_obj_map_dict, f)
 
     paths = sd.so_dir_paths
-    print("\n\n\n paths= ", paths, "obj_type= ", obj_type, "mapping_dict_path= ", mapping_dict_path, "\n\n\n")
-
 
     # Partitioning the work
     multi_params = basics.chunkify(paths, n_jobs)
     multi_params = [(path_block, obj_type, mapping_dict_path) for path_block in multi_params]
 
     # Running workers - Writing mapping to SVs
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_mapping_to_sv_thread, multi_params,
                                    nb_cpus=n_max_co_processes, debug=False)
-    elif qu.batchjob_enabled():
-        qu.QSUB_script(multi_params, "write_mapping_to_sv", pe=qsub_pe,
-                       queue=qsub_queue, script_folder=None,
-                       n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
     else:
-        raise Exception("QSUB not available")
+        qu.QSUB_script(multi_params, "write_mapping_to_sv", script_folder=None,
+                       n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
     log_proc.debug("map_objects_to_sv: %.1f min" % ((time.time() - start) / 60.))
 
 
 def _map_objects_thread(args):
     """Worker of map_objects_to_sv"""
-    # TODO: this needs to be done densely by matching cell organelle segmentation
-    #  (see corresponding ChunkDataset which is an intermediate result of
-    #  'from_probabilities_to_objects') to SV segmentation
+    # TODO: this needs to be done densely by matching cell organelle segmentation (see corresponding ChunkDataset
+    #  which is an intermediate result of 'from_probabilities_to_objects') to SV segmentation
 
     paths = args[0]
     obj_type = args[1]
@@ -289,6 +283,18 @@ def _map_objects_thread(args):
         for so_id in this_vx_dc.keys():
             so = seg_dataset.get_segmentation_object(so_id)
             so.attr_dict = this_attr_dc[so_id]
+            bb = so.bounding_box
+            # check object BB, TODO: HACK because kd.from_overlaycubes_to_list(vx_list,
+            #  datatype=datatype) will load the data via the object's BB --> new mapping is
+            #  needed asap
+            if np.linalg.norm((bb[1] - bb[0]) * seg_dataset.scaling) > global_params.thresh_mi_bbd_mapping:
+                log_proc.warn(
+                    'Skipped huge MI with size: {}, offset: {}, mi_id: {}, mi_c'
+                    'oord: {}'.format(so.size, so.bounding_box[0], so_id, so.rep_coord))
+                so.attr_dict["mapping_ids"] = []
+                so.attr_dict["mapping_ratios"] = []
+                this_attr_dc[so_id] = so.attr_dict
+                continue
             so.load_voxels(voxel_dc=this_vx_dc)
             if readonly:
                 if "mapping_ids" in so.attr_dict:
@@ -314,7 +320,6 @@ def _map_objects_thread(args):
                 id_ratios = id_counts / float(np.sum(id_counts))
 
                 for i_id in range(len(ids)):
-
                     if ids[i_id] in sv_id_dict:
                         sv_id_dict[ids[i_id]][so_id] = id_ratios[i_id]
                     else:
@@ -610,6 +615,7 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                          trafo_dict_path=None, stride=10,
                          qsub_pe=None, qsub_queue=None, nb_cpus=None,
                          n_max_co_processes=None):
+    # TODO: remove `qsub_pe`and `qsub_queue`
     """TODO: will be refactored into single method when generating syn objects
     Extract synapse type from KnossosDatasets. Stores sym.-asym. ratio in
     SJ object attribute dict.
@@ -636,19 +642,17 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                              kd_asym_path, kd_sym_path, trafo_dict_path])
 
     # Running workers - Extracting mapping
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if qu.batchjob_enabled():
         results = sm.start_multiprocess(_extract_synapse_type_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
-    elif qu.batchjob_enabled():
+    else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "extract_synapse_type",
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=None,
                                      n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
-    else:
-        raise Exception("QSUB not available")
 
 
 def _extract_synapse_type_thread(args):

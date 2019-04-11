@@ -9,7 +9,7 @@ import numpy as np
 from syconn.mp import batchjob_utils as qu
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.handler.basics import chunkify
-from syconn.handler.logger import initialize_logging
+from syconn.handler.config import initialize_logging
 from syconn.proc.skel_based_classifier import SkelClassifier
 from syconn.global_params import NCORES_PER_NODE
 from syconn import global_params

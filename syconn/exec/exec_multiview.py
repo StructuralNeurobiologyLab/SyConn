@@ -32,9 +32,10 @@ from syconn.handler.prediction import get_axoness_model
 from syconn.handler.basics import chunkify
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import find_missing_sv_attributes_in_ssv
-from syconn.handler.logger import initialize_logging
+from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.exec import exec_skeleton
+
 
 def run_morphology_embedding():
     log = initialize_logging('morphology_embedding', global_params.config.working_dir
@@ -80,7 +81,7 @@ def run_axoness_mapping():
     log.info('Finished axoness mapping.')
 
 
-def run_axoness_prediction(n_jobs=100, e3=False):
+def run_axoness_prediction(max_n_jobs=100, e3=False):
     log = initialize_logging('axon_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     # TODO: currently working directory has to be set globally in global_params and is not adjustable
@@ -88,7 +89,7 @@ def run_axoness_prediction(n_jobs=100, e3=False):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     sd = ssd.get_segmentationdataset("sv")
     # chunk them
-    multi_params = chunkify(sd.so_dir_paths, n_jobs)
+    multi_params = chunkify(sd.so_dir_paths, max_n_jobs)
     pred_key = "axoness_probas"  # leave this fixed because it is used all over
     # get model properties
     log.info('Performing axon prediction of neuron views. Labels will be stored '
@@ -112,18 +113,18 @@ def run_axoness_prediction(n_jobs=100, e3=False):
 
     if e3==True:
         path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
-                                     n_max_co_processes=15, pe="openmp", queue=None,
-                                     script_folder=None, n_cores=10,
-                                     suffix="_axoness", additional_flags="--gres=gpu:1")  # removed -V
+                                     n_max_co_processes=global_params.NGPU_TOTAL // 2,
+                                     n_cores=10, suffix="_axoness",
+                                     additional_flags="--gres=gpu:1")
     else:
         for par in multi_params:
             mk = par[1]
             # Single GPUs are made available for every job via slurm, no need for random assignments.
             mk["init_gpu"] = 0  # np.random.rand(0, 2)
         path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
-                                     n_max_co_processes=15, pe="openmp", queue=None,
-                                     script_folder=None, n_cores=10,
-                                     suffix="_axoness", additional_flags="--gres=gpu:1")  # removed -V
+                                     n_max_co_processes=global_params.NGPU_TOTAL // 2,
+                                     n_cores=global_params.NCORES_PER_NODE, suffix="_axoness",
+                                     additional_flags="--gres=gpu:1")
     log.info('Finished axon prediction. Now checking for missing predictions.')
     res = find_missing_sv_attributes_in_ssv(ssd, pred_key, n_cores=10)
     if len(res) > 0:
@@ -133,7 +134,7 @@ def run_axoness_prediction(n_jobs=100, e3=False):
         log.info('Success.')
 
 
-def run_celltype_prediction(n_jobs=100):
+def run_celltype_prediction(max_n_jobs=100):
     log = initialize_logging('celltype_prediction', global_params.config.working_dir+ '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -146,15 +147,17 @@ def run_celltype_prediction(n_jobs=100):
     multi_params = ssd.ssv_ids
     ordering = np.argsort(nb_svs_per_ssv)
     multi_params = multi_params[ordering[::-1]]
-    multi_params = chunkify(multi_params, n_jobs)
+    max_n_jobs = np.max([max_n_jobs, len(multi_params) // 200])  # at most 200 SSV per job
+    multi_params = chunkify(multi_params, max_n_jobs)
     # job parameter will be read sequentially, i.e. in order to provide only
     # one list as parameter one needs an additonal axis
     multi_params = [(ixs, ) for ixs in multi_params]
 
-    path_to_out = qu.QSUB_script(multi_params, "predict_cell_type", pe="openmp",
-                                 n_max_co_processes=34, queue=None,
-                                 script_folder=None, suffix="",
-                                 n_cores=10, additional_flags="--gres=gpu:1")
+    # TODO: switch n_max_co_processes to `global_params.NGPUS_TOTAL` as soon as EGL ressource allocation works!
+    path_to_out = qu.QSUB_script(multi_params, "predict_cell_type",
+                                 n_max_co_processes=global_params.NNODES_TOTAL,
+                                 suffix="", additional_flags="--gres=gpu:2",
+                                 n_cores=global_params.NCORES_PER_NODE)
     log.info('Finished prediction of {} SSVs. Checking completeness.'
              ''.format(len(ordering)))
     out_files = glob.glob(path_to_out + "*.pkl")
@@ -170,7 +173,7 @@ def run_celltype_prediction(n_jobs=100):
         log.info('Success.')
 
 
-def run_spiness_prediction(n_jobs=100):
+def run_spiness_prediction(max_n_jobs=100):
     log = initialize_logging('spine_identification', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -179,7 +182,7 @@ def run_spiness_prediction(n_jobs=100):
     # run semantic spine segmentation on multi views
     sd = ssd.get_segmentationdataset("sv")
     # chunk them
-    multi_params = chunkify(sd.so_dir_paths, n_jobs)
+    multi_params = chunkify(sd.so_dir_paths, max_n_jobs)
     # set model properties
     model_kwargs = dict(src=global_params.config.mpath_spiness,
                         multi_gpu=False)
@@ -190,7 +193,9 @@ def run_spiness_prediction(n_jobs=100):
     log.info('Starting spine prediction.')
     qu.QSUB_script(multi_params, "predict_spiness_chunked",
                    n_max_co_processes=NGPU_TOTAL, pe="openmp", queue=None,
-                   n_cores=10, python_path=global_params.config.py36path,  # use python 3.6
+                   n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                   python_path=global_params.config.py36path,
+                   # use python 3.6
                    suffix="",  additional_flags="--gres=gpu:1")   # removed -V (used with QSUB)
     log.info('Finished spine prediction.')
     # map semantic spine segmentation of multi views on SSV mesh
@@ -213,7 +218,7 @@ def run_spiness_prediction(n_jobs=100):
     log.info('Finished spine mapping.')
 
 
-def run_neuron_rendering():
+def run_neuron_rendering(max_n_jobs=2000):
     log = initialize_logging('neuron_view_rendering',
                              global_params.config.working_dir + '/logs/')
     # TODO: currently working directory has to be set globally in global_params
@@ -229,12 +234,12 @@ def run_neuron_rendering():
     # render normal size SSVs
     size_mask = nb_svs_per_ssv <= global_params.RENDERING_MAX_NB_SV
     multi_params = ssd.ssv_ids[size_mask]
-
-    # TODO: Currently slow if SSV contains very large SV(s)
+    # TODO: move from osmesa to egl, egl rendering worker (10 cpus, 1 gpu) then should utilize more threads for bigger
+    #  SSVs, and run more SSVs in parallel if they are small
     # sort ssv ids according to their number of SVs (descending)
     ordering = np.argsort(nb_svs_per_ssv[size_mask])
     multi_params = multi_params[ordering[::-1]]
-    multi_params = chunkify(multi_params, 2000)
+    multi_params = chunkify(multi_params, max_n_jobs)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.config.working_dir) for ixs in multi_params]
     log.info('Started rendering of {} SSVs. '.format(np.sum(size_mask)))
@@ -242,9 +247,28 @@ def run_neuron_rendering():
         log.info('{} huge SSVs will be rendered afterwards using the whole'
                  ' cluster.'.format(np.sum(~size_mask)))
     # generic
-    path_to_out = qu.QSUB_script(multi_params, "render_views", pe="openmp",
-                                 n_max_co_processes=global_params.NCORE_TOTAL,
-                                 script_folder=None, suffix="", queue=None)
+    # TODO: switch n_cores to `global_params.NGPUS_TOTAL` as soon as EGL ressource allocation works!
+    if global_params.PYOPENGL_PLATFORM == 'osmesa':  # utilize all CPUs
+        path_to_out = qu.QSUB_script(multi_params, "render_views",
+                                     n_max_co_processes=global_params.NCORE_TOTAL)
+    elif global_params.PYOPENGL_PLATFORM == 'egl':  # utilize 1 GPU per task
+        # TODO: use btachjob render_views_egl script which launches parallel egl jobs
+        # run 20 parallel jobs, egl will work on single node
+        if global_params.config.working_dir is not None and 'example_cube' in \
+                global_params.config.working_dir:
+            n_cores = 1
+            n_parallel_jobs = global_params.NCORES_PER_NODE
+        # else restrict job to only use one instance
+        else:
+            n_cores = global_params.NCORES_PER_NODE
+            n_parallel_jobs = global_params.NNODES_TOTAL
+        path_to_out = qu.QSUB_script(multi_params, "render_views",
+                                     n_max_co_processes=n_parallel_jobs,
+                                     additional_flags="--gres=gpu:2",
+                                     n_cores=n_cores)
+    else:
+        raise RuntimeError('Specified OpenGL platform "{}" not supported.'
+                           ''.format(global_params.PYOPENGL_PLATFORM))
     if np.sum(~size_mask) > 0:
         log.info('Finished rendering of {}/{} SSVs.'.format(len(ordering),
                                                             len(nb_svs_per_ssv)))
@@ -259,7 +283,7 @@ def run_neuron_rendering():
                              qsub_co_jobs=global_params.NCORE_TOTAL,
                              skip_indexviews=False, resume_job=False)
     log.info('Finished rendering of all SSVs. Checking completeness.')
-    res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=10)
+    res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=global_params.NCORES_PER_NODE)
     if len(res) != 0:
         msg = "Not all SSVs were rendered completely! Missing:\n{}".format(res)
         log.error(msg)
@@ -322,7 +346,7 @@ def run_create_neuron_ssd(prior_glia_removal=True):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir, version='0',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
-    ssd.save_dataset_deep(qsub_pe="openmp", n_max_co_processes=global_params.NCORE_TOTAL)  # also executes 'ssd.save_dataset_shallow()'
+    ssd.save_dataset_deep(n_max_co_processes=global_params.NCORE_TOTAL)  # also executes 'ssd.save_dataset_shallow()'
 
     exec_skeleton.run_skeleton_generation()
 
@@ -390,7 +414,7 @@ def run_glia_prediction(e3=False):
 
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for par in
                     multi_params]
-    if e3==True:
+    if e3 == True:
         path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
                                      n_max_co_processes=15, pe="openmp", queue=None,
                                      script_folder=None, n_cores=10,
@@ -534,8 +558,7 @@ def run_glia_rendering():
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.config.working_dir, version) for ixs in multi_params]
     path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
-                                 n_max_co_processes=global_params.NCORE_TOTAL, pe="openmp",
-                                 queue=None, script_folder=None, suffix="")
+                                 n_max_co_processes=global_params.NCORE_TOTAL)
 
     # check completeness
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)

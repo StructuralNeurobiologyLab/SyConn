@@ -20,10 +20,10 @@ config = {
                          'numpy==1.16.0', 'scipy', 'lz4', 'h5py', 'networkx', 'ipython<7.0.0',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn==0.19.1',
-                         'scikit-image==0.14.2', 'plyfile', 'vtki',
-                         'openmesh', 'pytest', 'theano==0.8.2', 'tqdm',
+                         'scikit-image==0.14.2', 'plyfile', 'termcolor',
+                         'openmesh', 'pytest', 'theano==0.8.2', 'tqdm', 'dill',
                          'pytest-runner', 'prompt-toolkit<2.0', 'numba==0.41.0',
-                         'llvmlite==0.26.0', 'elektronn3'],  # numba/llvmluite requirements due to https://github.com/numba/numba/issues/3666 in @jit compilation of 'id2rgb_array_contiguous' (in multiviews.py)
+                         'llvmlite==0.26.0', 'elektronn3', 'vtki'],  # numba/llvmluite requirements due to https://github.com/numba/numba/issues/3666 in @jit compilation of 'id2rgb_array_contiguous' (in multiviews.py)
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_utils'
                          '/tarball/dev#egg=knossos_utils',

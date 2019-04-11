@@ -6,7 +6,8 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-
+import dill
+import numpy as np  # needed for transfer function
 try:
     import cPickle as pkl
 except ImportError:
@@ -20,7 +21,7 @@ with open(path_storage_file, 'rb') as f:
     args = []
     while True:
         try:
-            args.append(pkl.load(f))
+            args.append(dill.load(f))
         except EOFError:
             break
 

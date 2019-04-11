@@ -9,9 +9,9 @@ import sys
 
 try:
     import cPickle as pkl
-except ImportError:
+except Exception:
     import pickle as pkl
-from syconn.extraction import cs_extraction_steps as ces
+from knossos_utils.chunky import _export_cset_as_kd_thread
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -24,7 +24,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = ces._extract_agg_cs_thread(args)
+out = _export_cset_as_kd_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)
