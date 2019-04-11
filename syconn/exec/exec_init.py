@@ -76,11 +76,12 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
     #                         offset=offset, log=log)
 
     # Object Processing -- Perform after mapping to also cache mapping ratios
-    sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
+    sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir, n_folders_fs=n_folders_fs)
     # sd_proc.dataset_analysis(sd, recompute=True, compute_meshprops=False)
 
     log.info("Extracted {} cell SVs. Preparing rendering locations "
              "(and meshes if not provided).".format(len(sd.ids)))
+
     start = time.time()
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, max_n_jobs)

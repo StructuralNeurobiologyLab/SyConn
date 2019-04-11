@@ -30,6 +30,7 @@ def _map_ids_thread(args):
     chunk_size = args[1]
     # wd = args[2]
 
+    worker_dc =
     for coord in coord_list:
 
         kd_obj_masks = {}
