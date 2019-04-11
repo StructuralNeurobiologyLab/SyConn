@@ -239,6 +239,8 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
         pkl.dump(sv_obj_map_dict, f)
 
     paths = sd.so_dir_paths
+    print("\n\n\n paths= ", paths, "obj_type= ", obj_type, "mapping_dict_path= ", mapping_dict_path, "\n\n\n")
+
 
     # Partitioning the work
     multi_params = basics.chunkify(paths, n_jobs)
@@ -248,7 +250,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_mapping_to_sv_thread, multi_params,
                                    nb_cpus=n_max_co_processes, debug=False)
-    elif qu.batchjob_enabled(): ### maybe write_mapping_to_sv has to be adapted
+    elif qu.batchjob_enabled():
         qu.QSUB_script(multi_params, "write_mapping_to_sv", pe=qsub_pe,
                        queue=qsub_queue, script_folder=None,
                        n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
@@ -259,7 +261,9 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
 
 def _map_objects_thread(args):
     """Worker of map_objects_to_sv"""
-    # TODO: this needs to be done densely by matching cell organelle segmentation (see corresponding ChunkDataset which is an intermediate result of 'from_probabilities_to_objects') to SV segmentation
+    # TODO: this needs to be done densely by matching cell organelle segmentation
+    #  (see corresponding ChunkDataset which is an intermediate result of
+    #  'from_probabilities_to_objects') to SV segmentation
 
     paths = args[0]
     obj_type = args[1]
@@ -274,7 +278,7 @@ def _map_objects_thread(args):
         datatype = np.uint64
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(kd_path)
-    seg_dataset =  segmentation.SegmentationDataset(obj_type, version=obj_version,
+    seg_dataset = segmentation.SegmentationDataset(obj_type, version=obj_version,
                                                    working_dir=working_dir)
     sv_id_dict = {}
     for p in paths:
@@ -310,6 +314,7 @@ def _map_objects_thread(args):
                 id_ratios = id_counts / float(np.sum(id_counts))
 
                 for i_id in range(len(ids)):
+
                     if ids[i_id] in sv_id_dict:
                         sv_id_dict[ids[i_id]][so_id] = id_ratios[i_id]
                     else:

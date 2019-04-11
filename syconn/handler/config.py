@@ -134,11 +134,8 @@ class DynConfig(Config):
         return self.entries['Paths']['kd_mi']
 
     @property
-    def kd_paths(self):
+    def kd_organells_paths(self):
         path_dict = {
-            'kd_seg': self.kd_seg_path,
-            'kd_sym': self.kd_sym_path,
-            'kd_asym' : self.kd_asym_path,
             'kd_sj': self.kd_sj_path,
             'kd_vc': self.kd_vc_path,
             'kd_mi': self.kd_mi_path
