@@ -50,7 +50,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
     if chunk_size is None:
         chunk_size = [512, 512, 512]
     if max_n_jobs is None:
-        max_n_jobs = global_params.NCORE_TOTAL * 2
+        max_n_jobs = global_params.NCORE_TOTAL * 3
     log = initialize_logging('create_sds', global_params.config.working_dir +
                              '/logs/', overwrite=True)
     # Sets initial values of object
@@ -81,6 +81,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
 
     log.info("Extracted {} cell SVs. Preparing rendering locations "
              "(and meshes if not provided).".format(len(sd.ids)))
+
     start = time.time()
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, max_n_jobs)
@@ -140,9 +141,11 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
         # About 0.2 h per object class
         log.info('Started mapping of {} cellular organelles of type "{}" to '
                  'cell SVs.'.format(len(sd_co.ids), co))
+
         sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path,
                                   n_jobs=max_n_jobs)
         log.info('Finished preparation of {} "{}"-SVs after {:.0f}s.'
                  ''.format(len(sd_co.ids), co, time.time() - start))
+
 
 

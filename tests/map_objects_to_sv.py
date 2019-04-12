@@ -2,6 +2,7 @@ from knossos_utils import chunky
 from syconn import global_params
 from syconn.handler.basics import kd_factory
 import numpy as np
+from collections import defaultdict
 from syconn.handler.basics import chunkify
 from syconn.mp import batchjob_utils as qu, mp_utils as sm
 from sys import getsizeof
@@ -25,48 +26,77 @@ def map_ids(wd, n_jobs=1000, qsub_pe=None, qsub_queue=None, nb_cpus=None,
                                 nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
 
 
-def _map_ids_thread(args):
-    coord_list = args[0]
-    chunk_size = args[1]
-    # wd = args[2]
+# def _map_ids_thread(args):
+    # coord_list = args[0]
+    # chunk_size = args[1]
+    # # wd = args[2]
+    #
+    # worker_dc['sv'] = defaultdict()
+    # objects = global_params.existing_cell_organelles
+    # for coord in coord_list:
+    #
+    #     # kd_cell = kd_factory(global_params.config.kd_seg_path)
+    #     # seg_cell = kd_cell.from_overlaycubes_to_matrix(offset=coord, size=chunk_size).flatten()
+    #     seg_cell = create_toy_data(chunk_size, 10).flatten()
+    #
+    #     obj_matrix = []
+    #     for obj_key in objects:
+    #         print(obj_key)
+    #         # obj_matix.append(kd_factory(objects[obj_key]).from_overlaycubes_to_matrix(
+    #         #                                             offset=coord, size=chunk_size).flatten())
+    #         obj_matrix.append(create_toy_data(chunk_size, 10).flatten())
+    #         worker_dc[obj_key] = defaultdict()
+    #
+    #     for i in range(len(seg_cell)):
+            
 
-    worker_dc =
-    for coord in coord_list:
 
-        kd_obj_masks = {}
-        objects = global_params.config.kd_paths
 
-        for obj_key in objects:
-            if obj_key == "kd_seg":
-                continue
-            temp_matrix = kd_factory(objects[obj_key]).from_overlaycubes_to_matrix(
-                                                        offset=coord, size=chunk_size)
-            kd_obj_masks[obj_key] = {}
-            for unique_obj_id in np.unique(temp_matrix):
-                if unique_obj_id == 0:
-                    continue
-                mask = np.zeros(shape=chunk_size, dtype=np.bool)
-                mask[temp_matrix == unique_obj_id] = 1
-                kd_obj_masks[obj_key][unique_obj_id] = mask
 
-        kd_cell = kd_factory(global_params.config.kd_seg_path)
-        seg_cell = kd_cell.from_overlaycubes_to_matrix(offset=coord, size=chunk_size)
 
-        cell_ids, cell_counts = np.unique(seg_cell, return_counts=True)
-        for i in range(len(cell_ids)):
-            cell_id = cell_ids[i]
-            cell_count = cell_counts[i]
-            cell_mask = np.zeros(shape=chunk_size, dtype=np.bool)
-            cell_mask[seg_cell == cell_id] = 1
 
-            for obj_name in kd_obj_masks:
-                for obj_id in kd_obj_masks[obj_name]:
-                    overlap = np.sum(kd_obj_masks[obj_name][obj_id] & cell_mask)
-                    print("cell_count= ", cell_count, "overlap= ", overlap)
+
+
+
+
+        #     kd_obj_masks[obj_key] = {}
+        #     for unique_obj_id in np.unique(temp_matrix):
+        #         if unique_obj_id == 0:
+        #             continue
+        #         mask = np.zeros(shape=chunk_size, dtype=np.bool)
+        #         mask[temp_matrix == unique_obj_id] = 1
+        #         kd_obj_masks[obj_key][unique_obj_id] = mask
+        #
+        #
+        #
+        # cell_ids, cell_counts = np.unique(seg_cell, return_counts=True)
+        # for i in range(len(cell_ids)):
+        #     cell_id = cell_ids[i]
+        #     cell_count = cell_counts[i]
+        #     cell_mask = np.zeros(shape=chunk_size, dtype=np.bool)
+        #     cell_mask[seg_cell == cell_id] = 1
+        #
+        #     for obj_name in kd_obj_masks:
+        #         for obj_id in kd_obj_masks[obj_name]:
+        #             overlap = np.sum(kd_obj_masks[obj_name][obj_id] & cell_mask)
+        #             print("cell_count= ", cell_count, "overlap= ", overlap)
+
+#
+# def create_toy_data(m_size, moduloo):
+#     np.random.seed(0)
+#     matrix = np.zeros(shape=m_size, dtype=int)
+#     for i in range(m_size[0]):
+#         for j in range(m_size[1]):
+#             for k in range(m_size[2]):
+#                 matrix[i, j, k] = np.random.randint(moduloo, size=1)
+#     return matrix
+
 
 
 def main():
     map_ids(wd="/wholebrain/u/mariakaw/SyConn/example_cube1/dict")
+
+    # _map_ids_thread([[[0, 0, 0]], (128, 128, 128)])
 
     # kd_paths = global_params.config.kd_paths
     # kd = []

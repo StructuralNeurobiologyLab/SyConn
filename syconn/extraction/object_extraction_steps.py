@@ -1106,15 +1106,18 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                              filename, hdf5names, dataset_names, overlaydataset_path,
                              suffix, n_folders_fs, sd_version])
 
-    if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_extract_voxels_combined_thread,
-                                        multi_params, nb_cpus=n_max_co_processes, verbose=True)
+    # if not qu.batchjob_enabled():
+    #     results = sm.start_multiprocess_imap(_extract_voxels_combined_thread,
+    #                                     multi_params, debug=False, nb_cpus=n_max_co_processes, verbose=True)
+    #
+    # else:
+    #     path_to_out = qu.QSUB_script(multi_params, "extract_voxels_combined",
+    #                                  pe=qsub_pe, queue=qsub_queue, n_cores=n_cores,
+    #                                  script_folder=None, n_max_co_processes=n_max_co_processes)
 
-    else:
-        path_to_out = qu.QSUB_script(multi_params, "extract_voxels_combined",
+    path_to_out = qu.QSUB_script(multi_params, "extract_voxels_combined",
                                      pe=qsub_pe, queue=qsub_queue, n_cores=n_cores,
                                      script_folder=None, n_max_co_processes=n_max_co_processes)
-
 
 def _extract_voxels_combined_thread(args):
     overlaydataset_path = args[5]
