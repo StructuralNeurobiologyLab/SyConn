@@ -71,9 +71,9 @@ if __name__ == "__main__":
     from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
     import tqdm
     pred_key_appendix1 = "test_pred_v1_large"
-    pred_key_appendix2 = "test_pred_v1"
+    pred_key_appendix2 = ""
     ssd = SuperSegmentationDataset(working_dir=WD, version="ctgt_v2")
-    #
+    # #
     # # prediction
     pbar = tqdm.tqdm(total=len(ssv_ids))
     m = get_celltype_model_e3()
@@ -82,12 +82,12 @@ if __name__ == "__main__":
     for ssv_id in ssv_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv._view_caching = True
-        ssv.predict_celltype_cnn(model=m_large, pred_key_appendix=pred_key_appendix1,
-                                 model_tnet=m_tnet)
-        ssv.predict_celltype_cnn(model=m_large, pred_key_appendix=pred_key_appendix2,
-                                 model_tnet=m_tnet)
+        # ssv.predict_celltype_cnn(model=m_large, pred_key_appendix=pred_key_appendix1,
+        #                          model_tnet=m_tnet)
+        ssv.predict_celltype_cnn(model=m, pred_key_appendix=pred_key_appendix1, largeFoV=False,
+                                 view_props={"overwrite": False})
         pbar.update()
-
+    pbar.close()
     # analysis
     from syconn.proc.stats import cluster_summary, projection_tSNE, model_performance
     gt_l = []
@@ -101,8 +101,17 @@ if __name__ == "__main__":
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.load_attr_dict()
         gt_l.append(ssv.attr_dict["cellttype_gt"])
+
+        # small FoV
         pred_l.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix1])
-        pred_proba.append(ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix1)])
+        preds_small = ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix1)]
+        preds_small = np.argmax(preds_small, axis=1)
+        major_dec = np.zeros(10)
+        for ii in range(len(major_dec)):
+            major_dec[ii] = np.sum(preds_small == ii)
+        major_dec /= np.sum(major_dec)
+        pred_proba.append(major_dec)
+        # large FoV
         pred_l_large.append(ssv.attr_dict["celltype_cnn_e3" + pred_key_appendix2])
         probas_large = ssv.attr_dict["celltype_cnn_e3{}_probas".format(pred_key_appendix2)]
         preds_large = np.argmax(probas_large, axis=1)
@@ -111,13 +120,16 @@ if __name__ == "__main__":
             major_dec[ii] = np.sum(preds_large == ii)
         major_dec /= np.sum(major_dec)
         pred_proba_large.append(major_dec)
+
+        # morphology embedding
         latent_morph_d.append(ssv.attr_dict["latent_morph_ct" + pred_key_appendix1])
         latent_morph_l.append(len(latent_morph_d[-1]) * [gt_l[-1]])
+
     train_d = np.concatenate(latent_morph_d)
     train_l = np.concatenate(latent_morph_l)
     pred_proba_large = np.array(pred_proba_large)
+    pred_proba = np.array(pred_proba)
     gt_l = np.array(gt_l)
-
     str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, INT=8)
     int2str_label = {v: k for k, v in str2int_label.items()}
     dest_p = "/wholebrain/scratch/pschuber/ConnMeet2019/ct_clustering/tsne.png"
@@ -134,7 +146,7 @@ if __name__ == "__main__":
     classes, c_cnts = np.unique(pred_l, return_counts=True)
     log_main.info('Successful prediction [standard] with the following cell type class '
                   'distribution [labels, counts]: {}, {}'.format(classes, c_cnts))
-    model_performance(pred_l, gt_l, os.path.split(dest_p)[0] + "/", n_labels=9,
+    model_performance(pred_proba, gt_l, os.path.split(dest_p)[0] + "/", n_labels=9,
                       target_names=target_names)
 
     # tSNE

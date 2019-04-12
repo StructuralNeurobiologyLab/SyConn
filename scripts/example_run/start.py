@@ -81,7 +81,9 @@ if __name__ == '__main__':
             shell=True).decode().replace('\n', '')
     else:
         py36path = ""
-    config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale, py36path=py36path)
+    config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale,
+                                                      py36path=py36path,
+                                                      use_large_fov_views_ct=False)
     with open(example_wd + 'config.ini', 'w') as f:
         f.write(config_str)
     with open(example_wd + 'configspec.ini', 'w') as f:
@@ -182,18 +184,19 @@ if __name__ == '__main__':
     step_idents.append('Synapse detection')
 
     log.info('Step 5/8 - Axon prediction')
-    exec_multiview.run_axoness_prediction(max_n_jobs=4, e3=True)
+    exec_multiview.run_axoness_prediction(max_n_jobs_gpu=4, e3=True)
     exec_multiview.run_axoness_mapping()
     time_stamps.append(time.time())
     step_idents.append('Axon prediction')
 
     log.info('Step 6/8 - Spine prediction')
-    exec_multiview.run_spiness_prediction(max_n_jobs=4)
+    exec_multiview.run_spiness_prediction(max_n_jobs_gpu=4,
+                                          max_n_jobs=max_n_jobs)
     time_stamps.append(time.time())
     step_idents.append('Spine prediction')
 
     log.info('Step 7/8 - Celltype analysis')
-    exec_multiview.run_celltype_prediction(max_n_jobs=4)
+    exec_multiview.run_celltype_prediction(max_n_jobs_gpu=4)
     time_stamps.append(time.time())
     step_idents.append('Celltype analysis')
 

@@ -149,8 +149,8 @@ class SuperSegmentationObject(object):
                 self._scaling = \
                     np.array(self.config.entries["Dataset"]["scaling"])
             except KeyError:
-                msg = 'Scaling not set and could not be found in config ' \
-                      'with entries: {}'.format(self.config.entries)
+                msg = 'Scaling not set and could not be found in config ("{}"' \
+                      ') with entries: {}'.format(self.config.path_config, self.config.entries)
                 log_reps.error(msg)
                 raise KeyError(msg)
         else:
@@ -2399,7 +2399,8 @@ class SuperSegmentationObject(object):
         if dest_path is not None:
             self.save_skeleton_to_kzip(dest_path=dest_path)
 
-    def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None):
+    def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
+                             largeFoV=True):
         """
         Infer celltype classification via `model` (stored as `celltype_cnn_e3` and `celltype_cnn_e3_probas`)
         and an optional cell embedding via `model_tnet` (stored as `latent_morph_ct`).
@@ -2414,7 +2415,10 @@ class SuperSegmentationObject(object):
             `global_params.py` will be used.
 
         """
-        # ssh.predict_sso_celltype(self, model, **kwargs)  # OLD
+        if not largeFoV:
+            if view_props is None:
+                view_props = {}
+            return ssh.predict_sso_celltype(self, model, **view_props)  # OLD
         if view_props is None:
             view_props = global_params.view_properties_large
         ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,

@@ -70,7 +70,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
 
     """
     if max_n_jobs is None:
-        max_n_jobs = global_params.NCORE_TOTAL * 3
+        max_n_jobs = global_params.NCORE_TOTAL * 2
 
     log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
                              overwrite=True)
