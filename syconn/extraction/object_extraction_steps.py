@@ -30,7 +30,6 @@ from ..proc.image import multi_mop
 from .. import global_params
 from ..handler.basics import kd_factory
 
-import sys
 
 def gauss_threshold_connected_components(*args, **kwargs):
     # alias
@@ -778,8 +777,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         n_chunk_jobs = len(voxel_rel_paths)
     chunk_blocks = np.array_split(np.array(chunk_list), n_chunk_jobs)
     path_blocks = np.array_split(np.array(voxel_rel_paths), n_chunk_jobs)
-    # for i_job in range(n_chunk_jobs): #Marysia
-    for i_job in range(1): #Marysia
+    for i_job in range(n_chunk_jobs):
         multi_params.append([[cset.chunk_dict[nb_chunk] for nb_chunk in chunk_blocks[i_job]], workfolder,
                              filename, hdf5names, dataset_names, overlaydataset_path,
                              suffix, path_blocks[i_job], n_folders_fs, transform_func, transform_func_kwargs])
@@ -843,6 +841,7 @@ def _extract_voxels_thread(args):
         id_count = 0
 
         for i_chunk, chunk in enumerate(chunks):
+
             if overlaydataset_path is None:
                 path = chunk.folder + filename + "_stitched_components%s.h5" % suffix
 
@@ -860,8 +859,6 @@ def _extract_voxels_thread(args):
                                                                        chunk.coordinates,
                                                                        datatype=np.uint32)
 
-
-
             uniqueID_coords_dict = defaultdict(list)  # {sv_id: [(x0,y0,z0),(x1,y1,z1),...]}
 
             dims = this_segmentation.shape
@@ -872,8 +869,6 @@ def _extract_voxels_thread(args):
 
             if i_chunk == 0:
                 n_per_voxel_path = np.ceil(float(len(uniqueID_coords_dict) * len(chunks)) / len(voxel_paths))
-
-
 
             for sv_id in uniqueID_coords_dict:
                 if sv_id == 0:
@@ -1106,18 +1101,15 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                              filename, hdf5names, dataset_names, overlaydataset_path,
                              suffix, n_folders_fs, sd_version])
 
-    # if not qu.batchjob_enabled():
-    #     results = sm.start_multiprocess_imap(_extract_voxels_combined_thread,
-    #                                     multi_params, debug=False, nb_cpus=n_max_co_processes, verbose=True)
-    #
-    # else:
-    #     path_to_out = qu.QSUB_script(multi_params, "extract_voxels_combined",
-    #                                  pe=qsub_pe, queue=qsub_queue, n_cores=n_cores,
-    #                                  script_folder=None, n_max_co_processes=n_max_co_processes)
+    if not qu.batchjob_enabled():
+        results = sm.start_multiprocess_imap(_extract_voxels_combined_thread,
+                                        multi_params, nb_cpus=n_max_co_processes, verbose=True)
 
-    path_to_out = qu.QSUB_script(multi_params, "extract_voxels_combined",
+    else:
+        path_to_out = qu.QSUB_script(multi_params, "extract_voxels_combined",
                                      pe=qsub_pe, queue=qsub_queue, n_cores=n_cores,
                                      script_folder=None, n_max_co_processes=n_max_co_processes)
+
 
 def _extract_voxels_combined_thread(args):
     overlaydataset_path = args[5]
