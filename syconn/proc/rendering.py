@@ -11,6 +11,7 @@ import numpy as np
 import time
 import os
 import tqdm
+import shutil
 import warnings
 import glob
 from scipy.ndimage.filters import gaussian_filter
@@ -1157,6 +1158,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
                                       verbose=False, render_kwargs=None,
                                       render_indexviews=True, return_views=True):
     """
+    # TODO: currently the view sorting is not aligned with the other rendering methods
 
     Parameters
     ----------
@@ -1199,9 +1201,9 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
     sso_kwargs = {'ssv_id': ssv_id,
                   'working_dir': working_dir,
                   "version": ssv.version}
-    render_kwargs_def = {'add_cellobjcts': True, 'verbose': verbose, 'clahe': False,
+    render_kwargs_def = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
-                      'nb_views': None, 'comp_window': None, 'rot_mat': None, 'wo_glia':True,
+                      'nb_views': None, 'comp_window': None, 'rot_mat': None, 'wo_glia': True,
                      'return_rot_mat': False, 'render_indexviews': render_indexviews}
     if render_kwargs is not None:
         render_kwargs_def.update(render_kwargs)
@@ -1221,11 +1223,12 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
     views = []
     out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
     for out_file in out_files2:
+        print(out_file)
         with open(out_file, 'rb') as f:
             views.append(pkl.load(f))
     views = np.concatenate(views)
+    shutil.rmtree(path_to_out + "/../", ignore_errors=True)
     if rendering_locations is None and return_views is False:
-        # TODO: this method requires
         if ssv.version != 'tmp':
             for i, so in enumerate(svs):
                 sv_views = views[part_views[i]:part_views[i+1]]

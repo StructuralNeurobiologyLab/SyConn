@@ -287,22 +287,22 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 priority, additional_flags, this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         elif BATCH_PROC_SYSTEM == 'SLURM':
-            if '--gres=gpu' in additional_flags:
-                # additional_flags = "-n%d" % n_cores
-                # otherwise multiprocessing will run on one CPU only if cpu binding is not modified within each process
-                additional_flags += " --cpu-bind=none --cpus-per-task=" + str(n_cores)
-                cmd_exec = "srun {0} --output={1} --error={2}" \
-                           " --job-name={3} {4} &".format(  # ntasks-per-node=1
-                    # because MP is organized by the launched job
-                    additional_flags, job_log_path, job_err_path,
-                    job_name, this_sh_path)
-            else:
-                if n_cores > 1:
-                    additional_flags += " -n%d" % n_cores
-                cmd_exec = "sbatch {0} --output={1} --error={2}" \
-                           " --job-name={3} {4}".format(
-                    additional_flags, job_log_path, job_err_path,
-                    job_name, this_sh_path)
+            # if '--gres=gpu' in additional_flags:
+            #     # additional_flags = "-n%d" % n_cores
+            #     # otherwise multiprocessing will run on one CPU only if cpu binding is not modified within each process
+            #     additional_flags += " --cpu-bind=none --cpus-per-task=" + str(n_cores)
+            #     cmd_exec = "srun {0} --output={1} --error={2}" \
+            #                " --job-name={3} {4} &".format(  # ntasks-per-node=1
+            #         # because MP is organized by the launched job
+            #         additional_flags, job_log_path, job_err_path,
+            #         job_name, this_sh_path)
+            # else:
+            if n_cores > 1:
+                additional_flags += " -n%d" % n_cores
+            cmd_exec = "sbatch {0} --output={1} --error={2}" \
+                       " --job-name={3} {4}".format(
+                additional_flags, job_log_path, job_err_path,
+                job_name, this_sh_path)
             if priority is not None and priority != 0:
                 log_batchjob.warning('Priorities are not supported with SLURM.')
             # added '--quiet' flag to prevent submission messages, errors will still be printed

@@ -81,7 +81,9 @@ if __name__ == '__main__':
             shell=True).decode().replace('\n', '')
     else:
         py36path = ""
-    config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale, py36path=py36path)
+    config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale,
+                                                      py36path=py36path,
+                                                      use_large_fov_views_ct=False)
     with open(example_wd + 'config.ini', 'w') as f:
         f.write(config_str)
     with open(example_wd + 'configspec.ini', 'w') as f:
@@ -162,63 +164,64 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 
-    # log.info('Step 2/8 - Creating SuperSegmentationDataset')
-    # exec_multiview.run_create_neuron_ssd(prior_glia_removal=False)
-    # time_stamps.append(time.time())
-    # step_idents.append('SSD generation')
-    #
-    # log.info('Step 3/8 - Neuron rendering')
-    # exec_multiview.run_neuron_rendering(max_n_jobs=max_n_jobs)
-    # time_stamps.append(time.time())
-    # step_idents.append('Neuron rendering')
-    #
-    # # run_syn_generation can run in parallel to steps 5 and 6, because they
-    # # require only medium MEM and CPU resources and mainly GPU
-    # # TODO: adapt memory and CPU allocation of those GPU workers
-    # log.info('Step 4/8 - Synapse detection')
-    # exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-    #                              max_n_jobs=max_n_jobs)
-    # time_stamps.append(time.time())
-    # step_idents.append('Synapse detection')
-    #
-    # log.info('Step 5/8 - Axon prediction')
-    # exec_multiview.run_axoness_prediction(max_n_jobs=4, e3=True)
-    # exec_multiview.run_axoness_mapping()
-    # time_stamps.append(time.time())
-    # step_idents.append('Axon prediction')
-    #
-    # log.info('Step 6/8 - Spine prediction')
-    # exec_multiview.run_spiness_prediction(max_n_jobs=4)
-    # time_stamps.append(time.time())
-    # step_idents.append('Spine prediction')
-    #
-    # log.info('Step 7/8 - Celltype analysis')
-    # exec_multiview.run_celltype_prediction(max_n_jobs=4)
-    # time_stamps.append(time.time())
-    # step_idents.append('Celltype analysis')
-    #
-    # log.info('Step 8/8 - Matrix export')
-    # exec_syns.run_matrix_export()
-    # time_stamps.append(time.time())
-    # step_idents.append('Matrix export')
-    #
-    # time_stamps = np.array(time_stamps)
-    # dts = time_stamps[1:] - time_stamps[:-1]
-    # dt_tot = time_stamps[-1] - time_stamps[0]
-    # dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
-    # time_summary_str = "\nEM data analysis of experiment '{}' finished after" \
-    #                    " {}.\n".format(experiment_name, dt_tot_str)
-    # for i in range(len(step_idents[1:])):
-    #     step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
-    #     step_dt_perc = int(dts[i] / dt_tot * 100)
-    #     step_str = "[{}/8] {}\t\t\t{}\t\t\t{}%\n".format(
-    #         i, step_idents[i+1], step_dt, step_dt_perc)
-    #     time_summary_str += step_str
-    # log.info(time_summary_str)
-    # # log.info('Setting up flask server for inspection. Annotated cell reconst'
-    # #          'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
-    # #          ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    # # fname_server = os.path.dirname(os.path.abspath(__file__)) + \
-    # #                '/../kplugin/server.py'
-    # # os.system('python {} --working_dir={} --port=10002'.format(
-    # #     fname_server, example_wd))
+    log.info('Step 2/8 - Creating SuperSegmentationDataset')
+    exec_multiview.run_create_neuron_ssd(prior_glia_removal=False)
+    time_stamps.append(time.time())
+    step_idents.append('SSD generation')
+
+    log.info('Step 3/8 - Neuron rendering')
+    exec_multiview.run_neuron_rendering(max_n_jobs=max_n_jobs)
+    time_stamps.append(time.time())
+    step_idents.append('Neuron rendering')
+
+    # run_syn_generation can run in parallel to steps 5 and 6, because they
+    # require only medium MEM and CPU resources and mainly GPU
+    # TODO: adapt memory and CPU allocation of those GPU workers
+    log.info('Step 4/8 - Synapse detection')
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
+                                 max_n_jobs=max_n_jobs)
+    time_stamps.append(time.time())
+    step_idents.append('Synapse detection')
+
+    log.info('Step 5/8 - Axon prediction')
+    exec_multiview.run_axoness_prediction(max_n_jobs_gpu=4, e3=True)
+    exec_multiview.run_axoness_mapping()
+    time_stamps.append(time.time())
+    step_idents.append('Axon prediction')
+
+    log.info('Step 6/8 - Spine prediction')
+    exec_multiview.run_spiness_prediction(max_n_jobs_gpu=4,
+                                          max_n_jobs=max_n_jobs)
+    time_stamps.append(time.time())
+    step_idents.append('Spine prediction')
+
+    log.info('Step 7/8 - Celltype analysis')
+    exec_multiview.run_celltype_prediction(max_n_jobs_gpu=4)
+    time_stamps.append(time.time())
+    step_idents.append('Celltype analysis')
+
+    log.info('Step 8/8 - Matrix export')
+    exec_syns.run_matrix_export()
+    time_stamps.append(time.time())
+    step_idents.append('Matrix export')
+
+    time_stamps = np.array(time_stamps)
+    dts = time_stamps[1:] - time_stamps[:-1]
+    dt_tot = time_stamps[-1] - time_stamps[0]
+    dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
+    time_summary_str = "\nEM data analysis of experiment '{}' finished after" \
+                       " {}.\n".format(experiment_name, dt_tot_str)
+    for i in range(len(step_idents[1:])):
+        step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
+        step_dt_perc = int(dts[i] / dt_tot * 100)
+        step_str = "[{}/8] {}\t\t\t{}\t\t\t{}%\n".format(
+            i, step_idents[i+1], step_dt, step_dt_perc)
+        time_summary_str += step_str
+    log.info(time_summary_str)
+    # log.info('Setting up flask server for inspection. Annotated cell reconst'
+    #          'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
+    #          ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    # fname_server = os.path.dirname(os.path.abspath(__file__)) + \
+    #                '/../kplugin/server.py'
+    # os.system('python {} --working_dir={} --port=10002'.format(
+    #     fname_server, example_wd))

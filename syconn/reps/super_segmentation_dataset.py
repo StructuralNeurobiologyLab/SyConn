@@ -1247,6 +1247,7 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1,
 def create_sso_skeletons_thread(args):
     from ..proc.graphs import create_graph_from_coords
     from ..reps.rep_helper import surface_samples
+    from ..handler.multiviews import generate_rendering_locs
 
     ssv_obj_ids = args[0]
     version = args[1]
@@ -1270,15 +1271,18 @@ def create_sso_skeletons_thread(args):
             ixs = np.arange(len(verts))
             np.random.shuffle(ixs)
             ixs = ixs[:int(0.5*len(ixs))]
-            locs = surface_samples(verts[ixs], bin_sizes=(1000, 1000, 1000),
-                                   max_nb_samples=10000, r=500)
+            locs = generate_rendering_locs(verts[ixs], 1000)
+            # locs = surface_samples(verts[ixs], bin_sizes=(1000, 1000, 1000),
+            #                        max_nb_samples=10000, r=500)
             g = create_graph_from_coords(locs, mst=True)
             if g.number_of_edges() == 1:
                 edge_list = np.array(list(g.edges()))
             else:
                 edge_list = np.array(g.edges())
             del g
-            assert edge_list.ndim == 2
+            if edge_list.ndim != 2:
+                raise ValueError("Edgelist must be a 2D array. Currently: {}\n{}".format(
+                    edge_list.ndim, edge_list))
             ssv.skeleton = dict()
             ssv.skeleton["nodes"] = locs / np.array(ssv.scaling)
             ssv.skeleton["edges"] = edge_list

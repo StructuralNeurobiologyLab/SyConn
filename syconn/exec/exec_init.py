@@ -50,7 +50,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
     if chunk_size is None:
         chunk_size = [512, 512, 512]
     if max_n_jobs is None:
-        max_n_jobs = global_params.NCORE_TOTAL * 3
+        max_n_jobs = global_params.NCORE_TOTAL * 2
     log = initialize_logging('create_sds', global_params.config.working_dir +
                              '/logs/', overwrite=True)
     # Sets initial values of object
@@ -70,31 +70,30 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
                   box_coords=[0, 0, 0], fit_box_size=True)
     log.info('Generating SegmentationDatasets for cell and cell '
              'organelle supervoxels.')
-    # oew.from_ids_to_objects(cd, "sv", overlaydataset_path=global_params.config.kd_seg_path,
-    #                         n_chunk_jobs=max_n_jobs, hdf5names=["sv"], n_max_co_processes=None,
-    #                         n_folders_fs=n_folders_fs, use_combined_extraction=True, size=size,
-    #                         offset=offset, log=log)
+    oew.from_ids_to_objects(cd, "sv", overlaydataset_path=global_params.config.kd_seg_path,
+                            n_chunk_jobs=max_n_jobs, hdf5names=["sv"], n_max_co_processes=None,
+                            n_folders_fs=n_folders_fs, use_combined_extraction=True, size=size,
+                            offset=offset, log=log)
 
     # Object Processing -- Perform after mapping to also cache mapping ratios
-    sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir, n_folders_fs=n_folders_fs)
-    # sd_proc.dataset_analysis(sd, recompute=True, compute_meshprops=False)
+    sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
+    sd_proc.dataset_analysis(sd, recompute=True, compute_meshprops=False)
 
     log.info("Extracted {} cell SVs. Preparing rendering locations "
              "(and meshes if not provided).".format(len(sd.ids)))
-
     start = time.time()
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, max_n_jobs)
     # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
     so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type='sv')
     multi_params = [[par, so_kwargs] for par in multi_params]
-    # if generate_sv_meshes:
-    #     _ = qu.QSUB_script(multi_params, "mesh_caching",
-    #                        n_max_co_processes=global_params.NCORE_TOTAL)
-    # _ = qu.QSUB_script(multi_params, "sample_location_caching",
-    #                    n_max_co_processes=global_params.NCORE_TOTAL)
-    # # recompute=False: only collect new sample_location property
-    # sd_proc.dataset_analysis(sd, compute_meshprops=True, recompute=False)
+    if generate_sv_meshes:
+        _ = qu.QSUB_script(multi_params, "mesh_caching",
+                           n_max_co_processes=global_params.NCORE_TOTAL)
+    _ = qu.QSUB_script(multi_params, "sample_location_caching",
+                       n_max_co_processes=global_params.NCORE_TOTAL)
+    # recompute=False: only collect new sample_location property
+    sd_proc.dataset_analysis(sd, compute_meshprops=True, recompute=False)
     log.info('Finished preparation of cell SVs after {:.0f}s.'.format(time.time() - start))
     # create SegmentationDataset for each cell organelle
     if transf_func_kd_overlay is None:
@@ -141,11 +140,9 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
         # About 0.2 h per object class
         log.info('Started mapping of {} cellular organelles of type "{}" to '
                  'cell SVs.'.format(len(sd_co.ids), co))
-
         sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path,
                                   n_jobs=max_n_jobs)
         log.info('Finished preparation of {} "{}"-SVs after {:.0f}s.'
                  ''.format(len(sd_co.ids), co, time.time() - start))
-
 
 

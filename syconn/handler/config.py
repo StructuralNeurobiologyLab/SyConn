@@ -77,6 +77,9 @@ class Config(object):
 
             if config.validate(Validator()):
                 self._entries = config
+            else:
+                self.log_main.error('ERROR: Could not parse config at '
+                                    '{}.'.format(self.path_config))
         else:
             self._entries = ConfigObj(self.path_config)
 
@@ -109,10 +112,13 @@ class DynConfig(Config):
          `self.working dir`.
         """
         # first check if working directory was set in environ, else check if it was changed in memory.
-        if 'syconn_wd' in os.environ:
+        if 'syconn_wd' in os.environ and os.environ['syconn_wd'] is not None and \
+            len(os.environ['syconn_wd']) > 0 and os.environ['syconn_wd'] != "None":
+
             if super().working_dir != os.environ['syconn_wd']:
                 super().__init__(os.environ['syconn_wd'])
-        elif super().working_dir != global_params.wd and global_params.wd is not None:
+        elif (global_params.wd is not None) and (len(global_params.wd) > 0) and \
+                (global_params.wd != "None") and (super().working_dir != global_params.wd):
             super().__init__(global_params.wd)
 
     @property
