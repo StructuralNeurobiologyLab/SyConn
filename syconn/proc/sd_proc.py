@@ -278,8 +278,6 @@ def _map_objects_thread(args):
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(kd_path)
 
-    print("\n\n\n kd_path= ", kd_path, "\n\n\n")
-    sys.exit("Error message")
 
     seg_dataset = segmentation.SegmentationDataset(obj_type, version=obj_version,
                                                    working_dir=working_dir)

@@ -7,6 +7,8 @@ from syconn.handler.basics import chunkify
 from syconn.mp import batchjob_utils as qu, mp_utils as sm
 from sys import getsizeof
 import sys
+from syconn.backend.storage import VoxelStorage, AttributeDict, VoxelStorageDyn
+import pickle
 
 
 def map_ids(wd, n_jobs=1000, qsub_pe=None, qsub_queue=None, nb_cpus=None,
@@ -23,7 +25,7 @@ def map_ids(wd, n_jobs=1000, qsub_pe=None, qsub_queue=None, nb_cpus=None,
 
     multi_params = []
     chunkify_id = 0
-    for coord_chunk in chunkify([cd_cell.chunk_dict[key].coordinates for key in cd_cell.chunk_dict], 1):
+    for coord_chunk in chunkify([cd_cell.chunk_dict[key].coordinates for key in cd_cell.chunk_dict], 100):
         multi_params.append([coord_chunk, chunk_size, wd, chunkify_id])
         chunkify_id += 1
 
@@ -40,6 +42,9 @@ def _map_ids_thread(args):
     worker_sv_dc = {}
     kd_obj = {}
     small_dc = {}
+    stri = wd + '/voxel_%s.pkl' %chunkify_id
+    f = open(stri, "wb")
+
 
     for obj_type in global_params.existing_cell_organelles:
         small_dc[obj_type] = {}
@@ -70,6 +75,8 @@ def _map_ids_thread(args):
                 else:
                     worker_sv_dc[cell_id][obj][j] = 1
 
+    pickle.dump(worker_sv_dc, f)
+    f.close()
 
 
 def create_toy_data(m_size, moduloo):
