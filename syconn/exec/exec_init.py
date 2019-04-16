@@ -20,6 +20,8 @@ from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.handler.basics import chunkify, kd_factory
 
+import sys
+
 
 # TODO: make it work with new SyConn
 def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
@@ -141,7 +143,7 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
         # About 0.2 h per object class
         log.info('Started mapping of {} cellular organelles of type "{}" to '
                  'cell SVs.'.format(len(sd_co.ids), co))
-
+        sys.exit("\n\n\n\n Error message \n\n\n\n")
         sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path,
                                   n_jobs=max_n_jobs)
         log.info('Finished preparation of {} "{}"-SVs after {:.0f}s.'

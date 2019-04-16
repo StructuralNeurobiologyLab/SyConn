@@ -6,95 +6,86 @@ from collections import defaultdict
 from syconn.handler.basics import chunkify
 from syconn.mp import batchjob_utils as qu, mp_utils as sm
 from sys import getsizeof
+import sys
 
 
 def map_ids(wd, n_jobs=1000, qsub_pe=None, qsub_queue=None, nb_cpus=None,
             n_max_co_processes=None, chunk_size=(128, 128, 128), debug=False):
 
+    global_params.wd = wd
     kd = kd_factory(global_params.config.kd_seg_path)
+
     cd_dir = global_params.config.working_dir + "chunkdatasets/sv/"
 
     cd_cell = chunky.ChunkDataset()
     cd_cell.initialize(kd, kd.boundary, chunk_size, cd_dir,
-                                           box_coords=[0, 0, 0], fit_box_size=True)
+                       box_coords=[0, 0, 0], fit_box_size=True)
 
     multi_params = []
+    chunkify_id = 0
     for coord_chunk in chunkify([cd_cell.chunk_dict[key].coordinates for key in cd_cell.chunk_dict], 1):
-        multi_params.append([coord_chunk, chunk_size, wd])
+        multi_params.append([coord_chunk, chunk_size, wd, chunkify_id])
+        chunkify_id += 1
 
-    sm.start_multiprocess_imap(_map_ids_thread, multi_param,
-                                nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
-
-
-# def _map_ids_thread(args):
-    # coord_list = args[0]
-    # chunk_size = args[1]
-    # # wd = args[2]
-    #
-    # worker_dc['sv'] = defaultdict()
-    # objects = global_params.existing_cell_organelles
-    # for coord in coord_list:
-    #
-    #     # kd_cell = kd_factory(global_params.config.kd_seg_path)
-    #     # seg_cell = kd_cell.from_overlaycubes_to_matrix(offset=coord, size=chunk_size).flatten()
-    #     seg_cell = create_toy_data(chunk_size, 10).flatten()
-    #
-    #     obj_matrix = []
-    #     for obj_key in objects:
-    #         print(obj_key)
-    #         # obj_matix.append(kd_factory(objects[obj_key]).from_overlaycubes_to_matrix(
-    #         #                                             offset=coord, size=chunk_size).flatten())
-    #         obj_matrix.append(create_toy_data(chunk_size, 10).flatten())
-    #         worker_dc[obj_key] = defaultdict()
-    #
-    #     for i in range(len(seg_cell)):
-            
+    sm.start_multiprocess_imap(_map_ids_thread, multi_params,
+                               nb_cpus=n_max_co_processes, verbose=debug, debug=debug)
 
 
+def _map_ids_thread(args):
+    coord_list = args[0]
+    chunk_size = args[1]
+    wd = args[2]
+    chunkify_id = args[3]
+
+    worker_sv_dc = {}
+    kd_obj = {}
+    small_dc = {}
+
+    for obj_type in global_params.existing_cell_organelles:
+        small_dc[obj_type] = {}
+        kd_obj[obj_type] = kd_factory(global_params.config.entries['Paths']['kd_%s' %obj_type])
+
+    kd_cell = kd_factory(global_params.config.kd_seg_path)
+
+    for coord in coord_list:
+        seg_cell = kd_cell.from_overlaycubes_to_matrix(offset=coord, size=chunk_size).flatten()
+
+        seg_obj = {}
+        for obj in kd_obj:
+            # seg_obj[obj] = kd_obj[obj].from_overlaycubes_to_matrix(offset=coord, size=chunk_size).flatten()
+            seg_obj[obj] = create_toy_data(chunk_size, 3).flatten()
+
+        for unique_cell_id in np.unique(seg_cell):
+            if unique_cell_id in worker_sv_dc:
+                continue
+            worker_sv_dc[unique_cell_id] = small_dc
+
+        for vox in range(len(seg_cell)):
+            cell_id = seg_cell[vox]
+
+            for obj in kd_obj:
+                j = seg_obj[obj][vox]
+                if j in worker_sv_dc[cell_id][obj]:
+                    worker_sv_dc[cell_id][obj][j] += 1
+                else:
+                    worker_sv_dc[cell_id][obj][j] = 1
 
 
 
-
-
-
-
-
-        #     kd_obj_masks[obj_key] = {}
-        #     for unique_obj_id in np.unique(temp_matrix):
-        #         if unique_obj_id == 0:
-        #             continue
-        #         mask = np.zeros(shape=chunk_size, dtype=np.bool)
-        #         mask[temp_matrix == unique_obj_id] = 1
-        #         kd_obj_masks[obj_key][unique_obj_id] = mask
-        #
-        #
-        #
-        # cell_ids, cell_counts = np.unique(seg_cell, return_counts=True)
-        # for i in range(len(cell_ids)):
-        #     cell_id = cell_ids[i]
-        #     cell_count = cell_counts[i]
-        #     cell_mask = np.zeros(shape=chunk_size, dtype=np.bool)
-        #     cell_mask[seg_cell == cell_id] = 1
-        #
-        #     for obj_name in kd_obj_masks:
-        #         for obj_id in kd_obj_masks[obj_name]:
-        #             overlap = np.sum(kd_obj_masks[obj_name][obj_id] & cell_mask)
-        #             print("cell_count= ", cell_count, "overlap= ", overlap)
-
-#
-# def create_toy_data(m_size, moduloo):
-#     np.random.seed(0)
-#     matrix = np.zeros(shape=m_size, dtype=int)
-#     for i in range(m_size[0]):
-#         for j in range(m_size[1]):
-#             for k in range(m_size[2]):
-#                 matrix[i, j, k] = np.random.randint(moduloo, size=1)
-#     return matrix
+def create_toy_data(m_size, moduloo):
+    # np.random.seed(0)
+    matrix = np.zeros(shape=m_size, dtype=int)
+    for i in range(m_size[0]):
+        for j in range(m_size[1]):
+            for k in range(m_size[2]):
+                matrix[i, j, k] = np.random.randint(moduloo, size=1)
+    return matrix
 
 
 
 def main():
-    map_ids(wd="/wholebrain/u/mariakaw/SyConn/example_cube1/dict")
+
+    map_ids(wd="/wholebrain/u/mariakaw/SyConn/example_cube1/")
 
     # _map_ids_thread([[[0, 0, 0]], (128, 128, 128)])
 

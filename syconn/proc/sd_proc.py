@@ -29,6 +29,8 @@ from ..handler import basics
 from ..proc.meshes import mesh_chunk
 from . import log_proc
 
+import sys
+
 
 def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                      compute_meshprops=False):
@@ -208,7 +210,10 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     assert obj_type in sd.version_dict
     seg_dataset = sd.get_segmentationdataset(obj_type)
     paths = seg_dataset.so_dir_paths
-
+    "\n\n\n"
+    for i in paths:
+        print(i)
+    "\n\n\n"
     # write cell organell mappings to cell organelle SV attribute dicts
     # Partitioning the work
     multi_params = basics.chunkify(paths, n_jobs)
@@ -272,6 +277,10 @@ def _map_objects_thread(args):
         datatype = np.uint64
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(kd_path)
+
+    print("\n\n\n kd_path= ", kd_path, "\n\n\n")
+    sys.exit("Error message")
+
     seg_dataset = segmentation.SegmentationDataset(obj_type, version=obj_version,
                                                    working_dir=working_dir)
     sv_id_dict = {}
