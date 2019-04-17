@@ -37,7 +37,7 @@ if __name__ == '__main__':
     kd_asym.initialize_from_knossos_path(global_params.config.kd_asym_path)
 
     # get data
-    for example_cube_id in range(3, 4):
+    for example_cube_id in range(1, 3):
         kzip_p = '{}/example_cube{}.k.zip'.format(curr_dir, example_cube_id)
         data_dir = "{}/data{}/".format(curr_dir, example_cube_id)
         os.makedirs(data_dir, exist_ok=True)
