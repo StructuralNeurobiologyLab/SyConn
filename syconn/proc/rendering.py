@@ -1127,14 +1127,10 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
         n_max_co_processes=n_jobs)
     out_files = glob.glob(path_to_out + "/*")
     list_of_views = []
-    for out_file in out_files:
-        with open(out_file, 'rb') as f:
-            print(f)
     out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
     for out_file in out_files2:
         with open(out_file, 'rb') as f:
             list_of_views.append(pkl.load(f))
-            print(f)
     result = []
     for j in list_of_views:
         for i in j:
