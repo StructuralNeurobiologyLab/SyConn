@@ -18,6 +18,20 @@ class data:
         exloc = np.array([5602, 4173, 4474]) * ssv.scaling
         self.exlocs = np.concatenate(ssv.sample_locations())
 
+def sorting_in_descending_order(array):
+    index_array = []
+    for i in range(len(array)):
+        index_array.append(i)
+    for iter_num in range(len(array) - 1, 0, -1):
+        for idx in range(iter_num):
+            if list[idx] < list[idx + 1]:
+                temp = array[idx]
+                array[idx] = array[idx + 1]
+                array[idx + 1] = temp
+                temp = index_array[idx]
+                index_array[idx] = index_array[idx + 1]
+                index_array[idx + 1] = temp
+    return index_array
 
 if __name__=='__main__':
     # TODO: use toy data and improve logging, see test_backend.py
@@ -33,6 +47,10 @@ if __name__=='__main__':
     now2 = time.time()
     print("time for reading data")
     print(now2-now)
+
+    array = [19,2,31,45,6,11,121,27]
+    index_array = sorting_in_descending_order(array)
+    print(index_array)
     """
     i = 0
     exlocs = chunkify_successive(exlocs, 10)
@@ -65,7 +83,7 @@ if __name__=='__main__':
     """
     now3 = time.time()
     print(now3-now2)
-    views = render_sso_coords_generic(ssv, working_dir, exlocs, render_indexviews=render_indexview, verbose=True)
+    #views = render_sso_coords_generic(ssv, working_dir, exlocs, render_indexviews=render_indexview, verbose=True)
 
 #now2 = time.time()
 

@@ -95,6 +95,8 @@ if __name__ == "__main__":
     #for :
     print(seg_cell)
     print(seg_vc)
+    print('atul')
+    print (seg_dict)
     #print(len(seg_cell))
     #print(len(seg_vc))
     #print(seg_dict[0])
