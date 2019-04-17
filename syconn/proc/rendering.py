@@ -18,7 +18,7 @@ from scipy.ndimage.filters import gaussian_filter
 from .image import rgb2gray, apply_clahe
 from . import log_proc
 from .. import global_params
-from ..handler.basics import flatten_list, chunkify_successive
+from ..handler.basics import flatten_list, chunkify_successive, chunkify_successive_split
 from ..handler.compression import arrtolz4string
 from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
     rgb2id_array, id2rgb_array_contiguous
@@ -1106,8 +1106,7 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
     """
     tim = time.time()
     chunk_size = len(rendering_locations) // n_jobs + 1
-    print(chunk_size)
-    params = chunkify_successive(rendering_locations, chunk_size)  # TODO: adapt chunk size in a reasonable way
+    params = chunkify_successive_split(rendering_locations, n_jobs)  # TODO: adapt chunk size in a reasonable way
     ssv_id = ssv.id
     working_dir = wd
     sso_kwargs = {'ssv_id': ssv_id,
@@ -1117,22 +1116,30 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
                       'nb_views': None, 'comp_window': None, 'rot_mat': None,
                      'return_rot_mat': False, 'render_indexviews': render_indexviews}
-    params = [[par, sso_kwargs, render_kwargs, ix] for ix, par in enumerate(params)]
+    param = [[par, sso_kwargs, render_kwargs, ix] for ix, par in enumerate(params[0])]
     tim1 = time.time()
     if verbose:
         log_proc.debug("Time for OTHER COMPUTATION {:.2f}s."
                        "".format(tim1 - tim))
     path_to_out = QSUB_script(
-        params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
+        param, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
         queue=None, script_folder=None, n_cores=1, disable_batchjob=True,
         n_max_co_processes=n_jobs)
     out_files = glob.glob(path_to_out + "/*")
-    results = []
+    list_of_views = []
+    for out_file in out_files:
+        with open(out_file, 'rb') as f:
+            print(f)
     out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
     for out_file in out_files2:
         with open(out_file, 'rb') as f:
-            results.append(pkl.load(f))
-    return results
+            list_of_views.append(pkl.load(f))
+            print(f)
+    result = []
+    for j in list_of_views:
+        for i in j:
+            result.append(i)
+    return result
 
 
 def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None,

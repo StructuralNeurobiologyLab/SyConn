@@ -20,12 +20,17 @@ class data:
 if __name__=='__main__':
     # TODO: use toy data and improve logging, see test_backend.py
     working_dir = "/wholebrain/scratch/areaxfs3/"
-    render_indexview = True
+    render_indexview = False
     now = time.time()
     ssc = SuperSegmentationDataset(working_dir)
-    ssv = ssc.get_super_segmentation_object(29753344)
+    ssv = ssc.get_super_segmentation_object(29833344)
     exlocs = np.concatenate(ssv.sample_locations())
-    exlocs = exlocs[::10]
+    #exlocs = exlocs[::10]
+    example = np.arange(30).reshape((10, 3))
+    print(example)
+    print(example.shape)
+    example = np.array_split(example, 4)
+    print(example)
     print("Example location array:", exlocs.shape)
     print(working_dir)
     now2 = time.time()
@@ -41,14 +46,18 @@ if __name__=='__main__':
         print(i)
         print(params[i-1])
     """
-    view = render_sso_coords_multiprocessing(ssv, working_dir, exlocs, render_indexviews=render_indexview,
-                                      n_jobs=5, verbose=True)
+    view = render_sso_coords_multiprocessing(ssv, working_dir, exlocs, n_jobs=5,
+                                verbose=True, render_indexviews=render_indexview)
+    view1 = render_sso_coords(ssv, exlocs, verbose=True)
     now1 = time.time()
-
+    print(np.array_equal(view, view1))
+    #print(np.sum((view - view1)**2))
     print(now1)
     print("")
     print(now1-now)
-
+    print(len(view))
+    print('hello_atul')
+    print(len(view1))
 #global_params.PYOPENGL_PLATFORM = 'osmesa'
     now2 = time.time()
     print(now2)

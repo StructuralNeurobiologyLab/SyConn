@@ -40,7 +40,7 @@ views = 0  # in case no rendering locations are given
 file = 'file'
 file = file + str(file_store_number)
 if render_indexviews:
-    print("In Render_index")
+    #print("In Render_index")
     del kwargs['add_cellobjects']
     del kwargs['clahe']
     del kwargs['wire_frame']
