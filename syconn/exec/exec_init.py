@@ -88,10 +88,16 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
     so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type='sv')
     multi_params = [[par, so_kwargs] for par in multi_params]
     if generate_sv_meshes:
+        start = time.time()
         _ = qu.QSUB_script(multi_params, "mesh_caching",
                            n_max_co_processes=global_params.NCORE_TOTAL)
+        log.info('Finished mesh caching of {} "{}"-SVs after {:.0f}s.'
+                 ''.format(len(sd.ids), 'cell', time.time() - start))
+    start = time.time()
     _ = qu.QSUB_script(multi_params, "sample_location_caching",
                        n_max_co_processes=global_params.NCORE_TOTAL)
+    log.info('Finished caching of rendering locations after {:.0f}s.'
+             ''.format(time.time() - start))
     # recompute=False: only collect new sample_location property
     sd_proc.dataset_analysis(sd, compute_meshprops=True, recompute=False)
     log.info('Finished preparation of cell SVs after {:.0f}s.'.format(time.time() - start))
@@ -132,19 +138,21 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
         sd_proc.dataset_analysis(sd_co, recompute=True, compute_meshprops=False)
         multi_params = chunkify(sd_co.so_dir_paths, max_n_jobs)
         so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type=co)
+        start = time.time()
         multi_params = [[par, so_kwargs] for par in multi_params]
         _ = qu.QSUB_script(multi_params, "mesh_caching",
                            n_max_co_processes=global_params.NCORE_TOTAL)
+        log.info('Finished mesh caching of {} "{}"-SVs after {:.0f}s.'
+                 ''.format(len(sd_co.ids), co, time.time() - start))
         sd_proc.dataset_analysis(sd_co, recompute=False, compute_meshprops=True)
         # # Old alternative, requires much more reads/writes then above solution
         # sd_proc.dataset_analysis(sd_co, recompute=True, compute_meshprops=True)
 
         # About 0.2 h per object class
-        log.info('Started mapping of {} cellular organelles of type "{}" to '
-                 'cell SVs.'.format(len(sd_co.ids), co))
+        start = time.time()
         sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path,
                                   n_jobs=max_n_jobs)
-        log.info('Finished preparation of {} "{}"-SVs after {:.0f}s.'
-                 ''.format(len(sd_co.ids), co, time.time() - start))
-
+        log.info('Finished mapping of {} cellular organelles of type "{}" to '
+                 'cell SVs after {:.0f}s.'.format(len(sd_co.ids), co,
+                                                  time.time() - start))
 

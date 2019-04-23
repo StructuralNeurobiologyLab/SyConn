@@ -231,7 +231,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
                                     nb_cc_dict[hdf5_name][-1])
     all_times.append(time.time() - time_start)
     step_names.append("extracting max labels")
-    log.debug("Max labels: {}".format(max_labels))
     basics.write_obj2pkl(cset.path_head_folder.rstrip("/") + "/max_labels.pkl",
                          [max_labels])
     #
@@ -287,14 +286,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
             offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
             orig_dtype=np.uint64, unified_labels=False,
             n_max_co_processes=n_max_co_processes)
-
-        # cset.export_cset_to_kd(target_kd, '{}_stitched_components'.format(filename), hdf5names,
-        #                        [global_params.NCORES_PER_NODE // 2, 2],  # somehow it is a nested multiprocess
-        #                        coordinate=offset, size=size,
-        #                        stride=[4 * 128, 4 * 128, 4 * 128],
-        #                        as_raw=False, orig_dtype=np.uint64,
-        #                        unified_labels=False)
-
         all_times.append(time.time() - time_start)
         step_names.append("export KD")
     # --------------------------------------------------------------------------

@@ -352,51 +352,14 @@ def surface_samples(coords, bin_sizes=(2000, 2000, 2000), max_nb_samples=5000,
 
 
 def find_object_properties(cube):
-    """
-    Extracts representative coordinate, bounding box and size for each segmentation objects
-    within `cube`. Ignores ID=0.
-    # TODO: find a way to use bincount and find_objects for very large IDs,
-    see `find_object_properties_OLD` which is faster in principle, but does not scale to large
-    IDs. First time this problem encountered during contact site extraction which are uint64
-    -> Maybe use local remapping of the IDs....
-
-    Parameters
-    ----------
-    cube : np.ndarray
-    3D segmentation data, shape: [N, M, K]
-
-    Returns
-    -------
-    List[Dict]
-        Representative coordinate pointing to an object voxel, bounding box and size
-         of the objects
-
-    """
-    from scipy.ndimage import find_objects
-    mask = cube != 0
-    if np.prod(cube.shape) == 0 or np.sum(mask) == 0:
-        return {}, {}, {}
-
-    ids, cnts = np.unique(cube, return_counts=True)
-
-    bbs = {}
-    rep_coords = {}
-    sizes = {}
-    for ii, obj_id in enumerate(ids):
-        if ii == 0:
-            continue
-        sls = find_objects(cube == obj_id, max_label=1)[0]
-        min_vec = np.array([sl.start for sl in sls], dtype=np.int)  # -1 because bounding boxes start at element with ID 1
-        max_vec = np.array([sl.stop for sl in sls], dtype=np.int)
-        rand_obj_coord = np.transpose(np.nonzero(cube[sls] == obj_id))[0]
-        bbs[obj_id] = np.array([min_vec, max_vec], dtype=np.int)
-        sizes[obj_id] = cnts[ii]
-        rep_coords[obj_id] = min_vec + rand_obj_coord  # TODO: think of another efficient way to get a
-        # more representative coordinate
-    return rep_coords, bbs, sizes
+    try:
+        from . find_object_properties_C import _find_object_properties as _find_object_propertiesC
+        return _find_object_propertiesC(cube)
+    except ImportError:
+        return _find_object_properties(cube)
 
 
-def find_object_properties_OLD(cube):
+def _find_object_properties(cube):
     """
     Extracts representative coordinate, bounding box and size for each segmentation objects
     within `cube`. Ignores ID=0.
@@ -425,10 +388,10 @@ def find_object_properties_OLD(cube):
     cube[mask] = cube[mask] - min_id
     # bincount requires int... TODO: unsafe behaviour for high ID values
     # try:
-    #     cnts = np.bincount(cube.flatten().astype(np.int64))
-    #     ids = np.nonzero(cnts)[0]
+    cnts = np.bincount(cube.flatten().astype(np.int64))
+    ids = np.nonzero(cnts)[0]
     # except ValueError:  # ValueError: array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible size.
-    ids, cnts = np.unique(cube, return_counts=True)
+    # ids, cnts = np.unique(cube, return_counts=True)
     # get bounding boxes
     res = find_objects(
         cube)  # returns a list of bounding boxes, first entry will correspond to ID=1

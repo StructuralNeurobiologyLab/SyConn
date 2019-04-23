@@ -277,6 +277,7 @@ class DynConfig(Config):
         return "%s/%s/" % (global_params.config.working_dir,
                            global_params.BATCH_PROC_SYSTEM)
 
+    @property
     def prior_glia_removal(self):
         try:
             return self.entries['Glia']['prior_glia_removal']
