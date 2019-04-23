@@ -355,6 +355,52 @@ def find_object_properties(cube):
     """
     Extracts representative coordinate, bounding box and size for each segmentation objects
     within `cube`. Ignores ID=0.
+    # TODO: find a way to use bincount and find_objects for very large IDs,
+    see `find_object_properties_OLD` which is faster in principle, but does not scale to large
+    IDs. First time this problem encountered during contact site extraction which are uint64
+    -> Maybe use local remapping of the IDs....
+
+    Parameters
+    ----------
+    cube : np.ndarray
+    3D segmentation data, shape: [N, M, K]
+
+    Returns
+    -------
+    List[Dict]
+        Representative coordinate pointing to an object voxel, bounding box and size
+         of the objects
+
+    """
+    from scipy.ndimage import find_objects
+    mask = cube != 0
+    if np.prod(cube.shape) == 0 or np.sum(mask) == 0:
+        return {}, {}, {}
+
+    ids, cnts = np.unique(cube, return_counts=True)
+
+    bbs = {}
+    rep_coords = {}
+    sizes = {}
+    for ii, obj_id in enumerate(ids):
+        if ii == 0:
+            continue
+        sls = find_objects(cube == obj_id, max_label=1)[0]
+        min_vec = np.array([sl.start for sl in sls], dtype=np.int)  # -1 because bounding boxes start at element with ID 1
+        max_vec = np.array([sl.stop for sl in sls], dtype=np.int)
+        rand_obj_coord = np.transpose(np.nonzero(cube[sls] == obj_id))[0]
+        bbs[obj_id] = np.array([min_vec, max_vec], dtype=np.int)
+        sizes[obj_id] = cnts[ii]
+        rep_coords[obj_id] = min_vec + rand_obj_coord  # TODO: think of another efficient way to get a
+        # more representative coordinate
+    return rep_coords, bbs, sizes
+
+
+def find_object_properties_OLD(cube):
+    """
+    Extracts representative coordinate, bounding box and size for each segmentation objects
+    within `cube`. Ignores ID=0.
+    # TODO: find a way to use bincount and find_objects for very large IDs
 
     Parameters
     ----------
@@ -373,13 +419,19 @@ def find_object_properties(cube):
     if np.prod(cube.shape) == 0 or np.sum(mask) == 0:
         return {}, {}, {}
     # get sizes
-    min_id = np.min(cube[mask]) - 1
+    min_id = np.min(cube[mask]) - 1  # -1 to not set the lowest ID to background
+    log_reps.debug("Cube size: {}, min/max ID: {}/{}".format(cube.shape, min_id + 1,
+                                                             np.max(cube)))
     cube[mask] = cube[mask] - min_id
     # bincount requires int... TODO: unsafe behaviour for high ID values
-    cnts = np.bincount(cube.flatten().astype(np.int64))
-    ids = np.nonzero(cnts)[0]
+    # try:
+    #     cnts = np.bincount(cube.flatten().astype(np.int64))
+    #     ids = np.nonzero(cnts)[0]
+    # except ValueError:  # ValueError: array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible size.
+    ids, cnts = np.unique(cube, return_counts=True)
     # get bounding boxes
-    res = find_objects(cube)  # returns a list of bounding boxes, first entry will correspond to ID=1
+    res = find_objects(
+        cube)  # returns a list of bounding boxes, first entry will correspond to ID=1
 
     bbs = {}
     rep_coords = {}
@@ -388,10 +440,14 @@ def find_object_properties(cube):
         if ii == 0:
             continue
         obj_id = int(ii + min_id)
-        sls = res[int(ii-1)]
-        min_vec = np.array([sl.start for sl in sls], dtype=np.int)  # -1 because bounding boxes start at element with ID 1
+        # sls = res[int(ii-1)]  # Old version which does not scale to huge IDs
+        sls = res[int(ii - 1)]
+        min_vec = np.array([sl.start for sl in sls],
+                           dtype=np.int)  # -1 because bounding boxes start at element with ID 1
         max_vec = np.array([sl.stop for sl in sls], dtype=np.int)
+        rand_obj_coord = np.transpose(np.nonzero(cube[sls] == ii))[0]
         bbs[obj_id] = np.array([min_vec, max_vec], dtype=np.int)
         sizes[obj_id] = cnts[ii]
-        rep_coords[obj_id] = min_vec  # TODO: think of another efficient way to get a more representative coordinate
+        rep_coords[
+            obj_id] = min_vec + rand_obj_coord  # TODO: think of another efficient way to get a more representative coordinate
     return rep_coords, bbs, sizes

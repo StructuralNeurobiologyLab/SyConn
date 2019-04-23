@@ -275,7 +275,7 @@ def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue
                              syn_threshold])
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess(
+        results = sm.start_multiprocess_imap(
             map_synssv_objects_thread,
             multi_params, nb_cpus=nb_cpus)
 

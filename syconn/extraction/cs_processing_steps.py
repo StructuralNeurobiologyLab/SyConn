@@ -31,7 +31,7 @@ from .. import global_params
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                          qsub_pe=None, qsub_queue=None,
-                                         n_max_co_processes=None):
+                                         n_max_co_processes=None, debug=False):
     """
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
@@ -45,6 +45,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     qsub_queue : str
     n_max_co_processes : int
         Number of parallel jobs
+    debug : bool
     """
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
@@ -52,40 +53,35 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
 
     multi_params = []
 
-    for ids_small_chunk in chunkify(ssd.ssv_ids, 2000):
+    for ids_small_chunk in chunkify(ssd.ssv_ids, global_params.NCORE_TOTAL):
         multi_params.append([wd, obj_version, ssd_version, ids_small_chunk])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
             _collect_properties_from_ssv_partners_thread, multi_params,
-            nb_cpus=n_max_co_processes)
-    elif qu.batchjob_enabled():
-        _ = qu.QSUB_script(
-            multi_params, "collect_properties_from_ssv_partners", pe=qsub_pe,
-            queue=qsub_queue, script_folder=None,
-            n_max_co_processes=n_max_co_processes)
+            nb_cpus=n_max_co_processes, debug=debug)
     else:
-        raise Exception("QSUB not available")
+        _ = qu.QSUB_script(
+            multi_params, "collect_properties_from_ssv_partners",
+            n_max_co_processes=n_max_co_processes)
 
     # iterate over paths with syn
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version=obj_version)
 
     multi_params = []
-    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, 2000):
+    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, global_params.NCORE_TOTAL):
         multi_params.append([so_dir_paths, wd, obj_version,
                              ssd_version])
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
             _from_cell_to_syn_dict, multi_params,
             nb_cpus=n_max_co_processes)
-    elif qu.batchjob_enabled():
+    else:
         _ = qu.QSUB_script(
             multi_params, "from_cell_to_syn_dict", pe=qsub_pe,
             queue=qsub_queue, script_folder=None,
             n_max_co_processes=n_max_co_processes)
-    else:
-        raise Exception("QSUB not available")
 
     # delete cache_dc
     _delete_all_cache_dc(ssd)
@@ -219,8 +215,9 @@ def filter_relevant_syn(sd_syn, ssd):
     """
     # get all cs IDs belonging to syn objects and then retrieve corresponding
     # SVs IDs via bit shift
-    sv_ids = ch.sv_id_to_partner_ids_vec([syn.lookup_in_attribute_dict('cs_id')
-                                          for syn in sd_syn.sos])
+
+    syn_cs_ids = sd_syn.load_cached_data('cs_id')
+    sv_ids = ch.sv_id_to_partner_ids_vec(syn_cs_ids)
 
     syn_ids = sd_syn.ids.copy()
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
@@ -305,13 +302,20 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
         os.makedirs(sd_syn_ssv.so_storage_path + p)
 
     rel_synssv_to_syn_ids_items = list(rel_synssv_to_syn_ids.items())
-    i_block = 0
-    multi_params = []
-    for block in [rel_synssv_to_syn_ids_items[i:i + stride]
-                  for i in range(0, len(rel_synssv_to_syn_ids_items), stride)]:
-        multi_params.append([wd, block, voxel_rel_paths[block_steps[i_block]: block_steps[i_block+1]],
-                             syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm])
-        i_block += 1
+    # # OLD
+    # i_block = 0
+    # multi_params = []
+    # for block in [rel_synssv_to_syn_ids_items[i:i + stride]
+    #               for i in range(0, len(rel_synssv_to_syn_ids_items), stride)]:
+    #     multi_params.append([wd, block, voxel_rel_paths[block_steps[i_block]: block_steps[i_block+1]],
+    #                          syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm])
+    #     i_block += 1
+
+    # NEW
+    n_used_paths = np.min([len(rel_synssv_to_syn_ids_items), len(voxel_rel_paths)])
+    rel_synssv_to_syn_ids_items_chunked = chunkify(rel_synssv_to_syn_ids_items, n_used_paths)
+    multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii:ii + 1],  # only get one element
+                    syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm) for ii in range(n_used_paths)]
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread,
                                        multi_params, nb_cpus=nb_cpus)
@@ -1244,8 +1248,8 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
     multi_params = [(so_dir_paths, wd, obj_version, mi_version, vc_version, ssd_version, max_vx_dist_nm,
                      max_rep_coord_dist_nm) for so_dir_paths in multi_params]
 
-    if qu.batchjob_enabled():
-        results = sm.start_multiprocess(_map_objects_to_synssv_thread,
+    if not qu.batchjob_enabled():
+        results = sm.start_multiprocess_imap(_map_objects_to_synssv_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
     else:
@@ -1431,7 +1435,7 @@ def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
                     multi_params]
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess(_classify_synssv_objects_thread,
+        results = sm.start_multiprocess_imap(_classify_synssv_objects_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
     else:

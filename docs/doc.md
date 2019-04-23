@@ -47,9 +47,8 @@ cd to `SyConn/scripts/example_run/` and run
 python start.py
 ```
 
-Based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, probability maps of cell organelles
-(mitochondria, vesicle clouds and synaptic junctions) and synapse type (inhibitory, excitatory) the example
-script analyses the cell wiring through subsequent steps.
+The example script analyzes the EM data based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, probability maps of cell organelles
+(mitochondria, vesicle clouds and synaptic junctions) and synapse type (inhibitory, excitatory).
 
 On a machine with 20 CPUs (Intel(R) Xeon(R) @ 2.60GHz) and 2 GPUs (GeForce GTX 980 Ti) SyConn
 finished the following analysis steps for an example cube with shape \[400 400 600] after 00h:09min:32s.

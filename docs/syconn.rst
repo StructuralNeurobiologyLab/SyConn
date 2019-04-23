@@ -15,7 +15,6 @@ Subpackages
     syconn.reps
     syconn.ui
     syconn.utils
-    syconn.QSUB_scripts
 
 
 Module contents

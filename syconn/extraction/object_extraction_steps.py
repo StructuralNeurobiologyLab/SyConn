@@ -1032,7 +1032,7 @@ def _combine_voxels_thread(args):
 def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                    n_folders_fs=10000, workfolder=None, overlaydataset_path=None,
                    chunk_list=None, suffix="", n_chunk_jobs=2000, sd_version=0,
-                   use_work_dir=True, qsub_pe=None, qsub_queue=None, n_cores=1,
+                   use_work_dir=True, n_cores=1,
                    n_max_co_processes=None):
     """
     Creates a SegmentationDataset of type dataset_names
@@ -1106,9 +1106,8 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
                                         multi_params, nb_cpus=n_max_co_processes, verbose=True)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params, "extract_voxels_combined",
-                                     pe=qsub_pe, queue=qsub_queue, n_cores=n_cores,
-                                     script_folder=None, n_max_co_processes=n_max_co_processes)
+        path_to_out = qu.QSUB_script(multi_params, "extract_voxels_combined", n_cores=n_cores,
+                                     max_iterations=10, n_max_co_processes=n_max_co_processes)
 
 
 def _extract_voxels_combined_thread(args):
@@ -1251,7 +1250,7 @@ def _extract_voxels_combined_thread_OLD(args):
 
 def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
                       offset=None, size=None, n_max_co_processes=None,
-                      stride=[4 * 128, 4 * 128, 4 * 128],
+                      stride=[4 * 128, 4 * 128, 4 * 128], overwrite=False,
                       as_raw=False, fast_downsampling=False,
                       unified_labels=False, orig_dtype=np.uint8):
     """
@@ -1271,6 +1270,7 @@ def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
     stride :
     as_raw :
     fast_downsampling :
+    overwrite :
     unified_labels :
     orig_dtype :
 
@@ -1298,8 +1298,8 @@ def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
                 coords = np.array([coordx, coordy, coordz])
                 multi_params.append([coords, stride, cset.path_head_folder,
                                      kd.knossos_path, name, hdf5names, as_raw,
-                                     unified_labels, n_cores, orig_dtype,
-                                     fast_downsampling])
+                                     unified_labels, 1, orig_dtype,
+                                     fast_downsampling, overwrite])
 
     qu.QSUB_script(multi_params, "export_cset_to_kd", n_cores=n_cores,
                    n_max_co_processes=n_max_co_processes)

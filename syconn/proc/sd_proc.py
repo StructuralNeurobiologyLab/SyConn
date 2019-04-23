@@ -612,7 +612,7 @@ def _export_sd_to_knossosdataset_thread(args):
 
 
 def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
-                         trafo_dict_path=None, stride=10,
+                         trafo_dict_path=None, stride=100,
                          qsub_pe=None, qsub_queue=None, nb_cpus=None,
                          n_max_co_processes=None):
     # TODO: remove `qsub_pe`and `qsub_queue`
@@ -642,8 +642,8 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                              kd_asym_path, kd_sym_path, trafo_dict_path])
 
     # Running workers - Extracting mapping
-    if qu.batchjob_enabled():
-        results = sm.start_multiprocess(_extract_synapse_type_thread,
+    if not qu.batchjob_enabled():
+        results = sm.start_multiprocess_imap(_extract_synapse_type_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
     else:
@@ -691,12 +691,16 @@ def _extract_synapse_type_thread(args):
                 vxl -= trafo_dict[so_id]
                 vxl = vxl[:, [1, 0, 2]]
             # TODO: remvoe try-except
-            try:
-                asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl))
-                sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl))
-            except:
-                log_proc.error("Failed to read raw cubes during synapse type "
-                               "extraction.")
+            if global_params.config.syntype_available:
+                try:
+                    asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl))
+                    sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl))
+                except:
+                    log_proc.error("Failed to read raw cubes during synapse type "
+                                   "extraction.")
+                    sym_prop = 0
+                    asym_prop = 0
+            else:
                 sym_prop = 0
                 asym_prop = 0
 

@@ -425,7 +425,7 @@ def from_probabilities_to_objects_parameter_sweeping(
 
 def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, dataset_names=None,
                         overlaydataset_path=None, chunk_list=None, offset=None, log=None,
-                        size=None, suffix="", qsub_pe=None, qsub_queue=None, workfolder=None,
+                        size=None, suffix="", workfolder=None,
                         n_max_co_processes=None, n_chunk_jobs=5000, use_combined_extraction=True):
     """
     # TODO: add SegmentationDataset initialization (-> `dataset_analysis` etc.)
@@ -485,8 +485,7 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
         time_start = time.time()
         oes.extract_voxels(cset, filename, hdf5names, dataset_names=dataset_names,
                            overlaydataset_path=overlaydataset_path,
-                           chunk_list=chunk_list, suffix=suffix, qsub_pe=qsub_pe,
-                           qsub_queue=qsub_queue, workfolder=workfolder,
+                           chunk_list=chunk_list, suffix=suffix, workfolder=workfolder,
                            n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
                            n_max_co_processes=n_max_co_processes)
         all_times.append(time.time() - time_start)
@@ -497,7 +496,6 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
         time_start = time.time()
         oes.combine_voxels(workfolder,
                            hdf5names, dataset_names=dataset_names,
-                           qsub_pe=qsub_pe, qsub_queue=qsub_queue,
                            n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
                            n_max_co_processes=n_max_co_processes)
         all_times.append(time.time() - time_start)
@@ -506,8 +504,8 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
         time_start = time.time()
         oes.extract_voxels_combined(cset, filename, hdf5names, overlaydataset_path=overlaydataset_path,
                                     dataset_names=dataset_names, chunk_list=chunk_list, suffix=suffix,
-                                    qsub_pe=qsub_pe, qsub_queue=qsub_queue, workfolder=workfolder,
-                                    n_folders_fs=n_folders_fs, n_chunk_jobs=n_chunk_jobs,
+                                    workfolder=workfolder, n_folders_fs=n_folders_fs,
+                                    n_chunk_jobs=n_chunk_jobs,
                                     n_max_co_processes=n_max_co_processes)
         all_times.append(time.time() - time_start)
         step_names.append("extract voxels combined")

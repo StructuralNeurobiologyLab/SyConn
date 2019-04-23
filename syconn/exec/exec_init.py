@@ -112,7 +112,9 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
         # `from_probabilities_to_objects` will export a KD at `path`, remove if already existing
         path = "{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)
         if os.path.isdir(path):
+            log.debug('Found existing KD at {}. Romiving it now.'.format(path))
             shutil.rmtree(path)
+            log.debug('Done')
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_without_conf(path, kd.boundary, kd.scale, kd.experiment_name, mags=[1, ])
         target_kd = knossosdataset.KnossosDataset()

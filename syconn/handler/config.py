@@ -180,8 +180,11 @@ class DynConfig(Config):
         -------
         str
         """
-        # self._check_actuality()
-        return self.entries['Paths']['init_rag']
+        self._check_actuality()
+        p = self.entries['Paths']['init_rag']
+        if len(p) == 0:
+            p = self.working_dir + "init_rag.txt"
+        return p
 
     # --------- CLASSIFICATION MODELS
     @property
@@ -274,11 +277,17 @@ class DynConfig(Config):
         return "%s/%s/" % (global_params.config.working_dir,
                            global_params.BATCH_PROC_SYSTEM)
 
+    def prior_glia_removal(self):
+        try:
+            return self.entries['Glia']['prior_glia_removal']
+        except KeyError:
+            return True
+
 
 def get_default_conf_str(example_wd, scaling, py36path="", syntype_avail=True,
-                         use_large_fov_views_ct=True, use_new_renderings_locs=True,
+                         use_large_fov_views_ct=False, use_new_renderings_locs=False,
                          kd_seg=None, kd_sym=None, kd_asym=None, kd_sj=None, kd_mi=None,
-                         kd_vc=None, init_rag_p=""):
+                         kd_vc=None, init_rag_p="", prior_glia_removal=False):
     """
     Default SyConn config and type specification, placed in the working directory.
 
@@ -307,8 +316,8 @@ syn = 0
 syn_ssv = 0
 mi = 0
 ssv = 0
-cs_agg = 0
 ax_gt = 0
+cs = 0
 
 [Paths]
 kd_seg = {}
@@ -353,10 +362,13 @@ allow_skel_gen = True
 [Views]
 use_large_fov_views_ct = {}
 use_new_renderings_locs = {}
+
+[Glia]
+prior_glia_removal = {}
     """.format(kd_seg, kd_sym, kd_asym, kd_sj, kd_vc, kd_mi, init_rag_p,
                py36path, scaling[0], scaling[1], scaling[2],
                str(syntype_avail), str(use_large_fov_views_ct),
-               str(use_new_renderings_locs))
+               str(use_new_renderings_locs), str(prior_glia_removal))
 
     configspec_str = """
 [Versions]
@@ -390,6 +402,9 @@ allow_skel_gen = boolean
 [Views]
 use_large_fov_views_ct = boolean
 use_new_renderings_locs = boolean
+
+[Glia]
+prior_glia_removal = boolean
 """
     return config_str, configspec_str
 

@@ -10,6 +10,7 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
+import shutil
 import glob
 import numpy as np
 import scipy.ndimage
@@ -20,6 +21,7 @@ import os
 from ..mp import batchjob_utils as qu
 from ..handler import compression
 from ..handler.basics import kd_factory
+from . object_extraction_steps import export_cset_to_kd_batchjob
 from . import log_extraction
 from .object_extraction_wrapper import from_ids_to_objects, calculate_chunk_numbers_for_box
 from ..mp.mp_utils import start_multiprocess_imap
@@ -28,6 +30,7 @@ try:
 except ImportError as e:
     log_extraction.warning('Could not import cython version of `block_processing`.')
     from .block_processing import kernel, process_block, process_block_nonzero
+from syconn import global_params
 
 
 def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=None,
@@ -62,7 +65,7 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
 
     if not qu.batchjob_enabled():
         _ = start_multiprocess_imap(_contact_site_detection_thread, multi_params,
-                                             debug=False, nb_cpus=n_max_co_processes)
+                                    debug=False, nb_cpus=n_max_co_processes)
     else:
         _ = qu.QSUB_script(multi_params, "contact_site_detection",
                            script_folder=None, n_max_co_processes=n_max_co_processes)
@@ -109,11 +112,10 @@ def detect_cs(arr):
     return cs_seg
 
 
-# TODO: use from_ids_to_objects
 def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
-                              n_folders_fs=10000, suffix="", overlaydataset_path=None,
-                              n_max_co_processes=None, n_chunk_jobs=5000, size=None,
-                              offset=None):
+                              n_folders_fs=10000, suffix="",
+                              n_max_co_processes=None, n_chunk_jobs=2000, size=None,
+                              offset=None, log=None):
     """
 
     Parameters
@@ -124,7 +126,6 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     hdf5name :
     n_folders_fs :
     suffix :
-    overlaydataset_path :
     n_max_co_processes :
     n_chunk_jobs :
     size :
@@ -134,8 +135,33 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     -------
 
     """
+    if log is None:
+        log = log_extraction
+    chunky.save_dataset(cset)
+    # init CS segmentation KD
+    kd = kd_factory(global_params.config.kd_seg_path)
+    path = "{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, filename)
+    if os.path.isdir(path):
+        log.debug('Found existing KD at {}. Removing it now.'.format(path))
+        shutil.rmtree(path)
+        log.debug('Done')
+    target_kd = knossosdataset.KnossosDataset()
+    target_kd.initialize_without_conf(path, kd.boundary, kd.scale, kd.experiment_name, mags=[1, ])
+    target_kd = knossosdataset.KnossosDataset()
+    target_kd.initialize_from_knossos_path(path)
 
-    from_ids_to_objects(cset, filename, overlaydataset_path=overlaydataset_path, n_chunk_jobs=n_chunk_jobs,
-                        hdf5names=[hdf5name], n_max_co_processes=n_max_co_processes, workfolder=working_dir,
+    # convert Chunkdataset to KD
+    export_cset_to_kd_batchjob(
+        cset, target_kd, '{}'.format(filename), [hdf5name],
+        offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
+        orig_dtype=np.uint64, unified_labels=False,
+        n_max_co_processes=n_max_co_processes)
+    log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset ({})'.format(
+        cset.path_head_folder, target_kd.knossos_path))
+
+    # get CS SD
+    from_ids_to_objects(cset, filename, overlaydataset_path=target_kd.conf_path,
+                        n_chunk_jobs=n_chunk_jobs, hdf5names=[hdf5name],
+                        n_max_co_processes=n_max_co_processes, workfolder=working_dir,
                         n_folders_fs=n_folders_fs, use_combined_extraction=True, suffix=suffix,
-                        size=size, offset=offset)
+                        size=size, offset=offset, log=log)

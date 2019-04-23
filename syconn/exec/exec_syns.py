@@ -36,7 +36,7 @@ def run_matrix_export():
     # synssv to SSVs) -> saves finding SSV ID indices in synapse arrays (->
     # slow for many synapses)
     cps.collect_properties_from_ssv_partners(global_params.config.working_dir,
-                                             qsub_pe='openmp')
+                                             debug=True)
     #
     # collect new object attributes collected above partner axoness, celltypes,
     # synapse probabilities etc, no need to compute size/rep_coord etc. ->
@@ -109,7 +109,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
     cs_cset = chunky.load_dataset(cd_dir, update_paths=True)
     #
     # TODO: change stride to n_jobs
-    # # This creates an SD of type 'syn', currently ~6h, will hopefully be sped up after refactoring
+    # This creates an SD of type 'syn', currently ~6h, will hopefully be sped up after refactoring
     cs_processing_steps.syn_gen_via_cset(cs_sd, sj_sd, cs_cset, resume_job=False,
                                          nb_cpus=2, n_folders_fs=n_folders_fs,
                                          n_chunk_jobs=max_n_jobs)

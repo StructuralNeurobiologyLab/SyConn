@@ -150,19 +150,22 @@ if __name__ == '__main__':
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
     # START SyConn
-    if 0:  # TODO: work-in glia removal
-        log.info('Step 0.5/8 - Glia separation')
-        exec_multiview.run_glia_rendering()
-        exec_multiview.run_glia_prediction()
-        exec_multiview.run_glia_splitting()
-        time_stamps.append(time.time())
-        step_idents.append('Glia separation')
-
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.run_create_sds(generate_sv_meshes=True, chunk_size=chunk_size,
                              n_folders_fs=n_folders_fs, max_n_jobs=max_n_jobs)
     time_stamps.append(time.time())
     step_idents.append('SD generation')
+
+    # if 1:  # TODO: work-in glia removal, TODO: filter SVs prior to glia analysis
+    #     log.info('Step 0.5/8 - Glia separation')
+    #     exec_multiview.run_glia_rendering()
+    #     exec_multiview.run_glia_prediction(e3=True)
+    #     exec_multiview.run_glia_splitting()
+    #     time_stamps.append(time.time())
+    #     step_idents.append('Glia separation')
+
+    time_stamps.append(time.time())
+    step_idents.append('Glia removal')
 
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
     exec_multiview.run_create_neuron_ssd(prior_glia_removal=False)

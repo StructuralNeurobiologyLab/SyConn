@@ -272,7 +272,7 @@ latex_elements = {
 #  author, documentclass [howto, manual, or own class]).
 latex_documents = [
     (master_doc, 'SyConn.tex', u'SyConn Documentation',
-     u'Philipp Schubert, Sven Dorkenwald, Jörgen Kornfeld', 'manual'),
+     u'Philipp Schubert, Jörgen Kornfeld', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of

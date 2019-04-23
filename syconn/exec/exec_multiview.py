@@ -431,11 +431,11 @@ def run_glia_prediction(e3=False):
 
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for par in
                     multi_params]
-    if e3 == True:
-        path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
-                                     n_max_co_processes=15, pe="openmp", queue=None,
-                                     script_folder=None, n_cores=10,
-                                     suffix="_glia", additional_flags="--gres=gpu:1")  # removed -V
+    if e3 is True:
+        qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
+                       n_max_co_processes=2 * global_params.NNODES_TOTAL,
+                       script_folder=None, n_cores=global_params.NCORES_PER_NODE,
+                       suffix="_glia", additional_flags="--gres=gpu:2")  # removed -V
     else:
         # randomly assign to gpu 0 or 1
         for par in multi_params:
@@ -443,12 +443,12 @@ def run_glia_prediction(e3=False):
             # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
             mk["init_gpu"] = 0
         path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
-                                     n_max_co_processes=25, pe="openmp",
-                                     queue=None, n_cores=10, suffix="_glia",
+                                     n_max_co_processes=2 * global_params.NNODES_TOTAL, pe="openmp",
+                                     queue=None, n_cores=global_params.NCORE_TOTAL, suffix="_glia",
                                      script_folder=None,
-                                     additional_flags="--gres=gpu:1")  # removed -V    
+                                     additional_flags="--gres=gpu:2")  # removed -V
     log.info('Finished glia prediction. Checking completeness.')
-    res = find_missing_sv_attributes(sd, pred_key, n_cores=10)
+    res = find_missing_sv_attributes(sd, pred_key, n_cores=global_params.NCORES_PER_NODE)
     if len(res) > 0:
         log.error("Attribute '{}' missing for follwing"
                   " SVs:\n{}".format(pred_key, res))
@@ -502,7 +502,9 @@ def run_glia_splitting():
              "".format(global_params.config.working_dir + "/glia/"))
 
 
-def run_glia_rendering():
+def run_glia_rendering(max_n_jobs=None):
+    if max_n_jobs is None:
+        max_n_jobs = 2 * global_params.NCORE_TOTAL
     log = initialize_logging('glia_view_rendering', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     np.random.seed(0)
@@ -541,14 +543,18 @@ def run_glia_rendering():
 
     # generate parameter for view rendering of individual SSV
     log.info("Starting view rendering.")
-    multi_params = []
-    for cc in nx.connected_component_subgraphs(G):
-        multi_params.append(cc)
-    multi_params = np.array(multi_params)
+    multi_params = list(nx.connected_component_subgraphs(G))
+    big_ssv = []
+    small_ssv = []
+    for g in multi_params:
+        if g.number_of_nodes() > RENDERING_MAX_NB_SV:
+            big_ssv.append(g)
+        else:
+            small_ssv.append(g)
 
-    # identify huge SSVs and process them individually on whole cluster
-    nb_svs = np.array([g.number_of_nodes() for g in multi_params])
-    big_ssv = multi_params[nb_svs > RENDERING_MAX_NB_SV]
+    # # identify huge SSVs and process them individually on whole cluster
+    # nb_svs = np.array([g.number_of_nodes() for g in multi_params])
+    # big_ssv = multi_params[nb_svs > RENDERING_MAX_NB_SV]
 
     for kk, g in enumerate(big_ssv[::-1]):
         # Create SSV object
@@ -564,22 +570,25 @@ def run_glia_rendering():
                            sso.get_seg_obj("sv", e[1]))
         sso._rag = new_G
         sso.render_views(add_cellobjects=False, cellobjects_only=False,
-                         skip_indexviews=True, woglia=False,
-                         qsub_pe="openmp", overwrite=True, qsub_co_jobs=global_params.NCORE_TOTAL)
+                         skip_indexviews=True, woglia=False, overwrite=True,
+                         qsub_co_jobs=global_params.NCORE_TOTAL)
 
     # render small SSV without overhead and single cpus on whole cluster
-    multi_params = multi_params[nb_svs <= RENDERING_MAX_NB_SV]
+    multi_params = small_ssv
     np.random.shuffle(multi_params)
-    multi_params = chunkify(multi_params, 2000)
+    multi_params = chunkify(multi_params, max_n_jobs)
 
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
+    # TODO: distinguish egl vs osmesa and run this in parallel for EGL
     multi_params = [(ixs, global_params.config.working_dir, version) for ixs in multi_params]
     path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
-                                 n_max_co_processes=global_params.NCORE_TOTAL)
+                                 n_max_co_processes=global_params.NCORE_TOTAL,
+                                 n_cores=global_params.NCORES_PER_NODE,
+                                 additional_flags="--gres=gpu:2" )
 
     # check completeness
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
-    res = find_missing_sv_views(sd, woglia=False, n_cores=10)
+    res = find_missing_sv_views(sd, woglia=False, n_cores=global_params.NCORE_TOTAL)
     missing_not_contained_in_rag = []
     missing_contained_in_rag = []
     for el in res:
@@ -595,6 +604,8 @@ def run_glia_rendering():
               "{}".format(missing_contained_in_rag)
         log.error(msg)
         raise RuntimeError(msg)
+    else:
+        log.info('All SVs now conain views required for glia prediction.')
 
 
 def axoness_pred_exists(sv):

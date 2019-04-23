@@ -46,7 +46,7 @@ NCORE_TOTAL = NNODES_TOTAL * NCORES_PER_NODE
 NGPU_TOTAL = NNODES_TOTAL * NGPUS_PER_NODE
 
 backend = "FS"  # File system
-PYOPENGL_PLATFORM = 'egl'  # Rendering
+PYOPENGL_PLATFORM = 'egl'  # Rendering: 'egl' or 'osmesa'
 DISABLE_LOCKING = False
 
 # --------- LOGGING

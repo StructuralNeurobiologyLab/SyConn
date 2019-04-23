@@ -7,6 +7,7 @@
 
 import sys
 import numpy as np
+import os
 import shutil
 try:
     import cPickle as pkl
@@ -47,7 +48,8 @@ for ssv_ix in ch:
         ssvs_small.append(sso)
 
 # render huge SSVs in parallel, multiple jobs per SSV
-n_parallel_jobs = global_params.NCORES_PER_NODE  # TODO: add as soon as EGL ressource allocation
+n_parallel_jobs = global_params.NCORES_PER_NODE  # TODO: add as soon as EGL resource allocation
+# works
 # works # // global_params.NGPUS_PER_NODE
 for ssv in ssvs_large:
     render_sso_coords_multiprocessing(ssvs_large, wd, n_parallel_jobs,
@@ -62,12 +64,14 @@ if len(ssvs_small) != 0:
     multi_params = [ssv.id for ssv in ssvs_small]
     multi_params = chunkify(multi_params, n_parallel_jobs)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
-    multi_params = [(ixs, wd) for ixs in multi_params]
+    multi_params = [(ixs, wd, render_kwargs) for ixs in multi_params]
     path_out = QSUB_script(
         multi_params, "render_views", suffix="_SSV{}".format(ssvs_small[0].id),
-        queue=None, script_folder=None, n_cores=1, disable_batchjob=True,
+        n_cores=1, disable_batchjob=True,
         n_max_co_processes=n_parallel_jobs)
-    shutil.rmtree(path_out + "/..", ignore_errors=True)
+    folder_del = os.path.abspath(path_out + "/../")
+    shutil.rmtree(folder_del, ignore_errors=True)
+    # TODO: this call leads to an error -> investigate further
     # start_multiprocess_obj('render_views', [[ssv, render_kwargs] for ssv in ssvs_small],
     #                        nb_cpus=n_parallel_jobs)
 with open(path_out_file, "wb") as f:

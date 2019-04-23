@@ -1313,26 +1313,21 @@ class SuperSegmentationObject(object):
                 log_reps.info("Rendering huge SSO. {} SVs left to process"
                               ".".format(len(self.svs)))
             params = [[so.id for so in el] for el in part]
-            if qsub_pe is None:
-                raise RuntimeError('QSUB has to be enabled when processing '
-                                   'huge SSVs.')
-            elif qu.batchjob_enabled():
-                params = chunkify(params, 2000)
-                so_kwargs = {'version': self.svs[0].version,
-                             'working_dir': self.working_dir,
-                             'obj_type': self.svs[0].type}
-                render_kwargs = {"overwrite": overwrite, 'woglia': woglia,
-                                 "render_first_only": global_params.SUBCC_CHUNK_SIZE_BIG_SSV,
-                                 'add_cellobjects': add_cellobjects,
-                                 "cellobjects_only": cellobjects_only,
-                                 'skip_indexviews': skip_indexviews}
-                params = [[par, so_kwargs, render_kwargs] for par in params]
-                qu.QSUB_script(
-                    params, "render_views_partial", suffix="_SSV{}".format(self.id),
-                    pe=qsub_pe, queue=None, script_folder=None, n_cores=2,
-                    n_max_co_processes=qsub_co_jobs, resume_job=resume_job)
-            else:
-                raise Exception("QSUB not available")
+
+            params = chunkify(params, 2000)
+            so_kwargs = {'version': self.svs[0].version,
+                         'working_dir': self.working_dir,
+                         'obj_type': self.svs[0].type}
+            render_kwargs = {"overwrite": overwrite, 'woglia': woglia,
+                             "render_first_only": global_params.SUBCC_CHUNK_SIZE_BIG_SSV,
+                             'add_cellobjects': add_cellobjects,
+                             "cellobjects_only": cellobjects_only,
+                             'skip_indexviews': skip_indexviews}
+            params = [[par, so_kwargs, render_kwargs] for par in params]
+            qu.QSUB_script(
+                params, "render_views_partial", suffix="_SSV{}".format(self.id),
+                pe=qsub_pe, queue=None, script_folder=None, n_cores=2,
+                n_max_co_processes=qsub_co_jobs, resume_job=resume_job)
         else:
             # render raw data
             render_sampled_sso(self, add_cellobjects=add_cellobjects,
