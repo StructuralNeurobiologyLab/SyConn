@@ -23,7 +23,7 @@ if __name__=='__main__':
     render_indexview = False
     now = time.time()
     ssc = SuperSegmentationDataset(working_dir)
-    ssv = ssc.get_super_segmentation_object(29833344)
+    ssv = ssc.get_super_segmentation_object(29753344)
     exlocs = np.concatenate(ssv.sample_locations())
     #exlocs = exlocs[::10]
     example = np.arange(30).reshape((10, 3))
@@ -55,9 +55,15 @@ if __name__=='__main__':
     print(now1)
     print("")
     print(now1-now)
-    print(len(view))
+    print(view[0])
+    print(view1[0])
+    print(np.array_equal(view[0], view1[0]))
+    print(len(view[0]))
     print('hello_atul')
-    print(len(view1))
+    print(len(view1[0]))
+    print('real trial')
+    print(np.array_equiv(view, view1))
+    print(np.array_equiv(view[1001], view1[1001]))
 #global_params.PYOPENGL_PLATFORM = 'osmesa'
     now2 = time.time()
     print(now2)
