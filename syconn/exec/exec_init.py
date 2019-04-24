@@ -21,7 +21,6 @@ from syconn.mp import batchjob_utils as qu
 from syconn.handler.basics import chunkify, kd_factory
 
 
-# TODO: make it work with new SyConn
 def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
                    generate_sv_meshes=False, load_cellorganelles_from_kd_overlaycubes=False,
                    transf_func_kd_overlay=None, cube_of_interest_bb=None):
@@ -59,8 +58,6 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
-    # TODO: get rid of explicit voxel extraction, all info necessary should be extracted
-    #  at the beginning, e.g. size, bounding box etc and then refactor to only use those cached attributes!
     # resulting ChunkDataset, required for SV extraction --
     # Object extraction - 2h, the same has to be done for all cell organelles
     cd_dir = global_params.config.working_dir + "chunkdatasets/sv/"
@@ -81,7 +78,6 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
 
     log.info("Extracted {} cell SVs. Preparing rendering locations "
              "(and meshes if not provided).".format(len(sd.ids)))
-    start = time.time()
     # chunk them
     multi_params = chunkify(sd.so_dir_paths, max_n_jobs)
     # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
@@ -105,7 +101,6 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
     if transf_func_kd_overlay is None:
         transf_func_kd_overlay = {k: None for k in global_params.existing_cell_organelles}
     for co in global_params.existing_cell_organelles:
-        start = time.time()
         cd_dir = global_params.config.working_dir + "chunkdatasets/{}/".format(co)
         cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
                       box_coords=[0, 0, 0], fit_box_size=True)

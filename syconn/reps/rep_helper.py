@@ -353,7 +353,7 @@ def surface_samples(coords, bin_sizes=(2000, 2000, 2000), max_nb_samples=5000,
 
 def find_object_properties(cube):
     try:
-        from . find_object_properties_C import _find_object_properties as _find_object_propertiesC
+        from . find_object_properties_C import _find_object_propertiesC
         return _find_object_propertiesC(cube)
     except ImportError:
         return _find_object_properties(cube)

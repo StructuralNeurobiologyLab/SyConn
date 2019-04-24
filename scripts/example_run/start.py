@@ -164,9 +164,6 @@ if __name__ == '__main__':
     #     time_stamps.append(time.time())
     #     step_idents.append('Glia separation')
 
-    time_stamps.append(time.time())
-    step_idents.append('Glia removal')
-
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
     exec_multiview.run_create_neuron_ssd(prior_glia_removal=False)
     time_stamps.append(time.time())

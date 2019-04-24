@@ -17,9 +17,6 @@ from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
 from knossos_utils.knossosdataset import KnossosDataset
-import elektronn2
-from elektronn2.config import config as e2config
-from elektronn2.utils.gpu import initgpu
 
 from ..handler import log_handler
 from syconn.handler import log_main
@@ -113,6 +110,7 @@ def predict_kzip(kzip_p, m_path, kd_path, clf_thresh=0.5, mfp_active=False,
     cube_name = os.path.splitext(os.path.basename(kzip_p))[0]
     if dest_path is None:
         dest_path = os.path.dirname(kzip_p)
+    from elektronn2.utils.gpu import initgpu
     if not os.path.isfile(dest_path + "/%s_data.h5" % cube_name) or overwrite:
         raw, labels = load_gt_from_kzip(kzip_p, kd_p=kd_path,
                                         raw_data_offset=0)
@@ -175,6 +173,7 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
         raw = raw[0]
     if not data_is_zxy:
         raw = xyz2zxy(raw)
+    from elektronn2.utils.gpu import initgpu
     initgpu(gpu_ix)
     if raw.dtype.kind in ('u', 'i'):
         raw = raw.astype(np.float32) / 255.
@@ -481,7 +480,7 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     -------
 
     """
-
+    from elektronn2.utils.gpu import initgpu
     initgpu(gpu_id)
     from elektronn2.neuromancer.model import modelload
     kd = KnossosDataset()
@@ -650,6 +649,7 @@ class NeuralNetworkInterface(object):
 
         if init_gpu is None:
             init_gpu = 'auto'
+        from elektronn2.config import config as e2config
         if e2config.device is None:
             from elektronn2.utils.gpu import initgpu
             initgpu(init_gpu)

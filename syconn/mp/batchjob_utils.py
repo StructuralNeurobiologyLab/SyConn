@@ -127,6 +127,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         Sends an notification email after completion. Currently does not contain any
         information about the job name, required time or CPU/MEM usage.
         TODO: use SLURM JobArrays to enable detailed notification emails
+    use_dill : bool
 
     Returns
     -------
@@ -297,12 +298,17 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             #         additional_flags, job_log_path, job_err_path,
             #         job_name, this_sh_path)
             # else:
+            import datetime
+            then = datetime.datetime(2019, 4, 24, 8, 0, 0)
+            dt = (then - datetime.datetime.now()).seconds // 60 - 1  # 1 min safety
+            add_cmd = "" #"--time={}".format(dt)
+
             if n_cores > 1:
                 additional_flags += " -n%d" % n_cores
             cmd_exec = "sbatch {0} --output={1} --error={2}" \
-                       " --job-name={3} {4}".format(
+                       " --job-name={3} {5} {4}".format(
                 additional_flags, job_log_path, job_err_path,
-                job_name, this_sh_path)
+                job_name, this_sh_path, add_cmd)
             if priority is not None and priority != 0:
                 log_batchjob.warning('Priorities are not supported with SLURM.')
             # added '--quiet' flag to prevent submission messages, errors will still be printed
@@ -372,9 +378,10 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
         # set number cores per job higher which will at the same time increase
         # the available amount of memory per job, ONLY VALID IF '--mem' was not specified explicitly!
-        n_cores += 1  # increase number of cores per job by at least 1
-        n_cores = np.max([np.min([global_params.NCORES_PER_NODE, float(n_max_co_processes) //
-                                  len(missed_params)]), n_cores])
+        n_cores += 2  # increase number of cores per job by at least 1
+        # TODO: activate again
+        # n_cores = np.max([np.min([global_params.NCORES_PER_NODE, float(n_max_co_processes) //
+        #                           len(missed_params)]), n_cores])
         n_cores = np.min([n_cores, global_params.NCORES_PER_NODE])
         n_cores = int(n_cores)
         # remove existing memory and cpus-per-task flags:

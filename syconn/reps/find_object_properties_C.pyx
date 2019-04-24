@@ -24,6 +24,8 @@ def _find_object_propertiesC(n_type[:, :, :] chunk):
         for y in range(chunk.shape[1]):
             for z in range(chunk.shape[2]):
                 key = chunk[x, y, z]
+                if key == 0:
+                    continue
                 if bounding_box.count(key):
                     old_bb = bounding_box[key]
                     bounding_box[key] = [[min(old_bb[0][0], x),

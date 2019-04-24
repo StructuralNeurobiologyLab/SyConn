@@ -9,6 +9,7 @@ import sys
 from validate import Validator
 import logging
 import coloredlogs
+import datetime
 from termcolor import colored
 import os
 from .. import global_params
@@ -473,7 +474,24 @@ def initialize_logging(log_name, log_dir=None, overwrite=True):
         fh = logging.FileHandler(log_dir + log_name + ".log")
         fh.setLevel(level)
         formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            '%(asctime)s (%(relative)smin) - %(name)s - %(levelname)s - %(message)s')
+        fh.addFilter(TimeFilter())
         fh.setFormatter(formatter)
         logger.addHandler(fh)
     return logger
+
+
+class TimeFilter(logging.Filter):
+    """https://stackoverflow.com/questions/31521859/python-logging-module-time-since-last-log"""
+    def filter(self, record):
+        try:
+          last = self.last
+        except AttributeError:
+          last = record.relativeCreated
+
+        delta = datetime.datetime.fromtimestamp(record.relativeCreated/1000.0) - datetime.datetime.fromtimestamp(last/1000.0)
+
+        record.relative = '{0:.1f}'.format(delta.seconds / 60.)
+
+        self.last = record.relativeCreated
+        return True

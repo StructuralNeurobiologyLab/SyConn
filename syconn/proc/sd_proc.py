@@ -561,15 +561,12 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512,
                              sd.working_dir, kd.knossos_path, block_edge_length])
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess(_export_sd_to_knossosdataset_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+        _ = sm.start_multiprocess(_export_sd_to_knossosdataset_thread,
+                                  multi_params, nb_cpus=nb_cpus)
 
     elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "export_sd_to_knossosdataset",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+        _ = qu.QSUB_script(multi_params, "export_sd_to_knossosdataset",
+                           n_max_co_processes=n_max_co_processes)
     else:
         raise Exception("QSUB not available")
 
@@ -647,12 +644,8 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                                         multi_params, nb_cpus=nb_cpus)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "extract_synapse_type",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_cores=nb_cpus,
-                                     n_max_co_processes=n_max_co_processes)
+        path_to_out = qu.QSUB_script(multi_params, "extract_synapse_type",
+                                     n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
 
 
 def _extract_synapse_type_thread(args):
