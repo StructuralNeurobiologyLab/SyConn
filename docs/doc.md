@@ -3,24 +3,23 @@
 ## Installation
 * Python 3.6
 * The whole pipeline was designed and tested on Linux systems
-* SyConn is based on the packages [elektronn](http://elektronn.org) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
-* cmake >= 3.1
+* SyConn is based on the packages [elektronn](https://github.com/ELEKTRONN/elektronn3) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
 * [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.
 
 
-We recommend installing Anaconda and setting up a python environment:
+1. We recommend installing Anaconda and setting up a python environment:
 ```
 conda create -n pysy python=3.6 anaconda
 conda activate pysy
 ```
-Git clone and install syconn and all prerequisites:
+2. a) Either git clone and install syconn with all prerequisites:
 ```
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 cd SyConn
 sh install.sh
 ```
 
-For manual installation run:
+2. b) Or alternatively run these commands to install them manually:
 ```
 conda install cmake
 conda install vigra -c conda-forge
