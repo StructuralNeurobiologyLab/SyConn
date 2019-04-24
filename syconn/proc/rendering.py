@@ -59,6 +59,11 @@ try:
 except ImportError:
     import pickle as pkl
 
+# try:
+#     from egl_ext import eglQueryDevicesEXT
+# except Exception as error:
+#     print('Caught this error: ' + repr(error))
+MULTIGPU = True
 
 # ------------------------------------ General rendering code ------------------------------------------
 # structure definition of rendering data array
@@ -67,6 +72,82 @@ vertex_offset = c_void_p(0 * float_size)
 normal_offset = c_void_p(3 * float_size)
 color_offset = c_void_p(6 * float_size)
 record_len = 10 * float_size
+
+
+
+
+# Copyright 2018 The dm_control Authors.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or  implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+# ============================================================================
+
+"""Extends OpenGL.EGL with definitions necessary for headless rendering."""
+
+import ctypes
+from OpenGL.platform import ctypesloader  # pylint: disable=g-bad-import-order
+try:
+  # Nvidia driver seems to need libOpenGL.so (as opposed to libGL.so)
+  # for multithreading to work properly. We load this in before everything else.
+  ctypesloader.loadLibrary(ctypes.cdll, 'OpenGL', mode=ctypes.RTLD_GLOBAL)
+except OSError:
+  pass
+
+# pylint: disable=g-import-not-at-top
+
+from OpenGL import EGL
+#from OpenGL import error
+from six.moves import range
+
+# From the EGL_EXT_device_enumeration extension.
+EGLDeviceEXT = ctypes.c_void_p
+PFNEGLQUERYDEVICESEXTPROC = ctypes.CFUNCTYPE(
+    EGL.EGLBoolean, EGL.EGLint,
+    ctypes.POINTER(EGLDeviceEXT), ctypes.POINTER(EGL.EGLint))
+try:
+  _eglQueryDevicesEXT = PFNEGLQUERYDEVICESEXTPROC(  # pylint: disable=invalid-name
+      EGL.eglGetProcAddress('eglQueryDevicesEXT'))
+except TypeError:
+  raise ImportError('eglQueryDevicesEXT is not available.')
+
+
+# From the EGL_EXT_platform_device extension.
+EGL_PLATFORM_DEVICE_EXT = 0x313F
+PFNEGLGETPLATFORMDISPLAYEXTPROC = ctypes.CFUNCTYPE(
+    EGL.EGLDisplay, EGL.EGLenum, ctypes.c_void_p, ctypes.POINTER(EGL.EGLint))
+try:
+  eglGetPlatformDisplayEXT = PFNEGLGETPLATFORMDISPLAYEXTPROC(  # pylint: disable=invalid-name
+      EGL.eglGetProcAddress('eglGetPlatformDisplayEXT'))
+except TypeError:
+  raise ImportError('eglGetPlatformDisplayEXT is not available.')
+
+
+# Wrap raw _eglQueryDevicesEXT function into something more Pythonic.
+def eglQueryDevicesEXT(max_devices=10):  # pylint: disable=invalid-name
+  devices = (EGLDeviceEXT * max_devices)()
+  num_devices = EGL.EGLint()
+  success = _eglQueryDevicesEXT(max_devices, devices, num_devices)
+  if success == EGL.EGL_TRUE:
+    return [devices[i] for i in range(num_devices.value)]
+  else:
+    raise error.GLError(err=EGL.eglGetError(),
+                        baseOperation=eglQueryDevicesEXT,
+                        result=success)
+
+
+
+
+
+
 
 
 def init_object(indices, vertices, normals, colors, ws):
@@ -206,41 +287,46 @@ def init_ctx(ws):
             EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
             EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
             EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
-            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
+            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY, EGL_TRUE, \
             eglGetDisplay, eglInitialize, eglChooseConfig, \
             eglBindAPI, eglCreatePbufferSurface, \
-            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER, EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, \
-            EGL_TRUE, EGL_FALSE,  EGL_LOSE_CONTEXT_ON_RESET, EGL_NO_RESET_NOTIFICATION
+            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
 
         major, minor = ctypes.c_long(), ctypes.c_long()
         num_configs = ctypes.c_long()
         configs = (EGLConfig * 1)()
 
-        # Cache DISPLAY if necessary and get an off-screen EGL display
-        orig_dpy = None
-        if 'DISPLAY' in os.environ:
-            orig_dpy = os.environ['DISPLAY']
-            del os.environ['DISPLAY']
-        dsp = eglGetDisplay(EGL_DEFAULT_DISPLAY)
-        assert dsp != EGL_NO_DISPLAY, 'Invalid DISPLAY during egl init.'
-        if orig_dpy is not None:
-            os.environ['DISPLAY'] = orig_dpy
+        if (MULTIGPU):
+            dev_on_node = eglQueryDevicesEXT()
+            for i in range(0, len(dev_on_node)):
+                dsp = eglGetDisplay(dev_on_node[i])
+                try:
+                    initialized = eglInitialize(dsp, major, minor)
+                    if (initialized == EGL_TRUE):
+                        break
+                except:
+                    pass
+        else:
+            dsp = eglGetDisplay(EGL_DEFAULT_DISPLAY)
 
-        # Initialize EGL
-        eglInitialize(dsp, major, minor)
+            assert dsp != EGL_NO_DISPLAY, 'Invalid DISPLAY during egl init.'
+
+            # Initialize EGL
+            eglInitialize(dsp, major, minor)
+
         config_attr = arrays.GLintArray.asArray(
-            [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, #EGL_LUMINANCE_SIZE, 8,
+            [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,  # EGL_LUMINANCE_SIZE, 8,
              EGL_BLUE_SIZE, 8, EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8,
-             EGL_DEPTH_SIZE, 8, EGL_COLOR_BUFFER_TYPE, #EGL_LUMINANCE_BUFFER,
+             EGL_DEPTH_SIZE, 8, EGL_COLOR_BUFFER_TYPE,  # EGL_LUMINANCE_BUFFER,
              EGL_RGB_BUFFER,
              EGL_RENDERABLE_TYPE,
-             EGL_OPENGL_BIT,  EGL_NONE])   #EGL_CONFORMANT, EGL_OPENGL_BIT,
+             EGL_OPENGL_BIT, EGL_NONE])  # EGL_CONFORMANT, EGL_OPENGL_BIT,
         eglChooseConfig(dsp, config_attr, configs, 1, num_configs)
 
         # Bind EGL to the OpenGL API
         eglBindAPI(EGL_OPENGL_API)
-        #attrbls = [major, minor,  EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_TRUE, EGL_FALSE, EGL_FALSE,
-         #          EGL_NO_RESET_NOTIFICATION]
+        # attrbls = [major, minor,  EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_TRUE, EGL_FALSE, EGL_FALSE,
+        #          EGL_NO_RESET_NOTIFICATION]
         attrbls = None
 
         # Create an EGL context
@@ -1116,7 +1202,10 @@ def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
                       'nb_views': None, 'comp_window': None, 'rot_mat': None,
                      'return_rot_mat': False, 'render_indexviews': render_indexviews}
-    param = [[par, sso_kwargs, render_kwargs, ix] for ix, par in enumerate(params[0])]
+    param = []
+    for i in range(n_jobs):
+        param.append([params[0][i], sso_kwargs, render_kwargs, i])
+    # param = [[par, sso_kwargs, render_kwargs, ix] for ix, par in enumerate(params[0])]  #same as for loop above
     tim1 = time.time()
     if verbose:
         log_proc.debug("Time for OTHER COMPUTATION {:.2f}s."

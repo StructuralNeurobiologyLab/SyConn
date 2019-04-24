@@ -25,12 +25,15 @@ if __name__=='__main__':
     ssc = SuperSegmentationDataset(working_dir)
     ssv = ssc.get_super_segmentation_object(29753344)
     exlocs = np.concatenate(ssv.sample_locations())
-    #exlocs = exlocs[::10]
+    # exlocs = exlocs[::100]
     example = np.arange(30).reshape((10, 3))
     print(example)
     print(example.shape)
     example = np.array_split(example, 4)
+    print(example[0])
     print(example)
+    print(example[2])
+    print(len(example))
     print("Example location array:", exlocs.shape)
     print(working_dir)
     now2 = time.time()
@@ -63,7 +66,7 @@ if __name__=='__main__':
     print(len(view1[0]))
     print('real trial')
     print(np.array_equiv(view, view1))
-    print(np.array_equiv(view[1001], view1[1001]))
+    #print(np.array_equiv(view[1001], view1[1001]))
 #global_params.PYOPENGL_PLATFORM = 'osmesa'
     now2 = time.time()
     print(now2)
