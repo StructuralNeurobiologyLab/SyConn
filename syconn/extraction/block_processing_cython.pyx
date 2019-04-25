@@ -9,6 +9,7 @@ import numpy as np
 import timeit
 
 
+# TODO: consider changing def to cdef
 def kernel(uint32_t[:, :, :] chunk, uint64_t center_id):
 
     cdef map[uint32_t, int] unique_ids

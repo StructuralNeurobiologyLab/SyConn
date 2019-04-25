@@ -353,8 +353,8 @@ def surface_samples(coords, bin_sizes=(2000, 2000, 2000), max_nb_samples=5000,
 
 def find_object_properties(cube):
     try:
-        from . find_object_properties_C import _find_object_propertiesC
-        return _find_object_propertiesC(cube)
+        from . find_object_properties_C import find_object_propertiesC
+        return find_object_propertiesC(cube)
     except ImportError:
         return _find_object_properties(cube)
 
@@ -363,7 +363,8 @@ def _find_object_properties(cube):
     """
     Extracts representative coordinate, bounding box and size for each segmentation objects
     within `cube`. Ignores ID=0.
-    # TODO: find a way to use bincount and find_objects for very large IDs
+    TODO: find a way to use bincount and find_objects for very large IDs -> use
+     ID remapping to make segmentation IDs contiguous
 
     Parameters
     ----------

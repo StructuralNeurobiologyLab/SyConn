@@ -189,10 +189,6 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
         mapped segmentation objects.
     n_jobs : int
         total number of jobs
-    qsub_pe : str
-        qsub parallel environment
-    qsub_queue : str
-        qsub queue
     nb_cpus : int or None
         number of cores used for multithreading
         number of cores per worker for qsub jobs
@@ -208,7 +204,6 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     assert obj_type in sd.version_dict
     seg_dataset = sd.get_segmentationdataset(obj_type)
     paths = seg_dataset.so_dir_paths
-
     # write cell organell mappings to cell organelle SV attribute dicts
     # Partitioning the work
     multi_params = basics.chunkify(paths, n_jobs)
@@ -709,7 +704,7 @@ def _extract_synapse_type_thread(args):
 
 
 def mesh_proc_chunked(working_dir, obj_type, nb_cpus=NCORES_PER_NODE):
-    """TODO: create QSUB solution and run if cell SV meshes do not exist
+    """
     Caches the meshes for all SegmentationObjects within the SegmentationDataset
      with object type 'obj_type'.
 
