@@ -352,9 +352,19 @@ def surface_samples(coords, bin_sizes=(2000, 2000, 2000), max_nb_samples=5000,
 
 
 def find_object_properties(cube):
+    try:
+        from . find_object_properties_C import find_object_propertiesC
+        return find_object_propertiesC(cube)
+    except ImportError:
+        return _find_object_properties(cube)
+
+
+def _find_object_properties(cube):
     """
     Extracts representative coordinate, bounding box and size for each segmentation objects
     within `cube`. Ignores ID=0.
+    TODO: find a way to use bincount and find_objects for very large IDs -> use
+     ID remapping to make segmentation IDs contiguous
 
     Parameters
     ----------
@@ -373,13 +383,19 @@ def find_object_properties(cube):
     if np.prod(cube.shape) == 0 or np.sum(mask) == 0:
         return {}, {}, {}
     # get sizes
-    min_id = np.min(cube[mask]) - 1
+    min_id = np.min(cube[mask]) - 1  # -1 to not set the lowest ID to background
+    log_reps.debug("Cube size: {}, min/max ID: {}/{}".format(cube.shape, min_id + 1,
+                                                             np.max(cube)))
     cube[mask] = cube[mask] - min_id
     # bincount requires int... TODO: unsafe behaviour for high ID values
+    # try:
     cnts = np.bincount(cube.flatten().astype(np.int64))
     ids = np.nonzero(cnts)[0]
+    # except ValueError:  # ValueError: array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible size.
+    # ids, cnts = np.unique(cube, return_counts=True)
     # get bounding boxes
-    res = find_objects(cube)  # returns a list of bounding boxes, first entry will correspond to ID=1
+    res = find_objects(
+        cube)  # returns a list of bounding boxes, first entry will correspond to ID=1
 
     bbs = {}
     rep_coords = {}
@@ -388,10 +404,14 @@ def find_object_properties(cube):
         if ii == 0:
             continue
         obj_id = int(ii + min_id)
-        sls = res[int(ii-1)]
-        min_vec = np.array([sl.start for sl in sls], dtype=np.int)  # -1 because bounding boxes start at element with ID 1
+        # sls = res[int(ii-1)]  # Old version which does not scale to huge IDs
+        sls = res[int(ii - 1)]
+        min_vec = np.array([sl.start for sl in sls],
+                           dtype=np.int)  # -1 because bounding boxes start at element with ID 1
         max_vec = np.array([sl.stop for sl in sls], dtype=np.int)
+        rand_obj_coord = np.transpose(np.nonzero(cube[sls] == ii))[0]
         bbs[obj_id] = np.array([min_vec, max_vec], dtype=np.int)
         sizes[obj_id] = cnts[ii]
-        rep_coords[obj_id] = min_vec  # TODO: think of another efficient way to get a more representative coordinate
+        rep_coords[
+            obj_id] = min_vec + rand_obj_coord  # TODO: think of another efficient way to get a more representative coordinate
     return rep_coords, bbs, sizes

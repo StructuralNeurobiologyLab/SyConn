@@ -9,6 +9,8 @@ import sys
 from validate import Validator
 import logging
 import coloredlogs
+import datetime
+import pwd
 from termcolor import colored
 import os
 from .. import global_params
@@ -157,12 +159,43 @@ class DynConfig(Config):
 
     @property
     def kd_organells_paths(self):
-        path_dict = {
-            'kd_sj': self.kd_sj_path,
-            'kd_vc': self.kd_vc_path,
-            'kd_mi': self.kd_mi_path
-        }
+        """
+        KDs of subcell. organelle probability maps
+
+        Returns
+        -------
+        Dict[str]
+        """
+        path_dict = {k: self.entries['Paths']['kd_{}'.format(k)] for k in
+                     global_params.existing_cell_organelles}
+        # path_dict = {
+        #     'kd_sj': self.kd_sj_path,
+        #     'kd_vc': self.kd_vc_path,
+        #     'kd_mi': self.kd_mi_path
+        # }
         return path_dict
+
+    @property
+    def kd_organelle_seg_paths(self):
+        """
+        KDs of subcell. organelle segmentations
+
+        Returns
+        -------
+        Dict[str]
+        """
+        path_dict = {k: "{}/knossosdatasets/{}_seg/".format(self.working_dir, k) for k in
+                     global_params.existing_cell_organelles}
+        # path_dict = {
+        #     'kd_sj': self.kd_sj_path,
+        #     'kd_vc': self.kd_vc_path,
+        #     'kd_mi': self.kd_mi_path
+        # }
+        return path_dict
+
+    @property
+    def temp_path(self):
+        return "/tmp/{}_syconn/".format(pwd.getpwuid(os.getuid()).pw_name)
 
     @property
     # TODO: Not necessarily needed anymore
@@ -189,8 +222,11 @@ class DynConfig(Config):
         -------
         str
         """
-        # self._check_actuality()
-        return self.entries['Paths']['init_rag']
+        self._check_actuality()
+        p = self.entries['Paths']['init_rag']
+        if len(p) == 0:
+            p = self.working_dir + "init_rag.txt"
+        return p
 
     # --------- CLASSIFICATION MODELS
     @property
@@ -283,11 +319,18 @@ class DynConfig(Config):
         return "%s/%s/" % (global_params.config.working_dir,
                            global_params.BATCH_PROC_SYSTEM)
 
+    @property
+    def prior_glia_removal(self):
+        try:
+            return self.entries['Glia']['prior_glia_removal']
+        except KeyError:
+            return True
+
 
 def get_default_conf_str(example_wd, scaling, py36path="", syntype_avail=True,
-                         use_large_fov_views_ct=True, use_new_renderings_locs=True,
+                         use_large_fov_views_ct=False, use_new_renderings_locs=False,
                          kd_seg=None, kd_sym=None, kd_asym=None, kd_sj=None, kd_mi=None,
-                         kd_vc=None, init_rag_p=""):
+                         kd_vc=None, init_rag_p="", prior_glia_removal=False):
     """
     Default SyConn config and type specification, placed in the working directory.
 
@@ -316,8 +359,8 @@ syn = 0
 syn_ssv = 0
 mi = 0
 ssv = 0
-cs_agg = 0
 ax_gt = 0
+cs = 0
 
 [Paths]
 kd_seg = {}
@@ -362,10 +405,13 @@ allow_skel_gen = True
 [Views]
 use_large_fov_views_ct = {}
 use_new_renderings_locs = {}
+
+[Glia]
+prior_glia_removal = {}
     """.format(kd_seg, kd_sym, kd_asym, kd_sj, kd_vc, kd_mi, init_rag_p,
                py36path, scaling[0], scaling[1], scaling[2],
                str(syntype_avail), str(use_large_fov_views_ct),
-               str(use_new_renderings_locs))
+               str(use_new_renderings_locs), str(prior_glia_removal))
 
     configspec_str = """
 [Versions]
@@ -399,6 +445,9 @@ allow_skel_gen = boolean
 [Views]
 use_large_fov_views_ct = boolean
 use_new_renderings_locs = boolean
+
+[Glia]
+prior_glia_removal = boolean
 """
     return config_str, configspec_str
 
@@ -466,7 +515,24 @@ def initialize_logging(log_name, log_dir=None, overwrite=True):
         fh = logging.FileHandler(log_dir + log_name + ".log")
         fh.setLevel(level)
         formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            '%(asctime)s (%(relative)smin) - %(name)s - %(levelname)s - %(message)s')
+        fh.addFilter(TimeFilter())
         fh.setFormatter(formatter)
         logger.addHandler(fh)
     return logger
+
+
+class TimeFilter(logging.Filter):
+    """https://stackoverflow.com/questions/31521859/python-logging-module-time-since-last-log"""
+    def filter(self, record):
+        try:
+          last = self.last
+        except AttributeError:
+          last = record.relativeCreated
+
+        delta = datetime.datetime.fromtimestamp(record.relativeCreated/1000.0) - datetime.datetime.fromtimestamp(last/1000.0)
+
+        record.relative = '{0:.1f}'.format(delta.seconds / 60.)
+
+        self.last = record.relativeCreated
+        return True

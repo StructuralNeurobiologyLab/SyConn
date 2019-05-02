@@ -24,9 +24,6 @@ from syconn.reps.segmentation import SegmentationDataset
 app = Flask(__name__)
 
 
-global sg_state
-
-
 @app.route('/ssv_skeleton/<ssv_id>', methods=['GET'])
 def route_ssv_skeleton(ssv_id):
     d = sg_state.backend.ssv_skeleton(ssv_id)

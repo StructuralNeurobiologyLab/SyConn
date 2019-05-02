@@ -58,7 +58,7 @@ for p in so_chunk_paths:
                 coords = np.array([so.rep_coord, ], dtype=np.float32)
             else:
                 if global_params.config.use_new_renderings_locs:
-                    coords = generate_rendering_locs(verts, 2000*3).astype(np.float32)  # '*3' because `generate_rendering_locs` use a division by 3 internally...
+                    coords = generate_rendering_locs(verts, 2000).astype(np.float32)
                 else:
                     coords = surface_samples(verts).astype(np.float32)
             loc_dc[ix] = coords

@@ -58,6 +58,9 @@ if __name__ == '__main__':
     if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
             or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
         raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
+    # currently this is were SyConn looks for the neuron rag # TODO refactor
+    os.makedirs(example_wd + '/glia/', exist_ok=True)
+    shutil.copy(h5_dir + "/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
 
     bb = parse_movement_area_from_zip(kzip_p)
     offset = np.array([0, 0, 0])
@@ -65,14 +68,15 @@ if __name__ == '__main__':
     scale = np.array([10, 10, 20])
     chunk_size = (256, 256, 256)
     n_folders_fs = 1000  # number of folders in should probably be different for different segmentations
-    max_n_jobs = 60
     experiment_name = 'j0126_example'
+    global_params.wd = example_wd
+    global_params.NCORE_TOTAL = 20
+    global_params.NGPU_TOTAL = 2
+    global_params.NNODES_TOTAL = 1
+    os.makedirs(global_params.config.temp_path, exist_ok=True)
 
     # PREPARE CONFIG
-    # currently this is were SyConn looks for the neuron rag # TODO refactor
-    os.makedirs(example_wd + '/glia/', exist_ok=True)
-    shutil.copy(h5_dir + "/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
-    global_params.wd = example_wd
+
     log.critical('Example run started. Working directory is overwritten and set'
                  ' to "{}".'.format(example_wd))
     if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
@@ -82,7 +86,7 @@ if __name__ == '__main__':
     else:
         py36path = ""
     config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale,
-                                                      py36path=py36path,
+                                                      py36path=py36path, use_new_renderings_locs=False,
                                                       use_large_fov_views_ct=False)
     with open(example_wd + 'config.ini', 'w') as f:
         f.write(config_str)
@@ -150,19 +154,21 @@ if __name__ == '__main__':
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
     # START SyConn
-    if 0:  # TODO: work-in glia removal
-        log.info('Step 0.5/8 - Glia separation')
-        exec_multiview.run_glia_rendering()
-        exec_multiview.run_glia_prediction()
-        exec_multiview.run_glia_splitting()
-        time_stamps.append(time.time())
-        step_idents.append('Glia separation')
-
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    exec_init.run_create_sds(generate_sv_meshes=True, chunk_size=chunk_size,
-                             n_folders_fs=n_folders_fs, max_n_jobs=max_n_jobs)
+    # exec_init.run_create_sds(generate_sv_meshes=True, chunk_size=chunk_size,
+    #                          n_folders_fs=n_folders_fs)
+    exec_init.init_cell_subcell_sds(generate_sv_meshes=True, chunk_size=chunk_size,
+                                    n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs)
     time_stamps.append(time.time())
     step_idents.append('SD generation')
+
+    # if 1:  # TODO: work-in glia removal, TODO: filter SVs prior to glia analysis
+    #     log.info('Step 0.5/8 - Glia separation')
+    #     exec_multiview.run_glia_rendering()
+    #     exec_multiview.run_glia_prediction(e3=True)
+    #     exec_multiview.run_glia_splitting()
+    #     time_stamps.append(time.time())
+    #     step_idents.append('Glia separation')
 
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
     exec_multiview.run_create_neuron_ssd(prior_glia_removal=False)
@@ -170,7 +176,7 @@ if __name__ == '__main__':
     step_idents.append('SSD generation')
 
     log.info('Step 3/8 - Neuron rendering')
-    exec_multiview.run_neuron_rendering(max_n_jobs=max_n_jobs)
+    exec_multiview.run_neuron_rendering()
     time_stamps.append(time.time())
     step_idents.append('Neuron rendering')
 
@@ -178,25 +184,23 @@ if __name__ == '__main__':
     # require only medium MEM and CPU resources and mainly GPU
     # TODO: adapt memory and CPU allocation of those GPU workers
     log.info('Step 4/8 - Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-                                 max_n_jobs=max_n_jobs)
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
 
     log.info('Step 5/8 - Axon prediction')
-    exec_multiview.run_axoness_prediction(max_n_jobs_gpu=4, e3=True)
+    exec_multiview.run_axoness_prediction(e3=True)
     exec_multiview.run_axoness_mapping()
     time_stamps.append(time.time())
     step_idents.append('Axon prediction')
 
     log.info('Step 6/8 - Spine prediction')
-    exec_multiview.run_spiness_prediction(max_n_jobs_gpu=4,
-                                          max_n_jobs=max_n_jobs)
+    exec_multiview.run_spiness_prediction()
     time_stamps.append(time.time())
     step_idents.append('Spine prediction')
 
     log.info('Step 7/8 - Celltype analysis')
-    exec_multiview.run_celltype_prediction(max_n_jobs_gpu=4)
+    exec_multiview.run_celltype_prediction()
     time_stamps.append(time.time())
     step_idents.append('Celltype analysis')
 

@@ -284,7 +284,8 @@ class SegmentationDataset(object):
                                       working_dir=self.working_dir,
                                       scaling=self.scaling,
                                       create=create,
-                                      n_folders_fs=self.n_folders_fs)
+                                      n_folders_fs=self.n_folders_fs,
+                                      config=self.config)
         else:
             res = []
             for ix in obj_id:
@@ -294,7 +295,8 @@ class SegmentationDataset(object):
                                       working_dir=self.working_dir,
                                       scaling=self.scaling,
                                       create=create,
-                                      n_folders_fs=self.n_folders_fs)
+                                      n_folders_fs=self.n_folders_fs,
+                                      config=self.config)
                 res.append(obj)
             return res
 
@@ -375,6 +377,12 @@ class SegmentationObject(object):
                       "`working_dir` or `config`."
                 log_reps.error(msg)
                 raise ValueError(msg)
+        elif config is not None:
+            if config.working_dir != working_dir:
+                raise ValueError('Inconsistent working directories in `config` and'
+                                 '`working_dir` kwargs.')
+            self._config = config
+            self._working_dir = working_dir
         else:
             self._working_dir = working_dir
             self._config = DynConfig(working_dir)
@@ -738,8 +746,7 @@ class SegmentationObject(object):
                 return np.array([self.rep_coord, ], dtype=np.float32) * self.scaling
 
             if global_params.config.use_new_renderings_locs:
-                coords = generate_rendering_locs(verts, 2000).astype(
-                    np.float32)  # '*3' because `generate_rendering_locs` use a division by 3 internally...
+                coords = generate_rendering_locs(verts, 2000).astype(np.float32)
             else:
                 coords = surface_samples(verts).astype(np.float32)
 
@@ -814,6 +821,8 @@ class SegmentationObject(object):
         # Set 'force_single_cc' to True in case of syn_ssv objects!
         if self.type == 'syn_ssv' and 'force_single_cc' not in kwargs:
             kwargs['force_single_cc'] = True
+        if self.type == 'sv' and 'decimate_mesh' not in kwargs:
+            kwargs['decimate_mesh'] = 0.3  # remove 30% of the verties  # TODO: add to global params
         return meshes.get_object_mesh(self, downsampling, n_closings=n_closings,
                                       triangulation_kwargs=kwargs)
 

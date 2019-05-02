@@ -1561,6 +1561,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
                 colors=None, force_recompute=False, index_view_key=None):
     """
     # TODO: optimize with cython
+    # TODO: throws index error for huge SSV?
     Maps semantic segmentation to SSV mesh.
 
     Parameters

@@ -322,7 +322,7 @@ class SuperSegmentationDataset(object):
         self.save_mapping_dict()
         self.save_id_changer()
 
-    def save_dataset_deep(self, extract_only=False, attr_keys=(), n_jobs=1000,
+    def save_dataset_deep(self, extract_only=False, attr_keys=(), n_jobs=None,
                           qsub_pe=None, qsub_queue=None, nb_cpus=None,
                           n_max_co_processes=None, new_mapping=True):
         save_dataset_deep(self, extract_only=extract_only,
@@ -512,7 +512,7 @@ class SuperSegmentationDataset(object):
         self._id_changer = np.load(self.id_changer_path)
 
 
-def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
+def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=None,
                       qsub_pe=None, qsub_queue=None, nb_cpus=None,
                       n_max_co_processes=None, new_mapping=True):
     # TODO: remove `qsub_pe`and `qsub_queue`
@@ -548,6 +548,8 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
         Whether to apply new mapping (see `ssd.mapping_dict`)
     """
     ssd.save_dataset_shallow()
+    if n_jobs is None:
+        n_jobs = global_params.NCORE_TOTAL
     multi_params = chunkify(ssd.ssv_ids, n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict,
                      ssd.working_dir, extract_only, attr_keys,

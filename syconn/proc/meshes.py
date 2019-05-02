@@ -118,7 +118,7 @@ class MeshObject(object):
     @property
     def normals(self):
         if self._normals is None or len(self._normals) != len(self.vertices):
-            log_proc.debug("Calculating normals")
+            # log_proc.debug("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         elif len(self._normals) != len(self.vertices):
             log_proc.debug("Calculating normals, because their shape differs from"
@@ -205,7 +205,7 @@ def triangulation_wrapper(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=F
 
 
 def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
-                  decimate_mesh=0, gradient_direction='ascent',
+                  decimate_mesh=0, gradient_direction='descent',
                   force_single_cc=False):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
@@ -227,8 +227,8 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
         Percentage of mesh size reduction, i.e. 0.1 will leave 90% of the
         vertices
     gradient_direction : str
-        defines orientation of triangle indices. 'ascent' is needed for KNOSSOS
-         compatibility.
+        defines orientation of triangle indices. '?' is needed for KNOSSOS
+         compatibility. TODO: check compatible index orientation, switched to `descent`, 23April2019
     force_single_cc : bool
         If True, performans dilations until only one foreground CC is present
         and then erodes with the same number to maintain size.
@@ -310,22 +310,16 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
                   "pip install vtki'."
             log_proc.error(msg)
             raise ImportError(msg)
-        log_proc.warning("'triangulation': Currently mesh-sparsification"
-                         " may not preserve volume.")
+        # log_proc.warning("'triangulation': Currently mesh-sparsification"
+        #                  " may not preserve volume.")
         # add number of vertices in front of every face (required by vtki)
         ind = np.concatenate([np.ones((len(ind), 1)).astype(np.int64) * 3, ind],
                              axis=1)
-        mesh = vtki.PolyData(verts, ind.flatten()).TriFilter()
-        decimated_mesh = mesh.Decimate(decimate_mesh, volume_preservation=True)
-        if decimated_mesh is None:  # maybe vtki API changes and operates in-place -> TODO: check version differences and require one of them, changed to vtki, PS 04Feb2019
-            decimated_mesh = mesh
-            if len(decimated_mesh.faces.reshape((-1, 4))[:, 1:]) == len(ind):
-                log_proc.error(
-                    "'triangulation': Mesh-sparsification could not sparsify"
-                    " mesh.")
+        mesh = vtki.PolyData(verts, ind.flatten())
+        mesh.decimate(decimate_mesh, volume_preservation=True)
         # remove face sizes again
-        ind = decimated_mesh.faces.reshape((-1, 4))[:, 1:]
-        verts = decimated_mesh.points
+        ind = mesh.faces.reshape((-1, 4))[:, 1:]
+        verts = mesh.points
         mo = MeshObject("", ind, verts)
         # compute normals
         norm = mo.normals.reshape((-1, 3))
@@ -1003,10 +997,14 @@ def mesh_chunk(args):
             min_obj_vx = global_params.config.entries['Sizethresholds'][obj_type]
         except KeyError:
             min_obj_vx = MESH_MIN_OBJ_VX
+        if obj_type == 'sv':
+            decimate_mesh = 0.3  # remove 30% of the verties  # TODO: add to global params
+        else:
+            decimate_mesh = 0
         try:
             indices, vertices, normals = triangulation(
                 voxel_list, downsampling=MESH_DOWNSAMPLING[obj_type], n_closings=MESH_CLOSING[obj_type],
-                force_single_cc=obj_type == 'syn_ssv')
+                force_single_cc=obj_type == 'syn_ssv', decimate_mesh=decimate_mesh)
             vertices += 1  # account for knossos 1-indexing
             vertices = np.round(vertices * scaling)
         except ValueError as e:

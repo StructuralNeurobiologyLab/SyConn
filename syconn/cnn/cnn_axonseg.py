@@ -17,7 +17,7 @@ import os
 import torch
 from torch import nn
 from torch import optim
-from elektronn3.training.loss import BlurryBoarderLoss, DiceLoss, LovaszLoss
+from elektronn3.training.loss import DiceLoss, LovaszLoss
 from elektronn3.models.fcn_2d import *
 from elektronn3.models.unet import UNet
 from elektronn3.data.transforms import RandomFlip

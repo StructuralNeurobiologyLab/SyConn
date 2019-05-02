@@ -544,14 +544,16 @@ class SyConnBackend(object):
 
 
 class ServerState(object):
-    def __init__(self):
-
+    def __init__(self, host=None, port=None):
         self.logger = log_gate
+        self.host = host
+        self.port = port
 
         self.logger.info('SyConn gate server starting up on working directory '
                          '"{}".'.format(global_params.wd))
         self.backend = SyConnBackend(global_params.config.working_dir, logger=self.logger)
-        self.logger.info('SyConn gate server running.')
+        self.logger.info('SyConn gate server running at {}, {}.'.format(
+            self.host, self.port))
         return
 
 
@@ -593,7 +595,7 @@ server_port = args.port
 server_host = args.host
 global_params.wd = server_wd
 
-sg_state = ServerState()
+sg_state = ServerState(server_host, server_port)
 
 # context = ('cert.crt', 'key.key') enable later
 app.run(host=server_host,  # do not run this on a non-firewalled machine!
