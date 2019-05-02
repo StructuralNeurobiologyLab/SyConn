@@ -163,7 +163,7 @@ def map_subcell_extract_propsC(n_type[:, :, :] ch, n_type[:, :, :, :] subcell_ch
                         local_bb[0][1][0] = max(local_bb[0][1][0], x + 1)
                         local_bb[0][1][1] = max(local_bb[0][1][1], y + 1)
                         local_bb[0][1][2] = max(local_bb[0][1][2], z + 1)
-                        subcell_size_dicts[ii][key] += 1
+                        subcell_size_dicts[ii][subcell_key] += 1
                         if key != 0:
                             if subcell_mapping_dicts[ii][subcell_key].count(key):
                                 subcell_mapping_dicts[ii][subcell_key][key] += 1
@@ -193,7 +193,7 @@ def map_subcell_extract_propsC(n_type[:, :, :] ch, n_type[:, :, :, :] subcell_ch
                     bounding_box[key] = ((x, y, z), (x+1, y+1, z+1))
                     sizes[key] = 1
                     rep_coords[key] = [x, y, z]  # TODO: could be more representative
-    return rep_coords, bounding_box, sizes, [subcell_rc_dicts, subcell_bb_dicts, subcell_size_dicts], subcell_mapping_dicts
+    return [rep_coords, bounding_box, sizes], [subcell_rc_dicts, subcell_bb_dicts, subcell_size_dicts], subcell_mapping_dicts
 
 
 def cython_loop(n_type[:, :, :] chunk):

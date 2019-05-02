@@ -447,7 +447,7 @@ def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     else:
         print("Starting multi-gpu prediction with GPUs:", gpu_ids)
         # TODO: replace by QSUB script
-        _multi_gpu_ds_pred(kd_p, kd_pred_p, cd_p, model_p,imposed_patch_size, gpu_ids)
+        _multi_gpu_ds_pred(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size, gpu_ids)
 
 
 def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,

@@ -12,6 +12,7 @@ import shutil
 
 from .. import global_params
 from ..extraction import log_extraction
+from ..reps.segmentation import SegmentationDataset
 from ..handler import basics
 from . import object_extraction_steps as oes
 
@@ -53,9 +54,31 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
     return chunk_list, translator
 
 
-def generate_subcell_kds(co, chunk_size=None,
-                         load_cellorganelles_from_kd_overlaycubes=False,
-                         transf_func_kd_overlay=None, cube_of_interest_bb=None, log=None):
+def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=None,
+                                   load_cellorganelles_from_kd_overlaycubes=False,
+                                   cube_of_interest_bb=None, log=None, **kwargs):
+    """
+    Generate KnossosDatasets for given subcellular structure key (e.g. 'mi').
+    The required initial data format is a chunkdataset located at
+    `"{}/chunkdatasets/{}/".format(global_params.config.working_dir, co)`.
+    Resulting KD will be stored at
+    `"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)`.
+    See `from_probabilities_to_kd` for details of the conversion process from
+    the initial probability map to the SV segmentation. Default: thresholding and
+    connected components, thresholds are stored in
+    `global_params.config.entries["Probathresholds"]`.
+
+    Parameters
+    ----------
+    co : str
+    chunk_size : Tuple
+    transf_func_kd_overlay : callable
+    load_cellorganelles_from_kd_overlaycubes : bool
+    cube_of_interest_bb : Tuple[Tuple[int]] or np.ndarray
+    log : logger
+    """
+    if chunk_size is None:
+        chunk_size = [512, 512, 512]
     if log is None:
         log = log_extraction
     kd = basics.kd_factory(global_params.config.kd_seg_path)
@@ -63,7 +86,7 @@ def generate_subcell_kds(co, chunk_size=None,
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
-    cd_dir = global_params.config.working_dir + "chunkdatasets/{}/".format(co)
+    cd_dir = "{}/chunkdatasets/{}/".format(global_params.config.working_dir, co)
     cd = chunky.ChunkDataset()
     cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
                   box_coords=[0, 0, 0], fit_box_size=True)
@@ -74,7 +97,7 @@ def generate_subcell_kds(co, chunk_size=None,
     prob_thresh = global_params.config.entries["Probathresholds"][co]  # get probability threshold
 
     # `from_probabilities_to_objects` will export a KD at `path`, remove if already existing
-    path = "{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)
+    path = global_params.config.kd_organelle_seg_paths[co]
     if os.path.isdir(path):
         log.debug('Found existing KD at {}. Removing it now.'.format(path))
         shutil.rmtree(path)
@@ -84,15 +107,11 @@ def generate_subcell_kds(co, chunk_size=None,
     target_kd = knossosdataset.KnossosDataset()
     target_kd.initialize_from_knossos_path(path)
     from_probabilities_to_kd(cd, co, # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist
-                          prob_kd_path_dict=prob_kd_path_dict, thresholds=[prob_thresh],
-                          hdf5names=[co], n_max_co_processes=None, target_kd=target_kd,
-                          debug=False, size=size, offset=offset,
-                          load_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
-                          transf_func_kd_overlay=transf_func_kd_overlay[co], log=log)
-
-
-def cell_subcell_kds_to_sds():
-    return
+                             prob_kd_path_dict=prob_kd_path_dict, thresholds=[prob_thresh],
+                             hdf5names=[co], n_max_co_processes=None, target_kd=target_kd,
+                             debug=False, size=size, offset=offset,
+                             load_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
+                             transf_func_kd_overlay=transf_func_kd_overlay[co], log=log, **kwargs)
 
 
 def from_probabilities_to_kd(cset, filename, hdf5names,
@@ -108,8 +127,6 @@ def from_probabilities_to_kd(cset, filename, hdf5names,
                           load_from_kd_overlaycubes=False,
                           transf_func_kd_overlay=None, log=None):
     """
-    # TODO: Merge this method with mapping (e.g. iterate over chunks of cell SV segm. and over all
-            objects to extract bounding boxes and overlap (i.e. mapping) at the same time
     Main function for the object extraction step; combines all needed steps
     # TODO: change object_names to dataset_names as in other methods
 

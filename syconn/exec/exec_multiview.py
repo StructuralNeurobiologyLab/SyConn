@@ -39,7 +39,7 @@ from syconn.exec import exec_skeleton
 
 def run_morphology_embedding(max_n_jobs=None):
     if max_n_jobs is None:
-        max_n_jobs = global_params.NCORE_TOTAL * 2
+        max_n_jobs = global_params.NGPU_TOTAL * 2
     log = initialize_logging('morphology_embedding', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -54,8 +54,9 @@ def run_morphology_embedding(max_n_jobs=None):
     # add ssd parameters
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
                      pred_key_appendix) for ssv_ids in multi_params]
-    qu.QSUB_script(multi_params, "generate_morphology_embedding", pe="openmp", queue=None,
-                   n_cores=10, suffix="", additional_flags="--gres=gpu:1", resume_job=False)  # removed -V (used with QSUB)
+    qu.QSUB_script(multi_params, "generate_morphology_embedding", n_max_co_processes=global_params.NGPU_TOTAL,
+                   n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                   suffix="", additional_flags="--gres=gpu:1", resume_job=False)  # removed -V (used with QSUB)
     log.info('Finished extraction of cell morphology embedding.')
 
 
@@ -80,12 +81,12 @@ def run_axoness_mapping(max_n_jobs=None):
     log.info('Starting axoness mapping.')
     path_to_out = qu.QSUB_script(multi_params, "map_viewaxoness2skel",
                                  n_max_co_processes=global_params.NCORE_TOTAL,
-                                 pe="openmp", queue=None, suffix="", n_cores=1)
+                                 suffix="", n_cores=1)
     # TODO: perform completeness check
     log.info('Finished axoness mapping.')
 
 
-def run_axoness_prediction(max_n_jobs_gpu=100, e3=False):
+def run_axoness_prediction(max_n_jobs_gpu=None, e3=False):
     log = initialize_logging('axon_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     if max_n_jobs_gpu is None:
@@ -100,7 +101,7 @@ def run_axoness_prediction(max_n_jobs_gpu=100, e3=False):
     # get model properties
     log.info('Performing axon prediction of neuron views. Labels will be stored '
              'on SV level in the attribute dict with key "{}"'.format(pred_key))
-    if e3 == True:
+    if e3 is True:
         model_kwargs = 'get_axoness_model_e3'
     else:
         m = get_axoness_model()
@@ -117,20 +118,20 @@ def run_axoness_prediction(max_n_jobs_gpu=100, e3=False):
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for
                     par in multi_params]
 
-    if e3==True:
-        path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
-                                     n_max_co_processes=global_params.NGPU_TOTAL // 2,
-                                     n_cores=10, suffix="_axoness",
-                                     additional_flags="--gres=gpu:1")
+    if e3 is True:
+        _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
+                           n_max_co_processes=global_params.NGPU_TOTAL,
+                           n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                           suffix="_axoness", additional_flags="--gres=gpu:1")
     else:
         for par in multi_params:
             mk = par[1]
             # Single GPUs are made available for every job via slurm, no need for random assignments.
             mk["init_gpu"] = 0  # np.random.rand(0, 2)
-        path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
-                                     n_max_co_processes=global_params.NGPU_TOTAL // 2,
-                                     n_cores=global_params.NCORES_PER_NODE, suffix="_axoness",
-                                     additional_flags="--gres=gpu:1")
+        _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
+                           n_max_co_processes=global_params.NGPU_TOTAL // 2,
+                           n_cores=global_params.NCORES_PER_NODE, suffix="_axoness",
+                           additional_flags="--gres=gpu:1")
     log.info('Finished axon prediction. Now checking for missing predictions.')
     res = find_missing_sv_attributes_in_ssv(ssd, pred_key, n_cores=global_params.NCORES_PER_NODE)
     if len(res) > 0:
@@ -204,7 +205,7 @@ def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
                     for par in multi_params]
     log.info('Starting spine prediction.')
     qu.QSUB_script(multi_params, "predict_spiness_chunked",
-                   n_max_co_processes=NGPU_TOTAL, pe="openmp", queue=None,
+                   n_max_co_processes=NGPU_TOTAL,
                    n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
                    python_path=global_params.config.py36path,
                    # use python 3.6
@@ -225,8 +226,8 @@ def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
                      kwargs_semseg2mesh) for ssv_ids in multi_params]
     log.info('Starting mapping of spine predictions to neurite surfaces.')
-    qu.QSUB_script(multi_params, "map_spiness", pe="openmp", queue=None,
-                   n_cores=2, suffix="", additional_flags="", resume_job=False)  # removed -V (used with QSUB)
+    qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=global_params.NCORE_TOTAL,
+                   n_cores=1, suffix="", additional_flags="", resume_job=False)  # removed -V (used with QSUB)
     log.info('Finished spine mapping.')
 
 
@@ -371,11 +372,11 @@ def run_create_neuron_ssd(prior_glia_removal=True):
              'organelle mapping.')
 
     # map cellular organelles to SSVs
-    # TODO: increase number of jobs in the next two QSUB submissions and sort by SSV size (descending)
+    # TODO: sort by SSV size (descending)
     ssd_proc.aggregate_segmentation_object_mappings(
-        ssd, global_params.existing_cell_organelles, qsub_pe="openmp")
+        ssd, global_params.existing_cell_organelles)
     ssd_proc.apply_mapping_decisions(
-        ssd, global_params.existing_cell_organelles, qsub_pe="openmp")
+        ssd, global_params.existing_cell_organelles)
     log.info('Finished mapping of cellular organelles to SSVs. '
              'Writing individual SSV graphs.')
 
@@ -443,8 +444,8 @@ def run_glia_prediction(e3=False):
             # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
             mk["init_gpu"] = 0
         path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
-                                     n_max_co_processes=2 * global_params.NNODES_TOTAL, pe="openmp",
-                                     queue=None, n_cores=global_params.NCORE_TOTAL, suffix="_glia",
+                                     n_max_co_processes=global_params.NNODES_TOTAL,
+                                     n_cores=global_params.NCORES_PER_NODE, suffix="_glia",
                                      script_folder=None,
                                      additional_flags="--gres=gpu:2")  # removed -V
     log.info('Finished glia prediction. Checking completeness.')

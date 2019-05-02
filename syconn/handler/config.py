@@ -10,6 +10,7 @@ from validate import Validator
 import logging
 import coloredlogs
 import datetime
+import pwd
 from termcolor import colored
 import os
 from .. import global_params
@@ -155,6 +156,46 @@ class DynConfig(Config):
     @property
     def kd_mi_path(self):
         return self.entries['Paths']['kd_mi']
+
+    @property
+    def kd_organells_paths(self):
+        """
+        KDs of subcell. organelle probability maps
+
+        Returns
+        -------
+        Dict[str]
+        """
+        path_dict = {k: self.entries['Paths']['kd_{}'.format(k)] for k in
+                     global_params.existing_cell_organelles}
+        # path_dict = {
+        #     'kd_sj': self.kd_sj_path,
+        #     'kd_vc': self.kd_vc_path,
+        #     'kd_mi': self.kd_mi_path
+        # }
+        return path_dict
+
+    @property
+    def kd_organelle_seg_paths(self):
+        """
+        KDs of subcell. organelle segmentations
+
+        Returns
+        -------
+        Dict[str]
+        """
+        path_dict = {k: "{}/knossosdatasets/{}_seg/".format(self.working_dir, k) for k in
+                     global_params.existing_cell_organelles}
+        # path_dict = {
+        #     'kd_sj': self.kd_sj_path,
+        #     'kd_vc': self.kd_vc_path,
+        #     'kd_mi': self.kd_mi_path
+        # }
+        return path_dict
+
+    @property
+    def temp_path(self):
+        return "/tmp/{}_syconn/".format(pwd.getpwuid(os.getuid()).pw_name)
 
     @property
     # TODO: Not necessarily needed anymore

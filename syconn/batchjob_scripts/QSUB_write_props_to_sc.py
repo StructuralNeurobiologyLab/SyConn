@@ -6,15 +6,12 @@
 # Authors: Philipp Schubert, Jörgen Kornfeld
 
 import sys
-import warnings
-warnings.filterwarnings("ignore", message=".*You are using implicit channel selection.*")
-warnings.filterwarnings("ignore", message=".*You are initializing a KnossosDataset from a path.*")
-warnings.filterwarnings("ignore", message=".*dataset.value has been deprecated.*")  # h5py deprecation warning
+
 try:
     import cPickle as pkl
-except Exception:
+except ImportError:
     import pickle as pkl
-from knossos_utils.chunky import _export_cset_as_kd_thread
+from syconn.proc import sd_proc
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -27,7 +24,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = _export_cset_as_kd_thread(args)
+out = sd_proc._write_props_to_sc_thread(args)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(out, f)

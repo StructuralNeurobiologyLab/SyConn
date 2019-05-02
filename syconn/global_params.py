@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Authors: Philipp Schubert, Joergen Kornfeld
 
 import warnings
 import os

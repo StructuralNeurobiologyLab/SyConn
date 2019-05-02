@@ -25,7 +25,7 @@ from ..proc.meshes import mesh_creator_sso
 
 
 def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=None,
-                                           n_jobs=1000, qsub_pe=None,
+                                           n_jobs=None, qsub_pe=None,
                                            qsub_queue=None, nb_cpus=None):
     """
 
@@ -45,23 +45,21 @@ def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=No
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
     assert "sv" in ssd.version_dict
+    if n_jobs is None:
+        n_jobs = global_params.NCORE_TOTAL * 2
 
     multi_params = basics.chunkify(ssd.ssv_ids, n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
                      obj_types, ssd.type) for ssv_id_block in multi_params]
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(
+    if not qu.batchjob_enabled():
+        _ = sm.start_multiprocess_imap(
             _aggregate_segmentation_object_mappings_thread,
             multi_params, nb_cpus=n_max_co_processes)
 
-    elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params, "aggregate_segmentation_object_mappings",
-                                     pe=qsub_pe, queue=qsub_queue, script_folder=None,
-                                     n_max_co_processes=n_max_co_processes, n_cores=nb_cpus)
-
     else:
-        raise Exception("QSUB not available")
+        _ = qu.QSUB_script(multi_params, "aggregate_segmentation_object_mappings",
+                           n_max_co_processes=n_max_co_processes, n_cores=nb_cpus)
 
 
 def _aggregate_segmentation_object_mappings_thread(args):
@@ -100,7 +98,7 @@ def _aggregate_segmentation_object_mappings_thread(args):
         ssv.save_attr_dict()
 
 
-def apply_mapping_decisions(ssd, obj_types, n_jobs=1000, qsub_pe=None,
+def apply_mapping_decisions(ssd, obj_types, n_jobs=None, qsub_pe=None,
                             qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     """
     Requires prior execution of `aggregate_segmentation_object_mappings`.
@@ -116,26 +114,23 @@ def apply_mapping_decisions(ssd, obj_types, n_jobs=1000, qsub_pe=None,
     """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
-
+    if n_jobs is None:
+        n_jobs = global_params.NCORE_TOTAL * 2
     multi_params = basics.chunkify(ssd.ssv_ids, n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
                      obj_types, ssd.type) for ssv_id_block in multi_params]
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_apply_mapping_decisions_thread,
-                                             multi_params, nb_cpus=n_max_co_processes)
-
-    elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "apply_mapping_decisions", n_cores=nb_cpus,
-                                     pe=qsub_pe, queue=qsub_queue, script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+    if not qu.batchjob_enabled():
+        _ = sm.start_multiprocess_imap(_apply_mapping_decisions_thread,
+                                       multi_params, nb_cpus=n_max_co_processes)
 
     else:
-        raise Exception("QSUB not available")
+        _ = qu.QSUB_script(multi_params, "apply_mapping_decisions",
+                           n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
 
 
 def _apply_mapping_decisions_thread(args):
+    # TODO: investigate `correct_for_background` when `obj_type=='sj'`
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
@@ -275,16 +270,13 @@ def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue
                              syn_threshold])
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(
+        _ = sm.start_multiprocess_imap(
             map_synssv_objects_thread,
             multi_params, nb_cpus=nb_cpus)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "map_synssv_objects",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+        _ = qu.QSUB_script(multi_params, "map_synssv_objects",
+                           n_max_co_processes=n_max_co_processes)
 
 
 def map_synssv_objects_thread(args):

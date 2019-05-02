@@ -29,6 +29,7 @@ from ..backend.storage import VoxelStorageL, VoxelStorage, VoxelStorageDyn
 from ..proc.image import multi_mop
 from .. import global_params
 from ..handler.basics import kd_factory
+from syconn.reps.rep_helper import find_object_properties
 
 
 def gauss_threshold_connected_components(*args, **kwargs):
@@ -1151,7 +1152,6 @@ def _extract_voxels_combined_thread_NEW(args):
                                                                        chunk.coordinates,
                                                                        datatype=np.uint32)
 
-                from syconn.reps.rep_helper import find_object_properties
                 segobj_res = find_object_properties(this_segmentation)  # returns 3 dicts: rep coord, bounding box, size
                 rep_coords = segobj_res[0]
                 bbs = segobj_res[1]

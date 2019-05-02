@@ -36,7 +36,7 @@ def run_matrix_export():
     # synssv to SSVs) -> saves finding SSV ID indices in synapse arrays (->
     # slow for many synapses)
     cps.collect_properties_from_ssv_partners(global_params.config.working_dir,
-                                             debug=True)
+                                             debug=False)
     #
     # collect new object attributes collected above partner axoness, celltypes,
     # synapse probabilities etc, no need to compute size/rep_coord etc. ->
@@ -72,7 +72,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
     if max_n_jobs is None:
         max_n_jobs = global_params.NCORE_TOTAL * 2
 
-    log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('synapse_generation', global_params.config.working_dir + '/logs/',
                              overwrite=True)
 
     kd_seg_path = global_params.config.kd_seg_path

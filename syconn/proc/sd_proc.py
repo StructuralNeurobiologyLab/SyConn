@@ -13,8 +13,11 @@ import numpy as np
 import os
 import tqdm
 import time
+import sys
+import shutil
 from collections import defaultdict
 from knossos_utils import knossosdataset
+from knossos_utils import chunky
 knossosdataset._set_noprint(True)
 
 from ..global_params import MESH_DOWNSAMPLING,\
@@ -25,9 +28,11 @@ from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn
 from ..reps import segmentation, segmentation_helper
+from ..reps import rep_helper
 from ..handler import basics
 from ..proc.meshes import mesh_chunk
 from . import log_proc
+from ..extraction import object_extraction_wrapper as oew
 
 
 def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
@@ -72,7 +77,8 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
     # Running workers
     if not qu.batchjob_enabled():
         results = sm.start_multiprocess_imap(_dataset_analysis_thread,
-                                             multi_params, nb_cpus=n_max_co_processes, debug=True)
+                                             multi_params, nb_cpus=n_max_co_processes,
+                                             debug=False)
 
     else:
         path_to_out = qu.QSUB_script(multi_params, "dataset_analysis", script_folder=None,
@@ -194,9 +200,6 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
         number of cores per worker for qsub jobs
     n_max_co_processes : int or None
         max number of workers running at the same time when using qsub
-    Returns
-    -------
-
     """
     start = time.time()
     if sd.type != "sv":
@@ -204,6 +207,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     assert obj_type in sd.version_dict
     seg_dataset = sd.get_segmentationdataset(obj_type)
     paths = seg_dataset.so_dir_paths
+
     # write cell organell mappings to cell organelle SV attribute dicts
     # Partitioning the work
     multi_params = basics.chunkify(paths, n_jobs)
@@ -311,7 +315,7 @@ def _map_objects_thread(args):
                     log_proc.error('Could not load overlaycube '
                                    'during object mapping')
                     continue
-                ids, id_counts = np.unique(id_list, return_counts=True)
+                ids, id_counts = np.unique(id_list, return_counts=True)  # cell SV IDs
                 id_ratios = id_counts / float(np.sum(id_counts))
 
                 for i_id in range(len(ids)):
@@ -345,6 +349,422 @@ def _write_mapping_to_sv_thread(args):
                 list(mapping_dict[sv_id].keys())
             this_attr_dc[sv_id]["mapping_%s_ratios" % obj_type] = \
                 list(mapping_dict[sv_id].values())
+        this_attr_dc.push()
+
+
+def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000, n_folders_fs_sc=1000,
+                              n_chunk_jobs=None, n_cores=1, n_max_co_processes=None,
+                              cube_of_interest_bb=None, chunk_size=None, log=None):
+    """Replaces `map_objects_to_sv` and parts of `from_ids_to_objects`.
+
+    Extracts segmentation properties for each SV in cell and subcellular segmentation.
+    Requires KDs at `kd_seg_path` and `kd_organelle_paths`
+
+    Step 1: Extract properties and overlap voxels locally
+    Step 2: Analyze resulting IDs (get result locations of each SV object)
+    Step 3: Write out combined results for each SV object according to SegmentationDataset chunking
+
+    Parameters
+    ----------
+    kd_seg_path : str
+    kd_organelle_paths : Dict[int]
+    n_folders_fs
+    n_folders_fs_sc :
+        `n_folders_fs` for subcellular structures
+    n_chunk_jobs
+    n_cores
+    n_max_co_processes
+    cube_of_interest_bb
+    chunk_size
+
+    Returns
+    -------
+
+    """
+    kd = basics.kd_factory(kd_seg_path)
+    assert sys.version_info >= (3, 6)  # below, dictionaries are unordered!
+    for k, v in kd_organelle_paths.items():
+        if not np.array_equal(basics.kd_factory(v).boundary, kd.boundary):
+            msg = "Data shape of subcellular structures '{}' differs from " \
+                  "cell segmentation data. {} vs. {}".format(
+                k, basics.kd_factory(v).boundary, kd.boundary)
+            log_proc.error(msg)
+            raise ValueError(msg)
+
+    # get chunks
+    if log is None:
+        log = log_proc
+    if n_chunk_jobs is None:
+        n_chunk_jobs = global_params.NCORE_TOTAL * 2
+    if chunk_size is None:
+        chunk_size = [512, 512, 512]
+    if cube_of_interest_bb is None:
+        cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
+    size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
+    offset = cube_of_interest_bb[0]
+    cd_dir = "{}/chunkdatasets/tmp/".format(global_params.config.temp_path)
+    cd = chunky.ChunkDataset()
+    cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
+                  box_coords=[0, 0, 0], fit_box_size=True)
+    chunk_list, _ = oew.calculate_chunk_numbers_for_box(cd, offset=offset,
+                                                        size=size)
+
+    all_times = []
+    step_names = []
+
+    # extracting mapping
+    start = time.time()
+    multi_params = basics.chunkify(chunk_list, n_chunk_jobs)
+    multi_params = [(chs, chunk_size, kd_seg_path, list(kd_organelle_paths.values())) for
+                    chs in multi_params]
+    if qu.batchjob_enabled():
+        path_to_out = qu.QSUB_script(multi_params, "map_subcell_extract_props", n_cores=n_cores,
+                                     n_max_co_processes=n_max_co_processes)
+        out_files = glob.glob(path_to_out + "/*")
+        results = []
+        for out_file in out_files:
+            with open(out_file, 'rb') as f:
+                results.append(pkl.load(f))
+    else:
+        results = sm.start_multiprocess_imap(_map_subcell_extract_props_thread, multi_params,
+                                             nb_cpus=n_max_co_processes, verbose=True,
+                                             debug=False)
+    all_times.append(time.time() - start)
+    step_names.append("extract and map segmentation objects")
+
+    # reduce step
+    tot_cp = [{}, defaultdict(list), {}]
+    tot_scp = [[{}, defaultdict(list), {}] for _ in range(len(kd_organelle_paths))]
+    tot_scm = [{} for _ in range(len(kd_organelle_paths))]
+    for cp_dc, scp_dcs, scm_dcs in results:
+        merge_prop_dicts([tot_cp, cp_dc])
+        # iterate over each subcellular structure
+        for ii in range(len(kd_organelle_paths)):
+            merge_map_dicts([tot_scm[ii], scm_dcs[ii]])
+            merge_prop_dicts([tot_scp[ii], scp_dcs[ii]])
+        del cp_dc, scp_dcs, scm_dcs  # will remove redundant data inside results
+
+    # convert mapping dicts to store ratio of number of overlapping voxels
+    prop_dict_p = "{}/sv_prop_dict.pkl".format(global_params.config.temp_path)
+    with open(prop_dict_p, "wb") as f:
+        pkl.dump(tot_cp, f)
+    del tot_cp
+
+    dict_paths = [prop_dict_p, ]
+    for ii, k in enumerate(global_params.existing_cell_organelles):
+        convert_nvox2ratio_mapdict(tot_scm[ii])  # in-place conversion
+        # subcell ID -> cell ID -> ratio
+        mapping_dict_path = "{}/{}_mapping_dict.pkl".format(global_params.config.temp_path, k)
+        with open(mapping_dict_path, "wb") as f:
+            pkl.dump(tot_scm[ii], f)
+
+        # cell ID -> subcell ID -> ratio
+        tot_scm_inv = invert_mdc(tot_scm[ii])
+        mapping_dict_path_inv = "{}_inv.pkl".format(mapping_dict_path[:-4])
+        with open(mapping_dict_path_inv, "wb") as f:
+            pkl.dump(tot_scm_inv, f)
+        tot_scm[ii] = {}  # free space
+        del tot_scm_inv
+
+        prop_dict = tot_scp[ii]
+        prop_dict_p = "{}/{}_prop_dict.pkl".format(global_params.config.temp_path, k)
+        with open(prop_dict_p, "wb") as f:
+            pkl.dump(prop_dict, f)
+        tot_scp[ii] = []  # free space
+
+        dict_paths += [mapping_dict_path, mapping_dict_path_inv]
+    all_times.append(time.time() - start)
+
+    step_names.append("conversion of results")
+
+    # TODO: do write out chunk-wise by analyzing location of intermediate results for each SV and write
+    #  them packaged according to the SegmentationDataset chunks
+    # # analyze output
+    # start = time.time()
+    #
+    #
+    # all_times.append(time.time() - start)
+    # step_names.append("analyze output")
+
+    # writing cell SV properties to SD
+    start = time.time()
+    multi_params = [(sv_id_block, n_folders_fs) for sv_id_block in basics.chunkify(np.arange(n_folders_fs), n_chunk_jobs)]
+    if not qu.batchjob_enabled():
+        sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params,
+                                   nb_cpus=n_max_co_processes, debug=False)
+    else:
+        qu.QSUB_script(multi_params, "write_props_to_sv", script_folder=None,
+                       n_cores=n_cores, n_max_co_processes=n_max_co_processes)
+    all_times.append(time.time() - start)
+    step_names.append("write cell SV dataset")
+    sv_sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
+                                             obj_type="sv", version=0)
+    dataset_analysis(sv_sd, recompute=True, compute_meshprops=False)
+
+    # write to subcell. SV attribute dicts
+    multi_params = [(sv_id_block, n_folders_fs_sc) for sv_id_block in basics.chunkify(np.arange(n_folders_fs_sc), n_chunk_jobs)]
+    if not qu.batchjob_enabled():
+        sm.start_multiprocess_imap(_write_props_to_sc_thread, multi_params,
+                                   nb_cpus=n_max_co_processes, debug=False)
+    else:
+        qu.QSUB_script(multi_params, "write_props_to_sc", script_folder=None,
+                       n_cores=n_cores, n_max_co_processes=n_max_co_processes)
+    step_names.append("write subcellular SV dataset")
+    for k in global_params.existing_cell_organelles:
+        sc_sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
+                                                 obj_type=k, version=0)
+        dataset_analysis(sc_sd, recompute=True, compute_meshprops=False)
+
+    # clear temporary files
+    for p in dict_paths:
+        os.remove(p)
+    shutil.rmtree(cd_dir, ignore_errors=True)
+    # --------------------------------------------------------------------------
+    log.debug("Time overview [from_probabilities_to_objects]:")
+    for ii in range(len(all_times)):
+        log.debug("%s: %.3fs" % (step_names[ii], all_times[ii]))
+    log.debug("--------------------------")
+    log.debug("Total Time: %.1f min" % (np.sum(all_times) / 60))
+    log.debug("--------------------------")
+
+
+def _map_subcell_extract_props_thread(args):
+    from syconn.reps.find_object_properties_C import map_subcell_extract_propsC
+    chunks = args[0]
+    chunk_size = args[1]
+    kd_cell_p = args[2]
+    kd_subcell_ps = args[3]
+
+    kd_cell = basics.kd_factory(kd_cell_p)
+    cd_dir = "{}/chunkdatasets/tmp/".format(global_params.config.temp_path)
+    cd = chunky.ChunkDataset()
+    cd.initialize(kd_cell, kd_cell.boundary, chunk_size, cd_dir,
+                  box_coords=[0, 0, 0], fit_box_size=True)
+    kd_subcells = [basics.kd_factory(kd_subcell_p) for kd_subcell_p in kd_subcell_ps]
+    n_subcell = len(kd_subcells)
+
+    cpd_lst = [{}, defaultdict(list), {}]    # cell property dicts
+    scpd_lst = [[{}, defaultdict(list), {}] for _ in range(n_subcell)]   # subcell. property dicts
+    scmd_lst = [{} for _ in range(n_subcell)]   # subcell. mapping dicts
+    # iterate over chunks and store information in property dicts for subcellular and cellular structures
+    for ch_id in chunks:
+        ch = cd.chunk_dict[ch_id]
+        offset, size = ch.coordinates.astype(np.int), ch.size
+        cell_d = kd_cell.from_overlaycubes_to_matrix(size, offset)
+        # get all segmentation arrays concatenates as 4D array: [C, X, Y, Z]
+        subcell_d = []
+        for kd_sc in kd_subcells:
+            subcell_d.append(kd_sc.from_overlaycubes_to_matrix(size, offset)[None, ])  # add auxiliary axis
+        subcell_d = np.concatenate(subcell_d)
+        cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = map_subcell_extract_propsC(cell_d, subcell_d)
+        # reorder to match [[rc, bb, size], [rc, bb, size]] for e.g. [mi, vc]
+        subcell_prop_dicts = [[subcell_prop_dicts[0][ii], subcell_prop_dicts[1][ii],
+                               subcell_prop_dicts[2][ii]] for ii in range(n_subcell)]
+        # merge cell properties: list list of dicts
+        merge_prop_dicts([cpd_lst, cell_prop_dicts], offset)
+        # collect subcell properties: list of list of dicts
+        # collect subcell mappings to cell SVs: list of list of dicts and list of dict of dict of int
+        for ii in range(n_subcell):
+            merge_map_dicts([scmd_lst[ii], subcell_mapping_dicts[ii]])
+            merge_prop_dicts([scpd_lst[ii], subcell_prop_dicts[ii]], offset)
+
+        del subcell_prop_dicts
+        del subcell_mapping_dicts
+        del cell_prop_dicts
+    return cpd_lst, scpd_lst, scmd_lst
+
+
+def merge_prop_dicts(prop_dicts, offset=None):
+    """Merge property dicts in-place. All values will be stored in the first dict."""
+    tot_rc = prop_dicts[0][0]
+    tot_bb = prop_dicts[0][1]
+    tot_size = prop_dicts[0][2]
+    for el in prop_dicts[1:]:
+        if len(el[0]) == 0:
+            continue
+        if offset is not None:
+            for k in el[0]:  # update chunk offset  # TODO: could be done at the end of the map_extract cython code
+                el[0][k] += offset
+        tot_rc.update(el[0])  # just overwrite existing elements
+        for k, v in el[1].items():
+            if offset is None:
+                bb = v
+            else:
+                bb = v + offset
+            tot_bb[k].append(bb)  # collect all bounding boxes to enable efficient data loading
+        for k, v in el[2].items():
+            if k in tot_size:
+                tot_size[k] += v
+            else:
+                tot_size[k] = v
+
+
+def convert_nvox2ratio_mapdict(map_dc):
+    """convert number of overlap voxels of each subcellular structure object
+     inside the mapping dicts to each cell SV
+     (subcell ID -> cell ID -> number overlap vxs) to fraction.
+     """
+    # TODO consider to implement in cython
+    for subcell_id, subcell_dc in map_dc.items():
+        s = np.sum(list(subcell_dc.values()))  # total number of overlap voxels
+        for k, v in subcell_dc.items():
+            map_dc[subcell_id][k] = subcell_dc[k] / s
+
+
+def invert_mdc(mapping_dict):
+    """Inverts mapping dict to: cell ID -> subcell ID -> value (ratio or voxel count)"""
+    mdc_inv = {}
+    for subcell_id, subcell_dc in mapping_dict.items():
+        for cell_id, v in subcell_dc.items():
+            if cell_id not in mdc_inv:
+                mdc_inv[cell_id] = {subcell_id: v}
+            else:
+                mdc_inv[cell_id][subcell_id] = v
+    return mdc_inv
+
+
+def merge_map_dicts(map_dicts):
+    """
+    Merge map dictionaries in-place. Values will be stored in first dictionary
+
+    Parameters
+    ----------
+    map_dicts
+
+    Returns
+    -------
+
+    """
+    tot_map = map_dicts[0]
+    for el in map_dicts[1:]:
+        # iterate over subcell. ids with dictionaries as values which store
+        # the number of overlap voxels to cell SVs
+        for sc_id, sc_dc in el.items():
+            if sc_id in tot_map:
+                for cellsv_id, ol_vx_cnt in sc_dc.items():
+                    if cellsv_id in tot_map[sc_id]:
+                        tot_map[sc_id][cellsv_id] += ol_vx_cnt
+                    else:
+                        tot_map[sc_id][cellsv_id] = ol_vx_cnt
+            else:
+                tot_map[sc_id] = sc_dc
+
+
+def _analyze_res_map_extract():
+    """TBD"""
+    return
+
+
+def _write_props_to_sc_thread(args):
+    """"""
+
+    obj_id_chs = args[0]
+    n_folders_fs = args[1]
+
+    # iterate over the subcell structures
+    for ii, k in enumerate(global_params.existing_cell_organelles):
+        # get cached mapping and property dicts of current subcellular structure
+        mapping_dict_path = "{}/{}_mapping_dict.pkl".format(global_params.config.temp_path, k)
+        with open(mapping_dict_path, "rb") as f:
+            mapping_dict = pkl.load(f)
+        prop_dict_p = "{}/{}_prop_dict.pkl".format(global_params.config.temp_path, k)
+        with open(prop_dict_p, "rb") as f:
+            prop_dict = pkl.load(f)
+
+        # store destinations for each existing obj
+        dest_dc = defaultdict(list)
+        for subcell_id in mapping_dict:
+            dest_dc[rep_helper.subfold_from_ix(subcell_id, n_folders_fs)].append(subcell_id)
+
+        # get SegmentationDataset of current subcell.
+        sc_sd = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs, obj_type=k,
+                                                 working_dir=global_params.config.working_dir, version=0)
+        # iterate over the subcellular SV ID chunks
+        for obj_id_mod in obj_id_chs:
+            obj_keys = dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]
+            # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
+            dummy_so = sc_sd.get_segmentation_object(obj_id_mod)
+            attr_p = dummy_so.attr_dict_path
+            vx_p = dummy_so.voxel_path
+            this_attr_dc = AttributeDict(attr_p, read_only=False, disable_locking=True)
+            voxel_dc = VoxelStorageDyn(vx_p, voxel_mode=False, voxeldata_path=global_params.config.kd_organelle_seg_paths[k],
+                                       read_only=False, disable_locking=True)
+            for sc_id in obj_keys:
+                this_attr_dc[sc_id]["mapping_ids"] = \
+                    list(mapping_dict[sc_id].keys())
+                this_attr_dc[sc_id]["mapping_ratios"] = \
+                    list(mapping_dict[sc_id].values())
+                rp = prop_dict[0][sc_id]
+                bbs = np.concatenate(prop_dict[1][sc_id])
+                size = prop_dict[2][sc_id]
+                this_attr_dc[sc_id]["rep_coord"] = rp
+                this_attr_dc[sc_id]["bounding_box"] = np.array(
+                    [bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
+                this_attr_dc[sc_id]["size"] = size
+                voxel_dc[sc_id] = bbs
+                # TODO: make use of these stored properties downstream during the reduce step
+                voxel_dc.increase_object_size(sc_id, size)
+                voxel_dc.set_object_repcoord(sc_id, rp)
+            voxel_dc.push()
+            this_attr_dc.push()
+
+
+def _write_props_to_sv_thread(args):
+    """"""
+
+    obj_id_chs = args[0]
+    n_folders_fs = args[1]
+
+    # iterate over the subcell structures
+    # get cached mapping and property dicts of current subcellular structure
+    mapping_dicts = {}
+    for ii, k in enumerate(global_params.existing_cell_organelles):
+        mapping_dict_path = "{}/{}_mapping_dict_inv.pkl".format(global_params.config.temp_path, k)
+        with open(mapping_dict_path, "rb") as f:
+            mapping_dicts[k] = pkl.load(f)
+
+    prop_dict_p = "{}/sv_prop_dict.pkl".format(global_params.config.temp_path)
+    with open(prop_dict_p, "rb") as f:
+        prop_dict = pkl.load(f)
+
+    # store destinations for each existing obj
+    dest_dc = defaultdict(list)
+    for k in prop_dict[0]:  # use dictionary for rep coord (just use any, they all share the same keys)
+        dest_dc[rep_helper.subfold_from_ix(k, n_folders_fs)].append(k)
+
+    # get SegmentationDataset of current subcell.
+    sv_sd = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs,
+                                             obj_type="sv", working_dir=global_params.config.working_dir, version=0)
+    # iterate over the subcellular SV ID chunks
+    for obj_id_mod in obj_id_chs:
+        obj_keys = dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]
+        # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
+        dummy_so = sv_sd.get_segmentation_object(obj_id_mod)
+        attr_p = dummy_so.attr_dict_path
+        vx_p = dummy_so.voxel_path
+        this_attr_dc = AttributeDict(attr_p, read_only=False, disable_locking=True)
+        voxel_dc = VoxelStorageDyn(vx_p, voxel_mode=False, voxeldata_path=global_params.config.kd_seg_path,
+                                   read_only=False, disable_locking=True)
+        for sv_id in obj_keys:
+            for ii, k in enumerate(global_params.existing_cell_organelles):
+                if sv_id not in mapping_dicts[k]:  # no object of this type mapped to current cell SV
+                    continue
+                this_attr_dc[sv_id]["mapping_%s_ids" % k] = \
+                    list(mapping_dicts[k][sv_id].keys())
+                this_attr_dc[sv_id]["mapping_%s_ratios" % k] = \
+                    list(mapping_dicts[k][sv_id].values())
+            rp = prop_dict[0][sv_id]
+            bbs = np.concatenate(prop_dict[1][sv_id])
+            size = prop_dict[2][sv_id]
+            this_attr_dc[sv_id]["rep_coord"] = rp
+            this_attr_dc[sv_id]["bounding_box"] = np.array(
+                [bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
+            this_attr_dc[sv_id]["size"] = size
+            voxel_dc[sv_id] = bbs
+            # TODO: make use of these stored properties downstream during the reduce step
+            voxel_dc.increase_object_size(sv_id, size)
+            voxel_dc.set_object_repcoord(sv_id, rp)
+        voxel_dc.push()
         this_attr_dc.push()
 
 
