@@ -1,6 +1,7 @@
 from setuptools import find_packages, setup
 import numpy
 import os
+
 try:
     from Cython.Build import cythonize
     cython_out = cythonize(["syconn/*/*.pyx"], include_path=[numpy.get_include()],

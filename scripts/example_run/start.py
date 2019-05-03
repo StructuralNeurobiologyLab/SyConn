@@ -26,6 +26,7 @@ from syconn.exec import exec_init, exec_syns, exec_multiview
 # TODO add materialize button and store current process in config.ini
 #  -> allows to resume interrupted processes
 if __name__ == '__main__':
+    print("wtf")
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='',
                         help='Working directory of SyConn')

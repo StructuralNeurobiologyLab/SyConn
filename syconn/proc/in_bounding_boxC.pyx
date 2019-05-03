@@ -1,8 +1,10 @@
 # distutils: language = c++
+
 cimport cython
 from libcpp cimport bool
 from libc.stdint cimport int, float
 from libcpp.vector cimport vector
+
 ctypedef fused pyf:
     float
     double

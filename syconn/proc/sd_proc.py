@@ -33,6 +33,8 @@ from ..handler import basics
 from ..proc.meshes import mesh_chunk
 from . import log_proc
 from ..extraction import object_extraction_wrapper as oew
+from zmesh import Mesher
+from Mesher import get_mesh as get_meshZ
 
 import sys
 
@@ -558,12 +560,15 @@ def _map_subcell_extract_props_thread(args):
         ch = cd.chunk_dict[ch_id]
         offset, size = ch.coordinates.astype(np.int), ch.size
         cell_d = kd_cell.from_overlaycubes_to_matrix(size, offset)
+        cell_mesh = find_mesh(cell_d)
         # get all segmentation arrays concatenates as 4D array: [C, X, Y, Z]
         subcell_d = []
+        subcell_meshes = []
         for kd_sc in kd_subcells:
             subcell_d.append(kd_sc.from_overlaycubes_to_matrix(size, offset)[None, ])  # add auxiliary axis
+            subcell_meshes.append(find_meshes(subcell_d[-1]))
         subcell_d = np.concatenate(subcell_d)
-        cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = map_subcell_extract_propsC(cell_d, subcell_d)
+        cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = map_subcel_extract_propsC(cell_d, subcell_d)
         # reorder to match [[rc, bb, size], [rc, bb, size]] for e.g. [mi, vc]
         subcell_prop_dicts = [[subcell_prop_dicts[0][ii], subcell_prop_dicts[1][ii],
                                subcell_prop_dicts[2][ii]] for ii in range(n_subcell)]
@@ -579,6 +584,25 @@ def _map_subcell_extract_props_thread(args):
         del subcell_mapping_dicts
         del cell_prop_dicts
     return cpd_lst, scpd_lst, scmd_lst
+
+
+def find_meshes(chunk):
+
+    """
+    Returns dictionaty with obj_id as a keys and list of faces of the mesh
+    """
+
+    mesher = Mesher((1, 1, 1))  # anisotropy of image
+    mesher.mesh(chunk)  # initial marching cubes pass
+
+    meshes = {}
+    for obj_id in mesher.ids():
+      meshes[obj_id] = mesher.get_mesh(obj_id, normals=True, simplification_factor=0,
+                        max_simplification_error=8)
+      mesher.erase(obj_id)
+    mesher.clear()
+
+    return meshes
 
 
 def merge_prop_dicts(prop_dicts, offset=None):

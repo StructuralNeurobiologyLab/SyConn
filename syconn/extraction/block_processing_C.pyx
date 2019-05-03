@@ -10,6 +10,7 @@ from libcpp.vector cimport vector
 import numpy as np
 import timeit
 
+
 ctypedef unordered_map[uint64_t, uint64_t] um_uint2uint
 ctypedef vector[int] int_vec
 ctypedef vector[int_vec] int_vec_vec
