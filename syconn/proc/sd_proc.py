@@ -34,7 +34,6 @@ from ..proc.meshes import mesh_chunk
 from . import log_proc
 from ..extraction import object_extraction_wrapper as oew
 from zmesh import Mesher
-from Mesher import get_mesh as get_meshZ
 
 import sys
 
@@ -555,18 +554,23 @@ def _map_subcell_extract_props_thread(args):
     cpd_lst = [{}, defaultdict(list), {}]    # cell property dicts
     scpd_lst = [[{}, defaultdict(list), {}] for _ in range(n_subcell)]   # subcell. property dicts
     scmd_lst = [{} for _ in range(n_subcell)]   # subcell. mapping dicts
+
+    meshes_path = wd + "/mesh.pkl"
+    cell_meshes = MeshStorage(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)  # key: cell_id, value: Mesher  # TODO: change to MeshStorage dictionary
+    subcell_meshes = [{} for _ in range(n_subcell)]  # array of subcells dictionaries-> key: cell_id, value: Mesher
+
     # iterate over chunks and store information in property dicts for subcellular and cellular structures
     for ch_id in chunks:
         ch = cd.chunk_dict[ch_id]
         offset, size = ch.coordinates.astype(np.int), ch.size
         cell_d = kd_cell.from_overlaycubes_to_matrix(size, offset)
-        cell_mesh = find_mesh(cell_d)
+        cell_mesh = find_meshes(cell_d)
         # get all segmentation arrays concatenates as 4D array: [C, X, Y, Z]
         subcell_d = []
-        subcell_meshes = []
+        subcell_mesh = []
         for kd_sc in kd_subcells:
             subcell_d.append(kd_sc.from_overlaycubes_to_matrix(size, offset)[None, ])  # add auxiliary axis
-            subcell_meshes.append(find_meshes(subcell_d[-1]))
+            subcell_mesh.append(find_meshes(subcell_d[-1]))
         subcell_d = np.concatenate(subcell_d)
         cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = map_subcel_extract_propsC(cell_d, subcell_d)
         # reorder to match [[rc, bb, size], [rc, bb, size]] for e.g. [mi, vc]
@@ -576,13 +580,19 @@ def _map_subcell_extract_props_thread(args):
         merge_prop_dicts([cpd_lst, cell_prop_dicts], offset)
         # collect subcell properties: list of list of dicts
         # collect subcell mappings to cell SVs: list of list of dicts and list of dict of dict of int
+        # TODO: writte 'merge_meshes_dict' method
+        merge_meshes_dict(cell_meshes, cell_mesh)
         for ii in range(n_subcell):
             merge_map_dicts([scmd_lst[ii], subcell_mapping_dicts[ii]])
             merge_prop_dicts([scpd_lst[ii], subcell_prop_dicts[ii]], offset)
+            merge_meshes_dict(subcell_meshes[ii], subcell_mesh[ii])
 
         del subcell_prop_dicts
         del subcell_mapping_dicts
         del cell_prop_dicts
+        del subcell_mesh
+        del cell_mesh
+
     return cpd_lst, scpd_lst, scmd_lst
 
 
@@ -597,11 +607,14 @@ def find_meshes(chunk):
 
     meshes = {}
     for obj_id in mesher.ids():
-      meshes[obj_id] = mesher.get_mesh(obj_id, normals=True, simplification_factor=0,
+      meshes[obj_id] = mesher.get_mesh(obj_id, normals=True, simplification_factor=10,
                         max_simplification_error=8)
       mesher.erase(obj_id)
     mesher.clear()
-
+    # for key in meshes:
+    #     print("\n\n\n len(meshes[key].faces)= ", len(meshes[key].faces), "len(meshes[key].vertices)= ",
+    #           len(meshes[key].vertices), "len(meshes[key].normals)= ", len(meshes[key].normals), "\n\n\n")
+    # print("\n\n\n len(meshes)= ", len(meshes))
     return meshes
 
 

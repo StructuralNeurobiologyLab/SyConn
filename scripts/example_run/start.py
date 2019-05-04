@@ -26,7 +26,7 @@ from syconn.exec import exec_init, exec_syns, exec_multiview
 # TODO add materialize button and store current process in config.ini
 #  -> allows to resume interrupted processes
 if __name__ == '__main__':
-    print("wtf")
+    print("first in main")
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='',
                         help='Working directory of SyConn')
@@ -45,7 +45,6 @@ if __name__ == '__main__':
 
     time_stamps = [time.time()]
     step_idents = ['t-0']
-
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
     h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
     kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
@@ -156,7 +155,7 @@ if __name__ == '__main__':
 
     # START SyConn
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    # exec_init.run_create_sds(generate_sv_meshes=True, chunk_size=chunk_size,
+    # # exec_init.run_create_sds(generate_sv_meshes=True, chunk_size=chunk_size,
     #                          n_folders_fs=n_folders_fs)
     exec_init.init_cell_subcell_sds(generate_sv_meshes=True, chunk_size=chunk_size,
                                     n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs)
