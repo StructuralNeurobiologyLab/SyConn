@@ -26,7 +26,7 @@ from .. import global_params
 from .image import single_conn_comp_img
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
-from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn
+from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn, MeshStorage
 from ..reps import segmentation, segmentation_helper
 from ..reps import rep_helper
 from ..handler import basics
@@ -423,8 +423,8 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     # extracting mapping
     start = time.time()
     multi_params = basics.chunkify(chunk_list, n_chunk_jobs)
-    multi_params = [(chs, chunk_size, kd_seg_path, list(kd_organelle_paths.values())) for
-                    chs in multi_params]
+    multi_params = [(chs, chunk_size, kd_seg_path, list(kd_organelle_paths.values()), worker_nr) for
+                    chs, worker_nr in zip(multi_params, range(len(multi_params)))]
     if qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params, "map_subcell_extract_props", n_cores=n_cores,
                                      n_max_co_processes=n_max_co_processes)
@@ -542,6 +542,9 @@ def _map_subcell_extract_props_thread(args):
     chunk_size = args[1]
     kd_cell_p = args[2]
     kd_subcell_ps = args[3]
+    worker_nr = args[4]
+
+    wd = global_params.config.working_dir
 
     kd_cell = basics.kd_factory(kd_cell_p)
     cd_dir = "{}/chunkdatasets/tmp/".format(global_params.config.temp_path)
@@ -555,22 +558,23 @@ def _map_subcell_extract_props_thread(args):
     scpd_lst = [[{}, defaultdict(list), {}] for _ in range(n_subcell)]   # subcell. property dicts
     scmd_lst = [{} for _ in range(n_subcell)]   # subcell. mapping dicts
 
-    meshes_path = wd + "/mesh.pkl"
-    cell_meshes = MeshStorage(attr_dir + "/mesh.pkl", disable_locking=True, read_only=False)  # key: cell_id, value: Mesher  # TODO: change to MeshStorage dictionary
-    subcell_meshes = [{} for _ in range(n_subcell)]  # array of subcells dictionaries-> key: cell_id, value: Mesher
+    cell_meshes = MeshStorage(wd + "/tmp_meshes/cell_mesh_" + worker_nr +".pkl", disable_locking=True, read_only=False)
+
+    subcell_meshes = [MeshStorage(wd + "/tmp_meshes/" + cell_org + "_mesh_" + worker_nr +".pkl",
+                                  disable_locking=True, read_only=False)
+                                  for cell_org in global_params.existing_cell_organelles]
 
     # iterate over chunks and store information in property dicts for subcellular and cellular structures
     for ch_id in chunks:
         ch = cd.chunk_dict[ch_id]
         offset, size = ch.coordinates.astype(np.int), ch.size
         cell_d = kd_cell.from_overlaycubes_to_matrix(size, offset)
-        cell_mesh = find_meshes(cell_d)
+        tmp_cell_mesh = find_meshes(cell_d)
         # get all segmentation arrays concatenates as 4D array: [C, X, Y, Z]
-        subcell_d = []
-        subcell_mesh = []
-        for kd_sc in kd_subcells:
+        tmp_subcell_meshes = []
+        for kd_sc, i in zip(kd_subcells, range(len(kd_subcells))):
             subcell_d.append(kd_sc.from_overlaycubes_to_matrix(size, offset)[None, ])  # add auxiliary axis
-            subcell_mesh.append(find_meshes(subcell_d[-1]))
+            tmp_subcell_meshes.append(find_meshes(subcell_d[-1]))
         subcell_d = np.concatenate(subcell_d)
         cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = map_subcel_extract_propsC(cell_d, subcell_d)
         # reorder to match [[rc, bb, size], [rc, bb, size]] for e.g. [mi, vc]
@@ -581,25 +585,26 @@ def _map_subcell_extract_props_thread(args):
         # collect subcell properties: list of list of dicts
         # collect subcell mappings to cell SVs: list of list of dicts and list of dict of dict of int
         # TODO: writte 'merge_meshes_dict' method
-        merge_meshes_dict(cell_meshes, cell_mesh)
+        # TODO: offset has to be taken into consideration
+        merge_meshes_dict(cell_meshes, tmp_cell_mesh)
         for ii in range(n_subcell):
             merge_map_dicts([scmd_lst[ii], subcell_mapping_dicts[ii]])
             merge_prop_dicts([scpd_lst[ii], subcell_prop_dicts[ii]], offset)
-            merge_meshes_dict(subcell_meshes[ii], subcell_mesh[ii])
+            merge_meshes_dict(subcell_meshes[ii], tmp_subcell_meshes)
 
         del subcell_prop_dicts
         del subcell_mapping_dicts
         del cell_prop_dicts
-        del subcell_mesh
-        del cell_mesh
+        del tmp_subcell_meshes
+        del tmp_cell_mesh
 
-    return cpd_lst, scpd_lst, scmd_lst
+    return cpd_lst, scpd_lst, scmd_lst, worker_nr
 
 
 def find_meshes(chunk):
 
     """
-    Returns dictionaty with obj_id as a keys and list of faces of the mesh
+    Save meshes into MeshStorage dictionary
     """
 
     mesher = Mesher((1, 1, 1))  # anisotropy of image
@@ -607,15 +612,16 @@ def find_meshes(chunk):
 
     meshes = {}
     for obj_id in mesher.ids():
-      meshes[obj_id] = mesher.get_mesh(obj_id, normals=True, simplification_factor=10,
-                        max_simplification_error=8)
-      mesher.erase(obj_id)
+        meshes[obj_id] = mesher.get_mesh(obj_id, normals=True, simplification_factor=10,
+                                         max_simplification_error=8)
+        mesher.erase(obj_id)
     mesher.clear()
-    # for key in meshes:
-    #     print("\n\n\n len(meshes[key].faces)= ", len(meshes[key].faces), "len(meshes[key].vertices)= ",
-    #           len(meshes[key].vertices), "len(meshes[key].normals)= ", len(meshes[key].normals), "\n\n\n")
-    # print("\n\n\n len(meshes)= ", len(meshes))
+
     return meshes
+
+
+def merge_meshes_dict():
+
 
 
 def merge_prop_dicts(prop_dicts, offset=None):
