@@ -543,8 +543,7 @@ def _map_subcell_extract_props_thread(args):
     kd_cell_p = args[2]
     kd_subcell_ps = args[3]
     worker_nr = args[4]
-
-    wd = global_params.config.working_dir
+    wd = global_params.wd
 
     kd_cell = basics.kd_factory(kd_cell_p)
     cd_dir = "{}/chunkdatasets/tmp/".format(global_params.config.temp_path)
@@ -558,30 +557,32 @@ def _map_subcell_extract_props_thread(args):
     scpd_lst = [[{}, defaultdict(list), {}] for _ in range(n_subcell)]   # subcell. property dicts
     scmd_lst = [{} for _ in range(n_subcell)]   # subcell. mapping dicts
 
-    cell_meshes = MeshStorage(wd + "/tmp_meshes/cell_mesh_" + worker_nr +".pkl", disable_locking=True, read_only=False)
+    cell_meshes = MeshStorage(wd + "tmp_meshes/cell_mesh_" + str(worker_nr) + ".pkl", disable_locking=True, read_only=False)
 
-    subcell_meshes = [MeshStorage(wd + "/tmp_meshes/" + cell_org + "_mesh_" + worker_nr +".pkl",
+    subcell_meshes = [MeshStorage(wd + "tmp_meshes/" + cell_org + "_mesh_" + str(worker_nr) +".pkl",
                                   disable_locking=True, read_only=False)
                                   for cell_org in global_params.existing_cell_organelles]
-
     # iterate over chunks and store information in property dicts for subcellular and cellular structures
     for ch_id in chunks:
         ch = cd.chunk_dict[ch_id]
         offset, size = ch.coordinates.astype(np.int), ch.size
         cell_d = kd_cell.from_overlaycubes_to_matrix(size, offset)
+        tmp_cell_mesh = defaultdict(list)
         tmp_cell_mesh = find_meshes(cell_d)
         # get all segmentation arrays concatenates as 4D array: [C, X, Y, Z]
         tmp_subcell_meshes = []
+        subcell_d = []
         for kd_sc, i in zip(kd_subcells, range(len(kd_subcells))):
             subcell_d.append(kd_sc.from_overlaycubes_to_matrix(size, offset)[None, ])  # add auxiliary axis
             tmp_subcell_meshes.append(find_meshes(subcell_d[-1]))
         subcell_d = np.concatenate(subcell_d)
-        cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = map_subcel_extract_propsC(cell_d, subcell_d)
+        cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = map_subcell_extract_propsC(cell_d, subcell_d)
         # reorder to match [[rc, bb, size], [rc, bb, size]] for e.g. [mi, vc]
         subcell_prop_dicts = [[subcell_prop_dicts[0][ii], subcell_prop_dicts[1][ii],
                                subcell_prop_dicts[2][ii]] for ii in range(n_subcell)]
         # merge cell properties: list list of dicts
         merge_prop_dicts([cpd_lst, cell_prop_dicts], offset)
+
         # collect subcell properties: list of list of dicts
         # collect subcell mappings to cell SVs: list of list of dicts and list of dict of dict of int
         # TODO: writte 'merge_meshes_dict' method
@@ -598,7 +599,7 @@ def _map_subcell_extract_props_thread(args):
         del tmp_subcell_meshes
         del tmp_cell_mesh
 
-    return cpd_lst, scpd_lst, scmd_lst, worker_nr
+    return cpd_lst, scpd_lst, scmd_lst
 
 
 def find_meshes(chunk):
@@ -620,7 +621,15 @@ def find_meshes(chunk):
     return meshes
 
 
-def merge_meshes_dict():
+def merge_meshes_dict(m_storage, tmp_dict):
+
+    """ Merge meshes dictionaries:
+
+    m_storage: objec of type MeshStorage
+    tmp_dict: list dictionary
+    """
+
+
 
 
 
