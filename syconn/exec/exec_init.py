@@ -22,15 +22,14 @@ from syconn.mp import batchjob_utils as qu
 from syconn.handler.basics import chunkify, kd_factory
 
 
-def sd_init(args):
-    co, generate_sv_meshes, max_n_jobs = args
+def sd_init(co, generate_sv_meshes, max_n_jobs):
     sd_seg = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir,
                                  version="0")
     multi_params = chunkify(sd_seg.so_dir_paths, max_n_jobs)
     so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type=co)
     if co != "sv" or (co == "sv" and generate_sv_meshes):
         multi_params = [[par, so_kwargs] for par in multi_params]
-        _ = qu.QSUB_script(multi_params, "mesh_caching", suffix="co",
+        _ = qu.QSUB_script(multi_params, "mesh_caching", suffix=co,
                            n_max_co_processes=global_params.NCORE_TOTAL)
 
     if co == "sv":
@@ -42,9 +41,8 @@ def sd_init(args):
     sd_proc.dataset_analysis(sd_seg, recompute=False, compute_meshprops=True)
 
 
-def kd_init(args):
-    co, chunk_size, transf_func_kd_overlay, load_cellorganelles_from_kd_overlaycubes, \
-    cube_of_interest_bb, log = args
+def kd_init(co, chunk_size, transf_func_kd_overlay, load_cellorganelles_from_kd_overlaycubes, \
+    cube_of_interest_bb, log):
     oew.generate_subcell_kd_from_proba(
         co, chunk_size=chunk_size, transf_func_kd_overlay=transf_func_kd_overlay,
         load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
