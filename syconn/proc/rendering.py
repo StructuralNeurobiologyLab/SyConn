@@ -1018,16 +1018,17 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     if ws is None:
         ws = (256, 128)
     if verbose:
-        print('Started "render_sso_coords_index_views" at {} locations for SSO {} using PyOpenGL'
+        log_proc.debug('Started "render_sso_coords_index_views" at {} locations for SSO {} using '
+                  'PyOpenGL'
                        ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
-    tim = time.time()
+    # tim = time.time()
     ind, vert, norm = sso.mesh
-    tim1 = time.time()
-    if verbose:
-        print("Time for initialising MESH {:.2f}s."
-                           "".format(tim1 - tim))
+    # tim1 = time.time()
+    # if verbose:
+    #     print("Time for initialising MESH {:.2f}s."
+    #                        "".format(tim1 - tim))
     if len(vert) == 0:
         msg = "No mesh for SSO {} found with {} locations.".format(sso, len(coords))
         log_proc.warning(msg)
@@ -1048,7 +1049,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
     # backwards compatibility with other color-dependent rendering methods
     # Create mesh object without redundant vertices to get same PCA rotation as for raw views
-    tim = time.time()
+    # tim = time.time()
     if rot_mat is None:
         mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
         querybox_edgelength = comp_window / mo.max_dist
@@ -1059,9 +1060,9 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     ind = np.arange(len(vert) // 3)
     color_array = np.repeat(color_array, 3, axis=0)  # 3 <- triangles
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
-    tim1 = time.time()
-    print("Time for initializing MESHOBJECT {:.2f}s."
-                       "".format(tim1 - tim))
+    # tim1 = time.time()
+    # print("Time for initializing MESHOBJECT {:.2f}s."
+    #                    "".format(tim1 - tim))
     if return_rot_matrices:
         ix_views, rot_mat = _render_mesh_coords(
             coords, mo, verbose=verbose, ws=ws, depth_map=False,
@@ -1078,9 +1079,9 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
                                    smooth_shade=False, views_key="index",
                                    nb_views=nb_views, comp_window=comp_window,
                                    return_rot_matrices=return_rot_matrices)
-    tim2 = time.time()
-    print("Time for _RENDER_MESH_COORDS {:.2f}s."
-                       "".format(tim2 - tim1))
+    # tim2 = time.time()
+    # print("Time for _RENDER_MESH_COORDS {:.2f}s."
+    #                    "".format(tim2 - tim1))
     if ix_views.shape[-1] == 3:
         ix_views = rgb2id_array(ix_views)[:, None]
     else:

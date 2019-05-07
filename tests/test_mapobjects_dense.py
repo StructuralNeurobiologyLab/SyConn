@@ -39,8 +39,9 @@ def timeit2(func, arg1, arg2):
 
 
 if __name__ == "__main__":
-    toy = np.random.randint(low=0, size=100**3, high=10000).reshape((
-        100, 100, 100)).astype(np.uint64)
+    edge_s = 50
+    toy = np.random.randint(low=0, size=edge_s**3, high=1000).reshape((
+        edge_s, edge_s, edge_s)).astype(np.uint64)
     # timeit(python_loop, toy)
     timeit(cython_loop, toy)
     timeit(find_object_propertiesC, toy)

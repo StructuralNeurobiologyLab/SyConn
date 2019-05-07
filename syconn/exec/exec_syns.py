@@ -80,44 +80,45 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
 
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
-    size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
-    offset = cube_of_interest_bb[0]
 
-    # Initital contact site extraction
-    cd_dir = global_params.config.working_dir + "/chunkdatasets/cs/"
-    # Class that contains a dict of chunks (with coordinates) after initializing it
-    cd = chunky.ChunkDataset()
-    cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
-                  box_coords=[0, 0, 0], fit_box_size=True)
-
-    # POPULATES CS CD with SV contacts
-    ces.find_contact_sites(cd, kd_seg_path, size=size, offset=offset)
-    ces.extract_agg_contact_sites(cd, global_params.config.working_dir,
-                                  n_folders_fs=n_folders_fs, suffix="",
-                                  n_chunk_jobs=max_n_jobs, size=size,
-                                  offset=offset)
-    log.info('Contact site extraction finished.')
-
-    # create overlap dataset between SJ and CS: SegmentationDataset of type 'syn'
-    # TODO: write new method which iterates over sj prob. map (KD), CS
-    #  ChunkDataset / KD and (optionally) synapse type in parallel and to
-    #  create a syn segmentation within from_probmaps_to_objects
-    # TODO: SD for cs and sj will not be needed anymore
-    cs_sd = SegmentationDataset('cs', working_dir=global_params.config.working_dir,
-                                version=0)  # version hard coded
-    sj_sd = SegmentationDataset('sj', working_dir=global_params.config.working_dir)
-    cs_cset = chunky.load_dataset(cd_dir, update_paths=True)
+    # # Initital contact site extraction
+    # cd_dir = global_params.config.working_dir + "/chunkdatasets/cs/"
+    # # Class that contains a dict of chunks (with coordinates) after initializing it
+    # cd = chunky.ChunkDataset()
+    # cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
+    #               box_coords=[0, 0, 0], fit_box_size=True)
     #
-    # TODO: change stride to n_jobs
-    # This creates an SD of type 'syn', currently ~6h, will hopefully be sped up after refactoring
-    cs_processing_steps.syn_gen_via_cset(cs_sd, sj_sd, cs_cset, resume_job=False,
-                                         nb_cpus=2, n_folders_fs=n_folders_fs,
-                                         n_chunk_jobs=max_n_jobs)
-    sd = SegmentationDataset("syn", working_dir=global_params.config.working_dir,
-                             version="0")
-    dataset_analysis(sd, compute_meshprops=False)
-    log.info('SegmentationDataset of type "syn" was generated.')
+    # # POPULATES CS CD with SV contacts
+    # ces.find_contact_sites(cd, kd_seg_path, size=size, offset=offset)
+    # ces.extract_agg_contact_sites(cd, global_params.config.working_dir,
+    #                               n_folders_fs=n_folders_fs, suffix="",
+    #                               n_chunk_jobs=max_n_jobs, size=size,
+    #                               offset=offset)
+    # log.info('Contact site extraction finished.')
+    #
+    # # create overlap dataset between SJ and CS: SegmentationDataset of type 'syn'
+    # # TODO: write new method which iterates over sj prob. map (KD), CS
+    # #  ChunkDataset / KD and (optionally) synapse type in parallel and to
+    # #  create a syn segmentation within from_probmaps_to_objects
+    # # TODO: SD for cs and sj will not be needed anymore
+    # cs_sd = SegmentationDataset('cs', working_dir=global_params.config.working_dir,
+    #                             version=0)  # version hard coded
+    # sj_sd = SegmentationDataset('sj', working_dir=global_params.config.working_dir)
+    # cs_cset = chunky.load_dataset(cd_dir, update_paths=True)
+    # #
+    # # TODO: change stride to n_jobs
+    # # This creates an SD of type 'syn', currently ~6h, will hopefully be sped up after refactoring
+    # cs_processing_steps.syn_gen_via_cset(cs_sd, sj_sd, cs_cset, resume_job=False,
+    #                                      nb_cpus=2, n_folders_fs=n_folders_fs,
+    #                                      n_chunk_jobs=max_n_jobs)
+    # sd = SegmentationDataset("syn", working_dir=global_params.config.working_dir,
+    #                          version="0")
+    # dataset_analysis(sd, compute_meshprops=False)
+    ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
+                              cube_of_interest_bb=cube_of_interest_bb, n_folders_fs=n_folders_fs)
+    log.info('SegmentationDataset of type "cs" and "syn" was generated.')
 
+    # TODO: add check for SSD existence, which is required at this point
     # This creates an SD of type 'syn_ssv', ~15 min, # TODO: change stride into n_jobs or similar
     cps.combine_and_split_syn(global_params.config.working_dir, resume_job=False,
                               stride=250, cs_gap_nm=global_params.cs_gap_nm,
@@ -127,12 +128,12 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
     dataset_analysis(sd_syn_ssv, compute_meshprops=True)
     log.info('SegmentationDataset of type "syn_ssv" was generated.')
 
-    # This will be replaced by the new method for the 'syn_ssv' generation,
-    # ~80 min @ 340 cpus
-    extract_synapse_type(sd_syn_ssv, kd_sym_path=global_params.config.kd_sym_path,
-                         stride=100,
-                         kd_asym_path=global_params.config.kd_asym_path)
-    log.info('Synapse type was mapped to "syn_ssv".')
+    # # This will be replaced by the new method for the 'syn_ssv' generation,
+    # # ~80 min @ 340 cpus
+    # extract_synapse_type(sd_syn_ssv, kd_sym_path=global_params.config.kd_sym_path,
+    #                      stride=100,
+    #                      kd_asym_path=global_params.config.kd_asym_path)
+    # log.info('Synapse type was mapped to "syn_ssv".')
 
     # ~1h
     cps.map_objects_to_synssv(global_params.config.working_dir)

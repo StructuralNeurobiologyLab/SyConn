@@ -8,6 +8,7 @@
 from knossos_utils import knossosdataset
 import time
 import os
+from multiprocessing import Process
 import shutil
 import numpy as np
 knossosdataset._set_noprint(True)
@@ -19,6 +20,35 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.handler.basics import chunkify, kd_factory
+
+
+def sd_init(args):
+    co, generate_sv_meshes, max_n_jobs = args
+    sd_seg = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir,
+                                 version="0")
+    multi_params = chunkify(sd_seg.so_dir_paths, max_n_jobs)
+    so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type=co)
+    if co != "sv" or (co == "sv" and generate_sv_meshes):
+        multi_params = [[par, so_kwargs] for par in multi_params]
+        _ = qu.QSUB_script(multi_params, "mesh_caching", suffix="co",
+                           n_max_co_processes=global_params.NCORE_TOTAL)
+
+    if co == "sv":
+        _ = qu.QSUB_script(multi_params, "sample_location_caching",
+                           n_max_co_processes=global_params.NCORE_TOTAL,
+                           suffix=co)
+
+    # now cache mesh properties
+    sd_proc.dataset_analysis(sd_seg, recompute=False, compute_meshprops=True)
+
+
+def kd_init(args):
+    co, chunk_size, transf_func_kd_overlay, load_cellorganelles_from_kd_overlaycubes, \
+    cube_of_interest_bb, log = args
+    oew.generate_subcell_kd_from_proba(
+        co, chunk_size=chunk_size, transf_func_kd_overlay=transf_func_kd_overlay,
+        load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
+        cube_of_interest_bb=cube_of_interest_bb, log=log)
 
 
 def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=10000, max_n_jobs=None,
@@ -38,49 +68,45 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
 
     log.info('Generating KnossosDatasets for subcellular structures {}.'
              ''.format(global_params.existing_cell_organelles))
-    # TODO: spawn as parallel threads
-    for co in global_params.existing_cell_organelles:
-        oew.generate_subcell_kd_from_proba(
-            co, chunk_size=chunk_size, transf_func_kd_overlay=transf_func_kd_overlay,
-            load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
-            cube_of_interest_bb=cube_of_interest_bb, log=log)
+    start = time.time()
+    ps = [Process(target=kd_init, args=[co, chunk_size, transf_func_kd_overlay,
+                                        load_cellorganelles_from_kd_overlaycubes,
+                                        cube_of_interest_bb, log])
+          for co in global_params.existing_cell_organelles]
+    for p in ps:
+        p.start()
+    for p in ps:
+        p.join()
+    log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
              ' cell supervoxels'.format(global_params.existing_cell_organelles))
+    start = time.time()
     sd_proc.map_subcell_extract_props(
         global_params.config.kd_seg_path, global_params.config.kd_organelle_seg_paths,
         n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs_sc, n_chunk_jobs=max_n_jobs,
         cube_of_interest_bb=cube_of_interest_bb, chunk_size=chunk_size, log=log)
+    log.info('Finished extraction and mapping after {:.0f}s.'
+             ''.format(time.time() - start))
 
     log.info('Caching properties of SegmentationDatasets for subcellular '
              'structures {} and cell supervoxels'.format(
         global_params.existing_cell_organelles))
-    # TODO: spawn as parallel threads
-    for co in global_params.existing_cell_organelles + ["sv"]:
-        sd_seg = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir,
-                                     version="0")
-        multi_params = chunkify(sd_seg.so_dir_paths, max_n_jobs)
-        so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type=co)
-        if co != "sv" or (co == "sv" and generate_sv_meshes):
-            start = time.time()
-            multi_params = [[par, so_kwargs] for par in multi_params]
-            _ = qu.QSUB_script(multi_params, "mesh_caching",
-                               n_max_co_processes=global_params.NCORE_TOTAL)
-            log.info('Finished mesh caching of {} "{}"-SVs after {:.0f}s.'
-                     ''.format(len(sd_seg.ids), co, time.time() - start))
-        if co == "sv":
-            start = time.time()
-            _ = qu.QSUB_script(multi_params, "sample_location_caching",
-                               n_max_co_processes=global_params.NCORE_TOTAL)
-            log.info('Finished caching of rendering locations after {:.0f}s.'
-                     ''.format(time.time() - start))
-        sd_proc.dataset_analysis(sd_seg, recompute=False, compute_meshprops=True)
+    start = time.time()
+    ps = [Process(target=sd_init, args=[co, generate_sv_meshes, max_n_jobs])
+          for co in global_params.existing_cell_organelles + ["sv"]]
+    for p in ps:
+        p.start()
+    for p in ps:
+        p.join()
+    log.info('Finished caching of meshes and rendering locations after {:.0f}s.'
+             ''.format(time.time() - start))
 
 
 def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
                    generate_sv_meshes=False, load_cellorganelles_from_kd_overlaycubes=False,
                    transf_func_kd_overlay=None, cube_of_interest_bb=None):
-    """
+    """DEPRECATED
 
     Parameters
     ----------

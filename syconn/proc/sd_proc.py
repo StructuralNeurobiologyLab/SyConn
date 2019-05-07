@@ -37,7 +37,6 @@ from ..extraction import object_extraction_wrapper as oew
 
 def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                      compute_meshprops=False):
-    # TODO: remove `qsub_pe`and `qsub_queue`
     """ Analyze SegmentationDataset and extract and cache SegmentationObjects
     attributes as numpy arrays. Will only recognize dict/storage entries of type int
     for object attribute collection.
@@ -81,8 +80,9 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                                              debug=False)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params, "dataset_analysis", script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+        path_to_out = qu.QSUB_script(multi_params, "dataset_analysis",
+                                     n_max_co_processes=n_max_co_processes,
+                                     suffix=sd.type)
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:

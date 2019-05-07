@@ -171,7 +171,7 @@ if __name__ == '__main__':
     #     step_idents.append('Glia separation')
 
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
-    exec_multiview.run_create_neuron_ssd(prior_glia_removal=False)
+    exec_multiview.run_create_neuron_ssd(prior_glia_removal=global_params.config.prior_glia_removal)
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 

@@ -196,6 +196,8 @@ class DynConfig(Config):
     @property
     def temp_path(self):
         return "/tmp/{}_syconn/".format(pwd.getpwuid(os.getuid()).pw_name)
+        # return "{}/{}_syconn/".format(os.path.expanduser('~/tmp/'), pwd.getpwuid(os.getuid(
+        # )).pw_name)
 
     @property
     # TODO: Not necessarily needed anymore
@@ -316,7 +318,7 @@ class DynConfig(Config):
 
     @property
     def qsub_work_folder(self):
-        return "%s/%s/" % (global_params.config.working_dir,
+        return "%s/%s/" % (self.temp_path, #global_params.config.working_dir,
                            global_params.BATCH_PROC_SYSTEM)
 
     @property

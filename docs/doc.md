@@ -32,6 +32,7 @@ conda install snappy
 conda install python-snappy
 conda install tensorboard tensorflow
 conda install -c conda-forge sip=4.18.1
+conda install gcc_impl_linux-64 gcc_linux-64 gxx_impl_linux-64 gxx_linux-64
 
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 cd SyConn

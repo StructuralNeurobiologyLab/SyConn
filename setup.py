@@ -3,7 +3,7 @@ import numpy
 import os
 try:
     from Cython.Build import cythonize
-    cython_out = cythonize(["syconn/*/*.pyx"], include_path=[numpy.get_include()],
+    cython_out = cythonize(["syconn/*/*.pyx"], include_path=[numpy.get_include(),],
                            compiler_directives={
                                 'language_level': 3, 'boundscheck': False,
                                 'wraparound': False, 'initializedcheck': False,
@@ -44,6 +44,7 @@ config = {
     'setup_requires': setup_requires, 'tests_require': ["pytest", ],
     # this will compile all files within directories in syconn/
      'ext_modules': cython_out,
+    'include_dirs': [numpy.get_include(),],
 
 }
 

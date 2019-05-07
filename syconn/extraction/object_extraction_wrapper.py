@@ -127,8 +127,9 @@ def from_probabilities_to_kd(cset, filename, hdf5names,
                           load_from_kd_overlaycubes=False,
                           transf_func_kd_overlay=None, log=None):
     """
+    # TODO: chunk tasks within each step to reduce total number of jobs
+
     Main function for the object extraction step; combines all needed steps
-    # TODO: change object_names to dataset_names as in other methods
 
     Parameters
     ----------
@@ -776,7 +777,6 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
         if chunk_list is None:
             chunk_list = [ii for ii in range(len(cset.chunk_dict))]
 
-    # # TODO: make extract-combine or extract_combined selectable / find optimal solution
     if not use_combined_extraction or overlaydataset_path is None:
         # # --------------------------------------------------------------------------
         #
