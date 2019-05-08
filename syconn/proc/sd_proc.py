@@ -422,6 +422,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
 
     # extracting mapping
     start = time.time()
+    # multi_params = basics.chunkify(chunk_list, 1)
     multi_params = basics.chunkify(chunk_list, n_chunk_jobs)
     multi_params = [(chs, chunk_size, kd_seg_path, list(kd_organelle_paths.values()), worker_nr) for
                     chs, worker_nr in zip(multi_params, range(len(multi_params)))]
@@ -564,17 +565,18 @@ def _map_subcell_extract_props_thread(args):
                                   for cell_org in global_params.existing_cell_organelles]
     # iterate over chunks and store information in property dicts for subcellular and cellular structures
     for ch_id in chunks:
+        print("\n\n\n ch_id= ", ch_id, chunks, "\n\n\n")
         ch = cd.chunk_dict[ch_id]
         offset, size = ch.coordinates.astype(np.int), ch.size
         cell_d = kd_cell.from_overlaycubes_to_matrix(size, offset)
         tmp_cell_mesh = defaultdict(list)
         tmp_cell_mesh = find_meshes(cell_d)
         # get all segmentation arrays concatenates as 4D array: [C, X, Y, Z]
-        tmp_subcell_meshes = []
+        tmp_subcell_meshes = [defaultdict(list) for _ in kd_subcells]
         subcell_d = []
         for kd_sc, i in zip(kd_subcells, range(len(kd_subcells))):
             subcell_d.append(kd_sc.from_overlaycubes_to_matrix(size, offset)[None, ])  # add auxiliary axis
-            tmp_subcell_meshes.append(find_meshes(subcell_d[-1]))
+            tmp_subcell_meshes[i] = find_meshes(subcell_d[-1])
         subcell_d = np.concatenate(subcell_d)
         cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = map_subcell_extract_propsC(cell_d, subcell_d)
         # reorder to match [[rc, bb, size], [rc, bb, size]] for e.g. [mi, vc]
@@ -591,13 +593,18 @@ def _map_subcell_extract_props_thread(args):
         for ii in range(n_subcell):
             merge_map_dicts([scmd_lst[ii], subcell_mapping_dicts[ii]])
             merge_prop_dicts([scpd_lst[ii], subcell_prop_dicts[ii]], offset)
-            merge_meshes_dict(subcell_meshes[ii], tmp_subcell_meshes)
+            print("\n\n\n BEDE laczyc subcells \n\n\n")
+            merge_meshes_dict(subcell_meshes[ii], tmp_subcell_meshes[ii])
 
         del subcell_prop_dicts
         del subcell_mapping_dicts
         del cell_prop_dicts
         del tmp_subcell_meshes
         del tmp_cell_mesh
+
+    cell_meshes.push()
+    for ii in range(n_subcell):
+        subcell_meshes[ii].push()
 
     return cpd_lst, scpd_lst, scmd_lst
 
@@ -628,9 +635,16 @@ def merge_meshes_dict(m_storage, tmp_dict):
     m_storage: objec of type MeshStorage
     tmp_dict: list dictionary
     """
+    for obj_id in tmp_dict:
+        if obj_id not in m_storage:
+            m_storage[obj_id] = [tmp_dict[obj_id].faces, tmp_dict[obj_id].vertices, tmp_dict[obj_id].normals]
 
-
-
+        else:
+            n_el = len(m_storage[obj_id][1])
+            tmp_dict[obj_id].faces += n_el
+            m_storage[obj_id][0] = np.concatenate((m_storage[obj_id][0], tmp_dict[obj_id].faces.flatten()))
+            m_storage[obj_id][1] = np.concatenate((m_storage[obj_id][1], tmp_dict[obj_id].vertices.flatten()))
+            m_storage[obj_id][2] = np.concatenate((m_storage[obj_id][2], tmp_dict[obj_id].normals.flatten()))
 
 
 def merge_prop_dicts(prop_dicts, offset=None):
