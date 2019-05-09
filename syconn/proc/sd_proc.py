@@ -447,6 +447,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     tot_scm = [{} for _ in range(len(kd_organelle_paths))]
     cell_mesh_workers = defaultdict(list)
     subcell_mesh_workers = [defaultdict(list) for _ in range(len(kd_organelle_paths))]
+
     for cp_dc, scp_dcs, scm_dcs, worker_nr in results:
         merge_prop_dicts([tot_cp, cp_dc])
         for cell_id in cp_dc[0].keys():
@@ -461,7 +462,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
 
     # # merge meshes between workers
     # save_meshes_into_pkl(cell_mesh_workers, n_folders_fs_sc, 'sv')
-    # for ii, k in enumerate(global_params.existing_cell_organelles)
+    # for ii, k in enumerate(global_params.existing_cell_organelles):
     #     save_meshes_into_pkl(subcell_mesh_workers[ii], n_folders_fs_sc, k)
 
     # convert mapping dicts to store ratio of number of overlapping voxels
@@ -570,8 +571,8 @@ def _map_subcell_extract_props_thread(args):
 
     cell_meshes = MeshStorage(global_params.config.temp_path + "/mesh_" + str(worker_nr) + ".pkl",
                               disable_locking=True, read_only=False)
-    strinnn = global_params.config.temp_path + "/mesh_" + str(worker_nr) + ".pkl"
-    subcell_meshes = [MeshStorage(global_params.config.temp_path + "/mesh_" + str(worker_nr) + ".pkl",
+
+    subcell_meshes = [MeshStorage(global_params.config.temp_path + "/mesha_" + str(worker_nr) + ".pkl",
                                   disable_locking=True, read_only=False)
                       for cell_org in global_params.existing_cell_organelles]
 
@@ -613,7 +614,6 @@ def _map_subcell_extract_props_thread(args):
 
     cell_meshes.push()
     for ii in range(n_subcell):
-        # basics.write_obj2pkl(global_params.config.temp_path + "/mesh_" + str(worker_nr) + ".pkl", subcell_meshes[ii])
         subcell_meshes[ii].push()
 
     return cpd_lst, scpd_lst, scmd_lst, worker_nr
@@ -672,8 +672,8 @@ def save_meshes_into_pkl(obj_dict, n_folders_fs_sc, k):
         for worker_nr in obj_dict[obj_id]:
             tmp_dict = MeshStorage(global_params.config.temp_path + "/mesh_" + str(worker_nr) + ".pkl",
                                    disable_locking=True, read_only=True)
-            for key in tmp_dict
-            print(tmp_dict)
+            for key in tmp_dict:
+                print(tmp_dict[key])
 
 
 
