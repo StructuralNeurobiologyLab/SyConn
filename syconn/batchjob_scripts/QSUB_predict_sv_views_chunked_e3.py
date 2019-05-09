@@ -45,9 +45,7 @@ if 'raw_only' in pred_kwargs:
 else:
     raw_only = False
 
-
 model = getattr(prediction, model_getter)()
-
 
 for p in so_chunk_paths:
     view_dc_p = p + "/views_woglia.pkl" if woglia else p + "/views.pkl"

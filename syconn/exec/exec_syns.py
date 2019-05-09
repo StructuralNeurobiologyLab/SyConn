@@ -9,11 +9,10 @@ from knossos_utils import knossosdataset
 import numpy as np
 knossosdataset._set_noprint(True)
 from knossos_utils import chunky
-from syconn.extraction import cs_processing_steps
 from syconn.extraction import cs_extraction_steps as ces
 from syconn import global_params
 from syconn.reps.segmentation import SegmentationDataset
-from syconn.proc.sd_proc import dataset_analysis, extract_synapse_type
+from syconn.proc.sd_proc import dataset_analysis
 from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
 from syconn.handler.config import initialize_logging
@@ -81,6 +80,9 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
+    # size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
+    # offset = cube_of_interest_bb[0]
+    #
     # # Initital contact site extraction
     # cd_dir = global_params.config.working_dir + "/chunkdatasets/cs/"
     # # Class that contains a dict of chunks (with coordinates) after initializing it
@@ -108,7 +110,7 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
     # #
     # # TODO: change stride to n_jobs
     # # This creates an SD of type 'syn', currently ~6h, will hopefully be sped up after refactoring
-    # cs_processing_steps.syn_gen_via_cset(cs_sd, sj_sd, cs_cset, resume_job=False,
+    # cps.syn_gen_via_cset(cs_sd, sj_sd, cs_cset, resume_job=False,
     #                                      nb_cpus=2, n_folders_fs=n_folders_fs,
     #                                      n_chunk_jobs=max_n_jobs)
     # sd = SegmentationDataset("syn", working_dir=global_params.config.working_dir,
@@ -127,10 +129,10 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
                                      obj_type='syn_ssv')
     dataset_analysis(sd_syn_ssv, compute_meshprops=True)
     log.info('SegmentationDataset of type "syn_ssv" was generated.')
-
+    #
     # # This will be replaced by the new method for the 'syn_ssv' generation,
     # # ~80 min @ 340 cpus
-    # extract_synapse_type(sd_syn_ssv, kd_sym_path=global_params.config.kd_sym_path,
+    # cps.extract_synapse_type(sd_syn_ssv, kd_sym_path=global_params.config.kd_sym_path,
     #                      stride=100,
     #                      kd_asym_path=global_params.config.kd_asym_path)
     # log.info('Synapse type was mapped to "syn_ssv".')

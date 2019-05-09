@@ -109,7 +109,7 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
         for out_file in out_files:
             with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
-
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     # reduce step
     cs_props = [{}, defaultdict(list), {}]
     syn_props = [{}, defaultdict(list), {}]
@@ -185,7 +185,7 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
                                 multi_params, nb_cpus=n_max_co_processes, debug=False)
     else:
         qu.QSUB_script(multi_params, "write_props_to_syn",
-                       n_max_co_processes=n_max_co_processes)
+                       n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
     sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                           obj_type='syn', version=0)
     dataset_analysis(sd, recompute=True, compute_meshprops=False)
@@ -204,8 +204,11 @@ def _contact_site_extraction_thread(args):
 
     kd = kd_factory(knossos_path)
     kd_syn = kd_factory(global_params.config.kd_sj_path)
-    kd_syntype_sym = kd_factory(global_params.config.kd_sym_path)
-    kd_syntype_asym = kd_factory(global_params.config.kd_asym_path)
+    if global_params.config.syntype_available:
+        kd_syntype_sym = kd_factory(global_params.config.kd_sym_path)
+        kd_syntype_asym = kd_factory(global_params.config.kd_asym_path)
+    else:
+        kd_syntype_sym, kd_syntype_asym = None, None
     cs_props = [{}, defaultdict(list), {}]
     syn_props = [{}, defaultdict(list), {}]
     tot_sym_cnt = {}
@@ -233,10 +236,14 @@ def _contact_site_extraction_thread(args):
             'Probathresholds']['sj']).astype(np.uint8)
         # get binary mask for symmetric and asymmetric syn. type per voxel  # TODO: add
         #  thresholds to global_params
-        sym_d = (kd_syntype_sym.from_raw_cubes_to_matrix(size, offset) >= 123).astype(
-            np.uint8)
-        asym_d = (kd_syntype_asym.from_raw_cubes_to_matrix(size, offset) >= 123).astype(
-            np.uint8)
+        if global_params.config.syntype_available:
+            sym_d = (kd_syntype_sym.from_raw_cubes_to_matrix(size, offset) >= 123).astype(
+                np.uint8)
+            asym_d = (kd_syntype_asym.from_raw_cubes_to_matrix(size, offset) >= 123).astype(
+                np.uint8)
+        else:
+            sym_d = np.zeros_like(syn_d)
+            asym_d = np.zeros_like(syn_d)
         cum_dt_data += time.time() - start
         start = time.time()
         # this counts SJ foreground voxels overlapping with the CS objects and the asym and sym voxels

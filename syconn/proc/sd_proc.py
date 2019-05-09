@@ -88,6 +88,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
         for out_file in out_files:
             with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     # Creating summaries
     # TODO: This is a potential bottleneck for very large datasets
     # TODO: resulting cache-arrays might have different lengths if attribute is missing in
@@ -1021,106 +1022,6 @@ def _export_sd_to_knossosdataset_thread(args):
                             overwrite=True,
                             nb_threads=1,
                             verbose=True)
-
-
-def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
-                         trafo_dict_path=None, stride=100,
-                         qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                         n_max_co_processes=None):
-    # TODO: remove `qsub_pe`and `qsub_queue`
-    """TODO: will be refactored into single method when generating syn objects
-    Extract synapse type from KnossosDatasets. Stores sym.-asym. ratio in
-    SJ object attribute dict.
-
-    Parameters
-    ----------
-    sj_sd : SegmentationDataset
-    kd_asym_path : str
-    kd_sym_path : str
-    trafo_dict_path : dict
-    stride : int
-    qsub_pe : str
-    qsub_queue : str
-    nb_cpus : int
-    n_max_co_processes : int
-    """
-    assert "syn_ssv" in sj_sd.version_dict
-    paths = sj_sd.so_dir_paths
-
-    # Partitioning the work
-    multi_params = []
-    for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
-        multi_params.append([path_block, sj_sd.version, sj_sd.working_dir,
-                             kd_asym_path, kd_sym_path, trafo_dict_path])
-
-    # Running workers - Extracting mapping
-    if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_extract_synapse_type_thread,
-                                        multi_params, nb_cpus=nb_cpus)
-
-    else:
-        path_to_out = qu.QSUB_script(multi_params, "extract_synapse_type",
-                                     n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
-
-
-def _extract_synapse_type_thread(args):
-    paths = args[0]
-    obj_version = args[1]
-    working_dir = args[2]
-    kd_asym_path = args[3]
-    kd_sym_path = args[4]
-    trafo_dict_path = args[5]
-
-    if trafo_dict_path is not None:
-        with open(trafo_dict_path, "rb") as f:
-            trafo_dict = pkl.load(f)
-    else:
-        trafo_dict = None
-
-    kd_asym = knossosdataset.KnossosDataset()
-    kd_asym.initialize_from_knossos_path(kd_asym_path)
-    kd_sym = knossosdataset.KnossosDataset()
-    kd_sym.initialize_from_knossos_path(kd_sym_path)
-
-    seg_dataset = segmentation.SegmentationDataset("syn_ssv",
-                                                   version=obj_version,
-                                                   working_dir=working_dir)
-    for p in paths:
-        this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=False, disable_locking=True)
-        for so_id in this_attr_dc.keys():
-            so = seg_dataset.get_segmentation_object(so_id)
-            so.attr_dict = this_attr_dc[so_id]
-            so.load_voxel_list()
-
-            vxl = so.voxel_list
-
-            if trafo_dict is not None:
-                vxl -= trafo_dict[so_id]
-                vxl = vxl[:, [1, 0, 2]]
-            # TODO: remvoe try-except
-            if global_params.config.syntype_available:
-                try:
-                    asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl))
-                    sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl))
-                except:
-                    log_proc.error("Failed to read raw cubes during synapse type "
-                                   "extraction.")
-                    sym_prop = 0
-                    asym_prop = 0
-            else:
-                sym_prop = 0
-                asym_prop = 0
-
-            if sym_prop + asym_prop == 0:
-                sym_ratio = -1
-            else:
-                sym_ratio = sym_prop / float(asym_prop + sym_prop)
-            so.attr_dict["syn_type_sym_ratio"] = sym_ratio
-            syn_sign = -1 if sym_ratio > global_params.sym_thresh else 1
-            so.attr_dict["syn_sign"] = syn_sign
-            this_attr_dc[so_id] = so.attr_dict
-        this_attr_dc.push()
 
 
 def mesh_proc_chunked(working_dir, obj_type, nb_cpus=NCORES_PER_NODE):

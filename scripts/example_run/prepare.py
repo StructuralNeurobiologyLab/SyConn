@@ -15,7 +15,7 @@ from syconn.handler.prediction import parse_movement_area_from_zip
 from syconn.handler.compression import save_to_h5py
 
 if __name__ == '__main__':
-    assert 'areaxfs_v6' in global_params.wd, 'Required dataset not available!'
+    assert 'areaxfs_v6' in global_params.config.working_dir, 'Required dataset not available!'
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
 
     raw_kd_path = global_params.config.kd_seg_path
@@ -44,7 +44,7 @@ if __name__ == '__main__':
     kd_asym.initialize_from_knossos_path(asym_kd_path)
 
     # get data
-    for example_cube_id in range(4, 5):
+    for example_cube_id in range(1, 4):
         kzip_p = '{}/example_cube{}.k.zip'.format(curr_dir, example_cube_id)
         data_dir = "{}/data{}/".format(curr_dir, example_cube_id)
         os.makedirs(data_dir, exist_ok=True)
@@ -71,9 +71,17 @@ if __name__ == '__main__':
         rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
         sv_ids = np.unique(seg)
         rag_sub_g = rag_g.subgraph(sv_ids)
+        print('Writing subgraph within {} and {} SVs.'.format(
+            bb, rag_sub_g.number_of_nodes()))
+        g_p = "{}/glia/glia_rag.bz2".format(global_params.config.working_dir)
+        rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
+        rag_sub_g_glia = rag_g.subgraph(sv_ids)
+        rag_sub_g = nx.union(rag_sub_g, rag_sub_g_glia)
         os.makedirs(data_dir, exist_ok=True)
         print('Writing subgraph within {} and {} SVs.'.format(
-            bb, len(sv_ids)))
+            bb, rag_sub_g.number_of_nodes()))
+        nx.write_edgelist(rag_sub_g, data_dir + "/rag.bz2")
+
 
 
 

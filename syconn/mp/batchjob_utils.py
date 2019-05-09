@@ -66,7 +66,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 script_folder=None, n_max_co_processes=None, resume_job=False,
                 sge_additional_flags=None, iteration=1, max_iterations=3,
                 params_orig_id=None, python_path=None, disable_mem_flag=False,
-                disable_batchjob=False, send_notification=False, use_dill=False):
+                disable_batchjob=False, send_notification=False, use_dill=False,
+                remove_jobfolder=False):
     # TODO: change `queue` and `pe` to be set globally in global_params. All
     #  wrappers around QSUB_script should then only have a flage like 'use_batchjob'
     # TODO: Switch to JobArrays!
@@ -233,28 +234,30 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
     pbar = tqdm.tqdm(total=len(params), miniters=1, mininterval=1)
 
+    dtime_sub = 0
+    start_all = time.time()
     # memory of finished jobs to calculate increments
     n_jobs_finished = 0
     last_diff_rp = 0
-    sleep_time = 10
+    sleep_time = 5
     for i_job in range(len(params)):
         if params_orig_id is not None:
             job_id = params_orig_id[i_job]
         else:
             job_id = i_job
-        if n_max_co_processes is not None:
-            while last_diff_rp == 0:
-                nb_rp = number_of_running_processes(job_name)
-                last_diff_rp = n_max_co_processes - nb_rp
-
-                if last_diff_rp == 0:
-                    n_jobs_done = len(glob.glob(path_to_out + "*.pkl"))
-                    diff = n_jobs_done - n_jobs_finished
-                    pbar.update(diff)
-                    n_jobs_finished = n_jobs_done
-                    time.sleep(sleep_time)
-            last_diff_rp -= 1
-            sleep_time = 1
+        # if n_max_co_processes is not None:
+        #     while last_diff_rp == 0:
+        #         nb_rp = number_of_running_processes(job_name)
+        #         last_diff_rp = n_max_co_processes - nb_rp
+        #
+        #         if last_diff_rp == 0:
+        #             n_jobs_done = len(glob.glob(path_to_out + "*.pkl"))
+        #             diff = n_jobs_done - n_jobs_finished
+        #             pbar.update(diff)
+        #             n_jobs_finished = n_jobs_done
+        #             time.sleep(sleep_time)
+        #     last_diff_rp -= 1
+        #     sleep_time = 1
 
         this_storage_path = path_to_storage + "job_%d.pkl" % job_id
         this_sh_path = path_to_sh + "job_%d.sh" % job_id
@@ -298,27 +301,29 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             #         additional_flags, job_log_path, job_err_path,
             #         job_name, this_sh_path)
             # else:
-            import datetime
-            then = datetime.datetime(2019, 4, 24, 8, 0, 0)
-            dt = (then - datetime.datetime.now()).seconds // 60 - 1  # 1 min safety
-            add_cmd = "" #"--time={}".format(dt)
+            # import datetime
+            # then = datetime.datetime(2019, 4, 24, 8, 0, 0)
+            # dt = (then - datetime.datetime.now()).seconds // 60 - 1  # 1 min safety
+            # add_cmd = "" #"--time={}".format(dt)
 
             if n_cores > 1:
                 additional_flags += " -n%d" % n_cores
             cmd_exec = "sbatch {0} --output={1} --error={2}" \
-                       " --job-name={3} {5} {4}".format(
+                       " --job-name={3} {4}".format(
                 additional_flags, job_log_path, job_err_path,
-                job_name, this_sh_path, add_cmd)
+                job_name, this_sh_path)
             if priority is not None and priority != 0:
                 log_batchjob.warning('Priorities are not supported with SLURM.')
             # added '--quiet' flag to prevent submission messages, errors will still be printed
             # (https://slurm.schedmd.com/sbatch.html), DOES NOT WORK
+            start = time.time()
             subprocess.call(cmd_exec, shell=True)
+            dtime_sub += time.time() - start
         else:
             raise NotImplementedError
+        time.sleep(0.1)
 
     log_batchjob.info("All jobs are submitted: %s" % name)
-
     while True:
         nb_rp = number_of_running_processes(job_name)
         # check actually running files
@@ -330,7 +335,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         n_jobs_finished = n_jobs_done
         time.sleep(sleep_time)
     pbar.close()
-    log_batchjob.info("All batch jobs have finished: %s" % name)
+    log_batchjob.info("All batch jobs have finished after {:.2f} s ({:.2f} s submission): {"
+                      "}".format(time.time()-start_all, dtime_sub, name))
 
     # Submit singleton job to send status email after jobs have been completed
     if send_notification:
@@ -405,7 +411,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             sge_additional_flags=sge_additional_flags, iteration=iteration+1,
             n_max_co_processes=n_max_co_processes,  n_cores=n_cores,
             params_orig_id=orig_job_ids, use_dill=use_dill)
-
+    if remove_jobfolder:
+        shutil.rmtree(job_folder)
     return path_to_out
 
 

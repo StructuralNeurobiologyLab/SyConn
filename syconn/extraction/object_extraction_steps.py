@@ -140,7 +140,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
         raise Exception("Number of thresholds, sigmas and HDF5 names does not "
                         "match!")
     if n_chunk_jobs is None:
-        n_chunk_jobs = 2 * global_params.NCORE_TOTAL
+        n_chunk_jobs = global_params.NCORE_TOTAL
     chunk_blocks = basics.chunkify(chunk_list, n_chunk_jobs)
 
     stitch_overlap = np.array([1, 1, 1])
@@ -159,7 +159,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
             max_sigma = np.array([np.max(sigmas)] * 3)
         overlap = np.ceil(max_sigma * 4) + stitch_overlap
 
-    # TODO: add chunks of chunks --> less total jobs
+    # TODO: use chunk IDs instead ob Chunk objects... ->
     multi_params = []
     for chunk_sub in chunk_blocks:
         multi_params.append(
@@ -193,7 +193,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
             with open(out_file, 'rb') as f:
                 for entry in pkl.load(f):
                     results_as_list.append(entry)
-
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     return results_as_list, [overlap, stitch_overlap]
 
 
@@ -371,7 +371,8 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
     else:
         path_to_out = qu.QSUB_script(multi_params_glob,
                                      "make_unique_labels", suffix=filename,
-                                     n_max_co_processes=n_max_co_processes)
+                                     n_max_co_processes=n_max_co_processes,
+                                     remove_jobfolder=True)
 
 
 def _make_unique_labels_thread(func_args):
@@ -482,6 +483,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
                     elems = result[hdf5_name]
                     for elem in elems:
                         stitch_list[hdf5_name].append(elem)
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 
     return stitch_list
 
@@ -685,7 +687,8 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
     else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "apply_merge_list", suffix=filename,
-                                     n_max_co_processes=n_max_co_processes)
+                                     n_max_co_processes=n_max_co_processes,
+                                     remove_jobfolder=True)
 
 
 def _apply_merge_list_thread(args):
@@ -810,6 +813,7 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         for out_file in out_files:
             with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     for i_hdf5_name, hdf5_name in enumerate(hdf5names):
         dataset_path = workfolder + "/%s_temp/" % dataset_names[i_hdf5_name]
         remap_dict = defaultdict(list)
@@ -1004,7 +1008,7 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
             path_to_out = qu.QSUB_script(multi_params,
                                          "combine_voxels", suffix=dataset_names[ii],
                                          n_max_co_processes=n_max_co_processes,
-                                         n_cores=nb_cpus)
+                                         n_cores=nb_cpus, remove_jobfolder=True)
         shutil.rmtree(dataset_temp_path)
 
 
@@ -1119,7 +1123,8 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
 
     else:
         path_to_out = qu.QSUB_script(multi_params, "extract_voxels_combined", suffix=filename, n_cores=n_cores,
-                                     max_iterations=10, n_max_co_processes=n_max_co_processes)
+                                     max_iterations=10, n_max_co_processes=n_max_co_processes,
+                                     remove_jobfolder=True)
 
 
 def _extract_voxels_combined_thread(args):
@@ -1262,7 +1267,7 @@ def _extract_voxels_combined_thread_OLD(args):
 def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
                       offset=None, size=None, n_max_co_processes=None,
                       stride=[4 * 128, 4 * 128, 4 * 128], overwrite=False,
-                      as_raw=False, fast_downsampling=False,
+                      as_raw=False, fast_downsampling=False, n_max_job=None,
                       unified_labels=False, orig_dtype=np.uint8):
     """
     Batchjob version of `ChunkDataset` `export_cset_to_kd` method, see knossos_utils.chunky for
@@ -1294,7 +1299,8 @@ def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
     except ImportError:
         raise ImportError('Could not import `_export_cset_as_kd_thread` from '
                           '`knossos_utils.chunky`.')
-
+    if n_max_job is None:
+        n_max_job = global_params.NCORE_TOTAL
     if offset is None or size is None:
         offset = np.zeros(3, dtype=np.int)
         size = np.copy(kd.boundary)
@@ -1307,10 +1313,12 @@ def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
             for coordz in range(offset[2], offset[2] + size[2],
                                 stride[2]):
                 coords = np.array([coordx, coordy, coordz])
-                multi_params.append([coords, stride, cset.path_head_folder,
-                                     kd.knossos_path, name, hdf5names, as_raw,
-                                     unified_labels, 1, orig_dtype,
-                                     fast_downsampling, overwrite])
+                multi_params.append(coords)
+    multi_params = basics.chunkify(multi_params, n_max_job)
+    multi_params = [[coords, stride, cset.path_head_folder, kd.knossos_path, name,
+                     hdf5names, as_raw, unified_labels, 1, orig_dtype,
+                     fast_downsampling, overwrite] for coords in multi_params]
 
     qu.QSUB_script(multi_params, "export_cset_to_kd", n_cores=n_cores,
-                   n_max_co_processes=n_max_co_processes, suffix=hdf5names[0])
+                   n_max_co_processes=n_max_co_processes, suffix=hdf5names[0],
+                   remove_jobfolder=True)

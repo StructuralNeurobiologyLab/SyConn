@@ -628,6 +628,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     init_opengl(ws, depth_map=depth_map, clear_value=1.0,
                 smooth_shade=smooth_shade, wire_frame=wire_frame)
     init_object(indices, vertices, normals, colors, ws)
+    n_empty_views = 0
     if verbose:
         pbar = tqdm.tqdm(total=len(res), mininterval=0.5)
     for ii, c in enumerate(coords):
@@ -675,19 +676,17 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         res[ii] = c_views
         if verbose:
             pbar.update(1)
-        found_empty_view = False
         for cv in c_views:
-            if len(np.unique(cv)) == 1:
-                if views_key == "raw" or views_key == "index":
-                    log_proc.critical("WARNING: Empty view of '{}'-mesh with {} vertices found. "
-                                     "Existing color value: {}".format(views_key, len(mesh.vert_resh), np.unique(cv)))
-                    found_empty_view = True
-        if found_empty_view:
-            log_proc.critical(
-                "WARNING: View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
-                  "'%s'-mesh with %d vertices. Location: %s" %
-                  (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
-                   views_key, len(mesh.vertices), repr(c)))
+            if views_key == "raw" or views_key == "index":
+                if len(np.unique(cv)) == 1:
+                    n_empty_views += 1
+                    continue  # check at most one occurrence
+    if n_empty_views / len(res) > 0.1:  # more than 10% locations contain at least one empty view
+        log_proc.critical(
+            "WARNING: Found {} locations with empty views.\t#view in list: %d/%d\n"
+              "'%s'-mesh with %d vertices. Example location: %s" %
+              (n_empty_views, len(coords),
+               views_key, len(mesh.vertices), repr(c)))
     if verbose:
         pbar.close()
     return res
@@ -997,6 +996,10 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
                                   rot_mat=None, nb_views=None,
                                   comp_window=None, return_rot_matrices=False):
     """
+    Uses per-face color via flattened vertices (i.e. vert[ind] -> slow!). This was added to be able
+    to calculate the surface coverage captured by the views.
+    TODO: Add fast GL_POINT rendering to omit slow per-face coloring (redundant veritces) and
+     expensive remapping from face IDs to vertex IDs.
 
     Parameters
     ----------
@@ -1019,8 +1022,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
         ws = (256, 128)
     if verbose:
         log_proc.debug('Started "render_sso_coords_index_views" at {} locations for SSO {} using '
-                  'PyOpenGL'
-                       ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
+                       'PyOpenGL platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     # tim = time.time()
@@ -1243,7 +1245,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
     # This is single node multiprocessing -> `disable_batchjob=False`
     path_to_out = QSUB_script(
         params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
-        queue=None, script_folder=None, n_cores=1, disable_batchjob=True,
+        n_cores=1, disable_batchjob=True,
         n_max_co_processes=n_jobs)
     out_files = glob.glob(path_to_out + "/*")
     views = []
@@ -1253,7 +1255,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
         with open(out_file, 'rb') as f:
             views.append(pkl.load(f))
     views = np.concatenate(views)
-    shutil.rmtree(path_to_out + "/../", ignore_errors=True)
+    shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     if rendering_locations is None and return_views is False:
         for i, so in enumerate(svs):
             so.enable_locking = True

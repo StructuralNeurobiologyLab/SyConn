@@ -27,7 +27,10 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-out = _export_cset_as_kd_thread(args)
+coords = args[0]
+params = args[1:]
+for coord in coords:
+    _export_cset_as_kd_thread([coord, ] + params)
 
 with open(path_out_file, "wb") as f:
-    pkl.dump(out, f)
+    pkl.dump(None, f)

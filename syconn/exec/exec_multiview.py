@@ -22,7 +22,6 @@ from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
 from syconn.reps.segmentation import SegmentationDataset
 from syconn.reps.segmentation_helper import find_missing_sv_attributes
 from syconn.handler.prediction import get_glia_model
-from syconn.handler.basics import parse_cc_dict_from_kml
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.proc import ssd_proc
 from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
@@ -56,7 +55,7 @@ def run_morphology_embedding(max_n_jobs=None):
                      pred_key_appendix) for ssv_ids in multi_params]
     qu.QSUB_script(multi_params, "generate_morphology_embedding", n_max_co_processes=global_params.NGPU_TOTAL,
                    n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
-                   suffix="", additional_flags="--gres=gpu:1", resume_job=False)  # removed -V (used with QSUB)
+                   suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
     log.info('Finished extraction of cell morphology embedding.')
 
 
@@ -79,9 +78,9 @@ def run_axoness_mapping(max_n_jobs=None):
 
     multi_params = [(par, pred_key_appendix) for par in multi_params]
     log.info('Starting axoness mapping.')
-    path_to_out = qu.QSUB_script(multi_params, "map_viewaxoness2skel",
-                                 n_max_co_processes=global_params.NCORE_TOTAL,
-                                 suffix="", n_cores=1)
+    _ = qu.QSUB_script(multi_params, "map_viewaxoness2skel",
+                       n_max_co_processes=global_params.NCORE_TOTAL,
+                       suffix="", n_cores=1, remove_jobfolder=True)
     # TODO: perform completeness check
     log.info('Finished axoness mapping.')
 
@@ -91,7 +90,6 @@ def run_axoness_prediction(max_n_jobs_gpu=None, e3=False):
                              overwrite=False)
     if max_n_jobs_gpu is None:
         max_n_jobs_gpu = global_params.NGPU_TOTAL * 2
-    # TODO: currently working directory has to be set globally in global_params and is not adjustable
     # here because all qsub jobs will start a script referring to 'global_params.config.working_dir'
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     sd = ssd.get_segmentationdataset("sv")
@@ -122,7 +120,8 @@ def run_axoness_prediction(max_n_jobs_gpu=None, e3=False):
         _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
                            n_max_co_processes=global_params.NGPU_TOTAL,
                            n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
-                           suffix="_axoness", additional_flags="--gres=gpu:1")
+                           suffix="_axoness", additional_flags="--gres=gpu:1",
+                           remove_jobfolder=True)
     else:
         for par in multi_params:
             mk = par[1]
@@ -131,7 +130,8 @@ def run_axoness_prediction(max_n_jobs_gpu=None, e3=False):
         _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
                            n_max_co_processes=global_params.NGPU_TOTAL // 2,
                            n_cores=global_params.NCORES_PER_NODE, suffix="_axoness",
-                           additional_flags="--gres=gpu:1")
+                           additional_flags="--gres=gpu:1",
+                           remove_jobfolder=True)
     log.info('Finished axon prediction. Now checking for missing predictions.')
     res = find_missing_sv_attributes_in_ssv(ssd, pred_key, n_cores=global_params.NCORES_PER_NODE)
     if len(res) > 0:
@@ -207,9 +207,8 @@ def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
     qu.QSUB_script(multi_params, "predict_spiness_chunked",
                    n_max_co_processes=NGPU_TOTAL,
                    n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
-                   python_path=global_params.config.py36path,
-                   # use python 3.6
-                   suffix="",  additional_flags="--gres=gpu:1")   # removed -V (used with QSUB)
+                   suffix="",  additional_flags="--gres=gpu:1",
+                   remove_jobfolder=True)
     log.info('Finished spine prediction.')
     # map semantic spine segmentation of multi views on SSV mesh
     # TODO: CURRENTLY HIGH MEMORY CONSUMPTION
@@ -227,13 +226,14 @@ def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
                      kwargs_semseg2mesh) for ssv_ids in multi_params]
     log.info('Starting mapping of spine predictions to neurite surfaces.')
     qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=global_params.NCORE_TOTAL,
-                   n_cores=1, suffix="", additional_flags="", resume_job=False)  # removed -V (used with QSUB)
+                   n_cores=1, suffix="", additional_flags="", remove_jobfolder=True)
     log.info('Finished spine mapping.')
 
 
 def run_neuron_rendering(max_n_jobs=None):
     if max_n_jobs is None:
-        max_n_jobs = global_params.NCORE_TOTAL * 2
+        max_n_jobs = global_params.NGPU_TOTAL * 2 if global_params.PYOPENGL_PLATFORM == 'egl' \
+            else global_params.NCORE_TOTAL * 2
     log = initialize_logging('neuron_view_rendering',
                              global_params.config.working_dir + '/logs/')
     # TODO: currently working directory has to be set globally in global_params
@@ -272,18 +272,18 @@ def run_neuron_rendering(max_n_jobs=None):
                 global_params.config.working_dir:
             n_cores = 1
             n_parallel_jobs = global_params.NCORES_PER_NODE
-            path_to_out = qu.QSUB_script(multi_params, "render_views",
-                                         n_max_co_processes=n_parallel_jobs,
-                                         additional_flags="--gres=gpu:2",
-                                         n_cores=n_cores)
+            _ = qu.QSUB_script(multi_params, "render_views",
+                               n_max_co_processes=n_parallel_jobs,
+                               additional_flags="--gres=gpu:2",
+                               n_cores=n_cores, remove_jobfolder=True)
         # else restrict job to only use one instance
         else:
             n_cores = global_params.NCORES_PER_NODE
             n_parallel_jobs = global_params.NNODES_TOTAL
-            path_to_out = qu.QSUB_script(multi_params, "render_views_egl",
-                                         n_max_co_processes=n_parallel_jobs,
-                                         additional_flags="--gres=gpu:2",
-                                         n_cores=n_cores)
+            _ = qu.QSUB_script(multi_params, "render_views_egl",
+                               n_max_co_processes=n_parallel_jobs,
+                               additional_flags="--gres=gpu:2",
+                               n_cores=n_cores, remove_jobfolder=True)
     else:
         raise RuntimeError('Specified OpenGL platform "{}" not supported.'
                            ''.format(global_params.PYOPENGL_PLATFORM))
@@ -310,7 +310,7 @@ def run_neuron_rendering(max_n_jobs=None):
         log.info('Success.')
 
 
-def run_create_neuron_ssd(prior_glia_removal=True):
+def run_create_neuron_ssd():
     """
     Creates SuperSegmentationDataset with version 0.
 
@@ -331,22 +331,6 @@ def run_create_neuron_ssd(prior_glia_removal=True):
     g_p = "{}/glia/neuron_rag{}.bz2".format(global_params.config.working_dir, suffix)
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
     # e.g. if rag was not created by glia splitting procedure this filtering is required
-    if not prior_glia_removal:
-        sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
-
-        sv_size_dict = {}
-        bbs = sd.load_cached_data('bounding_box') * sd.scaling
-        for ii in range(len(sd.ids)):
-            sv_size_dict[sd.ids[ii]] = bbs[ii]
-        ccsize_dict = create_ccsize_dict(rag_g, sv_size_dict)
-        log.debug("Finished preparation of SSV size dictionary based "
-                  "on bounding box diagional of corresponding SVs.")
-        before_cnt = len(rag_g.nodes())
-        for ix in list(rag_g.nodes()):
-            if ccsize_dict[ix] < global_params.min_cc_size_ssv:
-                rag_g.remove_node(ix)
-        log.debug("Removed %d neuron CCs because of size." %
-                  (before_cnt - len(rag_g.nodes())))
 
     ccs = nx.connected_components(rag_g)
     cc_dict = {}
@@ -403,16 +387,16 @@ def run_glia_prediction(e3=False):
                              overwrite=False)
     # only append to this key if needed (for e.g. different versions, change accordingly in 'axoness_mapping.py')
     pred_key = "glia_probas"
+
     # Load initial RAG from  Knossos mergelist text file.
-    init_rag_p = global_params.config.working_dir + "initial_rag.txt"
-    assert os.path.isfile(init_rag_p), "Initial RAG could not be found at %s."\
-                                       % init_rag_p
-    init_rag = parse_cc_dict_from_kml(init_rag_p)
-    log.info('Found {} CCs with a total of {} SVs in inital RAG.'
-          ''.format(len(init_rag), np.sum([len(v) for v in init_rag.values()])))
+    g = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
+    all_sv_ids_in_rag = np.array(list(g.nodes()), dtype=np.uint)
+
+    log.debug('Found {} CCs with a total of {} SVs in inital RAG.'.format(
+        nx.number_connected_components(g), g.number_of_nodes()))
     # chunk them
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
-    multi_params = chunkify(sd.so_dir_paths, 100)
+    multi_params = chunkify(sd.so_dir_paths, global_params.NGPU_TOTAL)
     # get model properties
     if e3 == True:
         model_kwargs = 'get_glia_model_e3'
@@ -436,53 +420,53 @@ def run_glia_prediction(e3=False):
         qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
                        n_max_co_processes=2 * global_params.NNODES_TOTAL,
                        script_folder=None, n_cores=global_params.NCORES_PER_NODE,
-                       suffix="_glia", additional_flags="--gres=gpu:2")  # removed -V
+                       suffix="_glia", additional_flags="--gres=gpu:2",
+                       remove_jobfolder=True)
     else:
         # randomly assign to gpu 0 or 1
         for par in multi_params:
             mk = par[1]
             # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
             mk["init_gpu"] = 0
-        path_to_out = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
-                                     n_max_co_processes=global_params.NNODES_TOTAL,
-                                     n_cores=global_params.NCORES_PER_NODE, suffix="_glia",
-                                     script_folder=None,
-                                     additional_flags="--gres=gpu:2")  # removed -V
+        _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
+                           n_max_co_processes=global_params.NNODES_TOTAL,
+                           n_cores=global_params.NCORES_PER_NODE, suffix="_glia",
+                           additional_flags="--gres=gpu:2", remove_jobfolder=True)
     log.info('Finished glia prediction. Checking completeness.')
-    res = find_missing_sv_attributes(sd, pred_key, n_cores=global_params.NCORES_PER_NODE)
-    if len(res) > 0:
-        log.error("Attribute '{}' missing for follwing"
-                  " SVs:\n{}".format(pred_key, res))
+    res = find_missing_sv_views(sd, woglia=False, n_cores=global_params.NCORES_PER_NODE)
+    missing_not_contained_in_rag = []
+    missing_contained_in_rag = []
+    for el in res:
+        if el not in all_sv_ids_in_rag:
+            missing_not_contained_in_rag.append(el)  # TODO: decide whether to use or not
+        else:
+            missing_contained_in_rag.append(el)
+    if len(missing_contained_in_rag) != 0:
+        msg = "Not all SVs were predicted! Missing:\n" \
+              "{}".format(missing_contained_in_rag)
+        log.error(msg)
+        raise ValueError(msg)
     else:
         log.info('Success.')
 
 
 def run_glia_splitting():
+    """
+    Uses the pruned RAG (stored as edge list .bz2 file) which is computed
+     in `init_cell_subcell_sds`.
+
+    Stores neuron RAG at `"{}/glia/neuron_rag{}.bz2".format(global_params.config.working_dir,
+    suffix)` which is then used by `run_create_neuron_ssd`
+
+    Returns
+    -------
+
+    """
     log = initialize_logging('glia_splitting', global_params.config.working_dir + '/logs/',
                              overwrite=False)
-    # path to networkx file containing the initial rag, TODO: create alternative formats
-    G = nx.Graph()  # TODO: Make this more general
-    with open(global_params.config.init_rag_path, 'r') as f:
-        for l in f.readlines():
-            edges = [int(v) for v in re.findall('(\d+)', l)]
-            G.add_edge(edges[0], edges[1])
-
-    all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
-    log.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
-
-    # add single SV connected components to initial graph
-    sd = SegmentationDataset(obj_type='sv', working_dir=global_params.config.working_dir)
-    sv_ids = sd.ids
-    diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
-    log.info('Found {} single connected component SVs which were'
-             ' missing in initial RAG.'.format(len(diff)))
-
-    for ix in diff:
-        G.add_node(ix)
-
-    all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
-    log.info("Found {} SVs in initial RAG after adding size-one connected "
-             "components. Writing RAG to pkl.".format(len(all_sv_ids_in_rag)))
+    G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
+    log.debug('Found {} CCs with a total of {} SVs in inital RAG.'.format(
+        nx.number_connected_components(G), G.number_of_nodes()))
 
     if not os.path.isdir(global_params.config.working_dir + "/glia/"):
         os.makedirs(global_params.config.working_dir + "/glia/")
@@ -499,13 +483,25 @@ def run_glia_splitting():
     recon_nx = G
     # create glia / neuron RAGs
     write_glia_rag(recon_nx, global_params.min_cc_size_ssv, suffix=rag_suffix)
-    log.info("Finished glia splitting. Resulting RAGs are stored at {}."
+    log.info("Finished glia splitting. Resulting neuron and glia RAGs are stored at {}."
              "".format(global_params.config.working_dir + "/glia/"))
 
 
 def run_glia_rendering(max_n_jobs=None):
+    """
+    Uses the pruned RAG (stored as edge list .bz2 file) which is computed
+     in `init_cell_subcell_sds`.
+
+    Parameters
+    ----------
+    max_n_jobs :
+
+    Returns
+    -------
+
+    """
     if max_n_jobs is None:
-        max_n_jobs = 2 * global_params.NCORE_TOTAL
+        max_n_jobs = 2 * global_params.NGPU_TOTAL
     log = initialize_logging('glia_view_rendering', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     np.random.seed(0)
@@ -513,38 +509,20 @@ def run_glia_rendering(max_n_jobs=None):
     # view rendering prior to glia removal, choose SSD accordingly
     version = "tmp"  # glia removal is based on the initial RAG and does not require explicitly stored SSVs
 
-    G = nx.Graph()  # TODO: Add factory method for initial RAG
-    with open(global_params.config.init_rag_path, 'r') as f:
-        for l in f.readlines():
-            edges = [int(v) for v in re.findall('(\d+)', l)]
-            G.add_edge(edges[0], edges[1])
+    G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
 
+    cc_gs = list(nx.connected_component_subgraphs(G))
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
-    log.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
-
-    # add single SV connected components to initial graph
-    sd = SegmentationDataset(obj_type='sv', working_dir=global_params.config.working_dir)
-    sv_ids = sd.ids
-    diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
-    log.info('Found {} single connected component SVs which were missing'
-             ' in initial RAG.'.format(len(diff)))
-
-    for ix in diff:
-        G.add_node(ix)
-
-    all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
-    log.info("Found {} SVs in initial RAG after adding size-one connected "
-             "components. Writing kml text file".format(len(all_sv_ids_in_rag)))
 
     # write out readable format for 'glia_prediction.py'
-    ccs = [[n for n in cc] for cc in nx.connected_component_subgraphs(G)]
+    ccs = [[n for n in cc] for cc in cc_gs]
     kml = knossos_ml_from_ccs([np.sort(cc)[0] for cc in ccs], ccs)
     with open(global_params.config.working_dir + "initial_rag.txt", 'w') as f:
         f.write(kml)
 
     # generate parameter for view rendering of individual SSV
     log.info("Starting view rendering.")
-    multi_params = list(nx.connected_component_subgraphs(G))
+    multi_params = cc_gs
     big_ssv = []
     small_ssv = []
     for g in multi_params:
@@ -585,28 +563,27 @@ def run_glia_rendering(max_n_jobs=None):
     path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
                                  n_max_co_processes=global_params.NCORE_TOTAL,
                                  n_cores=global_params.NCORES_PER_NODE,
-                                 additional_flags="--gres=gpu:2" )
+                                 additional_flags="--gres=gpu:2",
+                                 remove_jobfolder=True)
 
     # check completeness
+    log.info('Finished view rendering for glia separation. Checking completeness.')
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
-    res = find_missing_sv_views(sd, woglia=False, n_cores=global_params.NCORE_TOTAL)
+    res = find_missing_sv_views(sd, woglia=False, n_cores=global_params.NCORES_PER_NODE)
     missing_not_contained_in_rag = []
     missing_contained_in_rag = []
     for el in res:
         if el not in all_sv_ids_in_rag:
-            missing_not_contained_in_rag.append(el)
+            missing_not_contained_in_rag.append(el)  # TODO: decide whether to use or not
         else:
             missing_contained_in_rag.append(el)
-    if len(missing_not_contained_in_rag):
-        log.info("%d SVs were not rendered but also not part of the initial"
-                 "RAG: {}".format(missing_not_contained_in_rag))
     if len(missing_contained_in_rag) != 0:
-        msg = "Not all SSVs were rendered completely! Missing:\n" \
+        msg = "Not all SVs were rendered completely! Missing:\n" \
               "{}".format(missing_contained_in_rag)
         log.error(msg)
-        raise RuntimeError(msg)
+        raise ValueError(msg)
     else:
-        log.info('All SVs now conain views required for glia prediction.')
+        log.info('All SVs now contain views required for glia prediction.')
 
 
 def axoness_pred_exists(sv):

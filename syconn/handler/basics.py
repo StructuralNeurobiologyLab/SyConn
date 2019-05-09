@@ -21,6 +21,7 @@ from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
 from knossos_utils import KnossosDataset
 import re
 import signal
+import networkx as nx
 import contextlib
 import tqdm
 import warnings
@@ -33,7 +34,7 @@ __all__ = ['load_from_h5py', 'save_to_h5py', 'crop_bool_array',
            'write_data2kzip', 'remove_from_zip', 'chunkify', 'flatten_list',
            'get_skelID_from_path', 'write_txt2kzip', 'switch_array_entries',
            'parse_cc_dict_from_kzip', 'parse_cc_dict_from_kml', 'data2kzip',
-           'safe_copy', 'temp_seed', 'kd_factory']
+           'safe_copy', 'temp_seed', 'kd_factory', 'parse_cc_dict_from_g']
 
 
 def kd_factory(kd_path, channel='jpg'):
@@ -711,6 +712,14 @@ def parse_cc_dict_from_kml(kml_path):
     """
     txt = open(kml_path, "rb").read().decode()
     return prase_cc_dict_from_txt(txt)
+
+
+def parse_cc_dict_from_g(g):
+    cc_dict = {}
+    # use minimum ID in CC as SSV ID
+    for cc in sorted(nx.connected_components(g), key=len, reverse=True):
+        cc_dict[cc[0]] = cc
+    return cc_dict
 
 
 def parse_cc_dict_from_kzip(k_path):

@@ -48,29 +48,29 @@ cd to `SyConn/scripts/example_run/` and run
 python start.py
 ```
 
-The example script analyzes the EM data based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, probability maps of cell organelles
+The example script analyzes the EM data based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, probability maps of sub-cellular structures
 (mitochondria, vesicle clouds and synaptic junctions) and synapse type (inhibitory, excitatory).
 
 On a machine with 20 CPUs (Intel(R) Xeon(R) @ 2.60GHz) and 2 GPUs (GeForce GTX 980 Ti) SyConn
-finished the following analysis steps for an example cube with shape \[400 400 600] after 00h:09min:32s.
+finished the following analysis steps for an example cube of shape \[2180 2180 1140] after 02h:16min:52s.
 
-\[0/8] Preparation          00h:00min:08s       1%
+\[0/8] Preparation                       00h:07min:21s                   5%
 
-\[1/8] SD generation        00h:04min:35s       48%
+\[1/8] SD generation                     00h:29min:41s                   21%
 
-\[2/8] SSD generation       00h:00min:13s       2%
+\[2/8] SSD generation                    00h:01min:28s                   1%
 
-\[3/8] Neuron rendering     00h:00min:40s       7%
+\[3/8] Neuron rendering                  00h:40min:03s                   29%
 
-\[4/8] Synapse detection    00h:01min:26s       15%
+\[4/8] Synapse detection                 00h:32min:18s                   23%
 
-\[5/8] Axon prediction      00h:01min:07s       11%
+\[5/8] Axon prediction                   00h:05min:11s                   3%
 
-\[6/8] Spine prediction     00h:00min:54s       9%
+\[6/8] Spine prediction                  00h:14min:03s                   10%
 
-\[7/8] Celltype analysis    00h:00min:22s       3%
+\[7/8] Celltype analysis                 00h:06min:06s                   4%
 
-\[8/8] Matrix export        00h:00min:02s       0%
+\[8/8] Matrix export                     00h:00min:37s                   0%
 
 
 ## SyConn KNOSSOS viewer
@@ -105,17 +105,17 @@ list of cell IDs followed by pressing 'show neurite' will trigger the rendering 
 
 
 ## Analysis steps
-After initialization of the SDs (SVs and cellular organelles) and the SSD
-containing the agglomerated SVs, several analysis steps can be applied:
+After initialization of the SDs (cell and sub-cellular structures, step 1 in the example run) and the SSD
+containing the agglomerated cell SVs (step 3), several analysis steps can be applied:
 
 * [Optional] [Glia removal](glia_removal.md)
 
 * [Neuronal morphology analysis and classification](neuron_analysis.md) to identify cellular
-compartments (e.g. axons and spines) and to perform morphology based cell type classification.
+compartments (e.g. axons and spines) and to perform morphology based cell type classification (steps 3-7).
 
-* [Contact site extraction](contact_site_extraction.md)
+* [Contact site extraction](contact_site_extraction.md) (step 4)
 
-* [Identification of synapses and extraction of a wiring diagram](contact_site_classification.md)
+* [Identification of synapses and extraction of a wiring diagram](contact_site_classification.md) (steps 4 and 8)
 
 
 ## Package structure and data classes
