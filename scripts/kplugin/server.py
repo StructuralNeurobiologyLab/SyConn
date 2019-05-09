@@ -24,6 +24,9 @@ from syconn.reps.segmentation import SegmentationDataset
 app = Flask(__name__)
 
 
+global sg_state
+
+
 @app.route('/ssv_skeleton/<ssv_id>', methods=['GET'])
 def route_ssv_skeleton(ssv_id):
     d = sg_state.backend.ssv_skeleton(ssv_id)
@@ -393,8 +396,8 @@ class SyConnBackend(object):
     def ssv_of_sv(self, sv_id):
         """
         Returns the ssv for a given sv_id.
-        :param sv_id: 
-        :return: 
+        :param sv_id:
+        :return:
         """
         return {'ssv': self.ssd.id_changer[int(sv_id)]}
 
@@ -435,7 +438,7 @@ class SyConnBackend(object):
         """
         Returns all synapse meta data. This works only well for fast
         connections and less than 1e6 synapses or so.
-        :return: 
+        :return:
         """
 
         all_syn_meta_dict = copy.copy(self.conn_dict)
@@ -450,7 +453,7 @@ class SyConnBackend(object):
         """
         TODO: Requires adaptions of 'SyConnBackend' class
         Returns all synapse objs of a given ssv_id.
-        :return: 
+        :return:
 
         """
         syns = dict()
@@ -471,8 +474,8 @@ class SyConnBackend(object):
         Return the syn objs where this ssv_id is post synaptic,
         i.e. this ssv_id receives the synapse.
 
-        :param ssv_id: 
-        :return: 
+        :param ssv_id:
+        :return:
         """
         syns = dict()
         # not the most efficient approach, a cached map might be necessary for
@@ -541,14 +544,16 @@ class SyConnBackend(object):
 
 
 class ServerState(object):
-    def __init__(self):
-
+    def __init__(self, host=None, port=None):
         self.logger = log_gate
+        self.host = host
+        self.port = port
 
         self.logger.info('SyConn gate server starting up on working directory '
                          '"{}".'.format(global_params.wd))
         self.backend = SyConnBackend(global_params.config.working_dir, logger=self.logger)
-        self.logger.info('SyConn gate server running.')
+        self.logger.info('SyConn gate server running at {}, {}.'.format(
+            self.host, self.port))
         return
 
 
@@ -590,7 +595,7 @@ server_port = args.port
 server_host = args.host
 global_params.wd = server_wd
 
-sg_state = ServerState()
+sg_state = ServerState(server_host, server_port)
 
 # context = ('cert.crt', 'key.key') enable later
 app.run(host=server_host,  # do not run this on a non-firewalled machine!

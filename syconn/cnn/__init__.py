@@ -7,6 +7,7 @@
 
 
 from ..handler.logger import log_main
+
 log_cnn = log_main
 
 __all__ = ['log_cnn']

@@ -21,7 +21,7 @@ from .. import global_params
 from ..handler.basics import flatten_list, chunkify_successive, chunkify_successive_split
 from ..handler.compression import arrtolz4string
 from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
-    rgb2id_array, id2rgb_array_contiguous
+    rgb2id_array, id2rgb_array_contiguous, rgba2id_array, id2rgba_array_contiguous
 from .meshes import merge_meshes, MeshObject, calc_rot_matrices
 try:
     import os
@@ -38,8 +38,24 @@ except Exception as e:
 
 # can't load more than one platform simultaneously
 if os.environ['PYOPENGL_PLATFORM'] == 'egl':
-    log_proc.info('EGL rendering enabled.')
-    from OpenGL.EGL import eglDestroyContext, eglSwapBuffers
+    try:
+        from OpenGL.EGL import eglDestroyContext, eglSwapBuffers
+        from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
+            EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
+            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
+            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
+            EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
+            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
+            eglGetDisplay, eglInitialize, eglChooseConfig, \
+            eglBindAPI, eglCreatePbufferSurface, EGL_ALPHA_SIZE,\
+            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
+        log_proc.info('EGL rendering enabled.')
+    except ImportError as e:
+        os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
+        from OpenGL.osmesa import *
+        log_proc.warn('EGL requirements could not be imported ({}). '
+                      'Switched to OSMESA platform.'.format(e))
 elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
     log_proc.info('OSMESA rendering enabled.')
     from OpenGL.osmesa import *
@@ -47,13 +63,8 @@ else:
     msg = 'PYOpenGL environment has to be "egl" or "osmesa".'
     log_proc.error(msg)
     raise NotImplementedError(msg)
-try:
-    import numpy as np
-    import itertools
-    from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
-    from ..mp.batchjob_utils import QSUB_script
-except Exception as error:
-    print('Caught this error: ' + repr(error))
+import numpy as np
+from ..mp.batchjob_utils import QSUB_script
 try:
     import cPickle as pkl
 except ImportError:
@@ -265,8 +276,8 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
             data = np.ones_like(data) * 255
     elif colored:
         data = glReadPixels(0, 0, ws[0], ws[1],
-                            GL_RGB, GL_UNSIGNED_BYTE)
-        data = Image.frombuffer("RGB", (ws[0], ws[1]), data, 'raw', 'RGB', 0, 1)
+                            GL_RGBA, GL_UNSIGNED_BYTE)
+        data = Image.frombuffer("RGBA", (ws[0], ws[1]), data, 'raw', 'RGBA', 0, 1)
         data = np.asarray(data.transpose(Image.FLIP_TOP_BOTTOM))
     else:
         data = glReadPixels(0, 0, ws[0], ws[1],
@@ -277,8 +288,72 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
     return data
 
 
-# setup ######################################################################
-def init_ctx(ws):
+# # setup ######################################################################
+# TODO: init error if two jobs run on the same node in parallel (also when they are encapsulated via different SLURM logins)
+#  -> solution requires additional installations: https://github.com/deepmind/dm_control/blob/master/dm_control/_render/pyopengl/egl_renderer.py#L50
+# def init_ctx(ws):
+#     # ctx = OSMesaCreateContext(OSMESA_RGBA, None)
+#     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
+#         from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
+#             EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, eglGetPlatformDisplayEXT,\
+#             EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
+#             EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
+#             EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, eglQueryDevicesEXT, \
+#             EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, EGL_PLATFORM_DEVICE_EXT,\
+#             EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
+#             eglGetDisplay, eglInitialize, eglChooseConfig, EGL_TRUE, EGL_FALSE, \
+#             eglBindAPI, eglCreatePbufferSurface, eglGetError, EGL_SUCCESS, \
+#             eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
+#
+#         major, minor = ctypes.c_long(), ctypes.c_long()
+#         num_configs = ctypes.c_long()
+#         configs = (EGLConfig * 1)()
+#
+#         # see bug description and solution at
+#         # https://github.com/deepmind/dm_control/blob/master/dm_control/_render/pyopengl/egl_renderer.py#L50
+#         initialized = False
+#         devices = eglQueryDevicesEXT()
+#         for device in devices:
+#             dsp = eglGetPlatformDisplayEXT(
+#                 EGL_PLATFORM_DEVICE_EXT, device, None)
+#             initialized = eglInitialize(dsp, major, minor)
+#             egl_error = eglGetError()
+#             if egl_error == EGL_SUCCESS and initialized == EGL_TRUE:
+#                 break
+#
+#         if initialized != EGL_TRUE:
+#             raise RuntimeError('Failed to initialize EGL.')
+#         config_attr = arrays.GLintArray.asArray(
+#             [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
+#              EGL_BLUE_SIZE, 8, EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8,
+#              EGL_DEPTH_SIZE, 8, EGL_COLOR_BUFFER_TYPE,
+#              EGL_RGB_BUFFER,
+#              EGL_RENDERABLE_TYPE,
+#              EGL_OPENGL_BIT,  EGL_NONE])
+#         eglChooseConfig(dsp, config_attr, configs, 1, num_configs)
+#
+#         # Bind EGL to the OpenGL API
+#         eglBindAPI(EGL_OPENGL_API)
+#
+#         # Create an EGL context
+#         ctx = eglCreateContext(dsp, configs[0], EGL_NO_CONTEXT, None)
+#
+#         # Create an EGL pbuffer
+#         buf = eglCreatePbufferSurface(dsp, configs[0], [EGL_WIDTH, ws[0], EGL_HEIGHT, ws[1], EGL_NONE])
+#         # Make the EGL context current
+#         assert (eglMakeCurrent(dsp, buf, buf, ctx))
+#         ctx = [dsp, ctx, buf]
+#     elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
+#         ctx = OSMesaCreateContextExt(OSMESA_RGBA, 32, 0, 0, None)
+#         buf = arrays.GLubyteArray.zeros((ws[0], ws[1], 4)) + 1
+#         assert (OSMesaMakeCurrent(ctx, buf, GL_UNSIGNED_BYTE, ws[0], ws[1]))
+#         assert (OSMesaGetCurrentContext())
+#         OSMesaPixelStore(OSMESA_Y_UP, 0)
+#     else:
+#         raise NotImplementedError('PYOpenGL environment has to be "egl" or "osmesa".')
+#     return ctx
+
+def init_ctx(ws, depth_map):
     # ctx = OSMesaCreateContext(OSMESA_RGBA, None)
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
         from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
@@ -311,22 +386,30 @@ def init_ctx(ws):
 
             assert dsp != EGL_NO_DISPLAY, 'Invalid DISPLAY during egl init.'
 
-            # Initialize EGL
-            eglInitialize(dsp, major, minor)
-
-        config_attr = arrays.GLintArray.asArray(
-            [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,  # EGL_LUMINANCE_SIZE, 8,
-             EGL_BLUE_SIZE, 8, EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8,
-             EGL_DEPTH_SIZE, 8, EGL_COLOR_BUFFER_TYPE,  # EGL_LUMINANCE_BUFFER,
-             EGL_RGB_BUFFER,
-             EGL_RENDERABLE_TYPE,
-             EGL_OPENGL_BIT, EGL_NONE])  # EGL_CONFORMANT, EGL_OPENGL_BIT,
+        # Initialize EGL
+        eglInitialize(dsp, major, minor)
+        if depth_map:
+            config_attr = arrays.GLintArray.asArray(
+                [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, 8, EGL_RED_SIZE, 8,
+                 EGL_GREEN_SIZE, 8,
+                 EGL_DEPTH_SIZE, 8, EGL_COLOR_BUFFER_TYPE, #EGL_LUMINANCE_BUFFER,
+                 EGL_RGB_BUFFER,
+                 EGL_RENDERABLE_TYPE,
+                 EGL_OPENGL_BIT,  EGL_NONE])   #EGL_CONFORMANT, EGL_OPENGL_BIT,
+        else:
+            config_attr = arrays.GLintArray.asArray(
+                [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, 8, EGL_RED_SIZE, 8,
+                 EGL_GREEN_SIZE, 8, EGL_ALPHA_SIZE, 8,
+                 EGL_DEPTH_SIZE, 8, EGL_COLOR_BUFFER_TYPE,  # EGL_LUMINANCE_BUFFER,
+                 EGL_RGB_BUFFER,
+                 EGL_RENDERABLE_TYPE,
+                 EGL_OPENGL_BIT, EGL_NONE])  # EGL_CONFORMANT, EGL_OPENGL_BIT,
         eglChooseConfig(dsp, config_attr, configs, 1, num_configs)
 
         # Bind EGL to the OpenGL API
         eglBindAPI(EGL_OPENGL_API)
-        # attrbls = [major, minor,  EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_TRUE, EGL_FALSE, EGL_FALSE,
-        #          EGL_NO_RESET_NOTIFICATION]
+        #attrbls = [major, minor,  EGL_CONTEXT_OPENGL_CORE_PROFILE_BIT, EGL_TRUE, EGL_FALSE, EGL_FALSE,
+         #          EGL_NO_RESET_NOTIFICATION]
         attrbls = None
 
         # Create an EGL context
@@ -337,7 +420,8 @@ def init_ctx(ws):
         # Make the EGL context current
         assert (eglMakeCurrent(dsp, buf, buf, ctx))
         ctx = [dsp, ctx, buf]
-    elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
+    elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':  # TODO: might be optimizable for depth map
+        # rendering
         ctx = OSMesaCreateContextExt(OSMESA_RGBA, 32, 0, 0, None)
         buf = arrays.GLubyteArray.zeros((ws[0], ws[1], 4)) + 1
         assert (OSMesaMakeCurrent(ctx, buf, GL_UNSIGNED_BYTE, ws[0], ws[1]))
@@ -390,7 +474,8 @@ def init_opengl(ws, enable_lightning=False, clear_value=None, depth_map=False,
     if clear_value is None:
         glClearColor(0., 0., 0., 0.)
     else:
-        glClearColor(clear_value, clear_value, clear_value, 0.)
+        glClearColor(clear_value, clear_value, clear_value, clear_value)  # alpha changed from 0
+        # to clear_value, PS 12Apr2019
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
 
 
@@ -425,7 +510,7 @@ def multi_view_mesh(indices, vertices, normals, colors=None, alpha=None,
     np.array
         shape: (nb_views, ws[0], ws[1]
     """
-    ctx = init_ctx(ws)
+    ctx = init_ctx(ws, depth_map=depth_map)
     init_opengl(ws, enable_lightning, depth_map=depth_map, clear_value=background)
     vertices = np.array(vertices)
     indices = np.array(indices, dtype=np.uint)
@@ -511,7 +596,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
         assert type(colors) == dict
     else:
         colors = {"sv": None, "mi": None, "vc": None, "sj": None}
-    ctx = init_ctx(ws)
+    ctx = init_ctx(ws, depth_map=depth_map)
     init_opengl(ws, enable_lightning, depth_map=depth_map,
                 clear_value=background)
     # initially loading mesh is still needed to get bounding box...
@@ -633,7 +718,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     if not colored:
         view_sh = (nb_views, ws[1], ws[0])
     else:
-        view_sh = (nb_views, ws[1], ws[0], 3)
+        view_sh = (nb_views, ws[1], ws[0], 4)
     res = np.ones([len(coords)] + list(view_sh), dtype=np.uint8) * 255
     init_opengl(ws, depth_map=depth_map, clear_value=1.0,
                 smooth_shade=smooth_shade, wire_frame=wire_frame)
@@ -688,13 +773,13 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
         found_empty_view = False
         for cv in c_views:
             if len(np.unique(cv)) == 1:
-                if views_key == "raw":
-                    log_proc.warning("Empty view of '{}'-mesh with {} vertices found. "
+                if views_key == "raw" or views_key == "index":
+                    log_proc.critical("WARNING: Empty view of '{}'-mesh with {} vertices found. "
                                      "Existing color value: {}".format(views_key, len(mesh.vert_resh), np.unique(cv)))
                     found_empty_view = True
         if found_empty_view:
-            log_proc.warning(
-                "View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
+            log_proc.critical(
+                "WARNING: View 1: %0.1f\t View 2: %0.1f\t#view in list: %d/%d\n"
                   "'%s'-mesh with %d vertices. Location: %s" %
                   (np.sum(c_views[0]), np.sum(c_views[1]), ii, len(coords),
                    views_key, len(mesh.vertices), repr(c)))
@@ -808,7 +893,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
     if verbose:
         log_proc.debug("Starting local rendering at %d locations (%s)." %
                        (len(coords), views_key))
-    ctx = init_ctx(ws)
+    ctx = init_ctx(ws, depth_map=depth_map)
     mviews = multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths,
                                     clahe=clahe, views_key=views_key, ws=ws,
                                     depth_map=depth_map, verbose=verbose,
@@ -886,15 +971,17 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
         dur = time.time() - start
         log_proc.debug("Rendering of %d views took %0.2fs. "
                        "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
-    if sso.version != 'tmp':
+    # if sso.version != 'tmp':
+    if not return_views:
         for i, so in enumerate(missing_svs):
             sv_views = views[part_views[i]:part_views[i+1]]
+            so.enable_locking = True
             so.save_views(sv_views, woglia=woglia, cellobjects_only=cellobjects_only,
                           index_views=index_views)
-    else:
-        log_proc.warning('"render_sampled_sso" called but this SSV '
-                         'has version "tmp", results will'
-                         ' not be saved to disk.')
+    # else:
+    #     log_proc.warning('"render_sampled_sso" called but this SSV '
+    #                      'has version "tmp", results will'
+    #                      ' not be saved to disk.')
     if return_views:
         return views
 
@@ -923,9 +1010,12 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
          of [comp_window, comp_window / 2, comp_window]. Default: 8 um
     rot_mat : np.array
     return_rot_mat : bool
+
     Returns
     -------
-    np.array
+    np.ndarray
+        Resulting views rendered at each location.
+        Output shape: len(coords), 4 [cell outline + number of cell objects], nb_views, y, x
     """
     if comp_window is None:
         comp_window = 8e3
@@ -937,9 +1027,6 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     mesh = sso.mesh
-    if len(mesh[1]) == 0:
-        log_proc.error("No mesh for SSO {} found.".format(sso.id))
-        return
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
                                 "cellobjects only."
@@ -951,10 +1038,15 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
             rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
                                         mo.vert_resh, querybox_edgelength)
     else:
-        raw_views, rot_mat = render_mesh_coords(
-            coords, mesh[0], mesh[1], clahe=clahe, verbose=verbose,
-            return_rot_matrices=True, ws=ws, wire_frame=wire_frame,
-            rot_matrices=rot_mat, nb_views=nb_views, comp_window=comp_window)
+        if len(mesh[1]) == 0 or len(coords) == 0:
+            raw_views = np.ones((len(coords), nb_views, ws[0], ws[1]), dtype=np.uint8) * 255
+            msg = "No mesh for SSO {} found with {} locations.".format(sso, len(coords))
+            log_proc.warning(msg)
+        else:
+            raw_views, rot_mat = render_mesh_coords(
+                coords, mesh[0], mesh[1], clahe=clahe, verbose=verbose,
+                return_rot_matrices=True, ws=ws, wire_frame=wire_frame,
+                rot_matrices=rot_mat, nb_views=nb_views, comp_window=comp_window)
     if add_cellobjects:
         mesh = sso.mi_mesh
         if len(mesh[1]) != 0:
@@ -982,12 +1074,12 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
             sj_views = np.ones_like(raw_views) * 255
         if cellobjects_only:
             res = np.concatenate([mi_views[:, None], vc_views[:, None],
-                                   sj_views[:, None]], axis=1)
+                                  sj_views[:, None]], axis=1)
             if return_rot_mat:
                 return res, rot_mat
             return res
         res = np.concatenate([raw_views[:, None], mi_views[:, None],
-                               vc_views[:, None], sj_views[:, None]], axis=1)
+                              vc_views[:, None], sj_views[:, None]], axis=1)
         if return_rot_mat:
             return res, rot_mat
         return res
@@ -1021,34 +1113,38 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     if ws is None:
         ws = (256, 128)
     if verbose:
-        print('Started "render_sso_coords_index_views" at {} locations for SSO {} using PyOpenGL'
+        log_proc.debug('Started "render_sso_coords_index_views" at {} locations for SSO {} using '
+                  'PyOpenGL'
                        ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
-    tim = time.time()
+    # tim = time.time()
     ind, vert, norm = sso.mesh
-    tim1 = time.time()
-    if verbose:
-        print("Time for initialising MESH {:.2f}s."
-                           "".format(tim1 - tim))
+    # tim1 = time.time()
+    # if verbose:
+    #     print("Time for initialising MESH {:.2f}s."
+    #                        "".format(tim1 - tim))
     if len(vert) == 0:
-        log_proc.error("No mesh for SSO {} found.".format(sso.id))
+        msg = "No mesh for SSO {} found with {} locations.".format(sso, len(coords))
+        log_proc.warning(msg)
         return np.ones((len(coords), nb_views, ws[1], ws[0], 3), dtype=np.uint8)
     try:
-        color_array = id2rgb_array_contiguous(np.arange(len(ind) // 3))
+        color_array = id2rgba_array_contiguous(np.arange(len(ind) // 3))
     except ValueError as e:
         msg = "'render_sso_coords_index_views' failed with {} when " \
               "rendering SSV {}.".format(e, sso.id)
         log_proc.error(msg)
         raise ValueError(msg)
-    color_array = np.concatenate([color_array, np.ones((len(color_array), 1),
-                                                       dtype=np.uint8)*255],
-                                 axis=-1).astype(np.float32) / 255.
+    if color_array.shape[1] == 3:  # add alpha channel
+        color_array = np.concatenate([color_array, np.ones((len(color_array), 1),
+                                                           dtype=np.uint8)*255],
+                                     axis=-1)
+    color_array = color_array.astype(np.float32) / 255.
     # in init it seems color values have to be normalized, check problems with uniqueness if
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
     # backwards compatibility with other color-dependent rendering methods
     # Create mesh object without redundant vertices to get same PCA rotation as for raw views
-    tim = time.time()
+    # tim = time.time()
     if rot_mat is None:
         mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
         querybox_edgelength = comp_window / mo.max_dist
@@ -1057,30 +1153,35 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     # create redundant vertices to enable per-face colors
     vert = vert.reshape(-1, 3)[ind].flatten()
     ind = np.arange(len(vert) // 3)
-    color_array = np.repeat(color_array, 3, axis=0)
+    color_array = np.repeat(color_array, 3, axis=0)  # 3 <- triangles
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
-    tim1 = time.time()
-
-    print("Time for initializing MESHOBJECT {:.2f}s."
-                       "".format(tim1 - tim))
+    # tim1 = time.time()
+    # print("Time for initializing MESHOBJECT {:.2f}s."
+    #                    "".format(tim1 - tim))
     if return_rot_matrices:
         ix_views, rot_mat = _render_mesh_coords(
             coords, mo, verbose=verbose, ws=ws, depth_map=False,
             rot_matrices=rot_mat, smooth_shade=False, views_key="index",
             nb_views=nb_views, comp_window=comp_window,
             return_rot_matrices=return_rot_matrices)
-        ix_views = rgb2id_array(ix_views)[:, None]
+        if ix_views.shape[-1] == 3:  # rgba rendering
+            ix_views = rgb2id_array(ix_views)[:, None]
+        else:  # rgba rendering
+            ix_views = rgba2id_array(ix_views)[:, None]
         return ix_views, rot_mat
     ix_views = _render_mesh_coords(coords, mo, verbose=verbose, ws=ws,
                                    depth_map=False, rot_matrices=rot_mat,
                                    smooth_shade=False, views_key="index",
                                    nb_views=nb_views, comp_window=comp_window,
                                    return_rot_matrices=return_rot_matrices)
-    tim2 = time.time()
-
-    print("Time for _RENDER_MESH_COORDS {:.2f}s."
-                       "".format(tim2 - tim1))
-    return rgb2id_array(ix_views)[:, None]
+    # tim2 = time.time()
+    # print("Time for _RENDER_MESH_COORDS {:.2f}s."
+    #                    "".format(tim2 - tim1))
+    if ix_views.shape[-1] == 3:
+        ix_views = rgb2id_array(ix_views)[:, None]
+    else:
+        ix_views = rgba2id_array(ix_views)[:, None]
+    return ix_views
 
 
 def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
@@ -1158,7 +1259,7 @@ def render_sso_ortho_views(sso):
 
     Returns
     -------
-    np.array
+    np.ndarray
     """
     views = np.zeros((3, 4, 1024, 1024))
     # init MeshObject to calculate rotation into PCA frame
@@ -1173,58 +1274,93 @@ def render_sso_ortho_views(sso):
     return views
 
 
-def render_sso_coords_multiprocessing(ssv, wd, rendering_locations,
-                                      n_jobs, verbose=False,
-                                      render_indexviews=True):
+def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
+                                      verbose=False, render_kwargs=None,
+                                      render_indexviews=True, return_views=True):
     """
+    # TODO: currently the view sorting is not aligned with the other rendering methods
 
     Parameters
     ----------
     ssv : SuperSegmentationObject
-    wd : string: working directory for accessing data
+    wd : string
+        working directory for accessing data
     rendering_locations: array of locations to be rendered
-    n_jobs: int: number of parallel jobs running on same node of cluster
-    verbose: bool: flag to show th progress of rendering.
+        if not given, rendering locations are retrieved from the SSV's SVs. Results will be stored at SV locations.
+    n_jobs : int
+        number of parallel jobs running on same node of cluster
+    verbose : bool
+        flag to show th progress of rendering.
+    return_views : bool
+        if False and rendering_locations is None, views will be saved at
+        SSV SVs
 
-    Returns: Array: array of views after rendering of locations.
+    Returns
+    -------
+    np.ndarray
+        array of views after rendering of locations.
     -------
 
     """
+    if rendering_locations is not None and return_views is False:
+        raise ValueError('"render_sso_coords_multiprocessing" received invalid '
+                         'parameters (`rendering_locations!=None` and `return_v'
+                         'iews=False`). When using specific rendering locations, '
+                         'views have to be returned-')
     tim = time.time()
+    if rendering_locations is None:  # use SV rendering locations
+        svs = list(ssv.svs)
+        rendering_locations = [sv.sample_locations for sv in svs]
+        # store number of rendering locations per SV -> Ordering of rendered
+        # views must be preserved!
+        part_views = np.cumsum([0] + [len(c) for c in rendering_locations])
+
     chunk_size = len(rendering_locations) // n_jobs + 1
-    params = chunkify_successive_split(rendering_locations, n_jobs)  # TODO: adapt chunk size in a reasonable way
+    params = chunkify_successive(rendering_locations, chunk_size)
     ssv_id = ssv.id
     working_dir = wd
     sso_kwargs = {'ssv_id': ssv_id,
                   'working_dir': working_dir,
                   "version": ssv.version}
-    render_kwargs = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
+    render_kwargs_def = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
-                      'nb_views': None, 'comp_window': None, 'rot_mat': None,
+                      'nb_views': None, 'comp_window': None, 'rot_mat': None, 'wo_glia': True,
                      'return_rot_mat': False, 'render_indexviews': render_indexviews}
-    param = []
-    for i in range(n_jobs):
-        param.append([params[0][i], sso_kwargs, render_kwargs, i])
-    # param = [[par, sso_kwargs, render_kwargs, ix] for ix, par in enumerate(params[0])]  #same as for loop above
+    if render_kwargs is not None:
+        render_kwargs_def.update(render_kwargs)
+
+    params = [[par, sso_kwargs, render_kwargs_def, ix] for ix, par in
+              enumerate(params)]
     tim1 = time.time()
     if verbose:
         log_proc.debug("Time for OTHER COMPUTATION {:.2f}s."
                        "".format(tim1 - tim))
+    # This is single node multiprocessing -> `disable_batchjob=False`
     path_to_out = QSUB_script(
-        param, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
+        params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
         queue=None, script_folder=None, n_cores=1, disable_batchjob=True,
         n_max_co_processes=n_jobs)
     out_files = glob.glob(path_to_out + "/*")
     list_of_views = []
+    views = []
     out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
     for out_file in out_files2:
+        print(out_file)
         with open(out_file, 'rb') as f:
-            list_of_views.append(pkl.load(f))
-    result = []
+            views.append(pkl.load(f))
     for j in list_of_views:
         for i in j:
-            result.append(i)
-    return result
+            views.append(i)
+    shutil.rmtree(path_to_out + "/../", ignore_errors=True)
+    if rendering_locations is None and return_views is False:
+        for i, so in enumerate(svs):
+            so.enable_locking = True
+            sv_views = views[part_views[i]:part_views[i+1]]
+            so.save_views(sv_views, woglia=render_kwargs_def['wo_glia'],
+                          cellobjects_only=render_kwargs_def['cellobjects_only'],
+                          index_views=render_kwargs_def["render_indexviews"])
+        return
+    return views
 
 
 def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None,
@@ -1247,16 +1383,16 @@ def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None
 
     if render_indexviews is False:
         if len(rendering_locations) > 360:
-            views = render_sso_coords_multiprocessing(ssv, working_dir,
-                rendering_locations, render_indexviews=render_indexview,
-                        n_jobs=n_jobs, verbose=verbose)
+            views = render_sso_coords_multiprocessing(
+                ssv, working_dir, rendering_locations=rendering_locations,
+                n_jobs=n_jobs, verbose=verbose, render_indexviews=render_indexviews)
         else:
-            views = rendrender_sso_coords(ssv, rendering_locations, verbose=verbose)
+            views = render_sso_coords(ssv, rendering_locations, verbose=verbose)
     else:
         if len(rendering_locations) > 140:
-            views = render_sso_coords_multiprocessing(ssv, working_dir,
-                rendering_locations, render_indexviews=render_indexview,
-                        n_jobs=n_jobs, verbose=verbose)
+            views = render_sso_coords_multiprocessing(
+                ssv, working_dir, rendering_locations=rendering_locations,
+                render_indexviews=render_indexviews, n_jobs=n_jobs, verbose=verbose)
         else:
             views = render_sso_coords_index_views(ssv, rendering_locations, verbose=verbose)
     return views

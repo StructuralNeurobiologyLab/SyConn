@@ -12,6 +12,7 @@ try:
 except ImportError:
     import pickle as pkl
 from syconn.proc.sd_proc import sos_dict_fact, init_sos
+from syconn.handler.multiviews import generate_rendering_locs
 from syconn.reps.rep_helper import surface_samples
 from syconn.backend.storage import AttributeDict, CompressedStorage, MeshStorage
 from syconn import global_params
@@ -56,7 +57,10 @@ for p in so_chunk_paths:
             if len(verts) == 0:
                 coords = np.array([so.rep_coord, ], dtype=np.float32)
             else:
-                coords = surface_samples(verts).astype(np.float32)
+                if global_params.config.use_new_renderings_locs:
+                    coords = generate_rendering_locs(verts, 2000).astype(np.float32)
+                else:
+                    coords = surface_samples(verts).astype(np.float32)
             loc_dc[ix] = coords
         except Exception as e:
             print('ERROR during sample location generation of SV {}: {}'.format(so.id, str(e)))

@@ -16,6 +16,8 @@ from skimage.measure import mesh_surface_area
 from .. import global_params
 from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
+from ..handler.multiviews import generate_rendering_locs
+from ..handler.config import DynConfig
 from .rep_helper import subfold_from_ix, surface_samples, knossos_ml_from_svixs
 from ..handler.basics import get_filepaths_from_dir, safe_copy,\
     write_txt2kzip, temp_seed
@@ -65,21 +67,28 @@ class SegmentationDataset(object):
                                 [10**i for i in range(6)])
 
         if working_dir is None:
-            self._working_dir = global_params.config.working_dir
+            if global_params.wd is not None or version == 'tmp':
+                self._working_dir = global_params.wd
+            else:
+                msg = "No working directory (wd) given. It has to be" \
+                      " specified either in global_params, via kwarg " \
+                      "`working_dir` or `config`."
+                log_reps.error(msg)
+                raise ValueError(msg)
         else:
             self._working_dir = working_dir
+            self._config = DynConfig(working_dir)
 
         if not self._working_dir.endswith("/"):
             self._working_dir += "/"
 
         # self._config = parser.Config(self.working_dir)
-
         self._scaling = scaling
 
         if create and (version is None):
             version = 'new'
 
-        if version is None and create == False:
+        if version is None and create is False:
             try:
                 self._version = self.config.entries["Versions"][self.type]
             except:
@@ -243,12 +252,9 @@ class SegmentationDataset(object):
     @property
     def scaling(self):
         if self._scaling is None:
-            try:
-                self._scaling = \
-                    np.array(self.config.entries["Dataset"]["scaling"],
-                             dtype=np.float32)
-            except:
-                self._scaling = np.array([1, 1, 1])
+            self._scaling = \
+                np.array(self.config.entries["Dataset"]["scaling"],
+                         dtype=np.float32)
 
         return self._scaling
 
@@ -278,7 +284,8 @@ class SegmentationDataset(object):
                                       working_dir=self.working_dir,
                                       scaling=self.scaling,
                                       create=create,
-                                      n_folders_fs=self.n_folders_fs)
+                                      n_folders_fs=self.n_folders_fs,
+                                      config=self.config)
         else:
             res = []
             for ix in obj_id:
@@ -288,7 +295,8 @@ class SegmentationDataset(object):
                                       working_dir=self.working_dir,
                                       scaling=self.scaling,
                                       create=create,
-                                      n_folders_fs=self.n_folders_fs)
+                                      n_folders_fs=self.n_folders_fs,
+                                      config=self.config)
                 res.append(obj)
             return res
 
@@ -305,7 +313,7 @@ class SegmentationDataset(object):
 
 class SegmentationObject(object):
     def __init__(self, obj_id, obj_type="sv", version=None, working_dir=None,
-                 rep_coord=None, size=None, scaling=(10, 10, 20), create=False,
+                 rep_coord=None, size=None, scaling=None, create=False,
                  voxel_caching=True, mesh_caching=False, view_caching=False,
                  config=None, n_folders_fs=None, enable_locking=True,
                  skeleton_caching=True):
@@ -334,6 +342,9 @@ class SegmentationObject(object):
         enable_locking : bool
         skeleton_caching : bool
         """
+        if scaling is None:
+            scaling = global_params.config.entries["Dataset"]["scaling"]
+
         self._id = int(obj_id)
         self._type = obj_type
         self._rep_coord = rep_coord
@@ -358,9 +369,23 @@ class SegmentationObject(object):
         self._skeleton_caching = skeleton_caching
 
         if working_dir is None:
-            self._working_dir = global_params.config.working_dir
+            if global_params.wd is not None or version == 'tmp':
+                self._working_dir = global_params.wd
+            else:
+                msg = "No working directory (wd) given. It has to be" \
+                      " specified either in global_params, via kwarg " \
+                      "`working_dir` or `config`."
+                log_reps.error(msg)
+                raise ValueError(msg)
+        elif config is not None:
+            if config.working_dir != working_dir:
+                raise ValueError('Inconsistent working directories in `config` and'
+                                 '`working_dir` kwargs.')
+            self._config = config
+            self._working_dir = working_dir
         else:
             self._working_dir = working_dir
+            self._config = DynConfig(working_dir)
 
         self._scaling = scaling
 
@@ -719,7 +744,12 @@ class SegmentationObject(object):
             verts = self.mesh[1].reshape(-1, 3)
             if len(verts) == 0:  # only return scaled rep. coord as [1, 3] array
                 return np.array([self.rep_coord, ], dtype=np.float32) * self.scaling
-            coords = surface_samples(verts)
+
+            if global_params.config.use_new_renderings_locs:
+                coords = generate_rendering_locs(verts, 2000).astype(np.float32)
+            else:
+                coords = surface_samples(verts).astype(np.float32)
+
             loc_dc = CompressedStorage(self.locations_path, read_only=False,
                                        disable_locking=not self.enable_locking)
             loc_dc[self.id] = coords.astype(np.float32)
@@ -727,6 +757,7 @@ class SegmentationObject(object):
             return coords.astype(np.float32)
 
     def save_voxels(self, bin_arr, offset, overwrite=False):
+        raise RuntimeError('Save voxels must not be used anymore.')
         save_voxels(self, bin_arr, offset, overwrite=overwrite)
 
     def load_voxels(self, voxel_dc=None):
@@ -790,6 +821,8 @@ class SegmentationObject(object):
         # Set 'force_single_cc' to True in case of syn_ssv objects!
         if self.type == 'syn_ssv' and 'force_single_cc' not in kwargs:
             kwargs['force_single_cc'] = True
+        if self.type == 'sv' and 'decimate_mesh' not in kwargs:
+            kwargs['decimate_mesh'] = 0.3  # remove 30% of the verties  # TODO: add to global params
         return meshes.get_object_mesh(self, downsampling, n_closings=n_closings,
                                       triangulation_kwargs=kwargs)
 
@@ -832,7 +865,9 @@ class SegmentationObject(object):
         elif self.type == "mi":
             color = (0, 153, 255, 255)
         else:
-            raise TypeError("Given object type '{}' does not exist.".format(self.type))
+            raise TypeError("Given object type '{}' does not exist."
+                            "".format(self.type))
+        color = np.array(color, dtype=np.uint8)
         if ext_color is not None:
             if ext_color == 0:
                 color = None
@@ -978,6 +1013,10 @@ class SegmentationObject(object):
             log_reps.warning("No voxels found in VoxelDict!")
             return
 
+        if isinstance(voxel_dc, VoxelStorageDyn):
+            self._rep_coord = voxel_dc.object_repcoord(self.id)
+            return
+
         bin_arrs, block_offsets = voxel_dc[self.id]
         block_offsets = np.array(block_offsets)
 
@@ -1025,11 +1064,26 @@ class SegmentationObject(object):
 
         self._rep_coord = found_point + central_block_offset
 
-    def calculate_bounding_box(self):
-        _ = load_voxels(self)
+    def calculate_bounding_box(self, voxel_dc=None):
+        if voxel_dc is None:
+            voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
+                                    disable_locking=True)
+        if not isinstance(voxel_dc, VoxelStorageDyn):
+            _ = load_voxels(self, voxel_dc=voxel_dc)
+        else:
+            bbs = voxel_dc.get_boundingdata(self.id)
+            bb = np.array([bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
+            self._bounding_box = bb
 
-    def calculate_size(self):
-        _ = load_voxels(self)
+    def calculate_size(self, voxel_dc=None):
+        if voxel_dc is None:
+            voxel_dc = VoxelStorage(self.voxel_path, read_only=True,
+                                    disable_locking=True)
+        if not isinstance(voxel_dc, VoxelStorageDyn):
+            _ = load_voxels(self, voxel_dc=voxel_dc)
+        else:
+            size = voxel_dc.object_size(self.id)
+            self._size = size
 
     def save_kzip(self, path, kd=None, write_id=None):
         if write_id is None:
@@ -1085,7 +1139,7 @@ class SegmentationObject(object):
         self.attr_dict = dest_attr_dc
         self.save_attr_dict()
 
-    def split_component(self, dist, new_sd, new_id):
+    def split_component(self, dist, new_sd, new_id):  # TODO: refactor -> VoxelStorageDyn
         kdtree = spatial.cKDTree(self.voxel_list)
 
         graph = nx.from_edgelist(kdtree.query_pairs(dist))

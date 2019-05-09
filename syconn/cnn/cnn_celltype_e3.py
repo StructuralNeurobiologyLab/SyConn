@@ -27,14 +27,15 @@ from elektronn3.training import metrics
 
 
 def get_model():
-    model = StackedConv2ScalarWithLatentAdd(in_channels=4, n_classes=9, n_scalar=1)
+    model = StackedConv2ScalarWithLatentAdd(in_channels=4, n_classes=10, n_scalar=1)
     return model
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="celltype_e3_SGDR_axonGTv3_LatentAdd_largeFoV-run2",
+    parser.add_argument('-n', '--exp-name',
+                        default="celltype_e3_SGDR_axonGTv4_LatentAdd_nclasscorrected",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=5000000,
@@ -76,9 +77,9 @@ if __name__ == "__main__":
         # dim = 0 [20, xxx] -> [10, ...], [10, ...] on 2 GPUs
         model = nn.DataParallel(model)
     model.to(device)
-    n_classes = 9
+    n_classes = 10
     data_init_kwargs = {"raw_only": False, "nb_views": 2, 'train_fraction': 0.95,
-                        'nb_views_renderinglocations': 4, 'view_key': "4_large_fov",
+                        'nb_views_renderinglocations': 4, #'view_key': "4_large_fov",
                         "reduce_context": 0, "reduce_context_fact": 1, 'ctgt_key': "ctgt_v2", 'random_seed': 0,
                         "binary_views": False, "n_classes": n_classes, 'class_weights': [1] * n_classes}
 

@@ -3,14 +3,13 @@
 #
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Authors: Philipp Schubert, Joergen Kornfeld
 
 import warnings
-import logging
-# warnings.filterwarnings(action='once')
 import os
 import logging
 from .handler.config import DynConfig
+
 warnings.filterwarnings("ignore", message=".*You are using implicit channel selection.*")
 warnings.filterwarnings("ignore", message=".*You are initializing a KnossosDataset from a path.*")
 warnings.filterwarnings("ignore", message=".*dataset.value has been deprecated.*")  # h5py deprecation warning
@@ -18,33 +17,36 @@ warnings.filterwarnings("ignore", message=".*dataset.value has been deprecated.*
 # ---------------------- STATIC AND GLOBAL PARAMETERS # -----------------------
 # --------- GLOBAL WORKING DIRECTORY
 # wd = "/wholebrain/scratch/areaxfs3/"
-wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+# wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+wd = None
 # wd = "/wholebrain/scratch/areaxfs3/"
 # wd = '/mnt/j0126/areaxfs_v10/'
 
 # TODO: Put all dataset-specific parameters into config.ini / configspec.ini
 
 rag_suffix = ""  # identifier in case there will be more than one RAG, TODO: Remove
-config = DynConfig()
 
 # All subsquent parameter are dataset independent and do not have to be stored at
 # config.ini in the working directory
 
 # --------- BACKEND DEFINITIONS
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
-batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + \
-                         "/batchjob_scripts/"
-# TODO refactor syconn and get rid of all qsub_pe and qsub_queue kwargs and only use batch_job_enabled(), the default in QSUB_script are now BATCH_PE and BATCH_QUEUE
+batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + "/batchjob_scripts/"
+
+# TODO refactor syconn and get rid of all qsub_pe and qsub_queue kwargs and only use batch_job_enabled(),
+#  the default in QSUB_script should then be BATCH_PE and BATCH_QUEUE
 BATCH_PE = 'default'
 BATCH_QUEUE = 'all.q'
 # TODO: Use computing settings everywhere
 MEM_PER_NODE = 249.5e3  # in MB
 NCORES_PER_NODE = 20
-NCORE_TOTAL = 340
-NGPU_TOTAL = 34
+NGPUS_PER_NODE = 2
+NNODES_TOTAL = 17
+NCORE_TOTAL = NNODES_TOTAL * NCORES_PER_NODE
+NGPU_TOTAL = NNODES_TOTAL * NGPUS_PER_NODE
 
 backend = "FS"  # File system
-PYOPENGL_PLATFORM = 'egl'  # Rendering
+PYOPENGL_PLATFORM = 'egl'  # Rendering: 'egl' or 'osmesa'
 DISABLE_LOCKING = False
 
 # --------- LOGGING
@@ -60,11 +62,14 @@ log_level = logging.DEBUG  # INFO, DEBUG
 # will be stored at wd + '/logs/'.
 DISABLE_FILE_LOGGING = True
 
+# --------- CELL ORGANELLE PARAMETERS
+thresh_mi_bbd_mapping = 25e3
 
 # --------- CONTACT SITE AND SYNAPSE PARAMETERS
 # Synaptic junction bounding box diagonal threshold in nm; objects above will not be used during `syn_gen_via_cset`
 thresh_sj_bbd_syngen = 25e3
 thresh_syn_proba = 0.5  # RFC probability used for classifying whether syn or not
+thresh_syn_size = 10  # minimum number of voxel for synapses in SSVs  # TODO: tweak, increase
 cs_gap_nm = 250
 # mapping parameters in 'map_objects_to_synssv'; assignment of cellular organelles to syn_ssv
 max_vx_dist_nm = 2000
@@ -114,6 +119,14 @@ gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80
 
 
 # --------- CELLTYPE PARAMETERS
+view_properties_large = dict(verbose=False, ws=(512, 512), nb_views_render=6,
+                             comp_window=40960, nb_views_model=4)
 
 # --------- MORPHOLOGY EMBEDDING
 ndim_embedding = 10
+
+# general config object
+config = DynConfig()
+
+
+

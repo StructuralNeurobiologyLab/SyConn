@@ -4,7 +4,7 @@
 from syconn.handler.prediction import get_semseg_axon_model
 from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.reps.super_segmentation_helper import semseg_of_sso_nocache
-from syconn.handler.logger import log_main
+from syconn.handler import log_main
 import os
 
 

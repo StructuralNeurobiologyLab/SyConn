@@ -22,7 +22,7 @@ from matplotlib import pyplot as plt
 
 from . import skel_based_classifier_helper as sbch
 from ..handler.basics import load_pkl2obj
-from ..handler.logger import initialize_logging
+from ..handler.config import initialize_logging
 from ..reps import super_segmentation as ss
 from ..proc.stats import model_performance
 from ..mp import batchjob_utils as qu

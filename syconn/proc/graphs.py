@@ -488,7 +488,7 @@ def get_glia_paths(g, glia_dict, node2ccsize_dict, min_cc_size_neuron,
     return glia_paths
 
 
-def write_sopath2skeleton(so_path, dest_path, comment=None):
+def write_sopath2skeleton(so_path, dest_path, scaling=None, comment=None):
     """
     Writes very simple skeleton, each node represents the center of mass of a
     SV, and edges are created in list order.
@@ -497,18 +497,21 @@ def write_sopath2skeleton(so_path, dest_path, comment=None):
     ----------
     so_path : list of SegmentationObject
     dest_path : str
+    scaling : np.ndarray or tuple
     comment : str
     """
+    if scaling is None:
+        scaling = np.array(global_params.config["Dataset"]["scaling"])
     skel = Skeleton()
     anno = SkeletonAnnotation()
-    anno.scaling = [10, 10, 20]
+    anno.scaling = scaling
     rep_nodes = []
     for so in so_path:
         vert = so.mesh[1].reshape((-1, 3))
         com = np.mean(vert, axis=0)
         kd_tree = spatial.cKDTree(vert)
         dist, nn_ix = kd_tree.query([com])
-        nn = vert[nn_ix[0]] / np.array([10, 10, 20])
+        nn = vert[nn_ix[0]] / scaling
         n = SkeletonNode().from_scratch(anno, nn[0], nn[1], nn[2])
         anno.addNode(n)
         rep_nodes.append(n)
@@ -520,7 +523,7 @@ def write_sopath2skeleton(so_path, dest_path, comment=None):
     skel.to_kzip(dest_path)
 
 
-def coordpath2anno(coords):
+def coordpath2anno(coords, scaling=None):
     """
     Creates skeleton from scaled coordinates, assume coords are in order for
     edge creation.
@@ -528,16 +531,20 @@ def coordpath2anno(coords):
     Parameters
     ----------
     coords : np.array
+    scaling : np.ndarray
 
     Returns
     -------
     SkeletonAnnotation
     """
+    if scaling is None:
+        scaling = global_params.config["Dataset"]["scaling"]
     anno = SkeletonAnnotation()
-    anno.scaling = [10, 10, 20]
+    anno.scaling = scaling
     rep_nodes = []
     for c in coords:
-        n = SkeletonNode().from_scratch(anno, c[0]/10, c[1]/10, c[2]/20)
+        n = SkeletonNode().from_scratch(anno, c[0]/scaling[0], c[1]/scaling[1],
+                                        c[2]/scaling[2])
         anno.addNode(n)
         rep_nodes.append(n)
     for i in range(1, len(rep_nodes)):
@@ -565,15 +572,24 @@ def create_graph_from_coords(coords, max_dist=6000, force_single_cc=True,
         edge list of nodes (coords) using the ordering of coords, i.e. the
         edge (1, 2) connects coordinate coord[1] and coord[2].
     """
+    g = nx.Graph()
+    if len(coords) == 1:
+        g.add_node(0)
+        # this is slow, but there seems no way to add weights from an array with the same ordering as edges, so one loop is needed..
+        g.add_weighted_edges_from([[0, 0, 0]])
+        return g
     kd_t = spatial.cKDTree(coords)
     pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
-    if force_single_cc:
-        while not len(np.unique(pairs)) == len(coords):
+    if force_single_cc and len(coords) > 1:
+        cnt = 0
+        n_nodes = len(np.unique(pairs))
+        while not n_nodes == len(coords) and cnt < 100:
+            cnt += 1
             max_dist += max_dist / 3
-            log_proc.debug("Generated skeleton is not a single connected component. "
-                           "Increasing maximum node distance to {}".format(max_dist))
+            log_proc.debug("Generated skeleton ({} edges, {} nodes) is not a single connected "
+                           "component (#coords: {})). Increasing maximum node distance"
+                           " to {}".format(len(pairs), n_nodes, len(coords), max_dist))
             pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
-    g = nx.Graph()
     g.add_nodes_from(np.arange(len(coords)))
     weights = np.linalg.norm(coords[pairs[:, 0]]-coords[pairs[:, 1]], axis=1)#np.array([np.linalg.norm(coords[p[0]]-coords[p[1]]) for p in pairs])
     # this is slow, but there seems no way to add weights from an array with the same ordering as edges, so one loop is needed..

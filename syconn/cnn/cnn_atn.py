@@ -113,16 +113,16 @@ class TripletNet(nn.Module):
 
 def get_model():
     device = torch.device('cuda')
-    # RepNet = RepresentationNetwork(n_in_channels=4, n_out_channels=Z_DIM, dr=0.1,
-    #                                leaky_relu=False)
-    RepNet = RepNetwork_v2()
+    RepNet = RepresentationNetwork(n_in_channels=4, n_out_channels=Z_DIM, dr=0.1,
+                                   leaky_relu=False)
+    # RepNet = RepNetwork_v2()
     return TripletNet(RepNet).to(device)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="TN-25-Neighbors-3_SGDR_StackConv2Scal",
+    parser.add_argument('-n', '--exp-name', default="TN-25-Neighbors-3_SGDR_run2",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,

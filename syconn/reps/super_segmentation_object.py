@@ -41,6 +41,7 @@ from ..proc.rendering import render_sampled_sso, multi_view_sso, \
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import log_reps
+from ..handler.config import DynConfig
 from .. import global_params
 
 
@@ -113,6 +114,7 @@ class SuperSegmentationObject(object):
         self._voxels_xy_downsampled = None
         self._voxels_downsampled = None
         self._rag = None
+        self._sv_graph = None
 
         # init mesh dicts
         self._meshes = {"sv": None, "sj": None, "syn_ssv": None,
@@ -130,20 +132,25 @@ class SuperSegmentationObject(object):
             self.attr_dict["sv"] = sv_ids
 
         if working_dir is None:
-            try:
+            if global_params.wd is not None or version == 'tmp':
                 self._working_dir = global_params.wd
-            except:
-                raise Exception("No working directory (wd) specified in config")
+            else:
+                msg = "No working directory (wd) given. It has to be" \
+                      " specified either in global_params, via kwarg " \
+                      "`working_dir` or `config`."
+                log_reps.error(msg)
+                raise ValueError(msg)
         else:
             self._working_dir = working_dir
+            self._config = DynConfig(working_dir)
 
         if scaling is None:
             try:
                 self._scaling = \
                     np.array(self.config.entries["Dataset"]["scaling"])
             except KeyError:
-                msg = 'Scaling not set and could not be found in config ' \
-                      'with entries: {}'.format(self.config.entries)
+                msg = 'Scaling not set and could not be found in config ("{}"' \
+                      ') with entries: {}'.format(self.config.path_config, self.config.entries)
                 log_reps.error(msg)
                 raise KeyError(msg)
         else:
@@ -598,6 +605,8 @@ class SuperSegmentationObject(object):
         #             "SV IDs in graph differ from SSV SVs."
         #         for e in G_glob.edges(cc):
         #             G.add_edge(*e)
+        elif self._sv_graph is not None:
+            G = self._sv_graph
         else:
             raise ValueError("Could not find graph data for SSV {}."
                              "".format(self.id))
@@ -946,7 +955,7 @@ class SuperSegmentationObject(object):
             syn.load_attr_dict()
             syn_signs.append(syn.attr_dict["syn_sign"])
             syn_sizes.append(syn.mesh_area / 2)
-        if len(syn_signs) == 0:
+        if len(syn_signs) == 0 or np.sum(syn_sizes) == 0:
             return -1
         syn_signs = np.array(syn_signs)
         syn_sizes = np.array(syn_sizes)
@@ -1304,26 +1313,21 @@ class SuperSegmentationObject(object):
                 log_reps.info("Rendering huge SSO. {} SVs left to process"
                               ".".format(len(self.svs)))
             params = [[so.id for so in el] for el in part]
-            if qsub_pe is None:
-                raise RuntimeError('QSUB has to be enabled when processing '
-                                   'huge SSVs.')
-            elif qu.batchjob_enabled():
-                params = chunkify(params, 2000)
-                so_kwargs = {'version': self.svs[0].version,
-                             'working_dir': self.working_dir,
-                             'obj_type': self.svs[0].type}
-                render_kwargs = {"overwrite": overwrite, 'woglia': woglia,
-                                 "render_first_only": global_params.SUBCC_CHUNK_SIZE_BIG_SSV,
-                                 'add_cellobjects': add_cellobjects,
-                                 "cellobjects_only": cellobjects_only,
-                                 'skip_indexviews': skip_indexviews}
-                params = [[par, so_kwargs, render_kwargs] for par in params]
-                qu.QSUB_script(
-                    params, "render_views_partial", suffix="_SSV{}".format(self.id),
-                    pe=qsub_pe, queue=None, script_folder=None, n_cores=2,
-                    n_max_co_processes=qsub_co_jobs, resume_job=resume_job)
-            else:
-                raise Exception("QSUB not available")
+
+            params = chunkify(params, 2000)
+            so_kwargs = {'version': self.svs[0].version,
+                         'working_dir': self.working_dir,
+                         'obj_type': self.svs[0].type}
+            render_kwargs = {"overwrite": overwrite, 'woglia': woglia,
+                             "render_first_only": global_params.SUBCC_CHUNK_SIZE_BIG_SSV,
+                             'add_cellobjects': add_cellobjects,
+                             "cellobjects_only": cellobjects_only,
+                             'skip_indexviews': skip_indexviews}
+            params = [[par, so_kwargs, render_kwargs] for par in params]
+            qu.QSUB_script(
+                params, "render_views_partial", suffix="_SSV{}".format(self.id),
+                pe=qsub_pe, queue=None, script_folder=None, n_cores=2,
+                n_max_co_processes=qsub_co_jobs, resume_job=resume_job)
         else:
             # render raw data
             render_sampled_sso(self, add_cellobjects=add_cellobjects,
@@ -1980,10 +1984,12 @@ class SuperSegmentationObject(object):
     def gliasplit(self, dest_path=None, recompute=False, thresh=None,
                   write_shortest_paths=False, verbose=False,
                   pred_key_appendix=""):
+        glia_svs_key = "glia_svs" + pred_key_appendix
+        nonglia_svs_key = "nonglia_svs" + pred_key_appendix
         if thresh is None:
             thresh = global_params.glia_thresh
-        if recompute or not (self.attr_exists("glia_svs") and
-                             self.attr_exists("nonglia_svs")):
+        if recompute or not (self.attr_exists(glia_svs_key) and
+                             self.attr_exists(nonglia_svs_key)):
             if write_shortest_paths:
                 shortest_paths_dir = os.path.split(dest_path)[0]
             else:
@@ -2002,12 +2008,12 @@ class SuperSegmentationObject(object):
             non_glia_ccs_ixs = [[so.id for so in nonglia] for nonglia in
                                 nonglia_ccs]
             glia_ccs_ixs = [[so.id for so in glia] for glia in glia_ccs]
-            self.attr_dict["glia_svs"] = glia_ccs_ixs
-            self.attr_dict["nonglia_svs"] = non_glia_ccs_ixs
-            self.save_attributes(["glia_svs", "nonglia_svs"],
+            self.attr_dict[glia_svs_key] = glia_ccs_ixs
+            self.attr_dict[nonglia_svs_key] = non_glia_ccs_ixs
+            self.save_attributes([glia_svs_key, nonglia_svs_key],
                                  [glia_ccs_ixs, non_glia_ccs_ixs])
 
-    def gliasplit2mesh(self, dest_path=None):
+    def gliasplit2mesh(self, dest_path=None, pred_key_appendix=""):
         """
 
         Parameters
@@ -2020,16 +2026,18 @@ class SuperSegmentationObject(object):
         """
         # TODO: adapt writemesh2kzip to work with multiple writes
         #  to same file or use write_meshes2kzip here.
+        glia_svs_key = "glia_svs" + pred_key_appendix
+        nonglia_svs_key = "nonglia_svs" + pred_key_appendix
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
         # write meshes of CC's
-        glia_ccs = self.attr_dict["glia_svs"]
+        glia_ccs = self.attr_dict[glia_svs_key]
         for kk, glia in enumerate(glia_ccs):
             mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
                                    glia])
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], None,
                             "glia_cc%d.ply" % kk)
-        non_glia_ccs = self.attr_dict["nonglia_svs"]
+        non_glia_ccs = self.attr_dict[nonglia_svs_key]
         for kk, nonglia in enumerate(non_glia_ccs):
             mesh = merge_someshes([self.get_seg_obj("sv", ix) for ix in
                                    nonglia])
@@ -2293,19 +2301,19 @@ class SuperSegmentationObject(object):
                        "%0.4fs/SV" % (len(self.svs), end - start,
                                       float(end - start) / len(self.svs)))
 
-    def predict_views_embedding(self, model, pred_key_appendix=""):
+    def predict_views_embedding(self, model, pred_key_appendix="",
+                                view_key=None):
         """
-        This will save the latent vector of every skeleton node location as
-        self.sekeleton['latent_morph'] based on the nearest rendering location.
+        This will save a latent vector which captures a local morphology fingerprint for every
+        skeleton node location as self.sekeleton['latent_morph'] based on the nearest rendering location.
 
         Parameters
         ----------
         model :
         pred_key_appendix :
-
-        Returns
-        -------
-
+        view_key : str
+            View identifier, e.g. if views have been pre-rendered and are stored in
+            `self.view_dict`
         """
         from ..handler.prediction import naive_view_normalization_new
         pred_key = "latent_morph"
@@ -2314,7 +2322,7 @@ class SuperSegmentationObject(object):
             log_reps.warning('"predict_views_embedding" called but this SSV '
                              'has version "tmp", results will'
                              ' not be saved to disk.')
-        views = self.load_views()  # [N, 4, 2, y, x]
+        views = self.load_views(view_key=view_key)  # [N, 4, 2, y, x]
         # TODO: add normalization to model - prevent potentially different normalization!
         views = naive_view_normalization_new(views)
         # The inference with TNets can be optimzed, via splititng the views into three equally sized parts.
@@ -2386,8 +2394,33 @@ class SuperSegmentationObject(object):
         if dest_path is not None:
             self.save_skeleton_to_kzip(dest_path=dest_path)
 
-    def predict_celltype_cnn(self, model, **kwargs):
-        ssh.predict_sso_celltype(self, model, **kwargs)
+    def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
+                             largeFoV=True):
+        """
+        Infer celltype classification via `model` (stored as `celltype_cnn_e3` and `celltype_cnn_e3_probas`)
+        and an optional cell embedding via `model_tnet` (stored as `latent_morph_ct`).
+
+        Parameters
+        ----------
+        model : nn.Module
+        pred_key_appendix : str
+        model_tnet : Optional[nn.Module]
+        view_props : Optional[dict]
+            Dictionary which contains view properties. If None, default defined in
+            `global_params.py` will be used.
+
+        """
+        if not largeFoV:
+            if view_props is None:
+                view_props = {}
+            return ssh.predict_sso_celltype(self, model, **view_props)  # OLD
+        if view_props is None:
+            view_props = global_params.view_properties_large
+        ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
+                                    overwrite=False, **view_props)
+        if model_tnet is not None:
+            ssh.view_embedding_of_sso_nocache(self, model_tnet, pred_key_appendix=pred_key_appendix,
+                                              overwrite=True, **view_props)
 
     def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
                                obj_to_render=("sv", )):
@@ -2542,18 +2575,30 @@ def celltype_predictor(args):
 
     """
     # from ..handler.prediction import get_celltype_model
-    from ..handler.prediction import get_celltype_model_e3
+    from ..handler.prediction import get_celltype_model_e3, get_tripletnet_model_e3, \
+        get_tripletnet_model_large_e3, get_celltype_model_large_e3
     ssv_ids = args
     # randomly initialize gpu
     # m = get_celltype_model(init_gpu=0)
-    m = get_celltype_model_e3()
+    if not global_params.config.use_large_fov_views_ct:
+        m = get_celltype_model_e3()
+        m_tnet = get_tripletnet_model_e3()
+    else:
+        m = get_celltype_model_large_e3()
+        m_tnet = get_tripletnet_model_large_e3()
     pbar = tqdm.tqdm(total=len(ssv_ids))
     missing_ssvs = []
     for ix in ssv_ids:
         ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
         ssv.nb_cpus = 1
+        ssv._view_caching = True
         try:
-            ssh.predict_sso_celltype(ssv, m, overwrite=True)
+            if global_params.config.use_large_fov_views_ct:
+                view_props = global_params.view_properties_large
+                ssh.celltype_of_sso_nocache(ssv, m, overwrite=True, **view_props)
+                ssh.view_embedding_of_sso_nocache(ssv, m_tnet, overwrite=True, **view_props)
+            else:
+                ssh.predict_sso_celltype(ssv, m, overwrite=True)  # local views
         except Exception as e:
             missing_ssvs.append((ssv.id, e))
             log_reps.error(repr(e))
