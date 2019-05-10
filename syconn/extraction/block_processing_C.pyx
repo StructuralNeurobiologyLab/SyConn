@@ -20,7 +20,7 @@ ctypedef fused n_type:
 
 # TODO: currently falling back to python -> slow!
 # check: https://jakevdp.github.io/blog/2012/08/08/memoryview-benchmarks/
-cdef uint64_t kernel(uint32_t[:, :, ::1] chunk, uint64_t center_id):
+cdef uint64_t kernel(uint32_t[:, :, :] chunk, uint64_t center_id):
 
     cdef map[uint32_t, int] unique_ids
     cdef uint64_t key = 0

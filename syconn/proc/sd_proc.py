@@ -495,7 +495,8 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
                                    nb_cpus=n_max_co_processes, debug=False)
     else:
         qu.QSUB_script(multi_params, "write_props_to_sv", script_folder=None,
-                       n_cores=n_cores, n_max_co_processes=n_max_co_processes)
+                       n_cores=n_cores, n_max_co_processes=n_max_co_processes,
+                       remove_jobfolder=True)
     all_times.append(time.time() - start)
     step_names.append("write cell SV dataset")
     sv_sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
@@ -509,7 +510,8 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
                                    nb_cpus=n_max_co_processes, debug=False)
     else:
         qu.QSUB_script(multi_params, "write_props_to_sc", script_folder=None,
-                       n_cores=n_cores, n_max_co_processes=n_max_co_processes)
+                       n_cores=n_cores, n_max_co_processes=n_max_co_processes,
+                       remove_jobfolder=True)
     step_names.append("write subcellular SV dataset")
     for k in global_params.existing_cell_organelles:
         sc_sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
@@ -520,7 +522,8 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     for p in dict_paths:
         os.remove(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
-    # --------------------------------------------------------------------------
+    if qu.batchjob_enabled():  # remove job directory of `map_subcell_extract_props`
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     log.debug("Time overview [from_probabilities_to_objects]:")
     for ii in range(len(all_times)):
         log.debug("%s: %.3fs" % (step_names[ii], all_times[ii]))
@@ -791,7 +794,8 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=None,
                                      n_cores=nb_cpus,
-                                     n_max_co_processes=n_max_co_processes)
+                                     n_max_co_processes=n_max_co_processes,
+                                     remove_jobfolder=True)
     else:
         raise Exception("QSUB not available")
 
@@ -982,7 +986,8 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512,
 
     elif qu.batchjob_enabled():
         _ = qu.QSUB_script(multi_params, "export_sd_to_knossosdataset",
-                           n_max_co_processes=n_max_co_processes)
+                           n_max_co_processes=n_max_co_processes,
+                           remove_jobfolder=True)
     else:
         raise Exception("QSUB not available")
 

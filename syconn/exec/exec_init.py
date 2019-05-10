@@ -52,8 +52,8 @@ def kd_init(co, chunk_size, transf_func_kd_overlay, load_cellorganelles_from_kd_
 
 
 def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=10000, max_n_jobs=None,
-                   generate_sv_meshes=False, load_cellorganelles_from_kd_overlaycubes=False,
-                   transf_func_kd_overlay=None, cube_of_interest_bb=None):
+                          generate_sv_meshes=False, load_cellorganelles_from_kd_overlaycubes=False,
+                          transf_func_kd_overlay=None, cube_of_interest_bb=None):
     """
     If `global_params.config.prior_glia_removal==True`:
         stores pruned RAG at `global_params.config.pruned_rag_path`, required for all glia
@@ -168,6 +168,7 @@ def run_create_rag():
     nx.write_edgelist(G, global_params.config.pruned_rag_path)
 
     if not global_params.config.prior_glia_removal:
+        os.makedirs(global_params.config.working_dir + '/glia/', exist_ok=True)
         shutil.copy(global_params.config.pruned_rag_path, global_params.config.working_dir
                     + '/glia/neuron_rag.bz2')
 
@@ -237,7 +238,8 @@ def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
     if generate_sv_meshes:
         start = time.time()
         _ = qu.QSUB_script(multi_params, "mesh_caching",
-                           n_max_co_processes=global_params.NCORE_TOTAL)
+                           n_max_co_processes=global_params.NCORE_TOTAL,
+                           remove_jobfolder=True)
         log.info('Finished mesh caching of {} "{}"-SVs after {:.0f}s.'
                  ''.format(len(sd.ids), 'cell', time.time() - start))
     start = time.time()
