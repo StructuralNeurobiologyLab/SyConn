@@ -1291,14 +1291,23 @@ def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None
     """
 
     Args:
-        ssv:
-        working_dir:
-        rendering_locations:
-        n_jobs:
-        verbose:
-        render_indexviews:
+        ssv: SuperSegmentationObject
+        working_dir: string
+            working directory for accessing data
+        rendering_locations: array of locations to be rendered
+            if not given, rendering locations are retrieved from the SSV's SVs. Results will be stored at SV locations.
+        n_jobs : int
+            number of parallel jobs running on same node of cluster
+        verbose : bool
+            flag to show th progress of rendering.
+        render_indexviews: Bool
+            Flag to choose between render_index_view and render_sso_coords
 
-    Returns:
+     Returns
+    -------
+    np.ndarray
+        array of views after rendering of locations.
+    -------
 
     """
     if n_jobs is None:
