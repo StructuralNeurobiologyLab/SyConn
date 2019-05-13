@@ -55,6 +55,8 @@ if render_indexviews:
         del kwargs['wo_glia']
     views = render_sso_coords_index_views(sso, coords, **kwargs)
 else:
+    if 'wo_glia' in kwargs:
+        del kwargs['wo_glia']
     views = render_sso_coords(sso, coords, **kwargs)
 
 with open(path_out_file, "wb") as f:

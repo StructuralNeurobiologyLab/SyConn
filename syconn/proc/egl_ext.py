@@ -1,4 +1,4 @@
-# Copyright 2018 The dm_control Authors.
+# Copyright 2019 Philipp Schubert, Joergen Kornfeld.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,6 +11,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or  implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
+#Used for handling multigpu initialization of EGL.
+
 # ============================================================================
 
 """Extends OpenGL.EGL with definitions necessary for headless rendering."""

@@ -8,6 +8,7 @@
 from ctypes import sizeof, c_float, c_void_p, c_uint
 from PIL import Image
 import numpy as np
+import shutil
 import time
 import os
 import tqdm
@@ -70,10 +71,8 @@ try:
 except ImportError:
     import pickle as pkl
 
-# try:
-#     from egl_ext import eglQueryDevicesEXT
-# except Exception as error:
-#     print('Caught this error: ' + repr(error))
+
+from .egl_ext import eglQueryDevicesEXT
 MULTIGPU = True
 
 # ------------------------------------ General rendering code ------------------------------------------
@@ -83,82 +82,6 @@ vertex_offset = c_void_p(0 * float_size)
 normal_offset = c_void_p(3 * float_size)
 color_offset = c_void_p(6 * float_size)
 record_len = 10 * float_size
-
-
-
-
-# Copyright 2018 The dm_control Authors.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or  implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# ============================================================================
-
-"""Extends OpenGL.EGL with definitions necessary for headless rendering."""
-
-import ctypes
-from OpenGL.platform import ctypesloader  # pylint: disable=g-bad-import-order
-try:
-  # Nvidia driver seems to need libOpenGL.so (as opposed to libGL.so)
-  # for multithreading to work properly. We load this in before everything else.
-  ctypesloader.loadLibrary(ctypes.cdll, 'OpenGL', mode=ctypes.RTLD_GLOBAL)
-except OSError:
-  pass
-
-# pylint: disable=g-import-not-at-top
-
-from OpenGL import EGL
-#from OpenGL import error
-from six.moves import range
-
-# From the EGL_EXT_device_enumeration extension.
-EGLDeviceEXT = ctypes.c_void_p
-PFNEGLQUERYDEVICESEXTPROC = ctypes.CFUNCTYPE(
-    EGL.EGLBoolean, EGL.EGLint,
-    ctypes.POINTER(EGLDeviceEXT), ctypes.POINTER(EGL.EGLint))
-try:
-  _eglQueryDevicesEXT = PFNEGLQUERYDEVICESEXTPROC(  # pylint: disable=invalid-name
-      EGL.eglGetProcAddress('eglQueryDevicesEXT'))
-except TypeError:
-  raise ImportError('eglQueryDevicesEXT is not available.')
-
-
-# From the EGL_EXT_platform_device extension.
-EGL_PLATFORM_DEVICE_EXT = 0x313F
-PFNEGLGETPLATFORMDISPLAYEXTPROC = ctypes.CFUNCTYPE(
-    EGL.EGLDisplay, EGL.EGLenum, ctypes.c_void_p, ctypes.POINTER(EGL.EGLint))
-try:
-  eglGetPlatformDisplayEXT = PFNEGLGETPLATFORMDISPLAYEXTPROC(  # pylint: disable=invalid-name
-      EGL.eglGetProcAddress('eglGetPlatformDisplayEXT'))
-except TypeError:
-  raise ImportError('eglGetPlatformDisplayEXT is not available.')
-
-
-# Wrap raw _eglQueryDevicesEXT function into something more Pythonic.
-def eglQueryDevicesEXT(max_devices=10):  # pylint: disable=invalid-name
-  devices = (EGLDeviceEXT * max_devices)()
-  num_devices = EGL.EGLint()
-  success = _eglQueryDevicesEXT(max_devices, devices, num_devices)
-  if success == EGL.EGL_TRUE:
-    return [devices[i] for i in range(num_devices.value)]
-  else:
-    raise error.GLError(err=EGL.eglGetError(),
-                        baseOperation=eglQueryDevicesEXT,
-                        result=success)
-
-
-
-
-
-
 
 
 def init_object(indices, vertices, normals, colors, ws):
@@ -387,7 +310,7 @@ def init_ctx(ws, depth_map):
             assert dsp != EGL_NO_DISPLAY, 'Invalid DISPLAY during egl init.'
 
         # Initialize EGL
-        eglInitialize(dsp, major, minor)
+            eglInitialize(dsp, major, minor)
         if depth_map:
             config_attr = arrays.GLintArray.asArray(
                 [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, 8, EGL_RED_SIZE, 8,
@@ -1345,12 +1268,12 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
     views = []
     out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
     for out_file in out_files2:
-        print(out_file)
         with open(out_file, 'rb') as f:
             views.append(pkl.load(f))
-    for j in list_of_views:
-        for i in j:
-            views.append(i)
+    if(type(views[0]) is int):
+        views = 0
+    else:
+        views = np.concatenate(views)
     shutil.rmtree(path_to_out + "/../", ignore_errors=True)
     if rendering_locations is None and return_views is False:
         for i, so in enumerate(svs):
