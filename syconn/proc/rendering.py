@@ -1018,18 +1018,30 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
 
     Parameters
     ----------
-    sso :
-    coords :
-    verbose :
-    ws :
+    sso : SuperSegmentationObject
+    coords : np.array
+        N, 3
     rot_mat :
     comp_window : float
         window size in nm. the clipping box during rendering will have an extent
          of [comp_window, comp_window / 2, comp_window]
     return_rot_matrices : bool
+    add_cellobjects : bool
+    verbose : bool
+    ws : Optional[Tuple[int]]
+        Window size in pixels (y, x). Default: (256, 128)
+    rot_mat : np.array
+    nb_views : int
+    comp_window : Optional[float]
+        window size in nm. the clipping box during rendering will have an extent
+         of [comp_window, comp_window / 2, comp_window]. Default: 8 um
+    return_rot_mat : bool
+
     Returns
     -------
-
+    np.ndarray
+        array of views after rendering of locations.
+    -------
     """
     if comp_window is None:
         comp_window = 8e3
@@ -1127,7 +1139,7 @@ def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
     comp_window :
     return_rot_matrices :
 
-    Returns
+    Returns:
     -------
 
     """
@@ -1264,7 +1276,6 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
         queue=None, script_folder=None, n_cores=1, disable_batchjob=True,
         n_max_co_processes=n_jobs)
     out_files = glob.glob(path_to_out + "/*")
-    list_of_views = []
     views = []
     out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
     for out_file in out_files2:
