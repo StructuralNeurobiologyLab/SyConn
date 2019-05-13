@@ -212,6 +212,7 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
 
 
 def init_ctx(ws, depth_map):
+
     # ctx = OSMesaCreateContext(OSMESA_RGBA, None)
     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
         from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
