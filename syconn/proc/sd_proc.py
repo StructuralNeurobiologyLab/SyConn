@@ -210,10 +210,7 @@ def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
     assert obj_type in sd.version_dict
     seg_dataset = sd.get_segmentationdataset(obj_type)
     paths = seg_dataset.so_dir_paths
-    "\n\n\n"
-    for i in paths:
-        print(i)
-    "\n\n\n"
+
     # write cell organell mappings to cell organelle SV attribute dicts
     # Partitioning the work
     multi_params = basics.chunkify(paths, n_jobs)
@@ -425,6 +422,9 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     multi_params = basics.chunkify(chunk_list, n_chunk_jobs)
     multi_params = [(chs, chunk_size, kd_seg_path, list(kd_organelle_paths.values()), worker_nr) for
                     chs, worker_nr in zip(multi_params, range(len(multi_params)))]
+
+    n_workers = len(multi_params)
+
     if qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params, "map_subcell_extract_props", n_cores=n_cores,
                                      n_max_co_processes=n_max_co_processes)
@@ -444,33 +444,27 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     tot_cp = [{}, defaultdict(list), {}]
     tot_scp = [[{}, defaultdict(list), {}] for _ in range(len(kd_organelle_paths))]
     tot_scm = [{} for _ in range(len(kd_organelle_paths))]
-    cell_mesh_workers = defaultdict(list)
-    subcell_mesh_workers = [defaultdict(list) for _ in range(len(kd_organelle_paths))]
 
-    list_of_workers = []
-    for cp_dc, scp_dcs, scm_dcs, worker_nr in results:
+    for cp_dc, scp_dcs, scm_dcs in results:
         merge_prop_dicts([tot_cp, cp_dc])
-        list_of_workers.append(worker_nr)
-        for cell_id in cp_dc[0].keys():
-            cell_mesh_workers[cell_id].append(worker_nr)
         # iterate over each subcellular structure
         for ii in range(len(kd_organelle_paths)):
             merge_map_dicts([tot_scm[ii], scm_dcs[ii]])
             merge_prop_dicts([tot_scp[ii], scp_dcs[ii]])
-            for subcell_id in scp_dcs[ii][0].keys():
-                subcell_mesh_workers[ii][subcell_id].append(worker_nr)
         del cp_dc, scp_dcs, scm_dcs  # will remove redundant data inside results
 
-    # print("merge meshes between workers")
-    save_meshes_into_pkl(cell_mesh_workers, n_folders_fs_sc, 'sv')
-    for ii, k in enumerate(global_params.existing_cell_organelles):
-        save_meshes_into_pkl(subcell_mesh_workers[ii], n_folders_fs_sc, k)
+    print("\n\n\n The first phase is over\n\n\n")
+    # merge meshes between workers
+    print("merge meshes between workers")
+    multi_params = []
+    multi_params = [(k, n_folders_fs_sc, n_workers) for k in global_params.existing_cell_organelles]
+    multi_params.append(('sv', n_folders_fs_sc, n_workers))
 
-    # delete all tmp mesh pkl files
-    for worker_nr in list_of_workers:
-        os.remove(global_params.config.temp_path + "/mesh_" + str(worker_nr) + ".pkl")
+    sm.start_multiprocess_imap(_merge_meshes_workers, multi_params,
+                                   nb_cpus=n_max_co_processes, debug=False)
 
-    print("\n\n\n Kochanie jestes po!!! \n\n\n")
+    print("\n\n\n baju baj!\n\n\n")
+    sys.exit()
 
     # convert mapping dicts to store ratio of number of overlapping voxels
     prop_dict_p = "{}/sv_prop_dict.pkl".format(global_params.config.temp_path)
@@ -547,6 +541,9 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     for p in dict_paths:
         os.remove(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
+
+
+
     # --------------------------------------------------------------------------
     log.debug("Time overview [from_probabilities_to_objects]:")
     for ii in range(len(all_times)):
@@ -554,6 +551,34 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     log.debug("--------------------------")
     log.debug("Total Time: %.1f min" % (np.sum(all_times) / 60))
     log.debug("--------------------------")
+
+
+def _merge_meshes_workers(args):
+    print("\n\n\n here \n\n\n")
+    k = args[0]
+    n_folders_fs_sc = args[1]
+    n_workers = args[2]
+
+    big_mesh = MeshStorage(global_params.config.temp_path + "/big_mesh_" + str(k) + ".pkl",
+                              disable_locking=True, read_only=False)
+    for worker_nr in range(n_workers):
+        p = global_params.config.temp_path + "/mesh_" + str(k) + "_" + str(worker_nr) + ".pkl"
+        single_mesh = MeshStorage(p, disable_locking=True, read_only=False)
+        merge_meshes_dict(big_mesh, single_mesh)
+        del single_mesh
+        os.remove(p)
+
+    sc_sd = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs_sc, obj_type=k,
+                                             working_dir=global_params.config.working_dir, version=0)
+
+    for obj_id in big_mesh:
+        dummy_so = sc_sd.get_segmentation_object(obj_id)
+        mesh_path = dummy_so.mesh_path
+        obj_mesh = MeshStorage(mesh_path, disable_locking=True, read_only=False)
+        print("mesh_path= ", mesh_path)
+        obj_mesh[obj_id] = big_mesh[obj_id]
+        obj_mesh.push()
+        del obj_mesh
 
 
 def _map_subcell_extract_props_thread(args):
@@ -576,12 +601,13 @@ def _map_subcell_extract_props_thread(args):
     scpd_lst = [[{}, defaultdict(list), {}] for _ in range(n_subcell)]   # subcell. property dicts
     scmd_lst = [{} for _ in range(n_subcell)]   # subcell. mapping dicts
 
-    cell_meshes = MeshStorage(global_params.config.temp_path + "/mesh_" + str(worker_nr) + ".pkl",
+    cell_meshes = MeshStorage(global_params.config.temp_path + "/mesh_sv_" + str(worker_nr) + ".pkl",
                               disable_locking=True, read_only=False)
 
-    subcell_meshes = [MeshStorage(global_params.config.temp_path + "/mesha_" + str(worker_nr) + ".pkl",
+    subcell_meshes = [MeshStorage(global_params.config.temp_path +
+                                  "/mesh_" + str(organelle) + "_" + str(worker_nr) + ".pkl",
                                   disable_locking=True, read_only=False)
-                      for _ in global_params.existing_cell_organelles]
+                                  for organelle in global_params.existing_cell_organelles]
 
     # iterate over chunks and store information in property dicts for subcellular and cellular structures
     for ch_id in chunks:
@@ -595,7 +621,7 @@ def _map_subcell_extract_props_thread(args):
         subcell_d = []
         for kd_sc, i in zip(kd_subcells, range(len(kd_subcells))):
             subcell_d.append(kd_sc.from_overlaycubes_to_matrix(size, offset)[None, ])  # add auxiliary axis
-            tmp_subcell_meshes[i] = find_meshes(subcell_d[-1], offset)
+            tmp_subcell_meshes[i] = find_meshes(kd_sc.from_overlaycubes_to_matrix(size, offset), offset)
         subcell_d = np.concatenate(subcell_d)
         cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = map_subcell_extract_propsC(cell_d, subcell_d)
         # reorder to match [[rc, bb, size], [rc, bb, size]] for e.g. [mi, vc]
@@ -622,7 +648,7 @@ def _map_subcell_extract_props_thread(args):
     for ii in range(n_subcell):
         subcell_meshes[ii].push()
 
-    return cpd_lst, scpd_lst, scmd_lst, worker_nr
+    return cpd_lst, scpd_lst, scmd_lst
 
 
 def find_meshes(chunk, offset):
@@ -636,9 +662,10 @@ def find_meshes(chunk, offset):
 
     meshes = {}
     for obj_id in mesher.ids():
-        meshes[obj_id] = mesher.get_mesh(obj_id, normals=True, simplification_factor=10,
+        tmp = mesher.get_mesh(obj_id, normals=True, simplification_factor=10,
                                          max_simplification_error=8)
-        meshes[obj_id].vertices += offset
+        tmp.vertices += offset
+        meshes[obj_id] = [tmp.faces.flatten(), tmp.vertices.flatten(), tmp.normals.flatten() ]
         mesher.erase(obj_id)
 
     mesher.clear()
@@ -650,57 +677,20 @@ def merge_meshes_dict(m_storage, tmp_dict):
 
     """ Merge meshes dictionaries:
 
-    m_storage: objec of type MeshStorage
+    m_storage: list dictionary
     tmp_dict: list dictionary
+    {obj_id: [faces, vertices, normals]}
     """
     for obj_id in tmp_dict:
         if obj_id not in m_storage:
-            m_storage[obj_id] = [tmp_dict[obj_id].faces, tmp_dict[obj_id].vertices, tmp_dict[obj_id].normals]
+            m_storage[obj_id] = tmp_dict[obj_id]
 
         else:
-            n_el = len(m_storage[obj_id][1])
-            tmp_dict[obj_id].faces += n_el
-            m_storage[obj_id][0] = np.concatenate((m_storage[obj_id][0], tmp_dict[obj_id].faces.flatten()))
-            m_storage[obj_id][1] = np.concatenate((m_storage[obj_id][1], tmp_dict[obj_id].vertices.flatten()))
-            m_storage[obj_id][2] = np.concatenate((m_storage[obj_id][2], tmp_dict[obj_id].normals.flatten()))
-
-
-def merge_meshes_dict2(m_storage, obj_id, tmp_dict):
-
-    """ Merge meshes dictionaries:
-
-    m_storage: objec of type MeshStorage
-    tmp_dict: list dictionary
-    """
-    if obj_id not in m_storage:
-        m_storage[obj_id] = [tmp_dict[0], tmp_dict[1], tmp_dict[2]]
-
-    else:
-        n_el = len(m_storage[obj_id][1])
-        tmp_dict[0] += n_el
-        m_storage[obj_id][0] = np.concatenate((m_storage[obj_id][0], tmp_dict[0]))
-        m_storage[obj_id][1] = np.concatenate((m_storage[obj_id][1], tmp_dict[1]))
-        m_storage[obj_id][2] = np.concatenate((m_storage[obj_id][2], tmp_dict[2]))
-
-
-def save_meshes_into_pkl(obj_dict, n_folders_fs_sc, k):
-
-    sc_sd = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs_sc, obj_type=k,
-                                             working_dir=global_params.config.working_dir, version=0)
-    for obj_id in obj_dict:
-        dummy_so = sc_sd.get_segmentation_object(obj_id)
-        mesh_path = dummy_so.mesh_path
-
-        obj_mesh = MeshStorage(mesh_path, disable_locking=True, read_only=False)
-
-        for worker_nr in obj_dict[obj_id]:
-            tmp_dict = MeshStorage(global_params.config.temp_path + "/mesh_" + str(worker_nr) + ".pkl",
-                                   disable_locking=True, read_only=True)
-            # print("\n\n\n ", obj_id, "  ", global_params.config.temp_path + "/mesh_" + str(worker_nr) + ".pkl")
-
-            merge_meshes_dict2(obj_mesh, obj_id, tmp_dict[obj_id])
-
-        obj_mesh.push()
+            n_el = int((len(m_storage[obj_id][1]))/3)
+            tmp_dict[obj_id][0] += n_el
+            m_storage[obj_id][0] = np.concatenate((m_storage[obj_id][0], tmp_dict[obj_id][0]))
+            m_storage[obj_id][1] = np.concatenate((m_storage[obj_id][1], tmp_dict[obj_id][1]))
+            m_storage[obj_id][2] = np.concatenate((m_storage[obj_id][2], tmp_dict[obj_id][2]))
 
 
 def merge_prop_dicts(prop_dicts, offset=None):
