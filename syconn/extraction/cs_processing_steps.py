@@ -65,7 +65,8 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     else:
         _ = qu.QSUB_script(
             multi_params, "collect_properties_from_ssv_partners",
-            n_max_co_processes=n_max_co_processes)
+            n_max_co_processes=n_max_co_processes,
+        remove_jobfolder=True)
 
     # iterate over paths with syn
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
@@ -80,10 +81,9 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
             _from_cell_to_syn_dict, multi_params,
             nb_cpus=n_max_co_processes)
     else:
-        _ = qu.QSUB_script(
-            multi_params, "from_cell_to_syn_dict", pe=qsub_pe,
-            queue=qsub_queue, script_folder=None,
-            n_max_co_processes=n_max_co_processes)
+        _ = qu.QSUB_script(multi_params, "from_cell_to_syn_dict",
+                           n_max_co_processes=n_max_co_processes,
+                           remove_jobfolder=True)
 
     # delete cache_dc
     _delete_all_cache_dc(ssd)
@@ -314,9 +314,9 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                                        multi_params, nb_cpus=nb_cpus, debug=False)
 
     else:
-        _ = qu.QSUB_script(multi_params, "combine_and_split_syn", pe=qsub_pe,
-                           resume_job=resume_job, script_folder=None,
-                           queue=qsub_queue, n_max_co_processes=n_max_co_processes)
+        _ = qu.QSUB_script(multi_params, "combine_and_split_syn",
+                           resume_job=resume_job, remove_jobfolder=True,
+                           n_max_co_processes=n_max_co_processes)
 
     return sd_syn_ssv
 
@@ -369,7 +369,8 @@ def _combine_and_split_syn_thread(args):
         for this_cc in ccs:
             this_cc_mask = np.array(list(this_cc))
             # retrieve the index of the syn objects selected for this CC
-            this_syn_ixs, this_syn_ids_cnt = np.unique(synix_list[this_cc_mask], return_counts=True)
+            this_syn_ixs, this_syn_ids_cnt = np.unique(synix_list[this_cc_mask],
+                                                       return_counts=True)
             this_agg_syn_weights = this_syn_ids_cnt / np.sum(this_syn_ids_cnt)
             if np.sum(this_syn_ids_cnt) < global_params.thresh_syn_size:
                 continue
@@ -552,9 +553,8 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "combine_and_split_cs_agg",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+                                     n_max_co_processes=n_max_co_processes,
+                                     remove_jobfolder=True)
     else:
         raise Exception("QSUB not available")
 
@@ -1335,6 +1335,7 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
                           max_rep_coord_dist_nm=None, qsub_pe=None,
                           qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     # TODO: remove `qsub_pe`and `qsub_queue`
+    # TODO: optimize
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
     is executed in 'classify_synssv_objects'.
@@ -1372,9 +1373,8 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
     else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "map_objects_to_synssv",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+                                     n_max_co_processes=n_max_co_processes,
+                                     remove_jobfolder=True)
 
 
 def _map_objects_to_synssv_thread(args):
@@ -1558,8 +1558,8 @@ def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
     else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "classify_synssv_objects",
-                                     script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+                                     n_max_co_processes=n_max_co_processes,
+                                     remove_jobfolder=True)
 
 
 def _classify_synssv_objects_thread(args):

@@ -9,6 +9,7 @@ import numpy as np
 import re
 import glob
 import os
+import shutil
 from multiprocessing.pool import ThreadPool
 try:
     import cPickle as pkl
@@ -369,8 +370,7 @@ class SuperSegmentationDataset(object):
                                              "reskeletonize_objects_big_ones",
                                              n_cores=10,
                                              n_max_co_processes=int(n_max_co_processes/10*nb_cpus),
-                                             pe=qsub_pe, queue=qsub_queue,
-                                             script_folder=None)
+                                             remove_jobfolder=True)
             else:
                 raise Exception("QSUB not available")
 
@@ -393,9 +393,7 @@ class SuperSegmentationDataset(object):
         elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "export_skeletons",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None)
+                                         n_cores=nb_cpus, remove_jobfolder=True)
             out_files = glob.glob(path_to_out + "/*")
             no_skel_cnt = 0
             for out_file in out_files:
@@ -426,9 +424,7 @@ class SuperSegmentationDataset(object):
         elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "associate_objs_with_skel_nodes",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None)
+                                         n_cores=nb_cpus, remove_jobfolder=True)
         else:
             raise Exception("QSUB not available")
 
@@ -449,9 +445,7 @@ class SuperSegmentationDataset(object):
         elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "predict_axoness_skelbased",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None)
+                                         n_cores=nb_cpus, remove_jobfolder=True)
         else:
             raise Exception("QSUB not available")
 
@@ -472,9 +466,7 @@ class SuperSegmentationDataset(object):
         elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "predict_cell_type_skelbased",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None)
+                                         n_cores=nb_cpus, remove_jobfolder=True)
         else:
             raise Exception("QSUB not available")
 
@@ -563,8 +555,6 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=None,
     else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "write_super_segmentation_dataset",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
                                      n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
 
@@ -573,7 +563,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=None,
         for out_file in out_files:
             with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
-
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     attr_dict = {}
     for this_attr_dict in results:
         for attribute in this_attr_dict.keys():
@@ -690,8 +680,7 @@ def export_to_knossosdataset(ssd, kd, stride=1000, qsub_pe=None,
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_ssv_to_knossosdataset",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None)
+                                     remove_jobfolder=True)
 
     else:
         raise Exception("QSUB not available")
@@ -827,9 +816,7 @@ def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_skeletons",
-                                     n_cores=nb_cpus,
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None)
+                                     n_cores=nb_cpus,)
         out_files = glob.glob(path_to_out + "/*")
         no_skel_cnt = 0
         for out_file in out_files:
@@ -1273,9 +1260,11 @@ def create_sso_skeletons_thread(args):
             ixs = np.arange(len(verts))
             np.random.shuffle(ixs)
             ixs = ixs[:int(0.5*len(ixs))]
-            locs = generate_rendering_locs(verts[ixs], 1000)
-            # locs = surface_samples(verts[ixs], bin_sizes=(1000, 1000, 1000),
-            #                        max_nb_samples=10000, r=500)
+            if global_params.config.use_new_renderings_locs:
+                locs = generate_rendering_locs(verts[ixs], 1000)
+            else:
+                locs = surface_samples(verts[ixs], bin_sizes=(1000, 1000, 1000),
+                                       max_nb_samples=10000, r=500)
             g = create_graph_from_coords(locs, mst=True)
             if g.number_of_edges() == 1:
                 edge_list = np.array(list(g.edges()))

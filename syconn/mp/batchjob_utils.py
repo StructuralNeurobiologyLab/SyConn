@@ -321,7 +321,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             dtime_sub += time.time() - start
         else:
             raise NotImplementedError
-        time.sleep(0.1)
+        time.sleep(0.05)
 
     log_batchjob.info("All jobs are submitted: %s" % name)
     while True:
@@ -404,6 +404,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 m = re.search('(?<=--mem=)\w+', additional_flags)
                 additional_flags = additional_flags.replace('--mem=' + m.group(0), '--mem=0')
         # if all jobs failed, increase number of cores
+        if remove_jobfolder:  # remove old job folder
+            shutil.rmtree(job_folder)
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
             priority=priority, additional_flags=additional_flags, script_folder=None,
