@@ -232,9 +232,7 @@ class ConnectivityMatrix(object):
 
         elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
-                                         "extract_connectivity",
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None)
+                                         "extract_connectivity")
             out_files = glob.glob(path_to_out + "/*")
             results = []
             for out_file in out_files:
@@ -266,9 +264,7 @@ class ConnectivityMatrix(object):
 
         elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
-                                         "get_sso_specific_info",
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None)
+                                         "get_sso_specific_info",)
             out_files = glob.glob(path_to_out + "/*")
             results = []
             for out_file in out_files:

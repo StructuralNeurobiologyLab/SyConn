@@ -955,7 +955,7 @@ class SuperSegmentationObject(object):
             syn.load_attr_dict()
             syn_signs.append(syn.attr_dict["syn_sign"])
             syn_sizes.append(syn.mesh_area / 2)
-        if len(syn_signs) == 0:
+        if len(syn_signs) == 0 or np.sum(syn_sizes) == 0:
             return -1
         syn_signs = np.array(syn_signs)
         syn_sizes = np.array(syn_sizes)

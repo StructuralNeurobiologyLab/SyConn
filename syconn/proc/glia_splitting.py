@@ -32,9 +32,9 @@ def qsub_glia_splitting():
     if len(huge_ssvs):
         log_proc.info("{} huge SSVs detected (#SVs > {})".format(len(huge_ssvs),
                                                          RENDERING_MAX_NB_SV))
-    chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True), 4000)
-    qu.QSUB_script(chs, "split_glia", pe="openmp", queue=None, n_cores=2,
-                   script_folder=None, n_max_co_processes=170)
+    chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True), global_params.NCORES_PER_NODE)
+    qu.QSUB_script(chs, "split_glia", n_cores=1,
+                   n_max_co_processes=global_params.NCORE_TOTAL)
 
 
 def collect_glia_sv():
@@ -53,25 +53,29 @@ def collect_glia_sv():
     # not contained in RAG
     # TODO: add start_multiprocess on a different node
     glia_preds_list = start_multiprocess(collect_gliaSV_helper_chunked,
-                                         multi_params, nb_cpus=20, debug=False)
+                                         multi_params, nb_cpus=global_params.NCORES_PER_NODE, debug=False)
     glia_preds = {}
     for dc in glia_preds_list:
         glia_preds.update(dc)
     log_proc.info("Collected SV glianess.")
     # get SSV glia splits
-    chs = chunkify(list(cc_dict.keys()), 1000)
+    chs = chunkify(list(cc_dict.keys()), global_params.NCORES_PER_NODE)
     glia_svs = np.concatenate(start_multiprocess(collect_gliaSV_helper, chs,
-                                                 nb_cpus=20))
+                                                 nb_cpus=global_params.NCORES_PER_NODE))
     log_proc.info("Collected SSV glia SVs.")
     # add missing SV glianess and store whole dataset classification
     missing_ids = np.setdiff1d(sds.ids, ids_in_rag)
-    single_sv_glia = np.array([ix for ix in missing_ids if glia_preds[ix] == 1],
-                              dtype=np.uint64)
-    glia_svs = np.concatenate([single_sv_glia, glia_svs]).astype(np.uint64)
+    # # Single SV SSVs are part of the RAG now
+    # single_sv_glia = np.array([ix for ix in missing_ids if glia_preds[ix] == 1],
+    #                           dtype=np.uint64)
+    # glia_svs = np.concatenate([single_sv_glia, glia_svs]).astype(np.uint64)
     np.save(global_params.config.working_dir + "/glia/glia_svs.npy", glia_svs)
-    neuron_svs = np.array(list(set(sds.ids).difference(set(glia_svs))),
+    neuron_svs = np.array(list(set(sds.ids).difference(set(glia_svs).union(set(missing_ids)))),
                           dtype=np.uint64)
+    assert len((set(neuron_svs).union(set(glia_svs)).union(set(missing_ids))).difference(set(
+        sds.ids))) == 0
     np.save(global_params.config.working_dir + "/glia/neuron_svs.npy", neuron_svs)
+    np.save(global_params.config.working_dir + "/glia/pruned_svs.npy", missing_ids)
     log_proc.info("Collected whole dataset glia and neuron predictions.")
 
 
@@ -169,7 +173,7 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
     for ix in neuron_ids:
         if ccsize_dict[ix] < min_ssv_size:
             neuron_g.remove_node(ix)
-    log_proc.info("Removed %d neuron CCs with single SV because of size." %
+    log_proc.info("Removed %d neuron CCs because of size." %
           (before_cnt - len(neuron_g.nodes())))
     ccs = list(nx.connected_components(neuron_g))
     # Added np.min(list(cc)) to have deterministic SSV ID

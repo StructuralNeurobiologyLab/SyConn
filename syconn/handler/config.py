@@ -195,7 +195,8 @@ class DynConfig(Config):
 
     @property
     def temp_path(self):
-        return "/tmp/{}_syconn/".format(pwd.getpwuid(os.getuid()).pw_name)
+        # return "/tmp/{}_syconn/".format(pwd.getpwuid(os.getuid()).pw_name)
+        return "{}/tmp/".format(self.working_dir)
 
     @property
     # TODO: Not necessarily needed anymore
@@ -212,11 +213,6 @@ class DynConfig(Config):
     @property
     def init_rag_path(self):
         """
-        # currently a mergelist/RAG of the following form is expected:
-        # ID, ID
-        #    .
-        #    .
-        # ID, ID
 
         Returns
         -------
@@ -225,8 +221,19 @@ class DynConfig(Config):
         self._check_actuality()
         p = self.entries['Paths']['init_rag']
         if len(p) == 0:
-            p = self.working_dir + "init_rag.txt"
+            p = self.working_dir + "rag.bz2"
         return p
+
+    @property
+    def pruned_rag_path(self):
+        """
+
+        Returns
+        -------
+        str
+        """
+        self._check_actuality()
+        return self.working_dir + '/pruned_rag.bz2'
 
     # --------- CLASSIFICATION MODELS
     @property
@@ -316,7 +323,7 @@ class DynConfig(Config):
 
     @property
     def qsub_work_folder(self):
-        return "%s/%s/" % (global_params.config.working_dir,
+        return "%s/%s/" % (global_params.config.working_dir, # self.temp_path,
                            global_params.BATCH_PROC_SYSTEM)
 
     @property

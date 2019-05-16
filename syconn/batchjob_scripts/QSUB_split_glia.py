@@ -32,7 +32,7 @@ scaling = global_params.config.entries['Dataset']['scaling']
 for cc in args:
     svixs = list(cc.nodes())
     cc_ix = np.min(svixs)
-    sso = SuperSegmentationObject(cc_ix, version="gliaremoval", nb_cpus=2,
+    sso = SuperSegmentationObject(cc_ix, version="gliaremoval", nb_cpus=1,
                                   working_dir=global_params.config.working_dir,
                                   create=True, scaling=scaling,
                                   sv_ids=svixs)
@@ -48,7 +48,7 @@ for cc in args:
         sso.gliasplit(verbose=False)
     except Exception as e:
         print("\n-------------------------------------\n"
-              "Splitting of SSV %d failed with %s."
+              "ERROR: Splitting of SSV %d failed with %s."
               "\n-------------------------------------\n" % (cc_ix, e))
 
 with open(path_out_file, "wb") as f:

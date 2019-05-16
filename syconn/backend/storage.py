@@ -222,7 +222,8 @@ class VoxelStorageDyn(CompressedStorage):
             new_p = voxeldata_path
             if old_p != new_p:
                 log_backend.warn('Overwriting `voxeldata_path` in `VoxelStorag'
-                                 'eDyn` object from `{}` to `{}`.'.format(old_p, new_p))
+                                 'eDyn` object (stored at "{}") '
+                                 'from `{}` to `{}`.'.format(inp, old_p, new_p))
                 self._dc_intern['meta']['voxeldata_path'] = voxeldata_path
         voxeldata_path = self._dc_intern['meta']['voxeldata_path']
         if voxel_mode:
@@ -282,6 +283,13 @@ class VoxelStorageDyn(CompressedStorage):
     def get_voxeldata(self, item):
         old_vx_mode = self.voxel_mode
         self.voxel_mode = True
+        if self._dc_intern['meta']['voxeldata_path'] is None:
+            msg = '`voxel_mode` is True but no path to' \
+                  ' voxeldata given / found.'
+            log_backend.error(msg)
+            raise ValueError(msg)
+        kd = kd_factory(self._dc_intern['meta']['voxeldata_path'])
+        self.voxeldata = kd
         res = self[item]
         self.voxel_mode = old_vx_mode
         return res

@@ -35,6 +35,22 @@ except ImportError:
     from ..proc.in_bounding_box import in_bounding_box
 
 
+def init_sso_from_kzip(path):
+    """
+
+    Parameters
+    ----------
+    path :
+
+    Returns
+    -------
+
+    """
+    # TODO load .ply meshes, skeleton and sv_graph within kzip
+    # TODO: add `save_sso2kzip`
+    pass
+
+
 def majority_vote(anno, prop, max_dist):
     """
     Smoothes (average using sliding window of 2 times max_dist and majority

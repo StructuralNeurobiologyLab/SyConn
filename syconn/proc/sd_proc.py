@@ -26,7 +26,7 @@ from .. import global_params
 from .image import single_conn_comp_img
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
-from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn, MeshStorage
+from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn
 from ..reps import segmentation, segmentation_helper
 from ..reps import rep_helper
 from ..handler import basics
@@ -40,7 +40,6 @@ import sys
 
 def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                      compute_meshprops=False):
-    # TODO: remove `qsub_pe`and `qsub_queue`
     """ Analyze SegmentationDataset and extract and cache SegmentationObjects
     attributes as numpy arrays. Will only recognize dict/storage entries of type int
     for object attribute collection.
@@ -84,13 +83,15 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
                                              debug=False)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params, "dataset_analysis", script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+        path_to_out = qu.QSUB_script(multi_params, "dataset_analysis",
+                                     n_max_co_processes=n_max_co_processes,
+                                     suffix=sd.type)
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
             with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     # Creating summaries
     # TODO: This is a potential bottleneck for very large datasets
     # TODO: resulting cache-arrays might have different lengths if attribute is missing in
@@ -274,7 +275,6 @@ def _map_objects_thread(args):
         datatype = np.uint64
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_knossos_path(kd_path)
-
     seg_dataset = segmentation.SegmentationDataset(obj_type, version=obj_version,
                                                    working_dir=working_dir)
     sv_id_dict = {}
@@ -516,7 +516,8 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
                                    nb_cpus=n_max_co_processes, debug=False)
     else:
         qu.QSUB_script(multi_params, "write_props_to_sv", script_folder=None,
-                       n_cores=n_cores, n_max_co_processes=n_max_co_processes)
+                       n_cores=n_cores, n_max_co_processes=n_max_co_processes,
+                       remove_jobfolder=True)
     all_times.append(time.time() - start)
     step_names.append("write cell SV dataset")
     sv_sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
@@ -530,7 +531,8 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
                                    nb_cpus=n_max_co_processes, debug=False)
     else:
         qu.QSUB_script(multi_params, "write_props_to_sc", script_folder=None,
-                       n_cores=n_cores, n_max_co_processes=n_max_co_processes)
+                       n_cores=n_cores, n_max_co_processes=n_max_co_processes,
+                       remove_jobfolder=True)
     step_names.append("write subcellular SV dataset")
     for k in global_params.existing_cell_organelles:
         sc_sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
@@ -541,8 +543,8 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     for p in dict_paths:
         os.remove(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
-
-    # --------------------------------------------------------------------------
+    if qu.batchjob_enabled():  # remove job directory of `map_subcell_extract_props`
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     log.debug("Time overview [from_probabilities_to_objects]:")
     for ii in range(len(all_times)):
         log.debug("%s: %.3fs" % (step_names[ii], all_times[ii]))
@@ -910,7 +912,8 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
                                      pe=qsub_pe, queue=qsub_queue,
                                      script_folder=None,
                                      n_cores=nb_cpus,
-                                     n_max_co_processes=n_max_co_processes)
+                                     n_max_co_processes=n_max_co_processes,
+                                     remove_jobfolder=True)
     else:
         raise Exception("QSUB not available")
 
@@ -1101,7 +1104,8 @@ def export_sd_to_knossosdataset(sd, kd, block_edge_length=512,
 
     elif qu.batchjob_enabled():
         _ = qu.QSUB_script(multi_params, "export_sd_to_knossosdataset",
-                           n_max_co_processes=n_max_co_processes)
+                           n_max_co_processes=n_max_co_processes,
+                           remove_jobfolder=True)
     else:
         raise Exception("QSUB not available")
 
@@ -1141,106 +1145,6 @@ def _export_sd_to_knossosdataset_thread(args):
                             overwrite=True,
                             nb_threads=1,
                             verbose=True)
-
-
-def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
-                         trafo_dict_path=None, stride=100,
-                         qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                         n_max_co_processes=None):
-    # TODO: remove `qsub_pe`and `qsub_queue`
-    """TODO: will be refactored into single method when generating syn objects
-    Extract synapse type from KnossosDatasets. Stores sym.-asym. ratio in
-    SJ object attribute dict.
-
-    Parameters
-    ----------
-    sj_sd : SegmentationDataset
-    kd_asym_path : str
-    kd_sym_path : str
-    trafo_dict_path : dict
-    stride : int
-    qsub_pe : str
-    qsub_queue : str
-    nb_cpus : int
-    n_max_co_processes : int
-    """
-    assert "syn_ssv" in sj_sd.version_dict
-    paths = sj_sd.so_dir_paths
-
-    # Partitioning the work
-    multi_params = []
-    for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
-        multi_params.append([path_block, sj_sd.version, sj_sd.working_dir,
-                             kd_asym_path, kd_sym_path, trafo_dict_path])
-
-    # Running workers - Extracting mapping
-    if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_extract_synapse_type_thread,
-                                        multi_params, nb_cpus=nb_cpus)
-
-    else:
-        path_to_out = qu.QSUB_script(multi_params, "extract_synapse_type",
-                                     n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
-
-
-def _extract_synapse_type_thread(args):
-    paths = args[0]
-    obj_version = args[1]
-    working_dir = args[2]
-    kd_asym_path = args[3]
-    kd_sym_path = args[4]
-    trafo_dict_path = args[5]
-
-    if trafo_dict_path is not None:
-        with open(trafo_dict_path, "rb") as f:
-            trafo_dict = pkl.load(f)
-    else:
-        trafo_dict = None
-
-    kd_asym = knossosdataset.KnossosDataset()
-    kd_asym.initialize_from_knossos_path(kd_asym_path)
-    kd_sym = knossosdataset.KnossosDataset()
-    kd_sym.initialize_from_knossos_path(kd_sym_path)
-
-    seg_dataset = segmentation.SegmentationDataset("syn_ssv",
-                                                   version=obj_version,
-                                                   working_dir=working_dir)
-    for p in paths:
-        this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
-                                     read_only=False, disable_locking=True)
-        for so_id in this_attr_dc.keys():
-            so = seg_dataset.get_segmentation_object(so_id)
-            so.attr_dict = this_attr_dc[so_id]
-            so.load_voxel_list()
-
-            vxl = so.voxel_list
-
-            if trafo_dict is not None:
-                vxl -= trafo_dict[so_id]
-                vxl = vxl[:, [1, 0, 2]]
-            # TODO: remvoe try-except
-            if global_params.config.syntype_available:
-                try:
-                    asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl))
-                    sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl))
-                except:
-                    log_proc.error("Failed to read raw cubes during synapse type "
-                                   "extraction.")
-                    sym_prop = 0
-                    asym_prop = 0
-            else:
-                sym_prop = 0
-                asym_prop = 0
-
-            if sym_prop + asym_prop == 0:
-                sym_ratio = -1
-            else:
-                sym_ratio = sym_prop / float(asym_prop + sym_prop)
-            so.attr_dict["syn_type_sym_ratio"] = sym_ratio
-            syn_sign = -1 if sym_ratio > global_params.sym_thresh else 1
-            so.attr_dict["syn_sign"] = syn_sign
-            this_attr_dc[so_id] = so.attr_dict
-        this_attr_dc.push()
 
 
 def mesh_proc_chunked(working_dir, obj_type, nb_cpus=NCORES_PER_NODE):

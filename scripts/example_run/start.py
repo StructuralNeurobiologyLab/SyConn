@@ -26,11 +26,10 @@ from syconn.exec import exec_init, exec_syns, exec_multiview
 # TODO add materialize button and store current process in config.ini
 #  -> allows to resume interrupted processes
 if __name__ == '__main__':
-    print("first in main")
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='',
                         help='Working directory of SyConn')
-    parser.add_argument('--example_cube', type=str, default='2',
+    parser.add_argument('--example_cube', type=str, default='1',
                         help='Used toy data. Either "1" (400 x 400 x 600) '
                              'or "2" (1100, 1100, 600).')
     args = parser.parse_args()
@@ -45,6 +44,7 @@ if __name__ == '__main__':
 
     time_stamps = [time.time()]
     step_idents = ['t-0']
+
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
     h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
     kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
@@ -60,23 +60,20 @@ if __name__ == '__main__':
         raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
     # currently this is were SyConn looks for the neuron rag # TODO refactor
     os.makedirs(example_wd + '/glia/', exist_ok=True)
-    shutil.copy(h5_dir + "/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
 
     bb = parse_movement_area_from_zip(kzip_p)
+    prior_glia_removal = True
     offset = np.array([0, 0, 0])
     bd = bb[1] - bb[0]
     scale = np.array([10, 10, 20])
     chunk_size = (256, 256, 256)
     n_folders_fs = 1000  # number of folders in should probably be different for different segmentations
     experiment_name = 'j0126_example'
-    global_params.wd = example_wd
     global_params.NCORE_TOTAL = 20
     global_params.NGPU_TOTAL = 2
     global_params.NNODES_TOTAL = 1
-    os.makedirs(global_params.config.temp_path, exist_ok=True)
 
     # PREPARE CONFIG
-
     log.critical('Example run started. Working directory is overwritten and set'
                  ' to "{}".'.format(example_wd))
     if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
@@ -87,11 +84,15 @@ if __name__ == '__main__':
         py36path = ""
     config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale,
                                                       py36path=py36path, use_new_renderings_locs=False,
-                                                      use_large_fov_views_ct=False)
+                                                      use_large_fov_views_ct=False,
+                                                      prior_glia_removal=prior_glia_removal)
     with open(example_wd + 'config.ini', 'w') as f:
         f.write(config_str)
     with open(example_wd + 'configspec.ini', 'w') as f:
         f.write(configspec_str)
+
+    global_params.wd = example_wd
+    os.makedirs(global_params.config.temp_path, exist_ok=True)
 
     for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype',
                       'mpath_axoness', 'mpath_glia']:
@@ -101,6 +102,14 @@ if __name__ == '__main__':
                              ' "models" folder into the current working '
                              'directory "{}".'.format(mpath, example_wd))
 
+    if not prior_glia_removal:
+        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_rag_path)
+    else:
+        # if os.path.isfile(example_wd + '/glia/neuron_rag.bz2'):
+        #     raise ValueError('Found already existing neuron RAG. Glia removal will generate a new '
+        #                      'neuron RAG at this locations. Please remove the existing one before '
+        #                      'starting SyConn in glia-removal-mode.')
+        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
     # INITIALIZE DATA
     # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
     kd = knossosdataset.KnossosDataset()
@@ -155,16 +164,17 @@ if __name__ == '__main__':
 
     # START SyConn
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    # # exec_init.run_create_sds(generate_sv_meshes=True, chunk_size=chunk_size,
+    # exec_init.run_create_sds(generate_sv_meshes=True, chunk_size=chunk_size,
     #                          n_folders_fs=n_folders_fs)
     exec_init.init_cell_subcell_sds(generate_sv_meshes=True, chunk_size=chunk_size,
                                     n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs)
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 
+    exec_init.run_create_rag()
 
-    if 1:  # TODO: work-in glia removal, TODO: filter SVs prior to glia analysis
-        log.info('Step 0.5/8 - Glia separation')
+    if global_params.config.prior_glia_removal:
+        log.info('Step 1.5/8 - Glia separation')
         exec_multiview.run_glia_rendering()
         exec_multiview.run_glia_prediction(e3=True)
         exec_multiview.run_glia_splitting()
@@ -172,7 +182,7 @@ if __name__ == '__main__':
         step_idents.append('Glia separation')
 
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
-    exec_multiview.run_create_neuron_ssd(prior_glia_removal=False)
+    exec_multiview.run_create_neuron_ssd()
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 
@@ -216,17 +226,18 @@ if __name__ == '__main__':
     dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
     time_summary_str = "\nEM data analysis of experiment '{}' finished after" \
                        " {}.\n".format(experiment_name, dt_tot_str)
+    n_steps = len(step_idents[1:]) - 1
     for i in range(len(step_idents[1:])):
         step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
         step_dt_perc = int(dts[i] / dt_tot * 100)
-        step_str = "[{}/8] {}\t\t\t{}\t\t\t{}%\n".format(
-            i, step_idents[i+1], step_dt, step_dt_perc)
+        step_str = "[{}/{}] {}\t\t\t{}\t\t\t{}%\n".format(
+            i, n_steps, step_idents[i+1], step_dt, step_dt_perc)
         time_summary_str += step_str
     log.info(time_summary_str)
-    # log.info('Setting up flask server for inspection. Annotated cell reconst'
-    #          'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
-    #          ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    # fname_server = os.path.dirname(os.path.abspath(__file__)) + \
-    #                '/../kplugin/server.py'
-    # os.system('python {} --working_dir={} --port=10002'.format(
-    #     fname_server, example_wd))
+    log.info('Setting up flask server for inspection. Annotated cell reconst'
+             'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
+             ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    fname_server = os.path.dirname(os.path.abspath(__file__)) + \
+                   '/../kplugin/server.py'
+    os.system('python {} --working_dir={} --port=10001'.format(
+        fname_server, example_wd))

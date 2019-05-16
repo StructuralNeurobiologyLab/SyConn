@@ -31,8 +31,8 @@ rag_suffix = ""  # identifier in case there will be more than one RAG, TODO: Rem
 
 # --------- BACKEND DEFINITIONS
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
-batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + \
-                         "/batchjob_scripts/"
+batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + "/batchjob_scripts/"
+
 # TODO refactor syconn and get rid of all qsub_pe and qsub_queue kwargs and only use batch_job_enabled(),
 #  the default in QSUB_script should then be BATCH_PE and BATCH_QUEUE
 BATCH_PE = 'default'
@@ -69,6 +69,7 @@ thresh_mi_bbd_mapping = 25e3
 # Synaptic junction bounding box diagonal threshold in nm; objects above will not be used during `syn_gen_via_cset`
 thresh_sj_bbd_syngen = 25e3
 thresh_syn_proba = 0.5  # RFC probability used for classifying whether syn or not
+thresh_syn_size = 10  # minimum number of voxel for synapses in SSVs  # TODO: tweak, increase
 cs_gap_nm = 250
 # mapping parameters in 'map_objects_to_synssv'; assignment of cellular organelles to syn_ssv
 max_vx_dist_nm = 2000
@@ -126,3 +127,6 @@ ndim_embedding = 10
 
 # general config object
 config = DynConfig()
+
+
+
