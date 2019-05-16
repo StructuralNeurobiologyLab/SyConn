@@ -536,7 +536,7 @@ class SegmentationObject(object):
 
     @property
     def mesh_path(self):
-        return self.segobj_dir + "_marysia_mesh.pkl"
+        return self.segobj_dir + "mesh.pkl"
 
     @property
     def skeleton_path(self):

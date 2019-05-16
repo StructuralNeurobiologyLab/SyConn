@@ -30,7 +30,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='',
                         help='Working directory of SyConn')
-    parser.add_argument('--example_cube', type=str, default='1',
+    parser.add_argument('--example_cube', type=str, default='2',
                         help='Used toy data. Either "1" (400 x 400 x 600) '
                              'or "2" (1100, 1100, 600).')
     args = parser.parse_args()

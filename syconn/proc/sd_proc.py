@@ -441,6 +441,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     step_names.append("extract and map segmentation objects")
 
     # reduce step
+    start = time.time()
     tot_cp = [{}, defaultdict(list), {}]
     tot_scp = [[{}, defaultdict(list), {}] for _ in range(len(kd_organelle_paths))]
     tot_scm = [{} for _ in range(len(kd_organelle_paths))]
@@ -454,19 +455,16 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
         del cp_dc, scp_dcs, scm_dcs  # will remove redundant data inside results
 
     # merge meshes between workers
-    print("merge meshes between workers")
-    multi_params = []
     multi_params = [(k, n_folders_fs_sc, n_workers) for k in global_params.existing_cell_organelles]
     multi_params.append(('sv', n_folders_fs_sc, n_workers))
 
     sm.start_multiprocess_imap(_merge_meshes_workers, multi_params,
                                    nb_cpus=n_max_co_processes, debug=False)
 
+
     for worker_nr in range(n_workers):
         p = global_params.config.temp_path + "/tmp_meshes_worker_" + str(worker_nr) + ".pkl"
         os.remove(p)
-
-    print("\n\n\n THE END \n\n\n")
 
     # convert mapping dicts to store ratio of number of overlapping voxels
     prop_dict_p = "{}/sv_prop_dict.pkl".format(global_params.config.temp_path)
