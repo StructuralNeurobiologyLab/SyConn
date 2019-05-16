@@ -466,6 +466,8 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
         p = global_params.config.temp_path + "/tmp_meshes_worker_" + str(worker_nr) + ".pkl"
         os.remove(p)
 
+    print("\n\n\n THE END \n\n\n")
+
     # convert mapping dicts to store ratio of number of overlapping voxels
     prop_dict_p = "{}/sv_prop_dict.pkl".format(global_params.config.temp_path)
     with open(prop_dict_p, "wb") as f:
@@ -552,13 +554,12 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
 
 
 def _merge_meshes_workers(args):
-    print("\n\n\n here \n\n\n")
     k = args[0]
     n_folders_fs_sc = args[1]
     n_workers = args[2]
 
     big_mesh = MeshStorage(global_params.config.temp_path + "/big_mesh_" + str(k) + ".pkl",
-                              disable_locking=True, read_only=False)
+                           disable_locking=True, read_only=False)
 
     for worker_nr in range(n_workers):
         p = global_params.config.temp_path + "/tmp_meshes_worker_" + str(worker_nr) + ".pkl"
@@ -566,7 +567,6 @@ def _merge_meshes_workers(args):
         single_mesh = pkl.load(pkl_file)[k]
         pkl_file.close()
 
-        # single_mesh = MeshStorage(p, disable_locking=True, read_only=False)
         merge_meshes_dict(big_mesh, single_mesh)
         del single_mesh
 
@@ -580,10 +580,7 @@ def _merge_meshes_workers(args):
         obj_mesh[obj_id] = big_mesh[obj_id]
         obj_mesh.push()
         del obj_mesh
-        if k == 'sv':
-            mesh = dummy_so.mesh
-            write_mesh2kzip(global_params.config.temp_path + "/_" + str(obj_id) + "_.zip",
-                            mesh[0], mesh[1], mesh[2], None, ply_fname="sv%d.ply" % obj_id)
+
 
 def _map_subcell_extract_props_thread(args):
     from syconn.reps.find_object_properties_C import map_subcell_extract_propsC
@@ -610,16 +607,6 @@ def _map_subcell_extract_props_thread(args):
     for organelle in global_params.existing_cell_organelles:
         big_mesh_dict[organelle] = defaultdict(list)
 
-    #
-    #
-    # cell_meshes = MeshStorage(global_params.config.temp_path + "/mesh_sv_" + str(worker_nr) + ".pkl",
-    #                           disable_locking=True, read_only=False)
-    #
-    # subcell_meshes = [MeshStorage(global_params.config.temp_path +
-    #                               "/mesh_" + str(organelle) + "_" + str(worker_nr) + ".pkl",
-    #                               disable_locking=True, read_only=False)
-    #                               for organelle in global_params.existing_cell_organelles]
-
     # iterate over chunks and store information in property dicts for subcellular and cellular structures
     for ch_id in chunks:
         ch = cd.chunk_dict[ch_id]
@@ -631,8 +618,9 @@ def _map_subcell_extract_props_thread(args):
         tmp_subcell_meshes = [defaultdict(list) for _ in kd_subcells]
         subcell_d = []
         for kd_sc, i in zip(kd_subcells, range(len(kd_subcells))):
-            subcell_d.append(kd_sc.from_overlaycubes_to_matrix(size, offset)[None, ])  # add auxiliary axis
-            tmp_subcell_meshes[i] = find_meshes(kd_sc.from_overlaycubes_to_matrix(size, offset), offset)
+            subc_d = kd_sc.from_overlaycubes_to_matrix(size, offset)
+            tmp_subcell_meshes[i] = find_meshes(subc_d, offset)
+            subcell_d.append(subc_d[None, ])  # add auxiliary axis
         subcell_d = np.concatenate(subcell_d)
         cell_prop_dicts, subcell_prop_dicts, subcell_mapping_dicts = map_subcell_extract_propsC(cell_d, subcell_d)
         # reorder to match [[rc, bb, size], [rc, bb, size]] for e.g. [mi, vc]
@@ -659,9 +647,6 @@ def _map_subcell_extract_props_thread(args):
     output_worker = open(global_params.config.temp_path + "/tmp_meshes_worker_" + str(worker_nr) + ".pkl", 'wb')
     pkl.dump(big_mesh_dict, output_worker)
     output_worker.close()
-    # cell_meshes.push()
-    # for ii in range(n_subcell):
-    #     subcell_meshes[ii].push()
 
     return cpd_lst, scpd_lst, scmd_lst
 
@@ -669,9 +654,11 @@ def _map_subcell_extract_props_thread(args):
 def find_meshes(chunk, offset):
 
     """
-    Save meshes into MeshStorage dictionary
-    """
 
+    """
+    ## TODO convert
+    scaling = np.array(global_params.config.entries["Dataset"]["scaling"])
+    # print("\n\n\n anisotropy= ", anisotropy)
     mesher = Mesher((1, 1, 1))  # anisotropy of image
     mesher.mesh(chunk)  # initial marching cubes pass
 
@@ -679,8 +666,8 @@ def find_meshes(chunk, offset):
     for obj_id in mesher.ids():
         tmp = mesher.get_mesh(obj_id, normals=True, simplification_factor=10,
                                          max_simplification_error=8)
-        tmp.vertices += offset
-        meshes[obj_id] = [tmp.faces.flatten(), tmp.vertices.flatten(), tmp.normals.flatten() ]
+        tmp.vertices[:] = (tmp.vertices[:, ::-1] + offset) * scaling
+        meshes[obj_id] = [tmp.faces.flatten(), tmp.vertices.flatten(), tmp.normals.flatten()]
         mesher.erase(obj_id)
 
     mesher.clear()

@@ -162,6 +162,7 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('SD generation')
 
+
     if 1:  # TODO: work-in glia removal, TODO: filter SVs prior to glia analysis
         log.info('Step 0.5/8 - Glia separation')
         exec_multiview.run_glia_rendering()

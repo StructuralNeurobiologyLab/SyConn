@@ -8,6 +8,7 @@
 from knossos_utils import knossosdataset
 import time
 import os
+import sys
 import shutil
 import numpy as np
 knossosdataset._set_noprint(True)
@@ -61,13 +62,15 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
                                      version="0")
         multi_params = chunkify(sd_seg.so_dir_paths, max_n_jobs)
         so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type=co)
-        if co != "sv" or (co == "sv" and generate_sv_meshes):
-            start = time.time()
-            multi_params = [[par, so_kwargs] for par in multi_params]
-            _ = qu.QSUB_script(multi_params, "mesh_caching",
-                               n_max_co_processes=global_params.NCORE_TOTAL)
-            log.info('Finished mesh caching of {} "{}"-SVs after {:.0f}s.'
-                     ''.format(len(sd_seg.ids), co, time.time() - start))
+        # if co != "sv" or (co == "sv" and generate_sv_meshes):
+        #     start = time.time()
+        #     multi_params = [[par, so_kwargs] for par in multi_params]
+        #     _ = qu.QSUB_script(multi_params, "mesh_caching",
+        #                        n_max_co_processes=global_params.NCORE_TOTAL)
+        #     log.info('Finished mesh caching of {} "{}"-SVs after {:.0f}s.'
+        #              ''.format(len(sd_seg.ids), co, time.time() - start))
+        print("\n\n\n BEDZIE KRACH? \n\n\n")
+
         if co == "sv":
             start = time.time()
             _ = qu.QSUB_script(multi_params, "sample_location_caching",
