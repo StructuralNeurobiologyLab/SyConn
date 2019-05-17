@@ -51,6 +51,16 @@ if os.environ['PYOPENGL_PLATFORM'] == 'egl':
             eglGetDisplay, eglInitialize, eglChooseConfig, \
             eglBindAPI, eglCreatePbufferSurface, EGL_ALPHA_SIZE,\
             eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
+        from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
+            EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
+            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
+            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
+            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
+            EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
+            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY, EGL_TRUE, \
+            eglGetDisplay, eglInitialize, eglChooseConfig, \
+            eglBindAPI, eglCreatePbufferSurface, \
+            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
         log_proc.info('EGL rendering enabled.')
     except ImportError as e:
         os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
@@ -70,6 +80,12 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
+
+# TODO: add all rendering params to config/global_params
+
+
+from .egl_ext import eglQueryDevicesEXT
+MULTIGPU = True  # probably fine to remove this, mechanism can always be enabled
 
 
 # ------------------------------------ General rendering code ------------------------------------------
@@ -208,91 +224,28 @@ def screen_shot(ws, colored=False, depth_map=False, clahe=False,
     return data
 
 
-# # setup ######################################################################
-# TODO: init error if two jobs run on the same node in parallel (also when they are encapsulated via different SLURM logins)
-#  -> solution requires additional installations: https://github.com/deepmind/dm_control/blob/master/dm_control/_render/pyopengl/egl_renderer.py#L50
-# def init_ctx(ws):
-#     # ctx = OSMesaCreateContext(OSMESA_RGBA, None)
-#     if os.environ['PYOPENGL_PLATFORM'] == 'egl':
-#         from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
-#             EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, eglGetPlatformDisplayEXT,\
-#             EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
-#             EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
-#             EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, eglQueryDevicesEXT, \
-#             EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, EGL_PLATFORM_DEVICE_EXT,\
-#             EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
-#             eglGetDisplay, eglInitialize, eglChooseConfig, EGL_TRUE, EGL_FALSE, \
-#             eglBindAPI, eglCreatePbufferSurface, eglGetError, EGL_SUCCESS, \
-#             eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
-#
-#         major, minor = ctypes.c_long(), ctypes.c_long()
-#         num_configs = ctypes.c_long()
-#         configs = (EGLConfig * 1)()
-#
-#         # see bug description and solution at
-#         # https://github.com/deepmind/dm_control/blob/master/dm_control/_render/pyopengl/egl_renderer.py#L50
-#         initialized = False
-#         devices = eglQueryDevicesEXT()
-#         for device in devices:
-#             dsp = eglGetPlatformDisplayEXT(
-#                 EGL_PLATFORM_DEVICE_EXT, device, None)
-#             initialized = eglInitialize(dsp, major, minor)
-#             egl_error = eglGetError()
-#             if egl_error == EGL_SUCCESS and initialized == EGL_TRUE:
-#                 break
-#
-#         if initialized != EGL_TRUE:
-#             raise RuntimeError('Failed to initialize EGL.')
-#         config_attr = arrays.GLintArray.asArray(
-#             [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT,
-#              EGL_BLUE_SIZE, 8, EGL_RED_SIZE, 8, EGL_GREEN_SIZE, 8,
-#              EGL_DEPTH_SIZE, 8, EGL_COLOR_BUFFER_TYPE,
-#              EGL_RGB_BUFFER,
-#              EGL_RENDERABLE_TYPE,
-#              EGL_OPENGL_BIT,  EGL_NONE])
-#         eglChooseConfig(dsp, config_attr, configs, 1, num_configs)
-#
-#         # Bind EGL to the OpenGL API
-#         eglBindAPI(EGL_OPENGL_API)
-#
-#         # Create an EGL context
-#         ctx = eglCreateContext(dsp, configs[0], EGL_NO_CONTEXT, None)
-#
-#         # Create an EGL pbuffer
-#         buf = eglCreatePbufferSurface(dsp, configs[0], [EGL_WIDTH, ws[0], EGL_HEIGHT, ws[1], EGL_NONE])
-#         # Make the EGL context current
-#         assert (eglMakeCurrent(dsp, buf, buf, ctx))
-#         ctx = [dsp, ctx, buf]
-#     elif os.environ['PYOPENGL_PLATFORM'] == 'osmesa':
-#         ctx = OSMesaCreateContextExt(OSMESA_RGBA, 32, 0, 0, None)
-#         buf = arrays.GLubyteArray.zeros((ws[0], ws[1], 4)) + 1
-#         assert (OSMesaMakeCurrent(ctx, buf, GL_UNSIGNED_BYTE, ws[0], ws[1]))
-#         assert (OSMesaGetCurrentContext())
-#         OSMesaPixelStore(OSMESA_Y_UP, 0)
-#     else:
-#         raise NotImplementedError('PYOpenGL environment has to be "egl" or "osmesa".')
-#     return ctx
-
 def init_ctx(ws, depth_map):
     # ctx = OSMesaCreateContext(OSMESA_RGBA, None)
-    if os.environ['PYOPENGL_PLATFORM'] == 'egl':  # TODO: might be optimizable for depth map
-        # rendering
+    if os.environ['PYOPENGL_PLATFORM'] == 'egl':
         major, minor = ctypes.c_long(), ctypes.c_long()
         num_configs = ctypes.c_long()
         configs = (EGLConfig * 1)()
 
-        # Cache DISPLAY if necessary and get an off-screen EGL display
-        orig_dpy = None
-        if 'DISPLAY' in os.environ:
-            orig_dpy = os.environ['DISPLAY']
-            del os.environ['DISPLAY']
-        dsp = eglGetDisplay(EGL_DEFAULT_DISPLAY)
-        assert dsp != EGL_NO_DISPLAY, 'Invalid DISPLAY during egl init.'
-        if orig_dpy is not None:
-            os.environ['DISPLAY'] = orig_dpy
-
         # Initialize EGL
-        eglInitialize(dsp, major, minor)
+        if (MULTIGPU):
+            dev_on_node = eglQueryDevicesEXT()
+            for i in range(0, len(dev_on_node)):
+                dsp = eglGetDisplay(dev_on_node[i])
+                try:
+                    initialized = eglInitialize(dsp, major, minor)
+                    if (initialized == EGL_TRUE):
+                        break
+                except:
+                    pass
+        else:
+            dsp = eglGetDisplay(EGL_DEFAULT_DISPLAY)
+            assert dsp != EGL_NO_DISPLAY, 'Invalid DISPLAY during egl init.'
+            eglInitialize(dsp, major, minor)
         if depth_map:
             config_attr = arrays.GLintArray.asArray(
                 [EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, 8, EGL_RED_SIZE, 8,
@@ -1003,18 +956,30 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
 
     Parameters
     ----------
-    sso :
-    coords :
-    verbose :
-    ws :
+    sso : SuperSegmentationObject
+    coords : np.array
+        N, 3
     rot_mat :
     comp_window : float
         window size in nm. the clipping box during rendering will have an extent
          of [comp_window, comp_window / 2, comp_window]
     return_rot_matrices : bool
+    add_cellobjects : bool
+    verbose : bool
+    ws : Optional[Tuple[int]]
+        Window size in pixels (y, x). Default: (256, 128)
+    rot_mat : np.array
+    nb_views : int
+    comp_window : Optional[float]
+        window size in nm. the clipping box during rendering will have an extent
+         of [comp_window, comp_window / 2, comp_window]. Default: 8 um
+    return_rot_mat : bool
+
     Returns
     -------
-
+    np.ndarray
+        array of views after rendering of locations.
+    -------
     """
     if comp_window is None:
         comp_window = 8e3
@@ -1051,7 +1016,6 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
     # backwards compatibility with other color-dependent rendering methods
     # Create mesh object without redundant vertices to get same PCA rotation as for raw views
-    # tim = time.time()
     if rot_mat is None:
         mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
         querybox_edgelength = comp_window / mo.max_dist
@@ -1062,9 +1026,6 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     ind = np.arange(len(vert) // 3)
     color_array = np.repeat(color_array, 3, axis=0)  # 3 <- triangles
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
-    # tim1 = time.time()
-    # print("Time for initializing MESHOBJECT {:.2f}s."
-    #                    "".format(tim1 - tim))
     if return_rot_matrices:
         ix_views, rot_mat = _render_mesh_coords(
             coords, mo, verbose=verbose, ws=ws, depth_map=False,
@@ -1081,9 +1042,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
                                    smooth_shade=False, views_key="index",
                                    nb_views=nb_views, comp_window=comp_window,
                                    return_rot_matrices=return_rot_matrices)
-    # tim2 = time.time()
-    # print("Time for _RENDER_MESH_COORDS {:.2f}s."
-    #                    "".format(tim2 - tim1))
+
     if ix_views.shape[-1] == 3:
         ix_views = rgb2id_array(ix_views)[:, None]
     else:
@@ -1221,7 +1180,11 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
         # store number of rendering locations per SV -> Ordering of rendered
         # views must be preserved!
         part_views = np.cumsum([0] + [len(c) for c in rendering_locations])
-
+    if len(rendering_locations) == 0:
+        log_proc.warn('No rendering locations found for SSV {}.'.format(ssv.id))
+        # TODO: adapt hard-coded window size (256, 128) as soon as those are available in
+        #  `global_params`
+        return np.ones((0, global_params.NB_VIEWS, 256, 128), dtype=np.uint8) * 255
     chunk_size = len(rendering_locations) // n_jobs + 1
     params = chunkify_successive(rendering_locations, chunk_size)
     ssv_id = ssv.id
@@ -1251,7 +1214,6 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
     views = []
     out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
     for out_file in out_files2:
-        print(out_file)
         with open(out_file, 'rb') as f:
             views.append(pkl.load(f))
     views = np.concatenate(views)
@@ -1272,14 +1234,23 @@ def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None
     """
 
     Args:
-        ssv:
-        working_dir:
-        rendering_locations:
-        n_jobs:
-        verbose:
-        render_indexviews:
+        ssv: SuperSegmentationObject
+        working_dir: string
+            working directory for accessing data
+        rendering_locations: array of locations to be rendered
+            if not given, rendering locations are retrieved from the SSV's SVs. Results will be stored at SV locations.
+        n_jobs : int
+            number of parallel jobs running on same node of cluster
+        verbose : bool
+            flag to show th progress of rendering.
+        render_indexviews: Bool
+            Flag to choose between render_index_view and render_sso_coords
 
-    Returns:
+     Returns
+    -------
+    np.ndarray
+        array of views after rendering of locations.
+    -------
 
     """
     if n_jobs is None:

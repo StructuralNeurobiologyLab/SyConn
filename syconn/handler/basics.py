@@ -562,6 +562,10 @@ def chunkify_successive(l, n):
         yield l[i:i + n]
 
 
+def chunkify_successive_split(l, n):
+    return[np.array_split(l, n)]
+
+
 def flatten_list(lst):
     """
     Flattens list of lists. Same ordering as np.concatenate

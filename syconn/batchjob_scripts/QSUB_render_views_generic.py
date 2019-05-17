@@ -14,7 +14,7 @@ except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.proc.sd_proc import sos_dict_fact, init_sos
-from syconn.proc.rendering import render_sso_coords, render_sso_coords_index_views
+from syconn.proc.rendering import render_sso_coords_generic
 from syconn import global_params
 
 path_storage_file = sys.argv[1]
@@ -27,37 +27,17 @@ with open(path_storage_file, 'rb') as f:
             args.append(pkl.load(f))
         except EOFError:
             break
-
 coords = args[0]
 sso_kwargs = args[1]
 working_dir = sso_kwargs['working_dir']
 global_params.wd = working_dir
 kwargs = args[2]
-render_indexviews = kwargs['render_indexviews']
 file_store_number = args[3]
-del kwargs['render_indexviews']
 sso = SuperSegmentationObject(**sso_kwargs)
 views = 0  # in case no rendering locations are given
 file = 'file'
 file = file + str(file_store_number)
-if render_indexviews:
-    if 'add_cellobjects' in kwargs:
-        del kwargs['add_cellobjects']
-    if 'clahe' in kwargs:
-        del kwargs['clahe']
-    if 'wire_frame' in kwargs:
-        del kwargs['wire_frame']
-    if 'cellobjects_only' in kwargs:
-        del kwargs['cellobjects_only']
-    if 'return_rot_mat' in kwargs:
-        del kwargs['return_rot_mat']
-    if 'wo_glia' in kwargs:
-        del kwargs['wo_glia']
-    views = render_sso_coords_index_views(sso, coords, **kwargs)
-else:
-    if 'wo_glia' in kwargs:
-        del kwargs['wo_glia']
-    views = render_sso_coords(sso, coords, **kwargs)
+views = render_sso_coords_generic(sso, working_dir, coords, **kwargs)
 
 with open(path_out_file, "wb") as f:
     pkl.dump(views, f)
