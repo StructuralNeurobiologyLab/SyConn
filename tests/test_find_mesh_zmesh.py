@@ -33,7 +33,7 @@ def test_mesher():
         col.append(None)
         ply_fname.append("{}.ply".format(key))
 
-    write_meshes2kzip(global_params.config.temp_path + "/tets_mesh_cube1.k.zip", ind, vert, norm, col, ply_fname)
+    write_meshes2kzip("tets_mesh_cube1.k.zip", ind, vert, norm, col, ply_fname)
 
 
 if __name__ == "__main__":

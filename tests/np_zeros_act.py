@@ -1,22 +1,20 @@
-from knossos_utils import chunky
-from syconn import global_params
-from syconn.handler.basics import kd_factory
-import numpy as np
-from syconn.handler.basics import chunkify
-from syconn.mp import batchjob_utils as qu, mp_utils as sm
-from sys import getsizeof
+import collections
 
-def check_zeros():
-    a = np.zeros(shape=(3, 3), dtype=np.bool)
-    a[1, 1] = 1
-    b = np.zeros(shape=(3, 3), dtype=np.bool)
-    b[1, 1] = 1
-    b[1, 0] = 1
-    res = np.sum(a & b)
-    print("res =", res)
+def dict_functionality():
+     test_dict = collections.defaultdict(list)
+     tab = [2, 5, 8]
+
+     for i in range(10):
+         test_dict[i] = [i, 2*i, 3*i]
+
+     dict2 = test_dict[1, 3, 4]
+     print("test_dict= ", test_dict)
+     print("dict2= ", dict2)
+
+
 
 def main():
-    check_zeros();
+    dict_functionality()
 
 
 if __name__ == "__main__":
