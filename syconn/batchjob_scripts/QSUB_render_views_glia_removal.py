@@ -59,8 +59,7 @@ for g in ch:
 render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True,
                      skip_indexviews=True)
 # render huge SSVs in parallel, multiple jobs per SSV
-n_parallel_jobs = global_params.NCORES_PER_NODE  # TODO: add as soon as EGL ressource allocation
-# works # // global_params.NGPUS_PER_NODE
+n_parallel_jobs = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE
 for ssv in ssvs_large:
     render_sso_coords_multiprocessing(ssvs_large, wd, n_parallel_jobs,
                                       render_indexviews=False, return_views=False,

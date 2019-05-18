@@ -431,10 +431,11 @@ def calc_rot_matrices(coords, vertices, edge_length):
         vertices = vertices[::8]
     rot_matrices = np.zeros((len(coords), 16))
     edge_lengths = np.array([edge_length] * 3)
+    vertices = vertices.astype(np.float32)
     rotmat_dt = 0
     inlier_dt = 0
     for ii, c in enumerate(coords):
-        bounding_box = np.array([c, edge_lengths])
+        bounding_box = np.array([c, edge_lengths], dtype=np.float32)
         # start = time.time()
         inlier = np.array(vertices[in_bounding_box(vertices, bounding_box)])
         # inlier_dt += time.time() - start

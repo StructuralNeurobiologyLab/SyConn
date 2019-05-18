@@ -13,7 +13,6 @@ try:
 except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation import SuperSegmentationObject
-from syconn.proc.sd_proc import sos_dict_fact, init_sos
 from syconn.proc.rendering import render_sso_coords, render_sso_coords_index_views
 from syconn import global_params
 

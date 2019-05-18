@@ -140,7 +140,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         n_cores = 1
     if disable_batchjob or not batchjob_enabled():
         return batchjob_fallback(params, name, n_cores, suffix, n_max_co_processes,
-                                 script_folder, python_path)
+                                 script_folder, python_path,
+                                 remove_jobfolder=remove_jobfolder)
     if queue is None:
         queue = global_params.BATCH_QUEUE
     if pe is None:
@@ -505,7 +506,7 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
 
 def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=None,
-                      script_folder=None, python_path=None):
+                      script_folder=None, python_path=None, remove_jobfolder=False):
     """
     # TODO: utilize log and error files ('path_to_err', path_to_log')
     Fallback method in case no batchjob submission system is available.
@@ -586,6 +587,8 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     start_multiprocess_imap(fallback_exec, multi_params, debug=False,
                             nb_cpus=n_max_co_processes)
     log_batchjob.debug('Finished "{}" after {:.2f}s.'.format(name, time.time() - start))
+    if remove_jobfolder:
+        shutil.rmtree(job_folder, ignore_errors=True)
     return path_to_out
 
 

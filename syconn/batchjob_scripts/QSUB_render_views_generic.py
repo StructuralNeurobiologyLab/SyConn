@@ -34,7 +34,6 @@ global_params.wd = working_dir
 kwargs = args[2]
 file_store_number = args[3]
 sso = SuperSegmentationObject(**sso_kwargs)
-views = 0  # in case no rendering locations are given
 file = 'file'
 file = file + str(file_store_number)
 views = render_sso_coords_generic(sso, working_dir, coords, **kwargs)

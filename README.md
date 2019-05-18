@@ -45,3 +45,9 @@ The first version of SyConn (see branch [dorkenwald2017nm](https://github.com/St
 The Synaptic connectivity inference toolkit is developed at Max-Planck-Institute of Neurobiology, Munich.
 
 Authors: Philipp Schubert, Sven Dorkenwald, Rangoli Saxena, Joergen Kornfeld
+
+
+# Acknowledgements
+We thank deepmind for providing egl extension code to handle multi-gpu rendering on
+ the same machine, which is under the Apache License 2.0. The original code snippet used in our
+ project can be found [here](https://github.com/deepmind/dm_control/blob/30069ac11b60ee71acbd9159547d0bc334d63281/dm_control/_render/pyopengl/egl_ext.py).
