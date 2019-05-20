@@ -25,17 +25,19 @@ from syconn.proc.graphs import create_ccsize_dict
 from syconn.handler.basics import chunkify, kd_factory
 
 
-def sd_init(co, generate_sv_meshes, max_n_jobs):
+def sd_init(co, max_n_jobs):
     sd_seg = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir,
                                  version="0")
-    multi_params = chunkify(sd_seg.so_dir_paths, max_n_jobs)
-    so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type=co)
-    if co != "sv" or (co == "sv" and generate_sv_meshes):
-        multi_params = [[par, so_kwargs] for par in multi_params]
-        _ = qu.QSUB_script(multi_params, "mesh_caching", suffix=co, remove_jobfolder=True,
-                           n_max_co_processes=global_params.NCORE_TOTAL)
+    # if co != "sv" or (co == "sv" and generate_sv_meshes):
+    #
+    #     _ = qu.QSUB_script(multi_params, "mesh_caching", suffix=co, remove_jobfolder=True,
+    #                        n_max_co_processes=global_params.NCORE_TOTAL)
 
     if co == "sv":
+        multi_params = chunkify(sd_seg.so_dir_paths, max_n_jobs)
+        so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type=co)
+        multi_params = [[par, so_kwargs] for par in multi_params]
+
         _ = qu.QSUB_script(multi_params, "sample_location_caching",
                            n_max_co_processes=global_params.NCORE_TOTAL,
                            suffix=co, remove_jobfolder=True)
@@ -110,14 +112,14 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
     sd_proc.map_subcell_extract_props(
         global_params.config.kd_seg_path, global_params.config.kd_organelle_seg_paths,
         n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs_sc, n_chunk_jobs=max_n_jobs,
-        cube_of_interest_bb=cube_of_interest_bb, chunk_size=chunk_size, log=log)
+        cube_of_interest_bb=cube_of_interest_bb, chunk_size=chunk_size, log=log, generate_sv_mesh=generate_sv_meshes)
     log.info('Finished extraction and mapping after {:.0f}s.'
              ''.format(time.time() - start))
 
     log.info('Caching properties and calculating meshes for subcellular '
              'structures {} and cell supervoxels'.format(global_params.existing_cell_organelles))
     start = time.time()
-    ps = [Process(target=sd_init, args=[co, generate_sv_meshes, max_n_jobs])
+    ps = [Process(target=sd_init, args=[co, max_n_jobs])
           for co in ["sv"] + global_params.existing_cell_organelles]
     for p in ps:
         p.start()

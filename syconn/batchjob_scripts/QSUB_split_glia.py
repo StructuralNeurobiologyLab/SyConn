@@ -45,9 +45,7 @@ for cc in args:
     sos = init_sos(sd)
     sso._objects["sv"] = sos
     try:
-        sso.gliaspl
-
-        it(verbose=False)
+        sso.gliasplit(verbose=False)
     except Exception as e:
         print("\n-------------------------------------\n"
               "ERROR: Splitting of SSV %d failed with %s."

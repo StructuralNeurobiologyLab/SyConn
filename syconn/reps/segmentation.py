@@ -11,7 +11,7 @@ import networkx as nx
 from scipy import spatial
 from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
-from skimage.measure import mesh_surface_area
+from ..proc.meshes import mesh_area_calc
 
 from .. import global_params
 from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING
@@ -705,8 +705,7 @@ class SegmentationObject(object):
         float
             Mesh area in um^2
         """
-        return mesh_surface_area(self.mesh[1].reshape(-1, 3),
-                                 self.mesh[0].reshape(-1, 3)) / 1e6
+        return mesh_area_calc(self.mesh)
 
     @property
     def sample_locations_exist(self):

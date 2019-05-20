@@ -35,7 +35,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     example_cube_id = args.example_cube
     if args.working_dir == "":  # by default use cube dependent working dir
-        args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)
+        args.working_dir = "~/example_cube{}/".format(example_cube_id)
     example_wd = os.path.expanduser(args.working_dir)
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
 
