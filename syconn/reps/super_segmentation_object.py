@@ -31,7 +31,7 @@ from ..proc.sd_proc import predict_sos_views
 from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     knossos_ml_from_svixs, subfold_from_ix_SSO
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
-    coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify
+    coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify, data2kzip
 from ..backend.storage import CompressedStorage, MeshStorage
 from ..proc.graphs import split_glia, split_subcc_join, create_graph_from_coords
 from ..proc.meshes import write_mesh2kzip, merge_someshes, \
@@ -591,7 +591,9 @@ class SuperSegmentationObject(object):
             return -1
 
     def load_sv_graph(self):
-        if os.path.isfile(self.edgelist_path):
+        if self._sv_graph is not None:
+            G = self._sv_graph
+        elif os.path.isfile(self.edgelist_path):
             G = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
         # # Might be useful as soon as global graph path is available
         # else:
@@ -605,8 +607,6 @@ class SuperSegmentationObject(object):
         #             "SV IDs in graph differ from SSV SVs."
         #         for e in G_glob.edges(cc):
         #             G.add_edge(*e)
-        elif self._sv_graph is not None:
-            G = self._sv_graph
         else:
             raise ValueError("Could not find graph data for SSV {}."
                              "".format(self.id))
@@ -1462,7 +1462,7 @@ class SuperSegmentationObject(object):
             semseg_key = 'spiness4', nb_views=4
             This requires to run 'self._render_rawviews(nb_views=4)'
             This method then has to be called like:
-                'self.predict_semseg('spiness4', nb_views=4)'
+                'self.predict_semseg(m, 'spiness4', nb_views=4)'
 
         Parameters
         ----------
@@ -1846,25 +1846,47 @@ class SuperSegmentationObject(object):
         mesh2obj_file(dest_path, self.mesh, center=center, color=color,
                       scale=scale)
 
-    def export_kzip(self, dest_path=None, sv_color=None):
+    def export2kzip(self, dest_path, sv_graph=None, sv_color=None):
         """
         Writes the sso to a KNOSSOS loadable kzip.
         Color is specified as rgba, 0 to 255.
 
+        Will not invoke `load_attr_dict`
+
+        Saved SSO can also be re-loaded as an SSO instance via
+        `syconn.proc.ssd_assembly.init_sso_from_kzip`
+
         Parameters
         ----------
         dest_path : str
+        sv_graph : nx.Graph
+            SV graph of SSV with uint nodes
         sv_color : 4-tuple of int
-
-        Returns
-        -------
-
         """
-
-        self.load_attr_dict()
-        self.save_skeleton_to_kzip(dest_path=dest_path)
-        self.save_objects_to_kzip_sparse(["mi", "sj", "vc"],
-                                         dest_path=dest_path)
+        # # The next two calls are probably deprecated
+        # self.save_skeleton_to_kzip(dest_path=dest_path)
+        # self.save_objects_to_kzip_sparse(["mi", "sj", "vc"],
+        #                                  dest_path=dest_path)
+        tmp_dest_p = ['{}_skeleton.pkl'.format(dest_path),
+                      '{}_rag.bz2'.format(dest_path),
+                      '{}_sample_locations.pkl'.format(dest_path),
+                      '{}_attr_dict.pkl'.format(dest_path),
+                      '{}_meta.pkl'.format(dest_path)]
+        write_obj2pkl(tmp_dest_p[0], self.skeleton)
+        if sv_graph is None:
+            if not os.path.isfile(self.edgelist_path):
+                raise ValueError("Could not find SV graph of SSV {}. Please"
+                                 " pass `sv_graph` as kwarg.".format(self))
+            sv_graph = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
+        nx.write_edgelist(sv_graph, tmp_dest_p[1])
+        # np.save(tmp_dest_p[2], self.sample_locations())
+        write_obj2pkl(tmp_dest_p[2], self.sample_locations())
+        write_obj2pkl(tmp_dest_p[3], self.attr_dict)
+        write_obj2pkl(tmp_dest_p[4], {'version_dict': self.version_dict,
+                                      'scaling': self.scaling,
+                                      'working_dir': self.working_dir})
+        data2kzip(dest_path, tmp_dest_p, ['skeleton.pkl', 'rag.bz2', 'sample_locations.pkl',
+                                          'attr_dict.pkl', 'meta.pkl'])
         self.meshes2kzip(dest_path=dest_path, sv_color=sv_color)
         self.mergelist2kzip(dest_path=dest_path)
 

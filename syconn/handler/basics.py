@@ -25,7 +25,7 @@ import networkx as nx
 import contextlib
 import tqdm
 import warnings
-
+from plyfile import PlyData, PlyElement
 from . import log_handler
 from .. import global_params
 
@@ -316,6 +316,31 @@ def read_txt_from_zip(zip_fname, fname_in_zip):
     return txt
 
 
+def read_mesh_from_zip(zip_fname, fname_in_zip):
+    """
+    Read ply file from zip. Currently does not support normals!
+
+    Parameters
+    ----------
+    zip_fname : str
+    fname_in_zip : str
+
+    Returns
+    -------
+    np.array, np.array, np.array
+    """
+    with zipfile.ZipFile(zip_fname, allowZip64=True) as z:
+        txt = z.open(fname_in_zip)
+        plydata = PlyData.read(txt)
+        vert = plydata['vertex'].data
+        vert = vert.view((np.float32, len(vert.dtype.names))).flatten()
+        ind = np.array(plydata['face'].data['vertex_indices'].tolist()).flatten()
+        # TODO: support normals
+        # norm = plydata['normals'].data
+        # norm = vert.view((np.float32, len(vert.dtype.names))).flatten()
+    return [ind, vert, None]
+
+
 def write_txt2kzip(kzip_path, text, fname_in_zip, force_overwrite=False):
     """
     Write string to file in k.zip.
@@ -388,7 +413,7 @@ def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
 def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
               verbose=False):
     """
-    Write files to k.zip.
+    Write files to k.zip. Finally removes files at `fpaths`.
 
     Parameters
     ----------

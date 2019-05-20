@@ -790,8 +790,8 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
     ply_fname : str
     """
     if len(vert) == 0:
-        log_proc.warn("'write_mesh2kzip' call with empty vertex array. Did not"
-                      " write data to kzip.")
+        log_proc.warn("'write_mesh2kzip' called with empty vertex array. Did not"
+                      " write data to kzip. `ply_fname`. {}".format(ply_fname))
         return
     tmp_dest_p = '{}_{}'.format(k_path, ply_fname)
     if color is not None:

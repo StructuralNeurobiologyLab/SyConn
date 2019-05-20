@@ -5,46 +5,92 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 import numpy as np
-try:
-    from knossos_utils import mergelist_tools
-except ImportError:
-    from knossos_utils import mergelist_tools_fallback as mergelist_tool
+import zipfile
+import os
+import shutil
+import re
+import pickle as pkl
+from ..handler.basics import read_mesh_from_zip
+from ..reps.super_segmentation import SuperSegmentationObject
+from .. import global_params
+import networkx as nx
 
 
-def assemble_from_mergelist(ssd, mergelist):
-    if mergelist is not None:
-        assert "sv" in ssd.version_dict
-        if isinstance(mergelist, dict):
-            pass
-        elif isinstance(mergelist, str):
-            with open(mergelist, "r") as f:
-                mergelist = mergelist_tools. \
-                    subobject_map_from_mergelist(f.read())
-        else:
-            raise Exception("sv_mapping has unknown type")
+def init_sso_from_kzip(path, sso_id=None):
+    """
+    Initializes cell reconstruction from k.zip file.
+    The k.zip needs the following content:
+        - Mesh files: 'sv.ply', 'mi.ply', 'sj.ply', 'vc.ply'
+        - Rendering locations: 'sample_locations.pkl'  (currently broekn to use .npy, fixed in
+        python 3.7)
+        - Supervoxel graph: 'rag.bz2'
+        - meta dict: 'meta.pkl'
+        - [Optional] Skeleton representation: 'skeleton.pkl'
+        - [Optional] attribute dict: 'attr_dict.pkl'
 
-    ssd.reversed_mapping_dict = mergelist
+    Parameters
+    ----------
+    path : str
+        Path to kzip which contains SSV data
+    sso_id : int
+        ID of SSV, if not given looks for the first scalar occurrence in `path`
 
-    for sv_id in mergelist.values():
-        ssd.mapping_dict[sv_id] = []
+    Returns
+    -------
+    SuperSegmentationObject
+    """
+    if sso_id is None:
+        sso_id = int(re.findall("/(\d+).", path)[0])
+    zip = zipfile.ZipFile(path)
+    files = zip.namelist()
 
-    # Changed -1 defaults to 0
-    # ssd._id_changer = np.zeros(np.max(list(mergelist.keys())) + 1,
-    #                           dtype=np.uint)
-    # TODO: check if np.int might be a problem for big datasets
-    ssd._id_changer = np.ones(int(np.max(list(mergelist.keys())) + 1),
-                              dtype=np.int) * (-1)
+    # attribute dictionary
+    with zipfile.ZipFile(path, allowZip64=True) as z:
+        f = z.open("meta.pkl")
+        meta_dc = pkl.load(f)
 
-    for sv_id in mergelist.keys():
-        ssd.mapping_dict[mergelist[sv_id]].append(sv_id)
-        ssd._id_changer[sv_id] = mergelist[sv_id]
+    sso = SuperSegmentationObject(sso_id, version="tmp", **meta_dc)
+    # Required to enable prediction in 'tmp' SSVs # TODO: change those properties in SSO constructor
+    sso._mesh_caching = True
+    sso._view_caching = True
 
-    ssd.save_dataset_shallow()
+    # meshes
+    for obj_type in global_params.existing_cell_organelles + ["sv"]:
+        ply_name = "{}.ply".format(obj_type)
+        if ply_name in files:
+            sso._meshes[obj_type] = read_mesh_from_zip(path, ply_name)
+
+    # skeleton
+    if "skeleton.pkl" in files:
+        with zipfile.ZipFile(path, allowZip64=True) as z:
+            f = z.open("skeleton.pkl")
+            sso._skeleton = pkl.load(f)  # or loads?  returns a dict
+
+    # attribute dictionary
+    if "attr_dict.pkl" in files:
+        with zipfile.ZipFile(path, allowZip64=True) as z:
+            f = z.open("attr_dict.pkl")
+            sso.attr_dict = pkl.load(f)
+
+    # Sample locations
+    with zipfile.ZipFile(path, allowZip64=True, mode='r') as z:
+        f = z.open("sample_locations.pkl")
+        sso._sample_locations = pkl.load(f)
+        # # currently broken, fixed in python 3.7:
+        # https://stackoverflow.com/questions/33742544/zip-file-not-seekable
+        # f = z.open("sample_locations.npy", mode='r')
+        # sso._sample_locations = np.load(f)
+
+    # RAG
+    with zipfile.ZipFile(path, allowZip64=True) as z:
+        tmp_dir = os.path.dirname(path)
+        tmp_p = "{}/rag.bz2".format(tmp_dir)
+        z.extract('rag.bz2', tmp_dir)
+        sso._sv_graph = nx.read_edgelist(tmp_p, nodetype=np.uint)
+        os.remove(tmp_p)
+        _ = sso.rag  # invoke node conversion into SegmentationObjects
+    return sso
 
 
-def split_ssv(ssd, ssv_id, sv_ids_1, sv_ids_2):
-    pass
-
-
-def merge_ssvs(ssd, ssv_ids):
+def init_ssd_from_kzips(dir_path):
     pass
