@@ -9,10 +9,11 @@ import numpy as np
 from knossos_utils.skeleton_utils import load_skeleton
 from sklearn.neighbors import KDTree
 from syconn.proc.meshes import MeshObject, write_mesh2kzip
+from syconn.handler.multiviews import generate_rendering_locs
 from syconn.proc.graphs import bfs_smoothing
 from syconn.proc.rendering import render_sso_coords, _render_mesh_coords,\
     render_sso_coords_index_views
-from syconn.reps.super_segmentation import SuperSegmentationObject
+from syconn.reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
 from syconn.reps.views import ViewContainer
 from syconn import global_params
 from syconn.handler.compression import save_to_h5py
@@ -61,7 +62,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     sso = SuperSegmentationObject(sso_id, version=ssd_version)
     if initial_run:  # use default SSD version
         orig_sso = SuperSegmentationObject(sso_id)
-        orig_sso.copy2dir(dest_dir=sso.ssv_dir)
+        orig_sso.copy2dir(dest_dir=sso.ssv_dir, safe=False)
     if not sso.attr_dict_exists:
         msg = 'Attribute dict of original SSV was not copied successfully ' \
               'to target SSD.'
@@ -73,7 +74,11 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     vertices = vertices.reshape((-1, 3))
 
     # load skeleton
-    skel = load_skeleton(kzip_path)["skeleton"]
+    skel = load_skeleton(kzip_path)
+    if len(skel) == 1:
+        skel = list(skel.values())[0]
+    else:
+        skel = skel["skeleton"]
     skel_nodes = list(skel.getNodes())
 
     node_coords = np.array([n.getCoordinate() * sso.scaling for n in skel_nodes])
@@ -89,10 +94,6 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     if n_voting > 0:
         vertex_labels = bfs_smoothing(vertices, vertex_labels, n_voting=n_voting)
     color_array = palette[vertex_labels].astype(np.float32) / 255.
-
-    # for getting vertices of individual SSO
-    # np.save("/wholebrain/u/pschuber/spiness_skels/sso_%d_vertlabels.k.zip" % sso.id, vertex_labels)
-    # np.save("/wholebrain/u/pschuber/spiness_skels/sso_%d_verts.k.zip" % sso.id, vertices)
 
     if out_path is not None:
         if gt_type == 'spgt':  #
@@ -110,7 +111,8 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
 
     # use downsampled locations for view locations, only if they are close to a
     # labeled skeleton node
-    locs = np.concatenate(sso.sample_locations(cache=False))
+    locs = generate_rendering_locs(vertices, comp_window / 6)  # 6 rendering locations per comp.
+    # window
     dist, ind = tree.query(locs)
     locs = locs[dist[:, 0] < 2000]#[::3][:5]  # TODO add as parameter
 
@@ -129,7 +131,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
                                                return_rot_matrices=True, ws=ws,
                                                smooth_shade=False, nb_views=nb_views,
                                                comp_window=comp_window, verbose=verbose)
-    label_views = remap_rgb_labelviews(label_views, palette)[:, None]
+    label_views = remap_rgb_labelviews(label_views[..., :3], palette)[:, None]
     index_views = render_sso_coords_index_views(sso, locs, rot_mat=rot_mat, verbose=verbose,
                                                 nb_views=nb_views, ws=ws, comp_window=comp_window)
     raw_views = render_sso_coords(sso, locs, nb_views=nb_views, ws=ws,
@@ -153,6 +155,17 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
     -------
 
     """
+    sso_ids = [int(re.findall("/(\d+).", kzip_path)[0]) for kzip_path in kzip_paths]
+    ssd = SuperSegmentationDataset()
+    if not np.all([ssv.lookup_in_attribute_dict("size") is not None for ssv in
+                   ssd.get_super_segmentation_object(sso_ids)]):
+        print("Not all SSV IDs are part of " \
+            "the current SSD. IDs: {}".format([sso_id for sso_id in sso_ids if sso_id not in
+                                               ssd.ssv_ids]))
+        kzip_paths = np.array(kzip_paths)[np.array([ssv.lookup_in_attribute_dict("size") is not None for ssv in
+                   ssd.get_super_segmentation_object(sso_ids)])]
+        print("Ignoring missing IDs. Using {} k.zip files for GT "
+              "generation,".format(len(kzip_paths)))
     if dest_dir is None:
         dest_dir = os.path.expanduser("~/{}_semseg/".format(gt_type))
     if not os.path.isdir(dest_dir):
@@ -163,17 +176,19 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
         os.makedirs(dest_p_cache)
     start_multiprocess_imap(gt_generation_helper, params, nb_cpus=cpu_count(),
                             debug=False)
+    if gt_type == 'axgt':
+        return
     # Create Dataset splits for training, validation and test
     all_raw_views = []
     all_label_views = []
     # all_index_views = []  # Removed index views
-    print("Collecting views.")
+    print("Writing views.")
     for ii in range(len(kzip_paths)):
         sso_id = int(re.findall("/(\d+).", kzip_paths[ii])[0])
         dest_p = "{}/{}/".format(dest_p_cache, sso_id)
         raw_v = np.load(dest_p + "raw.npy")
         label_v = np.load(dest_p + "label.npy")
-        # index_v = np.load(dest_p + "index.npy")  # Removed index views
+        index_v = np.load(dest_p + "index.npy")  # Removed index views
         all_raw_views.append(raw_v)
         all_label_views.append(label_v)
         # all_index_views.append(index_v)  # Removed index views
@@ -194,11 +209,11 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
     print("Reshaping arrays.")
     all_raw_views = all_raw_views.reshape((-1, 4, ws[1], ws[0]))
     all_label_views = all_label_views.reshape((-1, 1, ws[1], ws[0]))
-    # all_index_views = all_index_views.reshape((-1, 1, 128, 256))  # Removed index views
-    # all_raw_views = np.concatenate([all_raw_views, all_index_views], axis=1)  # Removed index views
+    # # all_index_views = all_index_views.reshape((-1, 1, 128, 256))  # Removed index views
+    # # all_raw_views = np.concatenate([all_raw_views, all_index_views], axis=1)  # Removed index views
     raw_train, raw_valid, label_train, label_valid = train_test_split(all_raw_views, all_label_views, train_size=0.8,
                                                                       shuffle=False)
-    # raw_valid, raw_test, label_valid, label_test = train_test_split(raw_other, label_other, train_size=0.5, shuffle=False)  # Removed index views
+    # # raw_valid, raw_test, label_valid, label_test = train_test_split(raw_other, label_other, train_size=0.5, shuffle=False)  # Removed index views
     print("Writing h5 files.")
     os.makedirs(dest_dir, exist_ok=True)
     # chunk output data
@@ -229,6 +244,8 @@ def gt_generation_helper(args):
         os.makedirs(dest_p)
     np.save(dest_p + "raw.npy", raw_views)
     np.save(dest_p + "label.npy", label_views)
+    save_to_h5py([raw_views, label_views.astype(np.uint8)], dest_dir + "/data_{}.h5".format(sso_id),
+                 ["raw", "label"])
     # np.save(dest_p + "index.npy", index_views)
 
     # DEBUG PART START, write out images for manual inspection in Fiji
@@ -277,11 +294,37 @@ if __name__ == "__main__":
     if 1:
         initial_run = False
         ws = (1024, 512)
-        n_views = 3  # increase views per location due to higher pixel size, also increases GT diversity
+        n_views = 6  # increase views per location due to higher pixel size, also increases GT
+        # diversity
+
+        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_{" \
+                      "}/".format(ws[0])
+
+        # Process original data
+        global_params.wd = "/wholebrain/scratch/areaxfs3/"
         assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
-        label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_axoness_semseg_skeletons/"
-        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_{}/".format(ws[0])
+        label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
+                            "/gt_axoness_semseg_skeletons/"
+        file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
+        GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
+                      ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on ve
+
+        # Process new batches
+        global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+        assert global_params.wd == "/wholebrain/songbird/j0126/areaxfs_v6/"
+
+        label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
+                            "/gt_axoness_semseg_skeletons//batch3/"
+        file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
+        global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+        assert global_params.wd == "/wholebrain/songbird/j0126/areaxfs_v6/"
+
+
+        label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
+                            "/gt_axoness_semseg_skeletons/BATCH2_Feb2019/Annotations/"
         file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
         GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
                       ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)
-        # TODO: add new GT files based on areaxfs_v6
+
+        GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
+                      ws=ws, comp_window=40.96e3*2, n_voting=0)

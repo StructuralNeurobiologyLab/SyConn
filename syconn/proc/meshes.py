@@ -533,33 +533,6 @@ def get_bounding_box(coordinates):
     return mean, max_dist
 
 
-# @jit
-# def in_bounding_box(coords, bounding_box):
-#     """
-#     Loop version with numba
-#
-#     Parameters
-#     ----------
-#     coords : np.array (N x 3)
-#     bounding_box : tuple (np.array, np.array)
-#         center coordinate and edge lengths of bounding box
-#
-#     Returns
-#     -------
-#     np.array of bool
-#         inlying coordinates are indicated as true
-#     """
-#     edge_sizes = bounding_box[1] / 2
-#     coords = np.array(coords) - bounding_box[0]
-#     inlier = np.zeros((len(coords)), dtype=np.bool)
-#     for i in range(len(coords)):
-#         x_cond = (coords[i, 0] > -edge_sizes[0]) & (coords[i, 0] < edge_sizes[0])
-#         y_cond = (coords[i, 1] > -edge_sizes[1]) & (coords[i, 1] < edge_sizes[1])
-#         z_cond = (coords[i, 2] > -edge_sizes[2]) & (coords[i, 2] < edge_sizes[2])
-#         inlier[i] = x_cond & y_cond & z_cond
-#     return inlier
-
-
 @jit
 def get_avg_normal(normals, indices, nbvert):
     normals_avg = np.zeros((nbvert, 3), np.float)
@@ -751,7 +724,7 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
                       "automatically, data will be unusable if not normalized"
                       " between 0 and 255. min/max of data:"
                       " {}, {}".format(rgba_color.min(), rgba_color.max()))
-    elif rgba_color.dtype.kind != "u1":
+    elif not np.issubdtype(rgba_color.dtype, np.uint8):
         log_proc.warn("Color array is not of type integer or unsigned integer."
                       " It will now be converted automatically, data will be "
                       "unusable if not normalized between 0 and 255."
