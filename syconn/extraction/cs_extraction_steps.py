@@ -120,7 +120,10 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
         merge_prop_dicts([syn_props, curr_syn_props])
         merge_type_dicts([tot_asym_cnt, asym_cnt])
         merge_type_dicts([tot_sym_cnt, sym_cnt])
-
+    log.info('Finished cs ({}) and syn ({}) extraction.'.format(
+        len(cs_props[0]), len(syn_props[0])))
+    if len(syn_props[0]) == 0:
+        log.critical('WARNING: Did not find any synapses during extraction step.')
     # TODO: extract syn objects! maybe replace sj_0 Segmentation dataset by the overlapping CS<->
     #  sj objects -> run syn. extraction and sd_generation in parallel and return mi_0, vc_0 and
     #  syn_0 -> use syns as new sjs during rendering!
@@ -193,8 +196,8 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
                                           obj_type='cs', version=0)
     dataset_analysis(sd, recompute=True, compute_meshprops=False)
 
-    # for p in dict_paths:
-    #     os.remove(p)
+    for p in dict_paths:
+        os.remove(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
 
 
@@ -203,7 +206,8 @@ def _contact_site_extraction_thread(args):
     knossos_path = args[1]
 
     kd = kd_factory(knossos_path)
-    kd_syn = kd_factory(global_params.config.kd_sj_path)
+    # TODO: change back to kd.kd_sj_path (proba maps -> get rid of SJ extraction)
+    kd_syn = kd_factory(global_params.config.kd_organelle_seg_paths['sj'])
     if global_params.config.syntype_available:
         kd_syntype_sym = kd_factory(global_params.config.kd_sym_path)
         kd_syntype_asym = kd_factory(global_params.config.kd_asym_path)
@@ -232,8 +236,9 @@ def _contact_site_extraction_thread(args):
         offset = np.array(chunk.coordinates).astype(np.int)
         size = np.array(chunk.size)
         start = time.time()
-        syn_d = (kd_syn.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config.entries[
-            'Probathresholds']['sj']).astype(np.uint8)
+        # syn_d = (kd_syn.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config.entries[
+        #     'Probathresholds']['sj']).astype(np.uint8)
+        syn_d = (kd_syn.from_overlaycubes_to_matrix(size, offset, datatype=np.uint64) > 0).astype(np.uint8)
         # get binary mask for symmetric and asymmetric syn. type per voxel  # TODO: add
         #  thresholds to global_params
         if global_params.config.syntype_available:
@@ -264,9 +269,9 @@ def _contact_site_extraction_thread(args):
         merge_type_dicts([tot_asym_cnt, asym_cnt])
         merge_type_dicts([tot_sym_cnt, sym_cnt])
         del curr_cs_p, curr_syn_p, asym_cnt, sym_cnt
-    log_extraction.debug("Cum. time for loading data: {:.2f} s; for processing: {:.2f} "
-                         "s".format(
-        cum_dt_data, cum_dt_proc))
+    # log_extraction.debug("Cum. time for loading data: {:.2f} s; for processing: {:.2f} "
+    #                      "s. {} cs and {} syn. {}".format(
+    #     cum_dt_data, cum_dt_proc, len(cs_props[0]), len(syn_props[0]), syn_d.max()))
     return cs_props, syn_props, tot_asym_cnt, tot_sym_cnt
 
 

@@ -57,6 +57,7 @@ def kd_init(co, chunk_size, transf_func_kd_overlay, load_cellorganelles_from_kd_
 def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=10000, max_n_jobs=None,
                           generate_sv_meshes=False, load_cellorganelles_from_kd_overlaycubes=False,
                           transf_func_kd_overlay=None, cube_of_interest_bb=None):
+    # TODO: Don't extract sj objects and replace their use-cases with syn objects (?)
     """
     If `global_params.config.prior_glia_removal==True`:
         stores pruned RAG at `global_params.config.pruned_rag_path`, required for all glia

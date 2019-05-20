@@ -19,7 +19,6 @@ from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.proc.rendering import render_sso_coords_multiprocessing
 from syconn.handler.basics import chunkify
 from syconn.mp.batchjob_utils import QSUB_script
-from syconn.mp.mp_utils import start_multiprocess_obj
 from syconn import global_params
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -50,9 +49,8 @@ for ssv_ix in ch:
         ssvs_small.append(sso)
 
 # render huge SSVs in parallel, multiple jobs per SSV
-n_parallel_jobs = global_params.NCORES_PER_NODE  # TODO: add as soon as EGL resource allocation
-# works
-# works # // global_params.NGPUS_PER_NODE
+n_parallel_jobs = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE  # Assumes that
+# this job is always started using half of the node and with one GPU
 for ssv in ssvs_large:
     render_sso_coords_multiprocessing(ssvs_large, wd, n_parallel_jobs,
                                       render_indexviews=False, return_views=False,
@@ -73,8 +71,5 @@ if len(ssvs_small) != 0:
         n_max_co_processes=n_parallel_jobs)
     folder_del = os.path.abspath(path_out + "/../")
     shutil.rmtree(folder_del, ignore_errors=True)
-    # TODO: this call leads to an error -> investigate further
-    # start_multiprocess_obj('render_views', [[ssv, render_kwargs] for ssv in ssvs_small],
-    #                        nb_cpus=n_parallel_jobs)
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

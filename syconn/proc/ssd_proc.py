@@ -59,7 +59,8 @@ def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=No
 
     else:
         _ = qu.QSUB_script(multi_params, "aggregate_segmentation_object_mappings",
-                           n_max_co_processes=n_max_co_processes, n_cores=nb_cpus)
+                           n_max_co_processes=n_max_co_processes, n_cores=nb_cpus,
+                           remove_jobfolder=True)
 
 
 def _aggregate_segmentation_object_mappings_thread(args):
@@ -126,7 +127,8 @@ def apply_mapping_decisions(ssd, obj_types, n_jobs=None, qsub_pe=None,
 
     else:
         _ = qu.QSUB_script(multi_params, "apply_mapping_decisions",
-                           n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
+                           n_cores=nb_cpus, n_max_co_processes=n_max_co_processes,
+                           remove_jobfolder=True)
 
 
 def _apply_mapping_decisions_thread(args):
@@ -276,7 +278,8 @@ def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue
 
     else:
         _ = qu.QSUB_script(multi_params, "map_synssv_objects",
-                           n_max_co_processes=n_max_co_processes)
+                           n_max_co_processes=n_max_co_processes,
+                           remove_jobfolder=True)
 
 
 def map_synssv_objects_thread(args):

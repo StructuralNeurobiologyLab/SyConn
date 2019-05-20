@@ -21,7 +21,7 @@ opencv-python
 numba==0.41.0
 llvmlite==0.26.0
 plyfile
-openmesh
+openmesh==1.1.3
 pytest
 pytest-runner
 prompt-toolkit <2.0

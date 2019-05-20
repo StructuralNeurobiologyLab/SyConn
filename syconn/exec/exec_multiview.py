@@ -12,6 +12,7 @@ import os
 import numpy as np
 import networkx as nx
 import re
+import shutil
 
 from syconn.reps.rep_helper import knossos_ml_from_ccs
 from syconn.reps.segmentation_helper import find_missing_sv_views
@@ -25,7 +26,6 @@ from syconn.handler.prediction import get_glia_model
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.proc import ssd_proc
 from syconn.reps.super_segmentation_helper import find_incomplete_ssv_views
-from syconn.global_params import NGPU_TOTAL
 from syconn import global_params
 from syconn.handler.prediction import get_axoness_model
 from syconn.handler.basics import chunkify
@@ -205,7 +205,7 @@ def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
                     for par in multi_params]
     log.info('Starting spine prediction.')
     qu.QSUB_script(multi_params, "predict_spiness_chunked",
-                   n_max_co_processes=NGPU_TOTAL,
+                   n_max_co_processes=global_params.NGPU_TOTAL,
                    n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
                    suffix="",  additional_flags="--gres=gpu:1",
                    remove_jobfolder=True)
@@ -232,13 +232,10 @@ def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
 
 def run_neuron_rendering(max_n_jobs=None):
     if max_n_jobs is None:
-        max_n_jobs = global_params.NGPU_TOTAL * 2 if global_params.PYOPENGL_PLATFORM == 'egl' \
-            else global_params.NCORE_TOTAL * 2
+        max_n_jobs = global_params.NGPU_TOTAL * 4 if global_params.PYOPENGL_PLATFORM == 'egl' \
+            else global_params.NCORE_TOTAL * 4
     log = initialize_logging('neuron_view_rendering',
                              global_params.config.working_dir + '/logs/')
-    # TODO: currently working directory has to be set globally in global_params
-    #  and is not adjustable here because all qsub jobs will start a script
-    #  referring to 'global_params.config.working_dir'
     # view rendering prior to glia removal, choose SSD accordingly
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
@@ -249,8 +246,6 @@ def run_neuron_rendering(max_n_jobs=None):
     # render normal size SSVs
     size_mask = nb_svs_per_ssv <= global_params.RENDERING_MAX_NB_SV
     multi_params = ssd.ssv_ids[size_mask]
-    # TODO: move from osmesa to egl, egl rendering worker (10 cpus, 1 gpu) then should utilize more threads for bigger
-    #  SSVs, and run more SSVs in parallel if they are small
     # sort ssv ids according to their number of SVs (descending)
     ordering = np.argsort(nb_svs_per_ssv[size_mask])
     multi_params = multi_params[ordering[::-1]]
@@ -262,28 +257,28 @@ def run_neuron_rendering(max_n_jobs=None):
         log.info('{} huge SSVs will be rendered afterwards using the whole'
                  ' cluster.'.format(np.sum(~size_mask)))
     # generic
-    # TODO: switch n_cores to `global_params.NGPUS_TOTAL` as soon as EGL ressource allocation works!
     if global_params.PYOPENGL_PLATFORM == 'osmesa':  # utilize all CPUs
         path_to_out = qu.QSUB_script(multi_params, "render_views",
-                                     n_max_co_processes=global_params.NCORE_TOTAL)
+                           n_max_co_processes=global_params.NCORE_TOTAL,
+                           remove_jobfolder=False)
     elif global_params.PYOPENGL_PLATFORM == 'egl':  # utilize 1 GPU per task
-        # run 20 parallel jobs, egl will work on single node
+        # run EGL on single node: 20 parallel jobs
         if global_params.config.working_dir is not None and 'example_cube' in \
                 global_params.config.working_dir:
             n_cores = 1
             n_parallel_jobs = global_params.NCORES_PER_NODE
-            _ = qu.QSUB_script(multi_params, "render_views",
+            path_to_out = qu.QSUB_script(multi_params, "render_views",
                                n_max_co_processes=n_parallel_jobs,
                                additional_flags="--gres=gpu:2",
-                               n_cores=n_cores, remove_jobfolder=True)
-        # else restrict job to only use one instance
+                               n_cores=n_cores, remove_jobfolder=False)
+        # run on whole cluster
         else:
-            n_cores = global_params.NCORES_PER_NODE
-            n_parallel_jobs = global_params.NNODES_TOTAL
-            _ = qu.QSUB_script(multi_params, "render_views_egl",
+            n_cores = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE
+            n_parallel_jobs = global_params.NGPU_TOTAL
+            path_to_out = qu.QSUB_script(multi_params, "render_views_egl",
                                n_max_co_processes=n_parallel_jobs,
-                               additional_flags="--gres=gpu:2",
-                               n_cores=n_cores, remove_jobfolder=True)
+                               additional_flags="--gres=gpu:1",
+                               n_cores=n_cores, remove_jobfolder=False)
     else:
         raise RuntimeError('Specified OpenGL platform "{}" not supported.'
                            ''.format(global_params.PYOPENGL_PLATFORM))
@@ -307,6 +302,7 @@ def run_neuron_rendering(max_n_jobs=None):
         log.error(msg)
         raise RuntimeError(msg)
     else:
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
         log.info('Success.')
 
 
@@ -420,7 +416,7 @@ def run_glia_prediction(e3=False):
         qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
                        n_max_co_processes=2 * global_params.NNODES_TOTAL,
                        script_folder=None, n_cores=global_params.NCORES_PER_NODE,
-                       suffix="_glia", additional_flags="--gres=gpu:2",
+                       suffix="_glia", additional_flags="--gres=gpu:1",
                        remove_jobfolder=True)
     else:
         # randomly assign to gpu 0 or 1
@@ -431,7 +427,7 @@ def run_glia_prediction(e3=False):
         _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
                            n_max_co_processes=global_params.NNODES_TOTAL,
                            n_cores=global_params.NCORES_PER_NODE, suffix="_glia",
-                           additional_flags="--gres=gpu:2", remove_jobfolder=True)
+                           additional_flags="--gres=gpu:1", remove_jobfolder=True)
     log.info('Finished glia prediction. Checking completeness.')
     res = find_missing_sv_views(sd, woglia=False, n_cores=global_params.NCORES_PER_NODE)
     missing_not_contained_in_rag = []
@@ -501,7 +497,8 @@ def run_glia_rendering(max_n_jobs=None):
 
     """
     if max_n_jobs is None:
-        max_n_jobs = 2 * global_params.NGPU_TOTAL
+        max_n_jobs = global_params.NGPU_TOTAL * 4 if global_params.PYOPENGL_PLATFORM == 'egl' \
+            else global_params.NCORE_TOTAL * 4
     log = initialize_logging('glia_view_rendering', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     np.random.seed(0)
@@ -558,12 +555,11 @@ def run_glia_rendering(max_n_jobs=None):
     multi_params = chunkify(multi_params, max_n_jobs)
 
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
-    # TODO: distinguish egl vs osmesa and run this in parallel for EGL
     multi_params = [(ixs, global_params.config.working_dir, version) for ixs in multi_params]
-    path_to_out = qu.QSUB_script(multi_params, "render_views_glia_removal",
-                                 n_max_co_processes=global_params.NCORE_TOTAL,
-                                 n_cores=global_params.NCORES_PER_NODE,
-                                 additional_flags="--gres=gpu:2",
+    _ = qu.QSUB_script(multi_params, "render_views_glia_removal",
+                                 n_max_co_processes=global_params.NGPU_TOTAL,
+                                 n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                                 additional_flags="--gres=gpu:1",
                                  remove_jobfolder=True)
 
     # check completeness

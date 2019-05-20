@@ -747,7 +747,8 @@ class SegmentationObject(object):
             if global_params.config.use_new_renderings_locs:
                 coords = generate_rendering_locs(verts, 2000).astype(np.float32)
             else:
-                coords = surface_samples(verts).astype(np.float32)
+                coords = surface_samples(verts, bin_sizes=(2000, 2000, 2000),
+                                         max_nb_samples=10000, r=1000).astype(np.float32)
 
             loc_dc = CompressedStorage(self.locations_path, read_only=False,
                                        disable_locking=not self.enable_locking)

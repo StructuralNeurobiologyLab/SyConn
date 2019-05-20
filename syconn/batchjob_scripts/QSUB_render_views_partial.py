@@ -6,7 +6,6 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Jörgen Kornfeld
 
 import sys
-import numpy as np
 try:
     import cPickle as pkl
 except ImportError:

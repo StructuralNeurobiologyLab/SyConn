@@ -58,11 +58,11 @@ if __name__ == '__main__':
     if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
             or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
         raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
-    # currently this is were SyConn looks for the neuron rag # TODO refactor
+
     os.makedirs(example_wd + '/glia/', exist_ok=True)
 
     bb = parse_movement_area_from_zip(kzip_p)
-    prior_glia_removal = True
+    prior_glia_removal = False
     offset = np.array([0, 0, 0])
     bd = bb[1] - bb[0]
     scale = np.array([10, 10, 20])
@@ -164,14 +164,13 @@ if __name__ == '__main__':
 
     # START SyConn
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    # exec_init.run_create_sds(generate_sv_meshes=True, chunk_size=chunk_size,
-    #                          n_folders_fs=n_folders_fs)
     exec_init.init_cell_subcell_sds(generate_sv_meshes=True, chunk_size=chunk_size,
                                     n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs)
-    time_stamps.append(time.time())
-    step_idents.append('SD generation')
 
     exec_init.run_create_rag()
+
+    time_stamps.append(time.time())
+    step_idents.append('SD generation')
 
     if global_params.config.prior_glia_removal:
         log.info('Step 1.5/8 - Glia separation')

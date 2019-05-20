@@ -32,9 +32,10 @@ def qsub_glia_splitting():
     if len(huge_ssvs):
         log_proc.info("{} huge SSVs detected (#SVs > {})".format(len(huge_ssvs),
                                                          RENDERING_MAX_NB_SV))
-    chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True), global_params.NCORES_PER_NODE)
+    chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True), global_params.NCORE_TOTAL)
     qu.QSUB_script(chs, "split_glia", n_cores=1,
-                   n_max_co_processes=global_params.NCORE_TOTAL)
+                   n_max_co_processes=global_params.NCORE_TOTAL,
+                   remove_jobfolder=True)
 
 
 def collect_glia_sv():
@@ -52,8 +53,9 @@ def collect_glia_sv():
     # glia predictions only used for SSVs which only have single SV and were
     # not contained in RAG
     # TODO: add start_multiprocess on a different node
-    glia_preds_list = start_multiprocess(collect_gliaSV_helper_chunked,
-                                         multi_params, nb_cpus=global_params.NCORES_PER_NODE, debug=False)
+    glia_preds_list = start_multiprocess(collect_gliaSV_helper_chunked, multi_params,
+                                         nb_cpus=global_params.NCORES_PER_NODE,
+                                         debug=False)
     glia_preds = {}
     for dc in glia_preds_list:
         glia_preds.update(dc)

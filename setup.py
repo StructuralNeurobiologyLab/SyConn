@@ -33,7 +33,7 @@ config = {
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn==0.19.1',
                          'scikit-image==0.14.2', 'plyfile', 'termcolor',
-                         'openmesh', 'pytest', 'tqdm', 'dill',
+                         'openmesh==1.1.3', 'pytest', 'tqdm', 'dill',
                          'pytest-runner', 'prompt-toolkit<2.0', 'numba==0.41.0',
                          'llvmlite==0.26.0', 'elektronn3', 'vtki'],  # numba/llvmluite requirements due to https://github.com/numba/numba/issues/3666 in @jit compilation of 'id2rgb_array_contiguous' (in multiviews.py)
     'name': 'SyConn',
