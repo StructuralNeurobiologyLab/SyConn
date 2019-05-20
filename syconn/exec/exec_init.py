@@ -8,6 +8,7 @@
 from knossos_utils import knossosdataset
 import time
 import os
+import sys
 from multiprocessing import Process
 import shutil
 import networkx as nx

@@ -1,6 +1,7 @@
 from setuptools import find_packages, setup
 import numpy
 import os
+
 try:
     from Cython.Build import cythonize
     cython_out = cythonize(["syconn/*/*.pyx"], include_path=[numpy.get_include(),],
@@ -28,7 +29,7 @@ config = {
     'version': '0.2',
     'license': 'GPLv2',
     'install_requires': ['knossos_utils', 'matplotlib',
-                         'numpy==1.16.0', 'scipy', 'lz4', 'h5py', 'networkx', 'ipython<7.0.0',
+                         'numpy==1.16.3', 'scipy', 'lz4', 'h5py', 'networkx', 'ipython<7.0.0',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn==0.19.1',
                          'scikit-image==0.14.2', 'plyfile', 'termcolor',

@@ -4,7 +4,6 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-
 import numpy as np
 __cv2__ = True
 try:
@@ -15,8 +14,8 @@ except ImportError as e:
     __cv2__ = False
     createCLAHE = None
     equalizeHist = None
-from scipy import spatial, sparse, ndimage
 from sklearn.decomposition import PCA
+from scipy import spatial, sparse, ndimage
 import tqdm
 from ..proc import log_proc
 
