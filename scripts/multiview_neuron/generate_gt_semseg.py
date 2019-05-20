@@ -314,17 +314,13 @@ if __name__ == "__main__":
         assert global_params.wd == "/wholebrain/songbird/j0126/areaxfs_v6/"
 
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
-                            "/gt_axoness_semseg_skeletons//batch3/"
+                            "/gt_axoness_semseg_skeletons//batch3/"  # BATCH2_Feb2019/Annotations/"
         file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
-        global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-        assert global_params.wd == "/wholebrain/songbird/j0126/areaxfs_v6/"
-
+        GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
+                      ws=ws, comp_window=40.96e3*2, n_voting=0)
 
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
                             "/gt_axoness_semseg_skeletons/BATCH2_Feb2019/Annotations/"
         file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
         GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
                       ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)
-
-        GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
-                      ws=ws, comp_window=40.96e3*2, n_voting=0)
