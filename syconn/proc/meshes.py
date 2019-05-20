@@ -27,7 +27,7 @@ try:
     from .in_bounding_boxC import in_bounding_box
 except ImportError:
     from .in_bounding_box import in_bounding_box
-
+from skimage.measure import mesh_surface_area
 from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip
 from .image import apply_pca
@@ -47,7 +47,8 @@ except ImportError as e:
 
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
-           'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso']
+           'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso', 'merge_meshes_incl_norm',
+           'mesh_area_calc']
 
 
 class MeshObject(object):
@@ -627,9 +628,38 @@ def merge_meshes(ind_lst, vert_lst, nb_simplices=3):
     all_vert = np.zeros((0, ))
     for i in range(len(vert_lst)):
         all_ind = np.concatenate([all_ind, ind_lst[i] +
-                                  len(all_vert)/nb_simplices])
+                                  len(all_vert)//nb_simplices])
         all_vert = np.concatenate([all_vert, vert_lst[i]])
     return all_ind, all_vert
+
+
+def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
+    """
+    Combine several meshes into a single one.
+
+    Parameters
+    ----------
+    ind_lst : list of np.array [N, 1]
+    vert_lst : list of np.array [N, 1]
+    norm_lst : list of np.array [N, 1]
+    nb_simplices : int
+        Number of simplices, e.g. for triangles nb_simplices=3
+
+    Returns
+    -------
+    [np.array, np.array, np.array]
+    """
+    assert len(vert_lst) == len(ind_lst), "Length of indices list differs" \
+                                          "from vertices list."
+    all_ind = np.zeros((0, ), dtype=np.uint)
+    all_vert = np.zeros((0, ))
+    all_norm = np.zeros((0, ))
+    for i in range(len(vert_lst)):
+        all_ind = np.concatenate([all_ind, ind_lst[i] +
+                                  len(all_vert)//nb_simplices])
+        all_vert = np.concatenate([all_vert, vert_lst[i]])
+        all_norm = np.concatenate([all_norm, norm_lst[i]])
+    return [all_ind, all_vert, all_norm]
 
 
 def mesh_loader(so):
@@ -1049,3 +1079,15 @@ def mesh2obj_file(dest_path, mesh, color=None, center=None, scale=None):
     result = openmesh.write_mesh(dest_path, mesh_obj)
     # if not result:
     #     log_proc.error("Error occured when writing mesh to .obj file.")
+
+
+def mesh_area_calc(mesh):
+    """
+
+    Returns
+    -------
+    float
+        Mesh area in um^2
+    """
+    return mesh_surface_area(mesh[1].reshape(-1, 3),
+                             mesh[0].reshape(-1, 3)) / 1e6
