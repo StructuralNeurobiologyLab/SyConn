@@ -139,7 +139,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if n_cores is None:
         n_cores = 1
     if disable_batchjob or not batchjob_enabled():
-        return batchjob_fallback(params, name, n_cores, suffix, n_max_co_processes,
+        return batchjob_fallback(params, name, n_cores, suffix,
                                  script_folder, python_path,
                                  remove_jobfolder=remove_jobfolder)
     if queue is None:
@@ -505,7 +505,7 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     return path_to_out
 
 
-def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=None,
+def batchjob_fallback(params, name, n_cores=1, suffix="",
                       script_folder=None, python_path=None, remove_jobfolder=False):
     """
     # TODO: utilize log and error files ('path_to_err', path_to_log')
@@ -532,9 +532,7 @@ def batchjob_fallback(params, name, n_cores=1, suffix="", n_max_co_processes=Non
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob = log_mp
-    if n_max_co_processes is None:
-        n_max_co_processes = cpu_count()
-    n_max_co_processes = np.min([cpu_count(), n_max_co_processes])
+    n_max_co_processes = cpu_count()
     n_max_co_processes = np.min([n_max_co_processes // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
     n_max_co_processes = np.max([n_max_co_processes, 1])

@@ -26,7 +26,7 @@ from .segmentation import SegmentationDataset, SegmentationObject
 from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
 from ..handler.config import DynConfig
 from .super_segmentation_helper import create_sso_skeleton
-from ..proc.ssd_assembly import assemble_from_mergelist
+from .super_segmentation_helper import assemble_from_mergelist
 from ..mp import batchjob_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
 from ..mp import mp_utils as sm

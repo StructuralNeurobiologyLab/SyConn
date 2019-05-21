@@ -1427,6 +1427,8 @@ def _map_objects_to_synssv_thread(args):
 
 def objects_to_single_synssv(synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=2000,
                              max_rep_coord_dist_nm=4000):
+    # TODO: redesign feature and retrain RFC - total number of voxels does not make sense...
+
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
     is executed in 'classify_synssv_objects'.
@@ -1469,6 +1471,68 @@ def objects_to_single_synssv(synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=2000,
 
 
 def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
+                         max_rep_coord_dist_nm):
+    # TODO: redesign feature and retrain RFC - total number of voxels does not make sense...
+    """
+    Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
+    is executed in 'classify_synssv_objects'.
+    Helper function of `objects_to_single_synssv`.
+
+    Parameters
+    ----------
+    synssv_o : SegmentationObject
+        Contact site object of SSV
+    sd_obj : SegmentationObject
+        Dataset of cellular object to map
+    obj_ids : List[int]
+        IDs of cellular objects in question
+    max_vx_dist_nm : float
+    max_rep_coord_dist_nm : float
+
+    Returns
+    -------
+
+    """
+    obj_mask = np.in1d(sd_obj.ids, obj_ids)
+
+    if np.sum(obj_mask) == 0:
+        return 0, 0
+
+    obj_rep_coords = sd_obj.load_cached_data("rep_coord")[obj_mask] * \
+                     sd_obj.scaling
+
+    obj_kdtree = spatial.cKDTree(obj_rep_coords)
+
+    close_obj_ids = sd_obj.ids[obj_mask][obj_kdtree.query_ball_point(
+        synssv_o.rep_coord * synssv_o.scaling, r=max_rep_coord_dist_nm)]
+
+    synssv_vx_kdtree = spatial.cKDTree(synssv_o.voxel_list * synssv_o.scaling)
+
+    # log_extraction.debug(len(close_obj_ids))
+
+    n_obj_vxs = []
+    for close_obj_id in close_obj_ids:
+        obj = sd_obj.get_segmentation_object(close_obj_id)
+
+        # use mesh vertices instead of voxels
+        obj_vxs = obj.mesh[1].reshape(-1, 3)
+
+        ds, _ = synssv_vx_kdtree.query(obj_vxs,
+                                       distance_upper_bound=max_vx_dist_nm)
+        close_frac = np.sum(ds < np.inf) / len(obj_vxs)
+        # estimate number of voxels by close-by surface area fraction times total number of voxels
+        n_obj_vxs.append(close_frac * obj.size)
+
+    n_obj_vxs = np.array(n_obj_vxs)
+
+    # log_extraction.debug(n_obj_vxs)
+    n_objects = np.sum(n_obj_vxs > 0)
+    n_vxs = np.sum(n_obj_vxs)
+
+    return n_objects, n_vxs
+
+
+def map_objects_from_ssv_OLD(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
                          max_rep_coord_dist_nm):
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
