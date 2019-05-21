@@ -35,6 +35,7 @@ from . import log_proc
 from ..extraction import object_extraction_wrapper as oew
 from .meshes import mesh_area_calc, merge_meshes_incl_norm
 from zmesh import Mesher
+from syconn.proc.meshes import write_meshes2kzip
 
 import sys
 
@@ -419,7 +420,8 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
 
     # extracting mapping
     start = time.time()
-    multi_params = basics.chunkify(chunk_list, n_chunk_jobs)
+    multi_params = basics.chunkify(chunk_list, 1)
+    # multi_params = basics.chunkify(chunk_list, n_chunk_jobs)
     multi_params = [(chs, chunk_size, kd_seg_path, list(kd_organelle_paths.values()), worker_nr, generate_sv_mesh)
                     for chs, worker_nr in zip(multi_params, range(len(multi_params)))]
 
@@ -438,6 +440,8 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     all_times.append(time.time() - start)
     step_names.append("extract and map segmentation objects")
 
+    print('\n \n \n KONIEC IMPREZY!')
+    sys.exit()
     # reduce step
     start = time.time()
     tot_cp = [{}, defaultdict(list), {}]
@@ -619,7 +623,6 @@ def _map_subcell_extract_props_thread(args):
         del cell_prop_dicts
         del tmp_subcell_meshes
 
-
     output_worker = open(global_params.config.temp_path + "/tmp_meshes_worker_" + str(worker_nr) + ".pkl", 'wb')
     pkl.dump(big_mesh_dict, output_worker)
     output_worker.close()
@@ -627,6 +630,24 @@ def _map_subcell_extract_props_thread(args):
     ids_list.append(list(big_mesh_dict['sv'].keys()))
     for organelle in global_params.existing_cell_organelles:
         ids_list.append(list(big_mesh_dict[organelle].keys()))
+
+    #  ########################################
+
+    ind = []
+    vert = []
+    norm = []
+    col =[]
+    ply_fname = []
+    for key, val in big_mesh_dict['sv'].items():
+        ind.append(val[0])
+        vert.append(val[1])
+        norm.append(val[2])
+        col.append(None)
+        ply_fname.append("{}.ply".format(key))
+    name = "test_mesh_cube1_" + str(worker_nr) + ".k.zip"
+    write_meshes2kzip(name, ind, vert, norm, col, ply_fname)
+
+    #  ################################################################
 
     return cpd_lst, scpd_lst, scmd_lst, worker_nr, ids_list
 
