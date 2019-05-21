@@ -639,9 +639,12 @@ def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
 
     Parameters
     ----------
-    ind_lst : list of np.array [N, 1]
-    vert_lst : list of np.array [N, 1]
-    norm_lst : list of np.array [N, 1]
+    ind_lst : List[np.ndarray]
+        array shapes [M, 1]
+    vert_lst : List[np.ndarray]
+        array shapes [N, 1]
+    norm_lst : List[np.ndarray]
+        array shapes [N, 1]
     nb_simplices : int
         Number of simplices, e.g. for triangles nb_simplices=3
 
@@ -651,14 +654,23 @@ def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
     """
     assert len(vert_lst) == len(ind_lst), "Length of indices list differs" \
                                           "from vertices list."
-    all_ind = np.zeros((0, ), dtype=np.uint)
-    all_vert = np.zeros((0, ))
-    all_norm = np.zeros((0, ))
-    for i in range(len(vert_lst)):
-        all_ind = np.concatenate([all_ind, ind_lst[i] +
-                                  len(all_vert)//nb_simplices])
-        all_vert = np.concatenate([all_vert, vert_lst[i]])
-        all_norm = np.concatenate([all_norm, norm_lst[i]])
+
+    if len(vert_lst) == 0:
+        return [np.zeros((0,)), np.zeros((0,)), np.zeros((0,))]
+    else:
+        all_vert = np.concatenate(vert_lst)
+
+    if len(norm_lst) == 0:
+        all_norm = np.zeros((0,))
+    else:
+        all_norm = np.concatenate(norm_lst)
+    # store index and vertex offset of every partial mesh
+    vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst])
+    ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
+    all_ind = np.concatenate(ind_lst)
+    for i in range(0, len(vert_lst)):
+        start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]
+        all_ind[start_ix:end_ix] += vert_offset[i]
     return [all_ind, all_vert, all_norm]
 
 
@@ -700,7 +712,7 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
         ind, vert, norm = meshes[i]
         assert len(vert) == len(norm) or len(norm) == 0, "Length of normals " \
                                                          "and vertices differ."
-        all_ind = np.concatenate([all_ind, ind + len(all_vert)/nb_simplices])
+        all_ind = np.concatenate([all_ind, ind + len(all_vert)//nb_simplices])
         all_vert = np.concatenate([all_vert, vert])
         all_norm = np.concatenate([all_norm, norm])
         if color_vals is not None:

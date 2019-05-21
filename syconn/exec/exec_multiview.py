@@ -120,6 +120,9 @@ def run_axoness_prediction(max_n_jobs_gpu=None, e3=False):
         _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
                            n_max_co_processes=global_params.NGPU_TOTAL,
                            n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                           # using two GPUs on a single
+                           # node might be error-prone -> wb13 froze when processing
+                           # example_cube=2
                            suffix="_axoness", additional_flags="--gres=gpu:1",
                            remove_jobfolder=True)
     else:
@@ -392,7 +395,7 @@ def run_glia_prediction(e3=False):
         nx.number_connected_components(g), g.number_of_nodes()))
     # chunk them
     sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
-    multi_params = chunkify(sd.so_dir_paths, global_params.NGPU_TOTAL)
+    multi_params = chunkify(sd.so_dir_paths, global_params.NGPU_TOTAL * 2)
     # get model properties
     if e3 == True:
         model_kwargs = 'get_glia_model_e3'
@@ -414,8 +417,9 @@ def run_glia_prediction(e3=False):
                     multi_params]
     if e3 is True:
         qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
-                       n_max_co_processes=2 * global_params.NNODES_TOTAL,
-                       script_folder=None, n_cores=global_params.NCORES_PER_NODE,
+                       n_max_co_processes=global_params.NGPU_TOTAL,
+                       script_folder=None, n_cores=global_params.NCORES_PER_NODE //
+                                                   global_params.NGPUS_PER_NODE,
                        suffix="_glia", additional_flags="--gres=gpu:1",
                        remove_jobfolder=True)
     else:
@@ -425,8 +429,9 @@ def run_glia_prediction(e3=False):
             # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
             mk["init_gpu"] = 0
         _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
-                           n_max_co_processes=global_params.NNODES_TOTAL,
-                           n_cores=global_params.NCORES_PER_NODE, suffix="_glia",
+                           n_max_co_processes=global_params.NGPU_TOTAL,
+                           n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                           suffix="_glia",
                            additional_flags="--gres=gpu:1", remove_jobfolder=True)
     log.info('Finished glia prediction. Checking completeness.')
     res = find_missing_sv_views(sd, woglia=False, n_cores=global_params.NCORES_PER_NODE)

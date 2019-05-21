@@ -43,7 +43,7 @@ def sd_init(co, max_n_jobs):
                            suffix=co, remove_jobfolder=True)
 
     # now cache mesh properties
-    sd_proc.dataset_analysis(sd_seg, recompute=False, compute_meshprops=True)
+    sd_proc.dataset_analysis(sd_seg, recompute=False, compute_meshprops=False)
 
 
 def kd_init(co, chunk_size, transf_func_kd_overlay, load_cellorganelles_from_kd_overlaycubes, \
@@ -144,7 +144,7 @@ def run_create_rag():
     sd = SegmentationDataset(obj_type='sv', working_dir=global_params.config.working_dir)
     sv_ids = sd.ids
     diff = np.array(list(set(sv_ids).difference(set(all_sv_ids_in_rag))))
-    log.info('Found {} single connected component SVs which were missing'
+    log.info('Found {} single-element connected component SVs which were missing'
              ' in initial RAG.'.format(len(diff)))
 
     for ix in diff:

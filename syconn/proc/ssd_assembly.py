@@ -16,7 +16,7 @@ from .. import global_params
 import networkx as nx
 
 
-def init_sso_from_kzip(path, sso_id=None):
+def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
     """
     Initializes cell reconstruction from k.zip file.
     The k.zip needs the following content:
@@ -34,6 +34,10 @@ def init_sso_from_kzip(path, sso_id=None):
         Path to kzip which contains SSV data
     sso_id : int
         ID of SSV, if not given looks for the first scalar occurrence in `path`
+    load_as_tmp : bool
+        If True then `working_dir` and `version_dict` in meta.pkl dictionary is
+         not passed to SSO constructor, instead all version will be set to 'tmp'
+         and working directory will be None. Used to process SSO independent on working directory.
 
     Returns
     -------
@@ -48,6 +52,11 @@ def init_sso_from_kzip(path, sso_id=None):
     with zipfile.ZipFile(path, allowZip64=True) as z:
         f = z.open("meta.pkl")
         meta_dc = pkl.load(f)
+
+    if load_as_tmp:
+        for k in meta_dc['version_dict']:
+            meta_dc['version_dict'][k] = 'tmp'
+        meta_dc['working_dir'] = None
 
     sso = SuperSegmentationObject(sso_id, version="tmp", **meta_dc)
     # Required to enable prediction in 'tmp' SSVs # TODO: change those properties in SSO constructor

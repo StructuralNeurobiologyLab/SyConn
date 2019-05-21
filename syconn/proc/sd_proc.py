@@ -30,7 +30,7 @@ from ..backend.storage import AttributeDict, VoxelStorage, VoxelStorageDyn, Mesh
 from ..reps import segmentation, segmentation_helper
 from ..reps import rep_helper
 from ..handler import basics
-from ..proc.meshes import mesh_chunk, write_mesh2kzip
+from ..proc.meshes import mesh_chunk
 from . import log_proc
 from ..extraction import object_extraction_wrapper as oew
 from .meshes import mesh_area_calc, merge_meshes_incl_norm
@@ -171,169 +171,6 @@ def _dataset_analysis_thread(args):
             if recompute:
                 this_attr_dc.push()
     return global_attr_dict
-
-
-def map_objects_to_sv_multiple(sd, obj_types, kd_path, readonly=False, 
-                               n_jobs=1000, qsub_pe=None, qsub_queue=None,
-                               nb_cpus=None, n_max_co_processes=None):
-    assert isinstance(obj_types, list)  # TODO: probably possible to optimize
-    for obj_type in obj_types:
-        map_objects_to_sv(sd, obj_type, kd_path, readonly=readonly, n_jobs=n_jobs,
-                          nb_cpus=nb_cpus, n_max_co_processes=n_max_co_processes)
-        
-
-def map_objects_to_sv(sd, obj_type, kd_path, readonly=False, n_jobs=1000,
-                      nb_cpus=None, n_max_co_processes=None):
-    """
-    TODO: (cython) optimization required! E.g. replace by single iteration over cell segm. and all cell organelle KDs/CDs
-    Maps objects to SVs. The segmentation needs to be written to a KnossosDataset before running this
-
-    Parameters
-    ----------
-    sd : SegmentationDataset
-    obj_type : str
-    kd_path : str
-        path to knossos dataset containing the segmentation
-    readonly : bool
-        if True the mapping is only read from the segmentation objects and not
-        computed. This requires the previous computation of the mapping for the
-        mapped segmentation objects.
-    n_jobs : int
-        total number of jobs
-    nb_cpus : int or None
-        number of cores used for multithreading
-        number of cores per worker for qsub jobs
-    n_max_co_processes : int or None
-        max number of workers running at the same time when using qsub
-    """
-    start = time.time()
-    if sd.type != "sv":
-        raise Exception("You are mapping to a non-sv dataset")
-    assert obj_type in sd.version_dict
-    seg_dataset = sd.get_segmentationdataset(obj_type)
-    paths = seg_dataset.so_dir_paths
-
-    # write cell organell mappings to cell organelle SV attribute dicts
-    # Partitioning the work
-    multi_params = basics.chunkify(paths, n_jobs)
-    multi_params = [(mps, obj_type, sd.version_dict[obj_type], sd.working_dir,
-                     kd_path, readonly) for mps in multi_params]
-    # Running workers - Extracting mapping
-    if qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params, "map_objects", n_cores=nb_cpus,
-                                     n_max_co_processes=n_max_co_processes)
-        out_files = glob.glob(path_to_out + "/*")
-        results = []
-        for out_file in out_files:
-            with open(out_file, 'rb') as f:
-                results.append(pkl.load(f))
-    else:
-        results = sm.start_multiprocess_imap(_map_objects_thread, multi_params,
-                                             nb_cpus=n_max_co_processes, verbose=True,
-                                             debug=False)
-
-    # write cell organell mappings to cell SV attribute dicts
-    sv_obj_map_dict = defaultdict(dict)
-    for result in results:
-        for sv_key, value in result.items():
-            sv_obj_map_dict[sv_key].update(value)
-
-    mapping_dict_path = seg_dataset.path + "/sv_%s_mapping_dict.pkl" % sd.version
-    with open(mapping_dict_path, "wb") as f:
-        pkl.dump(sv_obj_map_dict, f)
-
-    paths = sd.so_dir_paths
-
-    # Partitioning the work
-    multi_params = basics.chunkify(paths, n_jobs)
-    multi_params = [(path_block, obj_type, mapping_dict_path) for path_block in multi_params]
-
-    # Running workers - Writing mapping to SVs
-    if not qu.batchjob_enabled():
-        sm.start_multiprocess_imap(_write_mapping_to_sv_thread, multi_params,
-                                   nb_cpus=n_max_co_processes, debug=False)
-    else:
-        qu.QSUB_script(multi_params, "write_mapping_to_sv", script_folder=None,
-                       n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
-    log_proc.debug("map_objects_to_sv: %.1f min" % ((time.time() - start) / 60.))
-
-
-def _map_objects_thread(args):
-    """Worker of map_objects_to_sv"""
-    # TODO: this needs to be done densely by matching cell organelle segmentation (see corresponding ChunkDataset
-    #  which is an intermediate result of 'from_probabilities_to_objects') to SV segmentation
-
-    paths = args[0]
-    obj_type = args[1]
-    obj_version = args[2]
-    working_dir = args[3]
-    kd_path = args[4]
-    readonly = args[5]
-    global_params.wd = working_dir
-    if len(args) > 6:
-        datatype = args[6]
-    else:
-        datatype = np.uint64
-    kd = knossosdataset.KnossosDataset()
-    kd.initialize_from_knossos_path(kd_path)
-    seg_dataset = segmentation.SegmentationDataset(obj_type, version=obj_version,
-                                                   working_dir=working_dir)
-    sv_id_dict = {}
-    for p in paths:
-        this_attr_dc = AttributeDict(p + "/attr_dict.pkl", read_only=readonly,
-                                     disable_locking=True)
-        this_vx_dc = VoxelStorage(p + "/voxel.pkl", read_only=True,
-                                  disable_locking=True)
-        for so_id in this_vx_dc.keys():
-            so = seg_dataset.get_segmentation_object(so_id)
-            so.attr_dict = this_attr_dc[so_id]
-            bb = so.bounding_box
-            # check object BB, TODO: HACK because kd.from_overlaycubes_to_list(vx_list,
-            #  datatype=datatype) will load the data via the object's BB --> new mapping is
-            #  needed asap
-            if np.linalg.norm((bb[1] - bb[0]) * seg_dataset.scaling) > global_params.thresh_mi_bbd_mapping:
-                log_proc.warn(
-                    'Skipped huge MI with size: {}, offset: {}, mi_id: {}, mi_c'
-                    'oord: {}'.format(so.size, so.bounding_box[0], so_id, so.rep_coord))
-                so.attr_dict["mapping_ids"] = []
-                so.attr_dict["mapping_ratios"] = []
-                this_attr_dc[so_id] = so.attr_dict
-                continue
-            so.load_voxels(voxel_dc=this_vx_dc)
-            if readonly:
-                if "mapping_ids" in so.attr_dict:
-                    ids = so.attr_dict["mapping_ids"]
-                    id_ratios = so.attr_dict["mapping_ratios"]
-
-                    for i_id in range(len(ids)):
-                        if ids[i_id] in sv_id_dict:
-                            sv_id_dict[ids[i_id]][so_id] = id_ratios[i_id]
-                        else:
-                            sv_id_dict[ids[i_id]] = {so_id: id_ratios[i_id]}
-            else:
-                if np.product(so.shape) > 1e12:  # TODO: Seems hacky
-                    continue
-                vx_list = np.argwhere(so.voxels) + so.bounding_box[0]
-                try:
-                    id_list = kd.from_overlaycubes_to_list(vx_list, datatype=datatype)
-                except:
-                    log_proc.error('Could not load overlaycube '
-                                   'during object mapping')
-                    continue
-                ids, id_counts = np.unique(id_list, return_counts=True)  # cell SV IDs
-                id_ratios = id_counts / float(np.sum(id_counts))
-
-                for i_id in range(len(ids)):
-                    if ids[i_id] in sv_id_dict:
-                        sv_id_dict[ids[i_id]][so_id] = id_ratios[i_id]
-                    else:
-                        sv_id_dict[ids[i_id]] = {so_id: id_ratios[i_id]}
-                so.attr_dict["mapping_ids"] = ids
-                so.attr_dict["mapping_ratios"] = id_ratios
-                this_attr_dc[so_id] = so.attr_dict
-        if not readonly:
-            this_attr_dc.push()
-    return sv_id_dict
 
 
 def _write_mapping_to_sv_thread(args):
@@ -509,7 +346,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
                     for sv_id_block in basics.chunkify(np.arange(n_folders_fs), n_chunk_jobs)]
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params,
-                                   nb_cpus=n_max_co_processes, debug=True)
+                                   nb_cpus=n_max_co_processes, debug=False)
     else:
         qu.QSUB_script(multi_params, "write_props_to_sv", script_folder=None,
                        n_cores=n_cores, n_max_co_processes=n_max_co_processes,
@@ -517,9 +354,6 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
 
     all_times.append(time.time() - start)
     step_names.append("write cell SV dataset")
-    sv_sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
-                                             obj_type="sv", version=0)
-    dataset_analysis(sv_sd, recompute=True, compute_meshprops=False)
 
     # write to subcell. SV attribute dicts
     multi_params = [(sv_id_block, n_folders_fs_sc, subcell_mesh_workers)
@@ -532,10 +366,6 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
                        n_cores=n_cores, n_max_co_processes=n_max_co_processes,
                        remove_jobfolder=True)
     step_names.append("write subcellular SV dataset")
-    for k in global_params.existing_cell_organelles:
-        sc_sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
-                                                 obj_type=k, version=0)
-        dataset_analysis(sc_sd, recompute=True, compute_meshprops=False)
 
     # clear temporary files
     for p in dict_paths:
@@ -619,7 +449,6 @@ def _map_subcell_extract_props_thread(args):
         del cell_prop_dicts
         del tmp_subcell_meshes
 
-
     output_worker = open(global_params.config.temp_path + "/tmp_meshes_worker_" + str(worker_nr) + ".pkl", 'wb')
     pkl.dump(big_mesh_dict, output_worker)
     output_worker.close()
@@ -637,15 +466,16 @@ def find_meshes(chunk, offset):
 
     """
     scaling = np.array(global_params.config.entries["Dataset"]["scaling"])
-    mesher = Mesher((1, 1, 1))
+    mesher = Mesher(scaling[::-1])  # xyz -> zxy
     mesher.mesh(chunk)
-
+    offset = offset * scaling
     meshes = {}
     for obj_id in mesher.ids():
-        tmp = mesher.get_mesh(obj_id, normals=True, simplification_factor=40, max_simplification_error=0)
+        tmp = mesher.get_mesh(obj_id, normals=True, simplification_factor=100,
+                              max_simplification_error=40)  # in nm (after scaling, see top)
         # the values of simplification_factor & max_simplification_error are random
 
-        tmp.vertices[:] = (tmp.vertices[:, ::-1] + offset) * scaling
+        tmp.vertices[:] = (tmp.vertices[:, ::-1] + offset)  # zxy -> xyz
         meshes[obj_id] = [tmp.faces.flatten(), tmp.vertices.flatten(), tmp.normals.flatten()]
         mesher.erase(obj_id)
 
@@ -674,11 +504,10 @@ def merge_meshes_single(m_storage, obj_id, tmp_dict):
     """
     if obj_id not in m_storage:
         m_storage[obj_id] = [tmp_dict[0], tmp_dict[1], tmp_dict[2]]
-
     else:
+        # TODO: this needs to be a parameter -> add global parameter for face type
         n_el = int((len(m_storage[obj_id][1])) / 3)
-        tmp_dict[0] += n_el
-        m_storage[obj_id][0] = np.concatenate((m_storage[obj_id][0], tmp_dict[0]))
+        m_storage[obj_id][0] = np.concatenate((m_storage[obj_id][0], tmp_dict[0] + n_el))
         m_storage[obj_id][1] = np.concatenate((m_storage[obj_id][1], tmp_dict[1]))
         m_storage[obj_id][2] = np.concatenate((m_storage[obj_id][2], tmp_dict[2]))
 
@@ -815,11 +644,9 @@ def _write_props_to_sc_thread(args):
                     list_of_ind.append(single_mesh[0])
                     list_of_ver.append(single_mesh[1])
                     list_of_norm.append(single_mesh[2])
-                    # merge_meshes_single(obj_mesh_dc, obj_id, single_mesh)  #TODO use merge_so_meshes instead of
                 mesh = merge_meshes_incl_norm(list_of_ind, list_of_ver, list_of_norm)
                 obj_mesh_dc[sc_id] = mesh
                 this_attr_dc[sc_id]["mesh_area"] = mesh_area_calc(mesh)
-
 
                 this_attr_dc[sc_id]["mapping_ids"] = \
                     list(mapping_dict[sc_id].keys())
@@ -870,6 +697,9 @@ def _write_props_to_sv_thread(args):
     sv_sd = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs,
                                              obj_type="sv", working_dir=global_params.config.working_dir, version=0)
     # iterate over the subcellular SV ID chunks
+    # dt_mesh_area = 0
+    # dt_mesh_merge = 0
+    # dt_mesh_merge_woio = 0  # without io
     for obj_id_mod in obj_id_chs:
         obj_keys = dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]
         # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
@@ -886,6 +716,7 @@ def _write_props_to_sv_thread(args):
                 list_of_ind = []
                 list_of_ver = []
                 list_of_norm = []
+                # start = time.time()
                 for worker_nr in cell_mesh_workers[sv_id]:
                     p = global_params.config.temp_path + "/tmp_meshes_worker_" + str(worker_nr) + ".pkl"
                     pkl_file = open(p, 'rb')
@@ -894,9 +725,14 @@ def _write_props_to_sv_thread(args):
                     list_of_ind.append(single_mesh[0])
                     list_of_ver.append(single_mesh[1])
                     list_of_norm.append(single_mesh[2])
+                # start2 = time.time()
                 mesh = merge_meshes_incl_norm(list_of_ind, list_of_ver, list_of_norm)
+                # dt_mesh_merge_woio += time.time() - start2
+                # dt_mesh_merge += time.time() - start
                 obj_mesh_dc[sv_id] = mesh
+                # start = time.time()
                 this_attr_dc[sv_id]["mesh_area"] = mesh_area_calc(mesh)
+                # dt_mesh_area += time.time() - start
 
             for ii, k in enumerate(global_params.existing_cell_organelles):
                 if sv_id not in mapping_dicts[k]:  # no object of this type mapped to current cell SV
@@ -919,6 +755,8 @@ def _write_props_to_sv_thread(args):
         voxel_dc.push()
         this_attr_dc.push()
         obj_mesh_dc.push()
+    # log_proc.critical('ERROR: dt mesh area {:.2f}s \t dt mesh merge {:.2f} s \t dt mesh merge '
+    #                   'without IO {:.2f} s'.format(dt_mesh_area, dt_mesh_merge, dt_mesh_merge_woio))
 
 
 def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,

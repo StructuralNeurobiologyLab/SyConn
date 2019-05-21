@@ -101,7 +101,6 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
     if os.path.isdir(path):
         log.debug('Found existing KD at {}. Removing it now.'.format(path))
         shutil.rmtree(path)
-        log.debug('Done')
     target_kd = knossosdataset.KnossosDataset()
     target_kd.initialize_without_conf(path, kd.boundary, kd.scale, kd.experiment_name, mags=[1, ])
     target_kd = knossosdataset.KnossosDataset()

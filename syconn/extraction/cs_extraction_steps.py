@@ -164,7 +164,6 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
         if os.path.isdir(path):
             log.debug('Found existing KD at {}. Removing it now.'.format(path))
             shutil.rmtree(path)
-            log.debug('Done')
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_without_conf(path, kd.boundary, kd.scale, kd.experiment_name,
                                           mags=[1, ])
@@ -547,7 +546,6 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
     if os.path.isdir(path):
         log.debug('Found existing KD at {}. Removing it now.'.format(path))
         shutil.rmtree(path)
-        log.debug('Done')
     target_kd = knossosdataset.KnossosDataset()
     target_kd.initialize_without_conf(path, kd.boundary, kd.scale, kd.experiment_name, mags=[1, ])
     target_kd = knossosdataset.KnossosDataset()

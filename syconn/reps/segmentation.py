@@ -821,7 +821,7 @@ class SegmentationObject(object):
         # Set 'force_single_cc' to True in case of syn_ssv objects!
         if self.type == 'syn_ssv' and 'force_single_cc' not in kwargs:
             kwargs['force_single_cc'] = True
-        if self.type == 'sv' and 'decimate_mesh' not in kwargs:
+        if (self.type == 'sv') and ('decimate_mesh' not in kwargs):
             kwargs['decimate_mesh'] = 0.3  # remove 30% of the verties  # TODO: add to global params
         return meshes.get_object_mesh(self, downsampling, n_closings=n_closings,
                                       triangulation_kwargs=kwargs)
