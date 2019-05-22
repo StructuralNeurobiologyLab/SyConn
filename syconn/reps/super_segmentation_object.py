@@ -1340,7 +1340,7 @@ class SuperSegmentationObject(object):
                                index_views=True)
 
     def render_indexviews(self, nb_views=2, save=True, force_recompute=False,
-                           verbose=False, view_key=None, ws=None, comp_window=None):
+                          verbose=False, view_key=None, ws=None, comp_window=None):
         """
         Render SSV raw views in case non-default number of views is required.
         Will be stored in SSV view dict. Default raw/index/prediction views are
@@ -1450,7 +1450,7 @@ class SuperSegmentationObject(object):
             return views
 
     def predict_semseg(self, m, semseg_key, nb_views=None, verbose=False,
-                       raw_view_key=None, save=True, ws=None, comp_window=None):
+                       raw_view_key=None, save=False, ws=None, comp_window=None):
         """
         Generates label views based on input model and stores it under the key
         'semseg_key', either within the SSV's SVs or in an extra view-storage
@@ -1487,12 +1487,13 @@ class SuperSegmentationObject(object):
                 nb_views = global_params.NB_VIEWS
             if raw_view_key is None:
                 raw_view_key = 'raw{}'.format(nb_views)
-            try:
+            if raw_view_key in self.view_dict:
                 views = self.load_views(raw_view_key)
-            except KeyError:
+            else:
                 log_reps.warning('Could not find raw-views. Re-rendering now.')
                 self._render_rawviews(nb_views, ws=ws, comp_window=comp_window, save=save,
-                                      view_key=raw_view_key, verbose=verbose)
+                                      view_key=raw_view_key, verbose=verbose,
+                                      force_recompute=True)
                 views = self.load_views(raw_view_key)
             if len(views) != len(np.concatenate(self.sample_locations(cache=False))):
                 raise ValueError("Unequal number of views and redering locations.")
@@ -1684,6 +1685,7 @@ class SuperSegmentationObject(object):
             force resampling of locations
         cache : bool
             save sample location in SSO attribute dict
+
         Returns
         -------
         list of array

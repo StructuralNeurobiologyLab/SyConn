@@ -656,7 +656,7 @@ def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
                                           "from vertices list."
 
     if len(vert_lst) == 0:
-        return [np.zeros((0,)), np.zeros((0,)), np.zeros((0,))]
+        return [np.zeros((0,), dtype=np.uint), np.zeros((0,)), np.zeros((0,))]
     else:
         all_vert = np.concatenate(vert_lst)
 
@@ -665,7 +665,8 @@ def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
     else:
         all_norm = np.concatenate(norm_lst)
     # store index and vertex offset of every partial mesh
-    vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst])
+    vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(
+        np.uint)
     ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
     all_ind = np.concatenate(ind_lst)
     for i in range(0, len(vert_lst)):
