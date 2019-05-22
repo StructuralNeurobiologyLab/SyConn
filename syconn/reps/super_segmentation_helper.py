@@ -1848,10 +1848,10 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
     raw_view_key = 'raw{}_{}_{}'.format(ws[0], ws[1], nb_views)
     index_view_key = 'index{}_{}_{}'.format(ws[0], ws[1], nb_views)
     verts = sso.mesh[1].reshape(-1, 3)
-    rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window
+    rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # ~three views per comp window
 
     # overwrite default rendering locations (used later on for the view generation)
-    sso._sample_locations = rendering_locs
+    sso._sample_locations = [rendering_locs]
     assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
                              " run 'semseg_of_sso_nocache'.".format(sso)
     # this generates the raw views and their prediction
