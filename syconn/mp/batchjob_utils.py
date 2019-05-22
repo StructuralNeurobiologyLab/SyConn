@@ -531,7 +531,8 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
                                           name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
-    log_batchjob = log_mp
+    log_batchjob = initialize_logging("{}".format(name + suffix),
+                                      log_dir=job_folder)
     n_max_co_processes = cpu_count()
     n_max_co_processes = np.min([n_max_co_processes // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
@@ -582,11 +583,14 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
 
         cmd_exec = "sh {}".format(this_sh_path)
         multi_params.append(cmd_exec)
-    start_multiprocess_imap(fallback_exec, multi_params, debug=False,
-                            nb_cpus=n_max_co_processes)
+    out_str = start_multiprocess_imap(fallback_exec, multi_params, debug=False,
+                                  nb_cpus=n_max_co_processes)
+    if len("".join(out_str)) > 0:
+        log_batchjob.error('Errors occurred during "{}".:\n{}'.format(name, out_str))
+    else:
+        if remove_jobfolder:
+            shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob.debug('Finished "{}" after {:.2f}s.'.format(name, time.time() - start))
-    if remove_jobfolder:
-        shutil.rmtree(job_folder, ignore_errors=True)
     return path_to_out
 
 
@@ -597,7 +601,7 @@ def fallback_exec(cmd_exec):
     ps = subprocess.Popen(cmd_exec, shell=True, stdout=subprocess.PIPE,
                           stderr=subprocess.PIPE)
     out, err = ps.communicate()
-
+    out_str = ""
     if log_mp.level == 10:
         reported = False
         if 'error' in out.decode().lower() or \
@@ -605,13 +609,17 @@ def fallback_exec(cmd_exec):
             log_mp.error(out.decode())
             log_mp.error(err.decode())
             reported = True
+            out_str = out.decode() + err.decode()
         if not reported and ('warning' in out.decode().lower() or
                              'warning' in err.decode().lower()):
             log_mp.warning(out.decode())
             log_mp.warning(err.decode())
+            out_str = out.decode() + err.decode()
     if 'error' in err.decode().lower():
         log_mp.error(out.decode())
         log_mp.error(err.decode())
+        out_str = out.decode() + err.decode()
+    return out_str
 
 
 def number_of_running_processes(job_name):

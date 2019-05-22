@@ -63,6 +63,7 @@ if __name__ == '__main__':
 
     bb = parse_movement_area_from_zip(kzip_p)
     prior_glia_removal = True
+    use_new_meshing = True  # TODO: optimize write-out and investigate find_mesh complexity
     offset = np.array([0, 0, 0])
     bd = bb[1] - bb[0]
     scale = np.array([10, 10, 20])
@@ -85,6 +86,8 @@ if __name__ == '__main__':
     config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale,
                                                       py36path=py36path, use_new_renderings_locs=False,
                                                       use_large_fov_views_ct=False,
+                                                      use_new_meshing=use_new_meshing,
+                                                      allow_mesh_gen_cells=True,
                                                       prior_glia_removal=prior_glia_removal)
     with open(example_wd + 'config.ini', 'w') as f:
         f.write(config_str)
@@ -164,8 +167,8 @@ if __name__ == '__main__':
 
     # START SyConn
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    exec_init.init_cell_subcell_sds(generate_sv_meshes=True, chunk_size=chunk_size,
-                                    n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs)
+    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
+                                    n_folders_fs_sc=n_folders_fs)
     exec_init.run_create_rag()
 
     time_stamps.append(time.time())

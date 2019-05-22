@@ -293,7 +293,10 @@ class DynConfig(Config):
 
     @property
     def allow_mesh_gen_cells(self):
-        return self.entries['Mesh']['allow_mesh_gen_cells']
+        try:
+            return self.entries['Mesh']['allow_mesh_gen_cells']
+        except KeyError:
+            return False
 
     @property
     def allow_skel_gen(self):
@@ -322,6 +325,13 @@ class DynConfig(Config):
             return False
 
     @property
+    def use_new_meshing(self):
+        try:
+            return self.entries['Mesh']['use_new_meshing']
+        except KeyError:
+            return False
+
+    @property
     def qsub_work_folder(self):
         return "%s/%s/" % (global_params.config.working_dir, # self.temp_path,
                            global_params.BATCH_PROC_SYSTEM)
@@ -337,7 +347,8 @@ class DynConfig(Config):
 def get_default_conf_str(example_wd, scaling, py36path="", syntype_avail=True,
                          use_large_fov_views_ct=False, use_new_renderings_locs=False,
                          kd_seg=None, kd_sym=None, kd_asym=None, kd_sj=None, kd_mi=None,
-                         kd_vc=None, init_rag_p="", prior_glia_removal=False):
+                         kd_vc=None, init_rag_p="", prior_glia_removal=False,
+                         use_new_meshing=False, allow_mesh_gen_cells=True):
     """
     Default SyConn config and type specification, placed in the working directory.
 
@@ -404,7 +415,8 @@ sj = 0.19047619
 vc = 0.285714286
 
 [Mesh]
-allow_mesh_gen_cells = True
+allow_mesh_gen_cells = {}
+use_new_meshing = {}
 
 [Skeleton]
 allow_skel_gen = True
@@ -417,8 +429,9 @@ use_new_renderings_locs = {}
 prior_glia_removal = {}
     """.format(kd_seg, kd_sym, kd_asym, kd_sj, kd_vc, kd_mi, init_rag_p,
                py36path, scaling[0], scaling[1], scaling[2],
-               str(syntype_avail), str(use_large_fov_views_ct),
-               str(use_new_renderings_locs), str(prior_glia_removal))
+               str(syntype_avail), str(allow_mesh_gen_cells), str(use_new_meshing),
+               str(use_large_fov_views_ct), str(use_new_renderings_locs),
+               str(prior_glia_removal))
 
     configspec_str = """
 [Versions]
@@ -445,6 +458,7 @@ __many__ = float
 
 [Mesh]
 allow_mesh_gen_cells = boolean
+use_new_meshing = boolean
 
 [Skeleton]
 allow_skel_gen = boolean

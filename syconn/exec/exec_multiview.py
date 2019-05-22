@@ -119,9 +119,9 @@ def run_axoness_prediction(max_n_jobs_gpu=None, e3=False):
     if e3 is True:
         _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
                            n_max_co_processes=global_params.NGPU_TOTAL,
-                           n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
-                           # using two GPUs on a single
-                           # node might be error-prone -> wb13 froze when processing
+                           n_cores=global_params.NCORES_PER_NODE,# // global_params.NGPUS_PER_NODE,
+                           # TODO: using two GPUs on a single
+                           # node seems to be error-prone -> wb13 froze when processing
                            # example_cube=2
                            suffix="_axoness", additional_flags="--gres=gpu:1",
                            remove_jobfolder=True)
@@ -418,8 +418,11 @@ def run_glia_prediction(e3=False):
     if e3 is True:
         qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
                        n_max_co_processes=global_params.NGPU_TOTAL,
-                       script_folder=None, n_cores=global_params.NCORES_PER_NODE //
-                                                   global_params.NGPUS_PER_NODE,
+                       script_folder=None, n_cores=global_params.NCORES_PER_NODE, #//
+        # global_params.NGPUS_PER_NODE,
+                       # TODO: using two GPUs on a single
+                       # node seems to be error-prone -> wb13 froze when processing
+                       # example_cube=2
                        suffix="_glia", additional_flags="--gres=gpu:1",
                        remove_jobfolder=True)
     else:
