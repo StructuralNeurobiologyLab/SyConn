@@ -262,6 +262,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     multi_params = [(chs, chunk_size, kd_seg_path, list(kd_organelle_paths.values()), worker_nr, generate_sv_mesh)
                     for chs, worker_nr in zip(multi_params, range(len(multi_params)))]
 
+
     if qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params, "map_subcell_extract_props", n_cores=n_cores,
                                      n_max_co_processes=n_max_co_processes)
@@ -277,8 +278,6 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     all_times.append(time.time() - start)
     step_names.append("extract and map segmentation objects")
 
-    print('\n \n \n KONIEC IMPREZY!')
-    sys.exit()
     # reduce step
     start = time.time()
     tot_cp = [{}, defaultdict(list), {}]
@@ -461,24 +460,6 @@ def _map_subcell_extract_props_thread(args):
     for organelle in global_params.existing_cell_organelles:
         ids_list.append(list(big_mesh_dict[organelle].keys()))
 
-    #  ########################################
-
-    ind = []
-    vert = []
-    norm = []
-    col =[]
-    ply_fname = []
-    for key, val in big_mesh_dict['sv'].items():
-        ind.append(val[0])
-        vert.append(val[1])
-        norm.append(val[2])
-        col.append(None)
-        ply_fname.append("{}.ply".format(key))
-    name = "test_mesh_cube1_" + str(worker_nr) + ".k.zip"
-    write_meshes2kzip(name, ind, vert, norm, col, ply_fname)
-
-    #  ################################################################
-
     return cpd_lst, scpd_lst, scmd_lst, worker_nr, ids_list
 
 
@@ -487,6 +468,8 @@ def find_meshes(chunk, offset):
     """
 
     """
+
+    chunk = np.pad(chunk, ((1, 1), (1, 1), (1, 1)), 'edge')
     scaling = np.array(global_params.config.entries["Dataset"]["scaling"])
     mesher = Mesher(scaling[::-1])  # xyz -> zxy
     mesher.mesh(chunk)
