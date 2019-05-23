@@ -302,6 +302,16 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
                 subcell_mesh_workers[ii][subcell_id].append(worker_nr)
         del cp_dc, scp_dcs, scm_dcs, ids_list  # will remove redundant data inside results
 
+    sc_mesh_worker_dc = "{}/sc_mesh_worker_dict.pkl".format(global_params.config.temp_path)
+    with open(sc_mesh_worker_dc, "wb") as f:
+        pkl.dump(subcell_mesh_workers, f)
+    del subcell_mesh_workers
+
+    c_mesh_worker_dc = "{}/c_mesh_worker_dict.pkl".format(global_params.config.temp_path)
+    with open(c_mesh_worker_dc, "wb") as f:
+        pkl.dump(cell_mesh_workers, f)
+    del cell_mesh_workers
+
     # convert mapping dicts to store ratio of number of overlapping voxels
     prop_dict_p = "{}/sv_prop_dict.pkl".format(global_params.config.temp_path)
     with open(prop_dict_p, "wb") as f:
@@ -347,7 +357,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     # writing cell SV properties to SD
     # TODO: n_chunk_jobs should constrain a maximum number of objects
     start = time.time()
-    multi_params = [(sv_id_block, n_folders_fs, cell_mesh_workers,
+    multi_params = [(sv_id_block, n_folders_fs,
                      global_params.config.allow_mesh_gen_cells)
                     for sv_id_block in basics.chunkify(np.arange(n_folders_fs), n_chunk_jobs)]
     if not qu.batchjob_enabled():
@@ -365,7 +375,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     step_names.append("write cell SV dataset")
 
     # write to subcell. SV attribute dicts
-    multi_params = [(sv_id_block, n_folders_fs_sc, subcell_mesh_workers)
+    multi_params = [(sv_id_block, n_folders_fs_sc)
                     for sv_id_block in basics.chunkify(np.arange(n_folders_fs_sc), n_chunk_jobs)]
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sc_thread, multi_params,
@@ -637,7 +647,10 @@ def _write_props_to_sc_thread(args):
 
     obj_id_chs = args[0]
     n_folders_fs = args[1]
-    subcell_mesh_workers = args[2]
+
+    sc_mesh_worker_dc = "{}/sc_mesh_worker_dict.pkl".format(global_params.config.temp_path)
+    with open(sc_mesh_worker_dc, "rb") as f:
+        subcell_mesh_workers = pkl.load(f)
 
     # iterate over the subcell structures
     for ii, organelle in enumerate(global_params.existing_cell_organelles):
@@ -709,7 +722,6 @@ def _write_props_to_sc_thread(args):
                         list_of_norm.append(single_mesh[2])
                     mesh = merge_meshes_incl_norm(list_of_ind, list_of_ver, list_of_norm)
                     obj_mesh_dc[sc_id] = mesh
-                    this_attr_dc[sc_id]["mesh_area"] = mesh_area_calc(mesh)
                     verts = mesh[1].reshape(-1, 3)
                     mesh_bb = [np.min(verts, axis=0), np.max(verts, axis=0)]
                     del verts
@@ -742,8 +754,11 @@ def _write_props_to_sv_thread(args):
 
     obj_id_chs = args[0]
     n_folders_fs = args[1]
-    cell_mesh_workers = args[2]
-    generate_sv_mesh = args[3]
+    generate_sv_mesh = args[2]
+
+    c_mesh_worker_dc = "{}/c_mesh_worker_dict.pkl".format(global_params.config.temp_path)
+    with open(c_mesh_worker_dc, "rb") as f:
+        cell_mesh_workers = pkl.load(f)
 
     # iterate over the subcell structures
     # get cached mapping and property dicts of current subcellular structure
@@ -824,6 +839,10 @@ def _write_props_to_sv_thread(args):
 
                 obj_mesh_dc[sv_id] = mesh
                 start = time.time()
+                verts = mesh[1].reshape(-1, 3)
+                mesh_bb = [np.min(verts, axis=0), np.max(verts, axis=0)]
+                del verts
+                this_attr_dc[sv_id]["mesh_bb"] = mesh_bb
                 this_attr_dc[sv_id]["mesh_area"] = mesh_area_calc(mesh)
                 dt_mesh_area += time.time() - start
 
