@@ -688,8 +688,9 @@ class SegmentationObject(object):
             if len(self.mesh[1]) == 0 or len(self.mesh[0]) == 0:
                 self._mesh_bb = self.bounding_box * self.scaling
             else:
-                self._mesh_bb = [np.min(self.mesh[1].reshape((-1, 3)), axis=0),
-                                 np.max(self.mesh[1].reshape((-1, 3)), axis=0)]
+                verts = self.mesh[1].reshape(-1, 3)
+                self._mesh_bb = [np.min(verts, axis=0),
+                                 np.max(verts, axis=0)]
         return self._mesh_bb
 
     @property

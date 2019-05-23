@@ -141,6 +141,13 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                         "match!")
     if n_chunk_jobs is None:
         n_chunk_jobs = global_params.NCORE_TOTAL
+
+    if chunk_list is None:
+        chunk_list = [ii for ii in range(len(cset.chunk_dict))]
+
+    rand_ixs = np.arange(len(chunk_list))
+    np.random.shuffle(rand_ixs)
+    chunk_list = np.array(chunk_list)[rand_ixs]
     chunk_blocks = basics.chunkify(chunk_list, n_chunk_jobs)
 
     stitch_overlap = np.array([1, 1, 1])
@@ -159,7 +166,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
             max_sigma = np.array([np.max(sigmas)] * 3)
         overlap = np.ceil(max_sigma * 4) + stitch_overlap
 
-    # TODO: use chunk IDs instead ob Chunk objects... ->
+    # TODO: use chunk IDs instead ob Chunk objects... -> faster submission
     multi_params = []
     for chunk_sub in chunk_blocks:
         multi_params.append(

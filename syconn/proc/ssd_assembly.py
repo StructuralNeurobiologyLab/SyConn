@@ -21,10 +21,10 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
     Initializes cell reconstruction from k.zip file.
     The k.zip needs the following content:
         - Mesh files: 'sv.ply', 'mi.ply', 'sj.ply', 'vc.ply'
-        - Rendering locations: 'sample_locations.pkl'  (currently broekn to use .npy, fixed in
-        python 3.7)
-        - Supervoxel graph: 'rag.bz2'
         - meta dict: 'meta.pkl'
+        - [Optional] Rendering locations: 'sample_locations.pkl'
+        (currently broekn to use .npy, fixed in python 3.7)
+        - [Optional] Supervoxel graph: 'rag.bz2'
         - [Optional] Skeleton representation: 'skeleton.pkl'
         - [Optional] attribute dict: 'attr_dict.pkl'
 
@@ -82,22 +82,24 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
             sso.attr_dict = pkl.load(f)
 
     # Sample locations
-    with zipfile.ZipFile(path, allowZip64=True, mode='r') as z:
-        f = z.open("sample_locations.pkl")
-        sso._sample_locations = pkl.load(f)
-        # # currently broken, fixed in python 3.7:
-        # https://stackoverflow.com/questions/33742544/zip-file-not-seekable
-        # f = z.open("sample_locations.npy", mode='r')
-        # sso._sample_locations = np.load(f)
+    if "sample_locations.pkl" in files:
+        with zipfile.ZipFile(path, allowZip64=True, mode='r') as z:
+            f = z.open("sample_locations.pkl")
+            sso._sample_locations = pkl.load(f)
+            # # currently broken, fixed in python 3.7:
+            # https://stackoverflow.com/questions/33742544/zip-file-not-seekable
+            # f = z.open("sample_locations.npy", mode='r')
+            # sso._sample_locations = np.load(f)
 
     # RAG
-    with zipfile.ZipFile(path, allowZip64=True) as z:
-        tmp_dir = os.path.dirname(path)
-        tmp_p = "{}/rag.bz2".format(tmp_dir)
-        z.extract('rag.bz2', tmp_dir)
-        sso._sv_graph = nx.read_edgelist(tmp_p, nodetype=np.uint)
-        os.remove(tmp_p)
-        _ = sso.rag  # invoke node conversion into SegmentationObjects
+    if "rag.bz2" in files:
+        with zipfile.ZipFile(path, allowZip64=True) as z:
+            tmp_dir = os.path.dirname(path)
+            tmp_p = "{}/rag.bz2".format(tmp_dir)
+            z.extract('rag.bz2', tmp_dir)
+            sso._sv_graph = nx.read_edgelist(tmp_p, nodetype=np.uint)
+            os.remove(tmp_p)
+            _ = sso.rag  # invoke node conversion into SegmentationObjects
     return sso
 
 

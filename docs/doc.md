@@ -73,6 +73,9 @@ finished the following analysis steps for an example cube of shape \[2180 2180 1
 \[8/8] Matrix export                     00h:00min:37s                   0%
 
 
+## More examples
+[here](examples.md)
+
 ## SyConn KNOSSOS viewer
 The following packages have to be available for the system's python2 interpreter
 (will differ from the conda environment):

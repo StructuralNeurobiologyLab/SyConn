@@ -1548,6 +1548,8 @@ class SuperSegmentationObject(object):
         nb_views : Optional[int]
         dest_path : str
         k : int
+            Number of nearest vertices to average over. If k=0 unpredicted vertices
+            will be treated as 'unpredicted' class.
         force_recompute : bool
         index_view_key : str
         """
@@ -1848,7 +1850,7 @@ class SuperSegmentationObject(object):
         mesh2obj_file(dest_path, self.mesh, center=center, color=color,
                       scale=scale)
 
-    def export2kzip(self, dest_path, sv_graph=None, sv_color=None):
+    def export2kzip(self, dest_path, attr_keys=(), rag=None, sv_color=None):
         """
         Writes the sso to a KNOSSOS loadable kzip.
         Color is specified as rgba, 0 to 255.
@@ -1861,7 +1863,9 @@ class SuperSegmentationObject(object):
         Parameters
         ----------
         dest_path : str
-        sv_graph : nx.Graph
+        attr_keys : Iterable[str]
+            currently allowed: 'sample_locations', 'skeleton', 'attr_dict', 'rag'
+        rag : nx.Graph
             SV graph of SSV with uint nodes
         sv_color : 4-tuple of int
         """
@@ -1869,26 +1873,41 @@ class SuperSegmentationObject(object):
         # self.save_skeleton_to_kzip(dest_path=dest_path)
         # self.save_objects_to_kzip_sparse(["mi", "sj", "vc"],
         #                                  dest_path=dest_path)
-        tmp_dest_p = ['{}_skeleton.pkl'.format(dest_path),
-                      '{}_rag.bz2'.format(dest_path),
-                      '{}_sample_locations.pkl'.format(dest_path),
-                      '{}_attr_dict.pkl'.format(dest_path),
-                      '{}_meta.pkl'.format(dest_path)]
-        write_obj2pkl(tmp_dest_p[0], self.skeleton)
-        if sv_graph is None:
-            if not os.path.isfile(self.edgelist_path):
-                raise ValueError("Could not find SV graph of SSV {}. Please"
-                                 " pass `sv_graph` as kwarg.".format(self))
-            sv_graph = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
-        nx.write_edgelist(sv_graph, tmp_dest_p[1])
-        # np.save(tmp_dest_p[2], self.sample_locations())
-        write_obj2pkl(tmp_dest_p[2], self.sample_locations())
-        write_obj2pkl(tmp_dest_p[3], self.attr_dict)
-        write_obj2pkl(tmp_dest_p[4], {'version_dict': self.version_dict,
-                                      'scaling': self.scaling,
-                                      'working_dir': self.working_dir})
-        data2kzip(dest_path, tmp_dest_p, ['skeleton.pkl', 'rag.bz2', 'sample_locations.pkl',
-                                          'attr_dict.pkl', 'meta.pkl'])
+        tmp_dest_p = []
+        target_fnames = []
+        attr_keys = list(attr_keys)
+        if 'rag' in attr_keys:
+            if rag is None and not os.path.isfile(self.edgelist_path):
+                log_reps.warn("Could not find SV graph of SSV {}. Please"
+                              " pass `sv_graph` as kwarg.".format(self))
+            else:
+                tmp_dest_p.append('{}_rag.bz2'.format(dest_path))
+                target_fnames.append('rag.bz2')
+                if rag is None:
+                    rag = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
+                nx.write_edgelist(rag, tmp_dest_p[-1])
+            attr_keys.remove('rag')
+
+        allowed_attributes = ('sample_locations', 'skeleton', 'attr_dict')
+        for attr in attr_keys:
+            if attr not in allowed_attributes:
+                raise ValueError('Invalid attribute specified. Currently suppor'
+                                 'ted attributes for export: {}'.format(allowed_attributes))
+            tmp_dest_p.append('{}_{}.pkl'.format(dest_path, attr))
+            target_fnames.append('{}.pkl'.format(attr))
+            sso_attr = getattr(self, attr)
+            if hasattr(sso_attr, '__call__'):
+                sso_attr = sso_attr()
+            write_obj2pkl(tmp_dest_p[-1], sso_attr)
+
+        # always write meta dict
+        tmp_dest_p.append('{}_{}.pkl'.format(dest_path, 'meta'))
+        target_fnames.append('{}.pkl'.format('meta'))
+        write_obj2pkl(tmp_dest_p[-1], {'version_dict': self.version_dict,
+                                       'scaling': self.scaling,
+                                       'working_dir': self.working_dir})
+        # write all data
+        data2kzip(dest_path, tmp_dest_p, target_fnames)
         self.meshes2kzip(dest_path=dest_path, sv_color=sv_color)
         self.mergelist2kzip(dest_path=dest_path)
 

@@ -199,7 +199,7 @@ class FSBase(StorageBase):
             dest = self._path
         if self._path is None:  # support virtual / temporary SSO objects
             log_extraction.warning('"push" called but Storage object was initialized '
-                                   'with "None". Content will not bw pushed.')
+                                   'with "None". Content will not be written.')
             return
         write_obj2pkl(dest + ".tmp", self._dc_intern)
         shutil.move(dest + ".tmp", dest)

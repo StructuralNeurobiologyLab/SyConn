@@ -90,6 +90,10 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
             calculate_chunk_numbers_for_box(cset, offset, size)
     else:
         chunk_list = [ii for ii in range(len(cset.chunk_dict))]
+    # shuffle chunklist to get a more balanced work-load
+    rand_ixs = np.arange(len(chunk_list))
+    np.random.shuffle(rand_ixs)
+    chunk_list = np.array(chunk_list)[rand_ixs]
 
     os.makedirs(cset.path_head_folder, exist_ok=True)
     multi_params = []
@@ -460,6 +464,8 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
     -------
 
     """
+    log_extraction.warning(DeprecationWarning('"find_contact_sites" was replaced by '
+                                              '"extract_contact_sites".'))
     if size is not None and offset is not None:
         chunk_list, _ = \
             calculate_chunk_numbers_for_box(cset, offset, size)

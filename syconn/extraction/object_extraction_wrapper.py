@@ -31,7 +31,7 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
 
     Returns
     -------
-    chunk_list: list
+    chunk_list: List
         chunk ids
     dictionary: dict
         with reverse mapping
