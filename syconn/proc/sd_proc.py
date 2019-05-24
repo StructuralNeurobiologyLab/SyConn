@@ -370,7 +370,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     if global_params.config.use_new_meshing:
         sv_sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                                  obj_type="sv", version=0)
-        dataset_analysis(sv_sd, recompute=True, compute_meshprops=False)
+        dataset_analysis(sv_sd, recompute=False, compute_meshprops=False)
     all_times.append(time.time() - start)
     step_names.append("write cell SV dataset")
 
@@ -390,7 +390,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
         for k in global_params.existing_cell_organelles:
             sc_sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                                      obj_type=k, version=0)
-            dataset_analysis(sc_sd, recompute=True, compute_meshprops=False)
+            dataset_analysis(sc_sd, recompute=False, compute_meshprops=False)
             for worker_nr in list_of_workers:
                 p = "{}/tmp_meshes_{}_{}.pkl".format(global_params.config.temp_path,
                                                      k, worker_nr)

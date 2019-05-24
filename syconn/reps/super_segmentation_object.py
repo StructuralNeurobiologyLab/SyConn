@@ -1678,7 +1678,8 @@ class SuperSegmentationObject(object):
                 dest_folder, self.id, k, semseg_key, min_spine_cc_size), head_c)
         return neck_c, neck_s, head_c, head_s
 
-    def sample_locations(self, force=False, cache=True, verbose=False):
+    def sample_locations(self, force=False, cache=True, verbose=False,
+                         ds_factor=None):
         """
 
         Parameters
@@ -1687,6 +1688,9 @@ class SuperSegmentationObject(object):
             force resampling of locations
         cache : bool
             save sample location in SSO attribute dict
+        verbose : bool
+        ds_factor : float
+            Downscaling factor to generate locations
 
         Returns
         -------
@@ -1702,7 +1706,8 @@ class SuperSegmentationObject(object):
                 return self.attr_dict["sample_locations"]
         if verbose:
             start = time.time()
-        params = [[sv, {"force": force}] for sv in self.svs]
+        params = [[sv, {"force": force, 'save': cache,
+                        'ds_factor': ds_factor}] for sv in self.svs]
 
         # list of arrays
         locs = sm.start_multiprocess_obj("sample_locations", params,
@@ -2413,7 +2418,7 @@ class SuperSegmentationObject(object):
 
     def gen_skel_from_sample_locs(self, dest_path=None):
         """
-
+        # TODO: out-source
         Parameters
         ----------
         dest_path : str
@@ -2421,7 +2426,9 @@ class SuperSegmentationObject(object):
         """
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
-        locs = np.concatenate(self.sample_locations())
+        # generate locations at every cubic micron, force recompute (rendering locations use
+        # different `ds_factor`) and don't write to disk (cache=False)
+        locs = np.concatenate(self.sample_locations(force=True, cache=False, ds_factor=1000))
         g = create_graph_from_coords(locs, mst=True)
         if g.number_of_edges() == 1:
             edge_list = np.array(list(g.edges()))

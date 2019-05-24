@@ -81,23 +81,24 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
     ces.extract_contact_sites(chunk_size=chunk_size, log=log, max_n_jobs=max_n_jobs,
-                              cube_of_interest_bb=cube_of_interest_bb, n_folders_fs=n_folders_fs)
+                              cube_of_interest_bb=cube_of_interest_bb,
+                              n_folders_fs=n_folders_fs)
     log.info('SegmentationDataset of type "cs" and "syn" was generated.')
 
     # TODO: add check for SSD existence, which is required at this point
-    # This creates an SD of type 'syn_ssv' TODO: change stride into n_jobs or similar
+    # This creates an SD of type 'syn_ssv'
     cps.combine_and_split_syn(global_params.config.working_dir, resume_job=False,
-                              stride=250, cs_gap_nm=global_params.cs_gap_nm,
+                              cs_gap_nm=global_params.cs_gap_nm, log=log,
                               n_folders_fs=n_folders_fs)
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
     dataset_analysis(sd_syn_ssv, compute_meshprops=True)
     log.info('SegmentationDataset of type "syn_ssv" was generated.')
 
-    cps.map_objects_to_synssv(global_params.config.working_dir)
+    cps.map_objects_to_synssv(global_params.config.working_dir, log=log)
     log.info('Cellular organelles were mapped to "syn_ssv".')
 
-    cps.classify_synssv_objects(global_params.config.working_dir)
+    cps.classify_synssv_objects(global_params.config.working_dir, log=log)
     log.info('Synapse property prediction finished.')
 
     log.info('Collecting and writing syn-ssv objects to SSV attribute '
@@ -106,5 +107,5 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
     # `map_synssv_objects` if the latter uses thresholding for synaptic objects
     dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)  # just collect new data
     # TODO: decide whether this should happen after prob thresholding or not
-    map_synssv_objects()
+    map_synssv_objects(log=log)
     log.info('Finished.')

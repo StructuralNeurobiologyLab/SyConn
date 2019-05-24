@@ -107,7 +107,7 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
                                     debug=False, nb_cpus=n_max_co_processes)
     else:
         path_to_out = qu.QSUB_script(multi_params, "contact_site_extraction",
-                           n_max_co_processes=n_max_co_processes)
+                           n_max_co_processes=n_max_co_processes, log=log)
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -177,7 +177,7 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
             cset, target_kd, obj_type, [obj_type],
             offset=offset, size=size, stride=chunk_size, as_raw=False,
             orig_dtype=np.uint64, unified_labels=False,
-            n_max_co_processes=n_max_co_processes)
+            n_max_co_processes=n_max_co_processes, log=log)
         log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset ({})'.format(
             cset.path_head_folder, target_kd.knossos_path))
 
@@ -190,7 +190,7 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
         start_multiprocess_imap(_write_props_to_syn_thread,
                                 multi_params, nb_cpus=n_max_co_processes, debug=False)
     else:
-        qu.QSUB_script(multi_params, "write_props_to_syn",
+        qu.QSUB_script(multi_params, "write_props_to_syn", log=log,
                        n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
     sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                           obj_type='syn', version=0)

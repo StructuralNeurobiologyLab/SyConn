@@ -42,6 +42,7 @@ for p in so_chunk_paths:
     ad = AttributeDict(attr_dc_p, disable_locking=True)
     md = MeshStorage(mesh_dc_p, disable_locking=True)
     svixs = list(ad.keys())
+    # replace SO objects by using rep_coord and IDs stored in the attribute dict
     sd = sos_dict_fact(svixs, **so_kwargs)
     sos = init_sos(sd)
     # compute locations and use already processed meshes

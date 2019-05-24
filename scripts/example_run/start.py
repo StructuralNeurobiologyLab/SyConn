@@ -68,7 +68,8 @@ if __name__ == '__main__':
     bd = bb[1] - bb[0]
     scale = np.array([10, 10, 20])
     chunk_size = (256, 256, 256)
-    n_folders_fs = 1000  # number of folders in should probably be different for different segmentations
+    n_folders_fs = 1000
+    n_folders_fs_sc = 1000
     experiment_name = 'j0126_example'
     global_params.NCORE_TOTAL = 20
     global_params.NGPU_TOTAL = 2
@@ -84,7 +85,8 @@ if __name__ == '__main__':
     else:
         py36path = ""
     config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale,
-                                                      py36path=py36path, use_new_renderings_locs=False,
+                                                      py36path=py36path,
+                                                      use_new_renderings_locs=True,
                                                       use_large_fov_views_ct=False,
                                                       use_new_meshing=use_new_meshing,
                                                       allow_mesh_gen_cells=True,
@@ -168,7 +170,7 @@ if __name__ == '__main__':
     # START SyConn
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-                                    n_folders_fs_sc=n_folders_fs)
+                                    n_folders_fs_sc=n_folders_fs_sc)
     exec_init.run_create_rag()
 
     time_stamps.append(time.time())
@@ -192,11 +194,8 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('Neuron rendering')
 
-    # run_syn_generation can run in parallel to steps 5 and 6, because they
-    # require only medium MEM and CPU resources and mainly GPU
-    # TODO: adapt memory and CPU allocation of those GPU workers
     log.info('Step 4/8 - Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs)
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
 

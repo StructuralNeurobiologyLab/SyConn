@@ -1275,7 +1275,7 @@ def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
                       offset=None, size=None, n_max_co_processes=None,
                       stride=[4 * 128, 4 * 128, 4 * 128], overwrite=False,
                       as_raw=False, fast_downsampling=False, n_max_job=None,
-                      unified_labels=False, orig_dtype=np.uint8):
+                      unified_labels=False, orig_dtype=np.uint8, log=None):
     """
     Batchjob version of `ChunkDataset` `export_cset_to_kd` method, see knossos_utils.chunky for
     details.
@@ -1328,4 +1328,4 @@ def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
 
     qu.QSUB_script(multi_params, "export_cset_to_kd", n_cores=n_cores,
                    n_max_co_processes=n_max_co_processes, suffix=hdf5names[0],
-                   remove_jobfolder=True)
+                   remove_jobfolder=True, log=log)

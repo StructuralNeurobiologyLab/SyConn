@@ -412,22 +412,20 @@ def rgba2id_array(rgb_arr):
             continue
         rgb = rgb_arr_flat[ii]
         id_arr[ii] = rgb[0] + rgb[1]*256 + rgb[2]*(256**2) + rgb[3]*(256**3)
-    background_ix = np.max(id_arr) + 1  # convention: The highest index value in index view will correspond to the background
+    # convention: The highest index value in index view will correspond to the background
+    background_ix = np.max(id_arr) + 1
     id_arr[mask_arr] = background_ix
     return id_arr.reshape(rgb_arr.shape[:-1])
 
 
 def generate_rendering_locs(verts, ds_factor):
     """
-    TODO: generalize for all rendering locations (e.g. also use in call of SSO.sample_locations)
-
     Parameters
     ----------
     verts : np.ndarray
         N, 3
     ds_factor : float
-        effectively determines the volume size (ds_factor^3) for which a
-        rendering location is returned.
+        volume (ds_factor^3) for which a rendering location is returned.
     Returns
     -------
     np.ndarray
@@ -441,7 +439,8 @@ def generate_rendering_locs(verts, ds_factor):
     rendering_locs = []
     for kk, c in enumerate(verts[verts_ixs]):
         ds_loc = tuple((c / ds_factor).astype(np.int))
-        if ds_loc in ds_locs_encountered:  # always gets first coordinate which is in downsampled voxel, the others are skipped
+        # always gets first coordinate which is in downsampled voxel, the others are skipped
+        if ds_loc in ds_locs_encountered:
             continue
         rendering_locs.append(c)
         ds_locs_encountered[ds_loc] = None

@@ -67,7 +67,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 sge_additional_flags=None, iteration=1, max_iterations=3,
                 params_orig_id=None, python_path=None, disable_mem_flag=False,
                 disable_batchjob=False, send_notification=False, use_dill=False,
-                remove_jobfolder=False):
+                remove_jobfolder=False, log=None):
     # TODO: change `queue` and `pe` to be set globally in global_params. All
     #  wrappers around QSUB_script should then only have a flage like 'use_batchjob'
     # TODO: Switch to JobArrays!
@@ -159,8 +159,11 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                                           name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
-    log_batchjob = initialize_logging("{}".format(name + suffix),
-                                      log_dir=job_folder)
+    if log is None:
+        log_batchjob = initialize_logging("{}".format(name + suffix),
+                                          log_dir=job_folder)
+    else:
+        log_batchjob = log
     n_max_co_processes = np.min([global_params.NCORE_TOTAL // n_cores,
                                  len(params)])
     n_max_co_processes = np.max([n_max_co_processes, 1])

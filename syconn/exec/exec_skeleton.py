@@ -39,7 +39,7 @@ def run_skeleton_generation(max_n_jobs=None):
     # create SSV skeletons, requires SV skeletons!
     log.info('Starting skeleton generation of {} SSVs.'.format(
         len(ssd.ssv_ids)))
-    qu.QSUB_script(multi_params, "export_skeletons_new",
+    qu.QSUB_script(multi_params, "export_skeletons_new", log=log,
                    n_max_co_processes=global_params.NCORE_TOTAL,
                    remove_jobfolder=True)
 

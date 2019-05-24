@@ -248,9 +248,8 @@ def filter_relevant_syn(sd_syn, ssd):
 
 
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
-                          stride=1000, qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                          resume_job=False, n_max_co_processes=None, n_folders_fs=10000):
-    # TODO: remove `qsub_pe`and `qsub_queue`
+                          nb_cpus=None, resume_job=False, n_max_co_processes=None,
+                          n_folders_fs=10000, log=None):
     """
     Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
     syn-objects on SSV level and aggregates the respective 'syn' attributes
@@ -289,9 +288,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                                         for ix in range(n_folders_fs)])
 
     voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
-    block_steps = np.linspace(0, len(voxel_rel_paths),
-                              int(np.ceil(float(len(rel_synssv_to_syn_ids)) /
-                                          stride)) + 1).astype(np.int)
+
     # target SD for SSV syn objects
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version="0", create=True,
@@ -316,7 +313,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     else:
         _ = qu.QSUB_script(multi_params, "combine_and_split_syn",
                            resume_job=resume_job, remove_jobfolder=True,
-                           n_max_co_processes=n_max_co_processes)
+                           n_max_co_processes=n_max_co_processes, log=log)
 
     return sd_syn_ssv
 
@@ -1332,7 +1329,7 @@ def synssv_o_features(synssv_o):
 
 def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
                           mi_version=None, vc_version=None, max_vx_dist_nm=None,
-                          max_rep_coord_dist_nm=None, qsub_pe=None,
+                          max_rep_coord_dist_nm=None, qsub_pe=None, log=None,
                           qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     # TODO: remove `qsub_pe`and `qsub_queue`
     # TODO: optimize
@@ -1372,7 +1369,7 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
 
     else:
         path_to_out = qu.QSUB_script(multi_params,
-                                     "map_objects_to_synssv",
+                                     "map_objects_to_synssv", log=log,
                                      n_max_co_processes=n_max_co_processes,
                                      remove_jobfolder=True)
 
@@ -1590,10 +1587,9 @@ def map_objects_from_ssv_OLD(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
     return n_objects, n_vxs
 
 
-def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
-                            qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
+def classify_synssv_objects(wd, obj_version=None,log=None, nb_cpus=None,
+                            n_max_co_processes=None):
     """
-    # TODO: remove `qsub_pe`and `qsub_queue`
     # TODO: Will be replaced by new synapse detection
     Classify SSV contact sites into synaptic or non-synaptic using an RFC model
     and store the result in the attribute dict of the syn_ssv objects.
@@ -1616,14 +1612,13 @@ def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
                     multi_params]
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_classify_synssv_objects_thread,
+        _ = sm.start_multiprocess_imap(_classify_synssv_objects_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "classify_synssv_objects",
-                                     n_max_co_processes=n_max_co_processes,
-                                     remove_jobfolder=True)
+        _ = qu.QSUB_script(multi_params,  "classify_synssv_objects",
+                           n_max_co_processes=n_max_co_processes,
+                           remove_jobfolder=True, log=log)
 
 
 def _classify_synssv_objects_thread(args):
