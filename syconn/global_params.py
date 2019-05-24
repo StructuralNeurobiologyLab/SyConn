@@ -17,9 +17,9 @@ warnings.filterwarnings("ignore", message=".*dataset.value has been deprecated.*
 # ---------------------- STATIC AND GLOBAL PARAMETERS # -----------------------
 # --------- GLOBAL WORKING DIRECTORY
 # wd = "/wholebrain/scratch/areaxfs3/"
-# wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-wd = None
-# wd = "/wholebrain/scratch/areaxfs3/"
+wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+#wd = None
+#wd = "/wholebrain/scratch/areaxfs3/"
 # wd = '/mnt/j0126/areaxfs_v10/'
 
 # TODO: Put all dataset-specific parameters into config.ini / configspec.ini

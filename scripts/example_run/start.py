@@ -56,7 +56,10 @@ if __name__ == '__main__':
     if not os.path.isfile(kzip_p) or not os.path.isdir(h5_dir):
         raise FileNotFoundError('Example data could not be found at "{}".'.format(curr_dir))
     if not os.path.isfile(h5_dir + 'seg.h5') or len(glob.glob(h5_dir + '*.h5')) != 7\
-            or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
+            or not os.path.isfile(h5_dir + 'rag.bz2'):
+        print(os.path.isfile(h5_dir + 'seg.h5'))
+        print(len(glob.glob(h5_dir + '*.h5')))
+        print(os.path.isfile(h5_dir + 'neuron_rag.bz2'))
         raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
 
     os.makedirs(example_wd + '/glia/', exist_ok=True)
@@ -242,3 +245,4 @@ if __name__ == '__main__':
                    '/../kplugin/server.py'
     os.system('python {} --working_dir={} --port=10001'.format(
         fname_server, example_wd))
+
