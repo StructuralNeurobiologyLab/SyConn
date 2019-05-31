@@ -782,7 +782,8 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
             workfolder = os.path.dirname(cset.path_head_folder.rstrip("/"))
     else:
         workfolder = cset.path_head_folder
-    voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
+    storage_location_ids = rh.get_unique_subfold_ixs(n_folders_fs)
+    voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
     if dataset_names is not None:
         for dataset_name in dataset_names:
             dataset_path = workfolder + "/%s_temp/" % dataset_name
@@ -963,8 +964,9 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
         dataset_names = hdf5names
     for ii in range(len(hdf5names)):
         hdf5_name = hdf5names[ii]
+        storage_location_ids = rh.get_unique_subfold_ixs(n_folders_fs)
         voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in
-                           range(n_folders_fs)]
+                           storage_location_ids]
 
         segdataset = segmentation.SegmentationDataset(obj_type=dataset_names[ii],
                                                       working_dir=workfolder,
@@ -1096,9 +1098,9 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
             workfolder = os.path.dirname(cset.path_head_folder.rstrip("/"))
     else:
         workfolder = cset.path_head_folder
-
+    storage_location_ids = rh.get_unique_subfold_ixs(n_folders_fs)
     voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in
-                       range(n_folders_fs)]
+                       storage_location_ids]
     for kk, hdf5_name in enumerate(hdf5names):
         object_name = dataset_names[kk]
         segdataset = segmentation.SegmentationDataset(

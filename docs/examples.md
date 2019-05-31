@@ -6,6 +6,10 @@ can be found in `SyConn/examples/`.
 * python script:  `SyConn/examples/semseg_spine.py`
 * requires model folder in working directory
 
+
+<img align="right" width="400" height="400" src="./_static/semseg_spiness_raw.png">
+
+<img align="right" width="400" height="400" src="./_static/semseg_spiness_spines.png">
 The script needs to be called with at least the `--kzip` argument to specify the location of the
  file which contains the cell reconstruction.
 If your SyConn working directory of example cube 1 is not located at the default
@@ -25,9 +29,3 @@ After completion you will find a second file which contains the cell mesh colore
 model's output.
 
 The following two images show an example of the original data (content of `(\d+).k.zip`) and the prediction (content of `(\d+)_spines.k.zip`; red: spine head, black: dendritic shaft; grey: spine neck; turquoise: soma/axon)
-
-
-<img align="right" width="200" height="200" src="./_static/semseg_spiness_raw.png">
-
-
-<img align="right" width="200" height="200" src="./_static/semseg_spiness_spines.png">

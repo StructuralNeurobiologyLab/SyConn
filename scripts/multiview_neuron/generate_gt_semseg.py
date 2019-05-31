@@ -56,7 +56,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
         raw, label and index views
     """
     assert gt_type in ["axgt", "spgt"], "Currently only spine and axon GT is supported"
-    n_labels = 3 if gt_type == "axgt" else 4
+    n_labels = 5 if gt_type == "axgt" else 4
     palette = generate_palette(n_labels)
     sso_id = int(re.findall("/(\d+).", kzip_path)[0])
     sso = SuperSegmentationObject(sso_id, version=ssd_version)
@@ -98,8 +98,9 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     if out_path is not None:
         if gt_type == 'spgt':  #
             colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1]]
-        else:# dendrite, axon, soma, background
-            colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1], [0.9, 0.9, 0.9, 1]]
+        else:# dendrite, axon, soma, bouton, terminal, background
+            colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
+                      [0.05, 0.6, 0.6, 1], [0.6, 0.05, 0.05, 1], [0.9, 0.9, 0.9, 1]]
         colors = (np.array(colors) * 255).astype(np.uint8)
         color_array_mesh = colors[vertex_labels][:, 0]  # TODO: check why only first element, maybe colors introduces an additional axis
         write_mesh2kzip("{}/sso_{}_gtlabels.k.zip".format(out_path, sso.id),
@@ -132,6 +133,8 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
                                                smooth_shade=False, nb_views=nb_views,
                                                comp_window=comp_window, verbose=verbose)
     label_views = remap_rgb_labelviews(label_views[..., :3], palette)[:, None]
+    # TODO: the 3 neglects the alpha channel, i.e. remapping labels bigger than 256**3 becomes
+    #  invalid
     index_views = render_sso_coords_index_views(sso, locs, rot_mat=rot_mat, verbose=verbose,
                                                 nb_views=nb_views, ws=ws, comp_window=comp_window)
     raw_views = render_sso_coords(sso, locs, nb_views=nb_views, ws=ws,
@@ -300,27 +303,38 @@ if __name__ == "__main__":
         dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_{" \
                       "}/".format(ws[0])
 
-        # Process original data
+        # # Process original data
+        # global_params.wd = "/wholebrain/scratch/areaxfs3/"
+        # assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
+        # label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
+        #                     "/gt_axoness_semseg_skeletons/batch1/"
+        # file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
+        # GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
+        #               ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on ve
+        #
+        # # Process new batches
+        # global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+        # assert global_params.wd == "/wholebrain/songbird/j0126/areaxfs_v6/"
+        #
+        # label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
+        #                     "/gt_axoness_semseg_skeletons//batch3/"  # BATCH2_Feb2019/Annotations/"
+        # file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
+        # GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
+        #               ws=ws, comp_window=40.96e3*2, n_voting=0)
+        #
+        # label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
+        #                     "/gt_axoness_semseg_skeletons/BATCH2_Feb2019/Annotations/"
+        # file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
+        # GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
+        #               ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)
+
+        # bouton GT
+        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_{" \
+                      "}_with_BOUTONS/".format(ws[0])
         global_params.wd = "/wholebrain/scratch/areaxfs3/"
         assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
-                            "/gt_axoness_semseg_skeletons/"
-        file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
-        GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
-                      ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on ve
-
-        # Process new batches
-        global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
-        assert global_params.wd == "/wholebrain/songbird/j0126/areaxfs_v6/"
-
-        label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
-                            "/gt_axoness_semseg_skeletons//batch3/"  # BATCH2_Feb2019/Annotations/"
-        file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
-        GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
-                      ws=ws, comp_window=40.96e3*2, n_voting=0)
-
-        label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
-                            "/gt_axoness_semseg_skeletons/BATCH2_Feb2019/Annotations/"
+                            "/gt_axoness_semseg_skeletons/NEW_including_boutons/batch1_results/"
         file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
         GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
                       ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)

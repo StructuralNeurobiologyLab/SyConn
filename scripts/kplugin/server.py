@@ -177,7 +177,10 @@ class SyConnBackend(object):
         mesh = ssv._load_obj_mesh_compr("sv")
         mesh = {'vertices': mesh[1],
                 'indices': mesh[0],
-                'normals': mesh[2] if len(mesh) == 2 else []}
+                # TODO: examine the existing normals more closely -> find_meshes seems to create
+                #  different normals than K (face orientation is correct though)
+                # 'normals': mesh[2] if len(mesh) == 2 else []}
+                'normals': []}
         dtime = time.time() - start
         self.logger.info('Got ssv mesh {} after {:.2f}'.format(ssv_id, dtime))
         return mesh
@@ -249,6 +252,9 @@ class SyConnBackend(object):
         :param ssv_id: int
         :return: dict
         """
+        # TODO: examine the existing normals more closely -> find_meshes seems to create
+        #  different normals than K (face orientation is correct though)
+        return b""
         start = time.time()
         self.logger.info('Loading ssv {} mesh normals'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
@@ -288,7 +294,10 @@ class SyConnBackend(object):
             return None
         ret = {'vertices': mesh[1],
                'indices': mesh[0],
-               'normals': mesh[2] if len(mesh) == 2 else []}
+               # TODO: examine the existing normals more closely -> find_meshes seems to create
+               #  different normals than K (face orientation is correct though)
+               # 'normals': mesh[2] if len(mesh) == 2 else []}
+               'normals': []}
         return ret
 
     def ssv_obj_ind(self, ssv_id, obj_type):
@@ -360,6 +369,9 @@ class SyConnBackend(object):
         :param obj_type: str
         :return: dict
         """
+        # TODO: examine the existing normals more closely -> find_meshes seems to create
+        #  different normals than K (face orientation is correct though)
+        return b""
         start = time.time()
         self.logger.info('Loading ssv {} {} mesh normals'
                          ''.format(ssv_id, obj_type))

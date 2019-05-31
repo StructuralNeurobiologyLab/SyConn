@@ -24,7 +24,7 @@ from ..handler.basics import kd_factory
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
-from ..reps.rep_helper import subfold_from_ix, ix_from_subfold
+from ..reps.rep_helper import subfold_from_ix, ix_from_subfold, get_unique_subfold_ixs
 from ..backend.storage import AttributeDict, VoxelStorage, CompressedStorage
 from ..handler.basics import chunkify
 from . import log_extraction
@@ -283,11 +283,11 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                                               version=syn_version)
 
     rel_synssv_to_syn_ids = filter_relevant_syn(syn_sd, ssd)
-
+    storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
     voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
-                                        for ix in range(n_folders_fs)])
+                                        for ix in storage_location_ids])
 
-    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
 
     # target SD for SSV syn objects
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
@@ -334,6 +334,10 @@ def _combine_and_split_syn_thread(args):
                                               version=syn_version)
 
     n_per_voxel_path = np.ceil(float(len(rel_cs_to_cs_agg_ids_items)) / len(voxel_rel_paths))
+    if n_per_voxel_path > sd_syn.n_folders_fs:
+        log_extraction.warning('Number of items per storage dict for "syn" objects'
+                               ' is bigger than `segmentation.SegmentationDataset'
+                               '("syn", working_dir=wd).n_folders_fs`.')
 
     n_items_for_path = 0
     cur_path_id = 0
@@ -341,7 +345,7 @@ def _combine_and_split_syn_thread(args):
     os.makedirs(base_dir, exist_ok=True)
     voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
     attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
-    # get ID for storing intermediate results
+    # get ID/path to storage to save intermediate results
     next_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
     for item in rel_cs_to_cs_agg_ids_items:
         n_items_for_path += 1
@@ -445,7 +449,10 @@ def _combine_and_split_syn_thread(args):
             this_attr_dc = dict(neuron_partners=ssv_ids)
             this_attr_dc.update(syn_props_agg)
             attr_dc[next_id] = this_attr_dc
-            next_id += sd_syn.n_folders_fs
+            if global_params.config.use_new_subfold:
+                next_id += 1
+            else:
+                next_id += sd_syn.n_folders_fs
 
         if n_items_for_path > n_per_voxel_path:
             # TODO: passing explicit dest_path might not be required here
@@ -510,7 +517,7 @@ def filter_relevant_cs_agg(cs_agg, ssd):
 
 # TODO: Use this in case contact objects are required
 def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
-                             cs_agg_version=None,
+                             cs_agg_version=None, n_folders_fs=10000,
                              stride=1000, qsub_pe=None, qsub_queue=None,
                              nb_cpus=None, n_max_co_processes=None):
 
@@ -519,16 +526,16 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
                                               version=cs_agg_version)
 
     rel_cs_to_cs_agg_ids = filter_relevant_cs_agg(cs_agg, ssd)
+    storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
+    voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
+                                        for ix in storage_location_ids])
 
-    voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, 100000)[:-2]
-                                        for ix in range(100000)])
-
-    voxel_rel_paths = [subfold_from_ix(ix, 100000) for ix in range(100000)]
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
     block_steps = np.linspace(0, len(voxel_rel_paths),
                               int(np.ceil(float(len(rel_cs_to_cs_agg_ids)) / stride)) + 1).astype(np.int)
 
     cs = segmentation.SegmentationDataset("cs_ssv", working_dir=wd, version="new",
-                                          create=True, n_folders_fs=100000)
+                                          create=True, n_folders_fs=n_folders_fs)
 
     for p in voxel_rel_paths_2stage:
         os.makedirs(cs.so_storage_path + p)
@@ -706,10 +713,10 @@ def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
                              stride=20, qsub_pe=None, qsub_queue=None,
                              nb_cpus=None, n_max_co_processes=None):
     assert n_folders_fs % stride == 0
-
+    raise DeprecationWarning('Currently not adapted to new subfold system')
     wd = cs_sd.working_dir
-
-    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
+    storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
     conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd, version="new",
                                                create=True, n_folders_fs=n_folders_fs)
 
@@ -738,6 +745,7 @@ def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
 
 # TODO: SegmentationDataset version of below, probably not necessary anymore
 def _overlap_mapping_sj_to_cs_thread(args):
+    # TODO: REMOVE
     wd, block_start, block_end, conn_sd_version, sj_sd_version, cs_sd_version, \
         rep_coord_dist_nm = args
 
@@ -756,7 +764,7 @@ def _overlap_mapping_sj_to_cs_thread(args):
     sj_kdtree = spatial.cKDTree(sj_sd.rep_coords[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']] * sj_sd.scaling)
 
     for i_cs_start_id, cs_start_id in enumerate(cs_id_assignment[block_start: block_end]):
-
+        # TODO: change
         rel_path = subfold_from_ix(i_cs_start_id + block_start, conn_sd.n_folders_fs)
 
         voxel_dc = VoxelStorage(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
@@ -866,8 +874,8 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
     wd = cs_sd.working_dir
 
     rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']]
-
-    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
+    storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd, version="0",
                                               create=True, n_folders_fs=n_folders_fs)
 
@@ -1095,7 +1103,8 @@ def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
 
     rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']]
 
-    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
+    storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
     conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd, version="new",
                                                create=True, n_folders_fs=n_folders_fs)
 

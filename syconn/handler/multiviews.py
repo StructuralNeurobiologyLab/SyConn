@@ -115,6 +115,10 @@ def str2intconverter(comment, gt_type):
             return 0
         elif comment == "gt_soma":
             return 2
+        elif comment == "gt_bouton":
+            return 3
+        elif comment == "gt_terminal":
+            return 4
         else:
             return -1
     elif gt_type == "spgt":

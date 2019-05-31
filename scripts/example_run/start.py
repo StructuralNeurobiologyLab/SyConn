@@ -115,6 +115,7 @@ if __name__ == '__main__':
         #                      'neuron RAG at this locations. Please remove the existing one before '
         #                      'starting SyConn in glia-removal-mode.')
         shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
+
     # INITIALIZE DATA
     # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
     kd = knossosdataset.KnossosDataset()

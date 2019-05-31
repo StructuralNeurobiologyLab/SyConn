@@ -1295,11 +1295,11 @@ class SuperSegmentationObject(object):
         """
         if len(self.sv_ids) > global_params.RENDERING_MAX_NB_SV:
             part = self.partition_cc()
-            log_reps.info('Partitioned hugh SSV into {} subgraphs with each {}'
+            log_reps.info('Partitioned huge SSV into {} subgraphs with each {}'
                           ' SVs.'.format(len(part), len(part[0])))
             if not overwrite:  # check existence of glia preds
                 views_exist = np.array(self.view_existence(), dtype=np.int)
-                log_reps.info("Rendering huge SSO. {}/{} views left to process"
+                log_reps.info("Rendering SSO. {}/{} views left to process"
                               ".".format(np.sum(views_exist == 0), len(self.svs)))
                 ex_dc = {}
                 for ii, k in enumerate(self.svs):
@@ -1310,11 +1310,11 @@ class SuperSegmentationObject(object):
                         continue
                 del ex_dc
             else:
-                log_reps.info("Rendering huge SSO. {} SVs left to process"
+                log_reps.info("Rendering SSO. {} SVs left to process"
                               ".".format(len(self.svs)))
             params = [[so.id for so in el] for el in part]
 
-            params = chunkify(params, 2000)
+            params = chunkify(params, global_params.NGPU_TOTAL * 2)
             so_kwargs = {'version': self.svs[0].version,
                          'working_dir': self.working_dir,
                          'obj_type': self.svs[0].type}
@@ -1326,8 +1326,9 @@ class SuperSegmentationObject(object):
             params = [[par, so_kwargs, render_kwargs] for par in params]
             qu.QSUB_script(
                 params, "render_views_partial", suffix="_SSV{}".format(self.id),
-                pe=qsub_pe, queue=None, script_folder=None, n_cores=2,
-                n_max_co_processes=qsub_co_jobs, resume_job=resume_job)
+                n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                n_max_co_processes=qsub_co_jobs,
+                resume_job=resume_job, additional_flags="--gres=gpu:1")
         else:
             # render raw data
             render_sampled_sso(self, add_cellobjects=add_cellobjects,

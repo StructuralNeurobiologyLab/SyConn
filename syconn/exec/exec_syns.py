@@ -90,6 +90,8 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
     cps.combine_and_split_syn(global_params.config.working_dir, resume_job=False,
                               cs_gap_nm=global_params.cs_gap_nm, log=log,
                               n_folders_fs=n_folders_fs)
+    log.info('Synapse objects were created.')
+
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
     dataset_analysis(sd_syn_ssv, compute_meshprops=True)

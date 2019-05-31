@@ -68,8 +68,6 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 params_orig_id=None, python_path=None, disable_mem_flag=False,
                 disable_batchjob=False, send_notification=False, use_dill=False,
                 remove_jobfolder=False, log=None):
-    # TODO: change `queue` and `pe` to be set globally in global_params. All
-    #  wrappers around QSUB_script should then only have a flage like 'use_batchjob'
     # TODO: Switch to JobArrays!
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
@@ -590,7 +588,11 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
                                   nb_cpus=n_max_co_processes)
     if len("".join(out_str)) > 0:
         log_batchjob.error('Errors occurred during "{}".:\n{}'.format(name, out_str))
-    else:
+    out_files = glob.glob(path_to_out + "*.pkl")
+    if len(out_files) < len(params):
+        raise ValueError('{}/{} Batchjob fallback worker failed.'.format(len(params) - len(
+            out_files), len(params)))
+    if len("".join(out_str)) == 0:
         if remove_jobfolder:
             shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob.debug('Finished "{}" after {:.2f}s.'.format(name, time.time() - start))

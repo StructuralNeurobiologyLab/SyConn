@@ -89,7 +89,9 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
     if chunk_size is None:
         chunk_size = [512, 512, 512]
     if max_n_jobs is None:
-        max_n_jobs = global_params.NCORE_TOTAL
+        max_n_jobs = global_params.NCORE_TOTAL * 2
+        # loading cached data or adapt number of jobs/cache size dynamically, dependent on the
+        # dataset
     kd = kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
@@ -152,7 +154,7 @@ def run_create_rag():
         G.add_edge(ix, ix)
 
     log.debug("Found {} SVs in initial RAG after adding size-one connected "
-              "components. Writing kml text file.".format(G.number_of_nodes()))
+              "components.".format(G.number_of_nodes()))
 
     # remove small connected components
     sv_size_dict = {}
