@@ -13,6 +13,7 @@ import numpy as np
 import os
 import tqdm
 import time
+import h5py
 import sys
 import shutil
 from collections import defaultdict
@@ -364,7 +365,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
                     for sv_id_block in basics.chunkify(storage_location_ids, global_params.NNODES_TOTAL * 2)]
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params,
-                                   nb_cpus=n_max_co_processes, debug=False)
+                                   nb_cpus=n_max_co_processes, debug=True)
     else:
         qu.QSUB_script(multi_params, "write_props_to_sv_singlenode",
                        n_cores=global_params.NCORES_PER_NODE, n_max_co_processes=global_params.NNODES_TOTAL,
@@ -396,12 +397,19 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
             for worker_nr in list_of_workers:
                 p = "{}/tmp_meshes_{}_{}.pkl".format(global_params.config.temp_path,
                                                      k, worker_nr)
+                p_h5py = "{}/tmp_meshes_{}_{}.h5".format(global_params.config.temp_path,
+                                                         k, worker_nr)
                 os.remove(p)
+                os.remove(p_h5py)
         # remove temporary SV meshes
         for worker_nr in list_of_workers:
             p = "{}/tmp_meshes_{}_{}.pkl".format(global_params.config.temp_path,
                                                  "sv", worker_nr)
+            p_h5py = "{}/tmp_meshes_{}_{}.h5".format(global_params.config.temp_path,
+                                                     "sv", worker_nr)
+
             os.remove(p)
+            os.remove(p_h5py)
     # clear temporary files
     for p in dict_paths:
         os.remove(p)
@@ -438,8 +446,7 @@ def _map_subcell_extract_props_thread(args):
     scmd_lst = [{} for _ in range(n_subcell)]   # subcell. mapping dicts
 
     big_mesh_dict = {}
-    big_mesh_dict['sv'] = defaultdict(list)
-    for organelle in global_params.existing_cell_organelles:
+    for organelle in ["sv", ] + global_params.existing_cell_organelles:
         big_mesh_dict[organelle] = defaultdict(list)
 
     dt_times_dc = {'find_mesh': 0, 'mesh_io': 0, 'merge_mesh': 0}
@@ -497,6 +504,19 @@ def _map_subcell_extract_props_thread(args):
             start = time.time()
             p = "{}/tmp_meshes_{}_{}.pkl".format(global_params.config.temp_path,
                                                  segtype, worker_nr)
+
+            # ###########################################################################
+            p_h5py = "{}/tmp_meshes_{}_{}.h5".format(global_params.config.temp_path,
+                                                     segtype, worker_nr)
+
+            f = h5py.File(p_h5py, "w")
+            for key in big_mesh_dict[segtype].keys():
+                grp = f.create_group(str(key))
+                for i, t in enumerate(['f', 'v', 'n']):  # faces, vertices, normals
+                    grp.create_dataset(t, data=big_mesh_dict[segtype][key][i], compression="gzip")
+            f.close()
+            # ############################################################################
+
             output_worker = open(p, 'wb')
             pkl.dump(big_mesh_dict[segtype], output_worker)
             output_worker.close()
@@ -859,6 +879,11 @@ def _write_props_to_sv_thread(args):
         for worker_nr in worker_ids:
             p = "{}/tmp_meshes_{}_{}.pkl".format(global_params.config.temp_path,
                                                  "sv", worker_nr)
+            p_h5py = "{}/tmp_meshes_{}_{}.h5".format(global_params.config.temp_path,
+                                                     "sv", worker_nr)
+
+
+
             pkl_file = open(p, 'rb')
             partial_mesh_dc = pkl.load(pkl_file)
             pkl_file.close()
@@ -868,6 +893,8 @@ def _write_props_to_sv_thread(args):
         dt_mesh_merge_io += time.time() - start
         log_proc.critical('Loading meshes from worker caches took'
                           ' {:.2f} min [dummy error]'.format(dt_mesh_merge_io / 60))
+        print("\n\n\n all_obj_keys= ", all_obj_keys)
+        sys.exit()
 
     # get SegmentationDataset of cell SV
     sv_sd = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs,

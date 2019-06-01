@@ -102,6 +102,7 @@ def save_to_h5py(data, path, hdf5_names=None):
     nothing
 
     """
+
     if (not type(data) is dict) and hdf5_names is None:
         raise Exception("hdf5names has to be set, when data is a list")
     if os.path.isfile(path):
