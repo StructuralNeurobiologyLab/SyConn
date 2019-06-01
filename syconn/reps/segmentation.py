@@ -688,8 +688,9 @@ class SegmentationObject(object):
             if len(self.mesh[1]) == 0 or len(self.mesh[0]) == 0:
                 self._mesh_bb = self.bounding_box * self.scaling
             else:
-                self._mesh_bb = [np.min(self.mesh[1].reshape((-1, 3)), axis=0),
-                                 np.max(self.mesh[1].reshape((-1, 3)), axis=0)]
+                verts = self.mesh[1].reshape(-1, 3)
+                self._mesh_bb = [np.min(verts, axis=0),
+                                 np.max(verts, axis=0)]
         return self._mesh_bb
 
     @property
@@ -734,7 +735,7 @@ class SegmentationObject(object):
         else:
             return self._views
 
-    def sample_locations(self, force=False):
+    def sample_locations(self, force=False, save=True, ds_factor=None):
         assert self.type == "sv"
         if self.sample_locations_exist and not force:
             return CompressedStorage(self.locations_path,
@@ -743,17 +744,18 @@ class SegmentationObject(object):
             verts = self.mesh[1].reshape(-1, 3)
             if len(verts) == 0:  # only return scaled rep. coord as [1, 3] array
                 return np.array([self.rep_coord, ], dtype=np.float32) * self.scaling
-
+            if ds_factor is None:
+                ds_factor = 2000
             if global_params.config.use_new_renderings_locs:
-                coords = generate_rendering_locs(verts, 2000).astype(np.float32)
+                coords = generate_rendering_locs(verts, ds_factor).astype(np.float32)
             else:
-                coords = surface_samples(verts, bin_sizes=(2000, 2000, 2000),
-                                         max_nb_samples=10000, r=1000).astype(np.float32)
-
-            loc_dc = CompressedStorage(self.locations_path, read_only=False,
-                                       disable_locking=not self.enable_locking)
-            loc_dc[self.id] = coords.astype(np.float32)
-            loc_dc.push()
+                coords = surface_samples(verts, [ds_factor] * 3,
+                                         r=ds_factor/2).astype(np.float32)
+            if save:
+                loc_dc = CompressedStorage(self.locations_path, read_only=False,
+                                           disable_locking=not self.enable_locking)
+                loc_dc[self.id] = coords.astype(np.float32)
+                loc_dc.push()
             return coords.astype(np.float32)
 
     def save_voxels(self, bin_arr, offset, overwrite=False):

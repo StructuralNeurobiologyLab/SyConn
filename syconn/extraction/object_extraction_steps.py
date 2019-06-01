@@ -141,6 +141,13 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                         "match!")
     if n_chunk_jobs is None:
         n_chunk_jobs = global_params.NCORE_TOTAL
+
+    if chunk_list is None:
+        chunk_list = [ii for ii in range(len(cset.chunk_dict))]
+
+    rand_ixs = np.arange(len(chunk_list))
+    np.random.shuffle(rand_ixs)
+    chunk_list = np.array(chunk_list)[rand_ixs]
     chunk_blocks = basics.chunkify(chunk_list, n_chunk_jobs)
 
     stitch_overlap = np.array([1, 1, 1])
@@ -159,7 +166,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
             max_sigma = np.array([np.max(sigmas)] * 3)
         overlap = np.ceil(max_sigma * 4) + stitch_overlap
 
-    # TODO: use chunk IDs instead ob Chunk objects... ->
+    # TODO: use chunk IDs instead ob Chunk objects... -> faster submission
     multi_params = []
     for chunk_sub in chunk_blocks:
         multi_params.append(
@@ -775,7 +782,8 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
             workfolder = os.path.dirname(cset.path_head_folder.rstrip("/"))
     else:
         workfolder = cset.path_head_folder
-    voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
+    storage_location_ids = rh.get_unique_subfold_ixs(n_folders_fs)
+    voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
     if dataset_names is not None:
         for dataset_name in dataset_names:
             dataset_path = workfolder + "/%s_temp/" % dataset_name
@@ -956,8 +964,9 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
         dataset_names = hdf5names
     for ii in range(len(hdf5names)):
         hdf5_name = hdf5names[ii]
+        storage_location_ids = rh.get_unique_subfold_ixs(n_folders_fs)
         voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in
-                           range(n_folders_fs)]
+                           storage_location_ids]
 
         segdataset = segmentation.SegmentationDataset(obj_type=dataset_names[ii],
                                                       working_dir=workfolder,
@@ -1089,9 +1098,9 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
             workfolder = os.path.dirname(cset.path_head_folder.rstrip("/"))
     else:
         workfolder = cset.path_head_folder
-
+    storage_location_ids = rh.get_unique_subfold_ixs(n_folders_fs)
     voxel_rel_paths = [rh.subfold_from_ix(ix, n_folders_fs) for ix in
-                       range(n_folders_fs)]
+                       storage_location_ids]
     for kk, hdf5_name in enumerate(hdf5names):
         object_name = dataset_names[kk]
         segdataset = segmentation.SegmentationDataset(
@@ -1268,7 +1277,7 @@ def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
                       offset=None, size=None, n_max_co_processes=None,
                       stride=[4 * 128, 4 * 128, 4 * 128], overwrite=False,
                       as_raw=False, fast_downsampling=False, n_max_job=None,
-                      unified_labels=False, orig_dtype=np.uint8):
+                      unified_labels=False, orig_dtype=np.uint8, log=None):
     """
     Batchjob version of `ChunkDataset` `export_cset_to_kd` method, see knossos_utils.chunky for
     details.
@@ -1321,4 +1330,4 @@ def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
 
     qu.QSUB_script(multi_params, "export_cset_to_kd", n_cores=n_cores,
                    n_max_co_processes=n_max_co_processes, suffix=hdf5names[0],
-                   remove_jobfolder=True)
+                   remove_jobfolder=True, log=log)

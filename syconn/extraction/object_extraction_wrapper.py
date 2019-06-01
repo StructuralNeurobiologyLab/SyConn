@@ -31,7 +31,7 @@ def calculate_chunk_numbers_for_box(cset, offset, size):
 
     Returns
     -------
-    chunk_list: list
+    chunk_list: List
         chunk ids
     dictionary: dict
         with reverse mapping
@@ -208,6 +208,7 @@ def from_probabilities_to_kd(cset, filename, hdf5names,
         Method which is to applied to cube data if `load_from_kd_overlaycubes`
         is True.
     log : logging.logger
+        # TODO: pass log to all methods called
 
 
     """
@@ -344,7 +345,7 @@ def from_probabilities_to_kd(cset, filename, hdf5names,
     oes.export_cset_to_kd_batchjob(
         cset, target_kd, '{}_stitched_components'.format(filename), hdf5names,
         offset=offset, size=size, stride=[4 * 128, 4 * 128, 4 * 128], as_raw=False,
-        orig_dtype=np.uint64, unified_labels=False,
+        orig_dtype=np.uint64, unified_labels=False, log=log,
         n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("export KD")

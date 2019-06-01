@@ -11,8 +11,10 @@ import glob
 import os
 import numpy as np
 import networkx as nx
+import time
 import re
 import shutil
+from multiprocessing import Queue, Process
 
 from syconn.reps.rep_helper import knossos_ml_from_ccs
 from syconn.reps.segmentation_helper import find_missing_sv_views
@@ -54,7 +56,7 @@ def run_morphology_embedding(max_n_jobs=None):
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
                      pred_key_appendix) for ssv_ids in multi_params]
     qu.QSUB_script(multi_params, "generate_morphology_embedding", n_max_co_processes=global_params.NGPU_TOTAL,
-                   n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                   n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE, log=log,
                    suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
     log.info('Finished extraction of cell morphology embedding.')
 
@@ -78,7 +80,7 @@ def run_axoness_mapping(max_n_jobs=None):
 
     multi_params = [(par, pred_key_appendix) for par in multi_params]
     log.info('Starting axoness mapping.')
-    _ = qu.QSUB_script(multi_params, "map_viewaxoness2skel",
+    _ = qu.QSUB_script(multi_params, "map_viewaxoness2skel", log=log,
                        n_max_co_processes=global_params.NCORE_TOTAL,
                        suffix="", n_cores=1, remove_jobfolder=True)
     # TODO: perform completeness check
@@ -117,12 +119,14 @@ def run_axoness_prediction(max_n_jobs_gpu=None, e3=False):
                     par in multi_params]
 
     if e3 is True:
-        _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
+        # TODO: using two GPUs on a single node seems to be error-prone
+        #  -> wb13 froze when processing example_cube=2
+        n_cores = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE
+        if 'example_cube' in global_params.config.working_dir:
+            n_cores = global_params.NCORES_PER_NODE  # do not run two predictions in parallel
+        _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3", log=log,
                            n_max_co_processes=global_params.NGPU_TOTAL,
-                           n_cores=global_params.NCORES_PER_NODE,# // global_params.NGPUS_PER_NODE,
-                           # TODO: using two GPUs on a single
-                           # node seems to be error-prone -> wb13 froze when processing
-                           # example_cube=2
+                           n_cores=n_cores,
                            suffix="_axoness", additional_flags="--gres=gpu:1",
                            remove_jobfolder=True)
     else:
@@ -130,7 +134,7 @@ def run_axoness_prediction(max_n_jobs_gpu=None, e3=False):
             mk = par[1]
             # Single GPUs are made available for every job via slurm, no need for random assignments.
             mk["init_gpu"] = 0  # np.random.rand(0, 2)
-        _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
+        _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked", log=log,
                            n_max_co_processes=global_params.NGPU_TOTAL // 2,
                            n_cores=global_params.NCORES_PER_NODE, suffix="_axoness",
                            additional_flags="--gres=gpu:1",
@@ -165,11 +169,11 @@ def run_celltype_prediction(max_n_jobs_gpu=None):
     # one list as parameter one needs an additonal axis
     multi_params = [(ixs, ) for ixs in multi_params]
 
-    # TODO: switch n_max_co_processes to `global_params.NGPUS_TOTAL` as soon as EGL ressource allocation works!
-    path_to_out = qu.QSUB_script(multi_params, "predict_cell_type",
+    path_to_out = qu.QSUB_script(multi_params, "predict_cell_type", log=log,
                                  n_max_co_processes=global_params.NNODES_TOTAL,
-                                 suffix="", additional_flags="--gres=gpu:2",
-                                 n_cores=global_params.NCORES_PER_NODE)
+                                 suffix="", additional_flags="--gres=gpu:1",
+                                 n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                                 remove_jobfolder=True)
     log.info('Finished prediction of {} SSVs. Checking completeness.'
              ''.format(len(ordering)))
     out_files = glob.glob(path_to_out + "*.pkl")
@@ -207,7 +211,7 @@ def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs]
                     for par in multi_params]
     log.info('Starting spine prediction.')
-    qu.QSUB_script(multi_params, "predict_spiness_chunked",
+    qu.QSUB_script(multi_params, "predict_spiness_chunked", log=log,
                    n_max_co_processes=global_params.NGPU_TOTAL,
                    n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
                    suffix="",  additional_flags="--gres=gpu:1",
@@ -229,7 +233,7 @@ def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
                      kwargs_semseg2mesh) for ssv_ids in multi_params]
     log.info('Starting mapping of spine predictions to neurite surfaces.')
     qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=global_params.NCORE_TOTAL,
-                   n_cores=1, suffix="", additional_flags="", remove_jobfolder=True)
+                   n_cores=1, suffix="", additional_flags="", remove_jobfolder=True, log=log)
     log.info('Finished spine mapping.')
 
 
@@ -261,7 +265,7 @@ def run_neuron_rendering(max_n_jobs=None):
                  ' cluster.'.format(np.sum(~size_mask)))
     # generic
     if global_params.PYOPENGL_PLATFORM == 'osmesa':  # utilize all CPUs
-        path_to_out = qu.QSUB_script(multi_params, "render_views",
+        path_to_out = qu.QSUB_script(multi_params, "render_views", log=log,
                            n_max_co_processes=global_params.NCORE_TOTAL,
                            remove_jobfolder=False)
     elif global_params.PYOPENGL_PLATFORM == 'egl':  # utilize 1 GPU per task
@@ -271,7 +275,7 @@ def run_neuron_rendering(max_n_jobs=None):
             n_cores = 1
             n_parallel_jobs = global_params.NCORES_PER_NODE
             path_to_out = qu.QSUB_script(multi_params, "render_views",
-                               n_max_co_processes=n_parallel_jobs,
+                               n_max_co_processes=n_parallel_jobs, log=log,
                                additional_flags="--gres=gpu:2",
                                n_cores=n_cores, remove_jobfolder=False)
         # run on whole cluster
@@ -279,7 +283,7 @@ def run_neuron_rendering(max_n_jobs=None):
             n_cores = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE
             n_parallel_jobs = global_params.NGPU_TOTAL
             path_to_out = qu.QSUB_script(multi_params, "render_views_egl",
-                               n_max_co_processes=n_parallel_jobs,
+                               n_max_co_processes=n_parallel_jobs, log=log,
                                additional_flags="--gres=gpu:1",
                                n_cores=n_cores, remove_jobfolder=False)
     else:
@@ -326,7 +330,6 @@ def run_create_neuron_ssd():
     log = initialize_logging('create_neuron_ssd', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     suffix = global_params.rag_suffix
-    # TODO: the following paths currently require prior glia-splitting
     g_p = "{}/glia/neuron_rag{}.bz2".format(global_params.config.working_dir, suffix)
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
     # e.g. if rag was not created by glia splitting procedure this filtering is required
@@ -416,22 +419,24 @@ def run_glia_prediction(e3=False):
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs] for par in
                     multi_params]
     if e3 is True:
-        qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3",
+        # TODO: using two GPUs on a single node seems to be error-prone
+        #  -> wb13 froze when processing example_cube=2
+        n_cores = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE
+        if 'example_cube' in global_params.config.working_dir:
+            n_cores = global_params.NCORES_PER_NODE  # do not run two predictions in parallel
+        qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3", log=log,
                        n_max_co_processes=global_params.NGPU_TOTAL,
-                       script_folder=None, n_cores=global_params.NCORES_PER_NODE, #//
-        # global_params.NGPUS_PER_NODE,
-                       # TODO: using two GPUs on a single
-                       # node seems to be error-prone -> wb13 froze when processing
-                       # example_cube=2
+                       script_folder=None, n_cores=n_cores,
                        suffix="_glia", additional_flags="--gres=gpu:1",
                        remove_jobfolder=True)
     else:
         # randomly assign to gpu 0 or 1
         for par in multi_params:
             mk = par[1]
-            # GPUs are made available for every job via slurm, no need for random assignments: np.random.rand(0, 2)
+            # GPUs are made available for every job via slurm,
+            # no need for random assignments: np.random.rand(0, 2)
             mk["init_gpu"] = 0
-        _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked",
+        _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked", log=log,
                            n_max_co_processes=global_params.NGPU_TOTAL,
                            n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
                            suffix="_glia",
@@ -491,6 +496,28 @@ def run_glia_splitting():
              "".format(global_params.config.working_dir + "/glia/"))
 
 
+def _run_huge_ssv_render_worker(q):
+    while True:
+        if q.empty():
+            break
+        kk, g, version = q.get()
+        # Create SSV object
+        sv_ixs = np.sort(list(g.nodes()))
+        # log.info("Processing SSV [{}] with {} SVs on whole cluster.".format(
+        #     kk + 1, len(sv_ixs)))
+        sso = SuperSegmentationObject(sv_ixs[0], working_dir=global_params.config.working_dir,
+                                      version=version, create=False, sv_ids=sv_ixs)
+        # nodes of sso._rag need to be SV
+        new_G = nx.Graph()
+        for e in g.edges():
+            new_G.add_edge(sso.get_seg_obj("sv", e[0]),
+                           sso.get_seg_obj("sv", e[1]))
+        sso._rag = new_G
+        sso.render_views(add_cellobjects=False, cellobjects_only=False,
+                         skip_indexviews=True, woglia=False, overwrite=True,
+                         qsub_co_jobs=global_params.NGPU_TOTAL)
+
+
 def run_glia_rendering(max_n_jobs=None):
     """
     Uses the pruned RAG (stored as edge list .bz2 file) which is computed
@@ -509,24 +536,20 @@ def run_glia_rendering(max_n_jobs=None):
             else global_params.NCORE_TOTAL * 4
     log = initialize_logging('glia_view_rendering', global_params.config.working_dir + '/logs/',
                              overwrite=False)
+    log.info("Preapring RAG.")
     np.random.seed(0)
 
     # view rendering prior to glia removal, choose SSD accordingly
-    version = "tmp"  # glia removal is based on the initial RAG and does not require explicitly stored SSVs
+    # glia removal is based on the initial RAG and does not require explicitly stored SSVs
+    # TODO: refactor how splits are stored, currently those are stored at ssv_tmp
+    version = "tmp"
 
     G = nx.read_edgelist(global_params.config.pruned_rag_path, nodetype=np.uint)
 
-    cc_gs = list(nx.connected_component_subgraphs(G))
+    cc_gs = sorted(list(nx.connected_component_subgraphs(G)), key=len, reverse=True)
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
 
-    # write out readable format for 'glia_prediction.py'
-    ccs = [[n for n in cc] for cc in cc_gs]
-    kml = knossos_ml_from_ccs([np.sort(cc)[0] for cc in ccs], ccs)
-    with open(global_params.config.working_dir + "initial_rag.txt", 'w') as f:
-        f.write(kml)
-
     # generate parameter for view rendering of individual SSV
-    log.info("Starting view rendering.")
     multi_params = cc_gs
     big_ssv = []
     small_ssv = []
@@ -536,35 +559,29 @@ def run_glia_rendering(max_n_jobs=None):
         else:
             small_ssv.append(g)
 
-    # # identify huge SSVs and process them individually on whole cluster
-    # nb_svs = np.array([g.number_of_nodes() for g in multi_params])
-    # big_ssv = multi_params[nb_svs > RENDERING_MAX_NB_SV]
-
-    for kk, g in enumerate(big_ssv[::-1]):
-        # Create SSV object
-        sv_ixs = np.sort(list(g.nodes()))
-        log.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(
-            kk+1, len(big_ssv), len(sv_ixs)))
-        sso = SuperSegmentationObject(sv_ixs[0], working_dir=global_params.config.working_dir,
-                                      version=version, create=False, sv_ids=sv_ixs)
-        # nodes of sso._rag need to be SV
-        new_G = nx.Graph()
-        for e in g.edges():
-            new_G.add_edge(sso.get_seg_obj("sv", e[0]),
-                           sso.get_seg_obj("sv", e[1]))
-        sso._rag = new_G
-        sso.render_views(add_cellobjects=False, cellobjects_only=False,
-                         skip_indexviews=True, woglia=False, overwrite=True,
-                         qsub_co_jobs=global_params.NCORE_TOTAL)
+    log.info("View rendering for glia separation started.")
+    # # identify huge SSVs and process them on the entire cluster
+    if len(big_ssv) > 0:
+        n_threads = 2
+        log.info("Processing {} huge SSVs in {} threads on the entire cluster"
+                 ".".format(len(big_ssv), n_threads))
+        q_in = Queue()
+        for kk, g in enumerate(big_ssv):
+            q_in.put((kk, g, version))
+        ps = [Process(target=_run_huge_ssv_render_worker, args=(q_in, )) for _ in range(n_threads)]
+        for p in ps:
+            p.start()
+            time.sleep(0.5)
+        for p in ps:
+            p.join()
 
     # render small SSV without overhead and single cpus on whole cluster
     multi_params = small_ssv
     np.random.shuffle(multi_params)
     multi_params = chunkify(multi_params, max_n_jobs)
-
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.config.working_dir, version) for ixs in multi_params]
-    _ = qu.QSUB_script(multi_params, "render_views_glia_removal",
+    _ = qu.QSUB_script(multi_params, "render_views_glia_removal", log=log,
                                  n_max_co_processes=global_params.NGPU_TOTAL,
                                  n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
                                  additional_flags="--gres=gpu:1",

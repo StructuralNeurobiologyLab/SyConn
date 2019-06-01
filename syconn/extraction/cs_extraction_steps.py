@@ -90,6 +90,10 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
             calculate_chunk_numbers_for_box(cset, offset, size)
     else:
         chunk_list = [ii for ii in range(len(cset.chunk_dict))]
+    # shuffle chunklist to get a more balanced work-load
+    rand_ixs = np.arange(len(chunk_list))
+    np.random.shuffle(rand_ixs)
+    chunk_list = np.array(chunk_list)[rand_ixs]
 
     os.makedirs(cset.path_head_folder, exist_ok=True)
     multi_params = []
@@ -103,7 +107,7 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
                                     debug=False, nb_cpus=n_max_co_processes)
     else:
         path_to_out = qu.QSUB_script(multi_params, "contact_site_extraction",
-                           n_max_co_processes=n_max_co_processes)
+                           n_max_co_processes=n_max_co_processes, log=log)
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -127,6 +131,9 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     # TODO: extract syn objects! maybe replace sj_0 Segmentation dataset by the overlapping CS<->
     #  sj objects -> run syn. extraction and sd_generation in parallel and return mi_0, vc_0 and
     #  syn_0 -> use syns as new sjs during rendering!
+    #  -> Run CS generation in parallel with mapping to at least get the syn objects before
+    #  rendering the neuron views (which need subcellular structures, there one can then use mi,
+    #  vc and syn (instead of sj))
     dict_paths = []
     # dump intermediate results
     dict_p = "{}/cs_prop_dict.pkl".format(global_params.config.temp_path)
@@ -173,20 +180,21 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
             cset, target_kd, obj_type, [obj_type],
             offset=offset, size=size, stride=chunk_size, as_raw=False,
             orig_dtype=np.uint64, unified_labels=False,
-            n_max_co_processes=n_max_co_processes)
+            n_max_co_processes=n_max_co_processes, log=log)
         log.debug('Finished conversion of ChunkDataset ({}) into KnossosDataset ({})'.format(
             cset.path_head_folder, target_kd.knossos_path))
 
     # Write SD
     path = "{}/knossosdatasets/syn_seg/".format(global_params.config.working_dir)
     path_cs = "{}/knossosdatasets/cs_seg/".format(global_params.config.working_dir)
+    storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
     multi_params = [(sv_id_block, n_folders_fs, path, path_cs) for sv_id_block in basics.chunkify(
-        np.arange(n_folders_fs), max_n_jobs)]
+        storage_location_ids, max_n_jobs)]
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_syn_thread,
                                 multi_params, nb_cpus=n_max_co_processes, debug=False)
     else:
-        qu.QSUB_script(multi_params, "write_props_to_syn",
+        qu.QSUB_script(multi_params, "write_props_to_syn", log=log,
                        n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
     sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                           obj_type='syn', version=0)
@@ -219,8 +227,7 @@ def _contact_site_extraction_thread(args):
     cum_dt_data = 0
     cum_dt_proc = 0
     for chunk in chunks:
-        overlap = np.array([6, 6, 3], dtype=np.int)  # TODO: check shape after `detect_cs` ->
-        # valid convolution, i.e. is `contacts` actually of shape `chunk.size`?
+        overlap = np.array([6, 6, 3], dtype=np.int)
         offset = np.array(chunk.coordinates - overlap)
         size = 2 * overlap + np.array(chunk.size)
         start = time.time()
@@ -460,6 +467,8 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
     -------
 
     """
+    log_extraction.warning(DeprecationWarning('"find_contact_sites" was replaced by '
+                                              '"extract_contact_sites".'))
     if size is not None and offset is not None:
         chunk_list, _ = \
             calculate_chunk_numbers_for_box(cset, offset, size)

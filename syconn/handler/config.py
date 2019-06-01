@@ -343,12 +343,20 @@ class DynConfig(Config):
         except KeyError:
             return True
 
+    @property
+    def use_new_subfold(self):
+        try:
+            return self.entries['Paths']['use_new_subfold']
+        except KeyError:
+            return False
+
 
 def get_default_conf_str(example_wd, scaling, py36path="", syntype_avail=True,
                          use_large_fov_views_ct=False, use_new_renderings_locs=False,
                          kd_seg=None, kd_sym=None, kd_asym=None, kd_sj=None, kd_mi=None,
                          kd_vc=None, init_rag_p="", prior_glia_removal=False,
-                         use_new_meshing=False, allow_mesh_gen_cells=True):
+                         use_new_meshing=False, allow_mesh_gen_cells=True,
+                         use_new_subfold=True):
     """
     Default SyConn config and type specification, placed in the working directory.
 
@@ -389,6 +397,7 @@ kd_vc = {}
 kd_mi = {}
 init_rag = {}
 py36path = {}
+use_new_subfold = {}
 
 [Dataset]
 scaling = {}, {}, {}
@@ -428,7 +437,7 @@ use_new_renderings_locs = {}
 [Glia]
 prior_glia_removal = {}
     """.format(kd_seg, kd_sym, kd_asym, kd_sj, kd_vc, kd_mi, init_rag_p,
-               py36path, scaling[0], scaling[1], scaling[2],
+               py36path, use_new_subfold, scaling[0], scaling[1], scaling[2],
                str(syntype_avail), str(allow_mesh_gen_cells), str(use_new_meshing),
                str(use_large_fov_views_ct), str(use_new_renderings_locs),
                str(prior_glia_removal))

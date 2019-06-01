@@ -1650,6 +1650,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         ts3 = time.time()
         log_reps.debug('Time to map predictions on vertices: '
                        '{:.2f}s.'.format(ts3 - ts2))
+        # TODO: add optimized procedure in case k==1 -> only map onto unpredicted vertices
+        #  instead of averaging all
         if k > 0:  # map predictions of predicted vertices to all vertices
             maj_vote = colorcode_vertices(
                 sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
@@ -1657,8 +1659,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         else:  # no vertex mask was applied in this case
             maj_vote = predictions
         ts4 = time.time()
-        log_reps.debug('Time to map predictions on unpredicted vertices: '
-                       '{:.2f}s.'.format(ts4 - ts3))
+        log_reps.debug('Time to map predictions on unpredicted vertices / to average vertex '
+                       'predictions: {:.2f}s.'.format(ts4 - ts3))
         # add prediction to mesh storage
         ld[semseg_key] = maj_vote
         ld.push()
@@ -1812,7 +1814,7 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
     sso.save_attributes([pred_key], [latent])
 
 
-def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
+def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window, n_avg=1,
                           dest_path=None, verbose=False):
     # TODO: check if save=False is actually happening everywhere, it seems raw views are being saved
     """
@@ -1821,6 +1823,8 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
     be predicted with the given `model` and maps prediction results onto mesh.
     Vertex labels are stored on file system and can be accessed via
     `sso.label_dict('vertex')[semseg_key]`.
+    If sso._sample_locations is None it `generate_rendering_locs(verts, comp_window / 3)`
+    will be called to generate rendering locations.
 
     Parameters
     ----------
@@ -1833,6 +1837,9 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
         Number of views rendered at each rendering location.
     comp_window : float
         Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+    n_avg : int
+        Number of nearest vertices to average over. If k=0 unpredicted vertices
+        will be treated as 'unpredicted' class.
     dest_path : str
         location of kzip in which colored vertices (according to semantic segmentation
         prediction) are stored.
@@ -1848,10 +1855,12 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
     raw_view_key = 'raw{}_{}_{}'.format(ws[0], ws[1], nb_views)
     index_view_key = 'index{}_{}_{}'.format(ws[0], ws[1], nb_views)
     verts = sso.mesh[1].reshape(-1, 3)
-    rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # ~three views per comp window
 
-    # overwrite default rendering locations (used later on for the view generation)
-    sso._sample_locations = [rendering_locs]
+    # use default rendering locations (used later on for the view generation)
+    if sso._sample_locations is None:
+        # ~three views per comp window
+        rendering_locs = generate_rendering_locs(verts, comp_window / 3)
+        sso._sample_locations = [rendering_locs]
     assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
                              " run 'semseg_of_sso_nocache'.".format(sso)
     # this generates the raw views and their prediction
@@ -1861,7 +1870,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
                           **view_kwargs)
     # map prediction onto mesh and saves it to sso._label_dict['vertex'][semseg_key] (also pushed to file system!)
     sso.semseg2mesh(semseg_key, index_view_key=index_view_key, dest_path=dest_path,
-                    force_recompute=True)
+                    force_recompute=True, k=n_avg)
 
 
 def assemble_from_mergelist(ssd, mergelist):

@@ -1295,11 +1295,11 @@ class SuperSegmentationObject(object):
         """
         if len(self.sv_ids) > global_params.RENDERING_MAX_NB_SV:
             part = self.partition_cc()
-            log_reps.info('Partitioned hugh SSV into {} subgraphs with each {}'
+            log_reps.info('Partitioned huge SSV into {} subgraphs with each {}'
                           ' SVs.'.format(len(part), len(part[0])))
             if not overwrite:  # check existence of glia preds
                 views_exist = np.array(self.view_existence(), dtype=np.int)
-                log_reps.info("Rendering huge SSO. {}/{} views left to process"
+                log_reps.info("Rendering SSO. {}/{} views left to process"
                               ".".format(np.sum(views_exist == 0), len(self.svs)))
                 ex_dc = {}
                 for ii, k in enumerate(self.svs):
@@ -1310,11 +1310,11 @@ class SuperSegmentationObject(object):
                         continue
                 del ex_dc
             else:
-                log_reps.info("Rendering huge SSO. {} SVs left to process"
+                log_reps.info("Rendering SSO. {} SVs left to process"
                               ".".format(len(self.svs)))
             params = [[so.id for so in el] for el in part]
 
-            params = chunkify(params, 2000)
+            params = chunkify(params, global_params.NGPU_TOTAL * 2)
             so_kwargs = {'version': self.svs[0].version,
                          'working_dir': self.working_dir,
                          'obj_type': self.svs[0].type}
@@ -1326,8 +1326,9 @@ class SuperSegmentationObject(object):
             params = [[par, so_kwargs, render_kwargs] for par in params]
             qu.QSUB_script(
                 params, "render_views_partial", suffix="_SSV{}".format(self.id),
-                pe=qsub_pe, queue=None, script_folder=None, n_cores=2,
-                n_max_co_processes=qsub_co_jobs, resume_job=resume_job)
+                n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                n_max_co_processes=qsub_co_jobs,
+                resume_job=resume_job, additional_flags="--gres=gpu:1")
         else:
             # render raw data
             render_sampled_sso(self, add_cellobjects=add_cellobjects,
@@ -1548,6 +1549,8 @@ class SuperSegmentationObject(object):
         nb_views : Optional[int]
         dest_path : str
         k : int
+            Number of nearest vertices to average over. If k=0 unpredicted vertices
+            will be treated as 'unpredicted' class.
         force_recompute : bool
         index_view_key : str
         """
@@ -1676,7 +1679,8 @@ class SuperSegmentationObject(object):
                 dest_folder, self.id, k, semseg_key, min_spine_cc_size), head_c)
         return neck_c, neck_s, head_c, head_s
 
-    def sample_locations(self, force=False, cache=True, verbose=False):
+    def sample_locations(self, force=False, cache=True, verbose=False,
+                         ds_factor=None):
         """
 
         Parameters
@@ -1685,6 +1689,9 @@ class SuperSegmentationObject(object):
             force resampling of locations
         cache : bool
             save sample location in SSO attribute dict
+        verbose : bool
+        ds_factor : float
+            Downscaling factor to generate locations
 
         Returns
         -------
@@ -1700,7 +1707,8 @@ class SuperSegmentationObject(object):
                 return self.attr_dict["sample_locations"]
         if verbose:
             start = time.time()
-        params = [[sv, {"force": force}] for sv in self.svs]
+        params = [[sv, {"force": force, 'save': cache,
+                        'ds_factor': ds_factor}] for sv in self.svs]
 
         # list of arrays
         locs = sm.start_multiprocess_obj("sample_locations", params,
@@ -1848,7 +1856,7 @@ class SuperSegmentationObject(object):
         mesh2obj_file(dest_path, self.mesh, center=center, color=color,
                       scale=scale)
 
-    def export2kzip(self, dest_path, sv_graph=None, sv_color=None):
+    def export2kzip(self, dest_path, attr_keys=(), rag=None, sv_color=None):
         """
         Writes the sso to a KNOSSOS loadable kzip.
         Color is specified as rgba, 0 to 255.
@@ -1861,7 +1869,9 @@ class SuperSegmentationObject(object):
         Parameters
         ----------
         dest_path : str
-        sv_graph : nx.Graph
+        attr_keys : Iterable[str]
+            currently allowed: 'sample_locations', 'skeleton', 'attr_dict', 'rag'
+        rag : nx.Graph
             SV graph of SSV with uint nodes
         sv_color : 4-tuple of int
         """
@@ -1869,26 +1879,41 @@ class SuperSegmentationObject(object):
         # self.save_skeleton_to_kzip(dest_path=dest_path)
         # self.save_objects_to_kzip_sparse(["mi", "sj", "vc"],
         #                                  dest_path=dest_path)
-        tmp_dest_p = ['{}_skeleton.pkl'.format(dest_path),
-                      '{}_rag.bz2'.format(dest_path),
-                      '{}_sample_locations.pkl'.format(dest_path),
-                      '{}_attr_dict.pkl'.format(dest_path),
-                      '{}_meta.pkl'.format(dest_path)]
-        write_obj2pkl(tmp_dest_p[0], self.skeleton)
-        if sv_graph is None:
-            if not os.path.isfile(self.edgelist_path):
-                raise ValueError("Could not find SV graph of SSV {}. Please"
-                                 " pass `sv_graph` as kwarg.".format(self))
-            sv_graph = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
-        nx.write_edgelist(sv_graph, tmp_dest_p[1])
-        # np.save(tmp_dest_p[2], self.sample_locations())
-        write_obj2pkl(tmp_dest_p[2], self.sample_locations())
-        write_obj2pkl(tmp_dest_p[3], self.attr_dict)
-        write_obj2pkl(tmp_dest_p[4], {'version_dict': self.version_dict,
-                                      'scaling': self.scaling,
-                                      'working_dir': self.working_dir})
-        data2kzip(dest_path, tmp_dest_p, ['skeleton.pkl', 'rag.bz2', 'sample_locations.pkl',
-                                          'attr_dict.pkl', 'meta.pkl'])
+        tmp_dest_p = []
+        target_fnames = []
+        attr_keys = list(attr_keys)
+        if 'rag' in attr_keys:
+            if rag is None and not os.path.isfile(self.edgelist_path):
+                log_reps.warn("Could not find SV graph of SSV {}. Please"
+                              " pass `sv_graph` as kwarg.".format(self))
+            else:
+                tmp_dest_p.append('{}_rag.bz2'.format(dest_path))
+                target_fnames.append('rag.bz2')
+                if rag is None:
+                    rag = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
+                nx.write_edgelist(rag, tmp_dest_p[-1])
+            attr_keys.remove('rag')
+
+        allowed_attributes = ('sample_locations', 'skeleton', 'attr_dict')
+        for attr in attr_keys:
+            if attr not in allowed_attributes:
+                raise ValueError('Invalid attribute specified. Currently suppor'
+                                 'ted attributes for export: {}'.format(allowed_attributes))
+            tmp_dest_p.append('{}_{}.pkl'.format(dest_path, attr))
+            target_fnames.append('{}.pkl'.format(attr))
+            sso_attr = getattr(self, attr)
+            if hasattr(sso_attr, '__call__'):
+                sso_attr = sso_attr()
+            write_obj2pkl(tmp_dest_p[-1], sso_attr)
+
+        # always write meta dict
+        tmp_dest_p.append('{}_{}.pkl'.format(dest_path, 'meta'))
+        target_fnames.append('{}.pkl'.format('meta'))
+        write_obj2pkl(tmp_dest_p[-1], {'version_dict': self.version_dict,
+                                       'scaling': self.scaling,
+                                       'working_dir': self.working_dir})
+        # write all data
+        data2kzip(dest_path, tmp_dest_p, target_fnames)
         self.meshes2kzip(dest_path=dest_path, sv_color=sv_color)
         self.mergelist2kzip(dest_path=dest_path)
 
@@ -2394,7 +2419,7 @@ class SuperSegmentationObject(object):
 
     def gen_skel_from_sample_locs(self, dest_path=None):
         """
-
+        # TODO: out-source
         Parameters
         ----------
         dest_path : str
@@ -2402,7 +2427,9 @@ class SuperSegmentationObject(object):
         """
         if dest_path is None:
             dest_path = self.skeleton_kzip_path_views
-        locs = np.concatenate(self.sample_locations())
+        # generate locations at every cubic micron, force recompute (rendering locations use
+        # different `ds_factor`) and don't write to disk (cache=False)
+        locs = np.concatenate(self.sample_locations(force=True, cache=False, ds_factor=1000))
         g = create_graph_from_coords(locs, mst=True)
         if g.number_of_edges() == 1:
             edge_list = np.array(list(g.edges()))
