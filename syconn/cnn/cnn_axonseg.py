@@ -24,6 +24,7 @@ from elektronn3.models.unet import UNet
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 
+from icecream import ic
 
 def get_model():
     vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
@@ -77,12 +78,13 @@ if __name__ == "__main__":
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
     global_params.gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_1024'
-    full_dataset = MultiviewDataCached(transform=transform, base_dir=global_params.gt_path_axonseg, num_read_limit=50)
-    train_size = int(0.8 * len(full_dataset))
-    val_size = len(full_dataset) - train_size
-    train_dataset, valid_dataset = random_split(full_dataset, [train_size, val_size])
+    # full_dataset = MultiviewDataCached(transform=transform, base_dir=global_params.gt_path_axonseg, num_read_limit=50)
+    # train_size = int(0.8 * len(full_dataset))
+    # val_size = len(full_dataset) - train_size
+    # train_dataset, valid_dataset = random_split(full_dataset, [train_size, val_size])
     # valid_dataset = MultiviewDataCached(train=False, transform=transform, base_dir=global_params.gt_path_axonseg)
-
+    train_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/train', train=True, inp_key='raw', target_key='label', transform=transform, num_read_limit=5)
+    valid_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/val', train=False, inp_key='raw', target_key='label', transform=transform, num_read_limit=5)
     # Set up optimization
     optimizer = optim.Adam(
         model.parameters(),

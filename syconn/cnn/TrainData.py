@@ -34,6 +34,8 @@ import glob
 from scipy import spatial
 import time
 import threading
+from icecream import ic
+import pdb
 
 # fix random seed.
 np.random.seed(0)
@@ -45,20 +47,27 @@ if elektronn3_avail:
         """
         Multiview spine data loader.
         """
-        def __init__(self, base_dir, inp_key='raw', target_key='label', 
-                    transform: Callable = Identity(), num_read_limit=4000):
+        def __init__(self, 
+                    base_dir, 
+                    train=True, 
+                    inp_key='raw', 
+                    target_key='label', 
+                    transform: Callable = Identity(), 
+                    num_read_limit=4000 # num_times each sample point should be used before corresponding h5py file is released
+                    ):
             super().__init__()
-            # from torch.utils.data import random_split
-            # train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+
             self.inp_key = inp_key
             self.target_key = target_key
             self.transform = transform
 
             self.fnames = sorted(glob.glob(base_dir + "/*.h5"))
-            self.num_files = len(self.fnames)
             print("Files found: ", self.fnames)
 
-            self.num_read_limit = num_read_limit  # How many times should a file be read before it is released from memory
+            if train:
+                self.num_read_limit = num_read_limit
+            else:
+                self.num_read_limit = 1  #no need to repeat sample points in validation
             self.secondary = self.secondary_t = None
             self.read(0)
             self.primary, self.primary_t = self.secondary, self.secondary_t
@@ -66,46 +75,47 @@ if elektronn3_avail:
             self.secondary = self.secondary_t = None
 
             self.num_samples_in_curr_file = self.primary.shape[0]
-            self.index_array = np.arange(np.max([self.num_read_limit, self.num_samples_in_curr_file]))%self.num_samples_in_curr_file
+            # self.index_array = np.arange(np.max([self.num_read_limit, self.num_samples_in_curr_file]))%self.num_samples_in_curr_file
+            self.index_array = np.array(list(range(self.num_samples_in_curr_file))*self.num_read_limit)
             np.random.shuffle(self.index_array)
 
             self.current_count = 0
             self.file_pointer = 1
-            self.samples_in_already_read_files = 0
+            self.num_samples_in_already_read_files = 0
             self.thread_launched = False
 
         def __getitem__(self, index):
             # pdb.set_trace()
-            index = index - self.samples_in_already_read_files
+            index = index - self.num_samples_in_already_read_files
             
-            if self.current_count > self.num_read_limit - 50 and self.thread_launched == False : #adjust 50 to a suitable value to read file completely in parallel
+            if self.current_count > int(0.5*len(self.index_array)) and self.thread_launched == False : #adjust 0.5
                 self.read_thread = threading.Thread(target=self.read, args=[self.file_pointer])
                 self.read_thread.start() # print("parallel thread launched")
                 self.thread_launched = True
             
-            if self.current_count == self.num_read_limit - 1: 
+            if self.current_count == len(self.index_array) - 1: 
                 self.read_thread.join() # print("parallel thread joined")
 
                 temp, temp_t = self.primary[self.index_array[index]], self.primary_t[self.index_array[index]]
-                self.samples_in_already_read_files += len(self.index_array)
+                self.num_samples_in_already_read_files += len(self.index_array)
                 self.primary, self.primary_t = self.secondary, self.secondary_t
                 self.close_files()
                 self.secondary = self.secondary_t = None
                 self.num_samples_in_curr_file = self.primary.shape[0]
-                self.index_array = np.arange(np.max([self.num_read_limit, self.num_samples_in_curr_file]))%self.num_samples_in_curr_file
+                # self.index_array = np.arange(np.max([self.num_read_limit, self.num_samples_in_curr_file]))%self.num_samples_in_curr_file
+                self.index_array = np.array(list(range(self.num_samples_in_curr_file))*self.num_read_limit)
                 np.random.shuffle(self.index_array)
-                self.file_pointer = self.get_next_file_ponter()
+                self.file_pointer = self.get_next_file_pointer()
                 self.current_count = 0
                 self.thread_launched = False
                 return temp, np.squeeze(temp_t, axis=0)
 
             self.current_count += 1
-            ic(index, self.index_array, self.primary.shape, self.primary_t.shape)
             return self.primary[self.index_array[index]], np.squeeze(self.primary_t[self.index_array[index]], axis=0)
 
-        def get_next_file_ponter(self):
-            if self.file_pointer == self.num_files:
-                self.samples_in_already_read_files = 0
+        def get_next_file_pointer(self):
+            if self.file_pointer == len(self.fnames):
+                self.num_samples_in_already_read_files = 0
                 return 0
             return self.file_pointer+1
 
@@ -114,12 +124,12 @@ if elektronn3_avail:
             self.file = h5py.File(os.path.expanduser(self.fnames[file_pointer]), 'r')
             self.secondary = self.file[self.inp_key][()]
             self.secondary_t = self.file[self.target_key][()].astype(np.int64)
-            self.secondary = np.transpose(self.secondary,(0,2,1,3,4))
-            self.secondary_t = np.transpose(self.secondary_t,(0,2,1,3,4))
-            shape = self.secondary.shape
-            shape_t = self.secondary_t.shape
-            self.secondary = self.secondary.reshape(-1, *shape[2:])
-            self.secondary_t = self.secondary_t.reshape(-1, *shape_t[2:])
+            # self.secondary = np.transpose(self.secondary,(0,2,1,3,4))
+            # self.secondary_t = np.transpose(self.secondary_t,(0,2,1,3,4))
+            # shape = self.secondary.shape
+            # shape_t = self.secondary_t.shape
+            # self.secondary = self.secondary.reshape(-1, *shape[2:])
+            # self.secondary_t = self.secondary_t.reshape(-1, *shape_t[2:])
 
             self.secondary, self.secondary_t = self.transform(self.secondary, self.secondary_t)
             print("read h5 file containes {} input samples, {} labels".format(self.secondary.shape[0], self.secondary_t.shape[0]))
