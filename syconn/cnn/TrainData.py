@@ -34,8 +34,6 @@ import glob
 from scipy import spatial
 import time
 import threading
-from icecream import ic
-import pdb
 
 # fix random seed.
 np.random.seed(0)
@@ -60,11 +58,11 @@ if elektronn3_avail:
             self.inp_key = inp_key
             self.target_key = target_key
             self.transform = transform
-
+            self.train = train
             self.fnames = sorted(glob.glob(base_dir + "/*.h5"))
-            print("Files found: ", self.fnames)
+            print("Files found: ", [ name[len(base_dir):] for name in self.fnames ] )
 
-            if train:
+            if self.train:
                 self.num_read_limit = num_read_limit
             else:
                 self.num_read_limit = 1  #no need to repeat sample points in validation
@@ -75,7 +73,6 @@ if elektronn3_avail:
             self.secondary = self.secondary_t = None
 
             self.num_samples_in_curr_file = self.primary.shape[0]
-            # self.index_array = np.arange(np.max([self.num_read_limit, self.num_samples_in_curr_file]))%self.num_samples_in_curr_file
             self.index_array = np.array(list(range(self.num_samples_in_curr_file))*self.num_read_limit)
             np.random.shuffle(self.index_array)
 
@@ -85,7 +82,6 @@ if elektronn3_avail:
             self.thread_launched = False
 
         def __getitem__(self, index):
-            # pdb.set_trace()
             index = index - self.num_samples_in_already_read_files
             
             if self.current_count > int(0.5*len(self.index_array)) and self.thread_launched == False : #adjust 0.5
@@ -102,7 +98,6 @@ if elektronn3_avail:
                 self.close_files()
                 self.secondary = self.secondary_t = None
                 self.num_samples_in_curr_file = self.primary.shape[0]
-                # self.index_array = np.arange(np.max([self.num_read_limit, self.num_samples_in_curr_file]))%self.num_samples_in_curr_file
                 self.index_array = np.array(list(range(self.num_samples_in_curr_file))*self.num_read_limit)
                 np.random.shuffle(self.index_array)
                 self.file_pointer = self.get_next_file_pointer()
@@ -124,20 +119,11 @@ if elektronn3_avail:
             self.file = h5py.File(os.path.expanduser(self.fnames[file_pointer]), 'r')
             self.secondary = self.file[self.inp_key][()]
             self.secondary_t = self.file[self.target_key][()].astype(np.int64)
-            # self.secondary = np.transpose(self.secondary,(0,2,1,3,4))
-            # self.secondary_t = np.transpose(self.secondary_t,(0,2,1,3,4))
-            # shape = self.secondary.shape
-            # shape_t = self.secondary_t.shape
-            # self.secondary = self.secondary.reshape(-1, *shape[2:])
-            # self.secondary_t = self.secondary_t.reshape(-1, *shape_t[2:])
-
             self.secondary, self.secondary_t = self.transform(self.secondary, self.secondary_t)
             print("read h5 file containes {} input samples, {} labels".format(self.secondary.shape[0], self.secondary_t.shape[0]))
-            # return self.secondary, self.secondary_t
 
         def __len__(self):
-            # return np.min([2500, self.target.shape[0]])  # self.target.shape[0]  # this number determines the epoch size
-            return 100
+            return 7835 if self.train else 1981  #Manually checked and written
 
         def close_files(self):
             self.file.close()
