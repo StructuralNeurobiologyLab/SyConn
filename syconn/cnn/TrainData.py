@@ -33,105 +33,104 @@ import h5py
 import glob
 from scipy import spatial
 import time
+import threading
+
 # fix random seed.
 np.random.seed(0)
 
-
 # --------------------------Elektronn3 - cached MultiviewData Class-------------
+
 if elektronn3_avail:
     class MultiviewDataCached(Dataset):
-            """
-            Multiview spine data loader.
-            """
-            def __init__(self, base_dir, train=True, inp_key='raw', target_key='label', 
-                        transform: Callable = Identity(), num_read_limit=4000):
-                super().__init__()
+        """
+        Multiview spine data loader.
+        """
+        def __init__(self, base_dir, inp_key='raw', target_key='label', 
+                    transform: Callable = Identity(), num_read_limit=4000):
+            super().__init__()
+            # from torch.utils.data import random_split
+            # train_dataset, val_dataset = random_split(full_dataset, [train_size, val_size])
+            self.inp_key = inp_key
+            self.target_key = target_key
+            self.transform = transform
 
-                self.train = train
-                self.inp_key = inp_key
-                self.target_key = target_key
-                self.transform = transform
+            self.fnames = sorted(glob.glob(base_dir + "/*.h5"))
+            self.num_files = len(self.fnames)
+            print("Files found: ", self.fnames)
 
-                self.cube_id = "train" if train else "valid"
-                self.fnames_inp = sorted(glob.glob(base_dir + "/raw_{}*.h5".format(self.cube_id)))
-                self.fnames_target = sorted(glob.glob(base_dir + "/label_{}*.h5".format(self.cube_id)))
-                print("Files found: ", self.fnames_inp, self.fnames_target)
-                assert len(self.fnames_inp) == len(self.fnames_target)
+            self.num_read_limit = num_read_limit  # How many times should a file be read before it is released from memory
+            self.secondary = self.secondary_t = None
+            self.read(0)
+            self.primary, self.primary_t = self.secondary, self.secondary_t
+            self.close_files()
+            self.secondary = self.secondary_t = None
 
-                self.secondary = None
-                self.secondary_t = None
-                self.read(0)
-                
-                self.primary = self.secondary
-                self.primary_t = self.secondary_t
+            self.num_samples_in_curr_file = self.primary.shape[0]
+            self.index_array = np.arange(np.max([self.num_read_limit, self.num_samples_in_curr_file]))%self.num_samples_in_curr_file
+            np.random.shuffle(self.index_array)
+
+            self.current_count = 0
+            self.file_pointer = 1
+            self.samples_in_already_read_files = 0
+            self.thread_launched = False
+
+        def __getitem__(self, index):
+            # pdb.set_trace()
+            index = index - self.samples_in_already_read_files
+            
+            if self.current_count > self.num_read_limit - 50 and self.thread_launched == False : #adjust 50 to a suitable value to read file completely in parallel
+                self.read_thread = threading.Thread(target=self.read, args=[self.file_pointer])
+                self.read_thread.start() # print("parallel thread launched")
+                self.thread_launched = True
+            
+            if self.current_count == self.num_read_limit - 1: 
+                self.read_thread.join() # print("parallel thread joined")
+
+                temp, temp_t = self.primary[self.index_array[index]], self.primary_t[self.index_array[index]]
+                self.samples_in_already_read_files += len(self.index_array)
+                self.primary, self.primary_t = self.secondary, self.secondary_t
                 self.close_files()
-                self.secondary = None
-                self.secondary_t = None
-                self.num_read_limit = num_read_limit  # How many time should a file be read before it is released from memory
+                self.secondary = self.secondary_t = None
+                self.num_samples_in_curr_file = self.primary.shape[0]
+                self.index_array = np.arange(np.max([self.num_read_limit, self.num_samples_in_curr_file]))%self.num_samples_in_curr_file
+                np.random.shuffle(self.index_array)
+                self.file_pointer = self.get_next_file_ponter()
                 self.current_count = 0
-                self.file_pointer = 1
-                random.seed(10000)
+                self.thread_launched = False
+                return temp, np.squeeze(temp_t, axis=0)
 
-                num_samples_in_file = self.primary.shape[0]
-                if num_samples_in_file < self.num_read_limit:
-                    self.index_array = list(range(num_samples_in_file)) + random.sample(range(num_samples_in_file), self.num_read_limit - num_samples_in_file)
-                else:
-                    self.index_array = random.sample(range(num_samples_in_file), self.num_read_limit)
-                # print("len index array",len(self.index_array))
+            self.current_count += 1
+            ic(index, self.index_array, self.primary.shape, self.primary_t.shape)
+            return self.primary[self.index_array[index]], np.squeeze(self.primary_t[self.index_array[index]], axis=0)
 
+        def get_next_file_ponter(self):
+            if self.file_pointer == self.num_files:
+                self.samples_in_already_read_files = 0
+                return 0
+            return self.file_pointer+1
 
-            def __getitem__(self, index):
-                index = index - (self.file_pointer-1)*self.num_read_limit
-                if self.current_count == self.num_read_limit - 50: #adjust 50 to a suitable value to read file completely in parallel
-                    # print("in get item")
-                    self.read_thread = threading.Thread(target=self.read, args=[self.file_pointer])
-                    self.read_thread.start()
-                    # print("parallel thread launched")
-                if self.current_count == self.num_read_limit - 1: 
-                    self.read_thread.join()
-                    # print(self.secondary.shape)
+        def read(self, file_pointer):
+            print("Reading file", self.fnames[file_pointer])
+            self.file = h5py.File(os.path.expanduser(self.fnames[file_pointer]), 'r')
+            self.secondary = self.file[self.inp_key][()]
+            self.secondary_t = self.file[self.target_key][()].astype(np.int64)
+            self.secondary = np.transpose(self.secondary,(0,2,1,3,4))
+            self.secondary_t = np.transpose(self.secondary_t,(0,2,1,3,4))
+            shape = self.secondary.shape
+            shape_t = self.secondary_t.shape
+            self.secondary = self.secondary.reshape(-1, *shape[2:])
+            self.secondary_t = self.secondary_t.reshape(-1, *shape_t[2:])
 
-                    # print("parallel thread joined")
-                    # print(len(self.index_array))
-                    temp = self.primary[self.index_array[index]]
-                    temp_t = self.primary_t[self.index_array[index]]
-                    self.primary = self.secondary
-                    self.primary_t = self.secondary_t
-                    # print(self.primary.shape, self.secondary.shape)
-                    self.secondary = None
-                    self.secondary_t = None
-                    num_samples_in_file = self.primary.shape[0]
-                    if num_samples_in_file < self.num_read_limit:
-                        self.index_array = list(range(num_samples_in_file)) + random.sample(range(num_samples_in_file), self.num_read_limit - num_samples_in_file)
-                    else:
-                        self.index_array = random.sample(range(num_samples_in_file), self.num_read_limit)
-                    self.file_pointer += 1
-                    self.close_files()
-                    self.current_count = 0
-                    return temp, np.squeeze(temp_t, axis=0)
-                
-                self.current_count += 1
-                # print("got item", self.current_count)
-                return self.primary[self.index_array[index]], np.squeeze(self.primary_t[self.index_array[index]], axis=0)
+            self.secondary, self.secondary_t = self.transform(self.secondary, self.secondary_t)
+            print("read h5 file containes {} input samples, {} labels".format(self.secondary.shape[0], self.secondary_t.shape[0]))
+            # return self.secondary, self.secondary_t
 
-            def read(self, file_pointer):
-                print("Reading files", self.fnames_inp[file_pointer], self.fnames_target[file_pointer])
-                self.inp_file = h5py.File(os.path.expanduser(self.fnames_inp[file_pointer]), 'r')
-                self.target_file = h5py.File(os.path.expanduser(self.fnames_target[file_pointer]), 'r')
-                self.secondary = self.inp_file[self.inp_key][()]
-                self.secondary_t = self.target_file[self.target_key][()].astype(np.int64)
-                self.secondary, self.secondary_t = self.transform(self.secondary, self.secondary_t)
-                print("read h5 file containes {} input samples, {} labels".format(self.secondary.shape[0], self.secondary_t.shape[0]) )
-                # return self.secondary, self.secondary_t
+        def __len__(self):
+            # return np.min([2500, self.target.shape[0]])  # self.target.shape[0]  # this number determines the epoch size
+            return 100
 
-            def __len__(self):
-                if not self.train:
-                    return np.min([500, self.target.shape[0]])
-                return np.min([2500, self.target.shape[0]])  # self.target.shape[0]  # this number determines the epoch size
-
-            def close_files(self):
-                self.inp_file.close()
-                self.target_file.close()
+        def close_files(self):
+            self.file.close()
 
 
 # -------------------------------------- elektronn3 ----------------------------

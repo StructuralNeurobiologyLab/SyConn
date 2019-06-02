@@ -278,7 +278,47 @@ def gt_generation_helper(args):
     #     imsave(h5py_path + "{}_index.png".format(ii), colored_indices[:, 0, 0][ii])
     # DEBUG PART END
 
+if __name__ == "__main__":
+    initial_run = True
+    ws = (1024, 512)
+    n_views = 3  # increase views per location due to higher pixel size, also increases GT diversity
+    global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+    assert global_params.wd == "/wholebrain/songbird/j0126/areaxfs_v6/"
+    label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_axoness_semseg_skeletons/BATCH2_Feb2019/Annotations/unprocessed/"
+    dest_gt_dir = "/wholebrain/songbird/j0126/areaxfs_v5/ssv_semsegaxoness/gt_h5_files_80nm_BATCH2_{}/".format(ws[0])
+    file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
+    GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
+                    ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)
 
+    # spiness
+    """if 0:
+        assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
+        initial_run = False
+        n_views = 2
+        label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_spgt/" \
+                            "spiness_skels_annotated/"
+        file_names = ["/27965455.039.k.zip",
+                      "/23044610.037.k.zip", "/4741011.074.k.zip",
+                      "/18279774.089.k.zip", "/26331138.046.k.zip"]
+        file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
+        GT_generation(file_paths, 'spgt', 'spgt', n_views, ws=(256, 128), comp_window=8e3)
+
+    # axoness
+    if 1:
+        initial_run = False
+        ws = (1024, 512)
+        n_views = 3  # increase views per location due to higher pixel size, also increases GT diversity
+        assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
+        label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_axoness_semseg_skeletons/"
+        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_{}/".format(ws[0])
+        file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
+        GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
+                      ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)
+        # TODO: add new GT files based on areaxfs_v6
+"""
+
+
+'''
 if __name__ == "__main__":
     # spiness
     if 0:
@@ -338,3 +378,4 @@ if __name__ == "__main__":
         file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
         GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
                       ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)
+'''

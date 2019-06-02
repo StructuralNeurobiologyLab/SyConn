@@ -11,12 +11,13 @@ It learns how to differentiate between spine head, spine neck and spine shaft.
 Caution! The input dataset was not manually corrected.
 """
 from syconn import global_params
-from syconn.cnn.TrainData import MultiviewData
+from syconn.cnn.TrainData import MultiviewDataCached
 import argparse
 import os
 import torch
 from torch import nn
 from torch import optim
+from torch.utils.data.dataset import random_split
 from elektronn3.training.loss import DiceLoss, LovaszLoss
 from elektronn3.models.fcn_2d import *
 from elektronn3.models.unet import UNet
@@ -25,11 +26,11 @@ from elektronn3.data import transforms
 
 
 def get_model():
-    # vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
-    # model = FCNs(base_net=vgg_model, n_class=4)
-    model = UNet(in_channels=4, out_channels=4, n_blocks=5, start_filts=32,
-                 up_mode='resize', merge_mode='concat', planar_blocks=(),
-                 activation='relu', batch_norm=True, dim=2,)
+    vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
+    model = FCNs(base_net=vgg_model, n_class=4)
+    # model = UNet(in_channels=4, out_channels=4, n_blocks=5, start_filts=32,
+    #              up_mode='resize', merge_mode='concat', planar_blocks=(),
+    #              activation='relu', batch_norm=True, dim=2,)
     return model
 
 
@@ -75,8 +76,12 @@ if __name__ == "__main__":
 
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
-    train_dataset = MultiviewData(train=True, transform=transform, base_dir=global_params.gt_path_axonseg)
-    valid_dataset = MultiviewData(train=False, transform=transform, base_dir=global_params.gt_path_axonseg)
+    global_params.gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_1024'
+    full_dataset = MultiviewDataCached(transform=transform, base_dir=global_params.gt_path_axonseg, num_read_limit=50)
+    train_size = int(0.8 * len(full_dataset))
+    val_size = len(full_dataset) - train_size
+    train_dataset, valid_dataset = random_split(full_dataset, [train_size, val_size])
+    # valid_dataset = MultiviewDataCached(train=False, transform=transform, base_dir=global_params.gt_path_axonseg)
 
     # Set up optimization
     optimizer = optim.Adam(
