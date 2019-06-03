@@ -115,7 +115,8 @@ gt_path_spineseg = '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'  # TODO:
 
 # --------- COMPARTMENT PARAMETERS
 DIST_AXONESS_AVERAGING = 10000
-gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm/'  # TODO: add to config
+gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness' \
+                  '/gt_h5_files_80nm_1024_with_BOUTONS/'  # TODO: add to config
 
 
 # --------- CELLTYPE PARAMETERS
