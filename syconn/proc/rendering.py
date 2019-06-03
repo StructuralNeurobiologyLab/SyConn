@@ -949,10 +949,6 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
                                   rot_mat=None, nb_views=None,
                                   comp_window=None, return_rot_matrices=False):
     """
-    Uses per-face color via flattened vertices (i.e. vert[ind] -> slow!). This was added to be able
-    to calculate the surface coverage captured by the views.
-    TODO: Add fast GL_POINT rendering to omit slow per-face coloring (redundant veritces) and
-     expensive remapping from face IDs to vertex IDs.
 
     Parameters
     ----------
@@ -987,7 +983,8 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
         ws = (256, 128)
     if verbose:
         log_proc.debug('Started "render_sso_coords_index_views" at {} locations for SSO {} using '
-                       'PyOpenGL platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
+                  'PyOpenGL'
+                       ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
     # tim = time.time()
@@ -1001,7 +998,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
         log_proc.warning(msg)
         return np.ones((len(coords), nb_views, ws[1], ws[0], 3), dtype=np.uint8)
     try:
-        color_array = id2rgba_array_contiguous(np.arange(len(ind) // 3))
+        color_array = id2rgba_array_contiguous(np.arange(len(vert)//3))
     except ValueError as e:
         msg = "'render_sso_coords_index_views' failed with {} when " \
               "rendering SSV {}.".format(e, sso.id)
@@ -1016,16 +1013,25 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
     # backwards compatibility with other color-dependent rendering methods
     # Create mesh object without redundant vertices to get same PCA rotation as for raw views
+    # tim = time.time()
     if rot_mat is None:
         mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
         querybox_edgelength = comp_window / mo.max_dist
         rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
                                     mo.vert_resh, querybox_edgelength)
+    #raise()
     # create redundant vertices to enable per-face colors
-    vert = vert.reshape(-1, 3)[ind].flatten()
-    ind = np.arange(len(vert) // 3)
-    color_array = np.repeat(color_array, 3, axis=0)  # 3 <- triangles
+    # vert = vert.reshape(-1, 3)
+    # ind = np.arange(len(vert) // 3)
+    # color_array = np.repeat(color_array, 3, axis=0)  # 3 <- triangles
+    #vert = vert.reshape(-1, 3)
+    #ind = np.arange(len(vert))
+    #color_array = np.repeat(color_array, 3, axis=0)  # 3 <- triangles
+    #raise()
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
+    # tim1 = time.time()
+    # print("Time for initializing MESHOBJECT {:.2f}s."
+    #                    "".format(tim1 - tim))
     if return_rot_matrices:
         ix_views, rot_mat = _render_mesh_coords(
             coords, mo, verbose=verbose, ws=ws, depth_map=False,
@@ -1042,13 +1048,14 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
                                    smooth_shade=False, views_key="index",
                                    nb_views=nb_views, comp_window=comp_window,
                                    return_rot_matrices=return_rot_matrices)
-
+    # tim2 = time.time()
+    # print("Time for _RENDER_MESH_COORDS {:.2f}s."
+    #                    "".format(tim2 - tim1))
     if ix_views.shape[-1] == 3:
         ix_views = rgb2id_array(ix_views)[:, None]
     else:
         ix_views = rgba2id_array(ix_views)[:, None]
     return ix_views
-
 
 def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
                                   ws=None, rot_mat=None, nb_views=None,

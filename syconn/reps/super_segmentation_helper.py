@@ -1609,31 +1609,28 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         ts1 = time.time()
         log_reps.debug('Time to load index and shape views: '
                        '{:.2f}s.'.format(ts1 - ts0))
-        ind = sso.mesh[0]
-        dc = defaultdict(list)
+        dc1 = defaultdict(list)
         background_id = np.max(i_views)
-        # color buffer holds traingle ID not vertex ID  # TODO: this should be a one time conversion step after the index view rendering!
         for ii in range(len(i_views)):
-            triangle_ix = i_views[ii]
-            if triangle_ix == background_id:
+            vertex_ix = i_views[ii]
+            if vertex_ix == background_id:
                 continue
             l = semseg_views[ii]  # triangle label
-            # get vertex ixs from triangle ixs via:
-            vertex_ix = triangle_ix * 3
-            dc[ind[vertex_ix]].append(l)
-            dc[ind[vertex_ix + 1]].append(l)
-            dc[ind[vertex_ix + 2]].append(l)
+            #get vertex ids into dictionary
+            dc1[vertex_ix].append(l)
         ts2 = time.time()
         log_reps.debug('Time to generate look-up dict: '
                        '{:.2f}s.'.format(ts2 - ts1))
         # background label is highest label in prediction (see 'generate_palette' or
         # 'remap_rgb_labelviews' in multiviews.py)
+        #background_l = 255
+        #print('yes')
         background_l = np.max(semseg_views)
         unpredicted_l = background_l + 1
         if unpredicted_l > 255:
             raise ValueError('Overflow in label view array.')
         vertex_labels = np.ones((len(sso.mesh[1]) // 3), dtype=np.uint8) * unpredicted_l
-        for ix, v in dc.items():
+        for ix, v in dc1.items():
             l, cnts = np.unique(v, return_counts=True)
             vertex_labels[ix] = l[np.argmax(cnts)]
         if k == 0:  # map actual prediction situation / coverage
@@ -1650,8 +1647,6 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         ts3 = time.time()
         log_reps.debug('Time to map predictions on vertices: '
                        '{:.2f}s.'.format(ts3 - ts2))
-        # TODO: add optimized procedure in case k==1 -> only map onto unpredicted vertices
-        #  instead of averaging all
         if k > 0:  # map predictions of predicted vertices to all vertices
             maj_vote = colorcode_vertices(
                 sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
@@ -1659,8 +1654,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         else:  # no vertex mask was applied in this case
             maj_vote = predictions
         ts4 = time.time()
-        log_reps.debug('Time to map predictions on unpredicted vertices / to average vertex '
-                       'predictions: {:.2f}s.'.format(ts4 - ts3))
+        log_reps.debug('Time to map predictions on unpredicted vertices: '
+                       '{:.2f}s.'.format(ts4 - ts3))
         # add prediction to mesh storage
         ld[semseg_key] = maj_vote
         ld.push()
