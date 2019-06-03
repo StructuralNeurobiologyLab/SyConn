@@ -240,10 +240,9 @@ def _apply_mapping_decisions_thread(args):
             ssv.save_attr_dict()
 
 
-def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue=None,
+def map_synssv_objects(synssv_version=None, stride=100, log=None,
                        nb_cpus=None, n_max_co_processes=global_params.NCORE_TOTAL,
                        syn_threshold=None):
-    # TODO: remove `qsub_pe`and `qsub_queue`
     """
     Map synn_ssv objects to all SSO objects contained in SSV SuperSegmentationDataset.
 
@@ -279,7 +278,7 @@ def map_synssv_objects(synssv_version=None, stride=100, qsub_pe=None, qsub_queue
     else:
         _ = qu.QSUB_script(multi_params, "map_synssv_objects",
                            n_max_co_processes=n_max_co_processes,
-                           remove_jobfolder=True)
+                           remove_jobfolder=True, log=log)
 
 
 def map_synssv_objects_thread(args):

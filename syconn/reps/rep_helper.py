@@ -10,6 +10,7 @@ from scipy import spatial
 from collections import Counter
 
 from ..reps import log_reps
+from .. import global_params
 
 
 def knossos_ml_from_svixs(sv_ixs, coords=None, comments=None):
@@ -156,6 +157,34 @@ def subfold_from_ix(ix, n_folders, old_version=False):
     str
     """
     assert n_folders in [10**i for i in range(6)]
+    if not global_params.config.use_new_subfold:
+        return subfold_from_ix_OLD(ix, n_folders, old_version)
+    order = int(np.log10(n_folders))
+    subfold = "/"
+    div_base = 1e3  # TODO: make this a parameter
+    ix = int(ix // div_base % n_folders)  # carve out the middle part
+    id_str = '{num:0{w}d}'.format(num=ix, w=order)
+
+    for idx in range(0, order, 2):
+        subfold += "%s/" % id_str[idx: idx + 2]
+
+    return subfold
+
+
+def subfold_from_ix_OLD(ix, n_folders, old_version=False):
+    """
+    # TODO: remove 'old_version' as soon as possible, currently there is one usage
+
+    Parameters
+    ----------
+    ix : int
+    n_folders: int
+
+    Returns
+    -------
+    str
+    """
+    assert n_folders in [10**i for i in range(6)]
 
     order = int(np.log10(n_folders))
 
@@ -174,6 +203,29 @@ def subfold_from_ix(ix, n_folders, old_version=False):
 
 
 def ix_from_subfold(subfold, n_folders):
+    """
+
+    Parameters
+    ----------
+    subfold : str
+
+    Returns
+    -------
+    int
+    """
+    if not global_params.config.use_new_subfold:
+        return ix_from_subfold_OLD(subfold, n_folders)
+
+    parts = subfold.strip("/").split("/")
+    order = int(np.log10(n_folders))
+    # TODO: ' + "000"' needs to be adapted if `div_base` is made variable in `subfold_from_ix`
+    if order % 2 == 0:
+        return int("".join("%.2d" % int(part) for part in parts) + "000")
+    else:
+        return int("".join("%.2d" % int(part) for part in parts[:-1]) + parts[-1] + "000")
+
+
+def ix_from_subfold_OLD(subfold, n_folders):
     """
 
     Parameters
@@ -209,6 +261,26 @@ def subfold_from_ix_SSO(ix):
 
     # raise NotImplementedError("Outdated")
     return "/%d/%d/%d/" % (ix % 1e2, ix % 1e4, ix)
+
+
+def get_unique_subfold_ixs(n_folders):
+    """
+    Returns unique IDs each associated with a unique storage dict
+
+    Parameters
+    ----------
+    n_folders : int
+
+    Returns
+    -------
+    np.ndarray
+    """
+    if global_params.config.use_new_subfold:
+        # TODO: this needs to be adapted as soon as `div_base` is changed in `subfold_from_ix`
+        storage_location_ids = [int(str(ix) + "000") for ix in np.arange(n_folders)]
+    else:
+        storage_location_ids = np.arange(n_folders)
+    return storage_location_ids
 
 
 def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,

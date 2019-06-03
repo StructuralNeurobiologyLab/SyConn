@@ -25,7 +25,7 @@ from syconn.proc.graphs import create_ccsize_dict
 from syconn.handler.basics import chunkify, kd_factory
 
 
-def sd_init(co, max_n_jobs):
+def sd_init(co, max_n_jobs, log=None):
     sd_seg = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir,
                                  version="0")
     multi_params = chunkify(sd_seg.so_dir_paths, max_n_jobs)
@@ -35,14 +35,16 @@ def sd_init(co, max_n_jobs):
     if not global_params.config.use_new_meshing and (co != "sv" or (co == "sv" and
             global_params.config.allow_mesh_gen_cells)):
         _ = qu.QSUB_script(multi_params, "mesh_caching", suffix=co, remove_jobfolder=False,
-                           n_max_co_processes=global_params.NCORE_TOTAL)
+                           n_max_co_processes=global_params.NCORE_TOTAL, log=log)
 
     if co == "sv":
         _ = qu.QSUB_script(multi_params, "sample_location_caching",
                            n_max_co_processes=global_params.NCORE_TOTAL,
-                           suffix=co, remove_jobfolder=True)
-    # now cache mesh properties
-    sd_proc.dataset_analysis(sd_seg, recompute=False, compute_meshprops=not global_params.config.use_new_meshing)
+                           suffix=co, remove_jobfolder=True, log=log)
+
+    # write mesh properties to attribute dictionaries if old meshing is active
+    if not global_params.config.use_new_meshing:
+        sd_proc.dataset_analysis(sd_seg, recompute=False, compute_meshprops=True)
 
 
 def kd_init(co, chunk_size, transf_func_kd_overlay, load_cellorganelles_from_kd_overlaycubes,
@@ -87,7 +89,9 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
     if chunk_size is None:
         chunk_size = [512, 512, 512]
     if max_n_jobs is None:
-        max_n_jobs = global_params.NCORE_TOTAL
+        max_n_jobs = global_params.NCORE_TOTAL * 2
+        # loading cached data or adapt number of jobs/cache size dynamically, dependent on the
+        # dataset
     kd = kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
@@ -119,7 +123,7 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
     log.info('Caching properties of subcellular structures {} and cell'
              ' supervoxels'.format(global_params.existing_cell_organelles))
     start = time.time()
-    ps = [Process(target=sd_init, args=[co, max_n_jobs])
+    ps = [Process(target=sd_init, args=[co, max_n_jobs, log])
           for co in ["sv"] + global_params.existing_cell_organelles]
     for p in ps:
         p.start()
@@ -150,7 +154,7 @@ def run_create_rag():
         G.add_edge(ix, ix)
 
     log.debug("Found {} SVs in initial RAG after adding size-one connected "
-              "components. Writing kml text file.".format(G.number_of_nodes()))
+              "components.".format(G.number_of_nodes()))
 
     # remove small connected components
     sv_size_dict = {}
@@ -174,136 +178,3 @@ def run_create_rag():
         os.makedirs(global_params.config.working_dir + '/glia/', exist_ok=True)
         shutil.copy(global_params.config.pruned_rag_path, global_params.config.working_dir
                     + '/glia/neuron_rag.bz2')
-
-
-def run_create_sds(chunk_size=None, n_folders_fs=10000, max_n_jobs=None,
-                   generate_sv_meshes=False, load_cellorganelles_from_kd_overlaycubes=False,
-                   transf_func_kd_overlay=None, cube_of_interest_bb=None):
-    """DEPRECATED
-
-    Parameters
-    ----------
-    chunk_size :
-    max_n_jobs : int
-    n_folders_fs :
-    generate_sv_meshes :
-    load_cellorganelles_from_kd_overlaycubes : bool
-        Load cell orgenelle prob/seg data from overlaycubes instead of raw cubes.
-    transf_func_kd_overlay : Dict[callable]
-        Method which is to applied to cube data if `load_from_kd_overlaycubes`
-        is True. Must be a dictionary with keys `global_params.existing_cell_organelles`.
-    cube_of_interest_bb : Tuple[np.ndarray]
-        Defines the bounding box of the cube to process. By default this is
-        set to (np.zoers(3); kd.boundary).
-
-
-    Returns
-    -------
-
-    """
-    if chunk_size is None:
-        chunk_size = [512, 512, 512]
-    if max_n_jobs is None:
-        max_n_jobs = global_params.NCORE_TOTAL * 2
-    log = initialize_logging('create_sds', global_params.config.working_dir +
-                             '/logs/', overwrite=True)
-    # Sets initial values of object
-    kd = kd_factory(global_params.config.kd_seg_path)
-    if cube_of_interest_bb is None:
-        cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
-    size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
-    offset = cube_of_interest_bb[0]
-    # resulting ChunkDataset, required for SV extraction --
-    # Object extraction - 2h, the same has to be done for all cell organelles
-    cd_dir = global_params.config.working_dir + "chunkdatasets/sv/"
-    # Class that contains a dict of chunks (with coordinates) after initializing it
-    cd = chunky.ChunkDataset()
-    cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
-                  box_coords=[0, 0, 0], fit_box_size=True)
-    log.info('Generating SegmentationDatasets for cell and cell '
-             'organelle supervoxels.')
-    oew.from_ids_to_objects(cd, "sv", overlaydataset_path=global_params.config.kd_seg_path,
-                            n_chunk_jobs=max_n_jobs, hdf5names=["sv"], n_max_co_processes=None,
-                            n_folders_fs=n_folders_fs, use_combined_extraction=True, size=size,
-                            offset=offset, log=log)
-
-    # Object Processing -- Perform after mapping to also cache mapping ratios
-    sd = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
-    sd_proc.dataset_analysis(sd, recompute=True, compute_meshprops=False)
-
-    log.info("Extracted {} cell SVs. Preparing rendering locations "
-             "(and meshes if not provided).".format(len(sd.ids)))
-    # chunk them
-    multi_params = chunkify(sd.so_dir_paths, max_n_jobs)
-    # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
-    so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type='sv')
-    multi_params = [[par, so_kwargs] for par in multi_params]
-    if generate_sv_meshes:
-        start = time.time()
-        _ = qu.QSUB_script(multi_params, "mesh_caching",
-                           n_max_co_processes=global_params.NCORE_TOTAL,
-                           remove_jobfolder=True)
-        log.info('Finished mesh caching of {} "{}"-SVs after {:.0f}s.'
-                 ''.format(len(sd.ids), 'cell', time.time() - start))
-    start = time.time()
-    _ = qu.QSUB_script(multi_params, "sample_location_caching",
-                       n_max_co_processes=global_params.NCORE_TOTAL)
-    log.info('Finished caching of rendering locations after {:.0f}s.'
-             ''.format(time.time() - start))
-    # recompute=False: only collect new sample_location property
-    sd_proc.dataset_analysis(sd, compute_meshprops=True, recompute=False)
-    log.info('Finished preparation of cell SVs after {:.0f}s.'.format(time.time() - start))
-    # create SegmentationDataset for each cell organelle
-    if transf_func_kd_overlay is None:
-        transf_func_kd_overlay = {k: None for k in global_params.existing_cell_organelles}
-    for co in global_params.existing_cell_organelles:
-        cd = chunky.ChunkDataset()
-        cd_dir = global_params.config.working_dir + "chunkdatasets/{}/".format(co)
-        cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
-                      box_coords=[0, 0, 0], fit_box_size=True)
-        log.info('Started object extraction of cellular organelles "{}" from '
-                 '{} chunks.'.format(co, len(cd.chunk_dict)))
-        prob_kd_path_dict = {co: getattr(global_params.config, 'kd_{}_path'.format(co))}
-        # This creates a SegmentationDataset of type 'co'
-        prob_thresh = global_params.config.entries["Probathresholds"][co]  # get probability threshold
-
-        # `from_probabilities_to_objects` will export a KD at `path`, remove if already existing
-        path = "{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)
-        if os.path.isdir(path):
-            log.debug('Found existing KD at {}. Removing it now.'.format(path))
-            shutil.rmtree(path)
-            log.debug('Done')
-        target_kd = knossosdataset.KnossosDataset()
-        target_kd.initialize_without_conf(path, kd.boundary, kd.scale, kd.experiment_name, mags=[1, ])
-        target_kd = knossosdataset.KnossosDataset()
-        target_kd.initialize_from_knossos_path(path)
-        oew.from_probabilities_to_objects(cd, co, # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist
-                                          prob_kd_path_dict=prob_kd_path_dict, thresholds=[prob_thresh],
-                                          workfolder=global_params.config.working_dir,
-                                          hdf5names=[co], n_max_co_processes=None, target_kd=target_kd,
-                                          n_folders_fs=n_folders_fs, debug=False, size=size, offset=offset,
-                                          load_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
-                                          transf_func_kd_overlay=transf_func_kd_overlay[co], log=log)
-        sd_co = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir)
-
-        # TODO: check if this is faster then the alternative below
-        sd_proc.dataset_analysis(sd_co, recompute=True, compute_meshprops=False)
-        multi_params = chunkify(sd_co.so_dir_paths, max_n_jobs)
-        so_kwargs = dict(working_dir=global_params.config.working_dir, obj_type=co)
-        start = time.time()
-        multi_params = [[par, so_kwargs] for par in multi_params]
-        _ = qu.QSUB_script(multi_params, "mesh_caching",
-                           n_max_co_processes=global_params.NCORE_TOTAL)
-        log.info('Finished mesh caching of {} "{}"-SVs after {:.0f}s.'
-                 ''.format(len(sd_co.ids), co, time.time() - start))
-        # # Old alternative, requires much more reads/writes then above solution
-        # sd_proc.dataset_analysis(sd_co, recompute=True, compute_meshprops=True)
-
-        # About 0.2 h per object class
-        start = time.time()
-        sd_proc.map_objects_to_sv(sd, co, global_params.config.kd_seg_path,
-                                  n_jobs=max_n_jobs)
-        log.info('Finished mapping of {} cellular organelles of type "{}" to '
-                 'cell SVs after {:.0f}s.'.format(len(sd_co.ids), co,
-                                                  time.time() - start))
-        sd_proc.dataset_analysis(sd_co, recompute=False, compute_meshprops=True)
