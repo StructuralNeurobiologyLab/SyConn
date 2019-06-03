@@ -1,3 +1,36 @@
 m2r
 sphinx >=1.7.5
 sphinx-autodoc-typehints >=1.3.0
+
+ipython<7.0.0
+h5py
+matplotlib>=2.2.2
+tqdm
+scipy>=1.1.0
+networkx
+m2r
+zmesh
+sphinx-autodoc-typehints >=1.3.0
+sphinx >=1.7.5
+lz4
+configobj
+flask
+fasteners
+numpy==1.16.3
+coloredlogs
+termcolor
+scikit-learn==0.19.1
+scikit-image==0.14.2
+pyopengl
+opencv-python
+numba==0.41.0
+llvmlite==0.26.0
+plyfile
+pytest
+pytest-runner
+prompt-toolkit <2.0
+git+git://github.com/ELEKTRONN/elektronn3@phil#egg=elektronn3
+vtki
+dill
+# git+git://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
+# openmesh==1.1.3
