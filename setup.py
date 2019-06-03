@@ -28,7 +28,7 @@ config = {
     'author_email': 'pschubert@neuro.mpg.de',
     'version': '0.2',
     'license': 'GPLv2',
-    'install_requires': ['knossos_utils', 'elektronn3',
+    'install_requires': [#'knossos_utils', 'elektronn3',
                          'numpy==1.16.3', 'scipy', 'lz4', 'h5py', 'networkx', 'ipython<7.0.0',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn==0.19.1',

@@ -28,6 +28,6 @@ pytest-runner
 prompt-toolkit <2.0
 vtki
 dill
+git+git://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
 # git+git://github.com/ELEKTRONN/elektronn3@phil#egg=elektronn3
-# git+git://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
 # openmesh==1.1.3
