@@ -13,9 +13,9 @@ import numpy as np
 import os
 import tqdm
 import time
-import h5py
 import sys
 import shutil
+import h5py
 from collections import defaultdict
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
@@ -365,7 +365,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
                     for sv_id_block in basics.chunkify(storage_location_ids, global_params.NNODES_TOTAL * 2)]
     if not qu.batchjob_enabled():
         sm.start_multiprocess_imap(_write_props_to_sv_thread, multi_params,
-                                   nb_cpus=n_max_co_processes, debug=True)
+                                   nb_cpus=n_max_co_processes, debug=False)
     else:
         qu.QSUB_script(multi_params, "write_props_to_sv_singlenode",
                        n_cores=global_params.NCORES_PER_NODE, n_max_co_processes=global_params.NNODES_TOTAL,
@@ -395,21 +395,14 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
                                                      obj_type=k, version=0, n_folders_fs=n_folders_fs_sc)
             dataset_analysis(sc_sd, recompute=False, compute_meshprops=False)
             for worker_nr in list_of_workers:
-                p = "{}/tmp_meshes_{}_{}.pkl".format(global_params.config.temp_path,
-                                                     k, worker_nr)
-                p_h5py = "{}/tmp_meshes_{}_{}.h5".format(global_params.config.temp_path,
-                                                         k, worker_nr)
+                p = "{}/tmp_meshes_{}_{}.h5".format(global_params.config.temp_path,
+                                                    k, worker_nr)
                 os.remove(p)
-                os.remove(p_h5py)
         # remove temporary SV meshes
         for worker_nr in list_of_workers:
-            p = "{}/tmp_meshes_{}_{}.pkl".format(global_params.config.temp_path,
-                                                 "sv", worker_nr)
-            p_h5py = "{}/tmp_meshes_{}_{}.h5".format(global_params.config.temp_path,
-                                                     "sv", worker_nr)
-
+            p = "{}/tmp_meshes_{}_{}.h5".format(global_params.config.temp_path,
+                                                "sv", worker_nr)
             os.remove(p)
-            os.remove(p_h5py)
     # clear temporary files
     for p in dict_paths:
         os.remove(p)
@@ -446,7 +439,8 @@ def _map_subcell_extract_props_thread(args):
     scmd_lst = [{} for _ in range(n_subcell)]   # subcell. mapping dicts
 
     big_mesh_dict = {}
-    for organelle in ["sv", ] + global_params.existing_cell_organelles:
+    big_mesh_dict['sv'] = defaultdict(list)
+    for organelle in global_params.existing_cell_organelles:
         big_mesh_dict[organelle] = defaultdict(list)
 
     dt_times_dc = {'find_mesh': 0, 'mesh_io': 0, 'merge_mesh': 0}
@@ -500,28 +494,20 @@ def _map_subcell_extract_props_thread(args):
 
     if global_params.config.use_new_meshing:
         ids_list = []
-        for segtype in ["sv", ] + global_params.existing_cell_organelles:
+        for seg_type in ["sv", ] + global_params.existing_cell_organelles:
             start = time.time()
-            p = "{}/tmp_meshes_{}_{}.pkl".format(global_params.config.temp_path,
-                                                 segtype, worker_nr)
 
-            # ###########################################################################
             p_h5py = "{}/tmp_meshes_{}_{}.h5".format(global_params.config.temp_path,
-                                                     segtype, worker_nr)
-
+                                                     seg_type, worker_nr)
             f = h5py.File(p_h5py, "w")
-            for key in big_mesh_dict[segtype].keys():
+            for key in big_mesh_dict[seg_type].keys():
                 grp = f.create_group(str(key))
                 for i, t in enumerate(['f', 'v', 'n']):  # faces, vertices, normals
-                    grp.create_dataset(t, data=big_mesh_dict[segtype][key][i], compression="gzip")
+                    grp.create_dataset(t, data=big_mesh_dict[seg_type][key][i], compression="gzip")
             f.close()
-            # ############################################################################
 
-            output_worker = open(p, 'wb')
-            pkl.dump(big_mesh_dict[segtype], output_worker)
-            output_worker.close()
             dt_times_dc['mesh_io'] += time.time() - start
-            ids_list.append(list(big_mesh_dict[segtype].keys()))
+            ids_list.append(list(big_mesh_dict[seg_type].keys()))
 
         dt_str = ["{}: {:.2f}s\t".format(k, v) for k, v in dt_times_dc.items()]
         log_proc.critical('{}  [dummy error]'.format("".join(dt_str)))
@@ -536,8 +522,6 @@ def find_meshes(chunk, offset):
     """
 
     """
-
-    chunk = np.pad(chunk, ((1, 1), (1, 1), (1, 1)), 'edge')
     scaling = np.array(global_params.config.entries["Dataset"]["scaling"])
     mesher = Mesher(scaling[::-1])  # xyz -> zxy
     mesher.mesh(chunk)
@@ -726,14 +710,14 @@ def _write_props_to_sc_thread(args):
                 worker_ids += subcell_mesh_workers[ii][k]
             worker_ids = np.unique(worker_ids)
             for worker_nr in worker_ids:
-                p = "{}/tmp_meshes_{}_{}.pkl".format(global_params.config.temp_path,
-                                                     organelle, worker_nr)
-                pkl_file = open(p, 'rb')
-                partial_mesh_dc = pkl.load(pkl_file)
-                pkl_file.close()
+                p_h5py = "{}/tmp_meshes_{}_{}.h5".format(global_params.config.temp_path,
+                                                         organelle, worker_nr)
+                f = h5py.File(p_h5py, 'r')
+
                 # only loaded keys which are part of the worker's chunk
-                for el in np.intersect1d(all_obj_keys, list(partial_mesh_dc.keys())):
-                    cached_mesh_dc[el].append(partial_mesh_dc[el])
+                for el in np.intersect1d(all_obj_keys, list(f.keys())):
+                    cached_mesh_dc[int(el)].append([f[str(el)]['f'][:], f[str(el)]['v'][:], f[str(el)]['n'][:]])
+                f.close()
 
         # get SegmentationDataset of current subcell.
         sc_sd = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs, obj_type=organelle,
@@ -867,6 +851,7 @@ def _write_props_to_sv_thread(args):
     if global_params.config.use_new_meshing:
         # get cached mesh dicts for segmentation object k
         cached_mesh_dc = defaultdict(list)
+        cached_mesh_dc_pkl = defaultdict(list)
         start = time.time()
         worker_ids = []
         for k in all_obj_keys:
@@ -877,24 +862,18 @@ def _write_props_to_sv_thread(args):
         log_proc.critical('Loading meshes of {} SVs from {} worker '
                           'caches.'.format(len(all_obj_keys), len(worker_ids)))
         for worker_nr in worker_ids:
-            p = "{}/tmp_meshes_{}_{}.pkl".format(global_params.config.temp_path,
-                                                 "sv", worker_nr)
+
             p_h5py = "{}/tmp_meshes_{}_{}.h5".format(global_params.config.temp_path,
                                                      "sv", worker_nr)
+            f = h5py.File(p_h5py, 'r')
 
-
-
-            pkl_file = open(p, 'rb')
-            partial_mesh_dc = pkl.load(pkl_file)
-            pkl_file.close()
             # only loaded keys which are part of the worker's chunk
-            for el in np.intersect1d(all_obj_keys, list(partial_mesh_dc.keys())):
-                cached_mesh_dc[el].append(partial_mesh_dc[el])
+            for el in np.intersect1d(all_obj_keys, list(f.keys())):
+                cached_mesh_dc[int(el)].append([f[str(el)]['f'][:], f[str(el)]['v'][:], f[str(el)]['n'][:]])
+            f.close()
         dt_mesh_merge_io += time.time() - start
         log_proc.critical('Loading meshes from worker caches took'
                           ' {:.2f} min [dummy error]'.format(dt_mesh_merge_io / 60))
-        print("\n\n\n all_obj_keys= ", all_obj_keys)
-        sys.exit()
 
     # get SegmentationDataset of cell SV
     sv_sd = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs,
