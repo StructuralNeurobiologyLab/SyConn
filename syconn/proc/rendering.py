@@ -987,12 +987,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
                        ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
         nb_views = global_params.NB_VIEWS
-    # tim = time.time()
     ind, vert, norm = sso.mesh
-    # tim1 = time.time()
-    # if verbose:
-    #     print("Time for initialising MESH {:.2f}s."
-    #                        "".format(tim1 - tim))
     if len(vert) == 0:
         msg = "No mesh for SSO {} found with {} locations.".format(sso, len(coords))
         log_proc.warning(msg)
@@ -1019,19 +1014,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
         querybox_edgelength = comp_window / mo.max_dist
         rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
                                     mo.vert_resh, querybox_edgelength)
-    #raise()
-    # create redundant vertices to enable per-face colors
-    # vert = vert.reshape(-1, 3)
-    # ind = np.arange(len(vert) // 3)
-    # color_array = np.repeat(color_array, 3, axis=0)  # 3 <- triangles
-    #vert = vert.reshape(-1, 3)
-    #ind = np.arange(len(vert))
-    #color_array = np.repeat(color_array, 3, axis=0)  # 3 <- triangles
-    #raise()
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
-    # tim1 = time.time()
-    # print("Time for initializing MESHOBJECT {:.2f}s."
-    #                    "".format(tim1 - tim))
     if return_rot_matrices:
         ix_views, rot_mat = _render_mesh_coords(
             coords, mo, verbose=verbose, ws=ws, depth_map=False,
@@ -1048,9 +1031,6 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
                                    smooth_shade=False, views_key="index",
                                    nb_views=nb_views, comp_window=comp_window,
                                    return_rot_matrices=return_rot_matrices)
-    # tim2 = time.time()
-    # print("Time for _RENDER_MESH_COORDS {:.2f}s."
-    #                    "".format(tim2 - tim1))
     if ix_views.shape[-1] == 3:
         ix_views = rgb2id_array(ix_views)[:, None]
     else:

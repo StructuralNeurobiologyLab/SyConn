@@ -1615,7 +1615,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             vertex_ix = i_views[ii]
             if vertex_ix == background_id:
                 continue
-            l = semseg_views[ii]  # triangle label
+            l = semseg_views[ii]  # vertex label
             #get vertex ids into dictionary
             dc1[vertex_ix].append(l)
         ts2 = time.time()
@@ -1623,8 +1623,6 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
                        '{:.2f}s.'.format(ts2 - ts1))
         # background label is highest label in prediction (see 'generate_palette' or
         # 'remap_rgb_labelviews' in multiviews.py)
-        #background_l = 255
-        #print('yes')
         background_l = np.max(semseg_views)
         unpredicted_l = background_l + 1
         if unpredicted_l > 255:
