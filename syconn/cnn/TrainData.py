@@ -34,6 +34,7 @@ import glob
 from scipy import spatial
 import time
 import threading
+import pdb
 
 # fix random seed.
 np.random.seed(0)
@@ -51,7 +52,7 @@ if elektronn3_avail:
                     inp_key='raw', 
                     target_key='label', 
                     transform: Callable = Identity(), 
-                    num_read_limit=4000 # num_times each sample point should be used before corresponding h5py file is released
+                    num_read_limit=5 # num_times each sample point should be used before corresponding h5py file is released
                     ):
             super().__init__()
 
@@ -60,7 +61,7 @@ if elektronn3_avail:
             self.transform = transform
             self.train = train
             self.fnames = sorted(glob.glob(base_dir + "/*.h5"))
-            print("Files found: ", [ name[len(base_dir):] for name in self.fnames ] )
+            # print("Files found: ", [ name[len(base_dir)+1:] for name in self.fnames ] )
 
             if self.train:
                 self.num_read_limit = num_read_limit
@@ -82,6 +83,8 @@ if elektronn3_avail:
             self.thread_launched = False
 
         def __getitem__(self, index):
+            # pdb.set_trace()
+            print("REQUESTED INDEX = ", index)
             index = index - self.num_samples_in_already_read_files
             
             if self.current_count > int(0.5*len(self.index_array)) and self.thread_launched == False : #adjust 0.5
@@ -117,17 +120,62 @@ if elektronn3_avail:
         def read(self, file_pointer):
             print("Reading file", self.fnames[file_pointer])
             self.file = h5py.File(os.path.expanduser(self.fnames[file_pointer]), 'r')
-            self.secondary = self.file[self.inp_key][()]
+            self.secondary = self.file[self.inp_key][()]/255
             self.secondary_t = self.file[self.target_key][()].astype(np.int64)
             self.secondary, self.secondary_t = self.transform(self.secondary, self.secondary_t)
             print("read h5 file containes {} input samples, {} labels".format(self.secondary.shape[0], self.secondary_t.shape[0]))
 
         def __len__(self):
-            return 7835 if self.train else 1981  #Manually checked and written
+            return 7835*self.num_read_limit if self.train else 1981  #Manually checked and written
 
         def close_files(self):
             self.file.close()
 
+    class ModMultiviewData(Dataset):
+        """
+        Multiview spine data loader.
+        """
+        def __init__(
+                self,
+                base_dir,
+                train=True,
+                inp_key='raw', target_key='label',
+                transform: Callable = Identity()
+        ):
+            super().__init__()
+            self.train = train
+            subdir = '/train' if train else '/val'
+            fnames = sorted(glob.glob(base_dir + subdir + "/*.h5"))
+            self.inp = []
+            self.target = []
+            for ii in range(len(fnames)-41):
+                self.file = h5py.File(os.path.expanduser(fnames[ii]), 'r')
+                data = self.file[inp_key][()][:,:3,:,:] #TODO make 4 channels
+                data_t  =self.file[target_key][()].astype(np.int64)
+                self.inp.append(data.astype(np.float32) / 255.)  # TODO: here we 'normalize' differently (just dividing by 255)
+                self.target.append(data_t[:, 0])
+                print(f'file {ii}-> {fnames[ii]} has finished processing ')
+                del data, data_t
+            self.close_files()
+            self.inp = np.concatenate(self.inp)
+            self.target = np.concatenate(self.target)
+            self.transform = transform
+            print("Dataset (Train:{}): {}\t{}".format(train, self.inp.shape,
+                                                np.unique(self.target, return_counts=True)))
+
+        def __getitem__(self, index):
+            inp = self.inp[index]
+            target = self.target[index]
+            inp, target = self.transform(inp, target)
+            return inp, target
+
+        def __len__(self):
+            if not self.train:
+                return np.min([500, self.target.shape[0]])
+            return np.min([2500, self.target.shape[0]])  # self.target.shape[0]  # this number determines the epoch size
+
+        def close_files(self):
+            self.file.close()
 
 # -------------------------------------- elektronn3 ----------------------------
 if elektronn3_avail:

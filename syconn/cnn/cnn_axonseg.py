@@ -11,7 +11,7 @@ It learns how to differentiate between spine head, spine neck and spine shaft.
 Caution! The input dataset was not manually corrected.
 """
 from syconn import global_params
-from syconn.cnn.TrainData import MultiviewDataCached
+from syconn.cnn.TrainData import ModMultiviewData
 import argparse
 import os
 import torch
@@ -21,24 +21,26 @@ from torch.utils.data.dataset import random_split
 from elektronn3.training.loss import DiceLoss, LovaszLoss
 from elektronn3.models.fcn_2d import *
 from elektronn3.models.unet import UNet
+from elektronn3.models.duc_hdc import ResNetDUC, ResNetDUCHDC
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 
 from icecream import ic
 
 def get_model():
-    vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
-    model = FCNs(base_net=vgg_model, n_class=4)
+    # vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
+    # model = FCNs(base_net=vgg_model, n_class=4)
     # model = UNet(in_channels=4, out_channels=4, n_blocks=5, start_filts=32,
-    #              up_mode='resize', merge_mode='concat', planar_blocks=(),
+    #              up_mode='upsample', merge_mode='concat', planar_blocks=(),
     #              activation='relu', batch_norm=True, dim=2,)
+    model = ResNetDUCHDC(num_classes=4)
     return model
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="axonseg-FCN-Dice-resizeconv-80nmGT",
+    parser.add_argument('-n', '--exp-name', default="axonseg-FCN-Dice-resizeconv-80nmGT_1024",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
@@ -79,12 +81,15 @@ if __name__ == "__main__":
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
     global_params.gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_1024'
     
-    train_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/train', 
-                                        train=True, inp_key='raw', target_key='label', 
-                                        transform=transform, num_read_limit=5)
-    valid_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/val', 
-                                        train=False, inp_key='raw', target_key='label', 
-                                        transform=transform, num_read_limit=5)
+    # train_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/train', 
+    #                                     train=True, inp_key='raw', target_key='label', 
+    #                                     transform=transform, num_read_limit=5)
+    # valid_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/val', 
+    #                                     train=False, inp_key='raw', target_key='label', 
+    #                                     transform=transform, num_read_limit=5)
+
+    train_dataset = ModMultiviewData(train=True, transform=transform, base_dir=global_params.gt_path_axonseg)
+    valid_dataset = ModMultiviewData(train=False, transform=transform, base_dir=global_params.gt_path_axonseg)
     # Set up optimization
     optimizer = optim.Adam(
         model.parameters(),
