@@ -234,7 +234,7 @@ def load_mesh(so, recompute=False):
     if not recompute and so.mesh_exists:
         try:
             mesh = MeshStorage(so.mesh_path,
-                               disable_locking=not so.enable_locking)[so.id]
+                               disable_locking=True)[so.id]
             if len(mesh) == 2:
                 indices, vertices = mesh
                 normals = np.zeros((0, ), dtype=np.float32)

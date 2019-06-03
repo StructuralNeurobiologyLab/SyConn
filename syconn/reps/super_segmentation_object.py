@@ -2518,7 +2518,7 @@ class SuperSegmentationObject(object):
 def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
                           render_first_only=0, add_cellobjects=True,
                           overwrite=False, cellobjects_only=False,
-                          index_views=False):
+                          index_views=False, enable_locking=True):
     """
     Renders for each SV views at sampled locations (number is dependent on
     SV mesh size with scaling fact) from combined mesh of all SV.
@@ -2533,6 +2533,8 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
     render_first_only : int
     add_cellobjects : bool
     overwrite : bool
+    enable_locking : bool
+        enable system locking when writing views
     """
     # initilaize temporary SSO
     if not overwrite:
@@ -2569,7 +2571,8 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
                           RuntimeWarning)
         sv_obj = sos[i]
         sv_obj.save_views(views=v, woglia=woglia, index_views=index_views,
-                          cellobjects_only=cellobjects_only)
+                          cellobjects_only=cellobjects_only,
+                          enable_locking=enable_locking)
 
 
 def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):

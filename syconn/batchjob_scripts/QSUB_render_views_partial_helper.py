@@ -38,7 +38,7 @@ del kwargs['skip_indexviews']
 # svixs is a list of SV IDs, i.e. a list of multiple SSVs
 for svix in svixs:
     sd = sos_dict_fact(svix, **so_kwargs)
-    sd['enable_locking'] = True
+    sd['enable_locking'] = False  # locking is explicitly enabled when saving views
     sos = init_sos(sd)
     # render raw views
     render_sampled_sos_cc(sos, index_views=False, **kwargs)

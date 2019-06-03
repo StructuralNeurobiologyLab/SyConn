@@ -739,7 +739,7 @@ class SegmentationObject(object):
         assert self.type == "sv"
         if self.sample_locations_exist and not force:
             return CompressedStorage(self.locations_path,
-                                     disable_locking=not self.enable_locking)[self.id]
+                                     disable_locking=True)[self.id]
         else:
             verts = self.mesh[1].reshape(-1, 3)
             if len(verts) == 0:  # only return scaled rep. coord as [1, 3] array
@@ -903,7 +903,7 @@ class SegmentationObject(object):
         return views
 
     def save_views(self, views, woglia=True, cellobjects_only=False,
-                   index_views=False, view_key=None):
+                   index_views=False, view_key=None, enable_locking=None):
         """
         Saves views according to its properties. If view_key is given it has
         to be a special type of view, e.g. spine predictions. If in this case
@@ -916,11 +916,14 @@ class SegmentationObject(object):
         cellobjects_only : bol
         index_views : bool
         view_key : str
+        enable_locking : bool
         """
         if not (woglia and not cellobjects_only and not index_views) and view_key is not None:
             raise ValueError('If views are saved to custom key, all other settings have to be defaults!')
+        if enable_locking is None:
+            enable_locking = self.enable_locking
         view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
-                                    read_only=False, disable_locking=not self.enable_locking)
+                                    read_only=False, disable_locking=enable_locking)
         if cellobjects_only:
             assert self.id in view_dc, "SV must already contain raw views " \
                                        "if adding views for cellobjects only."
