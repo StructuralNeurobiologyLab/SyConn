@@ -40,8 +40,9 @@ else:
 ssvs_large = []
 ssvs_small = []
 for ssv_ix in ch:
+    # locking is explicitly enabled when saving SV views, no need to enable it for reading data
     sso = SuperSegmentationObject(ssv_ix, working_dir=wd,
-                                  enable_locking_so=True)
+                                  enable_locking_so=False)
     if len(sso.sample_locations()) > np.inf:  # TODO: adapt as soon as
         # `render_sso_coords_multiprocessing` has correct sorting of returned views
         ssvs_large.append(sso)
