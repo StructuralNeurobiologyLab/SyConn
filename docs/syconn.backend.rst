@@ -1,21 +1,21 @@
-syconn.mp package
+syconn.backend package
 =================
 
 Submodules
 ----------
 
-syconn.mp.batchjob\_utils module
+syconn.backend.base module
 ----------------------------
 
-.. automodule:: syconn.mp.batchjob_utils
+.. automodule:: syconn.backend.base
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.mp.mp\_utils module
+syconn.backend.storage module
 ----------------------------
 
-.. automodule:: syconn.mp.mp_utils
+.. automodule:: syconn.backend.storage
     :members:
     :undoc-members:
     :show-inheritance:
@@ -24,7 +24,7 @@ syconn.mp.mp\_utils module
 Module contents
 ---------------
 
-.. automodule:: syconn.mp
+.. automodule:: syconn.backend
     :members:
     :undoc-members:
     :show-inheritance:

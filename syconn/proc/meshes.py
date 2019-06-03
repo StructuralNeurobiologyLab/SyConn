@@ -12,7 +12,7 @@ from numba import jit
 from scipy import spatial, ndimage
 from skimage import measure
 from sklearn.decomposition import PCA
-import openmesh
+
 from plyfile import PlyData, PlyElement
 from scipy.ndimage.morphology import binary_closing, binary_dilation
 import tqdm
@@ -42,8 +42,13 @@ try:
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 except ImportError as e:
     boundaryDistanceTransform, gaussianSmoothing = None, None
-    log_proc.error('ModuleNotFoundError. Could not import VIGRA. '
+    log_proc.error('ImportError. Could not import VIGRA. '
                    'Mesh generation will not be possible. {}'.format(e))
+try:
+    import openmesh
+except ImportError as e:
+    log_proc.error('ImportError. Could not import openmesh. '
+                   'Writing meshes will not be possible. {}'.format(e))
 
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
