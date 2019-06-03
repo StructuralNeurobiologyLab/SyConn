@@ -5,7 +5,7 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-# TODO: move code to syconn/gate/
+# TODO: move code to syconn/gate/ but keep executable script here
 import copy
 import time
 import numpy as np
@@ -17,7 +17,7 @@ import os
 from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
 from syconn import global_params
-from syconn.gate import log_gate
+from syconn.handler.logger import log_main as log_gate
 from syconn.handler.multiviews import int2str_converter
 from syconn.reps.segmentation import SegmentationDataset
 
