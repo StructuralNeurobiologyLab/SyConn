@@ -33,8 +33,8 @@ working_dir = so_kwargs['working_dir']
 global_params.wd = working_dir
 kwargs = args[2]
 
-n_parallel_jobs = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE  # Assumes that
-# this job is always started using half of the node and with one GPU
+n_parallel_jobs = global_params.NCORES_PER_NODE  # -> uses more threads than available (increase
+# usage of GPU)
 multi_params = ch
 # this creates a list of lists of SV IDs
 multi_params = chunkify(multi_params, n_parallel_jobs)
@@ -43,8 +43,8 @@ multi_params = [(ixs, so_kwargs, kwargs) for ixs in multi_params]
 # first SV should always be unique
 path_out = QSUB_script(
     multi_params, "render_views_partial_helper", suffix="_SSV{}".format(ch[0][0]),
-    n_cores=1, disable_batchjob=True,
-    n_max_co_processes=n_parallel_jobs)
+    n_cores=1, disable_batchjob=True, remove_jobfolder=True,
+    n_max_co_processes=n_parallel_jobs, show_progress=False)
 folder_del = os.path.abspath(path_out + "/../")
 shutil.rmtree(folder_del, ignore_errors=True)
 

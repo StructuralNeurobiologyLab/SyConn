@@ -179,8 +179,9 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
         os.makedirs(dest_p_cache)
     start_multiprocess_imap(gt_generation_helper, params, nb_cpus=cpu_count(),
                             debug=False)
-    if gt_type == 'axgt':
-        return
+    # TODO: in case GT is too big to hold all views in memory
+    # if gt_type == 'axgt':
+    #     return
     # Create Dataset splits for training, validation and test
     all_raw_views = []
     all_label_views = []
@@ -191,7 +192,7 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
         dest_p = "{}/{}/".format(dest_p_cache, sso_id)
         raw_v = np.load(dest_p + "raw.npy")
         label_v = np.load(dest_p + "label.npy")
-        index_v = np.load(dest_p + "index.npy")  # Removed index views
+        # index_v = np.load(dest_p + "index.npy")  # Removed index views
         all_raw_views.append(raw_v)
         all_label_views.append(label_v)
         # all_index_views.append(index_v)  # Removed index views
@@ -214,7 +215,8 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
     all_label_views = all_label_views.reshape((-1, 1, ws[1], ws[0]))
     # # all_index_views = all_index_views.reshape((-1, 1, 128, 256))  # Removed index views
     # # all_raw_views = np.concatenate([all_raw_views, all_index_views], axis=1)  # Removed index views
-    raw_train, raw_valid, label_train, label_valid = train_test_split(all_raw_views, all_label_views, train_size=0.8,
+    raw_train, raw_valid, label_train, label_valid = train_test_split(all_raw_views,
+                                                                      all_label_views, train_size=0.9,
                                                                       shuffle=False)
     # # raw_valid, raw_test, label_valid, label_test = train_test_split(raw_other, label_other, train_size=0.5, shuffle=False)  # Removed index views
     print("Writing h5 files.")

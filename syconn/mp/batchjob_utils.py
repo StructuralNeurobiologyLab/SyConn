@@ -67,7 +67,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 sge_additional_flags=None, iteration=1, max_iterations=3,
                 params_orig_id=None, python_path=None, disable_mem_flag=False,
                 disable_batchjob=False, send_notification=False, use_dill=False,
-                remove_jobfolder=False, log=None):
+                remove_jobfolder=False, log=None, show_progress=True):
     # TODO: Switch to JobArrays!
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
@@ -127,6 +127,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         information about the job name, required time or CPU/MEM usage.
         TODO: use SLURM JobArrays to enable detailed notification emails
     use_dill : bool
+    show_progress : bool
+        Currently only applies for `batchjob_fallback`
 
     Returns
     -------
@@ -139,7 +141,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if disable_batchjob or not batchjob_enabled():
         return batchjob_fallback(params, name, n_cores, suffix,
                                  script_folder, python_path,
-                                 remove_jobfolder=remove_jobfolder)
+                                 remove_jobfolder=remove_jobfolder,
+                                 show_progress=show_progress)
     if queue is None:
         queue = global_params.BATCH_QUEUE
     if pe is None:
@@ -507,7 +510,8 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
 
 def batchjob_fallback(params, name, n_cores=1, suffix="",
-                      script_folder=None, python_path=None, remove_jobfolder=False):
+                      script_folder=None, python_path=None,
+                      remove_jobfolder=False, show_progress=True):
     """
     # TODO: utilize log and error files ('path_to_err', path_to_log')
     Fallback method in case no batchjob submission system is available.
@@ -518,7 +522,6 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
     name :
     n_cores :
     suffix :
-    n_max_co_processes :
     script_folder :
     python_path :
 
@@ -585,7 +588,8 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
         cmd_exec = "sh {}".format(this_sh_path)
         multi_params.append(cmd_exec)
     out_str = start_multiprocess_imap(fallback_exec, multi_params, debug=False,
-                                  nb_cpus=n_max_co_processes)
+                                      nb_cpus=n_max_co_processes,
+                                      show_progress=show_progress)
     if len("".join(out_str)) > 0:
         log_batchjob.error('Errors occurred during "{}".:\n{}'.format(name, out_str))
     out_files = glob.glob(path_to_out + "*.pkl")
