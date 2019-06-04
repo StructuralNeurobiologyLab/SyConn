@@ -418,6 +418,22 @@ class SegmentationObject(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __reduce__(self):
+        """
+        Support pickling of class instances.
+        TODO: calling methods/attributes via `start_multiprocess_obj` is still erroneous:
+         `TypeError: can't pickle _thread.RLock objects`
+
+        Returns
+        -------
+
+        """
+        return self.__class__, (self._id, self._type, self._version, self._working_dir,
+                                self._rep_coord, self._size, self._scaling, False,
+                                self._voxel_caching, self._mesh_caching, self._view_caching,
+                                self._config, self._n_folders_fs, self.enable_locking,
+                                self._skeleton_caching)
+
     @property
     def type(self):
         return self._type
@@ -913,7 +929,7 @@ class SegmentationObject(object):
         ----------
         views : np.array
         woglia : bool
-        cellobjects_only : bol
+        cellobjects_only : bool
         index_views : bool
         view_key : str
         enable_locking : bool
@@ -923,7 +939,7 @@ class SegmentationObject(object):
         if enable_locking is None:
             enable_locking = self.enable_locking
         view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
-                                    read_only=False, disable_locking=enable_locking)
+                                    read_only=False, disable_locking=not enable_locking)
         if cellobjects_only:
             assert self.id in view_dc, "SV must already contain raw views " \
                                        "if adding views for cellobjects only."

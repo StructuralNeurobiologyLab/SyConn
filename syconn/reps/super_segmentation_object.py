@@ -1258,14 +1258,23 @@ class SuperSegmentationObject(object):
         #     view_dc.push()
         return views
 
-    def view_existence(self, woglia=True):
+    def view_existence_old(self, woglia=True):
         params = [[sv, {"woglia": woglia}] for sv in self.svs]
         so_views_exist = sm.start_multiprocess_obj("views_exist", params,
                                                    nb_cpus=self.nb_cpus)
         return so_views_exist
 
+    def view_existence(self, woglia=True):
+        view_paths = set([sv.view_path(woglia=woglia) for sv in self.svs])
+        cached_ids = []
+        for vp in view_paths:
+            cached_ids += list(CompressedStorage(vp, disable_locking=True).keys())
+        cached_ids = set(cached_ids).intersection(self.sv_ids)
+        so_views_exist = [svid in cached_ids for svid in self.sv_ids]
+        return so_views_exist
+
     def render_views(self, add_cellobjects=False, verbose=False,
-                     qsub_pe=None, overwrite=True, cellobjects_only=False,
+                     overwrite=True, cellobjects_only=False,
                      woglia=True, skip_indexviews=False, qsub_co_jobs=300,
                      resume_job=False):
         """
@@ -1297,21 +1306,24 @@ class SuperSegmentationObject(object):
             part = self.partition_cc()
             log_reps.info('Partitioned huge SSV into {} subgraphs with each {}'
                           ' SVs.'.format(len(part), len(part[0])))
-            if not overwrite:  # check existence of glia preds
-                views_exist = np.array(self.view_existence(), dtype=np.int)
-                log_reps.info("Rendering SSO. {}/{} views left to process"
-                              ".".format(np.sum(views_exist == 0), len(self.svs)))
-                ex_dc = {}
-                for ii, k in enumerate(self.svs):
-                    ex_dc[k] = views_exist[ii]
-                for k in part.keys():
-                    if ex_dc[k]:  # delete SO's with existing views
-                        del part[k]
-                        continue
-                del ex_dc
-            else:
-                log_reps.info("Rendering SSO. {} SVs left to process"
-                              ".".format(len(self.svs)))
+            log_reps.info("Rendering SSO. {} SVs left to process"
+                          ".".format(len(self.svs)))
+            # TODO: Does not work
+            # if not overwrite:  # check existence of glia preds
+            #     views_exist = np.array(self.view_existence(), dtype=np.int)
+            #     log_reps.info("Rendering SSO. {}/{} views left to process"
+            #                   ".".format(np.sum(views_exist == 0), len(self.svs)))
+            #     ex_dc = {}
+            #     for ii, k in enumerate(self.svs):
+            #         ex_dc[k] = views_exist[ii]
+            #     for k in part.keys():
+            #         if ex_dc[k]:  # delete SO's with existing views
+            #             del part[k]
+            #             continue
+            #     del ex_dc
+            # else:
+            #     log_reps.info("Rendering SSO. {} SVs left to process"
+            #                   ".".format(len(self.svs)))
             params = [[so.id for so in el] for el in part]
 
             params = chunkify(params, global_params.NGPU_TOTAL * 2)
@@ -2565,6 +2577,7 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
                                   ws=ws, verbose=verbose,
                                   cellobjects_only=cellobjects_only)
     for i in range(len(coords)):
+        # TODO: write chunked
         v = views[part_views[i]:part_views[i + 1]]
         if np.sum(v) == 0 or np.sum(v) == np.prod(v.shape):
             log_reps.warn("Empty views detected after rendering.",
@@ -2572,7 +2585,7 @@ def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
         sv_obj = sos[i]
         sv_obj.save_views(views=v, woglia=woglia, index_views=index_views,
                           cellobjects_only=cellobjects_only,
-                          enable_locking=enable_locking)
+                          enable_locking=True)
 
 
 def render_so(so, ws=(256, 128), add_cellobjects=True, verbose=False):

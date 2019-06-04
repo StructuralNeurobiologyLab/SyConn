@@ -50,7 +50,8 @@ for ssv_ix in ch:
         ssvs_small.append(sso)
 
 # render huge SSVs in parallel, multiple jobs per SSV
-n_parallel_jobs = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE  # Assumes that
+n_parallel_jobs = global_params.NCORES_PER_NODE  # // global_params.NGPUS_PER_NODE  # Assumes
+# that
 # this job is always started using half of the node and with one GPU
 for ssv in ssvs_large:
     render_sso_coords_multiprocessing(ssvs_large, wd, n_parallel_jobs,

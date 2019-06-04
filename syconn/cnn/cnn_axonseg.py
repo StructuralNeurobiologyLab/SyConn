@@ -36,7 +36,7 @@ def get_model():
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="axonseg-UNET-Dice-resizeconv-80nmGT-BOUTON",
+    parser.add_argument('-n', '--exp-name', default="axonseg-UNET-Dice-resizeconv-60nmGT-BOUTON",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
@@ -60,7 +60,7 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3training/')
 
     max_steps = args.max_steps
-    lr = 0.0048
+    lr = 0.001
     lr_stepsize = 500
     lr_dec = 0.995
     batch_size = 4

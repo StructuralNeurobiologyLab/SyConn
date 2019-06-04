@@ -830,11 +830,11 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
                        "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
     # if sso.version != 'tmp':
     if not return_views:
+        # TODO: write chunked
         for i, so in enumerate(missing_svs):
             sv_views = views[part_views[i]:part_views[i+1]]
-            so.enable_locking = True
             so.save_views(sv_views, woglia=woglia, cellobjects_only=cellobjects_only,
-                          index_views=index_views)
+                          index_views=index_views, enable_locking=True)
     # else:
     #     log_proc.warning('"render_sampled_sso" called but this SSV '
     #                      'has version "tmp", results will'

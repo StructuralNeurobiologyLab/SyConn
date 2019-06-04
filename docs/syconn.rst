@@ -13,6 +13,7 @@ Subpackages
     syconn.mp
     syconn.proc
     syconn.reps
+    syconn.exec
 
 
 Module contents

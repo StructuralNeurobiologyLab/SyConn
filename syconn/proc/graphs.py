@@ -237,8 +237,11 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
     return nonglia_ccs, glia_ccs
 
 
-def create_ccsize_dict(g, sizes):
-    ccs = nx.connected_components(g)
+def create_ccsize_dict(g, sizes, is_connected_components=False):
+    if not is_connected_components:
+        ccs = nx.connected_components(g)
+    else:
+        ccs = g
     node2cssize_dict = {}
     for cc in ccs:
         mesh_bbs = np.concatenate([sizes[n] for n in cc])

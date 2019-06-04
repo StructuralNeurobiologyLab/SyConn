@@ -513,6 +513,7 @@ def _run_huge_ssv_render_worker(q):
             new_G.add_edge(sso.get_seg_obj("sv", e[0]),
                            sso.get_seg_obj("sv", e[1]))
         sso._rag = new_G
+        # TODO: change overwrite to True, also change at `QSUB_render_views_glia_removal`!
         sso.render_views(add_cellobjects=False, cellobjects_only=False,
                          skip_indexviews=True, woglia=False, overwrite=True,
                          qsub_co_jobs=global_params.NGPU_TOTAL)
@@ -535,7 +536,7 @@ def run_glia_rendering(max_n_jobs=None):
         max_n_jobs = global_params.NGPU_TOTAL * 4 if global_params.PYOPENGL_PLATFORM == 'egl' \
             else global_params.NCORE_TOTAL * 4
     log = initialize_logging('glia_view_rendering', global_params.config.working_dir + '/logs/',
-                             overwrite=False)
+                             overwrite=True)
     log.info("Preapring RAG.")
     np.random.seed(0)
 
@@ -550,12 +551,22 @@ def run_glia_rendering(max_n_jobs=None):
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
 
     # generate parameter for view rendering of individual SSV
+    # TODO: remove SVs below minimum size (-> global_params.min_cc_size_ssv)
+    sds = SegmentationDataset("sv", working_dir=global_params.config.working_dir)
+    sv_size_dict = {}
+    bbs = sds.load_cached_data('bounding_box') * sds.scaling
+    for ii in range(len(sds.ids)):
+        sv_size_dict[sds.ids[ii]] = bbs[ii]
+    ccsize_dict = create_ccsize_dict(cc_gs, sv_size_dict, is_connected_components=True)
+
     multi_params = cc_gs
     big_ssv = []
     small_ssv = []
     for g in multi_params:
         if g.number_of_nodes() > RENDERING_MAX_NB_SV:
             big_ssv.append(g)
+        elif ccsize_dict[list(g.nodes())[0]] < global_params.min_cc_size_ssv:
+            pass  # ignore this CC
         else:
             small_ssv.append(g)
 
@@ -574,7 +585,6 @@ def run_glia_rendering(max_n_jobs=None):
             time.sleep(0.5)
         for p in ps:
             p.join()
-
     # render small SSV without overhead and single cpus on whole cluster
     multi_params = small_ssv
     np.random.shuffle(multi_params)
@@ -582,10 +592,9 @@ def run_glia_rendering(max_n_jobs=None):
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.config.working_dir, version) for ixs in multi_params]
     _ = qu.QSUB_script(multi_params, "render_views_glia_removal", log=log,
-                                 n_max_co_processes=global_params.NGPU_TOTAL,
-                                 n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
-                                 additional_flags="--gres=gpu:1",
-                                 remove_jobfolder=True)
+                       n_max_co_processes=global_params.NGPU_TOTAL,
+                       n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                       additional_flags="--gres=gpu:1", remove_jobfolder=True)
 
     # check completeness
     log.info('Finished view rendering for glia separation. Checking completeness.')

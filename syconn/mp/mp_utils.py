@@ -309,7 +309,7 @@ def start_multithread_imap(func, params, debug=False, verbose=False,
 def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
                            nb_cpus=None):
     """
-
+    # TODO: broken for n_cpus > 1: `TypeError: can't pickle _thread.RLock objects`
     Parameters
     ----------
     func_name : str

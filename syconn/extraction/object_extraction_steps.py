@@ -17,7 +17,7 @@ import shutil
 import itertools
 from collections import defaultdict
 from knossos_utils import knossosdataset, chunky
-from vigra.filters import gaussianSmoothing
+
 knossosdataset._set_noprint(True)
 
 from ..handler import log_handler
@@ -30,6 +30,12 @@ from ..proc.image import multi_mop
 from .. import global_params
 from ..handler.basics import kd_factory
 from syconn.reps.rep_helper import find_object_properties
+
+try:
+    from vigra.filters import gaussianSmoothing
+except ImportError as e:
+    log_handler.error('ImportError. Could not import VIGRA. '
+                      '`object_segmentation` will not be possible. {}'.format(e))
 
 
 def gauss_threshold_connected_components(*args, **kwargs):
