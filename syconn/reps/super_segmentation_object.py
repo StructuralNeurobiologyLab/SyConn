@@ -675,6 +675,7 @@ class SuperSegmentationObject(object):
         return np.unique(np.concatenate([[a.id, b.id] for a, b in edges]))
 
     def save_attr_dict(self):
+        # TODO: use AttributeDict class
         if self.version == 'tmp':
             log_reps.warning('"save_attr_dict" called but this SSV '
                              'has version "tmp", attribute dict will'
@@ -682,7 +683,9 @@ class SuperSegmentationObject(object):
             return
         try:
             orig_dc = load_pkl2obj(self.attr_dict_path)
-        except IOError:
+        except (IOError, EOFError) as e:
+            log_reps.critical("Could not load SSO attributes to {} due to "
+                              "{}.".format(self.attr_dict_path, e))
             orig_dc = {}
         orig_dc.update(self.attr_dict)
         write_obj2pkl(self.attr_dict_path + '.tmp', orig_dc)
@@ -709,13 +712,12 @@ class SuperSegmentationObject(object):
             attr_values = [attr_values]
         try:
             attr_dict = load_pkl2obj(self.attr_dict_path)
-        except IOError as e:
+        except (IOError, EOFError) as e:
             if not "[Errno 13] Permission denied" in str(e):
                 pass
             else:
-                log_reps.warn("Could not load SSO attributes to %s due to "
-                              "missing permissions." % self.attr_dict_path,
-                              RuntimeWarning)
+                log_reps.critical("Could not load SSO attributes to {} due to "
+                                  "{}.".format(self.attr_dict_path, e))
             attr_dict = {}
         for k, v in zip(attr_keys, attr_values):
             attr_dict[k] = v
@@ -2073,6 +2075,9 @@ class SuperSegmentationObject(object):
             self.attr_dict[nonglia_svs_key] = non_glia_ccs_ixs
             self.save_attributes([glia_svs_key, nonglia_svs_key],
                                  [glia_ccs_ixs, non_glia_ccs_ixs])
+        else:
+            log_reps.critical('Skipping SSO {}, glia splits already exist'
+                              '.'.format(self.id))
 
     def gliasplit2mesh(self, dest_path=None, pred_key_appendix=""):
         """

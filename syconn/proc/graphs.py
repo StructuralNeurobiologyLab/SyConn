@@ -194,8 +194,6 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
     list, list
         Neuron, glia connected components
     """
-    _ = start_multiprocess_obj("mesh_bb", [[sv, ] for sv in nx_g.nodes()],
-                               nb_cpus=nb_cpus, verbose=verbose)
     glia_key = "glia_probas"
     if clahe:
         glia_key += "_clahe"

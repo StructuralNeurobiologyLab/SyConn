@@ -25,18 +25,18 @@ from elektronn3.data import transforms
 
 
 def get_model():
-    # vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
-    # model = FCNs(base_net=vgg_model, n_class=6)
-    model = UNet(in_channels=4, out_channels=6, n_blocks=5, start_filts=32,
-                 merge_mode='concat', planar_blocks=(), #up_mode='resize',
-                 activation='relu', batch_norm=True, dim=2,)
+    vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
+    model = FCNs(base_net=vgg_model, n_class=6)
+    # model = UNet(in_channels=4, out_channels=6, n_blocks=5, start_filts=32,
+    #              merge_mode='concat', planar_blocks=(), #up_mode='resize',
+    #              activation='relu', batch_norm=True, dim=2,)
     return model
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="axonseg-UNET-Dice-resizeconv-60nmGT-BOUTON",
+    parser.add_argument('-n', '--exp-name', default="axonseg-FCN-Dice-60nmGT-BOUTON",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,

@@ -540,7 +540,6 @@ def load_pkl2obj(path):
 
     Returns
     -------
-    SegmentationDatasetObject
     """
     try:
         with open(path, 'rb') as inp:

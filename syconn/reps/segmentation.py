@@ -700,7 +700,9 @@ class SegmentationObject(object):
 
     @property
     def mesh_bb(self):
-        if self._mesh_bb is None:
+        if self._mesh_bb is None and 'mesh_bb' in self.attr_dict:
+            self._mesh_bb = self.attr_dict['mesh_bb']
+        elif self._mesh_bb is None:
             if len(self.mesh[1]) == 0 or len(self.mesh[0]) == 0:
                 self._mesh_bb = self.bounding_box * self.scaling
             else:
@@ -952,9 +954,11 @@ class SegmentationObject(object):
     def load_attr_dict(self):
         try:
              glob_attr_dc = AttributeDict(self.attr_dict_path,
-                                          disable_locking=not self.enable_locking)
+                                          disable_locking=True)  # disable locking, PS 07June2019
              self.attr_dict = glob_attr_dc[self.id]
-        except (IOError, EOFError):
+        except (IOError, EOFError) as e:
+            log_reps.critical("Could not load SSO attributes to {} due to "
+                              "{}.".format(self.attr_dict_path, e))
             return -1
 
     def save_attr_dict(self):
