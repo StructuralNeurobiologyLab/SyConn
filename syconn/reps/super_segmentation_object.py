@@ -1588,7 +1588,8 @@ class SuperSegmentationObject(object):
                                cols, force_recompute=force_recompute,
                                index_view_key=index_view_key)
 
-    def semseg_for_coords(self, coords, semseg_key, k=5, ds_vertices=20):
+    def semseg_for_coords(self, coords, semseg_key, k=5, ds_vertices=20,
+                          ignore_labels=None):
         """
         Dies not need to be axoness, it supports any attribut stored in
         self.skeleton.
@@ -1602,6 +1603,9 @@ class SuperSegmentationObject(object):
             Number of nearest neighbors (NN) during k-NN classification
         ds_vertices : int
             striding factor for vertices
+        ignore_labels : List[int]
+            Vertices with labels in `ignore_labels` will be ignored during
+             majority vote, e.g. used to exclude unpredicted vertices.
 
         Returns
         -------
@@ -1610,9 +1614,14 @@ class SuperSegmentationObject(object):
             majority label within radius_nm
         """
         # TODO: Allow multiple keys as in self.attr_for_coords, e.g. to include semseg axoness in a single query
+        if ignore_labels is None:
+            ignore_labels = []
         coords = np.array(coords) * self.scaling
         vertex_labels = self.label_dict('vertex')[semseg_key][::ds_vertices]
         vertices = self.mesh[1].reshape((-1, 3))[::ds_vertices]
+        for ign_l in ignore_labels:
+            vertices = vertices[vertex_labels != ign_l]
+            vertex_labels = vertex_labels[vertex_labels != ign_l]
         if len(vertex_labels) != len(vertices):
             raise ValueError('Size of vertices and their labels does not match!')
         maj_vote = colorcode_vertices(coords, vertices, vertex_labels, k=k,
@@ -2678,4 +2687,32 @@ def celltype_predictor(args):
             log_reps.error(repr(e))
         pbar.update(1)
     pbar.close()
+    return missing_ssvs
+
+
+def semsegaxoness_predictor(args):
+    """
+
+    Parameters
+    ----------
+    args :
+
+    Returns
+    -------
+
+    """
+    from ..handler.prediction import get_semseg_axon_model
+    ssv_ids = args
+    m = get_semseg_axon_model()
+    missing_ssvs = []
+    for ix in ssv_ids:
+        ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
+        ssv.nb_cpus = 1
+        ssv._view_caching = True
+        try:
+            view_props = global_params.view_properties_semsegax
+            ssh.semseg_of_sso_nocache(ssv, m, **view_props)
+        except Exception as e:
+            missing_ssvs.append((ssv.id, e))
+            log_reps.error(repr(e))
     return missing_ssvs

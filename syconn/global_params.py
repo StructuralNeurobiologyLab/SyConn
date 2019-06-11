@@ -123,6 +123,10 @@ gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness' \
 view_properties_large = dict(verbose=False, ws=(512, 512), nb_views_render=6,
                              comp_window=40960, nb_views_model=4)
 
+view_properties_semsegax = dict(verbose=False, ws=(1024, 512), nb_views_render=3,
+                                comp_window=40.96e3 * 1.5, semseg_key='axoness',
+                                n_avg=0)  # this will not map predictions to unpredicted vertices
+
 # --------- MORPHOLOGY EMBEDDING
 ndim_embedding = 10
 

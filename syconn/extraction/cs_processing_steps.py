@@ -65,8 +65,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     else:
         _ = qu.QSUB_script(
             multi_params, "collect_properties_from_ssv_partners",
-            n_max_co_processes=n_max_co_processes,
-        remove_jobfolder=True)
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
     # iterate over paths with syn
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
@@ -84,9 +83,11 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
         _ = qu.QSUB_script(multi_params, "from_cell_to_syn_dict",
                            n_max_co_processes=n_max_co_processes,
                            remove_jobfolder=True)
-
+    log_extraction.debug('Deleting cache dictionaries now.')
     # delete cache_dc
-    _delete_all_cache_dc(ssd)
+    sm.start_multiprocess_imap(_delete_all_cache_dc, ssd.ssv_ids,
+                               nb_cpus=global_params.NCORES_PER_NODE)
+    log_extraction.debug('Deleted all cache dictionaries.')
 
 
 def _collect_properties_from_ssv_partners_thread(args):
@@ -191,11 +192,12 @@ def _from_cell_to_syn_dict(args):
         this_attr_dc.push()
 
 
-def _delete_all_cache_dc(ssd):
-    for ssv_o in ssd.ssvs:  # Iterate over cells
-        ssv_o.load_attr_dict()
-        if os.path.exists(ssv_o.ssv_dir + "/cache_syn.pkl"):
-            os.remove(ssv_o.ssv_dir + "/cache_syn.pkl")
+def _delete_all_cache_dc(ssv_id):
+    ssv_o = super_segmentation.SuperSegmentationObject(
+        ssv_id, working_dir=global_params.config.working_dir)
+    ssv_o.load_attr_dict()
+    if os.path.exists(ssv_o.ssv_dir + "/cache_syn.pkl"):
+        os.remove(ssv_o.ssv_dir + "/cache_syn.pkl")
 
 
 # code for splitting 'syn' objects, which are generated as overlap between CS and SJ, see below.

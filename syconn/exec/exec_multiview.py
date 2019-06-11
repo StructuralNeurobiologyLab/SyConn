@@ -189,6 +189,60 @@ def run_celltype_prediction(max_n_jobs_gpu=None):
         log.info('Success.')
 
 
+def run_segmsegaxoness_prediction(max_n_jobs_gpu=None):
+    """
+    Will store semantic axoness labels as `view_properties_semsegax['semseg_key']` inside
+     ssv.label_dict('vertex')[semseg_key]
+    # TODO: change usage when collecting axoness for synapses
+
+    Parameters
+    ----------
+    max_n_jobs_gpu : int
+
+    Returns
+    -------
+
+    """
+    if max_n_jobs_gpu is None:
+        max_n_jobs_gpu = global_params.NGPU_TOTAL * 2
+    log = initialize_logging('axoness_prediction', global_params.config.working_dir+ '/logs/',
+                             overwrite=False)
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+    # shuffle SV IDs
+    np.random.seed(0)
+
+    log.info('Starting cell type prediction.')
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
+                               for ssv_id in ssd.ssv_ids])
+    multi_params = ssd.ssv_ids
+    ordering = np.argsort(nb_svs_per_ssv)
+    multi_params = multi_params[ordering[::-1]]
+    max_n_jobs_gpu = np.max([max_n_jobs_gpu, len(multi_params) // 200])  # at most 200 SSV per job
+    multi_params = chunkify(multi_params, max_n_jobs_gpu)
+    # job parameter will be read sequentially, i.e. in order to provide only
+    # one list as parameter one needs an additonal axis
+    multi_params = [(ixs, ) for ixs in multi_params]
+
+    path_to_out = qu.QSUB_script(multi_params, "predict_axoness_semseg", log=log,
+                                 n_max_co_processes=global_params.NNODES_TOTAL,
+                                 suffix="", additional_flags="--gres=gpu:1",
+                                 n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                                 remove_jobfolder=True)
+    log.info('Finished prediction of {} SSVs. Checking completeness.'
+             ''.format(len(ordering)))
+    out_files = glob.glob(path_to_out + "*.pkl")
+    err = []
+    for fp in out_files:
+        with open(fp, "rb") as f:
+            local_err = pkl.load(f)
+        err += list(local_err)
+    if len(err) > 0:
+        log.error("{} errors occurred for SSVs with ID: "
+                  "{}".format(len(err), [el[0] for el in err]))
+    else:
+        log.info('Success.')
+
+
 def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
     if max_n_jobs is None:
         max_n_jobs = global_params.NCORE_TOTAL * 2
@@ -321,11 +375,11 @@ def _run_neuron_rendering_big_helper(max_n_jobs=None):
         #  when multiprocessing
         # TODO: refactor `render_sso_coords_multiprocessing` and then use `QSUB_render_views_egl`
         #  here!
-        n_cores = global_params.NCORES_PER_NODE
+        n_cores = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE
         n_parallel_jobs = global_params.NGPU_TOTAL
         path_to_out = qu.QSUB_script(multi_params, "render_views_egl",
                            n_max_co_processes=n_parallel_jobs, log=log,
-                           additional_flags="--gres=gpu:2",
+                           additional_flags="--gres=gpu:1",
                            n_cores=n_cores, remove_jobfolder=True)
         log.info('Finished rendering of {}/{} SSVs.'.format(len(ordering),
                                                             len(nb_svs_per_ssv)))
