@@ -773,9 +773,9 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
 # ------------------------------------------------------------------------------
 # SSO rendering code
 
-def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
+def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True, return_rot_mat=False,
                        add_cellobjects=True, overwrite=True, index_views=False,
-                       return_views=False, cellobjects_only=False):
+                       return_views=False, cellobjects_only=False, rot_mat=None):
     """
 
     Renders for each SV views at sampled locations (number is dependent on
@@ -818,12 +818,13 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
     if verbose:
         start = time.time()
     if index_views:
-        views = render_sso_coords_index_views(sso, flat_coords, ws=ws,
-                                              verbose=verbose)
+        views, rot_mat = render_sso_coords_index_views(sso, flat_coords, ws=ws,
+                                                   return_rot_matrices=True,
+                                              verbose=verbose, rot_mat=rot_mat)
     else:
-        views = render_sso_coords(sso, flat_coords, ws=ws, verbose=verbose,
-                                  add_cellobjects=add_cellobjects,
-                                  cellobjects_only=cellobjects_only)
+        views, rot_mat = render_sso_coords(sso, flat_coords, ws=ws, verbose=verbose,
+                                  add_cellobjects=add_cellobjects, return_rot_mat=True,
+                                  cellobjects_only=cellobjects_only, rot_mat=rot_mat)
     if verbose:
         dur = time.time() - start
         log_proc.debug("Rendering of %d views took %0.2fs. "
@@ -840,12 +841,16 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True,
     #                      'has version "tmp", results will'
     #                      ' not be saved to disk.')
     if return_views:
+        if return_rot_mat:
+            return views, rot_mat
         return views
+    if return_rot_mat:
+        return rot_mat
 
 
 def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=False,
-                      ws=None, cellobjects_only=False, wire_frame=False,
-                      nb_views=None, comp_window=None, rot_mat=None, return_rot_mat=False):
+                      ws=None, cellobjects_only=False, wire_frame=False, nb_views=None,
+                      comp_window=None, rot_mat=None, return_rot_mat=False):
     """
     Render views of SuperSegmentationObject at given coordinates.
 

@@ -1304,7 +1304,9 @@ class SuperSegmentationObject(object):
         -------
 
         """
-        if len(self.sv_ids) > global_params.RENDERING_MAX_NB_SV:
+        # TODO: partial rendering currently does not support index view generation (-> vertex
+        #  indices will be different for each partial mesh)
+        if len(self.sv_ids) > global_params.RENDERING_MAX_NB_SV and not woglia:
             part = self.partition_cc()
             log_reps.info('Partitioned huge SSV into {} subgraphs with each {}'
                           ' SVs.'.format(len(part), len(part[0])))
@@ -1345,14 +1347,14 @@ class SuperSegmentationObject(object):
                 resume_job=resume_job, additional_flags="--gres=gpu:1")
         else:
             # render raw data
-            render_sampled_sso(self, add_cellobjects=add_cellobjects,
-                               verbose=verbose, overwrite=overwrite,
+            rot_mat = render_sampled_sso(self, add_cellobjects=add_cellobjects,
+                               verbose=verbose, overwrite=overwrite, return_rot_mat=True,
                                cellobjects_only=cellobjects_only, woglia=woglia)
             if skip_indexviews:
                 return
             # render index views
             render_sampled_sso(self, verbose=verbose, overwrite=overwrite,
-                               index_views=True)
+                               index_views=True, rot_mat=rot_mat)
 
     def render_indexviews(self, nb_views=2, save=True, force_recompute=False,
                           verbose=False, view_key=None, ws=None, comp_window=None):

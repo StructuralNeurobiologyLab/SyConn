@@ -8,7 +8,10 @@
 # TODO: move code to syconn/ui/
 from PythonQt import QtGui, Qt, QtCore
 from PythonQt.QtGui import QTableWidget, QTableWidgetItem
-import KnossosModule
+try:
+    import KnossosModule
+except ImportError:
+    import knossos as KnossosModule
 import sys
 import requests
 import re

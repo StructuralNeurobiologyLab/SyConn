@@ -237,11 +237,11 @@ def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
     log.info('Finished spine mapping.')
 
 
-def run_neuron_rendering(max_n_jobs=None):
+def _run_neuron_rendering_small_helper(max_n_jobs=None):
     if max_n_jobs is None:
         max_n_jobs = global_params.NGPU_TOTAL * 4 if global_params.PYOPENGL_PLATFORM == 'egl' \
             else global_params.NCORE_TOTAL * 4
-    log = initialize_logging('neuron_view_rendering',
+    log = initialize_logging('neuron_view_rendering_small',
                              global_params.config.working_dir + '/logs/')
     # view rendering prior to glia removal, choose SSD accordingly
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -260,10 +260,7 @@ def run_neuron_rendering(max_n_jobs=None):
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.config.working_dir) for ixs in multi_params]
     log.info('Started rendering of {} SSVs. '.format(np.sum(size_mask)))
-    if np.sum(~size_mask) > 0:
-        log.info('{} huge SSVs will be rendered afterwards using the whole'
-                 ' cluster.'.format(np.sum(~size_mask)))
-    # generic
+        # generic
     if global_params.PYOPENGL_PLATFORM == 'osmesa':  # utilize all CPUs
         path_to_out = qu.QSUB_script(multi_params, "render_views", log=log,
                            n_max_co_processes=global_params.NCORE_TOTAL,
@@ -285,37 +282,86 @@ def run_neuron_rendering(max_n_jobs=None):
             path_to_out = qu.QSUB_script(multi_params, "render_views_egl",
                                n_max_co_processes=n_parallel_jobs, log=log,
                                additional_flags="--gres=gpu:1",
-                               n_cores=n_cores, remove_jobfolder=False)
+                               n_cores=n_cores, remove_jobfolder=True)
     else:
         raise RuntimeError('Specified OpenGL platform "{}" not supported.'
                            ''.format(global_params.PYOPENGL_PLATFORM))
+    log.info('Finished rendering of {}/{} SSVs.'.format(len(ordering),
+                                                        len(nb_svs_per_ssv)))
+
+
+def _run_neuron_rendering_big_helper(max_n_jobs=None):
+    if max_n_jobs is None:
+        max_n_jobs = global_params.NNODES_TOTAL * 2
+    log = initialize_logging('neuron_view_rendering_big',
+                             global_params.config.working_dir + '/logs/')
+    # view rendering prior to glia removal, choose SSD accordingly
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+
+    #  TODO: use actual size criteria, e.g. number of sampling locations
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
+                               for ssv_id in ssd.ssv_ids])
+
+    # render normal size SSVs
+    size_mask = nb_svs_per_ssv <= global_params.RENDERING_MAX_NB_SV
+    # sort ssv ids according to their number of SVs (descending)
+    # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     if np.sum(~size_mask) > 0:
-        log.info('Finished rendering of {}/{} SSVs.'.format(len(ordering),
-                                                            len(nb_svs_per_ssv)))
+        log.info('{} huge SSVs will be rendered on single nodes'.format(np.sum(~size_mask)))
         # identify huge SSVs and process them individually on whole cluster
         big_ssv = ssd.ssv_ids[~size_mask]
-        for kk, ssv_id in enumerate(big_ssv):
-            ssv = ssd.get_super_segmentation_object(ssv_id)
-            log.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(
-                kk+1, len(big_ssv), len(ssv.sv_ids)))
-            ssv.render_views(add_cellobjects=True, cellobjects_only=False,
-                             woglia=True, qsub_pe="openmp", overwrite=True,
-                             qsub_co_jobs=global_params.NCORE_TOTAL,
-                             skip_indexviews=False, resume_job=False)
+
+        # sort ssv ids according to their number of SVs (descending)
+        ordering = np.argsort(nb_svs_per_ssv[~size_mask])
+        multi_params = big_ssv[ordering[::-1]]
+        multi_params = chunkify(multi_params, max_n_jobs)
+        # list of SSV IDs and SSD parameters need to be given to a single QSUB job
+        multi_params = [(ixs, global_params.config.working_dir) for ixs in multi_params]
+        # TODO: Currently high memory consumption when rendering index views! take into account
+        #  when multiprocessing
+        # TODO: refactor `render_sso_coords_multiprocessing` and then use `QSUB_render_views_egl`
+        #  here!
+        n_cores = global_params.NCORES_PER_NODE
+        n_parallel_jobs = global_params.NGPU_TOTAL
+        path_to_out = qu.QSUB_script(multi_params, "render_views_egl",
+                           n_max_co_processes=n_parallel_jobs, log=log,
+                           additional_flags="--gres=gpu:2",
+                           n_cores=n_cores, remove_jobfolder=True)
+        log.info('Finished rendering of {}/{} SSVs.'.format(len(ordering),
+                                                            len(nb_svs_per_ssv)))
+        # for kk, ssv_id in enumerate(big_ssv):
+        #     ssv = ssd.get_super_segmentation_object(ssv_id)
+        #     log.info("Processing SSV [{}/{}] with {} SVs on whole cluster.".format(
+        #         kk+1, len(big_ssv), len(ssv.sv_ids)))
+        #     ssv.render_views(add_cellobjects=True, cellobjects_only=False,
+        #                      woglia=True, overwrite=True, verbose=True,
+        #                      qsub_co_jobs=global_params.NCORE_TOTAL,
+        #                      skip_indexviews=False, resume_job=False)
+
+
+def run_neuron_rendering(max_n_jobs=None):
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+    log = initialize_logging('neuron_view_rendering',
+                             global_params.config.working_dir + '/logs/')
+    ps = [Process(target=_run_neuron_rendering_big_helper, args=(max_n_jobs, )),]
+          # Process(target=_run_neuron_rendering_small_helper, args=(max_n_jobs, ))]
+    for p in ps:
+        p.start()
+        time.sleep(10)
+    for p in ps:
+        p.join()
     log.info('Finished rendering of all SSVs. Checking completeness.')
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=global_params.NCORES_PER_NODE)
     if len(res) != 0:
         msg = "Not all SSVs were rendered completely! Missing:\n{}".format(res)
         log.error(msg)
         raise RuntimeError(msg)
-    else:
-        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
-        log.info('Success.')
+    log.info('Success.')
 
 
 def run_create_neuron_ssd():
     """
-    Creates SuperSegmentationDataset with version 0.
+    Creates SuperSegmentationDataset with `version=0`.
 
     Parameters
     ----------
@@ -513,7 +559,6 @@ def _run_huge_ssv_render_worker(q):
             new_G.add_edge(sso.get_seg_obj("sv", e[0]),
                            sso.get_seg_obj("sv", e[1]))
         sso._rag = new_G
-        # TODO: change overwrite to True, also change at `QSUB_render_views_glia_removal`!
         sso.render_views(add_cellobjects=False, cellobjects_only=False,
                          skip_indexviews=True, woglia=False, overwrite=True,
                          qsub_co_jobs=global_params.NGPU_TOTAL)

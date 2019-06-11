@@ -56,8 +56,7 @@ for g in ch:
     else:
         ssvs_small.append(sso)
 
-# TODO: change overwrite to True
-render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=False,
+render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True,
                      skip_indexviews=True)
 # render huge SSVs in parallel, multiple jobs per SSV, use more threads than cores -> increase
 # GPU load

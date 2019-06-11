@@ -34,10 +34,12 @@ global_params.wd = working_dir
 kwargs = args[2]
 
 n_parallel_jobs = global_params.NCORES_PER_NODE  # -> uses more threads than available (increase
+if 'add_cellobjects' in kwargs and kwargs['add_cellobjects']:
+    n_parallel_jobs = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE
 # usage of GPU)
 multi_params = ch
 # this creates a list of lists of SV IDs
-multi_params = chunkify(multi_params, n_parallel_jobs)
+multi_params = chunkify(multi_params, n_parallel_jobs * 2)
 # list of SSV IDs and SSD parameters need to be given to a single QSUB job
 multi_params = [(ixs, so_kwargs, kwargs) for ixs in multi_params]
 # first SV should always be unique

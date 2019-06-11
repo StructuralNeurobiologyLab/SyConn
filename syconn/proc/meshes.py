@@ -23,10 +23,6 @@ try:
 except ImportError:
     __vtk_avail__ = False
 
-try:
-    from .in_bounding_boxC import in_bounding_box
-except ImportError:
-    from .in_bounding_box import in_bounding_box
 from skimage.measure import mesh_surface_area
 from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip
@@ -49,6 +45,14 @@ try:
 except ImportError as e:
     log_proc.error('ImportError. Could not import openmesh. '
                    'Writing meshes will not be possible. {}'.format(e))
+
+try:
+    from .in_bounding_boxC import in_bounding_box
+except ImportError:
+    from .in_bounding_box import in_bounding_box
+    log_proc.error('ImportError. Could not import `in_boundinb_box` from '
+                   '`syconn/proc.in_bounding_boxC.py`. Fallback to numba jit.')
+
 
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
@@ -428,6 +432,7 @@ def calc_rot_matrices(coords, vertices, edge_length):
     np.array [M x 16]
         Fortran flattened OpenGL rotation matrix
     """
+    # TODO: use kdtree to partition vertices in the first place
     if not np.isscalar(edge_length):
         log_proc.warning('"calc_rot_matrices" now takes only scalar edgelengths'
                          '. Choosing np.min(edge_length) as query box edge'
@@ -440,6 +445,7 @@ def calc_rot_matrices(coords, vertices, edge_length):
     vertices = vertices.astype(np.float32)
     rotmat_dt = 0
     inlier_dt = 0
+    pbar = tqdm.tqdm(total=len(coords))
     for ii, c in enumerate(coords):
         bounding_box = np.array([c, edge_lengths], dtype=np.float32)
         # start = time.time()
@@ -447,11 +453,13 @@ def calc_rot_matrices(coords, vertices, edge_length):
         # inlier_dt += time.time() - start
         # start = time.time()
         rot_matrices[ii] = get_rotmatrix_from_points(inlier)
+        pbar.update(1)
         # rotmat_dt += time.time() - start
     # log_proc.debug('Time for inlier calc.: {:.2f} min'.format(
     #     inlier_dt / 60))
     # log_proc.debug('Time for rot. mat.  calc.: {:.2f} min'.format(
     #     rotmat_dt / 60))
+    pbar.close()
     return rot_matrices
 
 
@@ -500,7 +508,7 @@ def flag_empty_spaces(coords, vertices, edge_length):
         
     """
     if not np.isscalar(edge_length):
-        log_proc.warning('"calc_rot_matrices" now takes only scalar edgelengths'
+        log_proc.warning('"flag_empty_spaces" now takes only scalar edgelengths'
                          '. Choosing np.min(edge_length) as query box edge'
                          ' length.')
         edge_length = np.min(edge_length)
