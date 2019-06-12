@@ -383,7 +383,7 @@ def rgb2id_array(rgb_arr):
         rgb = rgb_arr_flat[ii]
         id_arr[ii] = rgb[0] + rgb[1]*256 + rgb[2]*(256**2)
     #background_ix = np.max(id_arr) + 1  # convention: The highest index value in index view will correspond to the background
-    background_ix = 0
+    background_ix = 256**3-2
     id_arr[mask_arr] = background_ix
     return id_arr.reshape(rgb_arr.shape[:-1])
 
@@ -419,7 +419,7 @@ def rgba2id_array(rgb_arr):
         id_arr[ii] = rgb[0] + rgb[1]*256 + rgb[2]*(256**2) + rgb[3]*(256**3)
     # convention: The highest index value in index view will correspond to the background
     #background_ix = np.max(id_arr) + 1
-    background_ix = 0
+    background_ix = 256**4-2
     id_arr[mask_arr] = background_ix
     return id_arr.reshape(rgb_arr.shape[:-1])
 

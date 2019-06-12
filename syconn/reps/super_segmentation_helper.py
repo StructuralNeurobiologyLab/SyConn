@@ -1610,8 +1610,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         log_reps.debug('Time to load index and shape views: '
                        '{:.2f}s.'.format(ts1 - ts0))
         dc1 = defaultdict(list)
-        #background_id = np.max(i_views)
-        background_id = 0
+        background_id = np.max(i_views)
+        #background_id = 256**4-2
         for ii in range(len(i_views)):
             vertex_ix = i_views[ii]
             if vertex_ix == background_id:
@@ -1624,8 +1624,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
                        '{:.2f}s.'.format(ts2 - ts1))
         # background label is highest label in prediction (see 'generate_palette' or
         # 'remap_rgb_labelviews' in multiviews.py)
-        #background_l = np.max(semseg_views)
-        background_l = 0
+        background_l = np.max(semseg_views)
+        #background_l = 0
         unpredicted_l = background_l + 1
         if unpredicted_l > 255:
             raise ValueError('Overflow in label view array.')
