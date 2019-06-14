@@ -257,7 +257,7 @@ class DynConfig(Config):
         """
         Semantic segmentation moder cellular compartments
         """
-        return self.model_dir + '/axon_semseg/'
+        return self.model_dir + '/axoness_semseg/'
 
     @property
     def mpath_celltype(self):

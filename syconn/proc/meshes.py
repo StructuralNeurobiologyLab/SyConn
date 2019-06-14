@@ -128,7 +128,7 @@ class MeshObject(object):
     @property
     def normals(self):
         if self._normals is None or len(self._normals) != len(self.vertices):
-            # log_proc.debug("Calculating normals")
+            log_proc.warning("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         elif len(self._normals) != len(self.vertices):
             log_proc.debug("Calculating normals, because their shape differs from"
@@ -413,10 +413,44 @@ def normalize_vertices(vertices):
     return vertices
 
 
-def calc_rot_matrices(coords, vertices, edge_length):
+def calc_rot_matrices(coords, vertices, edge_length, nb_cpus=1):
     """
     # Optimization comment: bottleneck is now 'get_rotmatrix_from_points'
 
+    Fits a PCA to local sub-volumes in order to rotate them according to
+    its main process (e.g. x-axis will be parallel to the long axis of a tube)
+
+    Parameters
+    ----------
+    coords : np.array [M x 3]
+    vertices : np.array [N x 3]
+    edge_length : float, int
+        spatial extent of box for querying vertices for pca fit
+    nb_cpus : int
+
+    Returns
+    -------
+    np.array [M x 16]
+        Fortran flattened OpenGL rotation matrix
+    """
+    if not np.isscalar(edge_length):
+        log_proc.warning('"calc_rot_matrices" now takes only scalar edgelengths'
+                         '. Choosing np.min(edge_length) as query box edge'
+                         ' length.')
+        edge_length = np.min(edge_length)
+    if len(vertices) > 1e5:
+        vertices = vertices[::8]
+    vertices = vertices.astype(np.float32)
+    params = [(coords_ch, vertices, edge_length) for coords_ch in
+              np.array_split(coords, nb_cpus, axis=0)]
+    res = start_multiprocess_imap(calc_rot_matrices_helper, params,
+                                  nb_cpus=nb_cpus)
+    rot_matrices = np.concatenate(res)
+    return rot_matrices
+
+
+def calc_rot_matrices_helper(args):
+    """
     Fits a PCA to local sub-volumes in order to rotate them according to
     its main process (e.g. x-axis will be parallel to the long axis of a tube)
 
@@ -432,34 +466,14 @@ def calc_rot_matrices(coords, vertices, edge_length):
     np.array [M x 16]
         Fortran flattened OpenGL rotation matrix
     """
-    # TODO: use kdtree to partition vertices in the first place
-    if not np.isscalar(edge_length):
-        log_proc.warning('"calc_rot_matrices" now takes only scalar edgelengths'
-                         '. Choosing np.min(edge_length) as query box edge'
-                         ' length.')
-        edge_length = np.min(edge_length)
-    if len(vertices) > 1e5:
-        vertices = vertices[::8]
+    coords, vertices, edge_length = args
     rot_matrices = np.zeros((len(coords), 16))
     edge_lengths = np.array([edge_length] * 3)
     vertices = vertices.astype(np.float32)
-    rotmat_dt = 0
-    inlier_dt = 0
-    pbar = tqdm.tqdm(total=len(coords))
     for ii, c in enumerate(coords):
         bounding_box = np.array([c, edge_lengths], dtype=np.float32)
-        # start = time.time()
         inlier = np.array(vertices[in_bounding_box(vertices, bounding_box)])
-        # inlier_dt += time.time() - start
-        # start = time.time()
         rot_matrices[ii] = get_rotmatrix_from_points(inlier)
-        pbar.update(1)
-        # rotmat_dt += time.time() - start
-    # log_proc.debug('Time for inlier calc.: {:.2f} min'.format(
-    #     inlier_dt / 60))
-    # log_proc.debug('Time for rot. mat.  calc.: {:.2f} min'.format(
-    #     rotmat_dt / 60))
-    pbar.close()
     return rot_matrices
 
 
@@ -718,6 +732,10 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     all_vert = np.zeros((0, ))
     all_norm = np.zeros((0, ))
     colors = np.zeros((0, ))
+    if nb_cpus > 1:
+        log_proc.debug('`merge_someshes` is not working with `n_cpus > 1`:'
+                       ' `cant pickle _thread.RLock objects`')
+        nb_cpus = 1
     meshes = start_multiprocess_imap(mesh_loader, sos, nb_cpus=nb_cpus,
                                      show_progress=False)
     if color_vals is not None and cmap is not None:

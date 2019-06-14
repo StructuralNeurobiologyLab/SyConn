@@ -452,7 +452,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
                 prune_nodes.append(curr_node)
         if len(new_nx_g.nodes) == len(nx_g.nodes):
             pruning_complete = True
-    # TODO: uncomment, or fix by using
+    # TODO: uncomment, or fix by using alternative method
     if nx.number_connected_components(new_nx_g) != 1:
         msg = 'Pruning of SV skeletons failed during "prune_stub_branches' \
               '" with {} connected components. Please check the underlying' \
@@ -1565,7 +1565,6 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
                 colors=None, force_recompute=False, index_view_key=None):
     """
     # TODO: optimize with cython
-    # TODO: throws index error for huge SSV?
     Maps semantic segmentation to SSV mesh.
 
     Parameters
@@ -1577,7 +1576,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         Colored mesh will be written to k.zip and not returned.
     k : int
         Number of nearest vertices to average over. If k=0 unpredicted vertices
-         will be treated as 'unpredicted' class.
+         will be treated as 'unpredicted' class (`np.max(semseg_views)+1`,
+          bigger than background label).
     colors : Optional[Tuple[list]]
         np.array with as many entries as the maximum label of 'semseg_key'
         predictions with values between 0 and 255 (will be interpreted as uint8).
@@ -1609,20 +1609,29 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         ts1 = time.time()
         log_reps.debug('Time to load index and shape views: '
                        '{:.2f}s.'.format(ts1 - ts0))
-        ind = sso.mesh[0]
         dc = defaultdict(list)
         background_id = np.max(i_views)
-        # color buffer holds traingle ID not vertex ID  # TODO: this should be a one time conversion step after the index view rendering!
+
+        # # color buffer holds traingle ID not vertex ID
+        # ind = sso.mesh[0]
+
+        # color buffer now stores the vertex ID
         for ii in range(len(i_views)):
-            triangle_ix = i_views[ii]
-            if triangle_ix == background_id:
+            # triangle_ix = i_views[ii]
+            # if triangle_ix == background_id:
+            #     continue
+            # l = semseg_views[ii]  # triangle label
+            # # get vertex ixs from triangle ixs via:
+            # vertex_ix = triangle_ix * 3
+            # dc[ind[vertex_ix]].append(l)
+            # dc[ind[vertex_ix + 1]].append(l)
+            # dc[ind[vertex_ix + 2]].append(l)
+            vertex_ix = i_views[ii]
+            if vertex_ix == background_id:
                 continue
-            l = semseg_views[ii]  # triangle label
-            # get vertex ixs from triangle ixs via:
-            vertex_ix = triangle_ix * 3
-            dc[ind[vertex_ix]].append(l)
-            dc[ind[vertex_ix + 1]].append(l)
-            dc[ind[vertex_ix + 2]].append(l)
+            l = semseg_views[ii]  # vertex label
+            # get vertex ids into dictionary
+            dc[vertex_ix].append(l)
         ts2 = time.time()
         log_reps.debug('Time to generate look-up dict: '
                        '{:.2f}s.'.format(ts2 - ts1))
@@ -1678,6 +1687,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         if colors is None:
             col = None  # set to None, because write_mesh2kzip only supports
             # RGBA colors and no labels
+        log_reps.debug('Writing results to kzip.')
         write_mesh2kzip(dest_path, sso.mesh[0], sso.mesh[1], sso.mesh[2],
                         col, ply_fname=semseg_key + ".ply")
         return

@@ -7,6 +7,7 @@
 
 import sys
 from syconn.reps.super_segmentation_object import semsegaxoness_predictor
+from syconn import global_params
 try:
     import cPickle as pkl
 except ImportError:
@@ -23,9 +24,9 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-
 ch = args[0]
-missing = semsegaxoness_predictor(ch)
+missing = semsegaxoness_predictor([ch, global_params.NCORES_PER_NODE //
+                                   global_params.NGPUS_PER_NODE])
 
 with open(path_out_file, "wb") as f:
     pkl.dump(missing, f)

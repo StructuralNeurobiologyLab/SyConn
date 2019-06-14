@@ -27,7 +27,7 @@ with open(path_storage_file, 'rb') as f:
 
 ch = args[0]
 sso_kwargs = args[1]
-if type(sso_kwargs) is str:
+if type(sso_kwargs) is str:  # only the working directory is given
     sso_kwargs = dict(working_dir=sso_kwargs, enable_locking_so=False)
 if len(args) == 3:
     render_kwargs = args[2]
@@ -38,7 +38,7 @@ for ssv_ix in ch:
         sv_ids = ssv_ix[1]
         ssv_ix = ssv_ix[0]
     else:
-        sv_ids = None
+        sv_ids = None  # will be loaded from attribute dict
     sso = SuperSegmentationObject(ssv_ix, sv_ids=sv_ids, **sso_kwargs)
     sso.load_attr_dict()
     sso.render_views(**render_kwargs)

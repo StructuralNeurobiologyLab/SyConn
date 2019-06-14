@@ -110,10 +110,6 @@ if __name__ == '__main__':
     if not prior_glia_removal:
         shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_rag_path)
     else:
-        # if os.path.isfile(example_wd + '/glia/neuron_rag.bz2'):
-        #     raise ValueError('Found already existing neuron RAG. Glia removal will generate a new '
-        #                      'neuron RAG at this locations. Please remove the existing one before '
-        #                      'starting SyConn in glia-removal-mode.')
         shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
 
     # INITIALIZE DATA
@@ -201,8 +197,11 @@ if __name__ == '__main__':
     step_idents.append('Synapse detection')
 
     log.info('Step 5/8 - Axon prediction')
-    exec_multiview.run_axoness_prediction(e3=True)
-    exec_multiview.run_axoness_mapping()
+    # exec_multiview.run_axoness_prediction(e3=True)
+    # exec_multiview.run_axoness_mapping()
+
+    exec_multiview.run_semsegaxoness_prediction()
+    exec_multiview.run_semsegaxoness_mapping()
     time_stamps.append(time.time())
     step_idents.append('Axon prediction')
 

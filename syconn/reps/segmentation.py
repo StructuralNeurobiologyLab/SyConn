@@ -79,6 +79,9 @@ class SegmentationDataset(object):
             self._working_dir = working_dir
             self._config = DynConfig(working_dir)
 
+        if global_params.wd is None:
+            global_params.wd = self._working_dir
+
         if not self._working_dir.endswith("/"):
             self._working_dir += "/"
 
@@ -386,6 +389,9 @@ class SegmentationObject(object):
         else:
             self._working_dir = working_dir
             self._config = DynConfig(working_dir)
+
+        if global_params.wd is None:
+            global_params.wd = self._working_dir
 
         self._scaling = scaling
 
@@ -957,7 +963,7 @@ class SegmentationObject(object):
                                           disable_locking=True)  # disable locking, PS 07June2019
              self.attr_dict = glob_attr_dc[self.id]
         except (IOError, EOFError) as e:
-            log_reps.critical("Could not load SSO attributes to {} due to "
+            log_reps.critical("Could not load SSO attributes at {} due to "
                               "{}.".format(self.attr_dict_path, e))
             return -1
 

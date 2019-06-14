@@ -21,6 +21,7 @@ from . import log_proc
 from .. import global_params
 from ..handler.basics import flatten_list, chunkify_successive
 from ..handler.compression import arrtolz4string
+from ..backend.storage import CompressedStorage
 from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
     rgb2id_array, id2rgb_array_contiguous, rgba2id_array, id2rgba_array_contiguous
 from .meshes import merge_meshes, MeshObject, calc_rot_matrices
@@ -775,7 +776,8 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
 
 def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True, return_rot_mat=False,
                        add_cellobjects=True, overwrite=True, index_views=False,
-                       return_views=False, cellobjects_only=False, rot_mat=None):
+                       return_views=False, cellobjects_only=False, rot_mat=None,
+                       view_key=None):
     """
 
     Renders for each SV views at sampled locations (number is dependent on
@@ -795,17 +797,19 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True, return_ro
     overwrite : bool
     return_views : bool
     cellobjects_only : bool
+    view_key : str
+
     """
     # get coordinates for N SV's in SSO
     coords = sso.sample_locations(cache=False)
     if not overwrite:
-        missing_sv_ixs = np.array([not so.views_exist(woglia=woglia)
-                                   for so in sso.svs],
-                                  dtype=np.bool)
+        missing_sv_ixs = ~np.array(sso.view_existence(
+            woglia=woglia, index_views=index_views, view_key=view_key), dtype=np.bool)
         missing_svs = np.array(sso.svs)[missing_sv_ixs]
         coords = np.array(coords)[missing_sv_ixs]
-        log_proc.info("Rendering %d/%d missing SVs of SSV %d."
-                      % (len(missing_svs), len(sso.sv_ids), sso.id))
+        log_proc.debug("Rendering {}/{} missing SVs of SSV {}. {}".format(
+            len(missing_svs), len(sso.sv_ids), sso.id,
+            "(index views)" if index_views else ""))
     else:
         missing_svs = np.array(sso.svs)
     if len(missing_svs) == 0:
@@ -818,34 +822,59 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True, return_ro
     if verbose:
         start = time.time()
     if index_views:
-        views, rot_mat = render_sso_coords_index_views(sso, flat_coords, ws=ws,
-                                                   return_rot_matrices=True,
-                                              verbose=verbose, rot_mat=rot_mat)
+        views, rot_mat = render_sso_coords_index_views(
+            sso, flat_coords, ws=ws, return_rot_matrices=True, verbose=verbose, rot_mat=rot_mat)
     else:
-        views, rot_mat = render_sso_coords(sso, flat_coords, ws=ws, verbose=verbose,
-                                  add_cellobjects=add_cellobjects, return_rot_mat=True,
-                                  cellobjects_only=cellobjects_only, rot_mat=rot_mat)
+        views, rot_mat = render_sso_coords(
+            sso, flat_coords, ws=ws, verbose=verbose, add_cellobjects=add_cellobjects,
+            return_rot_mat=True, cellobjects_only=cellobjects_only, rot_mat=rot_mat)
     if verbose:
         dur = time.time() - start
         log_proc.debug("Rendering of %d views took %0.2fs. "
                        "%0.4fs/SV" % (len(views), dur, float(dur)/len(sso.svs)))
-    # if sso.version != 'tmp':
     if not return_views:
-        # TODO: write chunked
-        for i, so in enumerate(missing_svs):
-            sv_views = views[part_views[i]:part_views[i+1]]
-            so.save_views(sv_views, woglia=woglia, cellobjects_only=cellobjects_only,
-                          index_views=index_views, enable_locking=True)
-    # else:
-    #     log_proc.warning('"render_sampled_sso" called but this SSV '
-    #                      'has version "tmp", results will'
-    #                      ' not be saved to disk.')
+        if cellobjects_only:
+            log_proc.warning('`cellobjects_only=True` in `render_sampled_sso` call, views '
+                             'will be written to file system in serial (this is slow).')
+            for i, so in enumerate(missing_svs):
+                sv_views = views[part_views[i]:part_views[i + 1]]
+                so.save_views(sv_views, woglia=woglia, cellobjects_only=cellobjects_only,
+                              index_views=index_views, enable_locking=True, view_key=view_key)
+        else:
+            write_sv_views_chunked(missing_svs, views, part_views,
+                                   dict(woglia=woglia, index_views=index_views, view_key=view_key))
     if return_views:
         if return_rot_mat:
             return views, rot_mat
         return views
     if return_rot_mat:
         return rot_mat
+
+
+def write_sv_views_chunked(svs, views, part_views, view_kwargs):
+    """
+
+    Parameters
+    ----------
+    svs : List[SegmentationObject]
+    views : np.ndarray
+    part_views : np.ndarray[int]
+        Cumulated number of views -> indices of start and end of SV views in `views` array
+    """
+    view_dc = {}
+    for sv_ix, sv in enumerate(svs):
+        curr_view_dest = sv.view_path(**view_kwargs)
+        view_ixs = part_views[sv_ix], part_views[sv_ix+1]
+        if curr_view_dest in view_dc:
+            view_dc[curr_view_dest][sv.id] = view_ixs
+        else:
+            view_dc[curr_view_dest] = {sv.id: view_ixs}
+    for k, v in view_dc.items():
+        view_storage = CompressedStorage(k, read_only=False)  # locking is enabled by default
+        for sv_id, sv_view_ixs in v.items():
+            view_storage[sv_id] = views[sv_view_ixs[0]:sv_view_ixs[1]]
+        view_storage.push()
+        del view_storage
 
 
 def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=False,
@@ -898,7 +927,8 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
             mo._colors = None
             querybox_edgelength = comp_window / mo.max_dist
             rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
-                                        mo.vert_resh, querybox_edgelength)
+                                        mo.vert_resh, querybox_edgelength,
+                                        nb_cpus=sso.nb_cpus)
     else:
         if len(mesh[1]) == 0 or len(coords) == 0:
             raw_views = np.ones((len(coords), nb_views, ws[0], ws[1]), dtype=np.uint8) * 255
@@ -956,7 +986,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     """
     Uses per-face color via flattened vertices (i.e. vert[ind] -> slow!). This was added to be able
     to calculate the surface coverage captured by the views.
-    TODO: Add fast GL_POINT rendering to omit slow per-face coloring (redundant veritces) and
+    TODO: Add fast GL_POINT rendering to omit slow per-face coloring (redundant vertices) and
      expensive remapping from face IDs to vertex IDs.
 
     Parameters
@@ -1003,10 +1033,11 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     #                        "".format(tim1 - tim))
     if len(vert) == 0:
         msg = "No mesh for SSO {} found with {} locations.".format(sso, len(coords))
-        log_proc.warning(msg)
-        return np.ones((len(coords), nb_views, ws[1], ws[0], 3), dtype=np.uint8)
+        log_proc.critical(msg)
+        return np.ones((len(coords), nb_views, ws[1], ws[0], 3), dtype=np.uint8) * 255
     try:
-        color_array = id2rgba_array_contiguous(np.arange(len(ind) // 3))
+        # color_array = id2rgba_array_contiguous(np.arange(len(ind) // 3))
+        color_array = id2rgba_array_contiguous(np.arange(len(vert) // 3))
     except ValueError as e:
         msg = "'render_sso_coords_index_views' failed with {} when " \
               "rendering SSV {}.".format(e, sso.id)
@@ -1014,8 +1045,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
         raise ValueError(msg)
     if color_array.shape[1] == 3:  # add alpha channel
         color_array = np.concatenate([color_array, np.ones((len(color_array), 1),
-                                                           dtype=np.uint8)*255],
-                                     axis=-1)
+                                                           dtype=np.uint8)*255], axis=-1)
     color_array = color_array.astype(np.float32) / 255.
     # in init it seems color values have to be normalized, check problems with uniqueness if
     # they are normalized between 0 and 1.. OR check if it is possible to just switch color arrays to UINT8 -> Check
@@ -1025,11 +1055,12 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
         mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
         querybox_edgelength = comp_window / mo.max_dist
         rot_mat = calc_rot_matrices(mo.transform_external_coords(coords),
-                                    mo.vert_resh, querybox_edgelength)
+                                    mo.vert_resh, querybox_edgelength,
+                                    nb_cpus=sso.nb_cpus)
     # create redundant vertices to enable per-face colors
-    vert = vert.reshape(-1, 3)[ind].flatten()
-    ind = np.arange(len(vert) // 3)
-    color_array = np.repeat(color_array, 3, axis=0)  # 3 <- triangles
+    # vert = vert.reshape(-1, 3)[ind].flatten()
+    # ind = np.arange(len(vert) // 3)
+    # color_array = np.repeat(color_array, 3, axis=0)  # 3 <- triangles
     mo = MeshObject("raw", ind, vert, color=color_array, normals=norm)
     if return_rot_matrices:
         ix_views, rot_mat = _render_mesh_coords(
@@ -1145,11 +1176,11 @@ def render_sso_ortho_views(sso):
     return views
 
 
-def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
-                                      verbose=False, render_kwargs=None,
-                                      render_indexviews=True, return_views=True):
+def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_locations=None,
+                                      verbose=False, render_kwargs=None, view_key=None,
+                                      render_indexviews=True, return_views=True,
+                                      disable_batchjob=True):
     """
-    # TODO: currently the view sorting is not aligned with the other rendering methods
 
     Parameters
     ----------
@@ -1178,25 +1209,29 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
                          'parameters (`rendering_locations!=None` and `return_v'
                          'iews=False`). When using specific rendering locations, '
                          'views have to be returned-')
-    tim = time.time()
+    svs = None
     if rendering_locations is None:  # use SV rendering locations
         svs = list(ssv.svs)
-        rendering_locations = [sv.sample_locations for sv in svs]
+        if ssv._sample_locations is None and not ssv.attr_exists("sample_locations"):
+            ssv.load_attr_dict()
+        rendering_locations = ssv.sample_locations(cache=False)
         # store number of rendering locations per SV -> Ordering of rendered
         # views must be preserved!
         part_views = np.cumsum([0] + [len(c) for c in rendering_locations])
+        rendering_locations = np.concatenate(rendering_locations)
     if len(rendering_locations) == 0:
-        log_proc.warn('No rendering locations found for SSV {}.'.format(ssv.id))
+        log_proc.critical('No rendering locations found for SSV {}.'.format(ssv.id))
         # TODO: adapt hard-coded window size (256, 128) as soon as those are available in
         #  `global_params`
         return np.ones((0, global_params.NB_VIEWS, 256, 128), dtype=np.uint8) * 255
-    chunk_size = len(rendering_locations) // n_jobs + 1
-    params = chunkify_successive(rendering_locations, chunk_size)
+    params = np.array_split(rendering_locations, n_jobs)
+
     ssv_id = ssv.id
     working_dir = wd
     sso_kwargs = {'ssv_id': ssv_id,
                   'working_dir': working_dir,
-                  "version": ssv.version}
+                  "version": ssv.version,
+                  'nb_cpus': n_cores}
     render_kwargs_def = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
                       'nb_views': None, 'comp_window': None, 'rot_mat': None, 'wo_glia': True,
@@ -1206,15 +1241,12 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
 
     params = [[par, sso_kwargs, render_kwargs_def, ix] for ix, par in
               enumerate(params)]
-    tim1 = time.time()
-    if verbose:
-        log_proc.debug("Time for OTHER COMPUTATION {:.2f}s."
-                       "".format(tim1 - tim))
     # This is single node multiprocessing -> `disable_batchjob=False`
     path_to_out = QSUB_script(
         params, "render_views_multiproc", suffix="_SSV{}".format(ssv_id),
-        n_cores=1, disable_batchjob=True,
-        n_max_co_processes=n_jobs)
+        n_cores=n_cores, disable_batchjob=disable_batchjob,
+        n_max_co_processes=n_jobs,
+        additional_flags="--gres=gpu:1" if not disable_batchjob else "")
     out_files = glob.glob(path_to_out + "/*")
     views = []
     out_files2 = np.sort(out_files, axis=-1, kind='quicksort', order=None)
@@ -1223,13 +1255,22 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, rendering_locations=None,
             views.append(pkl.load(f))
     views = np.concatenate(views)
     shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
-    if rendering_locations is None and return_views is False:
-        for i, so in enumerate(svs):
-            so.enable_locking = True
-            sv_views = views[part_views[i]:part_views[i+1]]
-            so.save_views(sv_views, woglia=render_kwargs_def['wo_glia'],
-                          cellobjects_only=render_kwargs_def['cellobjects_only'],
-                          index_views=render_kwargs_def["render_indexviews"])
+    if svs is not None and return_views is False:
+        if render_kwargs_def['cellobjects_only']:
+            log_proc.warning('`cellobjects_only=True` in `render_sampled_sso` call, views '
+                             'will be written to file system in serial (this is slow).')
+            for i, so in enumerate(svs):
+                so.enable_locking = True
+                sv_views = views[part_views[i]:part_views[i+1]]
+                so.save_views(sv_views, woglia=render_kwargs_def['wo_glia'],
+                              cellobjects_only=render_kwargs_def['cellobjects_only'],
+                              index_views=render_kwargs_def["render_indexviews"])
+        else:
+            write_sv_views_chunked(svs, views, part_views,
+                                   dict(woglia=render_kwargs_def['wo_glia'],
+                                        index_views=render_kwargs_def["render_indexviews"],
+                                        view_key=view_key))
+
         return
     return views
 

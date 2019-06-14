@@ -79,9 +79,6 @@ if len(ssvs_small) != 0:
         n_max_co_processes=n_parallel_jobs)
     folder_del = os.path.abspath(path_out + "/../")
     shutil.rmtree(folder_del, ignore_errors=True)
-    # TODO: this call leads to an error -> investigate further
-    # start_multiprocess_obj('render_views', [[ssv, render_kwargs] for ssv in ssvs_small],
-    #                        nb_cpus=n_parallel_jobs)
 
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

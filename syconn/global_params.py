@@ -86,6 +86,8 @@ MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0,
                 "conn": 4, 'syn_ssv': 20}
 MESH_MIN_OBJ_VX = 100  # adapt to size threshold
 
+meshing_props = dict(normals=True, simplification_factor=300, max_simplification_error=40)
+
 
 # --------- VIEW PARAMETERS
 NB_VIEWS = 2
@@ -102,7 +104,6 @@ RENDERING_MAX_NB_SV = 5e3
 # number of SV for which views are rendered in one pass
 SUBCC_CHUNK_SIZE_BIG_SSV = 9
 
-
 # --------- RFC PARAMETERS
 SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000}  # in nm
 
@@ -117,15 +118,15 @@ gt_path_spineseg = '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'  # TODO:
 DIST_AXONESS_AVERAGING = 10000
 gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness' \
                   '/gt_h5_files_80nm_1024_with_BOUTONS/'  # TODO: add to config
+view_properties_semsegax = dict(verbose=False, ws=(1024, 512), nb_views=3,
+                                comp_window=40.96e3 * 1.5, semseg_key='axoness',
+                                n_avg=0)  # this will not map predictions to unpredicted vertices
+map_properties_semsegax = dict(k=50, ds_vertices=10)
 
 
 # --------- CELLTYPE PARAMETERS
 view_properties_large = dict(verbose=False, ws=(512, 512), nb_views_render=6,
                              comp_window=40960, nb_views_model=4)
-
-view_properties_semsegax = dict(verbose=False, ws=(1024, 512), nb_views_render=3,
-                                comp_window=40.96e3 * 1.5, semseg_key='axoness',
-                                n_avg=0)  # this will not map predictions to unpredicted vertices
 
 # --------- MORPHOLOGY EMBEDDING
 ndim_embedding = 10

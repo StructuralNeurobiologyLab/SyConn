@@ -313,6 +313,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
     del cell_mesh_workers
 
     # convert mapping dicts to store ratio of number of overlapping voxels
+    # TODO: size filter here or during write-out?
     prop_dict_p = "{}/sv_prop_dict.pkl".format(global_params.config.temp_path)
     with open(prop_dict_p, "wb") as f:
         pkl.dump(tot_cp, f)
@@ -504,7 +505,7 @@ def _map_subcell_extract_props_thread(args):
             ids_list.append(list(big_mesh_dict[segtype].keys()))
 
         dt_str = ["{}: {:.2f}s\t".format(k, v) for k, v in dt_times_dc.items()]
-        log_proc.critical('{}  [dummy error]'.format("".join(dt_str)))
+        log_proc.debug('{}'.format("".join(dt_str)))
     else:
         # +1 for cell seg
         ids_list = [[] for _ in range(len(global_params.existing_cell_organelles) + 1)]
@@ -522,9 +523,7 @@ def find_meshes(chunk, offset):
     offset = offset * scaling
     meshes = {}
     for obj_id in mesher.ids():
-        # TODO: add to global_params.py or config
-        tmp = mesher.get_mesh(obj_id, normals=True, simplification_factor=200,
-                              max_simplification_error=40)  # in nm (after scaling, see top)
+        tmp = mesher.get_mesh(obj_id, **global_params.meshing_props)  # in nm (after scaling, see top)
         # the values of simplification_factor & max_simplification_error are random
 
         tmp.vertices[:] = (tmp.vertices[:, ::-1] + offset)  # zxy -> xyz
@@ -665,6 +664,7 @@ def _write_props_to_sc_thread(args):
             prop_dict_tmp = pkl.load(f)
 
         # store destinations for each existing obj
+        # TODO: optimize collection procedure
         dest_dc = defaultdict(list)
         for subcell_id in prop_dict_tmp[0]:
             dest_dc[rep_helper.subfold_from_ix(subcell_id, n_folders_fs)].append(subcell_id)
@@ -803,7 +803,7 @@ def _write_props_to_sv_thread(args):
         all_obj_keys += dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]
     if len(all_obj_keys) == 0:
         return
-    # only keep relevant data
+    # keep only relevant data
     prop_dict = [{}, {}, {}]
     for k in all_obj_keys:
         prop_dict[0][k] = prop_dict_tmp[0][k]
@@ -837,7 +837,8 @@ def _write_props_to_sv_thread(args):
 
     dt_loading_cache = time.time() - dt_loading_cache
 
-    log_proc.critical('[SV] loaded cache dicts after {:.2f} min [dummy error]'.format(dt_loading_cache / 60))
+    log_proc.debug('[SV] loaded cache dicts after {:.2f} min'.format(
+        dt_loading_cache / 60))
 
     # fetch all required mesh data
     dt_mesh_merge_io = 0
@@ -852,7 +853,7 @@ def _write_props_to_sv_thread(args):
                 continue
             worker_ids += cell_mesh_workers[k]
         worker_ids = np.unique(worker_ids)
-        log_proc.critical('Loading meshes of {} SVs from {} worker '
+        log_proc.debug('Loading meshes of {} SVs from {} worker '
                           'caches.'.format(len(all_obj_keys), len(worker_ids)))
         for worker_nr in worker_ids:
             p = "{}/tmp_meshes_{}_{}.pkl".format(global_params.config.temp_path,
@@ -864,8 +865,8 @@ def _write_props_to_sv_thread(args):
             for el in np.intersect1d(all_obj_keys, list(partial_mesh_dc.keys())):
                 cached_mesh_dc[el].append(partial_mesh_dc[el])
         dt_mesh_merge_io += time.time() - start
-        log_proc.critical('Loading meshes from worker caches took'
-                          ' {:.2f} min [dummy error]'.format(dt_mesh_merge_io / 60))
+        log_proc.debug('Loading meshes from worker caches took'
+                          ' {:.2f} min'.format(dt_mesh_merge_io / 60))
 
     # get SegmentationDataset of cell SV
     sv_sd = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs,
@@ -940,8 +941,8 @@ def _write_props_to_sv_thread(args):
         if global_params.config.use_new_meshing:
             obj_mesh_dc.push()
     if global_params.config.use_new_meshing:
-        log_proc.critical('[SV] dt mesh area {:.2f}s \t dt '
-                          'mesh merge {:.2f} s [dummy error]'.format(
+        log_proc.debug('[SV] dt mesh area {:.2f}s \t dt '
+                       'mesh merge {:.2f} s'.format(
             dt_mesh_area, dt_mesh_merge))
 
 

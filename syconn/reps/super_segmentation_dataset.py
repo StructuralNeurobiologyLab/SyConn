@@ -81,6 +81,9 @@ class SuperSegmentationDataset(object):
             self._working_dir = working_dir
             self._config = DynConfig(working_dir)
 
+        if global_params.wd is None:
+            global_params.wd = self._working_dir
+
         if scaling is None:
             try:
                 self._scaling = \

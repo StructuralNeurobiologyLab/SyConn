@@ -144,6 +144,9 @@ class SuperSegmentationObject(object):
             self._working_dir = working_dir
             self._config = DynConfig(working_dir)
 
+        if global_params.wd is None:
+            global_params.wd = self._working_dir
+
         if scaling is None:
             try:
                 self._scaling = \
@@ -683,9 +686,10 @@ class SuperSegmentationObject(object):
             return
         try:
             orig_dc = load_pkl2obj(self.attr_dict_path)
-        except (IOError, EOFError) as e:
-            log_reps.critical("Could not load SSO attributes to {} due to "
-                              "{}.".format(self.attr_dict_path, e))
+        except (IOError, EOFError, FileNotFoundError) as e:
+            if not '[Errno 2] No such file or' in str(e):
+                log_reps.critical("Could not load SSO attributes from {} due to "
+                                  "{}.".format(self.attr_dict_path, e))
             orig_dc = {}
         orig_dc.update(self.attr_dict)
         write_obj2pkl(self.attr_dict_path + '.tmp', orig_dc)
@@ -712,11 +716,11 @@ class SuperSegmentationObject(object):
             attr_values = [attr_values]
         try:
             attr_dict = load_pkl2obj(self.attr_dict_path)
-        except (IOError, EOFError) as e:
+        except (IOError, EOFError, FileNotFoundError) as e:
             if not "[Errno 13] Permission denied" in str(e):
                 pass
             else:
-                log_reps.critical("Could not load SSO attributes to {} due to "
+                log_reps.critical("Could not load SSO attributes at {} due to "
                                   "{}.".format(self.attr_dict_path, e))
             attr_dict = {}
         for k, v in zip(attr_keys, attr_values):
@@ -1266,8 +1270,9 @@ class SuperSegmentationObject(object):
                                                    nb_cpus=self.nb_cpus)
         return so_views_exist
 
-    def view_existence(self, woglia=True):
-        view_paths = set([sv.view_path(woglia=woglia) for sv in self.svs])
+    def view_existence(self, woglia=True, index_views=False, view_key=None):
+        view_paths = set([sv.view_path(woglia=woglia, index_views=index_views,
+                                       view_key=view_key) for sv in self.svs])
         cached_ids = []
         for vp in view_paths:
             cached_ids += list(CompressedStorage(vp, disable_locking=True).keys())
@@ -1283,9 +1288,11 @@ class SuperSegmentationObject(object):
         Renders views for each SV based on SSV context and stores them
         on SV level. Usually only used once: for initial glia or axoness
         prediction.
-        THIS WILL BE SAVED DISTRIBUTED AT EACH SV VIEW DICTIONARY
-        IS NOT CACHED IN THE ATTR-DICT OF THE SSV.
-        See '_render_rawviews' for storing the views in the SSV folder.
+        THE RESULTS WILL BE SAVED DISTRIBUTED AT EACH SV VIEW DICTIONARY -
+        IT IS NOT CACHED IN THE ATTR-DICT OF THE SSV. Used during initial
+        predictions.
+        See '_render_rawviews' for how to store views in the SSV storage, which
+        is e.g. used during GT generation.
 
         Parameters
         ----------
@@ -1314,7 +1321,7 @@ class SuperSegmentationObject(object):
                           ".".format(len(self.svs)))
             # TODO: Does not work
             # if not overwrite:  # check existence of glia preds
-            #     views_exist = np.array(self.view_existence(), dtype=np.int)
+            #     views_exist = np.array(self.view_existence(wo_glia=wo_glia), dtype=np.int)
             #     log_reps.info("Rendering SSO. {}/{} views left to process"
             #                   ".".format(np.sum(views_exist == 0), len(self.svs)))
             #     ex_dc = {}
@@ -1507,7 +1514,7 @@ class SuperSegmentationObject(object):
             if raw_view_key in self.view_dict:
                 views = self.load_views(raw_view_key)
             else:
-                log_reps.warning('Could not find raw-views. Re-rendering now.')
+                # log_reps.warning('Could not find raw-views. Re-rendering now.')
                 self._render_rawviews(nb_views, ws=ws, comp_window=comp_window, save=save,
                                       view_key=raw_view_key, verbose=verbose,
                                       force_recompute=True)
@@ -1571,19 +1578,26 @@ class SuperSegmentationObject(object):
         index_view_key : str
         """
         # colors are only needed if dest_path is given (last two colors correspond to background and undpredicted vertices (k=0))
-        if 'spiness' in semseg_key:
-            cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
-                             [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
-                             [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]])
-            cols = (cols * 255).astype(np.uint8)
-        elif 'axon' in semseg_key:
-            cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
-                             [0.1, 0.1, 0.1, 1], [0.9, 0.9, 0.9, 1],
-                             [0.1, 0.1, 0.9, 1]])
-            cols = (cols * 255).astype(np.uint8)
-        else:
-            raise ValueError('Semantic segmentation of "{}" is not (yet) supported.'
-                             ''.format(semseg_key))
+        cols = None
+        if dest_path is not None:
+            if 'spiness' in semseg_key:
+                cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
+                                 [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
+                                 [0.9, 0.9, 0.9, 1], [0.1, 0.1, 0.9, 1]])
+                cols = (cols * 255).astype(np.uint8)
+            elif 'axon' in semseg_key:
+                # cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
+                #                  [0.1, 0.1, 0.1, 1], [0.9, 0.9, 0.9, 1],
+                #                  [0.1, 0.1, 0.9, 1]])
+                # dendrite, axon, soma, bouton, terminal, background, unpredicted
+                cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
+                                 [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
+                                 [0.6, 0.05, 0.05, 1], [0.9, 0.9, 0.9, 1],
+                                 [0.1, 0.1, 0.9, 1]])
+                cols = (cols * 255).astype(np.uint8)
+            else:
+                raise ValueError('Semantic segmentation of "{}" is not (yet) supported.'
+                                 ''.format(semseg_key))
         return ssh.semseg2mesh(self, semseg_key, nb_views, dest_path, k,
                                cols, force_recompute=force_recompute,
                                index_view_key=index_view_key)
@@ -1736,8 +1750,9 @@ class SuperSegmentationObject(object):
                         'ds_factor': ds_factor}] for sv in self.svs]
 
         # list of arrays
+        # TODO: currently does not support multiprocessing
         locs = sm.start_multiprocess_obj("sample_locations", params,
-                                         nb_cpus=self.nb_cpus)
+                                         nb_cpus=1)  #self.nb_cpus)
         if cache:
             self.save_attributes(["sample_locations"], [locs])
         if verbose:
@@ -2692,6 +2707,7 @@ def celltype_predictor(args):
 
 def semsegaxoness_predictor(args):
     """
+    Predicts axoness and stores resulting labels at vertex dictionary.
 
     Parameters
     ----------
@@ -2702,12 +2718,12 @@ def semsegaxoness_predictor(args):
 
     """
     from ..handler.prediction import get_semseg_axon_model
-    ssv_ids = args
+    ssv_ids, nb_cpus = args
     m = get_semseg_axon_model()
     missing_ssvs = []
     for ix in ssv_ids:
         ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
-        ssv.nb_cpus = 1
+        ssv.nb_cpus = nb_cpus
         ssv._view_caching = True
         try:
             view_props = global_params.view_properties_semsegax
