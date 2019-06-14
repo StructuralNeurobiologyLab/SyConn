@@ -78,7 +78,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
             _from_cell_to_syn_dict, multi_params,
-            nb_cpus=n_max_co_processes)
+            nb_cpus=n_max_co_processes, debug=debug)
     else:
         _ = qu.QSUB_script(multi_params, "from_cell_to_syn_dict",
                            n_max_co_processes=n_max_co_processes,
@@ -128,14 +128,17 @@ def _collect_properties_from_ssv_partners_thread(args):
         curr_ax, latent_morph = ssv_o.attr_for_coords(
             ssv_syncoords, attr_keys=['axoness_avg10000', 'latent_morph'])
 
+        # TODO: think about refactoring or combining both axoness predictions
         curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness')
+        curr_ax = ssv_o.semseg_for_coords(
+            ssv_syncoords, global_params.view_properties_semsegax['semseg_key'],
+            **global_params.map_properties_semsegax)
 
         cache_dc['partner_axoness'] = np.array(curr_ax)
         cache_dc['synssv_ids'] = np.array(ssv_synids)
         cache_dc['partner_spiness'] = np.array(curr_sp)
         cache_dc['partner_celltypes'] = np.array(celltypes)
         cache_dc['latent_morph'] = np.array(latent_morph)
-
         cache_dc.push()
 
 
@@ -303,7 +306,9 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
         os.makedirs(sd_syn_ssv.so_storage_path + p)
 
     rel_synssv_to_syn_ids_items = list(rel_synssv_to_syn_ids.items())
-
+    # TODO: reduce number of used paths - e.g. by
+    #  `red_fact = max(n_folders_fs // 1000, 1)` `voxel_rel_paths[ii:ii + red_fact]` and
+    #  `n_used_paths =  np.min([len(rel_synssv_to_syn_ids_items), len(voxel_rel_paths) // red_fact])`
     n_used_paths = np.min([len(rel_synssv_to_syn_ids_items), len(voxel_rel_paths)])
     rel_synssv_to_syn_ids_items_chunked = chunkify(rel_synssv_to_syn_ids_items, n_used_paths)
     multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii:ii + 1],  # only get one element
@@ -1370,7 +1375,7 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
                                                   version=obj_version)
 
     # chunk params
-    multi_params = chunkify(sd_syn_ssv.so_dir_paths, 1500)
+    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.NCORE_TOTAL * 2)
     multi_params = [(so_dir_paths, wd, obj_version, mi_version, vc_version, ssd_version, max_vx_dist_nm,
                      max_rep_coord_dist_nm) for so_dir_paths in multi_params]
 
@@ -1527,6 +1532,7 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
 
         ds, _ = synssv_vx_kdtree.query(obj_vxs,
                                        distance_upper_bound=max_vx_dist_nm)
+        # surface fraction of subcellular object which is close to synapse
         close_frac = np.sum(ds < np.inf) / len(obj_vxs)
         # estimate number of voxels by close-by surface area fraction times total number of voxels
         n_obj_vxs.append(close_frac * obj.size)
@@ -1618,7 +1624,7 @@ def classify_synssv_objects(wd, obj_version=None,log=None, nb_cpus=None,
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version=obj_version)
 
-    multi_params = chunkify(sd_syn_ssv.so_dir_paths, 1500)
+    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.NCORE_TOTAL)
     multi_params = [(so_dir_paths, wd, obj_version) for so_dir_paths in
                     multi_params]
 
@@ -1737,6 +1743,9 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
     m_sizes = np.abs(m_sizes)
 
     ms_axs = np.sort(m_axs, axis=1)
+    # transform labels 3 and 4 to 1 (bouton and terminal to axon to apply correct filter)
+    ms_axs[ms_axs == 3] = 1
+    ms_axs[ms_axs == 4] = 1
     # vigra currently requires numpy==1.11.1
     try:
         u_axs = np.unique(ms_axs, axis=0)

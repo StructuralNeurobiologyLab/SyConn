@@ -1414,7 +1414,7 @@ def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=global_params.NCORE
     return list(missing_ssv_ids)
 
 
-def predict_views_semseg(views, model, batch_size=20, verbose=False):
+def predict_views_semseg(views, model, batch_size=10, verbose=False):
     """
     Predicts a view array of shape [N_LOCS, N_CH, N_VIEWS, X, Y] with
     N_LOCS locations each with N_VIEWS perspectives, N_CH different channels
@@ -1607,8 +1607,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             i_views = sso.load_views(index_view_key).flatten()
         semseg_views = sso.load_views(semseg_key).flatten()
         ts1 = time.time()
-        log_reps.debug('Time to load index and shape views: '
-                       '{:.2f}s.'.format(ts1 - ts0))
+        # log_reps.debug('Time to load index and shape views: '
+        #                '{:.2f}s.'.format(ts1 - ts0))
         dc = defaultdict(list)
         background_id = np.max(i_views)
 
@@ -1633,8 +1633,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             # get vertex ids into dictionary
             dc[vertex_ix].append(l)
         ts2 = time.time()
-        log_reps.debug('Time to generate look-up dict: '
-                       '{:.2f}s.'.format(ts2 - ts1))
+        # log_reps.debug('Time to generate look-up dict: '
+        #                '{:.2f}s.'.format(ts2 - ts1))
         # background label is highest label in prediction (see 'generate_palette' or
         # 'remap_rgb_labelviews' in multiviews.py)
         background_l = np.max(semseg_views)
@@ -1657,8 +1657,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             predicted_vertices = predicted_vertices[predictions != background_id]
             predictions = predictions[predictions != background_id]
         ts3 = time.time()
-        log_reps.debug('Time to map predictions on vertices: '
-                       '{:.2f}s.'.format(ts3 - ts2))
+        # log_reps.debug('Time to map predictions on vertices: '
+        #                '{:.2f}s.'.format(ts3 - ts2))
         # TODO: add optimized procedure in case k==1 -> only map onto unpredicted vertices
         #  instead of averaging all
         if k > 0:  # map predictions of predicted vertices to all vertices
@@ -1668,8 +1668,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         else:  # no vertex mask was applied in this case
             maj_vote = predictions
         ts4 = time.time()
-        log_reps.debug('Time to map predictions on unpredicted vertices / to average vertex '
-                       'predictions: {:.2f}s.'.format(ts4 - ts3))
+        # log_reps.debug('Time to map predictions on unpredicted vertices / to average vertex '
+        #                'predictions: {:.2f}s.'.format(ts4 - ts3))
         # add prediction to mesh storage
         ld[semseg_key] = maj_vote
         ld.push()

@@ -433,7 +433,6 @@ def _write_props_to_syn_singlenode_thread(args):
 
     with open(dict_p, "rb") as f:
         cs_props_tmp = pkl.load(f)
-    log_extraction.debug('Loaded property dict')
 
     # collect destinations of to-be-processed objects
     dest_dc = defaultdict(list)
@@ -459,12 +458,10 @@ def _write_props_to_syn_singlenode_thread(args):
         cs_props[1][k] = cs_props_tmp[1][k]
         cs_props[2][k] = cs_props_tmp[2][k]
     del cs_props_tmp
-    log_extraction.debug('Pruned property dict')
 
     dict_p = "{}/syn_prop_dict.pkl".format(global_params.config.temp_path)
     with open(dict_p, "rb") as f:
         syn_props_tmp = pkl.load(f)
-    log_extraction.debug('Loaded syn property dict')
 
     syn_props = [{}, {}, {}]
     for k in all_obj_keys:
@@ -480,7 +477,6 @@ def _write_props_to_syn_singlenode_thread(args):
     dict_p = "{}/cs_sym_cnt.pkl".format(global_params.config.temp_path)
     with open(dict_p, "rb") as f:
         cs_sym_cnt_tmp = pkl.load(f)
-    log_extraction.debug('Loaded sym. cnt dict')
 
     cs_sym_cnt = {}
     for k in all_obj_keys:
@@ -493,7 +489,6 @@ def _write_props_to_syn_singlenode_thread(args):
     dict_p = "{}/cs_asym_cnt.pkl".format(global_params.config.temp_path)
     with open(dict_p, "rb") as f:
         cs_asym_cnt_tmp = pkl.load(f)
-    log_extraction.debug('Loaded asym. cnt dict')
 
     cs_asym_cnt = {}
     for k in all_obj_keys:
@@ -502,14 +497,20 @@ def _write_props_to_syn_singlenode_thread(args):
         except KeyError:  # no type prediction for this contact site
             pass
     del cs_asym_cnt_tmp
-
-    m_params = [(obj_id_mod, dest_dc, cs_props, syn_props, cs_sym_cnt, cs_asym_cnt,
-    n_folders_fs, knossos_path, knossos_path_cs) for obj_id_mod in cs_ids_ch]
+    temp_folder = '{}/write_syn_props/{}_tmp_dcs/'.format(
+        global_params.config.temp_path, cs_ids_ch[0])
+    os.makedirs(temp_folder, exist_ok=True)
+    basics.write_obj2pkl(temp_folder + "dest_dc.pkl", dest_dc)
+    basics.write_obj2pkl(temp_folder + "cs_props.pkl", cs_props)
+    basics.write_obj2pkl(temp_folder + "syn_props.pkl", syn_props)
+    basics.write_obj2pkl(temp_folder + "cs_sym_cnt.pkl", cs_sym_cnt)
+    basics.write_obj2pkl(temp_folder + "cs_asym_cnt.pkl", cs_asym_cnt)
+    m_params = [(obj_id_mod, temp_folder, n_folders_fs, knossos_path, knossos_path_cs) for
+                obj_id_mod in cs_ids_ch]
 
     log_extraction.debug('Started write-out.')
-    # with multiprocessing.Pool(nb_cpus) as pool:
-    #     list(pool.map(_helper_func, m_params))
-    start_multiprocess_imap(_helper_func, m_params, nb_cpus=nb_cpus, verbose=True)
+    start_multiprocess_imap(_helper_func, m_params, nb_cpus=nb_cpus, verbose=False)
+    shutil.rmtree(temp_folder, ignore_errors=True)
 
 
 def _generate_storage_lookup(args):
@@ -542,8 +543,14 @@ def _generate_storage_lookup(args):
 
 # iterate over the subcellular SV ID chunks
 def _helper_func(args):
-    obj_id_mod, dest_dc, cs_props, syn_props, cs_sym_cnt, cs_asym_cnt,\
-    n_folders_fs, knossos_path, knossos_path_cs = args
+    obj_id_mod, temp_folder, n_folders_fs, knossos_path, knossos_path_cs = args
+
+    dest_dc = basics.load_pkl2obj(temp_folder + "dest_dc.pkl")
+    cs_props = basics.load_pkl2obj(temp_folder + "cs_props.pkl")
+    syn_props = basics.load_pkl2obj(temp_folder + "syn_props.pkl")
+    cs_sym_cnt = basics.load_pkl2obj(temp_folder + "cs_sym_cnt.pkl")
+    cs_asym_cnt = basics.load_pkl2obj(temp_folder + "cs_asym_cnt.pkl")
+
     sd = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs, obj_type='syn',
                                           working_dir=global_params.config.working_dir,
                                           version=0)
@@ -551,8 +558,6 @@ def _helper_func(args):
     sd_cs = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs, obj_type='cs',
                                              working_dir=global_params.config.working_dir,
                                              version=0)
-
-    print('ASD')
 
     obj_keys = dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]
     if len(obj_keys) == 0:
@@ -575,7 +580,6 @@ def _helper_func(args):
     this_attr_dc_cs = AttributeDict(attr_p_cs, read_only=False, disable_locking=True)
     voxel_dc_cs = VoxelStorageDyn(vx_p_cs, voxel_mode=False, voxeldata_path=knossos_path_cs,
                                   read_only=False, disable_locking=True)
-    print('A')
 
     for cs_id in obj_keys:
         # write cs to dict

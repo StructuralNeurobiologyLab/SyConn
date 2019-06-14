@@ -37,7 +37,7 @@ for ix in ssv_ixs:
         continue
     # background label is 5 -> unpredicted is background_label + 1 = 6, average over 50 nearest
     # vertex predictions
-    node_preds = sso.semseg_for_coords(sso.skeleton['nodes'], ignore_labels=[6],
+    node_preds = sso.semseg_for_coords(sso.skeleton['nodes'],
                                        semseg_key=global_params.view_properties_semsegax['semseg_key'],
                                        **map_properties)
     pred_key = "axoness{}_k{}".format(pred_key_appendix, map_properties['k'])

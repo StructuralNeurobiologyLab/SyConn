@@ -1339,7 +1339,6 @@ def exctract_ssv_morphology_embedding(args):
     from ..handler.prediction import get_tripletnet_model_e3
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.nb_cpus = global_params.NCORES_PER_NODE // 2  # TODO should be global_params.NGPU_PER_NODE
         m = get_tripletnet_model_e3()
         ssv.predict_views_embedding(m, pred_key_appendix)
 

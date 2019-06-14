@@ -121,7 +121,7 @@ gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness' \
 view_properties_semsegax = dict(verbose=False, ws=(1024, 512), nb_views=3,
                                 comp_window=40.96e3 * 1.5, semseg_key='axoness',
                                 n_avg=0)  # this will not map predictions to unpredicted vertices
-map_properties_semsegax = dict(k=50, ds_vertices=10)
+map_properties_semsegax = dict(k=50, ds_vertices=10, ignore_labels=[6])
 
 
 # --------- CELLTYPE PARAMETERS

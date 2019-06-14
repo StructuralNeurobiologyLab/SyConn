@@ -220,7 +220,8 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu=None):
     """
     Will store semantic axoness labels as `view_properties_semsegax['semseg_key']` inside
      ssv.label_dict('vertex')[semseg_key]
-    # TODO: change usage when collecting axoness for synapses
+    TODO: run rendering chunk-wise instead of on-the-fly and then perform
+     prediction chunk-wise as well, adopt from spiness step
 
     Parameters
     ----------

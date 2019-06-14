@@ -35,7 +35,7 @@ def run_matrix_export():
     # synssv to SSVs) -> saves finding SSV ID indices in synapse arrays (->
     # slow for many synapses)
     cps.collect_properties_from_ssv_partners(global_params.config.working_dir,
-                                             debug=False)
+                                             debug=True)
     #
     # collect new object attributes collected above partner axoness, celltypes,
     # synapse probabilities etc, no need to compute size/rep_coord etc. ->
@@ -91,9 +91,10 @@ def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
                               cs_gap_nm=global_params.cs_gap_nm, log=log,
                               n_folders_fs=n_folders_fs)
     log.info('Synapse objects were created.')
-
+    #
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
+
     dataset_analysis(sd_syn_ssv, compute_meshprops=True)
     log.info('SegmentationDataset of type "syn_ssv" was generated.')
 

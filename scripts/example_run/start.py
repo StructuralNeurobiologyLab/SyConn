@@ -197,6 +197,7 @@ if __name__ == '__main__':
     step_idents.append('Synapse detection')
 
     log.info('Step 5/8 - Axon prediction')
+    # # OLD
     # exec_multiview.run_axoness_prediction(e3=True)
     # exec_multiview.run_axoness_mapping()
 
@@ -210,12 +211,17 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('Spine prediction')
 
-    log.info('Step 7/8 - Celltype analysis')
+    log.info('Step 7/9 - Morphology extraction')
+    exec_multiview.run_morphology_embedding()
+    time_stamps.append(time.time())
+    step_idents.append('Morphology extraction')
+
+    log.info('Step 8/9 - Celltype analysis')
     exec_multiview.run_celltype_prediction()
     time_stamps.append(time.time())
     step_idents.append('Celltype analysis')
 
-    log.info('Step 8/8 - Matrix export')
+    log.info('Step 9/9 - Matrix export')
     exec_syns.run_matrix_export()
     time_stamps.append(time.time())
     step_idents.append('Matrix export')
