@@ -11,7 +11,7 @@ It learns how to differentiate between spine head, spine neck and spine shaft.
 Caution! The input dataset was not manually corrected.
 """
 from syconn import global_params
-from syconn.cnn.TrainData import ModMultiviewData
+from syconn.cnn.TrainData import ModMultiviewData, MultiviewDataCached
 import argparse
 import os
 import torch
@@ -24,16 +24,18 @@ from elektronn3.models.unet import UNet
 from elektronn3.models.duc_hdc import ResNetDUC, ResNetDUCHDC
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
-
+from sys import getsizeof
 from icecream import ic
+import pdb
 
 def get_model():
-    # vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
-    # model = FCNs(base_net=vgg_model, n_class=4)
+    vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
+    model = FCNs(base_net=vgg_model, n_class=4)
     # model = UNet(in_channels=4, out_channels=4, n_blocks=5, start_filts=32,
     #              up_mode='upsample', merge_mode='concat', planar_blocks=(),
     #              activation='relu', batch_norm=True, dim=2,)
-    model = ResNetDUCHDC(num_classes=4)
+    # model = ResNetDUCHDC(num_classes=4)
+    # print(getsizeof(model))
     return model
 
 
@@ -46,6 +48,8 @@ if __name__ == "__main__":
         '-m', '--max-steps', type=int, default=500000,
         help='Maximum number of training steps to perform.'
     )
+    parser.add_argument('--num-repeat', type=int, default=1, 
+                    help='Specify how many times each datapoint be used before corresponding h5 file is released')
     args = parser.parse_args()
     if not args.disable_cuda and torch.cuda.is_available():
         device = torch.device('cuda')
@@ -67,29 +71,31 @@ if __name__ == "__main__":
     lr = 0.0048
     lr_stepsize = 500
     lr_dec = 0.995
-    batch_size = 5
+    batch_size = 1
 
     model = get_model()
-    if torch.cuda.device_count() > 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        batch_size = batch_size * torch.cuda.device_count()
+    # if torch.cuda.device_count() > 1:
+    #     print("Let's use", torch.cuda.device_count(), "GPUs!")
+    #     batch_size = batch_size * torch.cuda.device_count()
         # dim = 0 [20, xxx] -> [10, ...], [10, ...] on 2 GPUs
-        model = nn.DataParallel(model)
+        # model = nn.DataParallel(model)
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
     global_params.gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_1024'
-    
-    # train_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/train', 
-    #                                     train=True, inp_key='raw', target_key='label', 
-    #                                     transform=transform, num_read_limit=5)
-    # valid_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/val', 
-    #                                     train=False, inp_key='raw', target_key='label', 
-    #                                     transform=transform, num_read_limit=5)
 
-    train_dataset = ModMultiviewData(train=True, transform=transform, base_dir=global_params.gt_path_axonseg)
-    valid_dataset = ModMultiviewData(train=False, transform=transform, base_dir=global_params.gt_path_axonseg)
+    # num_workers must be <=1 for MultiviewDataCached class    
+    train_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/train', 
+                                        train=True, inp_key='raw', target_key='label', 
+                                        transform=transform, num_read_limit=args.num_repeat)
+    valid_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/val', 
+                                        train=False, inp_key='raw', target_key='label', 
+                                        transform=transform, num_read_limit=1)
+    ic(train_dataset.__len__(), valid_dataset.__len__())
+    # train_dataset = ModMultiviewData(train=True, transform=transform, base_dir=global_params.gt_path_axonseg)
+    # valid_dataset = ModMultiviewData(train=False, transform=transform, base_dir=global_params.gt_path_axonseg)
     # Set up optimization
     optimizer = optim.Adam(
         model.parameters(),
@@ -111,7 +117,7 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         valid_dataset=valid_dataset,
         batchsize=batch_size,
-        num_workers=2,
+        num_workers=0,
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched},
