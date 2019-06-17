@@ -71,15 +71,15 @@ if __name__ == "__main__":
     lr = 0.0048
     lr_stepsize = 500
     lr_dec = 0.995
-    batch_size = 1
+    batch_size = 4
 
     model = get_model()
-    # if torch.cuda.device_count() > 1:
-    #     print("Let's use", torch.cuda.device_count(), "GPUs!")
-    #     batch_size = batch_size * torch.cuda.device_count()
+    if torch.cuda.device_count() > 1:
+        print("Let's use", torch.cuda.device_count(), "GPUs!")
+        batch_size = batch_size * torch.cuda.device_count()
         # dim = 0 [20, xxx] -> [10, ...], [10, ...] on 2 GPUs
-        # model = nn.DataParallel(model)
-    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        model = nn.DataParallel(model)
+    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     model.to(device)
 
     # Specify data set
@@ -93,7 +93,7 @@ if __name__ == "__main__":
     valid_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/val', 
                                         train=False, inp_key='raw', target_key='label', 
                                         transform=transform, num_read_limit=1)
-    ic(train_dataset.__len__(), valid_dataset.__len__())
+    # ic(train_dataset.__len__(), valid_dataset.__len__())
     # train_dataset = ModMultiviewData(train=True, transform=transform, base_dir=global_params.gt_path_axonseg)
     # valid_dataset = ModMultiviewData(train=False, transform=transform, base_dir=global_params.gt_path_axonseg)
     # Set up optimization
@@ -117,7 +117,7 @@ if __name__ == "__main__":
         train_dataset=train_dataset,
         valid_dataset=valid_dataset,
         batchsize=batch_size,
-        num_workers=0,
+        num_workers=1,
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched},

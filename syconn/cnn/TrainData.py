@@ -59,7 +59,7 @@ if elektronn3_avail:
             self.target_key = target_key
             self.transform = transform
             self.train = train
-            self.fnames = sorted(glob.glob(base_dir + "/*.h5"))[:3] #TODO take full length
+            self.fnames = sorted(glob.glob(base_dir + "/*.h5")) #[:3] #TODO take full length
             self.base_dir = base_dir
             # print("Files found: ", [ name[len(base_dir)+1:] for name in self.fnames ] )
 
@@ -83,10 +83,10 @@ if elektronn3_avail:
             self.thread_launched = False
 
         def __getitem__(self, index):
-            print("Requested index ", index)
+            # print("Requested index ", index)
             index = index - self.num_samples_in_already_read_files
-            print("num samples already ", self.num_samples_in_already_read_files," will give index ", index)
-            print(self.primary.shape)
+            # print("num samples already ", self.num_samples_in_already_read_files," will give index ", index)
+            # print(self.primary.shape)
             if self.current_count > int(0.5*len(self.index_array)) and self.thread_launched == False : #adjust 0.5
                 self.read_thread = threading.Thread(target=self.read, args=[self.file_pointer])
                 self.read_thread.start() # print("parallel thread launched")
@@ -114,7 +114,7 @@ if elektronn3_avail:
 
         def read(self, file_pointer):
             # print("Reading file", self.fnames[file_pointer][len(self.base_dir)+1:])
-            print("file_pointer ", file_pointer)
+            # print("file_pointer ", file_pointer)
             self.file = h5py.File(os.path.expanduser(self.fnames[file_pointer]), 'r')
             self.secondary = self.file[self.inp_key][()]/255
             self.secondary = self.secondary.astype(np.float32)
@@ -123,8 +123,8 @@ if elektronn3_avail:
             # print(f"read h5 file containes {self.secondary.shape[0]} samples") #, {self.secondary_t.shape[0]} labels")
 
         def __len__(self):
-            # return 7835*self.num_read_limit if self.train else 1981  #Manually checked and written
-            return 205*self.num_read_limit if self.train else 53
+            return 7835*self.num_read_limit if self.train else 1981  #Manually checked and written
+            # return 205*self.num_read_limit if self.train else 53 # for first 3 files listed in sorted order
 
         def close_files(self):
             self.file.close()
