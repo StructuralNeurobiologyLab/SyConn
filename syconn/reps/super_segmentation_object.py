@@ -1321,7 +1321,7 @@ class SuperSegmentationObject(object):
                           ".".format(len(self.svs)))
             # TODO: Does not work
             # if not overwrite:  # check existence of glia preds
-            #     views_exist = np.array(self.view_existence(wo_glia=wo_glia), dtype=np.int)
+            #     views_exist = np.array(self.view_existence(woglia=woglia), dtype=np.int)
             #     log_reps.info("Rendering SSO. {}/{} views left to process"
             #                   ".".format(np.sum(views_exist == 0), len(self.svs)))
             #     ex_dc = {}
@@ -1410,10 +1410,8 @@ class SuperSegmentationObject(object):
                                                         rot_mat=self._rot_mat, ws=ws,
                                                         comp_window=comp_window)
         end_ix_views = time.time()
-        log_reps.debug("Rendering views took {:.2f} s. {:.2f} views/s".format(
-            end_ix_views - start, len(index_views) / (end_ix_views - start)))
-        log_reps.debug("Mapping rgb values to vertex indices took {:.2f}s.".format(
-            time.time() - end_ix_views))
+        # log_reps.debug("Rendering views took {:.2f} s. {:.2f} views/s".format(
+        #     end_ix_views - start, len(index_views) / (end_ix_views - start)))
         if self.view_caching:
             self.view_dict[view_key] = index_views
         if not save:
@@ -2698,8 +2696,9 @@ def celltype_predictor(args):
             else:
                 ssh.predict_sso_celltype(ssv, m, overwrite=True)  # local views
         except Exception as e:
-            missing_ssvs.append((ssv.id, e))
-            log_reps.error(repr(e))
+            missing_ssvs.append((ssv.id, str(e)))
+            msg = 'ERROR during celltype prediction of SSV {}. {}'.format(ssv.id, repr(e))
+            log_reps.error(msg)
         pbar.update(1)
     pbar.close()
     return missing_ssvs
@@ -2721,14 +2720,28 @@ def semsegaxoness_predictor(args):
     ssv_ids, nb_cpus = args
     m = get_semseg_axon_model()
     missing_ssvs = []
+    view_props = global_params.view_properties_semsegax
+    pbar = tqdm.tqdm(total=len(ssv_ids))
     for ix in ssv_ids:
         ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
         ssv.nb_cpus = nb_cpus
         ssv._view_caching = True
         try:
-            view_props = global_params.view_properties_semsegax
-            ssh.semseg_of_sso_nocache(ssv, m, **view_props)
+            try:
+                ssh.semseg_of_sso_nocache(ssv, m, **view_props)
+            except Exception:
+                # retry # TODO: facing cuda OOM errors after certain number of iterations
+                del m
+                del ssv
+                ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
+                ssv.nb_cpus = nb_cpus
+                ssv._view_caching = True
+                m = get_semseg_axon_model()
+                ssh.semseg_of_sso_nocache(ssv, m, **view_props)
         except Exception as e:
-            missing_ssvs.append((ssv.id, e))
-            log_reps.error(repr(e))
+            missing_ssvs.append((ssv.id, str(e)))
+            msg = 'ERROR during sem. seg. prediction of SSV {}. {}'.format(ssv.id, repr(e))
+            log_reps.error(msg)
+        pbar.update()
+    pbar.close()
     return missing_ssvs

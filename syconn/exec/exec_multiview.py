@@ -184,8 +184,10 @@ def run_celltype_prediction(max_n_jobs_gpu=None):
             local_err = pkl.load(f)
         err += list(local_err)
     if len(err) > 0:
-        log.error("{} errors occurred for SSVs with ID: "
-                  "{}".format(len(err), [el[0] for el in err]))
+        msg = "{} errors occurred for SSVs with ID: " \
+              "{}".format(len(err), [el[0] for el in err])
+        log.error(msg)
+        raise ValueError(msg)
     else:
         log.info('Success.')
 
@@ -245,7 +247,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu=None):
     multi_params = ssd.ssv_ids
     ordering = np.argsort(nb_svs_per_ssv)
     multi_params = multi_params[ordering[::-1]]
-    max_n_jobs_gpu = np.max([max_n_jobs_gpu, len(multi_params) // 200])  # at most 200 SSV per job
+    max_n_jobs_gpu = np.max([max_n_jobs_gpu, len(multi_params) // 100])  # at most 100 SSV per job
     multi_params = chunkify(multi_params, max_n_jobs_gpu)
     # job parameter will be read sequentially, i.e. in order to provide only
     # one list as parameter one needs an additonal axis
@@ -265,8 +267,10 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu=None):
             local_err = pkl.load(f)
         err += list(local_err)
     if len(err) > 0:
-        log.error("{} errors occurred for SSVs with ID: "
-                  "{}".format(len(err), [el[0] for el in err]))
+        msg = "{} errors occurred for SSVs with ID: " \
+              "{}".format(len(err), [el[0] for el in err])
+        log.error(msg)
+        raise ValueError(msg)
     else:
         log.info('Success.')
 
@@ -315,7 +319,7 @@ def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
                      kwargs_semseg2mesh) for ssv_ids in multi_params]
     log.info('Starting mapping of spine predictions to neurite surfaces.')
     qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=global_params.NCORE_TOTAL,
-                   n_cores=1, suffix="", additional_flags="", remove_jobfolder=True, log=log)
+                   n_cores=4, suffix="", additional_flags="", remove_jobfolder=True, log=log)
     log.info('Finished spine mapping.')
 
 
@@ -424,7 +428,7 @@ def _run_neuron_rendering_big_helper(max_n_jobs=None):
                            n_max_co_processes=n_parallel_jobs, log=log,
                            additional_flags="--gres=gpu:1",
                            n_cores=n_cores, remove_jobfolder=True)
-        # render index-views only
+        # # render index-views only
         for ssv_id in big_ssv:
             ssv = SuperSegmentationObject(ssv_id, working_dir=global_params.config.working_dir)
             render_sso_coords_multiprocessing(ssv, global_params.config.working_dir, verbose=True,
@@ -669,7 +673,7 @@ def run_glia_rendering(max_n_jobs=None):
             else global_params.NCORE_TOTAL * 4
     log = initialize_logging('glia_view_rendering', global_params.config.working_dir + '/logs/',
                              overwrite=True)
-    log.info("Preapring RAG.")
+    log.info("Preparing RAG.")
     np.random.seed(0)
 
     # view rendering prior to glia removal, choose SSD accordingly
@@ -746,6 +750,7 @@ def run_glia_rendering(max_n_jobs=None):
         raise ValueError(msg)
     else:
         log.info('All SVs now contain views required for glia prediction.')
+    # TODO: remove temporary SSV datasets
 
 
 def axoness_pred_exists(sv):

@@ -444,7 +444,7 @@ def calc_rot_matrices(coords, vertices, edge_length, nb_cpus=1):
     params = [(coords_ch, vertices, edge_length) for coords_ch in
               np.array_split(coords, nb_cpus, axis=0)]
     res = start_multiprocess_imap(calc_rot_matrices_helper, params,
-                                  nb_cpus=nb_cpus)
+                                  nb_cpus=nb_cpus, show_progress=False)
     rot_matrices = np.concatenate(res)
     return rot_matrices
 

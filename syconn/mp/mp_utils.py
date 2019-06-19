@@ -153,10 +153,10 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
 
     start = time.time()
     if nb_cpus > 1:
-        with MyPool(nb_cpus) as pool:
-            if show_progress:
-                result = parallel_process(params, func, nb_cpus)
-            else:
+        if show_progress:
+            result = parallel_process(params, func, nb_cpus)
+        else:
+            with MyPool(nb_cpus) as pool:
                 result = list(pool.map(func, params))
     else:
         if show_progress:

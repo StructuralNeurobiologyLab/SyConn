@@ -200,7 +200,6 @@ if __name__ == '__main__':
     # # OLD
     # exec_multiview.run_axoness_prediction(e3=True)
     # exec_multiview.run_axoness_mapping()
-
     exec_multiview.run_semsegaxoness_prediction()
     exec_multiview.run_semsegaxoness_mapping()
     time_stamps.append(time.time())

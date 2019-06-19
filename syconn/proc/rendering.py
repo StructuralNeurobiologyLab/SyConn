@@ -1083,6 +1083,12 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
         ix_views = rgb2id_array(ix_views)[:, None]
     else:
         ix_views = rgba2id_array(ix_views)[:, None]
+    scnd_largest = np.partition(np.unique(ix_views.flatten()), -2)[-2]  # largest value is background
+    if scnd_largest > len(vert) // 3:
+        log_proc.critical('Critical error during index-rendering: Maximum vertex'
+                          ' ID which was rendered is bigger than vertex array.'
+                          '{}, {}; SSV ID {}'.format(
+            scnd_largest, len(vert) // 3, sso.id))
     return ix_views
 
 
@@ -1232,9 +1238,10 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
                   'working_dir': working_dir,
                   "version": ssv.version,
                   'nb_cpus': n_cores}
+    # TODOO: refactor kwargs!
     render_kwargs_def = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,
-                      'nb_views': None, 'comp_window': None, 'rot_mat': None, 'wo_glia': True,
+                      'nb_views': None, 'comp_window': None, 'rot_mat': None, 'woglia': True,
                      'return_rot_mat': False, 'render_indexviews': render_indexviews}
     if render_kwargs is not None:
         render_kwargs_def.update(render_kwargs)
@@ -1262,12 +1269,12 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
             for i, so in enumerate(svs):
                 so.enable_locking = True
                 sv_views = views[part_views[i]:part_views[i+1]]
-                so.save_views(sv_views, woglia=render_kwargs_def['wo_glia'],
+                so.save_views(sv_views, woglia=render_kwargs_def['woglia'],
                               cellobjects_only=render_kwargs_def['cellobjects_only'],
                               index_views=render_kwargs_def["render_indexviews"])
         else:
             write_sv_views_chunked(svs, views, part_views,
-                                   dict(woglia=render_kwargs_def['wo_glia'],
+                                   dict(woglia=render_kwargs_def['woglia'],
                                         index_views=render_kwargs_def["render_indexviews"],
                                         view_key=view_key))
 

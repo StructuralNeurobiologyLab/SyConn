@@ -60,13 +60,6 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
                           transf_func_kd_overlay=None, cube_of_interest_bb=None):
     # TODO: Don't extract sj objects and replace their use-cases with syn objects (?)
     """
-    If `global_params.config.prior_glia_removal==True`:
-        stores pruned RAG at `global_params.config.pruned_rag_path`, required for all glia
-        removal steps. `run_glia_splitting` will finally return `neuron_rag.bz2`
-    else:
-        stores pruned RAG at `global_params.config.working_dir + /glia/neuron_rag.bz2`, required
-        for `run_create_neuron_ssd`.
-
     Parameters
     ----------
     chunk_size :
@@ -135,6 +128,18 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
 
 
 def run_create_rag():
+    """
+    If `global_params.config.prior_glia_removal==True`:
+        stores pruned RAG at `global_params.config.pruned_rag_path`, required for all glia
+        removal steps. `run_glia_splitting` will finally return `neuron_rag.bz2`
+    else:
+        stores pruned RAG at `global_params.config.working_dir + /glia/neuron_rag.bz2`, required
+        for `run_create_neuron_ssd`.
+
+    Returns
+    -------
+
+    """
     log = initialize_logging('create_rag', global_params.config.working_dir +
                              '/logs/', overwrite=True)
     # Crop RAG according to cell SVs found during SD generation and apply size threshold

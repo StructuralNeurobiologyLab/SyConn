@@ -1875,12 +1875,18 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window, n_a
                              " run 'semseg_of_sso_nocache'.".format(sso)
     # this generates the raw views and their prediction
     sso.predict_semseg(model, semseg_key, raw_view_key=raw_view_key, **view_kwargs)
+    if verbose:
+        log_reps.debug('Finished shape-view rendering and sem. seg. prediction.')
     # this generates the index views
     sso.render_indexviews(view_key=index_view_key, force_recompute=True,
                           **view_kwargs)
+    if verbose:
+        log_reps.debug('Finished index-view rendering.')
     # map prediction onto mesh and saves it to sso._label_dict['vertex'][semseg_key] (also pushed to file system!)
     sso.semseg2mesh(semseg_key, index_view_key=index_view_key, dest_path=dest_path,
                     force_recompute=True, k=n_avg)
+    if verbose:
+        log_reps.debug('Finished mapping of vertex predictions to mesh.')
 
 
 def assemble_from_mergelist(ssd, mergelist):

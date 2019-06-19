@@ -331,9 +331,9 @@ def id2rgba_array_contiguous(id_arr):
     x3 = np.arange(256).astype(np.uint8)
     x4 = np.arange(256).astype(np.uint8)
     xx1, xx2, xx3, xx4 = np.meshgrid(x1, x2, x3, x4, sparse=False, copy=False)
-    rgba_arr = np.concatenate([xx4.flatten()[:, None], xx1.flatten()[:, None],
-                               xx3.flatten()[:, None], xx2.flatten()[:, None]],
-                              axis=-1)[:nb_ids]
+    rgba_arr = np.concatenate([xx4.flatten()[:, None], xx3.flatten()[:, None],
+                               xx1.flatten()[:, None], xx2.flatten()[:, None]],
+                              axis=-1)[:nb_ids]  # 4,3,1,2  with numpy 1.16, PS 14June2019
     return rgba_arr
 
 
