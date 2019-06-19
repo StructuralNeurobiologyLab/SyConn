@@ -102,6 +102,7 @@ def process_block_nonzero(uint32_t[:, :, :] edges, uint32_t[:, :, :] arr, stenci
                 out[x, y, z] =  kernel(chunk, center_id)
     return out
 
+
 def extract_cs_syntype(n_type[:, :, :] cs_seg, uint8_t[:, :, :] syn_mask,
     uint8_t[:, :, :] asym_mask, uint8_t[:, :, :] sym_mask):
     """cs_seg, syn_mask, sym_mask and asym_mask  must all have the same shape!

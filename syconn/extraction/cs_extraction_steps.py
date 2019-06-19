@@ -16,6 +16,7 @@ import shutil
 import glob
 import numpy as np
 import scipy.ndimage
+import h5py
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
 knossosdataset._set_noprint(True)
@@ -134,32 +135,46 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     #  -> Run CS generation in parallel with mapping to at least get the syn objects before
     #  rendering the neuron views (which need subcellular structures, there one can then use mi,
     #  vc and syn (instead of sj))
-    dict_paths = []
-    # dump intermediate results
-    dict_p = "{}/cs_prop_dict.pkl".format(global_params.config.temp_path)
-    with open(dict_p, "wb") as f:
-        pkl.dump(cs_props, f)
-    del cs_props
-    dict_paths.append(dict_p)
 
-    dict_p = "{}/syn_prop_dict.pkl".format(global_params.config.temp_path)
-    with open(dict_p, "wb") as f:
-        pkl.dump(syn_props, f)
+    #  dump intermediate results
+    dict_paths = []
+    p_h5py = "{}/cs_prop_dict.h5".format(global_params.config.temp_path)
+    dict_paths.append(p_h5py)
+    f = h5py.File(p_h5py, "w")
+    for ii in range(len(cs_props)):
+        grp = f.create_group(str(ii))
+        for key, val in cs_props[ii].items():
+            if ii == 2:
+                grp.create_dataset(str(key), data=val)
+            else:
+                grp.create_dataset(str(key), data=val, compression="gzip")
+    del cs_props
+    f.close()
+
+    p_h5py = "{}/syn_prop_dict.h5".format(global_params.config.temp_path)
+    dict_paths.append(p_h5py)
+    f = h5py.File(p_h5py, "w")
+    for ii in range(len(syn_props)):
+        grp = f.create_group(str(ii))
+        for key, val in syn_props[ii].items():
+            if ii == 2:
+                grp.create_dataset(str(key), data=val)
+            else:
+                grp.create_dataset(str(key), data=val, compression="gzip")
     del syn_props
-    dict_paths.append(dict_p)
+    f.close()
 
     # convert counting dicts to store ratio of syn. type voxels
-    dict_p = "{}/cs_sym_cnt.pkl".format(global_params.config.temp_path)
-    with open(dict_p, "wb") as f:
-        pkl.dump(tot_sym_cnt, f)
+    p_h5py = "{}/cs_sym_cnt.pkl".format(global_params.config.temp_path)
+    dict_paths.append(p_h5py)
+    print("tot_sym_cnt= ", tot_sym_cnt)
+    compression.save_to_h5py(tot_sym_cnt, p_h5py, compression=False)
     del tot_sym_cnt
-    dict_paths.append(dict_p)
 
-    dict_p = "{}/cs_asym_cnt.pkl".format(global_params.config.temp_path)
-    with open(dict_p, "wb") as f:
-        pkl.dump(tot_asym_cnt, f)
+    p_h5py = "{}/cs_asym_cnt.pkl".format(global_params.config.temp_path)
+    dict_paths.append(p_h5py)
+    compression.save_to_h5py(tot_asym_cnt, p_h5py, compression=False)
     del tot_asym_cnt
-    dict_paths.append(dict_p)
 
     # write cs and syn segmentation to KD and SD
     chunky.save_dataset(cset)
@@ -188,8 +203,10 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     path = "{}/knossosdatasets/syn_seg/".format(global_params.config.working_dir)
     path_cs = "{}/knossosdatasets/cs_seg/".format(global_params.config.working_dir)
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
+    # multi_params = [(sv_id_block, n_folders_fs, path, path_cs) for sv_id_block in basics.chunkify(
+    #     storage_location_ids, max_n_jobs)]
     multi_params = [(sv_id_block, n_folders_fs, path, path_cs) for sv_id_block in basics.chunkify(
-        storage_location_ids, max_n_jobs)]
+        storage_location_ids, 1)]
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_syn_thread,
                                 multi_params, nb_cpus=n_max_co_processes, debug=False)
@@ -206,6 +223,7 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     for p in dict_paths:
         os.remove(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
+    print("\n\n\n KONIEC IMPREZY \n\n\n ")
 
 
 def _contact_site_extraction_thread(args):
@@ -289,27 +307,20 @@ def _write_props_to_syn_thread(args):
     knossos_path = args[2]
     knossos_path_cs = args[3]
 
-    # get cached dicts
-    dict_p = "{}/cs_prop_dict.pkl".format(global_params.config.temp_path)
-    with open(dict_p, "rb") as f:
-        cs_props = pkl.load(f)
+    p_h5py = "{}/cs_prop_dict.h5".format(global_params.config.temp_path)
+    f_cs_props = h5py.File(p_h5py, 'r')
 
-    dict_p = "{}/syn_prop_dict.pkl".format(global_params.config.temp_path)
-    with open(dict_p, "rb") as f:
-        syn_props = pkl.load(f)
+    p_h5py = "{}/syn_prop_dict.pkl".format(global_params.config.temp_path)
+    f_syn_props = h5py.File(p_h5py, 'r')
 
-    dict_p = "{}/cs_sym_cnt.pkl".format(global_params.config.temp_path)
-    with open(dict_p, "rb") as f:
-        cs_sym_cnt = pkl.load(f)
+    p_cs_sym_cnt_h5py = "{}/cs_sym_cnt.pkl".format(global_params.config.temp_path)
 
-    dict_p = "{}/cs_asym_cnt.pkl".format(global_params.config.temp_path)
-    with open(dict_p, "rb") as f:
-        cs_asym_cnt = pkl.load(f)
+    p_cs_asym_cnt_h5py = "{}/cs_asym_cnt.pkl".format(global_params.config.temp_path)
 
     # store destinations for each existing obj
     dest_dc = defaultdict(list)
-    for cs_id in cs_props[0]:
-        dest_dc[rep_helper.subfold_from_ix(cs_id, n_folders_fs)].append(cs_id)
+    for cs_id in f_cs_prop['0'].keys():
+        dest_dc[rep_helper.subfold_from_ix(int(cs_id), n_folders_fs)].append(cs_id)
 
     # get SegmentationDataset of current subcell.
     sd = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs, obj_type='syn',
@@ -320,8 +331,14 @@ def _write_props_to_syn_thread(args):
     # iterate over the subcellular SV ID chunks
     for obj_id_mod in cs_ids_ch:
         obj_keys = dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]
+
         if len(obj_keys) == 0:
             continue
+        cs_props = load_h5_spec_dict(obj_keys, f_cs_props)
+        syn_props = load_h5_spec_dict(obj_keys, f_syn_props)
+        cs_sym_cnt = compression.load_from_h5py(p_cs_sym_cnt_h5py, as_dict=True)
+        cs_asym_cnt = compression.load_from_h5py(p_cs_asym_cnt_h5py, as_dict=True)
+
         # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so = sd.get_segmentation_object(obj_id_mod)
         attr_p = dummy_so.attr_dict_path
@@ -401,6 +418,17 @@ def _write_props_to_syn_thread(args):
         voxel_dc_cs.push()
         this_attr_dc.push()
         this_attr_dc_cs.push()
+
+
+def load_h5_spec_dict(obj_keys, file):
+
+    out_dict = [{}, defaultdict(list), {}]
+    for obj_key in obj_keys:
+        cs_props[0][obj_key] = file['0'][obj_key][:]
+        cs_props[1][obj_key] = file['1'][obj_key][:]
+        cs_props[2][obj_key] = file['2'][obj_key][()]
+
+    return out_dict
 
 
 def convert_nvox2ratio_syntype(syn_cnts, sym_cnts, asym_cnts):
