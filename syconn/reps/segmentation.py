@@ -830,7 +830,7 @@ class SegmentationObject(object):
     def total_edge_length(self):
         if self.skeleton is None:
             self.load_skeleton()
-        #  TODO: change interface to match SSV, i.e. to dictionary
+        #  TODO: change interface to match SSV interface, i.e. change to dictionary
         nodes = self.skeleton[0].reshape(-1, 3).astype(np.float32)
         edges = self.skeleton[2].reshape(-1, 2)
         return np.sum([np.linalg.norm(

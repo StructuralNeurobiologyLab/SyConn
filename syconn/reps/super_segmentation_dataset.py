@@ -327,11 +327,9 @@ class SuperSegmentationDataset(object):
         self.save_id_changer()
 
     def save_dataset_deep(self, extract_only=False, attr_keys=(), n_jobs=None,
-                          qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                          n_max_co_processes=None, new_mapping=True):
+                          nb_cpus=None, n_max_co_processes=None, new_mapping=True):
         save_dataset_deep(self, extract_only=extract_only,
                           attr_keys=attr_keys, n_jobs=n_jobs,
-                          qsub_pe=qsub_pe, qsub_queue=qsub_queue,
                           nb_cpus=nb_cpus, new_mapping=new_mapping,
                           n_max_co_processes=n_max_co_processes)
 
@@ -508,9 +506,7 @@ class SuperSegmentationDataset(object):
 
 
 def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=None,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                      n_max_co_processes=None, new_mapping=True):
-    # TODO: remove `qsub_pe`and `qsub_queue`
+                      nb_cpus=None, n_max_co_processes=None, new_mapping=True):
     """
     Saves attributes of all SSVs within the given SSD and computes properties
     like size and representative coordinate. `ids.npy` order may change after
@@ -719,13 +715,11 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
                            nb_cpus=None):
     ssd.save_dataset_shallow()
     sv_kd = kd_factory(sv_kd_path)
-
     if not os.path.exists(ssv_kd_path):
         ssv_kd = knossosdataset.KnossosDataset()
-        ssv_kd.initialize_without_conf(ssv_kd_path, sv_kd.boundary,
-                                       sv_kd.scale,
-                                       sv_kd.experiment_name,
-                                       mags=[1])
+        scale = np.array(global_params.config.entries["Dataset"]["scaling"], dtype=np.float32)
+        ssv_kd.initialize_without_conf(ssv_kd_path, sv_kd.boundary, scale,
+                                       sv_kd.experiment_name, mags=[1])
 
     size = np.ones(3, dtype=np.int) * stride
     multi_params = []

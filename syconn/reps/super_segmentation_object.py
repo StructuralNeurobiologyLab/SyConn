@@ -52,7 +52,7 @@ class SuperSegmentationObject(object):
                  view_caching=False, config=None, nb_cpus=1,
                  enable_locking=True, enable_locking_so=False, ssd_type="ssv"):
         """
-        Class to represent an agglomeration of supervoxels (SegmentationObjects).
+        Class to represent agglomerated supervoxels (see `SegmentationObjects`).
 
         Parameters
         ----------
@@ -401,6 +401,8 @@ class SuperSegmentationObject(object):
 
     @property
     def cell_type(self):
+        log_reps.warning('DEPRECATED USE OF `cell_type` attribute in SSV'
+                         ' {}'.format(self.id))
         if self.cell_type_ratios is not None:
             return np.argmax(self.cell_type_ratios)
         else:
@@ -408,6 +410,8 @@ class SuperSegmentationObject(object):
 
     @property
     def cell_type_ratios(self):
+        log_reps.warning('DEPRECATED USE OF `cell_type_ratios` attribute in SSV'
+                         ' {}'.format(self.id))
         return self.lookup_in_attribute_dict("cell_type_ratios")
 
     def weighted_graph(self, add_node_attr=()):
@@ -1354,9 +1358,9 @@ class SuperSegmentationObject(object):
                 resume_job=resume_job, additional_flags="--gres=gpu:1")
         else:
             # render raw data
-            rot_mat = render_sampled_sso(self, add_cellobjects=add_cellobjects,
-                               verbose=verbose, overwrite=overwrite, return_rot_mat=True,
-                               cellobjects_only=cellobjects_only, woglia=woglia)
+            rot_mat = render_sampled_sso(
+                self, add_cellobjects=add_cellobjects, verbose=verbose, overwrite=overwrite,
+                return_rot_mat=True, cellobjects_only=cellobjects_only, woglia=woglia)
             if skip_indexviews:
                 return
             # render index views

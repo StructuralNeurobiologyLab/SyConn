@@ -163,7 +163,7 @@ def init_object(indices, vertices, normals, colors, ws):
 
 def draw_object(triangulation=True):
     """
-    Draw mesh.
+    Draw elements in current buffer.
     """
     glVertexPointer(3, GL_FLOAT, record_len, vertex_offset)
     glNormalPointer(GL_FLOAT, record_len, normal_offset)
@@ -429,10 +429,10 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
 
     Parameters
     ----------
-    colors: dict
-    save_skeleton : tuple of str
+    sso : SuperSegmentationObject
+    colors : dict
+    obj_to_render : tuple of str
         cell objects to render (e.g. 'mi', 'sj', 'vc', ..)
-    alpha :
     ws : tuple
         window size of output images (width, height)
     physical_scale :
@@ -446,6 +446,7 @@ def multi_view_sso(sso, colors=None, obj_to_render=('sv',),
         values)
     rot_mat : np.array
         4 x 4 rotation matrix
+    triangulation : bool
 
     Returns
     -------
@@ -524,6 +525,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                            nb_views=None, triangulation=True):
     """
     Same as multi_view_mesh_coords but without creating gl context.
+
     Parameters
     ----------
     mesh : MeshObject
@@ -544,6 +546,12 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     clahe : bool
         apply clahe to screenshot
     wire_frame : bool
+    smooth_shade : bool
+    verbose : bool
+    egl_args : Tuple
+        Optional arguments if EGL platform is used
+    nb_views : int
+    triangulation : bool
 
     Returns
     -------
@@ -637,10 +645,9 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
                     continue  # check at most one occurrence
     if n_empty_views / len(res) > 0.1:  # more than 10% locations contain at least one empty view
         log_proc.critical(
-            "WARNING: Found {} locations with empty views.\t#view in list: %d/%d\n"
-              "'%s'-mesh with %d vertices. Example location: %s" %
-              (n_empty_views, len(coords),
-               views_key, len(mesh.vertices), repr(c)))
+            "WARNING: Found {}/{} locations with empty views.\t'{}'-mesh with "
+            "{} vertices. Example location: {}".format(n_empty_views, len(coords), views_key,
+                                                       len(mesh.vertices), repr(c)))
     if verbose:
         pbar.close()
     return res
@@ -788,7 +795,6 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True, return_ro
     sso : SuperSegmentationObject
     ws : tuple
     verbose : bool
-    clahe : bool
     add_cellobjects : bool
     cellobjects_only : bool
     woglia : bool
@@ -798,6 +804,8 @@ def render_sampled_sso(sso, ws=(256, 128), verbose=False, woglia=True, return_ro
     return_views : bool
     cellobjects_only : bool
     view_key : str
+    return_rot_mat : bool
+    rot_mat : np.ndarray
 
     """
     # get coordinates for N SV's in SSO
@@ -860,6 +868,7 @@ def write_sv_views_chunked(svs, views, part_views, view_kwargs):
     views : np.ndarray
     part_views : np.ndarray[int]
         Cumulated number of views -> indices of start and end of SV views in `views` array
+    view_kwargs : dict
     """
     view_dc = {}
     for sv_ix, sv in enumerate(svs):
@@ -999,7 +1008,6 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
         window size in nm. the clipping box during rendering will have an extent
          of [comp_window, comp_window / 2, comp_window]
     return_rot_matrices : bool
-    add_cellobjects : bool
     verbose : bool
     ws : Optional[Tuple[int]]
         Window size in pixels (y, x). Default: (256, 128)
@@ -1008,7 +1016,6 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     comp_window : Optional[float]
         window size in nm. the clipping box during rendering will have an extent
          of [comp_window, comp_window / 2, comp_window]. Default: 8 um
-    return_rot_mat : bool
 
     Returns
     -------
@@ -1197,11 +1204,17 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
         if not given, rendering locations are retrieved from the SSV's SVs. Results will be stored at SV locations.
     n_jobs : int
         number of parallel jobs running on same node of cluster
+    n_cores : int
+        Cores per job
     verbose : bool
         flag to show th progress of rendering.
     return_views : bool
         if False and rendering_locations is None, views will be saved at
         SSV SVs
+    render_kwargs : dict
+    view_key : str
+    render_indexviews : bool
+    disable_batchjob : bool
 
     Returns
     -------

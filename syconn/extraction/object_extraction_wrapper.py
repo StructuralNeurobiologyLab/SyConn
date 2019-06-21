@@ -102,7 +102,8 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
         log.debug('Found existing KD at {}. Removing it now.'.format(path))
         shutil.rmtree(path)
     target_kd = knossosdataset.KnossosDataset()
-    target_kd.initialize_without_conf(path, kd.boundary, kd.scale, kd.experiment_name, mags=[1, ])
+    scale = np.array(global_params.config.entries["Dataset"]["scaling"], dtype=np.float32)
+    target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ])
     target_kd = knossosdataset.KnossosDataset()
     target_kd.initialize_from_knossos_path(path)
     from_probabilities_to_kd(cd, co, # membrane_kd_path=global_params.config.kd_barrier_path,  # TODO: currently does not exist

@@ -12,6 +12,7 @@ from knossos_utils import chunky
 from syconn.extraction import cs_extraction_steps as ces
 from syconn import global_params
 from syconn.reps.segmentation import SegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.proc.sd_proc import dataset_analysis
 from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
@@ -20,6 +21,9 @@ from syconn.handler.basics import kd_factory
 
 
 def run_matrix_export():
+    # cache cell attributes
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+    ssd.save_dataset_deep()
     log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
                              overwrite=True)
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,

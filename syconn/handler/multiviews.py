@@ -201,6 +201,16 @@ def int2str_converter(label, gt_type):
 
 
 def img_rand_coloring(img):
+    """
+
+    Parameters
+    ----------
+    img :
+
+    Returns
+    -------
+
+    """
     if img.ndim == 3 and img.shape[2] > 1:
         raise ValueError("Input image must not contain rgb values")
     colored_img = np.zeros(list(img.shape) + [3], dtype=np.uint8)

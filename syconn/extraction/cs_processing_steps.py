@@ -38,6 +38,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
     (-1 for asym., 1 for sym. synapses).
+
     Parameters
     ----------
     wd : str
@@ -130,6 +131,9 @@ def _collect_properties_from_ssv_partners_thread(args):
 
         # TODO: think about refactoring or combining both axoness predictions
         curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness')
+        # TODO: maybe switch to per-compartment majority vote for axon classification,
+        #  use ssv.skeleton to query `'{}_comp_maj'.format(global_params.view_properties_semsegax[
+        #  'semseg_key'])`
         curr_ax = ssv_o.semseg_for_coords(
             ssv_syncoords, global_params.view_properties_semsegax['semseg_key'],
             **global_params.map_properties_semsegax)

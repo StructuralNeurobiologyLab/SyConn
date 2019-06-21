@@ -18,10 +18,10 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     # path to working directory of example cube - required to load pretrained models
-    path_to_workingdir = args.working_dir
+    path_to_workingdir = os.path.expanduser(args.working_dir)
 
     # path to cell reconstruction k.zip
-    cell_kzip_fn = args.kzip
+    cell_kzip_fn = os.path.expanduser(args.kzip)
 
     # set working directory to obtain models
     global_params.wd = path_to_workingdir
