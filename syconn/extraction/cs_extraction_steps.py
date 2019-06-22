@@ -165,13 +165,12 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     f.close()
 
     # convert counting dicts to store ratio of syn. type voxels
-    p_h5py = "{}/cs_sym_cnt.pkl".format(global_params.config.temp_path)
+    p_h5py = "{}/cs_sym_cnt.h5".format(global_params.config.temp_path)
     dict_paths.append(p_h5py)
-    print("tot_sym_cnt= ", tot_sym_cnt)
     compression.save_to_h5py(tot_sym_cnt, p_h5py, compression=False)
     del tot_sym_cnt
 
-    p_h5py = "{}/cs_asym_cnt.pkl".format(global_params.config.temp_path)
+    p_h5py = "{}/cs_asym_cnt.h5".format(global_params.config.temp_path)
     dict_paths.append(p_h5py)
     compression.save_to_h5py(tot_asym_cnt, p_h5py, compression=False)
     del tot_asym_cnt
@@ -310,16 +309,18 @@ def _write_props_to_syn_thread(args):
     p_h5py = "{}/cs_prop_dict.h5".format(global_params.config.temp_path)
     f_cs_props = h5py.File(p_h5py, 'r')
 
-    p_h5py = "{}/syn_prop_dict.pkl".format(global_params.config.temp_path)
+    p_h5py = "{}/syn_prop_dict.h5".format(global_params.config.temp_path)
     f_syn_props = h5py.File(p_h5py, 'r')
 
-    p_cs_sym_cnt_h5py = "{}/cs_sym_cnt.pkl".format(global_params.config.temp_path)
+    p_h5py = "{}/cs_sym_cnt.h5".format(global_params.config.temp_path)
+    p_cs_sym_cnt_h5py = h5py.File(p_h5py, 'r')
 
-    p_cs_asym_cnt_h5py = "{}/cs_asym_cnt.pkl".format(global_params.config.temp_path)
+    p_h5py = "{}/cs_asym_cnt.h5".format(global_params.config.temp_path)
+    p_cs_asym_cnt_h5py = h5py.File(p_h5py, 'r')
 
     # store destinations for each existing obj
     dest_dc = defaultdict(list)
-    for cs_id in f_cs_prop['0'].keys():
+    for cs_id in f_cs_props['0'].keys():
         dest_dc[rep_helper.subfold_from_ix(int(cs_id), n_folders_fs)].append(cs_id)
 
     # get SegmentationDataset of current subcell.
@@ -424,9 +425,10 @@ def load_h5_spec_dict(obj_keys, file):
 
     out_dict = [{}, defaultdict(list), {}]
     for obj_key in obj_keys:
-        cs_props[0][obj_key] = file['0'][obj_key][:]
-        cs_props[1][obj_key] = file['1'][obj_key][:]
-        cs_props[2][obj_key] = file['2'][obj_key][()]
+        print("file['1']= ", file['1'][:])
+        out_dict[0][obj_key] = file['0'][obj_key][:]
+        out_dict[1][obj_key] = file['1'][obj_key][:]
+        out_dict[2][obj_key] = file['2'][obj_key][()]
 
     return out_dict
 

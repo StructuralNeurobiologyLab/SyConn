@@ -261,11 +261,11 @@ def save_to_h5py(data, path, hdf5_names=None, overwrite=False, compression=True)
         os.remove(path)
     f = h5py.File(path, "w")
     if type(data) is dict:
-        for key in data.keys():
+        for key, key_str in zip(data.keys(), map(str, data.keys())):
             if compression:
-                f.create_dataset(key, data=data[key], compression="gzip")
+                f.create_dataset(key_str, data=data[key], compression="gzip")
             else:
-                f.create_dataset(key, data=data[key])
+                f.create_dataset(key_str, data=data[key])
     else:
         if len(hdf5_names) != len(data):
             f.close()
