@@ -251,7 +251,7 @@ class SuperSegmentationDataset(object):
 
     def load_cached_data(self, name):
         if os.path.exists(self.path + name + "s.npy"):
-            return np.load(self.path + name + "s.npy")
+            return np.load(self.path + name + "s.npy", allow_pickle=True)
 
     def sv_id_to_ssv_id(self, sv_id):
         return self.id_changer[sv_id]

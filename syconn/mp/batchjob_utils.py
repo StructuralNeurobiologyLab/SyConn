@@ -67,7 +67,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 sge_additional_flags=None, iteration=1, max_iterations=3,
                 params_orig_id=None, python_path=None, disable_mem_flag=False,
                 disable_batchjob=False, send_notification=False, use_dill=False,
-                remove_jobfolder=False, log=None, show_progress=True):
+                remove_jobfolder=False, log=None, show_progress=True,
+                allow_resubm_all_fail=False):
     # TODO: Switch to JobArrays!
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
@@ -129,6 +130,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     use_dill : bool
     show_progress : bool
         Currently only applies for `batchjob_fallback`
+    allow_resubm_all_fail : bool
+        Will resubmit failed jobs even if all failed. Useful for e.g. unexpected memory
+        requirements.
 
     Returns
     -------
@@ -362,7 +366,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
     out_files = glob.glob(path_to_out + "*.pkl")
     # only stop if first iteration and script was not resumed (params_orig_id is None)
-    if len(out_files) == 0 and iteration == 1 and params_orig_id is None:
+    if len(out_files) == 0 and iteration == 1 and params_orig_id is None and not allow_resubm_all_fail:
         msg = 'All submitted jobs have failed. Re-submission will not be initiated.' \
               ' Please check your submitted code.'
         log_batchjob.error(msg)
@@ -389,7 +393,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
         # set number cores per job higher which will at the same time increase
         # the available amount of memory per job, ONLY VALID IF '--mem' was not specified explicitly!
-        n_cores += 2  # increase number of cores per job by at least 1
+        n_cores += 2  # increase number of cores per job by at least 2
         # TODO: activate again
         # n_cores = np.max([np.min([global_params.NCORES_PER_NODE, float(n_max_co_processes) //
         #                           len(missed_params)]), n_cores])
@@ -616,7 +620,8 @@ def fallback_exec(cmd_exec):
     if log_mp.level == 10:
         reported = False
         if 'error' in out.decode().lower() or \
-                'error' in err.decode().lower():
+                'error' in err.decode().lower() or 'killed' in\
+                out.decode().lower() or 'killed' in err.decode.lower():
             log_mp.error(out.decode())
             log_mp.error(err.decode())
             reported = True

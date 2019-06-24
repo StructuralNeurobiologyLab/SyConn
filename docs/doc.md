@@ -140,7 +140,7 @@ organized in [SegmentationDatasets](segmentation_datasets.md).
 
 * [Mesh](meshes.md) generation and representation of SOs
 
-* Multi-view representation of SSOs (see docs for [glia](glia_removal.md) and [neuron](neuron_analysis.md) analysis; [preprint](https://www.biorxiv.org/content/early/2018/07/06/364034) on biorXiv)
+* Multi-view representation of SSOs (see docs for [glia](glia_removal.md) and [neuron](neuron_analysis.md) analysis and [article](https://www.nature.com/articles/s41467-019-10836-3) in Nature Communications)
 
 
 ## Flowchart of SyConn

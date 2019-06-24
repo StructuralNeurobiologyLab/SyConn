@@ -1354,7 +1354,7 @@ class SuperSegmentationObject(object):
             qu.QSUB_script(
                 params, "render_views_partial", suffix="_SSV{}".format(self.id),
                 n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
-                n_max_co_processes=qsub_co_jobs, remove_jobfolder=True,
+                n_max_co_processes=qsub_co_jobs, remove_jobfolder=True, allow_resubm_all_fail=True,
                 resume_job=resume_job, additional_flags="--gres=gpu:1")
         else:
             # render raw data

@@ -588,8 +588,9 @@ def run_glia_prediction(e3=False):
         else:
             missing_contained_in_rag.append(el)
     if len(missing_contained_in_rag) != 0:
-        msg = "Not all SVs were predicted! Missing:\n" \
-              "{}".format(missing_contained_in_rag)
+        msg = "Not all SVs were predicted! {}/{} missing:\n" \
+              "{}".format(len(missing_contained_in_rag), len(all_sv_ids_in_rag),
+                          missing_contained_in_rag[:100])
         log.error(msg)
         raise ValueError(msg)
     else:
@@ -633,15 +634,14 @@ def run_glia_splitting():
              "".format(global_params.config.working_dir + "/glia/"))
 
 
-def _run_huge_ssv_render_worker(q):
+def _run_huge_ssv_render_worker(q, q_out):
     while True:
-        if q.empty():
+        inp = q.get()
+        if inp == -1:
             break
-        kk, g, version = q.get()
+        kk, g, version = inp
         # Create SSV object
         sv_ixs = np.sort(list(g.nodes()))
-        # log.info("Processing SSV [{}] with {} SVs on whole cluster.".format(
-        #     kk + 1, len(sv_ixs)))
         sso = SuperSegmentationObject(sv_ixs[0], working_dir=global_params.config.working_dir,
                                       version=version, create=False, sv_ids=sv_ixs)
         # nodes of sso._rag need to be SV
@@ -653,6 +653,7 @@ def _run_huge_ssv_render_worker(q):
         sso.render_views(add_cellobjects=False, cellobjects_only=False,
                          skip_indexviews=True, woglia=False, overwrite=True,
                          qsub_co_jobs=global_params.NGPU_TOTAL)
+        q_out.put(0)
 
 
 def run_glia_rendering(max_n_jobs=None):
@@ -693,7 +694,8 @@ def run_glia_rendering(max_n_jobs=None):
     bbs = sds.load_cached_data('bounding_box') * sds.scaling
     for ii in range(len(sds.ids)):
         sv_size_dict[sds.ids[ii]] = bbs[ii]
-    ccsize_dict = create_ccsize_dict(cc_gs, sv_size_dict, is_connected_components=True)
+    ccsize_dict = create_ccsize_dict(cc_gs, sv_size_dict,
+                                     is_connected_components=True)
 
     multi_params = cc_gs
     big_ssv = []
@@ -713,14 +715,21 @@ def run_glia_rendering(max_n_jobs=None):
         log.info("Processing {} huge SSVs in {} threads on the entire cluster"
                  ".".format(len(big_ssv), n_threads))
         q_in = Queue()
+        q_out = Queue()
         for kk, g in enumerate(big_ssv):
             q_in.put((kk, g, version))
-        ps = [Process(target=_run_huge_ssv_render_worker, args=(q_in, )) for _ in range(n_threads)]
+        for _ in range(n_threads):
+            q_in.put(-1)
+        ps = [Process(target=_run_huge_ssv_render_worker, args=(q_in, q_out)) for _ in range(n_threads)]
         for p in ps:
             p.start()
             time.sleep(0.5)
+        q_in.close()
+        q_in.join_thread()
         for p in ps:
             p.join()
+        if q_out.qsize() != len(big_ssv):
+            raise ValueError('Not all `_run_huge_ssv_render_worker` jobs completed successfully.')
     # render small SSV without overhead and single cpus on whole cluster
     multi_params = small_ssv
     np.random.shuffle(multi_params)
@@ -744,8 +753,9 @@ def run_glia_rendering(max_n_jobs=None):
         else:
             missing_contained_in_rag.append(el)
     if len(missing_contained_in_rag) != 0:
-        msg = "Not all SVs were rendered completely! Missing:\n" \
-              "{}".format(missing_contained_in_rag)
+        msg = "Not all SVs were rendered completely! {}/{} missing:\n" \
+              "{}".format(len(missing_contained_in_rag), len(all_sv_ids_in_rag),
+                          missing_contained_in_rag[:100])
         log.error(msg)
         raise ValueError(msg)
     else:
