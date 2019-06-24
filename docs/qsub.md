@@ -10,7 +10,7 @@ which can be found in the `QSUB_scripts` folder inside `syconn`.
 (identify the folder of `QSUB_export_skeletons_new`: FOLDER_OF_QSUB_SCRIPT):
 ```
 import os
-from syconn.mp import qsub_utils as qu
+from syconn.mp import batchjob_utils as qu
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.handler.basics import chunkify
 from syconn.config import global_params

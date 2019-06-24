@@ -21,10 +21,11 @@ from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
 from knossos_utils import KnossosDataset
 import re
 import signal
+import networkx as nx
 import contextlib
 import tqdm
 import warnings
-
+from plyfile import PlyData, PlyElement
 from . import log_handler
 from .. import global_params
 
@@ -33,7 +34,7 @@ __all__ = ['load_from_h5py', 'save_to_h5py', 'crop_bool_array',
            'write_data2kzip', 'remove_from_zip', 'chunkify', 'flatten_list',
            'get_skelID_from_path', 'write_txt2kzip', 'switch_array_entries',
            'parse_cc_dict_from_kzip', 'parse_cc_dict_from_kml', 'data2kzip',
-           'safe_copy', 'temp_seed', 'kd_factory']
+           'safe_copy', 'temp_seed', 'kd_factory', 'parse_cc_dict_from_g']
 
 
 def kd_factory(kd_path, channel='jpg'):
@@ -315,6 +316,31 @@ def read_txt_from_zip(zip_fname, fname_in_zip):
     return txt
 
 
+def read_mesh_from_zip(zip_fname, fname_in_zip):
+    """
+    Read ply file from zip. Currently does not support normals!
+
+    Parameters
+    ----------
+    zip_fname : str
+    fname_in_zip : str
+
+    Returns
+    -------
+    np.array, np.array, np.array
+    """
+    with zipfile.ZipFile(zip_fname, allowZip64=True) as z:
+        txt = z.open(fname_in_zip)
+        plydata = PlyData.read(txt)
+        vert = plydata['vertex'].data
+        vert = vert.view((np.float32, len(vert.dtype.names))).flatten()
+        ind = np.array(plydata['face'].data['vertex_indices'].tolist()).flatten()
+        # TODO: support normals
+        # norm = plydata['normals'].data
+        # norm = vert.view((np.float32, len(vert.dtype.names))).flatten()
+    return [ind, vert, None]
+
+
 def write_txt2kzip(kzip_path, text, fname_in_zip, force_overwrite=False):
     """
     Write string to file in k.zip.
@@ -387,7 +413,7 @@ def write_data2kzip(kzip_path, fpath, fname_in_zip=None, force_overwrite=False):
 def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
               verbose=False):
     """
-    Write files to k.zip.
+    Write files to k.zip. Finally removes files at `fpaths`.
 
     Parameters
     ----------
@@ -514,7 +540,6 @@ def load_pkl2obj(path):
 
     Returns
     -------
-    SegmentationDatasetObject
     """
     try:
         with open(path, 'rb') as inp:
@@ -559,6 +584,10 @@ def chunkify_successive(l, n):
     """Yield successive n-sized chunks from l."""
     for i in range(0, len(l), n):
         yield l[i:i + n]
+
+
+def chunkify_successive_split(l, n):
+    return[np.array_split(l, n)]
 
 
 def flatten_list(lst):
@@ -711,6 +740,14 @@ def parse_cc_dict_from_kml(kml_path):
     """
     txt = open(kml_path, "rb").read().decode()
     return prase_cc_dict_from_txt(txt)
+
+
+def parse_cc_dict_from_g(g):
+    cc_dict = {}
+    # use minimum ID in CC as SSV ID
+    for cc in sorted(nx.connected_components(g), key=len, reverse=True):
+        cc_dict[cc[0]] = cc
+    return cc_dict
 
 
 def parse_cc_dict_from_kzip(k_path):

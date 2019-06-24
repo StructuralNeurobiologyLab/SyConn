@@ -13,16 +13,18 @@ from sklearn import ensemble, externals
 from sklearn.model_selection import cross_val_score
 from knossos_utils.chunky import load_dataset
 from knossos_utils import knossosdataset, skeleton_utils, skeleton
+
 knossosdataset._set_noprint(True)
 import time
 import datetime
 import shutil
+import pickle as pkl
 
 from ..handler.basics import kd_factory
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
 from ..reps import super_segmentation, segmentation, connectivity_helper as ch
-from ..reps.rep_helper import subfold_from_ix, ix_from_subfold
+from ..reps.rep_helper import subfold_from_ix, ix_from_subfold, get_unique_subfold_ixs
 from ..backend.storage import AttributeDict, VoxelStorage, CompressedStorage
 from ..handler.basics import chunkify
 from . import log_extraction
@@ -31,11 +33,12 @@ from .. import global_params
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                          qsub_pe=None, qsub_queue=None,
-                                         n_max_co_processes=None):
+                                         n_max_co_processes=None, debug=False):
     """
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
     (-1 for asym., 1 for sym. synapses).
+
     Parameters
     ----------
     wd : str
@@ -45,6 +48,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     qsub_queue : str
     n_max_co_processes : int
         Number of parallel jobs
+    debug : bool
     """
 
     ssd = super_segmentation.SuperSegmentationDataset(working_dir=wd,
@@ -52,43 +56,39 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
 
     multi_params = []
 
-    for ids_small_chunk in chunkify(ssd.ssv_ids, 2000):
+    for ids_small_chunk in chunkify(ssd.ssv_ids, global_params.NCORE_TOTAL):
         multi_params.append([wd, obj_version, ssd_version, ids_small_chunk])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
             _collect_properties_from_ssv_partners_thread, multi_params,
-            nb_cpus=n_max_co_processes)
-    elif qu.batchjob_enabled():
-        _ = qu.QSUB_script(
-            multi_params, "collect_properties_from_ssv_partners", pe=qsub_pe,
-            queue=qsub_queue, script_folder=None,
-            n_max_co_processes=n_max_co_processes)
+            nb_cpus=n_max_co_processes, debug=debug)
     else:
-        raise Exception("QSUB not available")
+        _ = qu.QSUB_script(
+            multi_params, "collect_properties_from_ssv_partners",
+            n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
     # iterate over paths with syn
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version=obj_version)
 
     multi_params = []
-    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, 2000):
+    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, global_params.NCORE_TOTAL):
         multi_params.append([so_dir_paths, wd, obj_version,
                              ssd_version])
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(
             _from_cell_to_syn_dict, multi_params,
-            nb_cpus=n_max_co_processes)
-    elif qu.batchjob_enabled():
-        _ = qu.QSUB_script(
-            multi_params, "from_cell_to_syn_dict", pe=qsub_pe,
-            queue=qsub_queue, script_folder=None,
-            n_max_co_processes=n_max_co_processes)
+            nb_cpus=n_max_co_processes, debug=debug)
     else:
-        raise Exception("QSUB not available")
-
+        _ = qu.QSUB_script(multi_params, "from_cell_to_syn_dict",
+                           n_max_co_processes=n_max_co_processes,
+                           remove_jobfolder=True)
+    log_extraction.debug('Deleting cache dictionaries now.')
     # delete cache_dc
-    _delete_all_cache_dc(ssd)
+    sm.start_multiprocess_imap(_delete_all_cache_dc, ssd.ssv_ids,
+                               nb_cpus=global_params.NCORES_PER_NODE)
+    log_extraction.debug('Deleted all cache dictionaries.')
 
 
 def _collect_properties_from_ssv_partners_thread(args):
@@ -129,14 +129,20 @@ def _collect_properties_from_ssv_partners_thread(args):
         curr_ax, latent_morph = ssv_o.attr_for_coords(
             ssv_syncoords, attr_keys=['axoness_avg10000', 'latent_morph'])
 
+        # TODO: think about refactoring or combining both axoness predictions
         curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness')
+        # TODO: maybe switch to per-compartment majority vote for axon classification,
+        #  use ssv.skeleton to query `'{}_comp_maj'.format(global_params.view_properties_semsegax[
+        #  'semseg_key'])`
+        curr_ax = ssv_o.semseg_for_coords(
+            ssv_syncoords, global_params.view_properties_semsegax['semseg_key'],
+            **global_params.map_properties_semsegax)
 
         cache_dc['partner_axoness'] = np.array(curr_ax)
         cache_dc['synssv_ids'] = np.array(ssv_synids)
         cache_dc['partner_spiness'] = np.array(curr_sp)
         cache_dc['partner_celltypes'] = np.array(celltypes)
         cache_dc['latent_morph'] = np.array(latent_morph)
-
         cache_dc.push()
 
 
@@ -193,11 +199,12 @@ def _from_cell_to_syn_dict(args):
         this_attr_dc.push()
 
 
-def _delete_all_cache_dc(ssd):
-    for ssv_o in ssd.ssvs:  # Iterate over cells
-        ssv_o.load_attr_dict()
-        if os.path.exists(ssv_o.ssv_dir + "/cache_syn.pkl"):
-            os.remove(ssv_o.ssv_dir + "/cache_syn.pkl")
+def _delete_all_cache_dc(ssv_id):
+    ssv_o = super_segmentation.SuperSegmentationObject(
+        ssv_id, working_dir=global_params.config.working_dir)
+    ssv_o.load_attr_dict()
+    if os.path.exists(ssv_o.ssv_dir + "/cache_syn.pkl"):
+        os.remove(ssv_o.ssv_dir + "/cache_syn.pkl")
 
 
 # code for splitting 'syn' objects, which are generated as overlap between CS and SJ, see below.
@@ -219,8 +226,9 @@ def filter_relevant_syn(sd_syn, ssd):
     """
     # get all cs IDs belonging to syn objects and then retrieve corresponding
     # SVs IDs via bit shift
-    sv_ids = ch.sv_id_to_partner_ids_vec([syn.lookup_in_attribute_dict('cs_id')
-                                          for syn in sd_syn.sos])
+
+    syn_cs_ids = sd_syn.load_cached_data('cs_id')
+    sv_ids = ch.sv_id_to_partner_ids_vec(syn_cs_ids)
 
     syn_ids = sd_syn.ids.copy()
     # this might mean that all syn between svs with IDs>max(np.uint32) are discarded
@@ -249,9 +257,8 @@ def filter_relevant_syn(sd_syn, ssd):
 
 
 def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
-                          stride=1000, qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                          resume_job=False, n_max_co_processes=None, n_folders_fs=10000):
-    # TODO: remove `qsub_pe`and `qsub_queue`
+                          nb_cpus=None, resume_job=False, n_max_co_processes=None,
+                          n_folders_fs=10000, log=None):
     """
     Creates 'syn_ssv' objects from 'syn' objects. Therefore, computes connected
     syn-objects on SSV level and aggregates the respective 'syn' attributes
@@ -285,14 +292,12 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
                                               version=syn_version)
 
     rel_synssv_to_syn_ids = filter_relevant_syn(syn_sd, ssd)
-
+    storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
     voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
-                                        for ix in range(n_folders_fs)])
+                                        for ix in storage_location_ids])
 
-    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
-    block_steps = np.linspace(0, len(voxel_rel_paths),
-                              int(np.ceil(float(len(rel_synssv_to_syn_ids)) /
-                                          stride)) + 1).astype(np.int)
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
+
     # target SD for SSV syn objects
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version="0", create=True,
@@ -305,21 +310,21 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
         os.makedirs(sd_syn_ssv.so_storage_path + p)
 
     rel_synssv_to_syn_ids_items = list(rel_synssv_to_syn_ids.items())
-    i_block = 0
-    multi_params = []
-    for block in [rel_synssv_to_syn_ids_items[i:i + stride]
-                  for i in range(0, len(rel_synssv_to_syn_ids_items), stride)]:
-        multi_params.append([wd, block, voxel_rel_paths[block_steps[i_block]: block_steps[i_block+1]],
-                             syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm])
-        i_block += 1
+    # TODO: reduce number of used paths - e.g. by
+    #  `red_fact = max(n_folders_fs // 1000, 1)` `voxel_rel_paths[ii:ii + red_fact]` and
+    #  `n_used_paths =  np.min([len(rel_synssv_to_syn_ids_items), len(voxel_rel_paths) // red_fact])`
+    n_used_paths = np.min([len(rel_synssv_to_syn_ids_items), len(voxel_rel_paths)])
+    rel_synssv_to_syn_ids_items_chunked = chunkify(rel_synssv_to_syn_ids_items, n_used_paths)
+    multi_params = [(wd, rel_synssv_to_syn_ids_items_chunked[ii], voxel_rel_paths[ii:ii + 1],  # only get one element
+                    syn_sd.version, sd_syn_ssv.version, ssd.scaling, cs_gap_nm) for ii in range(n_used_paths)]
     if not qu.batchjob_enabled():
         _ = sm.start_multiprocess_imap(_combine_and_split_syn_thread,
-                                       multi_params, nb_cpus=nb_cpus)
+                                       multi_params, nb_cpus=nb_cpus, debug=False)
 
     else:
-        _ = qu.QSUB_script(multi_params, "combine_and_split_syn", pe=qsub_pe,
-                           resume_job=resume_job, script_folder=None,
-                           queue=qsub_queue, n_max_co_processes=n_max_co_processes)
+        _ = qu.QSUB_script(multi_params, "combine_and_split_syn",
+                           resume_job=resume_job, remove_jobfolder=True,
+                           n_max_co_processes=n_max_co_processes, log=log)
 
     return sd_syn_ssv
 
@@ -340,6 +345,10 @@ def _combine_and_split_syn_thread(args):
                                               version=syn_version)
 
     n_per_voxel_path = np.ceil(float(len(rel_cs_to_cs_agg_ids_items)) / len(voxel_rel_paths))
+    if n_per_voxel_path > sd_syn.n_folders_fs:
+        log_extraction.warning('Number of items per storage dict for "syn" objects'
+                               ' is bigger than `segmentation.SegmentationDataset'
+                               '("syn", working_dir=wd).n_folders_fs`.')
 
     n_items_for_path = 0
     cur_path_id = 0
@@ -347,14 +356,11 @@ def _combine_and_split_syn_thread(args):
     os.makedirs(base_dir, exist_ok=True)
     voxel_dc = VoxelStorage(base_dir + "/voxel.pkl", read_only=False)
     attr_dc = AttributeDict(base_dir + "/attr_dict.pkl", read_only=False)
-
-    # get ID for storing intermediate results
+    # get ID/path to storage to save intermediate results
     next_id = ix_from_subfold(voxel_rel_paths[cur_path_id], sd_syn.n_folders_fs)
     for item in rel_cs_to_cs_agg_ids_items:
         n_items_for_path += 1
-
         ssv_ids = ch.sv_id_to_partner_ids_vec([item[0]])[0]
-
         syn = sd_syn.get_segmentation_object(item[1][0])
         syn.load_attr_dict()
         syn_attr_list = [syn.attr_dict]  # used to collect syn properties
@@ -369,12 +375,17 @@ def _combine_and_split_syn_thread(args):
             synix_list += [syn_ix] * len(syn_object.voxel_list)
         syn_attr_list = np.array(syn_attr_list)
         synix_list = np.array(synix_list)
-
+        if len(voxel_list) == 0:
+            raise ValueError('Empty voxel list')
         ccs = cc_large_voxel_lists(voxel_list * scaling, cs_gap_nm)
         for this_cc in ccs:
             this_cc_mask = np.array(list(this_cc))
             # retrieve the index of the syn objects selected for this CC
-            this_syn_ixs = np.unique(synix_list[this_cc_mask])
+            this_syn_ixs, this_syn_ids_cnt = np.unique(synix_list[this_cc_mask],
+                                                       return_counts=True)
+            this_agg_syn_weights = this_syn_ids_cnt / np.sum(this_syn_ids_cnt)
+            if np.sum(this_syn_ids_cnt) < global_params.thresh_syn_size:
+                continue
             this_attr = syn_attr_list[this_syn_ixs]
             this_vx = voxel_list[this_cc_mask]
             abs_offset = np.min(this_vx, axis=0)
@@ -399,7 +410,7 @@ def _combine_and_split_syn_thread(args):
             syn_props_agg = {}
             for dc in this_attr:
                 for k in ['background_overlap_ratio', 'id_cs_ratio', 'id_sj_ratio', 'cs_id',
-                          'sj_id', 'sj_size_pseudo', 'cs_size']:
+                          'sj_id', 'sj_size_pseudo', 'cs_size', 'sym_prop', 'asym_prop']:
                     syn_props_agg.setdefault(k, []).append(dc[k])
             # store cs and sj IDs
             syn_props_agg['sj_ids'] = syn_props_agg['sj_id']
@@ -407,11 +418,15 @@ def _combine_and_split_syn_thread(args):
             syn_props_agg['cs_ids'] = syn_props_agg['cs_id']
             del syn_props_agg['cs_id']
             # calculate weighted mean of sj, cs and background ratios
-            syn_props_agg['sj_size_pseudo'] = np.array(syn_props_agg['sj_size_pseudo'])
-            syn_props_agg['cs_size'] = np.array(syn_props_agg['cs_size'])
-            syn_props_agg['id_sj_ratio'] = np.array(syn_props_agg['id_sj_ratio'])
-            syn_props_agg['id_cs_ratio'] = np.array(syn_props_agg['id_cs_ratio'])
-            syn_props_agg['background_overlap_ratio'] = np.array(syn_props_agg['background_overlap_ratio'])
+            syn_props_agg['sj_size_pseudo'] = this_agg_syn_weights * np.array(syn_props_agg[
+                                                                                'sj_size_pseudo'])
+            syn_props_agg['cs_size'] = this_agg_syn_weights * np.array(syn_props_agg['cs_size'])
+            syn_props_agg['id_sj_ratio'] = this_agg_syn_weights * np.array(syn_props_agg[
+                                                                              'id_sj_ratio'])
+            syn_props_agg['id_cs_ratio'] = this_agg_syn_weights * np.array(syn_props_agg[
+                                                                             'id_cs_ratio'])
+            syn_props_agg['background_overlap_ratio'] = this_agg_syn_weights * np.array(
+                syn_props_agg['background_overlap_ratio'])
             sj_size_pseudo_norm = np.sum(syn_props_agg['sj_size_pseudo'])
             cs_size_norm = np.sum(syn_props_agg['cs_size'])
             sj_s_w = syn_props_agg['id_sj_ratio'] * syn_props_agg['sj_size_pseudo']
@@ -420,13 +435,35 @@ def _combine_and_split_syn_thread(args):
             syn_props_agg['background_overlap_ratio'] = np.sum(back_s_w) / sj_size_pseudo_norm
             cs_s_w = syn_props_agg['id_cs_ratio'] * syn_props_agg['cs_size']
             syn_props_agg['id_cs_ratio'] = np.sum(cs_s_w) / cs_size_norm
+
+            # type weights as weighted sum of syn fragments
+            syn_props_agg['sym_prop'] = this_agg_syn_weights * np.array(syn_props_agg['sym_prop'])
+            sym_prop = np.sum(syn_props_agg['sym_prop'] * syn_props_agg['sj_size_pseudo']) / sj_size_pseudo_norm
+            syn_props_agg['asym_prop'] = this_agg_syn_weights * np.array(syn_props_agg['asym_prop'])
+            asym_prop = np.sum(syn_props_agg['asym_prop'] * syn_props_agg['sj_size_pseudo']) / \
+                        sj_size_pseudo_norm
+            syn_props_agg['sym_prop'] = sym_prop
+            syn_props_agg['asym_prop'] = asym_prop
+
             del syn_props_agg['cs_size']
             del syn_props_agg['sj_size_pseudo']
+
+            if sym_prop + asym_prop == 0:
+                sym_ratio = -1
+            else:
+                sym_ratio = sym_prop / float(asym_prop + sym_prop)
+            syn_props_agg["syn_type_sym_ratio"] = sym_ratio
+            syn_sign = -1 if sym_ratio > global_params.sym_thresh else 1
+            syn_props_agg["syn_sign"] = syn_sign
+
             # add syn_ssv dict to AttributeStorage
             this_attr_dc = dict(neuron_partners=ssv_ids)
             this_attr_dc.update(syn_props_agg)
             attr_dc[next_id] = this_attr_dc
-            next_id += sd_syn.n_folders_fs
+            if global_params.config.use_new_subfold:
+                next_id += 1
+            else:
+                next_id += sd_syn.n_folders_fs
 
         if n_items_for_path > n_per_voxel_path:
             # TODO: passing explicit dest_path might not be required here
@@ -491,7 +528,7 @@ def filter_relevant_cs_agg(cs_agg, ssd):
 
 # TODO: Use this in case contact objects are required
 def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
-                             cs_agg_version=None,
+                             cs_agg_version=None, n_folders_fs=10000,
                              stride=1000, qsub_pe=None, qsub_queue=None,
                              nb_cpus=None, n_max_co_processes=None):
 
@@ -500,16 +537,16 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
                                               version=cs_agg_version)
 
     rel_cs_to_cs_agg_ids = filter_relevant_cs_agg(cs_agg, ssd)
+    storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
+    voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, n_folders_fs)[:-2]
+                                        for ix in storage_location_ids])
 
-    voxel_rel_paths_2stage = np.unique([subfold_from_ix(ix, 100000)[:-2]
-                                        for ix in range(100000)])
-
-    voxel_rel_paths = [subfold_from_ix(ix, 100000) for ix in range(100000)]
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
     block_steps = np.linspace(0, len(voxel_rel_paths),
                               int(np.ceil(float(len(rel_cs_to_cs_agg_ids)) / stride)) + 1).astype(np.int)
 
     cs = segmentation.SegmentationDataset("cs_ssv", working_dir=wd, version="new",
-                                          create=True, n_folders_fs=100000)
+                                          create=True, n_folders_fs=n_folders_fs)
 
     for p in voxel_rel_paths_2stage:
         os.makedirs(cs.so_storage_path + p)
@@ -531,9 +568,8 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "combine_and_split_cs_agg",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+                                     n_max_co_processes=n_max_co_processes,
+                                     remove_jobfolder=True)
     else:
         raise Exception("QSUB not available")
 
@@ -688,10 +724,10 @@ def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
                              stride=20, qsub_pe=None, qsub_queue=None,
                              nb_cpus=None, n_max_co_processes=None):
     assert n_folders_fs % stride == 0
-
+    raise DeprecationWarning('Currently not adapted to new subfold system')
     wd = cs_sd.working_dir
-
-    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
+    storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
     conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd, version="new",
                                                create=True, n_folders_fs=n_folders_fs)
 
@@ -720,6 +756,7 @@ def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
 
 # TODO: SegmentationDataset version of below, probably not necessary anymore
 def _overlap_mapping_sj_to_cs_thread(args):
+    # TODO: REMOVE
     wd, block_start, block_end, conn_sd_version, sj_sd_version, cs_sd_version, \
         rep_coord_dist_nm = args
 
@@ -738,7 +775,7 @@ def _overlap_mapping_sj_to_cs_thread(args):
     sj_kdtree = spatial.cKDTree(sj_sd.rep_coords[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']] * sj_sd.scaling)
 
     for i_cs_start_id, cs_start_id in enumerate(cs_id_assignment[block_start: block_end]):
-
+        # TODO: change
         rel_path = subfold_from_ix(i_cs_start_id + block_start, conn_sd.n_folders_fs)
 
         voxel_dc = VoxelStorage(conn_sd.so_storage_path + rel_path + "/voxel.pkl",
@@ -848,8 +885,8 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
     wd = cs_sd.working_dir
 
     rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']]
-
-    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
+    storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd, version="0",
                                               create=True, n_folders_fs=n_folders_fs)
 
@@ -932,7 +969,7 @@ def syn_gen_via_cset_thread(args):
             cs_ids = cs_cset.from_chunky_to_matrix(size, offset, 'cs', ['cs'],
                                                    dtype=np.uint64)['cs']
             u_cs_ids, c_cs_ids = np.unique(cs_ids, return_counts=True)
-            n_vxs_in_sjbb = float(np.sum(c_cs_ids))  # equivalent to np.prod(size) which is the volume spanned by the SJ bounding box
+            n_vxs_in_sjbb = float(np.sum(c_cs_ids))  # equivalent to .size which is the  total volume
             zero_ratio = c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb
             for cs_id in u_cs_ids:
                 if cs_id == 0:
@@ -957,7 +994,7 @@ def syn_gen_via_cset_thread(args):
                 # for faster calculation  of aggregated syn properties during 'syn_ssv' generation ('combine_and_split_syn')
                 attr_dc[next_syn_id] = {'sj_id': sj_id, 'cs_id': cs_id,
                                         'id_sj_ratio': id_ratio,
-                                        'sj_size_pseudo': n_vxs_in_sjbb,  # TODO: still unclear why not use sj.size, PS. This would be more intuitive.
+                                        'sj_size_pseudo': n_vxs_in_sjbb,
                                         'id_cs_ratio': cs_ratio,
                                         'cs_size': cs.size,
                                         'background_overlap_ratio': zero_ratio}
@@ -965,6 +1002,106 @@ def syn_gen_via_cset_thread(args):
 
         voxel_dc.push(sd_syn.so_storage_path + rel_path + "/voxel.pkl")
         attr_dc.push(sd_syn.so_storage_path + rel_path + "/attr_dict.pkl")
+
+
+def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
+                         trafo_dict_path=None, stride=100,
+                         qsub_pe=None, qsub_queue=None, nb_cpus=None,
+                         n_max_co_processes=None):
+    # TODO: remove `qsub_pe`and `qsub_queue`
+    """TODO: will be refactored into single method when generating syn objects
+    Extract synapse type from KnossosDatasets. Stores sym.-asym. ratio in
+    SJ object attribute dict.
+
+    Parameters
+    ----------
+    sj_sd : SegmentationDataset
+    kd_asym_path : str
+    kd_sym_path : str
+    trafo_dict_path : dict
+    stride : int
+    qsub_pe : str
+    qsub_queue : str
+    nb_cpus : int
+    n_max_co_processes : int
+    """
+    assert "syn_ssv" in sj_sd.version_dict
+    paths = sj_sd.so_dir_paths
+
+    # Partitioning the work
+    multi_params = []
+    for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
+        multi_params.append([path_block, sj_sd.version, sj_sd.working_dir,
+                             kd_asym_path, kd_sym_path, trafo_dict_path])
+
+    # Running workers - Extracting mapping
+    if not qu.batchjob_enabled():
+        results = sm.start_multiprocess_imap(_extract_synapse_type_thread,
+                                        multi_params, nb_cpus=nb_cpus)
+
+    else:
+        path_to_out = qu.QSUB_script(multi_params, "extract_synapse_type",
+                                     n_cores=nb_cpus, n_max_co_processes=n_max_co_processes)
+
+
+def _extract_synapse_type_thread(args):
+    paths = args[0]
+    obj_version = args[1]
+    working_dir = args[2]
+    kd_asym_path = args[3]
+    kd_sym_path = args[4]
+    trafo_dict_path = args[5]
+
+    if trafo_dict_path is not None:
+        with open(trafo_dict_path, "rb") as f:
+            trafo_dict = pkl.load(f)
+    else:
+        trafo_dict = None
+
+    kd_asym = knossosdataset.KnossosDataset()
+    kd_asym.initialize_from_knossos_path(kd_asym_path)
+    kd_sym = knossosdataset.KnossosDataset()
+    kd_sym.initialize_from_knossos_path(kd_sym_path)
+
+    seg_dataset = segmentation.SegmentationDataset("syn_ssv",
+                                                   version=obj_version,
+                                                   working_dir=working_dir)
+    for p in paths:
+        this_attr_dc = AttributeDict(p + "/attr_dict.pkl",
+                                     read_only=False, disable_locking=True)
+        for so_id in this_attr_dc.keys():
+            so = seg_dataset.get_segmentation_object(so_id)
+            so.attr_dict = this_attr_dc[so_id]
+            so.load_voxel_list()
+
+            vxl = so.voxel_list
+
+            if trafo_dict is not None:
+                vxl -= trafo_dict[so_id]
+                vxl = vxl[:, [1, 0, 2]]
+            # TODO: remvoe try-except
+            if global_params.config.syntype_available:
+                try:
+                    asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl))
+                    sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl))
+                except:
+                    log_extraction.error("Failed to read raw cubes during synapse type "
+                                   "extraction.")
+                    sym_prop = 0
+                    asym_prop = 0
+            else:
+                sym_prop = 0
+                asym_prop = 0
+
+            if sym_prop + asym_prop == 0:
+                sym_ratio = -1
+            else:
+                sym_ratio = sym_prop / float(asym_prop + sym_prop)
+            so.attr_dict["syn_type_sym_ratio"] = sym_ratio
+            syn_sign = -1 if sym_ratio > global_params.sym_thresh else 1
+            so.attr_dict["syn_sign"] = syn_sign
+            this_attr_dc[so_id] = so.attr_dict
+        this_attr_dc.push()
 
 
 # TODO: KD version of above, probably not necessary anymore
@@ -977,7 +1114,8 @@ def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
 
     rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']]
 
-    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in range(n_folders_fs)]
+    storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
+    voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
     conn_sd = segmentation.SegmentationDataset("conn", working_dir=wd, version="new",
                                                create=True, n_folders_fs=n_folders_fs)
 
@@ -1211,9 +1349,10 @@ def synssv_o_features(synssv_o):
 
 def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
                           mi_version=None, vc_version=None, max_vx_dist_nm=None,
-                          max_rep_coord_dist_nm=None, qsub_pe=None,
+                          max_rep_coord_dist_nm=None, qsub_pe=None, log=None,
                           qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
     # TODO: remove `qsub_pe`and `qsub_queue`
+    # TODO: optimize
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
     is executed in 'classify_synssv_objects'.
@@ -1240,20 +1379,19 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
                                                   version=obj_version)
 
     # chunk params
-    multi_params = chunkify(sd_syn_ssv.so_dir_paths, 1500)
+    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.NCORE_TOTAL * 2)
     multi_params = [(so_dir_paths, wd, obj_version, mi_version, vc_version, ssd_version, max_vx_dist_nm,
                      max_rep_coord_dist_nm) for so_dir_paths in multi_params]
 
-    if qu.batchjob_enabled():
-        results = sm.start_multiprocess(_map_objects_to_synssv_thread,
+    if not qu.batchjob_enabled():
+        results = sm.start_multiprocess_imap(_map_objects_to_synssv_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
     else:
         path_to_out = qu.QSUB_script(multi_params,
-                                     "map_objects_to_synssv",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+                                     "map_objects_to_synssv", log=log,
+                                     n_max_co_processes=n_max_co_processes,
+                                     remove_jobfolder=True)
 
 
 def _map_objects_to_synssv_thread(args):
@@ -1306,6 +1444,8 @@ def _map_objects_to_synssv_thread(args):
 
 def objects_to_single_synssv(synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=2000,
                              max_rep_coord_dist_nm=4000):
+    # TODO: redesign feature and retrain RFC - total number of voxels does not make sense...
+
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
     is executed in 'classify_synssv_objects'.
@@ -1348,6 +1488,69 @@ def objects_to_single_synssv(synssv_o, ssv, mi_sd, vc_sd, max_vx_dist_nm=2000,
 
 
 def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
+                         max_rep_coord_dist_nm):
+    # TODO: redesign feature and retrain RFC - total number of voxels does not make sense...
+    """
+    Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
+    is executed in 'classify_synssv_objects'.
+    Helper function of `objects_to_single_synssv`.
+
+    Parameters
+    ----------
+    synssv_o : SegmentationObject
+        Contact site object of SSV
+    sd_obj : SegmentationObject
+        Dataset of cellular object to map
+    obj_ids : List[int]
+        IDs of cellular objects in question
+    max_vx_dist_nm : float
+    max_rep_coord_dist_nm : float
+
+    Returns
+    -------
+
+    """
+    obj_mask = np.in1d(sd_obj.ids, obj_ids)
+
+    if np.sum(obj_mask) == 0:
+        return 0, 0
+
+    obj_rep_coords = sd_obj.load_cached_data("rep_coord")[obj_mask] * \
+                     sd_obj.scaling
+
+    obj_kdtree = spatial.cKDTree(obj_rep_coords)
+
+    close_obj_ids = sd_obj.ids[obj_mask][obj_kdtree.query_ball_point(
+        synssv_o.rep_coord * synssv_o.scaling, r=max_rep_coord_dist_nm)]
+
+    synssv_vx_kdtree = spatial.cKDTree(synssv_o.voxel_list * synssv_o.scaling)
+
+    # log_extraction.debug(len(close_obj_ids))
+
+    n_obj_vxs = []
+    for close_obj_id in close_obj_ids:
+        obj = sd_obj.get_segmentation_object(close_obj_id)
+
+        # use mesh vertices instead of voxels
+        obj_vxs = obj.mesh[1].reshape(-1, 3)
+
+        ds, _ = synssv_vx_kdtree.query(obj_vxs,
+                                       distance_upper_bound=max_vx_dist_nm)
+        # surface fraction of subcellular object which is close to synapse
+        close_frac = np.sum(ds < np.inf) / len(obj_vxs)
+        # estimate number of voxels by close-by surface area fraction times total number of voxels
+        n_obj_vxs.append(close_frac * obj.size)
+
+    n_obj_vxs = np.array(n_obj_vxs)
+
+    # log_extraction.debug(n_obj_vxs)
+    n_objects = np.sum(n_obj_vxs > 0)
+    n_vxs = np.sum(n_obj_vxs)
+
+    return n_objects, n_vxs
+
+
+def map_objects_from_ssv_OLD(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
                          max_rep_coord_dist_nm):
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
@@ -1405,10 +1608,9 @@ def map_objects_from_ssv(synssv_o, sd_obj, obj_ids, max_vx_dist_nm,
     return n_objects, n_vxs
 
 
-def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
-                            qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
+def classify_synssv_objects(wd, obj_version=None,log=None, nb_cpus=None,
+                            n_max_co_processes=None):
     """
-    # TODO: remove `qsub_pe`and `qsub_queue`
     # TODO: Will be replaced by new synapse detection
     Classify SSV contact sites into synaptic or non-synaptic using an RFC model
     and store the result in the attribute dict of the syn_ssv objects.
@@ -1426,19 +1628,18 @@ def classify_synssv_objects(wd, obj_version=None, qsub_pe=None,
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version=obj_version)
 
-    multi_params = chunkify(sd_syn_ssv.so_dir_paths, 1500)
+    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.NCORE_TOTAL)
     multi_params = [(so_dir_paths, wd, obj_version) for so_dir_paths in
                     multi_params]
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess(_classify_synssv_objects_thread,
+        _ = sm.start_multiprocess_imap(_classify_synssv_objects_thread,
                                         multi_params, nb_cpus=nb_cpus)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "classify_synssv_objects",
-                                     script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+        _ = qu.QSUB_script(multi_params,  "classify_synssv_objects",
+                           n_max_co_processes=n_max_co_processes,
+                           remove_jobfolder=True, log=log)
 
 
 def _classify_synssv_objects_thread(args):
@@ -1546,6 +1747,9 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
     m_sizes = np.abs(m_sizes)
 
     ms_axs = np.sort(m_axs, axis=1)
+    # transform labels 3 and 4 to 1 (bouton and terminal to axon to apply correct filter)
+    ms_axs[ms_axs == 3] = 1
+    ms_axs[ms_axs == 4] = 1
     # vigra currently requires numpy==1.11.1
     try:
         u_axs = np.unique(ms_axs, axis=0)

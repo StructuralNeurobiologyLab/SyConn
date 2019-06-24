@@ -4,18 +4,18 @@ syconn.mp package
 Submodules
 ----------
 
-syconn.mp.qsub\_utils module
+syconn.mp.batchjob\_utils module
 ----------------------------
 
-.. automodule:: syconn.mp.qsub_utils
+.. automodule:: syconn.mp.batchjob_utils
     :members:
     :undoc-members:
     :show-inheritance:
 
-syconn.mp.shared\_mem module
+syconn.mp.mp\_utils module
 ----------------------------
 
-.. automodule:: syconn.mp.shared_mem
+.. automodule:: syconn.mp.mp_utils
     :members:
     :undoc-members:
     :show-inheritance:

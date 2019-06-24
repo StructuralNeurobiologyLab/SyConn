@@ -115,6 +115,10 @@ def str2intconverter(comment, gt_type):
             return 0
         elif comment == "gt_soma":
             return 2
+        elif comment == "gt_bouton":
+            return 3
+        elif comment == "gt_terminal":
+            return 4
         else:
             return -1
     elif gt_type == "spgt":
@@ -155,6 +159,10 @@ def int2str_converter(label, gt_type):
             return "gt_dendrite"
         elif label == 2:
             return "gt_soma"
+        elif label == 3:
+            return "gt_bouton"
+        elif label == 4:
+            return "gt_terminal"
         else:
             return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
     elif gt_type == "spgt":
@@ -193,6 +201,16 @@ def int2str_converter(label, gt_type):
 
 
 def img_rand_coloring(img):
+    """
+
+    Parameters
+    ----------
+    img :
+
+    Returns
+    -------
+
+    """
     if img.ndim == 3 and img.shape[2] > 1:
         raise ValueError("Input image must not contain rgb values")
     colored_img = np.zeros(list(img.shape) + [3], dtype=np.uint8)
@@ -263,7 +281,6 @@ def id2rgb_array(id_arr):
 @jit
 def id2rgb_array_contiguous(id_arr):
     """
-    # TODO: Add rgba implementation to render huge cells with shared context in EGL
     Transforms ID values into the array of RGBs labels based on the assumption
     that 'id_arr' is contiguous index array from 0...len(id_arr).
     Same mapping as 'id2rgb_array'.
@@ -293,6 +310,43 @@ def id2rgb_array_contiguous(id_arr):
     return rgb_arr
 
 
+@jit
+def id2rgba_array_contiguous(id_arr):
+    """
+    Transforms ID values into the array of RGBs labels based on the assumption
+    that 'id_arr' is contiguous index array from 0...len(id_arr).
+    Same mapping as 'id2rgb_array'.
+    Note: Constant retrieval time. For large N preferable.
+
+    Parameters
+    ----------
+    id_arr : np.array
+        ID values [N, 1]
+
+    Returns
+    -------
+    np.array
+        RGBA values.squeezed [N, 4]
+    """
+    if id_arr.squeeze().ndim > 1:
+        raise ValueError("Unsupported index array shape.")
+    nb_ids = len(id_arr.squeeze())
+    if nb_ids < 256**3 - 1:
+        rgb_arr = id2rgb_array_contiguous(id_arr)
+        return np.concatenate([rgb_arr, np.zeros((nb_ids, 1))], axis=1)
+    if nb_ids >= 256**4 - 1:  # highest value is reserved for background
+        raise ValueError("Overflow in vertex ID array.")
+    x1 = np.arange(256).astype(np.uint8)
+    x2 = np.arange(256).astype(np.uint8)
+    x3 = np.arange(256).astype(np.uint8)
+    x4 = np.arange(256).astype(np.uint8)
+    xx1, xx2, xx3, xx4 = np.meshgrid(x1, x2, x3, x4, sparse=False, copy=False)
+    rgba_arr = np.concatenate([xx4.flatten()[:, None], xx3.flatten()[:, None],
+                               xx1.flatten()[:, None], xx2.flatten()[:, None]],
+                              axis=-1)[:nb_ids]  # 4,3,1,2  with numpy 1.16, PS 14June2019
+    return rgba_arr
+
+
 def rgb2id(rgb):
     """
     Transforms unique RGB values into soo vertex ID.
@@ -317,7 +371,7 @@ def rgb2id(rgb):
 @jit
 def rgb2id_array(rgb_arr):
     """
-    Transforms RGB values into IDs based on 'rgb2id'.
+    Transforms RGB values into IDs
 
     Parameters
     ----------
@@ -342,22 +396,57 @@ def rgb2id_array(rgb_arr):
             continue
         rgb = rgb_arr_flat[ii]
         id_arr[ii] = rgb[0] + rgb[1]*256 + rgb[2]*(256**2)
-    background_ix = np.max(id_arr) + 1  # convention: The highest index value in index view will correspond to the background
+    # convention: The highest index value in index view will correspond to the background
+    # background_ix = np.max(id_arr) + 1
+    background_ix = 256**3 - 2
+    id_arr[mask_arr] = background_ix
+    return id_arr.reshape(rgb_arr.shape[:-1])
+
+
+@jit
+def rgba2id_array(rgb_arr):
+    """
+    Transforms RGBA values into IDs
+
+    Parameters
+    ----------
+    rgb_arr : np.array
+        RGB values [N, 3]
+
+    Returns
+    -------
+    np.array
+        ID values [N, ]
+    """
+
+    if rgb_arr.ndim > 1:
+        assert rgb_arr.shape[-1] == 4, "ValueError: unsupported shape"
+    else:
+        raise ValueError("Unsupported shape")
+    rgb_arr_flat = rgb_arr.flatten().reshape((-1, 4))
+    mask_arr = (rgb_arr_flat[:, 0] == 255) & (rgb_arr_flat[:, 1] == 255) & \
+               (rgb_arr_flat[:, 2] == 255) & (rgb_arr_flat[:, 3] == 255)
+    id_arr = np.zeros((len(rgb_arr_flat)), dtype=np.uint32)
+    for ii in range(len(rgb_arr_flat)):
+        if mask_arr[ii]:
+            continue
+        rgb = rgb_arr_flat[ii]
+        id_arr[ii] = rgb[0] + rgb[1]*256 + rgb[2]*(256**2) + rgb[3]*(256**3)
+    # convention: The highest index value in index view will correspond to the background
+    # background_ix = np.max(id_arr) + 1
+    background_ix = 256**4 - 2
     id_arr[mask_arr] = background_ix
     return id_arr.reshape(rgb_arr.shape[:-1])
 
 
 def generate_rendering_locs(verts, ds_factor):
     """
-    TODO: generalize for all rendering locations (e.g. also use in call of SSO.sample_locations)
-
     Parameters
     ----------
     verts : np.ndarray
         N, 3
     ds_factor : float
-        effectively determines the volume size (ds_factor^3) for which a
-        rendering location is returned.
+        volume (ds_factor^3) for which a rendering location is returned.
     Returns
     -------
     np.ndarray
@@ -371,7 +460,8 @@ def generate_rendering_locs(verts, ds_factor):
     rendering_locs = []
     for kk, c in enumerate(verts[verts_ixs]):
         ds_loc = tuple((c / ds_factor).astype(np.int))
-        if ds_loc in ds_locs_encountered:  # always gets first coordinate which is in downsampled voxel, the others are skipped
+        # always gets first coordinate which is in downsampled voxel, the others are skipped
+        if ds_loc in ds_locs_encountered:
             continue
         rendering_locs.append(c)
         ds_locs_encountered[ds_loc] = None

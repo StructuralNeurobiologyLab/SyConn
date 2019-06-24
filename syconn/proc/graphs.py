@@ -194,8 +194,6 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
     list, list
         Neuron, glia connected components
     """
-    _ = start_multiprocess_obj("mesh_bb", [[sv, ] for sv in nx_g.nodes()],
-                               nb_cpus=nb_cpus, verbose=verbose)
     glia_key = "glia_probas"
     if clahe:
         glia_key += "_clahe"
@@ -237,8 +235,11 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
     return nonglia_ccs, glia_ccs
 
 
-def create_ccsize_dict(g, sizes):
-    ccs = nx.connected_components(g)
+def create_ccsize_dict(g, sizes, is_connected_components=False):
+    if not is_connected_components:
+        ccs = nx.connected_components(g)
+    else:
+        ccs = g
     node2cssize_dict = {}
     for cc in ccs:
         mesh_bbs = np.concatenate([sizes[n] for n in cc])
@@ -572,15 +573,24 @@ def create_graph_from_coords(coords, max_dist=6000, force_single_cc=True,
         edge list of nodes (coords) using the ordering of coords, i.e. the
         edge (1, 2) connects coordinate coord[1] and coord[2].
     """
+    g = nx.Graph()
+    if len(coords) == 1:
+        g.add_node(0)
+        # this is slow, but there seems no way to add weights from an array with the same ordering as edges, so one loop is needed..
+        g.add_weighted_edges_from([[0, 0, 0]])
+        return g
     kd_t = spatial.cKDTree(coords)
     pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
-    if force_single_cc:
-        while not len(np.unique(pairs)) == len(coords):
+    if force_single_cc and len(coords) > 1:
+        cnt = 0
+        n_nodes = len(np.unique(pairs))
+        while not n_nodes == len(coords) and cnt < 100:
+            cnt += 1
             max_dist += max_dist / 3
-            log_proc.debug("Generated skeleton is not a single connected component. "
-                           "Increasing maximum node distance to {}".format(max_dist))
+            log_proc.debug("Generated skeleton ({} edges, {} nodes) is not a single connected "
+                           "component (#coords: {})). Increasing maximum node distance"
+                           " to {}".format(len(pairs), n_nodes, len(coords), max_dist))
             pairs = kd_t.query_pairs(r=max_dist, output_type="ndarray")
-    g = nx.Graph()
     g.add_nodes_from(np.arange(len(coords)))
     weights = np.linalg.norm(coords[pairs[:, 0]]-coords[pairs[:, 1]], axis=1)#np.array([np.linalg.norm(coords[p[0]]-coords[p[1]]) for p in pairs])
     # this is slow, but there seems no way to add weights from an array with the same ordering as edges, so one loop is needed..

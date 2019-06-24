@@ -11,7 +11,7 @@ import networkx as nx
 from scipy import spatial
 from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
-from skimage.measure import mesh_surface_area
+from ..proc.meshes import mesh_area_calc
 
 from .. import global_params
 from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING
@@ -78,6 +78,9 @@ class SegmentationDataset(object):
         else:
             self._working_dir = working_dir
             self._config = DynConfig(working_dir)
+
+        if global_params.wd is None:
+            global_params.wd = self._working_dir
 
         if not self._working_dir.endswith("/"):
             self._working_dir += "/"
@@ -284,7 +287,8 @@ class SegmentationDataset(object):
                                       working_dir=self.working_dir,
                                       scaling=self.scaling,
                                       create=create,
-                                      n_folders_fs=self.n_folders_fs)
+                                      n_folders_fs=self.n_folders_fs,
+                                      config=self.config)
         else:
             res = []
             for ix in obj_id:
@@ -294,7 +298,8 @@ class SegmentationDataset(object):
                                       working_dir=self.working_dir,
                                       scaling=self.scaling,
                                       create=create,
-                                      n_folders_fs=self.n_folders_fs)
+                                      n_folders_fs=self.n_folders_fs,
+                                      config=self.config)
                 res.append(obj)
             return res
 
@@ -375,9 +380,18 @@ class SegmentationObject(object):
                       "`working_dir` or `config`."
                 log_reps.error(msg)
                 raise ValueError(msg)
+        elif config is not None:
+            if config.working_dir != working_dir:
+                raise ValueError('Inconsistent working directories in `config` and'
+                                 '`working_dir` kwargs.')
+            self._config = config
+            self._working_dir = working_dir
         else:
             self._working_dir = working_dir
             self._config = DynConfig(working_dir)
+
+        if global_params.wd is None:
+            global_params.wd = self._working_dir
 
         self._scaling = scaling
 
@@ -409,6 +423,22 @@ class SegmentationObject(object):
 
     def __ne__(self, other):
         return not self.__eq__(other)
+
+    def __reduce__(self):
+        """
+        Support pickling of class instances.
+        TODO: calling methods/attributes via `start_multiprocess_obj` is still erroneous:
+         `TypeError: can't pickle _thread.RLock objects`
+
+        Returns
+        -------
+
+        """
+        return self.__class__, (self._id, self._type, self._version, self._working_dir,
+                                self._rep_coord, self._size, self._scaling, False,
+                                self._voxel_caching, self._mesh_caching, self._view_caching,
+                                self._config, self._n_folders_fs, self.enable_locking,
+                                self._skeleton_caching)
 
     @property
     def type(self):
@@ -676,12 +706,15 @@ class SegmentationObject(object):
 
     @property
     def mesh_bb(self):
-        if self._mesh_bb is None:
+        if self._mesh_bb is None and 'mesh_bb' in self.attr_dict:
+            self._mesh_bb = self.attr_dict['mesh_bb']
+        elif self._mesh_bb is None:
             if len(self.mesh[1]) == 0 or len(self.mesh[0]) == 0:
                 self._mesh_bb = self.bounding_box * self.scaling
             else:
-                self._mesh_bb = [np.min(self.mesh[1].reshape((-1, 3)), axis=0),
-                                 np.max(self.mesh[1].reshape((-1, 3)), axis=0)]
+                verts = self.mesh[1].reshape(-1, 3)
+                self._mesh_bb = [np.min(verts, axis=0),
+                                 np.max(verts, axis=0)]
         return self._mesh_bb
 
     @property
@@ -697,8 +730,7 @@ class SegmentationObject(object):
         float
             Mesh area in um^2
         """
-        return mesh_surface_area(self.mesh[1].reshape(-1, 3),
-                                 self.mesh[0].reshape(-1, 3)) / 1e6
+        return mesh_area_calc(self.mesh)
 
     @property
     def sample_locations_exist(self):
@@ -727,26 +759,27 @@ class SegmentationObject(object):
         else:
             return self._views
 
-    def sample_locations(self, force=False):
+    def sample_locations(self, force=False, save=True, ds_factor=None):
         assert self.type == "sv"
         if self.sample_locations_exist and not force:
             return CompressedStorage(self.locations_path,
-                                     disable_locking=not self.enable_locking)[self.id]
+                                     disable_locking=True)[self.id]
         else:
             verts = self.mesh[1].reshape(-1, 3)
             if len(verts) == 0:  # only return scaled rep. coord as [1, 3] array
                 return np.array([self.rep_coord, ], dtype=np.float32) * self.scaling
-
+            if ds_factor is None:
+                ds_factor = 2000
             if global_params.config.use_new_renderings_locs:
-                coords = generate_rendering_locs(verts, 2000).astype(
-                    np.float32)  # '*3' because `generate_rendering_locs` use a division by 3 internally...
+                coords = generate_rendering_locs(verts, ds_factor).astype(np.float32)
             else:
-                coords = surface_samples(verts).astype(np.float32)
-
-            loc_dc = CompressedStorage(self.locations_path, read_only=False,
-                                       disable_locking=not self.enable_locking)
-            loc_dc[self.id] = coords.astype(np.float32)
-            loc_dc.push()
+                coords = surface_samples(verts, [ds_factor] * 3,
+                                         r=ds_factor/2).astype(np.float32)
+            if save:
+                loc_dc = CompressedStorage(self.locations_path, read_only=False,
+                                           disable_locking=not self.enable_locking)
+                loc_dc[self.id] = coords.astype(np.float32)
+                loc_dc.push()
             return coords.astype(np.float32)
 
     def save_voxels(self, bin_arr, offset, overwrite=False):
@@ -797,7 +830,7 @@ class SegmentationObject(object):
     def total_edge_length(self):
         if self.skeleton is None:
             self.load_skeleton()
-        #  TODO: change interface to match SSV, i.e. to dictionary
+        #  TODO: change interface to match SSV interface, i.e. change to dictionary
         nodes = self.skeleton[0].reshape(-1, 3).astype(np.float32)
         edges = self.skeleton[2].reshape(-1, 2)
         return np.sum([np.linalg.norm(
@@ -814,6 +847,8 @@ class SegmentationObject(object):
         # Set 'force_single_cc' to True in case of syn_ssv objects!
         if self.type == 'syn_ssv' and 'force_single_cc' not in kwargs:
             kwargs['force_single_cc'] = True
+        if (self.type == 'sv') and ('decimate_mesh' not in kwargs):
+            kwargs['decimate_mesh'] = 0.3  # remove 30% of the verties  # TODO: add to global params
         return meshes.get_object_mesh(self, downsampling, n_closings=n_closings,
                                       triangulation_kwargs=kwargs)
 
@@ -892,7 +927,7 @@ class SegmentationObject(object):
         return views
 
     def save_views(self, views, woglia=True, cellobjects_only=False,
-                   index_views=False, view_key=None):
+                   index_views=False, view_key=None, enable_locking=None):
         """
         Saves views according to its properties. If view_key is given it has
         to be a special type of view, e.g. spine predictions. If in this case
@@ -902,14 +937,17 @@ class SegmentationObject(object):
         ----------
         views : np.array
         woglia : bool
-        cellobjects_only : bol
+        cellobjects_only : bool
         index_views : bool
         view_key : str
+        enable_locking : bool
         """
         if not (woglia and not cellobjects_only and not index_views) and view_key is not None:
             raise ValueError('If views are saved to custom key, all other settings have to be defaults!')
+        if enable_locking is None:
+            enable_locking = self.enable_locking
         view_dc = CompressedStorage(self.view_path(woglia=woglia, index_views=index_views, view_key=view_key),
-                                    read_only=False, disable_locking=not self.enable_locking)
+                                    read_only=False, disable_locking=not enable_locking)
         if cellobjects_only:
             assert self.id in view_dc, "SV must already contain raw views " \
                                        "if adding views for cellobjects only."
@@ -922,9 +960,11 @@ class SegmentationObject(object):
     def load_attr_dict(self):
         try:
              glob_attr_dc = AttributeDict(self.attr_dict_path,
-                                          disable_locking=not self.enable_locking)
+                                          disable_locking=True)  # disable locking, PS 07June2019
              self.attr_dict = glob_attr_dc[self.id]
-        except (IOError, EOFError):
+        except (IOError, EOFError) as e:
+            log_reps.critical("Could not load SSO attributes at {} due to "
+                              "{}.".format(self.attr_dict_path, e))
             return -1
 
     def save_attr_dict(self):

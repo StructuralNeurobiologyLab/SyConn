@@ -7,15 +7,13 @@ Subpackages
 .. toctree::
 
     syconn.config
+    syconn.backend
     syconn.extraction
-    syconn.gate
     syconn.handler
     syconn.mp
     syconn.proc
     syconn.reps
-    syconn.ui
-    syconn.utils
-    syconn.QSUB_scripts
+    syconn.exec
 
 
 Module contents

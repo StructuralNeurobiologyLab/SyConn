@@ -40,12 +40,14 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
         all_rec.append(rec)
         f = fscore(rec, prec, beta=fscore_beta)
         t_opt = t[np.argmax(f)]
+        try:
+            roc_auc = roc_auc_score(np.array(curr_labels), np.array(proba[:, i]))
+        except ValueError:  # Only one class present in y_true. ROC AUC score is not defined in that case
+            roc_auc = 0
         header += "\nthresh, f%d-score, recall, precision, roc-auc, supp " \
                   "\n%0.6f %0.6f %0.6f %0.6f %0.6f %d\n\n" \
                  % (fscore_beta, t_opt, f[np.argmax(f)], rec[np.argmax(f)],
-                    prec[np.argmax(f)],
-                    roc_auc_score(np.array(curr_labels), np.array(proba[:, i])),
-                    len(proba))
+                    prec[np.argmax(f)], roc_auc, len(proba))
     header += classification_report(labels, np.argmax(proba, axis=1), digits=4,
                                 target_names=target_names)
     header += "acc.: %0.4f" % accuracy_score(labels, np.argmax(proba, axis=1))
@@ -270,8 +272,19 @@ def cluster_summary(train_d, train_l, valid_d, valid_l, fold, prefix="", pca=Non
         bin_labels = label_binarize(valid_l,
                                     classes=np.arange(len(target_names)))
         bin_labels = np.hstack((bin_labels, 1 - bin_labels))
+    elif prefix == "ctgt_v2":
+        unique_c = np.unique(train_l)
+        assert 6 not in unique_c and 9 not in unique_c  # hack because we have missing classes in
+        # the GT
+        train_l[train_l == 7] = 6  # convert TAN label to be 6
+        train_l[train_l == 8] = 7  # convert INT labels to be 7
+        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, TAN=6, INT=7)
+        int2str_label = {v: k for k, v in str2int_label.items()}
+        target_names = [int2str_label[ii] for ii in range(8)]
+        bin_labels = label_binarize(valid_l,
+                                    classes=np.arange(len(target_names)))
     else:
-        raise()
+        raise ValueError("Unknown data. Please add a valid prefix.")
     if pca is None:
         pca = PCA(n_components=3, whiten=True, random_state=0)
         pca.fit(train_d)
@@ -392,7 +405,12 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
     plt.ylabel('$Z_2$', fontsize=15)
     plt.xlabel('$Z_1$', fontsize=15)
     if colors is None:
-        colors = ["r", "g", "b", "y", "k"]
+        # colors = ["r", "g", "b", "y", "k"]
+        if len(target_names) == 5:
+            colors = ["r", "g", "b", "y", "k"]
+        else:
+            cmap = plt.cm.get_cmap("Accent", len(target_names))
+            colors = [cmap(i) for i in range(len(target_names))]
     if target_names is None:
         target_names = ["%d" % i for i in nb_labels]
     for i in nb_labels:
@@ -462,7 +480,7 @@ def projection_pca(ds_d, ds_l, dest_path, pca=None, colors=None, do_3d=True,
 
 
 def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
-                    do_3d=False, **tsne_kwargs):
+                    do_3d=False, cmap_ident="prism", **tsne_kwargs):
     """
 
     Parameters
@@ -500,19 +518,24 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
     plt.ylabel('$Z_2$', fontsize=15)
     plt.xlabel('$Z_1$', fontsize=15)
     if colors is None:
-        colors = ["r", "g", "b", "y", "k"]
+        # colors = ["r", "g", "b", "y", "k"]
+        if len(target_names) == 5:
+            colors = ["r", "g", "b", "y", "k"]
+        else:
+            cmap = plt.cm.get_cmap(cmap_ident, len(target_names))
+            colors = [cmap(i) for i in range(len(target_names))]
     if target_names is None:
         target_names = ["%d" % i for i in nb_labels]
     for i in nb_labels:
-        cur_pal = sns.light_palette(colors[i], as_cmap=True)
-        d0, d1 = res[ds_l == i][:, 0], res[ds_l == i][:, 1]
-        ax = sns.kdeplot(d0, d1, shade=False, cmap=cur_pal,
-                         alpha=0.75, shade_lowest=False, label="%d" % i,
-                         n_levels=15, gridsize=100, ls=1, lw=1)
-        ax.patch.set_facecolor('white')
-        ax.collections[0].set_alpha(0)
+        # cur_pal = sns.light_palette(colors[i], as_cmap=True)
+        # d0, d1 = res[ds_l == i][:, 0], res[ds_l == i][:, 1]
+        # ax = sns.kdeplot(d0, d1, shade=False, cmap=cur_pal,
+        #                  alpha=0.75, shade_lowest=False, label="%d" % i,
+        #                  n_levels=1, gridsize=100, ls=1, lw=1)
+        # ax.patch.set_facecolor('white')
+        # ax.collections[0].set_alpha(0)
         plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 1],
-                                s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
+                                s=1.2, lw=0, alpha=1, color=colors[i], label=target_names[i])
     handles = []
     for ii in range(len(target_names)):
         handles.append(mpatches.Patch(color=colors[ii], label=target_names[ii]))
@@ -525,18 +548,14 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
         plt.figure()
         plt.ylabel('$Z_3$', fontsize=15)
         plt.xlabel('$Z_1$', fontsize=15)
-        if colors is None:
-            colors = ["r", "g", "b", "y", "k"]
-        if target_names is None:
-            target_names = ["%d" % i for i in nb_labels]
         for i in nb_labels:
-            cur_pal = sns.light_palette(colors[i], as_cmap=True)
-            d0, d2 = res[ds_l == i][:, 0], res[ds_l == i][:, 2]
-            ax = sns.kdeplot(d0, d2, shade=False, cmap=cur_pal,
-                             alpha=0.6, shade_lowest=False, label="%d" % i
-                             , gridsize=100, ls=0.6, lw=0.6)
-            ax.patch.set_facecolor('white')
-            ax.collections[0].set_alpha(0)
+            # cur_pal = sns.light_palette(colors[i], as_cmap=True)
+            # d0, d2 = res[ds_l == i][:, 0], res[ds_l == i][:, 2]
+            # ax = sns.kdeplot(d0, d2, shade=False, cmap=cur_pal,
+            #                  alpha=0.6, shade_lowest=False, label="%d" % i
+            #                  , gridsize=100, ls=0.6, lw=0.6)
+            # ax.patch.set_facecolor('white')
+            # ax.collections[0].set_alpha(0)
             plt.scatter(res[ds_l == i][:, 0], res[ds_l == i][:, 2],
                                     s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
         handles = []
@@ -551,18 +570,14 @@ def projection_tSNE(ds_d, ds_l, dest_path, colors=None, target_names=None,
         plt.figure()
         plt.ylabel('$Z_3$', fontsize=15)
         plt.xlabel('$Z_2$', fontsize=15)
-        if colors is None:
-            colors = ["r", "g", "b", "y", "k"]
-        if target_names is None:
-            target_names = ["%d" % i for i in nb_labels]
         for i in nb_labels:
-            cur_pal = sns.light_palette(colors[i], as_cmap=True)
-            d1, d2 = res[ds_l == i][:, 1], res[ds_l == i][:, 2]
-            ax = sns.kdeplot(d1, d2, shade=False, cmap=cur_pal,
-                             alpha=0.6, shade_lowest=False, label="%d" % i
-                             , gridsize=100, ls=0.6, lw=0.6)
-            ax.patch.set_facecolor('white')
-            ax.collections[0].set_alpha(0)
+            # cur_pal = sns.light_palette(colors[i], as_cmap=True)
+            # d1, d2 = res[ds_l == i][:, 1], res[ds_l == i][:, 2]
+            # ax = sns.kdeplot(d1, d2, shade=False, cmap=cur_pal,
+            #                  alpha=0.6, shade_lowest=False, label="%d" % i
+            #                  , gridsize=100, ls=0.6, lw=0.6)
+            # ax.patch.set_facecolor('white')
+            # ax.collections[0].set_alpha(0)
             plt.scatter(res[ds_l == i][:, 1], res[ds_l == i][:, 2],
                                     s=1.2, lw=0, alpha=0.5, color=colors[i], label=target_names[i])
         handles = []

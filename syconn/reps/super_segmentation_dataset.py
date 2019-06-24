@@ -9,6 +9,7 @@ import numpy as np
 import re
 import glob
 import os
+import shutil
 from multiprocessing.pool import ThreadPool
 try:
     import cPickle as pkl
@@ -25,7 +26,7 @@ from .segmentation import SegmentationDataset, SegmentationObject
 from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
 from ..handler.config import DynConfig
 from .super_segmentation_helper import create_sso_skeleton
-from ..proc.ssd_assembly import assemble_from_mergelist
+from .super_segmentation_helper import assemble_from_mergelist
 from ..mp import batchjob_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
 from ..mp import mp_utils as sm
@@ -79,6 +80,9 @@ class SuperSegmentationDataset(object):
         else:
             self._working_dir = working_dir
             self._config = DynConfig(working_dir)
+
+        if global_params.wd is None:
+            global_params.wd = self._working_dir
 
         if scaling is None:
             try:
@@ -247,7 +251,7 @@ class SuperSegmentationDataset(object):
 
     def load_cached_data(self, name):
         if os.path.exists(self.path + name + "s.npy"):
-            return np.load(self.path + name + "s.npy")
+            return np.load(self.path + name + "s.npy", allow_pickle=True)
 
     def sv_id_to_ssv_id(self, sv_id):
         return self.id_changer[sv_id]
@@ -322,12 +326,10 @@ class SuperSegmentationDataset(object):
         self.save_mapping_dict()
         self.save_id_changer()
 
-    def save_dataset_deep(self, extract_only=False, attr_keys=(), n_jobs=1000,
-                          qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                          n_max_co_processes=None, new_mapping=True):
+    def save_dataset_deep(self, extract_only=False, attr_keys=(), n_jobs=None,
+                          nb_cpus=None, n_max_co_processes=None, new_mapping=True):
         save_dataset_deep(self, extract_only=extract_only,
                           attr_keys=attr_keys, n_jobs=n_jobs,
-                          qsub_pe=qsub_pe, qsub_queue=qsub_queue,
                           nb_cpus=nb_cpus, new_mapping=new_mapping,
                           n_max_co_processes=n_max_co_processes)
 
@@ -369,8 +371,7 @@ class SuperSegmentationDataset(object):
                                              "reskeletonize_objects_big_ones",
                                              n_cores=10,
                                              n_max_co_processes=int(n_max_co_processes/10*nb_cpus),
-                                             pe=qsub_pe, queue=qsub_queue,
-                                             script_folder=None)
+                                             remove_jobfolder=True)
             else:
                 raise Exception("QSUB not available")
 
@@ -393,9 +394,7 @@ class SuperSegmentationDataset(object):
         elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "export_skeletons",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None)
+                                         n_cores=nb_cpus, remove_jobfolder=True)
             out_files = glob.glob(path_to_out + "/*")
             no_skel_cnt = 0
             for out_file in out_files:
@@ -426,9 +425,7 @@ class SuperSegmentationDataset(object):
         elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "associate_objs_with_skel_nodes",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None)
+                                         n_cores=nb_cpus, remove_jobfolder=True)
         else:
             raise Exception("QSUB not available")
 
@@ -449,9 +446,7 @@ class SuperSegmentationDataset(object):
         elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "predict_axoness_skelbased",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None)
+                                         n_cores=nb_cpus, remove_jobfolder=True)
         else:
             raise Exception("QSUB not available")
 
@@ -472,9 +467,7 @@ class SuperSegmentationDataset(object):
         elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "predict_cell_type_skelbased",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None)
+                                         n_cores=nb_cpus, remove_jobfolder=True)
         else:
             raise Exception("QSUB not available")
 
@@ -512,10 +505,8 @@ class SuperSegmentationDataset(object):
         self._id_changer = np.load(self.id_changer_path)
 
 
-def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                      n_max_co_processes=None, new_mapping=True):
-    # TODO: remove `qsub_pe`and `qsub_queue`
+def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=None,
+                      nb_cpus=None, n_max_co_processes=None, new_mapping=True):
     """
     Saves attributes of all SSVs within the given SSD and computes properties
     like size and representative coordinate. `ids.npy` order may change after
@@ -548,7 +539,8 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
         Whether to apply new mapping (see `ssd.mapping_dict`)
     """
     ssd.save_dataset_shallow()
-
+    if n_jobs is None:
+        n_jobs = global_params.NCORE_TOTAL
     multi_params = chunkify(ssd.ssv_ids, n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict,
                      ssd.working_dir, extract_only, attr_keys,
@@ -562,8 +554,6 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
     else:
         path_to_out = qu.QSUB_script(multi_params,
                                      "write_super_segmentation_dataset",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
                                      n_cores=nb_cpus,
                                      n_max_co_processes=n_max_co_processes)
 
@@ -572,7 +562,7 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=1000,
         for out_file in out_files:
             with open(out_file, 'rb') as f:
                 results.append(pkl.load(f))
-
+        shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     attr_dict = {}
     for this_attr_dict in results:
         for attribute in this_attr_dict.keys():
@@ -689,8 +679,7 @@ def export_to_knossosdataset(ssd, kd, stride=1000, qsub_pe=None,
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_ssv_to_knossosdataset",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None)
+                                     remove_jobfolder=True)
 
     else:
         raise Exception("QSUB not available")
@@ -726,13 +715,11 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
                            nb_cpus=None):
     ssd.save_dataset_shallow()
     sv_kd = kd_factory(sv_kd_path)
-
     if not os.path.exists(ssv_kd_path):
         ssv_kd = knossosdataset.KnossosDataset()
-        ssv_kd.initialize_without_conf(ssv_kd_path, sv_kd.boundary,
-                                       sv_kd.scale,
-                                       sv_kd.experiment_name,
-                                       mags=[1])
+        scale = np.array(global_params.config.entries["Dataset"]["scaling"], dtype=np.float32)
+        ssv_kd.initialize_without_conf(ssv_kd_path, sv_kd.boundary, scale,
+                                       sv_kd.experiment_name, mags=[1])
 
     size = np.ones(3, dtype=np.int) * stride
     multi_params = []
@@ -826,9 +813,7 @@ def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "export_skeletons",
-                                     n_cores=nb_cpus,
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None)
+                                     n_cores=nb_cpus,)
         out_files = glob.glob(path_to_out + "/*")
         no_skel_cnt = 0
         for out_file in out_files:
@@ -1226,6 +1211,11 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1,
     safe : bool
         if True, will not overwrite existing data
     """
+    # update existing SSV IDs  # TODO: currently this requires a new mapping dict Unclear what to
+    #  do in order to enable updates on existing SSD (e.g. after adding new SSVs)
+    # paths = glob.glob(ssd.path + "/so_storage/*/*/*/")
+    # ssd._ssv_ids = np.array([int(os.path.basename(p.strip("/")))
+    #                           for p in paths], dtype=np.uint)
     if target_wd is None:
         target_wd = global_params.config.working_dir
     scaling = ssvs[0].scaling
@@ -1243,19 +1233,18 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1,
 def create_sso_skeletons_thread(args):
     from ..proc.graphs import create_graph_from_coords
     from ..reps.rep_helper import surface_samples
+    from ..handler.multiviews import generate_rendering_locs
 
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
     working_dir = args[3]
 
-    n_cpus_avail = cpu_count()
     ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
                                    version_dict=version_dict)
 
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.nb_cpus = n_cpus_avail
         if not global_params.config.allow_skel_gen:
             # TODO: change to create_sso_skeleton_fast as soon as RAG edges
             #  only connected spatially close SVs
@@ -1268,15 +1257,20 @@ def create_sso_skeletons_thread(args):
             ixs = np.arange(len(verts))
             np.random.shuffle(ixs)
             ixs = ixs[:int(0.5*len(ixs))]
-            locs = surface_samples(verts[ixs], bin_sizes=(1000, 1000, 1000),
-                                   max_nb_samples=10000, r=500)
+            if global_params.config.use_new_renderings_locs:
+                locs = generate_rendering_locs(verts[ixs], 1000)
+            else:
+                locs = surface_samples(verts[ixs], bin_sizes=(1000, 1000, 1000),
+                                       max_nb_samples=10000, r=500)
             g = create_graph_from_coords(locs, mst=True)
             if g.number_of_edges() == 1:
                 edge_list = np.array(list(g.edges()))
             else:
                 edge_list = np.array(g.edges())
             del g
-            assert edge_list.ndim == 2
+            if edge_list.ndim != 2:
+                raise ValueError("Edgelist must be a 2D array. Currently: {}\n{}".format(
+                    edge_list.ndim, edge_list))
             ssv.skeleton = dict()
             ssv.skeleton["nodes"] = locs / np.array(ssv.scaling)
             ssv.skeleton["edges"] = edge_list
@@ -1339,7 +1333,6 @@ def exctract_ssv_morphology_embedding(args):
     from ..handler.prediction import get_tripletnet_model_e3
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.nb_cpus = global_params.NCORES_PER_NODE // 2  # TODO should be global_params.NGPU_PER_NODE
         m = get_tripletnet_model_e3()
         ssv.predict_views_embedding(m, pred_key_appendix)
 

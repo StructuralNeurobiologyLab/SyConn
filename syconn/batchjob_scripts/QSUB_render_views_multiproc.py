@@ -13,7 +13,6 @@ try:
 except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation import SuperSegmentationObject
-from syconn.proc.sd_proc import sos_dict_fact, init_sos
 from syconn.proc.rendering import render_sso_coords, render_sso_coords_index_views
 from syconn import global_params
 
@@ -27,6 +26,7 @@ with open(path_storage_file, 'rb') as f:
             args.append(pkl.load(f))
         except EOFError:
             break
+
 coords = args[0]
 sso_kwargs = args[1]
 working_dir = sso_kwargs['working_dir']
@@ -39,15 +39,26 @@ sso = SuperSegmentationObject(**sso_kwargs)
 views = 0  # in case no rendering locations are given
 file = 'file'
 file = file + str(file_store_number)
+# TODO: refactor kwargs
+if 'overwrite' in kwargs:
+    del kwargs['overwrite']
 if render_indexviews:
-    print("In Render_index")
-    del kwargs['add_cellobjects']
-    del kwargs['clahe']
-    del kwargs['wire_frame']
-    del kwargs['cellobjects_only']
-    del kwargs['return_rot_mat']
+    if 'add_cellobjects' in kwargs:
+        del kwargs['add_cellobjects']
+    if 'clahe' in kwargs:
+        del kwargs['clahe']
+    if 'wire_frame' in kwargs:
+        del kwargs['wire_frame']
+    if 'cellobjects_only' in kwargs:
+        del kwargs['cellobjects_only']
+    if 'return_rot_mat' in kwargs:
+        del kwargs['return_rot_mat']
+    if 'woglia' in kwargs:
+        del kwargs['woglia']
     views = render_sso_coords_index_views(sso, coords, **kwargs)
 else:
+    if 'woglia' in kwargs:
+        del kwargs['woglia']
     views = render_sso_coords(sso, coords, **kwargs)
 
 with open(path_out_file, "wb") as f:

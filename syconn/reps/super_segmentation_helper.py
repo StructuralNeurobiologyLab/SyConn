@@ -16,6 +16,10 @@ from collections import defaultdict
 from scipy import spatial
 from knossos_utils.skeleton_utils import annotation_to_nx_graph,\
     load_skeleton as load_skeleton_kzip
+try:
+    from knossos_utils import mergelist_tools
+except ImportError:
+    from knossos_utils import mergelist_tools_fallback as mergelist_tool
 
 from .rep_helper import assign_rep_values, colorcode_vertices
 from . import segmentation
@@ -448,7 +452,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
                 prune_nodes.append(curr_node)
         if len(new_nx_g.nodes) == len(nx_g.nodes):
             pruning_complete = True
-    # TODO: uncomment, or fix by using
+    # TODO: uncomment, or fix by using alternative method
     if nx.number_connected_components(new_nx_g) != 1:
         msg = 'Pruning of SV skeletons failed during "prune_stub_branches' \
               '" with {} connected components. Please check the underlying' \
@@ -1410,7 +1414,7 @@ def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=global_params.NCORE
     return list(missing_ssv_ids)
 
 
-def predict_views_semseg(views, model, batch_size=20, verbose=False):
+def predict_views_semseg(views, model, batch_size=10, verbose=False):
     """
     Predicts a view array of shape [N_LOCS, N_CH, N_VIEWS, X, Y] with
     N_LOCS locations each with N_VIEWS perspectives, N_CH different channels
@@ -1572,7 +1576,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         Colored mesh will be written to k.zip and not returned.
     k : int
         Number of nearest vertices to average over. If k=0 unpredicted vertices
-         will be treated as 'unpredicted' class.
+         will be treated as 'unpredicted' class (`np.max(semseg_views)+1`,
+          bigger than background label).
     colors : Optional[Tuple[list]]
         np.array with as many entries as the maximum label of 'semseg_key'
         predictions with values between 0 and 255 (will be interpreted as uint8).
@@ -1602,25 +1607,34 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             i_views = sso.load_views(index_view_key).flatten()
         semseg_views = sso.load_views(semseg_key).flatten()
         ts1 = time.time()
-        log_reps.debug('Time to load index and shape views: '
-                       '{:.2f}s.'.format(ts1 - ts0))
-        ind = sso.mesh[0]
+        # log_reps.debug('Time to load index and shape views: '
+        #                '{:.2f}s.'.format(ts1 - ts0))
         dc = defaultdict(list)
         background_id = np.max(i_views)
-        # color buffer holds traingle ID not vertex ID  # TODO: this should be a one time conversion step after the index view rendering!
+
+        # # color buffer holds traingle ID not vertex ID
+        # ind = sso.mesh[0]
+
+        # color buffer now stores the vertex ID
         for ii in range(len(i_views)):
-            triangle_ix = i_views[ii]
-            if triangle_ix == background_id:
+            # triangle_ix = i_views[ii]
+            # if triangle_ix == background_id:
+            #     continue
+            # l = semseg_views[ii]  # triangle label
+            # # get vertex ixs from triangle ixs via:
+            # vertex_ix = triangle_ix * 3
+            # dc[ind[vertex_ix]].append(l)
+            # dc[ind[vertex_ix + 1]].append(l)
+            # dc[ind[vertex_ix + 2]].append(l)
+            vertex_ix = i_views[ii]
+            if vertex_ix == background_id:
                 continue
-            l = semseg_views[ii]  # triangle label
-            # get vertex ixs from triangle ixs via:
-            vertex_ix = triangle_ix * 3
-            dc[ind[vertex_ix]].append(l)
-            dc[ind[vertex_ix + 1]].append(l)
-            dc[ind[vertex_ix + 2]].append(l)
+            l = semseg_views[ii]  # vertex label
+            # get vertex ids into dictionary
+            dc[vertex_ix].append(l)
         ts2 = time.time()
-        log_reps.debug('Time to generate look-up dict: '
-                       '{:.2f}s.'.format(ts2 - ts1))
+        # log_reps.debug('Time to generate look-up dict: '
+        #                '{:.2f}s.'.format(ts2 - ts1))
         # background label is highest label in prediction (see 'generate_palette' or
         # 'remap_rgb_labelviews' in multiviews.py)
         background_l = np.max(semseg_views)
@@ -1643,8 +1657,10 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             predicted_vertices = predicted_vertices[predictions != background_id]
             predictions = predictions[predictions != background_id]
         ts3 = time.time()
-        log_reps.debug('Time to map predictions on vertices: '
-                       '{:.2f}s.'.format(ts3 - ts2))
+        # log_reps.debug('Time to map predictions on vertices: '
+        #                '{:.2f}s.'.format(ts3 - ts2))
+        # TODO: add optimized procedure in case k==1 -> only map onto unpredicted vertices
+        #  instead of averaging all
         if k > 0:  # map predictions of predicted vertices to all vertices
             maj_vote = colorcode_vertices(
                 sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
@@ -1652,8 +1668,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         else:  # no vertex mask was applied in this case
             maj_vote = predictions
         ts4 = time.time()
-        log_reps.debug('Time to map predictions on unpredicted vertices: '
-                       '{:.2f}s.'.format(ts4 - ts3))
+        # log_reps.debug('Time to map predictions on unpredicted vertices / to average vertex '
+        #                'predictions: {:.2f}s.'.format(ts4 - ts3))
         # add prediction to mesh storage
         ld[semseg_key] = maj_vote
         ld.push()
@@ -1671,6 +1687,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         if colors is None:
             col = None  # set to None, because write_mesh2kzip only supports
             # RGBA colors and no labels
+        log_reps.debug('Writing results to kzip.')
         write_mesh2kzip(dest_path, sso.mesh[0], sso.mesh[1], sso.mesh[2],
                         col, ply_fname=semseg_key + ".ply")
         return
@@ -1807,7 +1824,7 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
     sso.save_attributes([pred_key], [latent])
 
 
-def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
+def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window, n_avg=1,
                           dest_path=None, verbose=False):
     # TODO: check if save=False is actually happening everywhere, it seems raw views are being saved
     """
@@ -1816,6 +1833,8 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
     be predicted with the given `model` and maps prediction results onto mesh.
     Vertex labels are stored on file system and can be accessed via
     `sso.label_dict('vertex')[semseg_key]`.
+    If sso._sample_locations is None it `generate_rendering_locs(verts, comp_window / 3)`
+    will be called to generate rendering locations.
 
     Parameters
     ----------
@@ -1828,6 +1847,9 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
         Number of views rendered at each rendering location.
     comp_window : float
         Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+    n_avg : int
+        Number of nearest vertices to average over. If k=0 unpredicted vertices
+        will be treated as 'unpredicted' class.
     dest_path : str
         location of kzip in which colored vertices (according to semantic segmentation
         prediction) are stored.
@@ -1843,17 +1865,56 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window,
     raw_view_key = 'raw{}_{}_{}'.format(ws[0], ws[1], nb_views)
     index_view_key = 'index{}_{}_{}'.format(ws[0], ws[1], nb_views)
     verts = sso.mesh[1].reshape(-1, 3)
-    rendering_locs = generate_rendering_locs(verts, comp_window / 3)  # three views per comp window
 
-    # overwrite default rendering locations (used later on for the view generation)
-    sso._sample_locations = rendering_locs
+    # use default rendering locations (used later on for the view generation)
+    if sso._sample_locations is None:
+        # ~three views per comp window
+        rendering_locs = generate_rendering_locs(verts, comp_window / 3)
+        sso._sample_locations = [rendering_locs]
     assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
                              " run 'semseg_of_sso_nocache'.".format(sso)
     # this generates the raw views and their prediction
     sso.predict_semseg(model, semseg_key, raw_view_key=raw_view_key, **view_kwargs)
+    if verbose:
+        log_reps.debug('Finished shape-view rendering and sem. seg. prediction.')
     # this generates the index views
     sso.render_indexviews(view_key=index_view_key, force_recompute=True,
                           **view_kwargs)
+    if verbose:
+        log_reps.debug('Finished index-view rendering.')
     # map prediction onto mesh and saves it to sso._label_dict['vertex'][semseg_key] (also pushed to file system!)
     sso.semseg2mesh(semseg_key, index_view_key=index_view_key, dest_path=dest_path,
-                    force_recompute=True)
+                    force_recompute=True, k=n_avg)
+    if verbose:
+        log_reps.debug('Finished mapping of vertex predictions to mesh.')
+
+
+def assemble_from_mergelist(ssd, mergelist):
+    if mergelist is not None:
+        assert "sv" in ssd.version_dict
+        if isinstance(mergelist, dict):
+            pass
+        elif isinstance(mergelist, str):
+            with open(mergelist, "r") as f:
+                mergelist = mergelist_tools. \
+                    subobject_map_from_mergelist(f.read())
+        else:
+            raise Exception("sv_mapping has unknown type")
+
+    ssd.reversed_mapping_dict = mergelist
+
+    for sv_id in mergelist.values():
+        ssd.mapping_dict[sv_id] = []
+
+    # Changed -1 defaults to 0
+    # ssd._id_changer = np.zeros(np.max(list(mergelist.keys())) + 1,
+    #                           dtype=np.uint)
+    # TODO: check if np.int might be a problem for big datasets
+    ssd._id_changer = np.ones(int(np.max(list(mergelist.keys())) + 1),
+                              dtype=np.int) * (-1)
+
+    for sv_id in mergelist.keys():
+        ssd.mapping_dict[mergelist[sv_id]].append(sv_id)
+        ssd._id_changer[sv_id] = mergelist[sv_id]
+
+    ssd.save_dataset_shallow()

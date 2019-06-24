@@ -1,15 +1,15 @@
 # distutils: language = c++
+
 cimport cython
-from libcpp cimport bool
-from libc.stdint cimport int, float
+from libcpp cimport bool, int, float
+#from libc.stdint cimport int, float
 from libcpp.vector cimport vector
+
 ctypedef fused pyf:
     float
     double
 
-
 def in_bounding_box(pyf[:,:] coords, pyf[:, :] bounding_box):
-
     cdef float edge_sizes[3]
     edge_sizes[:] = [bounding_box[1,0]/2, bounding_box[1,1]/2, bounding_box[1,2]/2 ]
 

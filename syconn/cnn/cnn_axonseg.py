@@ -17,7 +17,7 @@ import os
 import torch
 from torch import nn
 from torch import optim
-from elektronn3.training.loss import BlurryBoarderLoss, DiceLoss, LovaszLoss
+from elektronn3.training.loss import DiceLoss, LovaszLoss
 from elektronn3.models.fcn_2d import *
 from elektronn3.models.unet import UNet
 from elektronn3.data.transforms import RandomFlip
@@ -25,18 +25,18 @@ from elektronn3.data import transforms
 
 
 def get_model():
-    # vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
-    # model = FCNs(base_net=vgg_model, n_class=4)
-    model = UNet(in_channels=4, out_channels=4, n_blocks=5, start_filts=32,
-                 up_mode='resize', merge_mode='concat', planar_blocks=(),
-                 activation='relu', batch_norm=True, dim=2,)
+    vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
+    model = FCNs(base_net=vgg_model, n_class=6)
+    # model = UNet(in_channels=4, out_channels=6, n_blocks=5, start_filts=32,
+    #              merge_mode='concat', planar_blocks=(), #up_mode='resize',
+    #              activation='relu', batch_norm=True, dim=2,)
     return model
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-    parser.add_argument('-n', '--exp-name', default="axonseg-FCN-Dice-resizeconv-80nmGT",
+    parser.add_argument('-n', '--exp-name', default="axonseg-FCN-Dice-60nmGT-BOUTON",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=500000,
@@ -60,10 +60,10 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3training/')
 
     max_steps = args.max_steps
-    lr = 0.0048
+    lr = 0.001
     lr_stepsize = 500
     lr_dec = 0.995
-    batch_size = 5
+    batch_size = 4
 
     model = get_model()
     if torch.cuda.device_count() > 1:

@@ -9,6 +9,8 @@ import sys
 from validate import Validator
 import logging
 import coloredlogs
+import datetime
+import pwd
 from termcolor import colored
 import os
 from .. import global_params
@@ -77,6 +79,9 @@ class Config(object):
 
             if config.validate(Validator()):
                 self._entries = config
+            else:
+                self.log_main.error('ERROR: Could not parse config at '
+                                    '{}.'.format(self.path_config))
         else:
             self._entries = ConfigObj(self.path_config)
 
@@ -109,10 +114,13 @@ class DynConfig(Config):
          `self.working dir`.
         """
         # first check if working directory was set in environ, else check if it was changed in memory.
-        if 'syconn_wd' in os.environ:
+        if 'syconn_wd' in os.environ and os.environ['syconn_wd'] is not None and \
+            len(os.environ['syconn_wd']) > 0 and os.environ['syconn_wd'] != "None":
+
             if super().working_dir != os.environ['syconn_wd']:
                 super().__init__(os.environ['syconn_wd'])
-        elif super().working_dir != global_params.wd and global_params.wd is not None:
+        elif (global_params.wd is not None) and (len(global_params.wd) > 0) and \
+                (global_params.wd != "None") and (super().working_dir != global_params.wd):
             super().__init__(global_params.wd)
 
     @property
@@ -150,6 +158,47 @@ class DynConfig(Config):
         return self.entries['Paths']['kd_mi']
 
     @property
+    def kd_organells_paths(self):
+        """
+        KDs of subcell. organelle probability maps
+
+        Returns
+        -------
+        Dict[str]
+        """
+        path_dict = {k: self.entries['Paths']['kd_{}'.format(k)] for k in
+                     global_params.existing_cell_organelles}
+        # path_dict = {
+        #     'kd_sj': self.kd_sj_path,
+        #     'kd_vc': self.kd_vc_path,
+        #     'kd_mi': self.kd_mi_path
+        # }
+        return path_dict
+
+    @property
+    def kd_organelle_seg_paths(self):
+        """
+        KDs of subcell. organelle segmentations
+
+        Returns
+        -------
+        Dict[str]
+        """
+        path_dict = {k: "{}/knossosdatasets/{}_seg/".format(self.working_dir, k) for k in
+                     global_params.existing_cell_organelles}
+        # path_dict = {
+        #     'kd_sj': self.kd_sj_path,
+        #     'kd_vc': self.kd_vc_path,
+        #     'kd_mi': self.kd_mi_path
+        # }
+        return path_dict
+
+    @property
+    def temp_path(self):
+        # return "/tmp/{}_syconn/".format(pwd.getpwuid(os.getuid()).pw_name)
+        return "{}/tmp/".format(self.working_dir)
+
+    @property
     # TODO: Not necessarily needed anymore
     def py36path(self):
         if len(self.entries['Paths']['py36path']) != 0:
@@ -164,18 +213,27 @@ class DynConfig(Config):
     @property
     def init_rag_path(self):
         """
-        # currently a mergelist/RAG of the following form is expected:
-        # ID, ID
-        #    .
-        #    .
-        # ID, ID
 
         Returns
         -------
         str
         """
-        # self._check_actuality()
-        return self.entries['Paths']['init_rag']
+        self._check_actuality()
+        p = self.entries['Paths']['init_rag']
+        if len(p) == 0:
+            p = self.working_dir + "rag.bz2"
+        return p
+
+    @property
+    def pruned_rag_path(self):
+        """
+
+        Returns
+        -------
+        str
+        """
+        self._check_actuality()
+        return self.working_dir + '/pruned_rag.bz2'
 
     # --------- CLASSIFICATION MODELS
     @property
@@ -199,7 +257,7 @@ class DynConfig(Config):
         """
         Semantic segmentation moder cellular compartments
         """
-        return self.model_dir + '/axon_semseg/'
+        return self.model_dir + '/axoness_semseg/'
 
     @property
     def mpath_celltype(self):
@@ -235,7 +293,10 @@ class DynConfig(Config):
 
     @property
     def allow_mesh_gen_cells(self):
-        return self.entries['Mesh']['allow_mesh_gen_cells']
+        try:
+            return self.entries['Mesh']['allow_mesh_gen_cells']
+        except KeyError:
+            return False
 
     @property
     def allow_skel_gen(self):
@@ -264,13 +325,38 @@ class DynConfig(Config):
             return False
 
     @property
+    def use_new_meshing(self):
+        try:
+            return self.entries['Mesh']['use_new_meshing']
+        except KeyError:
+            return False
+
+    @property
     def qsub_work_folder(self):
-        return "%s/%s/" % (global_params.config.working_dir,
+        return "%s/%s/" % (global_params.config.working_dir, # self.temp_path,
                            global_params.BATCH_PROC_SYSTEM)
+
+    @property
+    def prior_glia_removal(self):
+        try:
+            return self.entries['Glia']['prior_glia_removal']
+        except KeyError:
+            return True
+
+    @property
+    def use_new_subfold(self):
+        try:
+            return self.entries['Paths']['use_new_subfold']
+        except KeyError:
+            return False
 
 
 def get_default_conf_str(example_wd, scaling, py36path="", syntype_avail=True,
-                         use_large_fov_views_ct=True, use_new_renderings_locs=True):
+                         use_large_fov_views_ct=False, use_new_renderings_locs=False,
+                         kd_seg=None, kd_sym=None, kd_asym=None, kd_sj=None, kd_mi=None,
+                         kd_vc=None, init_rag_p="", prior_glia_removal=False,
+                         use_new_meshing=False, allow_mesh_gen_cells=True,
+                         use_new_subfold=True):
     """
     Default SyConn config and type specification, placed in the working directory.
 
@@ -279,6 +365,18 @@ def get_default_conf_str(example_wd, scaling, py36path="", syntype_avail=True,
     str, str
         config.ini and configspec.ini contents
     """
+    if kd_seg is None:
+        kd_seg = example_wd + 'knossosdatasets/seg/'
+    if kd_sym is None:
+        kd_sym = example_wd + 'knossosdatasets/sym/'
+    if kd_asym is None:
+        kd_asym = example_wd + 'knossosdatasets/asym/'
+    if kd_sj is None:
+        kd_sj = example_wd + 'knossosdatasets/sj/'
+    if kd_mi is None:
+        kd_mi = example_wd + 'knossosdatasets/mi/'
+    if kd_vc is None:
+        kd_vc = example_wd + 'knossosdatasets/vc/'
     config_str = """[Versions]
 sv = 0
 vc = 0
@@ -287,8 +385,8 @@ syn = 0
 syn_ssv = 0
 mi = 0
 ssv = 0
-cs_agg = 0
 ax_gt = 0
+cs = 0
 
 [Paths]
 kd_seg = {}
@@ -299,6 +397,7 @@ kd_vc = {}
 kd_mi = {}
 init_rag = {}
 py36path = {}
+use_new_subfold = {}
 
 [Dataset]
 scaling = {}, {}, {}
@@ -325,7 +424,8 @@ sj = 0.19047619
 vc = 0.285714286
 
 [Mesh]
-allow_mesh_gen_cells = True
+allow_mesh_gen_cells = {}
+use_new_meshing = {}
 
 [Skeleton]
 allow_skel_gen = True
@@ -333,15 +433,14 @@ allow_skel_gen = True
 [Views]
 use_large_fov_views_ct = {}
 use_new_renderings_locs = {}
-    """.format(example_wd + 'knossosdatasets/seg/',
-               example_wd + 'knossosdatasets/sym/',
-               example_wd + 'knossosdatasets/asym/',
-               example_wd + 'knossosdatasets/sj/',
-               example_wd + 'knossosdatasets/vc/',
-               example_wd + 'knossosdatasets/mi/', '',
-               py36path, scaling[0], scaling[1], scaling[2],
-               str(syntype_avail), str(use_large_fov_views_ct),
-               str(use_new_renderings_locs))
+
+[Glia]
+prior_glia_removal = {}
+    """.format(kd_seg, kd_sym, kd_asym, kd_sj, kd_vc, kd_mi, init_rag_p,
+               py36path, use_new_subfold, scaling[0], scaling[1], scaling[2],
+               str(syntype_avail), str(allow_mesh_gen_cells), str(use_new_meshing),
+               str(use_large_fov_views_ct), str(use_new_renderings_locs),
+               str(prior_glia_removal))
 
     configspec_str = """
 [Versions]
@@ -368,6 +467,7 @@ __many__ = float
 
 [Mesh]
 allow_mesh_gen_cells = boolean
+use_new_meshing = boolean
 
 [Skeleton]
 allow_skel_gen = boolean
@@ -375,6 +475,9 @@ allow_skel_gen = boolean
 [Views]
 use_large_fov_views_ct = boolean
 use_new_renderings_locs = boolean
+
+[Glia]
+prior_glia_removal = boolean
 """
     return config_str, configspec_str
 
@@ -442,7 +545,24 @@ def initialize_logging(log_name, log_dir=None, overwrite=True):
         fh = logging.FileHandler(log_dir + log_name + ".log")
         fh.setLevel(level)
         formatter = logging.Formatter(
-            '%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            '%(asctime)s (%(relative)smin) - %(name)s - %(levelname)s - %(message)s')
+        fh.addFilter(TimeFilter())
         fh.setFormatter(formatter)
         logger.addHandler(fh)
     return logger
+
+
+class TimeFilter(logging.Filter):
+    """https://stackoverflow.com/questions/31521859/python-logging-module-time-since-last-log"""
+    def filter(self, record):
+        try:
+          last = self.last
+        except AttributeError:
+          last = record.relativeCreated
+
+        delta = datetime.datetime.fromtimestamp(record.relativeCreated/1000.0) - datetime.datetime.fromtimestamp(last/1000.0)
+
+        record.relative = '{0:.1f}'.format(delta.seconds / 60.)
+
+        self.last = record.relativeCreated
+        return True

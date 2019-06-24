@@ -3,7 +3,7 @@
 #
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
-# Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
+# Authors: Philipp Schubert, Joergen Kornfeld
 
 import warnings
 import os
@@ -31,8 +31,8 @@ rag_suffix = ""  # identifier in case there will be more than one RAG, TODO: Rem
 
 # --------- BACKEND DEFINITIONS
 BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
-batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + \
-                         "/batchjob_scripts/"
+batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + "/batchjob_scripts/"
+
 # TODO refactor syconn and get rid of all qsub_pe and qsub_queue kwargs and only use batch_job_enabled(),
 #  the default in QSUB_script should then be BATCH_PE and BATCH_QUEUE
 BATCH_PE = 'default'
@@ -46,7 +46,7 @@ NCORE_TOTAL = NNODES_TOTAL * NCORES_PER_NODE
 NGPU_TOTAL = NNODES_TOTAL * NGPUS_PER_NODE
 
 backend = "FS"  # File system
-PYOPENGL_PLATFORM = 'egl'  # Rendering
+PYOPENGL_PLATFORM = 'egl'  # Rendering: 'egl' or 'osmesa'
 DISABLE_LOCKING = False
 
 # --------- LOGGING
@@ -62,11 +62,14 @@ log_level = logging.DEBUG  # INFO, DEBUG
 # will be stored at wd + '/logs/'.
 DISABLE_FILE_LOGGING = True
 
+# --------- CELL ORGANELLE PARAMETERS
+thresh_mi_bbd_mapping = 25e3
 
 # --------- CONTACT SITE AND SYNAPSE PARAMETERS
 # Synaptic junction bounding box diagonal threshold in nm; objects above will not be used during `syn_gen_via_cset`
 thresh_sj_bbd_syngen = 25e3
 thresh_syn_proba = 0.5  # RFC probability used for classifying whether syn or not
+thresh_syn_size = 10  # minimum number of voxel for synapses in SSVs  # TODO: tweak, increase
 cs_gap_nm = 250
 # mapping parameters in 'map_objects_to_synssv'; assignment of cellular organelles to syn_ssv
 max_vx_dist_nm = 2000
@@ -82,6 +85,8 @@ MESH_DOWNSAMPLING = {"sv": (4, 4, 2), "sj": (2, 2, 1), "vc": (4, 4, 2),
 MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0,
                 "conn": 4, 'syn_ssv': 20}
 MESH_MIN_OBJ_VX = 100  # adapt to size threshold
+
+meshing_props = dict(normals=True, simplification_factor=300, max_simplification_error=40)
 
 
 # --------- VIEW PARAMETERS
@@ -99,7 +104,6 @@ RENDERING_MAX_NB_SV = 5e3
 # number of SV for which views are rendered in one pass
 SUBCC_CHUNK_SIZE_BIG_SSV = 9
 
-
 # --------- RFC PARAMETERS
 SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000}  # in nm
 
@@ -112,7 +116,12 @@ gt_path_spineseg = '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'  # TODO:
 
 # --------- COMPARTMENT PARAMETERS
 DIST_AXONESS_AVERAGING = 10000
-gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm/'  # TODO: add to config
+gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness' \
+                  '/gt_h5_files_80nm_1024_with_BOUTONS/'  # TODO: add to config
+view_properties_semsegax = dict(verbose=False, ws=(1024, 512), nb_views=3,
+                                comp_window=40.96e3 * 1.5, semseg_key='axoness',
+                                n_avg=0)  # this will not map predictions to unpredicted vertices
+map_properties_semsegax = dict(k=50, ds_vertices=10, ignore_labels=[6])
 
 
 # --------- CELLTYPE PARAMETERS
@@ -124,3 +133,6 @@ ndim_embedding = 10
 
 # general config object
 config = DynConfig()
+
+
+

@@ -11,6 +11,8 @@ echo y | conda install pyopengl
 echo y | conda install snappy
 echo y | conda install python-snappy
 echo y | conda install tensorboard tensorflow
+echo y | conda install llvmlite=0.26.0
+echo y | conda install gcc_impl_linux-64 gcc_linux-64 gxx_impl_linux-64 gxx_linux-64
 
 
 pip install -r requirements.txt

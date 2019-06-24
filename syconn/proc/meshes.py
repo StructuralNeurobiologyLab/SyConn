@@ -12,7 +12,7 @@ from numba import jit
 from scipy import spatial, ndimage
 from skimage import measure
 from sklearn.decomposition import PCA
-import openmesh
+
 from plyfile import PlyData, PlyElement
 from scipy.ndimage.morphology import binary_closing, binary_dilation
 import tqdm
@@ -23,11 +23,7 @@ try:
 except ImportError:
     __vtk_avail__ = False
 
-try:
-    from .in_bounding_boxC import in_bounding_box
-except ImportError:
-    from .in_bounding_box import in_bounding_box
-
+from skimage.measure import mesh_surface_area
 from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip
 from .image import apply_pca
@@ -42,12 +38,26 @@ try:
     from vigra.filters import boundaryDistanceTransform, gaussianSmoothing
 except ImportError as e:
     boundaryDistanceTransform, gaussianSmoothing = None, None
-    log_proc.error('ModuleNotFoundError. Could not import VIGRA. '
+    log_proc.error('ImportError. Could not import VIGRA. '
                    'Mesh generation will not be possible. {}'.format(e))
+try:
+    import openmesh
+except ImportError as e:
+    log_proc.error('ImportError. Could not import openmesh. '
+                   'Writing meshes will not be possible. {}'.format(e))
+
+try:
+    from .in_bounding_boxC import in_bounding_box
+except ImportError:
+    from .in_bounding_box import in_bounding_box
+    log_proc.error('ImportError. Could not import `in_boundinb_box` from '
+                   '`syconn/proc.in_bounding_boxC.py`. Fallback to numba jit.')
+
 
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
-           'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso']
+           'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso', 'merge_meshes_incl_norm',
+           'mesh_area_calc']
 
 
 class MeshObject(object):
@@ -118,7 +128,7 @@ class MeshObject(object):
     @property
     def normals(self):
         if self._normals is None or len(self._normals) != len(self.vertices):
-            log_proc.debug("Calculating normals")
+            log_proc.warning("Calculating normals")
             self._normals = unit_normal(self.vertices, self.indices)
         elif len(self._normals) != len(self.vertices):
             log_proc.debug("Calculating normals, because their shape differs from"
@@ -205,7 +215,7 @@ def triangulation_wrapper(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=F
 
 
 def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
-                  decimate_mesh=0, gradient_direction='ascent',
+                  decimate_mesh=0, gradient_direction='descent',
                   force_single_cc=False):
     """
     Calculates triangulation of point cloud or dense volume using marching cubes
@@ -227,8 +237,8 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
         Percentage of mesh size reduction, i.e. 0.1 will leave 90% of the
         vertices
     gradient_direction : str
-        defines orientation of triangle indices. 'ascent' is needed for KNOSSOS
-         compatibility.
+        defines orientation of triangle indices. '?' is needed for KNOSSOS
+         compatibility. TODO: check compatible index orientation, switched to `descent`, 23April2019
     force_single_cc : bool
         If True, performans dilations until only one foreground CC is present
         and then erodes with the same number to maintain size.
@@ -310,22 +320,16 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
                   "pip install vtki'."
             log_proc.error(msg)
             raise ImportError(msg)
-        log_proc.warning("'triangulation': Currently mesh-sparsification"
-                         " may not preserve volume.")
+        # log_proc.warning("'triangulation': Currently mesh-sparsification"
+        #                  " may not preserve volume.")
         # add number of vertices in front of every face (required by vtki)
         ind = np.concatenate([np.ones((len(ind), 1)).astype(np.int64) * 3, ind],
                              axis=1)
-        mesh = vtki.PolyData(verts, ind.flatten()).TriFilter()
-        decimated_mesh = mesh.Decimate(decimate_mesh, volume_preservation=True)
-        if decimated_mesh is None:  # maybe vtki API changes and operates in-place -> TODO: check version differences and require one of them, changed to vtki, PS 04Feb2019
-            decimated_mesh = mesh
-            if len(decimated_mesh.faces.reshape((-1, 4))[:, 1:]) == len(ind):
-                log_proc.error(
-                    "'triangulation': Mesh-sparsification could not sparsify"
-                    " mesh.")
+        mesh = vtki.PolyData(verts, ind.flatten())
+        mesh.decimate(decimate_mesh, volume_preservation=True)
         # remove face sizes again
-        ind = decimated_mesh.faces.reshape((-1, 4))[:, 1:]
-        verts = decimated_mesh.points
+        ind = mesh.faces.reshape((-1, 4))[:, 1:]
+        verts = mesh.points
         mo = MeshObject("", ind, verts)
         # compute normals
         norm = mo.normals.reshape((-1, 3))
@@ -409,10 +413,44 @@ def normalize_vertices(vertices):
     return vertices
 
 
-def calc_rot_matrices(coords, vertices, edge_length):
+def calc_rot_matrices(coords, vertices, edge_length, nb_cpus=1):
     """
     # Optimization comment: bottleneck is now 'get_rotmatrix_from_points'
 
+    Fits a PCA to local sub-volumes in order to rotate them according to
+    its main process (e.g. x-axis will be parallel to the long axis of a tube)
+
+    Parameters
+    ----------
+    coords : np.array [M x 3]
+    vertices : np.array [N x 3]
+    edge_length : float, int
+        spatial extent of box for querying vertices for pca fit
+    nb_cpus : int
+
+    Returns
+    -------
+    np.array [M x 16]
+        Fortran flattened OpenGL rotation matrix
+    """
+    if not np.isscalar(edge_length):
+        log_proc.warning('"calc_rot_matrices" now takes only scalar edgelengths'
+                         '. Choosing np.min(edge_length) as query box edge'
+                         ' length.')
+        edge_length = np.min(edge_length)
+    if len(vertices) > 1e5:
+        vertices = vertices[::8]
+    vertices = vertices.astype(np.float32)
+    params = [(coords_ch, vertices, edge_length) for coords_ch in
+              np.array_split(coords, nb_cpus, axis=0)]
+    res = start_multiprocess_imap(calc_rot_matrices_helper, params,
+                                  nb_cpus=nb_cpus, show_progress=False)
+    rot_matrices = np.concatenate(res)
+    return rot_matrices
+
+
+def calc_rot_matrices_helper(args):
+    """
     Fits a PCA to local sub-volumes in order to rotate them according to
     its main process (e.g. x-axis will be parallel to the long axis of a tube)
 
@@ -428,29 +466,14 @@ def calc_rot_matrices(coords, vertices, edge_length):
     np.array [M x 16]
         Fortran flattened OpenGL rotation matrix
     """
-    if not np.isscalar(edge_length):
-        log_proc.warning('"calc_rot_matrices" now takes only scalar edgelengths'
-                         '. Choosing np.min(edge_length) as query box edge'
-                         ' length.')
-        edge_length = np.min(edge_length)
-    if len(vertices) > 1e5:
-        vertices = vertices[::8]
+    coords, vertices, edge_length = args
     rot_matrices = np.zeros((len(coords), 16))
     edge_lengths = np.array([edge_length] * 3)
-    rotmat_dt = 0
-    inlier_dt = 0
+    vertices = vertices.astype(np.float32)
     for ii, c in enumerate(coords):
-        bounding_box = np.array([c, edge_lengths])
-        # start = time.time()
+        bounding_box = np.array([c, edge_lengths], dtype=np.float32)
         inlier = np.array(vertices[in_bounding_box(vertices, bounding_box)])
-        # inlier_dt += time.time() - start
-        # start = time.time()
         rot_matrices[ii] = get_rotmatrix_from_points(inlier)
-        # rotmat_dt += time.time() - start
-    # log_proc.debug('Time for inlier calc.: {:.2f} min'.format(
-    #     inlier_dt / 60))
-    # log_proc.debug('Time for rot. mat.  calc.: {:.2f} min'.format(
-    #     rotmat_dt / 60))
     return rot_matrices
 
 
@@ -499,7 +522,7 @@ def flag_empty_spaces(coords, vertices, edge_length):
         
     """
     if not np.isscalar(edge_length):
-        log_proc.warning('"calc_rot_matrices" now takes only scalar edgelengths'
+        log_proc.warning('"flag_empty_spaces" now takes only scalar edgelengths'
                          '. Choosing np.min(edge_length) as query box edge'
                          ' length.')
         edge_length = np.min(edge_length)
@@ -536,33 +559,6 @@ def get_bounding_box(coordinates):
     mean = np.mean(coord_resh, axis=0)
     max_dist = np.max(np.abs(coord_resh - mean))
     return mean, max_dist
-
-
-# @jit
-# def in_bounding_box(coords, bounding_box):
-#     """
-#     Loop version with numba
-#
-#     Parameters
-#     ----------
-#     coords : np.array (N x 3)
-#     bounding_box : tuple (np.array, np.array)
-#         center coordinate and edge lengths of bounding box
-#
-#     Returns
-#     -------
-#     np.array of bool
-#         inlying coordinates are indicated as true
-#     """
-#     edge_sizes = bounding_box[1] / 2
-#     coords = np.array(coords) - bounding_box[0]
-#     inlier = np.zeros((len(coords)), dtype=np.bool)
-#     for i in range(len(coords)):
-#         x_cond = (coords[i, 0] > -edge_sizes[0]) & (coords[i, 0] < edge_sizes[0])
-#         y_cond = (coords[i, 1] > -edge_sizes[1]) & (coords[i, 1] < edge_sizes[1])
-#         z_cond = (coords[i, 2] > -edge_sizes[2]) & (coords[i, 2] < edge_sizes[2])
-#         inlier[i] = x_cond & y_cond & z_cond
-#     return inlier
 
 
 @jit
@@ -659,9 +655,51 @@ def merge_meshes(ind_lst, vert_lst, nb_simplices=3):
     all_vert = np.zeros((0, ))
     for i in range(len(vert_lst)):
         all_ind = np.concatenate([all_ind, ind_lst[i] +
-                                  len(all_vert)/nb_simplices])
+                                  len(all_vert)//nb_simplices])
         all_vert = np.concatenate([all_vert, vert_lst[i]])
     return all_ind, all_vert
+
+
+def merge_meshes_incl_norm(ind_lst, vert_lst, norm_lst, nb_simplices=3):
+    """
+    Combine several meshes into a single one.
+
+    Parameters
+    ----------
+    ind_lst : List[np.ndarray]
+        array shapes [M, 1]
+    vert_lst : List[np.ndarray]
+        array shapes [N, 1]
+    norm_lst : List[np.ndarray]
+        array shapes [N, 1]
+    nb_simplices : int
+        Number of simplices, e.g. for triangles nb_simplices=3
+
+    Returns
+    -------
+    [np.array, np.array, np.array]
+    """
+    assert len(vert_lst) == len(ind_lst), "Length of indices list differs" \
+                                          "from vertices list."
+
+    if len(vert_lst) == 0:
+        return [np.zeros((0,), dtype=np.uint), np.zeros((0,)), np.zeros((0,))]
+    else:
+        all_vert = np.concatenate(vert_lst)
+
+    if len(norm_lst) == 0:
+        all_norm = np.zeros((0,))
+    else:
+        all_norm = np.concatenate(norm_lst)
+    # store index and vertex offset of every partial mesh
+    vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(
+        np.uint)
+    ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
+    all_ind = np.concatenate(ind_lst)
+    for i in range(0, len(vert_lst)):
+        start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]
+        all_ind[start_ix:end_ix] += vert_offset[i]
+    return [all_ind, all_vert, all_norm]
 
 
 def mesh_loader(so):
@@ -694,6 +732,10 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     all_vert = np.zeros((0, ))
     all_norm = np.zeros((0, ))
     colors = np.zeros((0, ))
+    if nb_cpus > 1:
+        log_proc.debug('`merge_someshes` is not working with `n_cpus > 1`:'
+                       ' `cant pickle _thread.RLock objects`')
+        nb_cpus = 1
     meshes = start_multiprocess_imap(mesh_loader, sos, nb_cpus=nb_cpus,
                                      show_progress=False)
     if color_vals is not None and cmap is not None:
@@ -702,7 +744,7 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
         ind, vert, norm = meshes[i]
         assert len(vert) == len(norm) or len(norm) == 0, "Length of normals " \
                                                          "and vertices differ."
-        all_ind = np.concatenate([all_ind, ind + len(all_vert)/nb_simplices])
+        all_ind = np.concatenate([all_ind, ind + len(all_vert)//nb_simplices])
         all_vert = np.concatenate([all_vert, vert])
         all_norm = np.concatenate([all_norm, norm])
         if color_vals is not None:
@@ -756,7 +798,7 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
                       "automatically, data will be unusable if not normalized"
                       " between 0 and 255. min/max of data:"
                       " {}, {}".format(rgba_color.min(), rgba_color.max()))
-    elif rgba_color.dtype.kind != "u1":
+    elif not np.issubdtype(rgba_color.dtype, np.uint8):
         log_proc.warn("Color array is not of type integer or unsigned integer."
                       " It will now be converted automatically, data will be "
                       "unusable if not normalized between 0 and 255."
@@ -822,8 +864,8 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
     ply_fname : str
     """
     if len(vert) == 0:
-        log_proc.warn("'write_mesh2kzip' call with empty vertex array. Did not"
-                      " write data to kzip.")
+        log_proc.warn("'write_mesh2kzip' called with empty vertex array. Did not"
+                      " write data to kzip. `ply_fname`. {}".format(ply_fname))
         return
     tmp_dest_p = '{}_{}'.format(k_path, ply_fname)
     if color is not None:
@@ -1003,10 +1045,14 @@ def mesh_chunk(args):
             min_obj_vx = global_params.config.entries['Sizethresholds'][obj_type]
         except KeyError:
             min_obj_vx = MESH_MIN_OBJ_VX
+        if obj_type == 'sv':
+            decimate_mesh = 0.3  # remove 30% of the verties  # TODO: add to global params
+        else:
+            decimate_mesh = 0
         try:
             indices, vertices, normals = triangulation(
                 voxel_list, downsampling=MESH_DOWNSAMPLING[obj_type], n_closings=MESH_CLOSING[obj_type],
-                force_single_cc=obj_type == 'syn_ssv')
+                force_single_cc=obj_type == 'syn_ssv', decimate_mesh=decimate_mesh)
             vertices += 1  # account for knossos 1-indexing
             vertices = np.round(vertices * scaling)
         except ValueError as e:
@@ -1077,3 +1123,15 @@ def mesh2obj_file(dest_path, mesh, color=None, center=None, scale=None):
     result = openmesh.write_mesh(dest_path, mesh_obj)
     # if not result:
     #     log_proc.error("Error occured when writing mesh to .obj file.")
+
+
+def mesh_area_calc(mesh):
+    """
+
+    Returns
+    -------
+    float
+        Mesh area in um^2
+    """
+    return mesh_surface_area(mesh[1].reshape(-1, 3),
+                             mesh[0].reshape(-1, 3)) / 1e6

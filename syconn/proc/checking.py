@@ -35,8 +35,6 @@ def find_missing_overlaycubes(path, stride=100, qsub_pe=None, qsub_queue=None,
     elif qu.batchjob_enabled():
         path_to_out = qu.QSUB_script(multi_params,
                                      "find_missing_overlaycubes",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
                                      n_max_co_processes=n_max_co_processes)
 
         out_files = glob.glob(path_to_out + "/*")

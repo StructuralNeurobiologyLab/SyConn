@@ -37,8 +37,14 @@ if __name__ == '__main__':
     if args.working_dir == "":  # by default use cube dependent working dir
         args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)
     example_wd = os.path.expanduser(args.working_dir)
+    log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
 
     # PREPARE TOY DATA
+    log.info('Step 0/8 - Preparation')
+
+    time_stamps = [time.time()]
+    step_idents = ['t-0']
+
     curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
     h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
     kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
@@ -53,21 +59,23 @@ if __name__ == '__main__':
             or not os.path.isfile(h5_dir + 'neuron_rag.bz2'):
         raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
 
-    log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
+    os.makedirs(example_wd + '/glia/', exist_ok=True)
+
     bb = parse_movement_area_from_zip(kzip_p)
+    prior_glia_removal = True
+    use_new_meshing = True  # TODO: optimize write-out and investigate find_mesh complexity
     offset = np.array([0, 0, 0])
     bd = bb[1] - bb[0]
     scale = np.array([10, 10, 20])
     chunk_size = (256, 256, 256)
-    n_folders_fs = 1000  # number of folders in should probably be different for different segmentations
-    max_n_jobs = 60
+    n_folders_fs = 1000
+    n_folders_fs_sc = 1000
     experiment_name = 'j0126_example'
+    global_params.NCORE_TOTAL = 20
+    global_params.NGPU_TOTAL = 2
+    global_params.NNODES_TOTAL = 1
 
     # PREPARE CONFIG
-    # currently this is were SyConn looks for the neuron rag # TODO refactor
-    os.makedirs(example_wd + '/glia/', exist_ok=True)
-    shutil.copy(h5_dir + "/neuron_rag.bz2", example_wd + '/glia/neuron_rag.bz2')
-    global_params.wd = example_wd
     log.critical('Example run started. Working directory is overwritten and set'
                  ' to "{}".'.format(example_wd))
     if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
@@ -76,11 +84,20 @@ if __name__ == '__main__':
             shell=True).decode().replace('\n', '')
     else:
         py36path = ""
-    config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale, py36path=py36path)
+    config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale,
+                                                      py36path=py36path,
+                                                      use_new_renderings_locs=True,
+                                                      use_large_fov_views_ct=False,
+                                                      use_new_meshing=use_new_meshing,
+                                                      allow_mesh_gen_cells=True,
+                                                      prior_glia_removal=prior_glia_removal)
     with open(example_wd + 'config.ini', 'w') as f:
         f.write(config_str)
     with open(example_wd + 'configspec.ini', 'w') as f:
         f.write(configspec_str)
+
+    global_params.wd = example_wd
+    os.makedirs(global_params.config.temp_path, exist_ok=True)
 
     for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype',
                       'mpath_axoness', 'mpath_glia']:
@@ -90,16 +107,13 @@ if __name__ == '__main__':
                              ' "models" folder into the current working '
                              'directory "{}".'.format(mpath, example_wd))
 
-    log.info('Finished example cube initialization (shape: {}). Starting'
-             ' SyConn pipeline.'.format(bd))
-    log.info('Example data will be processed in "{}".'.format(example_wd))
-
-    time_stamps = [time.time()]
-    step_idents = ['t-0']
+    if not prior_glia_removal:
+        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_rag_path)
+    else:
+        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
 
     # INITIALIZE DATA
     # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
-    log.info('Step 0/8 - Preparation')
     kd = knossosdataset.KnossosDataset()
     # kd.set_channel('jpg')
     kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
@@ -108,8 +122,8 @@ if __name__ == '__main__':
 
     seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
     # seg_d = seg_d.astype(np.uint32)
-    # TODO: currently KnossosDataset class does not infer the correct type automatically, see knossos config
-    #  and handling in detail
+    # TODO: currently KnossosDataset class does not infer the correct type automatically,
+    #  see knossos config and handling in detail
     kd.from_matrix_to_cubes(offset, mags=[1, 2], data=seg_d,
                             fast_downsampling=True, as_raw=False)
 
@@ -146,57 +160,67 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('Preparation')
 
-    # Run SyConn  # TODO: set n_max_co_processes to None by default (-> submit all jobs at once when using SLURM)
-    if 0:  # TODO: work-in glia removal
-        log.info('Step 0.5/8 - Glia separation')
+    log.info('Finished example cube initialization (shape: {}). Starting'
+             ' SyConn pipeline.'.format(bd))
+    log.info('Example data will be processed in "{}".'.format(example_wd))
+
+    # START SyConn
+    log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
+    exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
+                                    n_folders_fs_sc=n_folders_fs_sc)
+    exec_init.run_create_rag()
+
+    time_stamps.append(time.time())
+    step_idents.append('SD generation')
+
+    if global_params.config.prior_glia_removal:
+        log.info('Step 1.5/8 - Glia separation')
         exec_multiview.run_glia_rendering()
-        exec_multiview.run_glia_prediction()
+        exec_multiview.run_glia_prediction(e3=True)
         exec_multiview.run_glia_splitting()
         time_stamps.append(time.time())
         step_idents.append('Glia separation')
 
-    log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
-    exec_init.run_create_sds(generate_sv_meshes=True, chunk_size=chunk_size,
-                             n_folders_fs=n_folders_fs, max_n_jobs=max_n_jobs)
-    time_stamps.append(time.time())
-    step_idents.append('SD generation')
-
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
-    exec_multiview.run_create_neuron_ssd(prior_glia_removal=False)
+    exec_multiview.run_create_neuron_ssd()
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 
     log.info('Step 3/8 - Neuron rendering')
-    exec_multiview.run_neuron_rendering(max_n_jobs=max_n_jobs)
+    exec_multiview.run_neuron_rendering()
     time_stamps.append(time.time())
     step_idents.append('Neuron rendering')
 
-    # run_syn_generation can run in parallel to steps 5 and 6, because they
-    # require only medium MEM and CPU resources and mainly GPU
-    # TODO: adapt memory and CPU allocation of those GPU workers
     log.info('Step 4/8 - Synapse detection')
-    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
-                                 max_n_jobs=max_n_jobs)
+    exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
 
     log.info('Step 5/8 - Axon prediction')
-    exec_multiview.run_axoness_prediction(max_n_jobs=4, e3=True)
-    exec_multiview.run_axoness_mapping()
+    # # OLD
+    # exec_multiview.run_axoness_prediction(e3=True)
+    # exec_multiview.run_axoness_mapping()
+    exec_multiview.run_semsegaxoness_prediction()
+    exec_multiview.run_semsegaxoness_mapping()
     time_stamps.append(time.time())
     step_idents.append('Axon prediction')
 
     log.info('Step 6/8 - Spine prediction')
-    exec_multiview.run_spiness_prediction(max_n_jobs=4)
+    exec_multiview.run_spiness_prediction()
     time_stamps.append(time.time())
     step_idents.append('Spine prediction')
 
-    log.info('Step 7/8 - Celltype analysis')
-    exec_multiview.run_celltype_prediction(max_n_jobs=4)
+    log.info('Step 7/9 - Morphology extraction')
+    exec_multiview.run_morphology_embedding()
+    time_stamps.append(time.time())
+    step_idents.append('Morphology extraction')
+
+    log.info('Step 8/9 - Celltype analysis')
+    exec_multiview.run_celltype_prediction()
     time_stamps.append(time.time())
     step_idents.append('Celltype analysis')
 
-    log.info('Step 8/8 - Matrix export')
+    log.info('Step 9/9 - Matrix export')
     exec_syns.run_matrix_export()
     time_stamps.append(time.time())
     step_idents.append('Matrix export')
@@ -207,17 +231,18 @@ if __name__ == '__main__':
     dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
     time_summary_str = "\nEM data analysis of experiment '{}' finished after" \
                        " {}.\n".format(experiment_name, dt_tot_str)
+    n_steps = len(step_idents[1:]) - 1
     for i in range(len(step_idents[1:])):
         step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
         step_dt_perc = int(dts[i] / dt_tot * 100)
-        step_str = "[{}/8] {}\t\t\t{}\t\t\t{}%\n".format(
-            i, step_idents[i+1], step_dt, step_dt_perc)
+        step_str = "[{}/{}] {}\t\t\t{}\t\t\t{}%\n".format(
+            i, n_steps, step_idents[i+1], step_dt, step_dt_perc)
         time_summary_str += step_str
     log.info(time_summary_str)
-    # log.info('Setting up flask server for inspection. Annotated cell reconst'
-    #          'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
-    #          ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    # fname_server = os.path.dirname(os.path.abspath(__file__)) + \
-    #                '/../kplugin/server.py'
-    # os.system('python {} --working_dir={} --port=10002'.format(
-    #     fname_server, example_wd))
+    log.info('Setting up flask server for inspection. Annotated cell reconst'
+             'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
+             ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    fname_server = os.path.dirname(os.path.abspath(__file__)) + \
+                   '/../kplugin/server.py'
+    os.system('python {} --working_dir={} --port=10001'.format(
+        fname_server, example_wd))

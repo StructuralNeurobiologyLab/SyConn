@@ -19,6 +19,7 @@ except ImportError:
 import os
 import time
 import shutil
+from pickle import UnpicklingError
 
 from ..extraction import log_extraction
 from ..handler.basics import write_obj2pkl, load_pkl2obj
@@ -199,7 +200,7 @@ class FSBase(StorageBase):
             dest = self._path
         if self._path is None:  # support virtual / temporary SSO objects
             log_extraction.warning('"push" called but Storage object was initialized '
-                                   'with "None". Content will not bw pushed.')
+                                   'with "None". Content will not be written.')
             return
         write_obj2pkl(dest + ".tmp", self._dc_intern)
         shutil.move(dest + ".tmp", dest)
@@ -241,9 +242,9 @@ class FSBase(StorageBase):
         if os.path.isfile(source):
             try:
                 self._dc_intern = load_pkl2obj(source)
-            except EOFError:
+            except (UnpicklingError, EOFError) as e:
                 log_extraction.warning("Could not load LZ4Dict ({}). 'push' will"
-                                       " overwrite broken .pkl file.".format(self._path))
+                                       " overwrite broken .pkl file: {}.".format(self._path, e))
                 self._dc_intern = {}
         else:
             self._dc_intern = {}

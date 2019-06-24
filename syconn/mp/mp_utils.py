@@ -67,7 +67,8 @@ def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
         try:
             out.append(future.result())
         except Exception as e:
-            log_mp.error(e)
+            msg = "In function '{}': {}".format(str(function), e)
+            log_mp.error(msg)
             out.append(e)
     return front + out
 
@@ -152,10 +153,10 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
 
     start = time.time()
     if nb_cpus > 1:
-        with MyPool(nb_cpus) as pool:
-            if show_progress:
-                result = parallel_process(params, func, nb_cpus)
-            else:
+        if show_progress:
+            result = parallel_process(params, func, nb_cpus)
+        else:
+            with MyPool(nb_cpus) as pool:
                 result = list(pool.map(func, params))
     else:
         if show_progress:
@@ -269,22 +270,10 @@ def start_multithread_imap(func, params, debug=False, verbose=False,
     start = time.time()
 
     if nb_cpus > 1:
-        # TODO: fix show_progress flag
-        # if show_progress:
-        """
-        pool = MyPool(nb_cpus)
-        if show_progress:
-            result = list(tqdm.tqdm(pool.imap(func, params), total=len(params), ncols=80, leave=False,
-                                    unit='jobs', unit_scale=True, dynamic_ncols=False, mininterval=1))
-        else:
-            result = pool.imap(func, params)
-        pool.close()
-        pool.join()
-
-        """
         if show_progress:
             result = parallel_threads(params, func, nb_cpus)
         else:
+            pool = MyPool(nb_cpus)
             result = list(pool.map(func, params))
 
     else:
@@ -308,7 +297,7 @@ def start_multithread_imap(func, params, debug=False, verbose=False,
 def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
                            nb_cpus=None):
     """
-
+    # TODO: broken for n_cpus > 1: `TypeError: can't pickle _thread.RLock objects`
     Parameters
     ----------
     func_name : str
@@ -331,7 +320,10 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
         nb_cpus = 1
 
     nb_cpus = min(nb_cpus, len(params), cpu_count())
-
+    if nb_cpus > 1:
+        log_mp.warning('`start_multiprocess_imap` is broken for n_cpus > 1:'
+                       ' `TypeError: cant pickle _thread.RLock objects`')
+        nb_cpus = 1
     if verbose:
         log_mp.debug("Computing %d parameters with %d cpus." %
                      (len(params), nb_cpus))

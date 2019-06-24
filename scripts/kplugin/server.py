@@ -5,7 +5,7 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-# TODO: move code to syconn/gate/
+# TODO: move code to syconn/gate/ but keep executable script here
 import copy
 import time
 import numpy as np
@@ -17,7 +17,7 @@ import os
 from syconn.reps import super_segmentation as ss
 from syconn.reps import connectivity_helper as conn
 from syconn import global_params
-from syconn.gate import log_gate
+from syconn.handler.logger import log_main as log_gate
 from syconn.handler.multiviews import int2str_converter
 from syconn.reps.segmentation import SegmentationDataset
 
@@ -177,7 +177,10 @@ class SyConnBackend(object):
         mesh = ssv._load_obj_mesh_compr("sv")
         mesh = {'vertices': mesh[1],
                 'indices': mesh[0],
-                'normals': mesh[2] if len(mesh) == 2 else []}
+                # TODO: examine the existing normals more closely -> find_meshes seems to create
+                #  different normals than K (face orientation is correct though)
+                # 'normals': mesh[2] if len(mesh) == 2 else []}
+                'normals': []}
         dtime = time.time() - start
         self.logger.info('Got ssv mesh {} after {:.2f}'.format(ssv_id, dtime))
         return mesh
@@ -233,13 +236,19 @@ class SyConnBackend(object):
             return {}
         skel_attr = ["nodes", "edges", "diameters"]
         avg_dst = global_params.DIST_AXONESS_AVERAGING
-        keys = ["axoness_avg{}".format(avg_dst),
-                "axoness_avg{}_comp_maj".format(avg_dst)]
+        keys = [
+                # "axoness_avg{}".format(avg_dst),
+                # "axoness_avg{}_comp_maj".format(avg_dst),
+                "axoness_k{}".format(global_params.map_properties_semsegax['k']),
+                "axoness_k{}_comp_maj".format(global_params.map_properties_semsegax['k'])]
         for k in keys:
             if k in skeleton:
                 skel_attr.append(k)
                 if type(skeleton[k]) is list:
                     skeleton[k] = np.array(skeleton[k])
+            else:
+                log_gate.warning("Couldn't find requested key in "
+                                 "skeleton '{}'. Existing keys: {}".format(k, skeleton.keys()))
         return {k: skeleton[k].flatten().tolist() for k in
                 skel_attr}
 
@@ -249,6 +258,9 @@ class SyConnBackend(object):
         :param ssv_id: int
         :return: dict
         """
+        # TODO: examine the existing normals more closely -> find_meshes seems to create
+        #  different normals than K (face orientation is correct though)
+        return b""
         start = time.time()
         self.logger.info('Loading ssv {} mesh normals'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
@@ -288,7 +300,10 @@ class SyConnBackend(object):
             return None
         ret = {'vertices': mesh[1],
                'indices': mesh[0],
-               'normals': mesh[2] if len(mesh) == 2 else []}
+               # TODO: examine the existing normals more closely -> find_meshes seems to create
+               #  different normals than K (face orientation is correct though)
+               # 'normals': mesh[2] if len(mesh) == 2 else []}
+               'normals': []}
         return ret
 
     def ssv_obj_ind(self, ssv_id, obj_type):
@@ -360,6 +375,9 @@ class SyConnBackend(object):
         :param obj_type: str
         :return: dict
         """
+        # TODO: examine the existing normals more closely -> find_meshes seems to create
+        #  different normals than K (face orientation is correct though)
+        return b""
         start = time.time()
         self.logger.info('Loading ssv {} {} mesh normals'
                          ''.format(ssv_id, obj_type))
@@ -544,14 +562,16 @@ class SyConnBackend(object):
 
 
 class ServerState(object):
-    def __init__(self):
-
+    def __init__(self, host=None, port=None):
         self.logger = log_gate
+        self.host = host
+        self.port = port
 
         self.logger.info('SyConn gate server starting up on working directory '
                          '"{}".'.format(global_params.wd))
         self.backend = SyConnBackend(global_params.config.working_dir, logger=self.logger)
-        self.logger.info('SyConn gate server running.')
+        self.logger.info('SyConn gate server running at {}, {}.'.format(
+            self.host, self.port))
         return
 
 
@@ -593,7 +613,7 @@ server_port = args.port
 server_host = args.host
 global_params.wd = server_wd
 
-sg_state = ServerState()
+sg_state = ServerState(server_host, server_port)
 
 # context = ('cert.crt', 'key.key') enable later
 app.run(host=server_host,  # do not run this on a non-firewalled machine!

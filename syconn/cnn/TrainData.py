@@ -69,7 +69,7 @@ if elektronn3_avail:
                 data_t = self.target_file[target_key][()].astype(np.int64)
                 self.target.append(data_t[:, 0])
                 del data, data_t
-            self.close_files()
+                self.close_files()
             self.inp = np.concatenate(self.inp)
             self.target = np.concatenate(self.target)
             self.transform = transform
