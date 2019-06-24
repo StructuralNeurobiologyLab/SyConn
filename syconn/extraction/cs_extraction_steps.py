@@ -147,6 +147,7 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
             if ii == 2:
                 grp.create_dataset(str(key), data=val)
             else:
+                print("\n\n\n ii= ", ii, "key= ", key, " val= ", val)
                 grp.create_dataset(str(key), data=val, compression="gzip")
     del cs_props
     f.close()
@@ -222,7 +223,6 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     for p in dict_paths:
         os.remove(p)
     shutil.rmtree(cd_dir, ignore_errors=True)
-    print("\n\n\n KONIEC IMPREZY \n\n\n ")
 
 
 def _contact_site_extraction_thread(args):
@@ -275,8 +275,7 @@ def _contact_site_extraction_thread(args):
         cum_dt_data += time.time() - start
         start = time.time()
         # this counts SJ foreground voxels overlapping with the CS objects and the asym and sym voxels
-        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt = extract_cs_syntype(contacts, syn_d, asym_d,
-                                                                      sym_d)
+        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt = extract_cs_syntype(contacts, syn_d, asym_d, sym_d)
         cum_dt_proc += time.time() - start
         os.makedirs(chunk.folder, exist_ok=True)
         compression.save_to_h5py([contacts],
@@ -312,12 +311,6 @@ def _write_props_to_syn_thread(args):
     p_h5py = "{}/syn_prop_dict.h5".format(global_params.config.temp_path)
     f_syn_props = h5py.File(p_h5py, 'r')
 
-    p_h5py = "{}/cs_sym_cnt.h5".format(global_params.config.temp_path)
-    p_cs_sym_cnt_h5py = h5py.File(p_h5py, 'r')
-
-    p_h5py = "{}/cs_asym_cnt.h5".format(global_params.config.temp_path)
-    p_cs_asym_cnt_h5py = h5py.File(p_h5py, 'r')
-
     # store destinations for each existing obj
     dest_dc = defaultdict(list)
     for cs_id in f_cs_props['0'].keys():
@@ -337,9 +330,9 @@ def _write_props_to_syn_thread(args):
             continue
         cs_props = load_h5_spec_dict(obj_keys, f_cs_props)
         syn_props = load_h5_spec_dict(obj_keys, f_syn_props)
-        cs_sym_cnt = compression.load_from_h5py(p_cs_sym_cnt_h5py, as_dict=True)
-        cs_asym_cnt = compression.load_from_h5py(p_cs_asym_cnt_h5py, as_dict=True)
-
+        cs_sym_cnt = compression.load_from_h5py("{}/cs_sym_cnt.h5".format(global_params.config.temp_path), as_dict=True)
+        cs_asym_cnt = compression.load_from_h5py("{}/cs_asym_cnt.h5".format(global_params.config.temp_path), as_dict=True)
+        
         # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so = sd.get_segmentation_object(obj_id_mod)
         attr_p = dummy_so.attr_dict_path
@@ -359,6 +352,7 @@ def _write_props_to_syn_thread(args):
         voxel_dc_cs = VoxelStorageDyn(vx_p_cs, voxel_mode=False, voxeldata_path=knossos_path_cs,
                                       read_only=False, disable_locking=True)
         for cs_id in obj_keys:
+            cs_id = int(cs_id)
             # write cs to dict
             rp_cs = cs_props[0][cs_id]
             bbs_cs = np.concatenate(cs_props[1][cs_id])
@@ -415,6 +409,7 @@ def _write_props_to_syn_thread(args):
 
             # write voxels explicitely, Assumes, reasonably sized synapses!
             voxel_dc_store[cs_id] = voxel_dc.get_voxeldata(cs_id)
+            
         voxel_dc_store.push()  # write voxel data explicitly
         voxel_dc_cs.push()
         this_attr_dc.push()
@@ -423,12 +418,13 @@ def _write_props_to_syn_thread(args):
 
 def load_h5_spec_dict(obj_keys, file):
 
+    obj_keys = np.intersect1d(obj_keys, list(file['0'].keys()))
+    
     out_dict = [{}, defaultdict(list), {}]
     for obj_key in obj_keys:
-        print("file['1']= ", file['1'][:])
-        out_dict[0][obj_key] = file['0'][obj_key][:]
-        out_dict[1][obj_key] = file['1'][obj_key][:]
-        out_dict[2][obj_key] = file['2'][obj_key][()]
+        out_dict[0][int(obj_key)] = file['0'][obj_key][:]
+        out_dict[1][int(obj_key)] = file['1'][obj_key][:]
+        out_dict[2][int(obj_key)] = file['2'][obj_key][()]
 
     return out_dict
 
