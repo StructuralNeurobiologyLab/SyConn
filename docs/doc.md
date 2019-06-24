@@ -3,24 +3,23 @@
 ## Installation
 * Python 3.6
 * The whole pipeline was designed and tested on Linux systems
-* SyConn is based on the packages [elektronn](http://elektronn.org) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
-* cmake >= 3.1
+* SyConn is based on the packages [elektronn3](https://github.com/ELEKTRONN/elektronn3) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
 * [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.
 
 
-We recommend installing Anaconda and setting up a python environment:
+1. We recommend installing Anaconda and setting up a python environment:
 ```
 conda create -n pysy python=3.6 anaconda
 conda activate pysy
 ```
-Git clone and install syconn and all prerequisites:
+2. a) Either git clone and install syconn with all prerequisites:
 ```
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 cd SyConn
 sh install.sh
 ```
 
-For manual installation run:
+2. b) Or alternatively run these commands to install them manually:
 ```
 conda install cmake
 conda install vigra -c conda-forge
@@ -88,16 +87,15 @@ The following packages have to be available for the system's python2 interpreter
 
 In order to inspect the resulting data via the SyConnViewer KNOSSOS-plugin follow these steps:
 
-- wait until `start.py` finished. For restarting the server run `SyConn/scripts/kplugin/
-server.py --working_dir=<path>` pointing to your working directory (`<path>`). The server address and
-port will be printed here.
+- Wait until `start.py` finished. For restarting the server run `SyConn/scripts/kplugin/server.py --working_dir=<path>`
+pointing to your working directory (`<path>`). The server address and port will be printed here.
 
-- download and run the nightly build of KNOSSOS (https://github.com/knossos-project/knossos/releases/tag/nightly)
+- Download and run the nightly build of KNOSSOS (https://github.com/knossos-project/knossos/releases/tag/nightly)
 
-- in KNOSSOS -> File -> Choose Dataset -> browse to your working directory and open
+- In KNOSSOS -> File -> Choose Dataset -> browse to your working directory and open
 `knossosdatasets/seg/mag1/knossos.conf` with enabled 'load_segmentation_overlay' (at the bottom of the dialog).
 
-- then go to Scripting (top row) -> Run file -> browse to `SyConn/scripts/kplugin/syconn_knossos_viewer.py`, open it and enter
+- Then go to Scripting (top row) -> Run file -> browse to `SyConn/scripts/kplugin/syconn_knossos_viewer.py`, open it and enter
 the port and address of the syconn server.
 
 - After the SyConnViewer window has opened, the selection of segmentation fragments in the slice-viewports (exploration mode) or in the
