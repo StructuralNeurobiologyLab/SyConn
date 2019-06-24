@@ -31,7 +31,7 @@ We thank deepmind for providing egl extension code to handle multi-gpu rendering
 
 
 # References
-\[1\] [Automated synaptic connectivity inference for volume electron microscopy][https://www.nature.com/articles/nmeth.4206]
+\[1\] [Automated synaptic connectivity inference for volume electron microscopy](https://www.nature.com/articles/nmeth.4206)
 ```
  @ARTICLE{SyConn2017,
    title     = "Automated synaptic connectivity inference for volume electron
@@ -53,7 +53,7 @@ We thank deepmind for providing egl extension code to handle multi-gpu rendering
   ```
 
 
-\[2\] [Learning cellular morphology with neural networks][https://doi.org/10.1038/s41467-019-10836-3]
+\[2\] [Learning cellular morphology with neural networks](https://doi.org/10.1038/s41467-019-10836-3)
   ```
   @Article{Schubert2019,
 author={Schubert, Philipp J.
