@@ -432,7 +432,7 @@ def from_probabilities_to_objects_parameter_sweeping(cset,
 def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
                         overlaydataset_path=None, chunk_list=None, offset=None,
                         size=None, suffix="", qsub_pe=None, qsub_queue=None, qsub_slots=None,
-                        n_max_co_processes=None, n_chunk_jobs=5000):
+                        n_max_co_processes=None, n_chunk_jobs=5000, version_dict_sd=None):
     """
     Main function for the object extraction step; combines all needed steps
     Parameters
@@ -494,13 +494,13 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000,
     all_times.append(time.time() - time_start)
     step_names.append("voxel extraction")
     print("\nTime needed for extracting voxels: %.3fs" % all_times[-1])
-    #
+
     # # --------------------------------------------------------------------------
     #
     time_start = time.time()
     oes.combine_voxels(os.path.dirname(cset.path_head_folder.rstrip("/")),
                        hdf5names, qsub_pe=qsub_pe, qsub_queue=qsub_queue,
-                       n_folders_fs=n_folders_fs,
+                       n_folders_fs=n_folders_fs, version_dict_sd=version_dict_sd,
                        n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("combine voxels")

@@ -918,7 +918,7 @@ def _extract_voxels_thread(args):
     return map_dict
 
 
-def combine_voxels(workfolder, hdf5names,
+def combine_voxels(workfolder, hdf5names, version_sd=0, version_dict_sd=None,
                    n_folders_fs=10000, stride=10, nb_cpus=1,
                    qsub_pe=None, qsub_queue=None, n_max_co_processes=None):
     """
@@ -954,12 +954,13 @@ def combine_voxels(workfolder, hdf5names,
 
         segdataset = segmentation.SegmentationDataset(obj_type=hdf5_name,
                                                       working_dir=workfolder,
-                                                      version="new",
-                                                      create=True,
+                                                      version=version_sd,
+                                                      create=True, version_dict=version_dict_sd,
                                                       n_folders_fs=n_folders_fs)
 
         for p in voxel_rel_paths_2stage:
-            os.makedirs(segdataset.so_storage_path + p)
+            if not os.path.isdir(segdataset.so_storage_path + p):
+                os.makedirs(segdataset.so_storage_path + p)
 
         multi_params = []
         path_blocks = np.array_split(np.array(voxel_rel_paths),
@@ -992,7 +993,7 @@ def combine_voxels(workfolder, hdf5names,
 
             multi_params.append([workfolder, hdf5_name, path_block,
                                  path_block_dicts, segdataset.version,
-                                 n_folders_fs])
+                                 n_folders_fs, version_dict_sd])
 
         if qsub_pe is None and qsub_queue is None:
             results = sm.start_multiprocess_imap(_combine_voxels_thread,
@@ -1017,12 +1018,13 @@ def _combine_voxels_thread(args):
     path_block_dicts = args[3]
     dataset_version = args[4]
     n_folders_fs = args[5]
+    version_dict_sd = args[6]
 
     dataset_temp_path = workfolder + "/%s_temp/" % hdf5_name
 
     segdataset = segmentation.SegmentationDataset(
         obj_type=hdf5_name, working_dir=workfolder, version=dataset_version,
-        n_folders_fs=n_folders_fs)
+        n_folders_fs=n_folders_fs, version_dict=version_dict_sd)
 
     for i_voxel_rel_path, voxel_rel_path in enumerate(voxel_rel_paths):
 

@@ -327,7 +327,7 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None, debug=False):
     raw = xyz2zxy(raw)
     print("Raw:", raw.shape, raw.dtype, raw.min(), raw.max())
     print("Label:", label.shape, label.dtype, label.min(), label.max())
-    print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
+    print("-----------------\nGT Summary:\n%s\n" % str(Counter(label.flatten()).items()))
     if not fname[-2:] == "h5":
         fname = fname + ".h5"
     if debug:
@@ -433,11 +433,11 @@ def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     """
     if isinstance(gpu_ids, int) or len(gpu_ids) == 1:
         _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size,
-                 mfp_active, gpu_ids, overwrite)
+                      mfp_active, gpu_ids, overwrite)
     else:
         print("Starting multi-gpu prediction with GPUs:", gpu_ids)
 
-        _multi_gpu_ds_pred(kd_p, kd_pred_p, cd_p, model_p,imposed_patch_size, gpu_ids)
+        _multi_gpu_ds_pred(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size, gpu_ids)
 
 
 def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
@@ -464,7 +464,7 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
         the GPU used
     overwrite : bool
         True: fresh predictions ; False: earlier prediction continues
-        
+
 
     Returns
     -------
@@ -515,7 +515,7 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
     if n is None:
         kd_pred = KnossosDataset()
         kd_pred.initialize_without_conf(kd_pred_p, kd.boundary, kd.scale,
-                                        kd.experiment_name, mags=[1,2,4,8])
+                                        kd.experiment_name, mags=[1, 2, 4, 8])
         cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True,
                              stride=[256, 256, 256])
 
@@ -537,7 +537,7 @@ def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size,mfp_ac
     cd.initialize(kd, kd.boundary, [512, 512, 256], cd_p, overlap=offset,
                   box_coords=np.zeros(3), fit_box_size=True)
     kd_pred.initialize_without_conf(kd_pred_p, kd.boundary, kd.scale,
-                                    kd.experiment_name, mags=[1,2,4,8])
+                                    kd.experiment_name, mags=[1, 2, 4, 8])
     cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True,
                          stride=[256, 256, 256])
 
@@ -607,6 +607,7 @@ class NeuralNetworkInterface(object):
     Inference class for elektronn2 models, support will end at some point.
     Switching to 'InferenceModel' in elektronn3.model.base in the long run.
     """
+
     def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
                  channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2,
                  normalize_data=False, normalize_func=None, init_gpu=None):
@@ -666,7 +667,7 @@ class NeuralNetworkInterface(object):
                 cnt += 1
                 pbar.update()
             x_b = x[b]
-            proba[b] = self.model.predict(x_b)[None, ]
+            proba[b] = self.model.predict(x_b)[None,]
         overhead = len(x) % bs
         # TODO: add proper axis handling, maybe introduce axistags
         if overhead != 0:
@@ -680,8 +681,8 @@ class NeuralNetworkInterface(object):
             end = time.time()
             sys.stdout.write("\r%0.2f\n" % 1.0)
             sys.stdout.flush()
-            print("Prediction of %d samples took %0.2fs; %0.4fs/sample." %\
-                  (len(x), end-start, (end-start)/len(x)))
+            print("Prediction of %d samples took %0.2fs; %0.4fs/sample." % \
+                  (len(x), end - start, (end - start) / len(x)))
             pbar.close()
         if self.arch == "triplet":
             return proba[..., 0]
@@ -865,7 +866,6 @@ def _multi_gpu_ds_pred(kd_p, kd_pred_p, cd_p, model_p,
 
     def start_partial_pred(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size,
                            gpuid, i, n):
-
         fpath = os.path.dirname(os.path.abspath(__file__))
         path, file = os.path.split(os.path.dirname(fpath))
         cmd = "python {0}/syconn/handler/partial_ds_pred.py {1} {2} {3} {4}" \
