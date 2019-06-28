@@ -325,6 +325,8 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
             log_reps.error(msg)
             raise ValueError(msg)
     hull_tree = spatial.cKDTree(rep_coords)
+    if k > len(rep_coords):
+        k = rep_coords
     dists, ixs = hull_tree.query(vertices, n_jobs=nb_cpus, k=k)
     hull_rep = np.zeros((len(vertices)), dtype=np.int)
     for i in range(len(ixs)):

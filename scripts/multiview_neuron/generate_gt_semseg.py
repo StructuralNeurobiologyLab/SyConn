@@ -297,16 +297,16 @@ if __name__ == "__main__":
 
     # axoness
     if 1:
-        initial_run = False
+        initial_run = True
         ws = (1024, 512)
         comp_window = 40.96e3 * 1.5  # ~60nm pixel size
         n_views = 6  # increase views per location due to higher pixel size, also increases GT
         # diversity
 
-        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_60nm_{" \
-                      "}/".format(ws[0])
 
         # # Process original data
+        # dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_{" \
+        #               "}/".format(ws[0])
         # global_params.wd = "/wholebrain/scratch/areaxfs3/"
         # assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
         # label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
@@ -331,14 +331,23 @@ if __name__ == "__main__":
         # GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
         #               ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)
 
-        # bouton GT
-        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_{" \
-                      "}_with_BOUTONS/".format(ws[0])
-        global_params.wd = "/wholebrain/scratch/areaxfs3/"
-        assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
+        # # bouton GT
+        # # BATCH 1
+        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_60nm_{" \
+                      "}_with_BOUTONS_v2/".format(ws[0])
+        # global_params.wd = "/wholebrain/scratch/areaxfs3/"
+        # assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
+        # label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
+        #                     "/gt_axoness_semseg_skeletons/NEW_including_boutons/batch1_results/"
+        # file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
+        # GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
+        #               ws=ws, comp_window=comp_window, n_voting=0)  # disable BFS smoothing on
+        # # vertices (probalby not needed on cell compartment level)
+
+        global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+        assert global_params.wd == "/wholebrain/songbird/j0126/areaxfs_v6/"
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
-                            "/gt_axoness_semseg_skeletons/NEW_including_boutons/batch1_results/"
+                            "/gt_axoness_semseg_skeletons/NEW_including_boutons/batch2_results/"
         file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
         GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
                       ws=ws, comp_window=comp_window, n_voting=0)  # disable BFS smoothing on
-        # vertices (probalby not needed on cell compartment level)

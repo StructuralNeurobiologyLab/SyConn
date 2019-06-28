@@ -1633,8 +1633,11 @@ class SuperSegmentationObject(object):
         if ignore_labels is None:
             ignore_labels = []
         coords = np.array(coords) * self.scaling
+        vertices = self.mesh[1].reshape((-1, 3))
+        if len(vertices) < 5e6:
+            ds_vertices = max(1, ds_vertices // 10)
         vertex_labels = self.label_dict('vertex')[semseg_key][::ds_vertices]
-        vertices = self.mesh[1].reshape((-1, 3))[::ds_vertices]
+        vertices = vertices[::ds_vertices]
         for ign_l in ignore_labels:
             vertices = vertices[vertex_labels != ign_l]
             vertex_labels = vertex_labels[vertex_labels != ign_l]

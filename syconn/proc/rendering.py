@@ -1276,6 +1276,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
     views = np.concatenate(views)
     shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
     if svs is not None and return_views is False:
+        start_writing = time.time()
         if render_kwargs_def['cellobjects_only']:
             log_proc.warning('`cellobjects_only=True` in `render_sampled_sso` call, views '
                              'will be written to file system in serial (this is slow).')
@@ -1290,7 +1291,9 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
                                    dict(woglia=render_kwargs_def['woglia'],
                                         index_views=render_kwargs_def["render_indexviews"],
                                         view_key=view_key))
-
+        end_writing = time.time()
+        log_proc.debug('Writing SV renderings took {:.2f}s'.format(
+            end_writing - start_writing))
         return
     return views
 

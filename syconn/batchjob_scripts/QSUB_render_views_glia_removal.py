@@ -50,8 +50,7 @@ for g in ch:
         new_G.add_edge(sso.get_seg_obj("sv", e[0]),
                        sso.get_seg_obj("sv", e[1]))
     sso._rag = new_G
-    if len(sso.sample_locations()) > np.inf:  # TODO: adapt as soon as
-        # `render_sso_coords_multiprocessing` has correct sorting of returned views
+    if len(sso.sample_locations()) > 1e3:  # TODO: add as parameter to global_params.py
         ssvs_large.append(sso)
     else:
         ssvs_small.append(sso)

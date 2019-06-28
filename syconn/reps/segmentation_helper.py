@@ -23,8 +23,12 @@ def glia_pred_so(so, thresh, pred_key_appendix):
     pred_key = "glia_probas" + pred_key_appendix
     if not pred_key in so.attr_dict:
         so.load_attr_dict()
-    preds = np.array(so.attr_dict[pred_key][:, 1] > thresh, dtype=np.int)
-    pred = np.mean(so.attr_dict[pred_key][:, 1]) > thresh
+    try:
+        preds = np.array(so.attr_dict[pred_key][:, 1] > thresh, dtype=np.int)
+        pred = np.mean(so.attr_dict[pred_key][:, 1]) > thresh
+    except KeyError:
+        raise KeyError('Could not find glia proba key `{}` in so,attr_dict (keys: {})'.format(
+            pred_key, so.attr_dict.keys()))
     if pred == 0:
         return 0
     glia_votes = np.sum(preds)

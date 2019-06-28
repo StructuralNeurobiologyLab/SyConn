@@ -186,6 +186,7 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 
+    # TODO: launch steps 3 and 4 in parallel
     log.info('Step 3/8 - Neuron rendering')
     exec_multiview.run_neuron_rendering()
     time_stamps.append(time.time())

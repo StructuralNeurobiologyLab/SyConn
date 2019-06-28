@@ -28,7 +28,6 @@ def qsub_glia_splitting():
     glia SVs
     """
     cc_dict = load_pkl2obj(global_params.config.working_dir + "/glia/cc_dict_rag_graphs.pkl")
-    print("LAIHGONLEGD" + str(1183536 in cc_dict))
     huge_ssvs = [it[0] for it in cc_dict.items() if len(it[1]) > RENDERING_MAX_NB_SV]
     if len(huge_ssvs):
         log_proc.info("{} huge SSVs detected (#SVs > {})".format(len(huge_ssvs),

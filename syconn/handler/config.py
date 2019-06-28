@@ -448,6 +448,7 @@ __many__ = string
 
 [Paths]
 __many__ = string
+use_new_subfold = boolean
 
 [Dataset]
 scaling = float_list(min=3, max=3)
