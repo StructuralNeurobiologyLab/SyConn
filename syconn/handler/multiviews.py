@@ -191,6 +191,9 @@ def int2str_converter(label, gt_type):
         l_dc_inv = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7)
         l_dc_inv["?"] = 8
         l_dc = {v: k for k, v in l_dc_inv.items()}
+        # Do not distinguish between FS and INT/?
+        l_dc[8] = "INT"
+        l_dc[6] = "INT"
         try:
             return l_dc[label]
         except KeyError:

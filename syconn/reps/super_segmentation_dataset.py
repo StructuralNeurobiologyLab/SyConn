@@ -215,13 +215,16 @@ class SuperSegmentationDataset(object):
     @property
     def ssv_ids(self):
         if self._ssv_ids is None:
-            if len(self.mapping_dict) > 0:
+            # do not change the order of the if statements as it is crucial
+            # for the resulting ordering of self.ssv_ids (only ids.npy matches
+            # with all the other cached numpy arrays).
+            if os.path.exists(self.path + "/ids.npy"):
+                self._ssv_ids = np.load(self.path + "/ids.npy")
+            elif len(self.mapping_dict) > 0:
                 self._ssv_ids = np.array(list(self.mapping_dict.keys()))
             elif self.mapping_dict_exists:
                 self.load_mapping_dict()
                 self._ssv_ids = np.array(list(self.mapping_dict.keys()))
-            elif os.path.exists(self.path + "/ids.npy"):
-                self._ssv_ids = np.load(self.path + "/ids.npy")
             else:
                 paths = glob.glob(self.path + "/so_storage/*/*/*/")
                 self._ssv_ids = np.array([int(os.path.basename(p.strip("/")))
@@ -250,6 +253,7 @@ class SuperSegmentationDataset(object):
         return self._id_changer
 
     def load_cached_data(self, name):
+        # TODO: remove this 's' concept
         if os.path.exists(self.path + name + "s.npy"):
             return np.load(self.path + name + "s.npy", allow_pickle=True)
 

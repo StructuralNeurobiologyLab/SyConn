@@ -5,20 +5,21 @@ Refactored version of SyConn for automated synaptic connectivity inference based
  see below or checkout the branch [dorkenwald2017nm](https://github.com/StructuralNeurobiologyLab/SyConn/tree/dorkenwald2017nm).
 
 Current features:
-- introduction of supervoxel and agglomerated supervoxel classes
-- added support for (sub-) cellular compartment (spines, axon/dendrite/soma) and cell type classification with skeleton- [\[1\]](https://www.nature.com/articles/nmeth.4206) and multiview-based [\[2\]](https://www.nature.com/articles/s41467-019-10836-3) approaches
-- cell organelle prediction, extraction and mesh generation
+- object-oriented handler for supervoxels (e.g. cell fragments, predicted cellular organelles like mitochondria, vesicle clouds etc.)
+- prediction of subcellular structures, supervoxel extraction and mesh generation
+- (sub-) cellular compartment (spines, bouton and axon/dendrite/soma) and cell type classification with multiview- [\[2\]](https://www.nature.com/articles/s41467-019-10836-3) and with skeleton-based approaches [\[1\]](https://www.nature.com/articles/nmeth.4206)
 - glia identification and separation [\[2\]](https://www.nature.com/articles/s41467-019-10836-3)
-- generation of connectivity matrix
+- connectivity matrix export
+- KNOSSOS plugin for interactive exploration (work in progress)
 
-If you use parts of this code base in your academic projects, please cite the corresponding publication.
+If you use parts of this code base in your academic projects, please cite the corresponding publication(s).
 
 
 Documentation
 -------------
 The documentation for the refactored version is still work-in-progress and can be found [here](docs/doc.md). Alternatively see the latest [readthedocs build](https://syconn.readthedocs.io/en/latest/).
 
-For SyConn v1, please have a look at the old [documentation](https://structuralneurobiologylab.github.io/SyConn/documentation/). We also present more general information about SyConn on our [Website](https://structuralneurobiologylab.github.io/SyConn/).
+For SyConn v1, please refer to the old [documentation](https://structuralneurobiologylab.github.io/SyConn/documentation/). We also present more general information about SyConn on our [Website](https://structuralneurobiologylab.github.io/SyConn/).
 
 
 The Team
@@ -35,8 +36,8 @@ The original code snippet (under the Apache License 2.0) used for our project ca
 [here](https://github.com/deepmind/dm_control/blob/30069ac11b60ee71acbd9159547d0bc334d63281/dm_control/_render/pyopengl/egl_ext.py).
 
 
-References
-----------
+Publications
+------------
 \[1\] [Automated synaptic connectivity inference for volume electron microscopy](https://www.nature.com/articles/nmeth.4206)
 ```
  @ARTICLE{SyConn2017,
