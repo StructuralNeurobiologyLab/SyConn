@@ -55,6 +55,92 @@ if elektronn3_avail:
                     ):
             super().__init__()
             #IMPORTANT while creating dataloader from this class, num_workers must be <=1
+            cube_id = "train" if train else "valid"
+            self.fnames_inp = sorted(glob.glob(base_dir + "/raw_{}*.h5".format(cube_id)))
+            self.fnames_target = sorted(glob.glob(base_dir + "/label_{}*.h5".format(cube_id)))
+            assert len(self.fnames_inp) == len(self.fnames_target)
+            self.inp_key = inp_key
+            self.target_key = target_key
+            self.transform = transform
+            self.train = train
+
+            if self.train:
+                self.num_read_limit = num_read_limit
+            else:
+                self.num_read_limit = 1  #no need to repeat sample points in validation
+            self.secondary = self.secondary_t = None
+            self.read(0)
+            self.primary, self.primary_t = self.secondary, self.secondary_t
+            self.close_files()
+            self.secondary = self.secondary_t = None
+
+            self.num_samples_in_curr_file = self.primary.shape[0]
+            self.index_array = np.array(list(range(self.num_samples_in_curr_file))*self.num_read_limit)
+            np.random.shuffle(self.index_array)
+
+            self.current_count = 0
+            self.file_pointer = 1
+            self.num_samples_in_already_read_files = 0
+            self.thread_launched = False
+
+        def __getitem__(self, index):
+            index = index - self.num_samples_in_already_read_files
+
+            if self.current_count > int(0.5*len(self.index_array)) and self.thread_launched == False : #adjust 0.5
+                self.read_thread = threading.Thread(target=self.read, args=[self.file_pointer])
+                self.read_thread.start() # print("parallel thread launched")
+                self.thread_launched = True
+            
+            if self.current_count == len(self.index_array) - 1: 
+                self.read_thread.join() # print("parallel thread joined")
+
+                temp, temp_t = self.primary[self.index_array[index]], self.primary_t[self.index_array[index]]
+                self.num_samples_in_already_read_files += len(self.index_array)
+                self.primary, self.primary_t = self.secondary, self.secondary_t
+                self.close_files()
+                self.secondary = self.secondary_t = None
+                self.num_samples_in_curr_file = self.primary.shape[0]
+                self.index_array = np.array(list(range(self.num_samples_in_curr_file))*self.num_read_limit)
+                np.random.shuffle(self.index_array)
+                if self.file_pointer == 0: self.num_samples_in_already_read_files = 0
+                self.file_pointer = (self.file_pointer+1)%len(self.fnames_inp)
+                self.current_count = 0
+                self.thread_launched = False
+                return temp, np.squeeze(temp_t, axis=0)
+
+            self.current_count += 1
+            return self.primary[self.index_array[index]], np.squeeze(self.primary_t[self.index_array[index]], axis=0)
+
+        def read(self, file_pointer):
+            self.file_inp = h5py.File(os.path.expanduser(self.fnames_inp[file_pointer]), 'r')
+            self.file_target = h5py.File(os.path.expanduser(self.fnames_target[file_pointer]), 'r')
+            self.secondary = self.file_inp[self.inp_key][()]/255
+            self.secondary = self.secondary.astype(np.float32)
+            self.secondary_t = self.file_target[self.target_key][()].astype(np.int64)
+            self.secondary, self.secondary_t = self.transform(self.secondary, self.secondary_t)
+            # print(f"read h5 file {self.fnames_inp[file_pointer][len(self.base_dir)+1:]} contains {self.secondary.shape[0]} samples") #, {self.secondary_t.shape[0]} labels")
+
+        def __len__(self):
+            # return 4865*self.num_read_limit if self.train else 541   # for bouton batch1
+            # return 9045*self.num_read_limit if self.train else 1005  # for bouton batch2
+            return (9045+4865)*self.num_read_limit if self.train else (1005+541) # for batch1+batch2
+
+        def close_files(self):
+            self.file_inp.close()
+            self.file_target.close()
+
+if 0:
+    class MultiviewDataCached(Dataset):
+        def __init__(self, 
+                    base_dir, 
+                    train=True, 
+                    inp_key='raw', 
+                    target_key='label', 
+                    transform: Callable = Identity(), 
+                    num_read_limit=5 # num_times each sample point should be used before corresponding h5py file is released
+                    ):
+            super().__init__()
+            #IMPORTANT while creating dataloader from this class, num_workers must be <=1
             self.inp_key = inp_key
             self.target_key = target_key
             self.transform = transform
@@ -87,13 +173,16 @@ if elektronn3_avail:
             index = index - self.num_samples_in_already_read_files
             # print("num samples already ", self.num_samples_in_already_read_files," will give index ", index)
             # print(self.primary.shape)
-            if self.current_count > int(0.5*len(self.index_array)) and self.thread_launched == False : #adjust 0.5
+            if self.current_count > int(0.1*len(self.index_array)) and self.thread_launched == False : #adjust 0.1
                 self.read_thread = threading.Thread(target=self.read, args=[self.file_pointer])
                 self.read_thread.start() # print("parallel thread launched")
                 self.thread_launched = True
+                # print("thread launched ", time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
             
             if self.current_count == len(self.index_array) - 1: 
-                self.read_thread.join() # print("parallel thread joined")
+                # print("waiting for thread ", time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
+                self.read_thread.join()
+                # print("thread joined ", time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime()))
 
                 temp, temp_t = self.primary[self.index_array[index]], self.primary_t[self.index_array[index]]
                 self.num_samples_in_already_read_files += len(self.index_array)
@@ -130,9 +219,6 @@ if elektronn3_avail:
             self.file.close()
 
     class ModMultiviewData(Dataset):
-        """
-        Multiview spine data loader.
-        """
         def __init__(
                 self,
                 base_dir,

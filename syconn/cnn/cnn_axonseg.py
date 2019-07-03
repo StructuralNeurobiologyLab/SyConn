@@ -11,17 +11,20 @@ It learns how to differentiate between spine head, spine neck and spine shaft.
 Caution! The input dataset was not manually corrected.
 """
 from syconn import global_params
-from syconn.cnn.TrainData import ModMultiviewData, MultiviewDataCached
+from syconn.cnn.TrainData import MultiviewDataCached
 import argparse
 import os
+import _pickle
+import zipfile
 import torch
 from torch import nn
 from torch import optim
 from torch.utils.data.dataset import random_split
 from elektronn3.training.loss import DiceLoss, LovaszLoss
+from elektronn3.training import metrics
 from elektronn3.models.fcn_2d import *
 from elektronn3.models.unet import UNet
-from elektronn3.models.duc_hdc import ResNetDUC, ResNetDUCHDC
+# from elektronn3.models.duc_hdc import ResNetDUC, ResNetDUCHDC
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 from sys import getsizeof
@@ -30,7 +33,7 @@ import pdb
 
 def get_model():
     vgg_model = VGGNet(model='vgg13', requires_grad=True, in_channels=4)
-    model = FCNs(base_net=vgg_model, n_class=4)
+    model = FCNs(base_net=vgg_model, n_class=6)
     # model = UNet(in_channels=4, out_channels=4, n_blocks=5, start_filts=32,
     #              up_mode='upsample', merge_mode='concat', planar_blocks=(),
     #              activation='relu', batch_norm=True, dim=2,)
@@ -50,6 +53,8 @@ if __name__ == "__main__":
     )
     parser.add_argument('--num-repeat', type=int, default=1, 
                     help='Specify how many times each datapoint be used before corresponding h5 file is released')
+    parser.add_argument('-r', '--resume', metavar='PATH',help='Path to pretrained model state dict or a compiled and saved '
+                                                                'ScriptModule from which to resume training.')
     args = parser.parse_args()
     if not args.disable_cuda and torch.cuda.is_available():
         device = torch.device('cuda')
@@ -68,29 +73,46 @@ if __name__ == "__main__":
     save_root = os.path.expanduser('~/e3training/')
 
     max_steps = args.max_steps
-    lr = 0.0048
+    lr = 2e-4 #0.0048
     lr_stepsize = 500
     lr_dec = 0.995
     batch_size = 4
 
     model = get_model()
-    if torch.cuda.device_count() > 1:
-        print("Let's use", torch.cuda.device_count(), "GPUs!")
-        batch_size = batch_size * torch.cuda.device_count()
-        # dim = 0 [20, xxx] -> [10, ...], [10, ...] on 2 GPUs
-        model = nn.DataParallel(model)
-    # device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-    model.to(device)
+    if args.resume is not None:  # Load pretrained network
+        pretrained = os.path.expanduser(args.resume)
+        _warning_str = 'Loading model without optimizer state. Prefer state dicts'
+        if zipfile.is_zipfile(pretrained):  # Zip file indicates saved ScriptModule
+            logger.warning(_warning_str)
+            model = torch.jit.load(pretrained, map_location=device)
+        else:  # Either state dict or pickled model
+            state = torch.load(pretrained)
+            if isinstance(state, dict):
+                model.load_state_dict(state)
+                # optimizer_state_dict = state.get('optimizer_state_dict')
+                # lr_sched_state_dict = state.get('lr_sched_state_dict')
+                # if optimizer_state_dict is None:
+                #     logger.warning('optimizer_state_dict not found.')
+                # if lr_sched_state_dict is None:
+                #     logger.warning('lr_sched_state_dict not found.')
+            elif isinstance(state, nn.Module):
+                logger.warning(_warning_str)
+                model = state
+            else:
+                raise ValueError(f'Can\'t load {pretrained}.')
 
+    model.to(device)
+    # pdb.set_trace()
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
-    global_params.gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_1024'
-
+    # global_params.gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_1024'
+    # global_params.gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_1024_with_BOUTONS'
+    global_params.gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/all_bouton_data'
     # num_workers must be <=1 for MultiviewDataCached class    
-    train_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/train', 
+    train_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'', 
                                         train=True, inp_key='raw', target_key='label', 
                                         transform=transform, num_read_limit=args.num_repeat)
-    valid_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'/val', 
+    valid_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'', 
                                         train=False, inp_key='raw', target_key='label', 
                                         transform=transform, num_read_limit=1)
     # ic(train_dataset.__len__(), valid_dataset.__len__())
@@ -108,6 +130,16 @@ if __name__ == "__main__":
     # criterion = LovaszLoss().to(device)
     criterion = DiceLoss().to(device)
 
+    valid_metrics = {
+    'val_accuracy': metrics.bin_accuracy,
+    'val_precision': metrics.bin_precision,
+    'val_recall': metrics.bin_recall,
+    'val_DSC': metrics.bin_dice_coefficient,
+    'val_IoU': metrics.bin_iou,
+    # 'val_AP': metrics.bin_average_precision,  # expensive
+    # 'val_AUROC': metrics.bin_auroc,  # expensive
+    }
+
     # Create and run trainer
     trainer = Trainer(
         model=model,
@@ -121,6 +153,7 @@ if __name__ == "__main__":
         save_root=save_root,
         exp_name=args.exp_name,
         schedulers={"lr": lr_sched},
+        valid_metrics=valid_metrics,
         ipython_shell=False,
         mixed_precision=False,  # Enable to use Apex for mixed precision training
     )
