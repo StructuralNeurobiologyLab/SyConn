@@ -58,7 +58,7 @@ class SuperSegmentationDataset(object):
             if True, locking is enabled for SSO files.
         """
         self.ssv_dict = {}
-        self.mapping_dict = {}
+        self._mapping_dict = None
         self.sso_caching = sso_caching
         self.sso_locking = sso_locking
         self._mapping_dict_reversed = None
@@ -196,6 +196,16 @@ class SuperSegmentationDataset(object):
     @property
     def id_changer_exists(self):
         return os.path.exists(self.id_changer_path)
+
+    @property
+    def mapping_dict(self):
+        if self._mapping_dict is None:
+            if self.mapping_dict_exists:
+                self.load_mapping_dict()
+            else:
+                self._mapping_dict = {}
+        return self._mapping_dict
+
 
     @property
     def mapping_dict_reversed(self):
@@ -494,7 +504,7 @@ class SuperSegmentationDataset(object):
 
     def load_mapping_dict(self):
         assert self.mapping_dict_exists
-        self.mapping_dict = load_pkl2obj(self.mapping_dict_path)
+        self._mapping_dict = load_pkl2obj(self.mapping_dict_path)
 
     def load_mapping_dict_reversed(self):
         assert self.mapping_dict_reversed_exists
@@ -575,8 +585,9 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=None,
 
             attr_dict[attribute] += this_attr_dict[attribute]
 
-    if not ssd.mapping_dict_exists:
-        ssd.mapping_dict = dict(zip(attr_dict["id"], attr_dict["sv"]))
+    if not ssd.mapping_dict_exists or len(ssd.mapping_dict) == 0:
+        # initialize mapping dict
+        ssd._mapping_dict = dict(zip(attr_dict["id"], attr_dict["sv"]))
         ssd.save_dataset_shallow()
 
     for attribute in attr_dict.keys():

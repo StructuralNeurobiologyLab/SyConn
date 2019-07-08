@@ -711,12 +711,10 @@ class main_class(QtGui.QDialog):
             # TODO: could be optimized: currently we need to get the index,
             #  and in on_syn_selector_changed the synapse ID is retrieved again
             syn_ix = self.syn_item_model.index(self.all_syns['ids'].index(self.syn_selected1), 0)
-            print(syn_ix, type(syn_ix))
             self.on_syn_selector_changed(syn_ix)
         return
 
     def clear_knossos_view_button_clicked(self):
-
         # delete all existing objects in mergelist
         all_objects = KnossosModule.segmentation.objects()
         [KnossosModule.segmentation.remove_object(obj) for obj in all_objects]

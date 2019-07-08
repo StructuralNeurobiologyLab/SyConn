@@ -440,8 +440,6 @@ def _run_neuron_rendering_big_helper(max_n_jobs=None):
 
 
 def run_neuron_rendering(max_n_jobs=None):
-    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-
     log = initialize_logging('neuron_view_rendering',
                              global_params.config.working_dir + '/logs/')
     ps = [Process(target=_run_neuron_rendering_big_helper, args=(max_n_jobs, )),
@@ -452,9 +450,12 @@ def run_neuron_rendering(max_n_jobs=None):
     for p in ps:
         p.join()
     log.info('Finished rendering of all SSVs. Checking completeness.')
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=global_params.NCORES_PER_NODE)
     if len(res) != 0:
-        msg = "Not all SSVs were rendered completely! Missing:\n{}".format(res)
+        msg = "Not all SVs were predicted! {}/{} missing:\n" \
+              "{}".format(len(res), len(ssd.ssv_ids),
+                          res[:10])
         log.error(msg)
         raise RuntimeError(msg)
     log.info('Success.')

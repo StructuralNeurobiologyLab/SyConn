@@ -144,7 +144,9 @@ def run_create_rag():
                              '/logs/', overwrite=True)
     # Crop RAG according to cell SVs found during SD generation and apply size threshold
     G = nx.read_edgelist(global_params.config.init_rag_path, nodetype=np.uint)
-
+    if 0 in G.nodes():
+        G.remove_node(0)
+        log.warning('Found background node 0 in original graph. Removing.')
     all_sv_ids_in_rag = np.array(list(G.nodes()), dtype=np.uint)
     log.info("Found {} SVs in initial RAG.".format(len(all_sv_ids_in_rag)))
 
