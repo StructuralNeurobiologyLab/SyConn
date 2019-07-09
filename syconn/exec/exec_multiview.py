@@ -257,7 +257,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu=None):
                                  n_max_co_processes=global_params.NNODES_TOTAL,
                                  suffix="", additional_flags="--gres=gpu:1",
                                  n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
-                                 remove_jobfolder=True)
+                                 remove_jobfolder=False)
     log.info('Finished prediction of {} SSVs. Checking completeness.'
              ''.format(len(ordering)))
     out_files = glob.glob(path_to_out + "*.pkl")
@@ -265,7 +265,8 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu=None):
     for fp in out_files:
         with open(fp, "rb") as f:
             local_err = pkl.load(f)
-        err += list(local_err)
+        if local_err is not None:
+            err += list(local_err)
     if len(err) > 0:
         msg = "{} errors occurred for SSVs with ID: " \
               "{}".format(len(err), [el[0] for el in err])
@@ -273,6 +274,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu=None):
         raise ValueError(msg)
     else:
         log.info('Success.')
+    shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 
 
 def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
