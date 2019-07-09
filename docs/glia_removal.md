@@ -2,7 +2,7 @@
 All scripts used for the analysis of the neuron segmentation are located in `SyConn/scripts/multiviews_glia/`.
 
 ## Prerequisites
-* Knossos- and SegmentationDataset of the super voxel segmentation
+* Knossos- and SegmentationDataset of the supervoxel segmentation
 * Initial RAG/SV-mapping
 
 ## Steps

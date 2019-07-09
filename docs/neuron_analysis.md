@@ -5,7 +5,7 @@ All scripts used for the analysis of the neuron segmentation are located in `SyC
 * Cell type prediction: `celltype_prediction.py`
 
 ## Prerequisites
-* Knossos- and SegmentationDataset of the super voxel segmentation
+* Knossos- and SegmentationDataset of the supervoxel segmentation
 * SegmentationDatasets for all cellular organelles (currently mitochondria, vesicle clouds and synaptic junctions)
 * \[Optional\] [Glia removal](glia_removal.md)
 * The RAG/SV-mapping in form of a SSD, see [SuperSegmentationDatasets](super_segmentation_datasets.md)

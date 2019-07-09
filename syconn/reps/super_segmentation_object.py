@@ -385,6 +385,10 @@ class SuperSegmentationObject(object):
     def mi_mesh(self):
         return self.load_mesh("mi")
 
+    @property
+    def syn_ssv_mesh(self):
+        return self.load_mesh("syn_ssv")
+
     def label_dict(self, data_type='vertex'):
         if data_type == 'vertex':
             if data_type in self._label_dict:
@@ -1594,7 +1598,7 @@ class SuperSegmentationObject(object):
                 # dendrite, axon, soma, bouton, terminal, background, unpredicted
                 cols = np.array([[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1],
                                  [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1],
-                                 [0.6, 0.05, 0.05, 1], [0.9, 0.9, 0.9, 1],
+                                 [0.8, 0.8, 0.1, 1], [0.9, 0.9, 0.9, 1],
                                  [0.1, 0.1, 0.9, 1]])
                 cols = (cols * 255).astype(np.uint8)
             else:
@@ -1836,6 +1840,11 @@ class SuperSegmentationObject(object):
         elif obj_type == "mi":
             mesh = self.mi_mesh
             # color = np.array([0, 153, 255, 255])
+        elif obj_type == "syn_ssv":
+            mesh = self.syn_ssv_mesh
+            # also store it as 'sj' s.t. `init_sso_from_kzip` can use it for rendering.
+            # TODO: add option to rendering code which enables rendering of arbitrary cell organelles
+            obj_type = 'sj'
         else:
             mesh = self._meshes[obj_type]
         if ext_color is not None:
@@ -1860,7 +1869,7 @@ class SuperSegmentationObject(object):
         write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], color,
                         ply_fname=obj_type + ".ply")
 
-    def meshes2kzip(self, dest_path=None, sv_color=None):
+    def meshes2kzip(self, dest_path=None, sv_color=None, synssv_instead_sj=False):
         """
         Writes SV, mito, vesicle cloud and synaptic junction meshes to k.zip
 
@@ -1870,6 +1879,7 @@ class SuperSegmentationObject(object):
         sv_color : np.array
             array with RGBA values or None to use default values
             (see 'mesh2kzip')
+        synssv_instead_sj : bool
 
         Returns
         -------
@@ -1879,6 +1889,8 @@ class SuperSegmentationObject(object):
             dest_path = self.skeleton_kzip_path
         for ot in ["sj", "vc", "mi",
                    "sv"]:  # determins rendering order in KNOSSOS
+            if ot == "sj" and synssv_instead_sj:
+                ot = 'syn_ssv'
             self.mesh2kzip(obj_type=ot, dest_path=dest_path, ext_color=sv_color if
             ot == "sv" else None)
 
@@ -1901,7 +1913,8 @@ class SuperSegmentationObject(object):
         mesh2obj_file(dest_path, self.mesh, center=center, color=color,
                       scale=scale)
 
-    def export2kzip(self, dest_path, attr_keys=(), rag=None, sv_color=None):
+    def export2kzip(self, dest_path, attr_keys=(), rag=None, sv_color=None,
+                    synssv_instead_sj=False):
         """
         Writes the sso to a KNOSSOS loadable kzip.
         Color is specified as rgba, 0 to 255.
@@ -1919,6 +1932,7 @@ class SuperSegmentationObject(object):
         rag : nx.Graph
             SV graph of SSV with uint nodes
         sv_color : 4-tuple of int
+        synssv_instead_sj : bool
         """
         # # The next two calls are probably deprecated
         # self.save_skeleton_to_kzip(dest_path=dest_path)
@@ -1959,7 +1973,8 @@ class SuperSegmentationObject(object):
                                        'working_dir': self.working_dir})
         # write all data
         data2kzip(dest_path, tmp_dest_p, target_fnames)
-        self.meshes2kzip(dest_path=dest_path, sv_color=sv_color)
+        self.meshes2kzip(dest_path=dest_path, sv_color=sv_color,
+                         synssv_instead_sj=synssv_instead_sj)
         self.mergelist2kzip(dest_path=dest_path)
 
     def write_svmeshes2kzip(self, dest_path=None):

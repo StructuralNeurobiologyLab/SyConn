@@ -12,7 +12,7 @@ It consists of two steps: (1) Finding and extracting contact sites between super
   because an oversegmentation is necessary in these cases.
 
 ## Prerequisites
-* Knossos- and SegmentationDataset of the super voxel segmentation
+* Knossos- and SegmentationDataset of the supervoxel segmentation
 * SuperSegmentationDataset containg the cell reconstructions (SV-agglomeration/RAG)
 * KnossosDataset of symmetric, asymmetric and SJ predictions (WIP)
 
