@@ -1,9 +1,8 @@
 [![Documentation Status](https://readthedocs.org/projects/syconn/badge/?version=latest)](https://syconn.readthedocs.io/en/latest/?badge=latest)
 
-<img align="right" width="200" src="./docs/_static/logo_SyConn.png">
+<img align="left" width="200" src="./docs/_static/logo_SyConn.png">
 
-
-# SyConn
+-------------
 Refactored version of SyConn for automated synaptic connectivity inference based on dense EM segmentation data. For the first version
  see below or checkout the branch [dorkenwald2017nm](https://github.com/StructuralNeurobiologyLab/SyConn/tree/dorkenwald2017nm).
 
