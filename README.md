@@ -1,6 +1,6 @@
 [![Documentation Status](https://readthedocs.org/projects/syconn/badge/?version=latest)](https://syconn.readthedocs.io/en/latest/?badge=latest)
 
-<img align="right" width="400" src="./docs/_static/logo_SyConn.png">
+<img align="right" width="200" src="./docs/_static/logo_SyConn.png">
 
 
 # SyConn
