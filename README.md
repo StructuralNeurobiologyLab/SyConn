@@ -1,5 +1,8 @@
 [![Documentation Status](https://readthedocs.org/projects/syconn/badge/?version=latest)](https://syconn.readthedocs.io/en/latest/?badge=latest)
 
+<img align="right" width="400" src="./docs/_static/logo_SyConn.png">
+
+
 # SyConn
 Refactored version of SyConn for automated synaptic connectivity inference based on dense EM segmentation data. For the first version
  see below or checkout the branch [dorkenwald2017nm](https://github.com/StructuralNeurobiologyLab/SyConn/tree/dorkenwald2017nm).
@@ -59,7 +62,6 @@ Publications
    url       = http://dx.doi.org/10.1038/nmeth.4206
  }
   ```
-
 
 \[2\] [Learning cellular morphology with neural networks](https://doi.org/10.1038/s41467-019-10836-3)
   ```

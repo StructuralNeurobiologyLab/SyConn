@@ -2,7 +2,7 @@
 This section introduces minimal examples for parts of SyConn. The corresponding python scripts
 can be found in `SyConn/examples/`.
 
-## Semantic segmentation
+## Semantic segmentation if spines
 * python script:  `SyConn/examples/semseg_spine.py`
 * requires model folder in working directory
 
@@ -29,3 +29,9 @@ After completion you will find a second file which contains the cell mesh colore
 model's output.
 
 The following two images show an example of the original data (content of `(\d+).k.zip`) and the prediction (content of `(\d+)_spines.k.zip`; red: spine head, black: dendritic shaft; grey: spine neck; turquoise: soma/axon)
+
+
+## Semantic segmentation of (other) cell compartments
+* python script:  `SyConn/examples/semseg_axon.py`
+* requires model folder in working directory
+
