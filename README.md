@@ -8,7 +8,8 @@ Refactored version of SyConn for automated synaptic connectivity inference based
  see below or checkout the branch [dorkenwald2017nm](https://github.com/StructuralNeurobiologyLab/SyConn/tree/dorkenwald2017nm).
 
 Current features:
-- object-oriented handler for supervoxels (e.g. cell fragments, predicted cellular organelles like mitochondria, vesicle clouds etc.)
+- introduction of classes for handling of supervoxels (e.g. cell fragments, predicted cellular
+organelles like mitochondria, vesicle clouds etc.) and agglomerated supervoxels
 - prediction of subcellular structures, supervoxel extraction and mesh generation
 - (sub-) cellular compartment (spines, bouton and axon/dendrite/soma) and cell type classification with multiview- [\[2\]](https://www.nature.com/articles/s41467-019-10836-3) and with skeleton-based approaches [\[1\]](https://www.nature.com/articles/nmeth.4206)
 - glia identification and separation [\[2\]](https://www.nature.com/articles/s41467-019-10836-3)
