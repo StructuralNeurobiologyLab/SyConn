@@ -2,6 +2,7 @@
 
 <img align="left" width="200" src="./docs/_static/logo_SyConn.png">
 
+
 -------------
 Refactored version of SyConn for automated synaptic connectivity inference based on dense EM segmentation data. For the first version
  see below or checkout the branch [dorkenwald2017nm](https://github.com/StructuralNeurobiologyLab/SyConn/tree/dorkenwald2017nm).
