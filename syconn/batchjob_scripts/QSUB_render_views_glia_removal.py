@@ -50,22 +50,23 @@ for g in ch:
         new_G.add_edge(sso.get_seg_obj("sv", e[0]),
                        sso.get_seg_obj("sv", e[1]))
     sso._rag = new_G
-    if len(sso.sample_locations()) > np.inf:  # TODO: adapt as soon as
-        # `render_sso_coords_multiprocessing` has correct sorting of returned views
+    if len(sso.sample_locations()) > np.inf:
+        # TODO: Currently does not work with `version=tmp`. Add as parameter to global_params.py
         ssvs_large.append(sso)
     else:
         ssvs_small.append(sso)
 
-render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True,
-                     skip_indexviews=True)
 # render huge SSVs in parallel, multiple jobs per SSV, use more threads than cores -> increase
 # GPU load
+render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True)
 n_parallel_jobs = global_params.NCORES_PER_NODE  # // global_params.NGPUS_PER_NODE
 for ssv in ssvs_large:
-    render_sso_coords_multiprocessing(ssvs_large, wd, n_parallel_jobs,
+    render_sso_coords_multiprocessing(ssv, wd, n_parallel_jobs,
                                       render_indexviews=False, return_views=False,
                                       render_kwargs=render_kwargs)
 
+render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True,
+                     skip_indexviews=True)
 # render small SSVs in parallel, one job per SSV
 sso_kwargs = dict(version=version, create=False, working_dir=wd)
 if len(ssvs_small) != 0:

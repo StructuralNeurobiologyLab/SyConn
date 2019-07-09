@@ -257,7 +257,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu=None):
                                  n_max_co_processes=global_params.NNODES_TOTAL,
                                  suffix="", additional_flags="--gres=gpu:1",
                                  n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
-                                 remove_jobfolder=True)
+                                 remove_jobfolder=False)
     log.info('Finished prediction of {} SSVs. Checking completeness.'
              ''.format(len(ordering)))
     out_files = glob.glob(path_to_out + "*.pkl")
@@ -265,7 +265,8 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu=None):
     for fp in out_files:
         with open(fp, "rb") as f:
             local_err = pkl.load(f)
-        err += list(local_err)
+        if local_err is not None:
+            err += list(local_err)
     if len(err) > 0:
         msg = "{} errors occurred for SSVs with ID: " \
               "{}".format(len(err), [el[0] for el in err])
@@ -273,6 +274,7 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu=None):
         raise ValueError(msg)
     else:
         log.info('Success.')
+    shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 
 
 def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
@@ -440,8 +442,6 @@ def _run_neuron_rendering_big_helper(max_n_jobs=None):
 
 
 def run_neuron_rendering(max_n_jobs=None):
-    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-
     log = initialize_logging('neuron_view_rendering',
                              global_params.config.working_dir + '/logs/')
     ps = [Process(target=_run_neuron_rendering_big_helper, args=(max_n_jobs, )),
@@ -452,9 +452,12 @@ def run_neuron_rendering(max_n_jobs=None):
     for p in ps:
         p.join()
     log.info('Finished rendering of all SSVs. Checking completeness.')
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=global_params.NCORES_PER_NODE)
     if len(res) != 0:
-        msg = "Not all SSVs were rendered completely! Missing:\n{}".format(res)
+        msg = "Not all SVs were predicted! {}/{} missing:\n" \
+              "{}".format(len(res), len(ssd.ssv_ids),
+                          res[:10])
         log.error(msg)
         raise RuntimeError(msg)
     log.info('Success.')

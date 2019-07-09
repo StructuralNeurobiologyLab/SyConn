@@ -445,9 +445,6 @@ def _combine_and_split_syn_thread(args):
             syn_props_agg['sym_prop'] = sym_prop
             syn_props_agg['asym_prop'] = asym_prop
 
-            del syn_props_agg['cs_size']
-            del syn_props_agg['sj_size_pseudo']
-
             if sym_prop + asym_prop == 0:
                 sym_ratio = -1
             else:
@@ -456,6 +453,8 @@ def _combine_and_split_syn_thread(args):
             syn_sign = -1 if sym_ratio > global_params.sym_thresh else 1
             syn_props_agg["syn_sign"] = syn_sign
 
+            del syn_props_agg['cs_size']
+            del syn_props_agg['sj_size_pseudo']
             # add syn_ssv dict to AttributeStorage
             this_attr_dc = dict(neuron_partners=ssv_ids)
             this_attr_dc.update(syn_props_agg)
@@ -470,7 +469,7 @@ def _combine_and_split_syn_thread(args):
             voxel_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
                               "/voxel.pkl")
             attr_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
-                             "/attr_dict.pkl")
+                         "/attr_dict.pkl")
 
             cur_path_id += 1
             n_items_for_path = 0

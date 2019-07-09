@@ -72,8 +72,49 @@ finished the following analysis steps for an example cube of shape \[2180 2180 1
 \[8/8] Matrix export                     00h:00min:37s                   0%
 
 
-## More examples
-[here](examples.md)
+## Example scripts and API usage
+Example scripts can be found [here](examples.md) and code examples [here](api.md).
+
+## Package structure and data classes
+The basic data structures and initialization procedures are explained in the following sections:
+
+* SyConn operates with a pre-defined [working directory and config files](config.md)
+
+* Super voxels (and cellular organelles) are stored in the SegmentationObject data class ([SO](segmentation_datasets.md)), which are
+organized in [SegmentationDatasets](segmentation_datasets.md).
+
+* SyConn principally supports different [backends](backend.md) for data storage, the current default is a simple shared filesystem
+(such as lustre, Google Cloud Filestore or AWS Elastic File System).
+
+* Agglomerated super voxels (SVs) are implemented as SuperSegmentationObjects ([SSO](super_segmentation_objects.md)). The collection
+ of super-SVs are usually defined in a region adjacency graph (RAG) which is used to initialize the SuperSegmentationDataset
+  ([SSD](super_segmentation_datasets.md)).
+
+* [Skeletons](skeletons.md) of (super) super voxels, usually computed from variants of the TEASAR algorithm (https://ieeexplore.ieee.org/document/883951).
+
+* [Mesh](meshes.md) generation and representation of SOs
+
+* Multi-view representation of SSOs (see docs for [glia](glia_removal.md) and [neuron](neuron_analysis.md) analysis and [article](https://www.nature.com/articles/s41467-019-10836-3) in Nature Communications)
+
+
+## Flowchart of SyConn
+
+<img src="https://docs.google.com/drawings/d/e/2PACX-1vSY7p2boPxb9OICxNhSrHQlvuHTBRbSMeIOgQ4_NV6pflxc0FKJvPBtskYMAgJsX_OP-6CNmb08tLC5/pub?w=1920&amp;h=800">
+
+
+## Analysis steps
+After initialization of the SDs (cell and sub-cellular structures, step 1 in the example run) and the SSD
+containing the agglomerated cell SVs (step 3), several analysis steps can be applied:
+
+* [Optional] [Glia removal](glia_removal.md)
+
+* [Neuronal morphology analysis and classification](neuron_analysis.md) to identify cellular
+compartments (e.g. axons and spines) and to perform morphology based cell type classification (steps 3-7).
+
+* [Contact site extraction](contact_site_extraction.md) (step 4)
+
+* [Identification of synapses and extraction of a wiring diagram](contact_site_classification.md) (steps 4 and 8)
+
 
 ## SyConn KNOSSOS viewer
 The following packages have to be available for the system's python2 interpreter
@@ -103,44 +144,3 @@ list of cell IDs followed by pressing 'show neurite' will trigger the rendering 
  The plugin will display additional information about the selected cell and a list of detected synapses (shown as tuples of cell IDs;
  clicking the entry will trigger a jump to the synapse location) and their respective
  properties. In case the window does not pop-up check Scripting->Interpreter for errors.
-
-
-## Analysis steps
-After initialization of the SDs (cell and sub-cellular structures, step 1 in the example run) and the SSD
-containing the agglomerated cell SVs (step 3), several analysis steps can be applied:
-
-* [Optional] [Glia removal](glia_removal.md)
-
-* [Neuronal morphology analysis and classification](neuron_analysis.md) to identify cellular
-compartments (e.g. axons and spines) and to perform morphology based cell type classification (steps 3-7).
-
-* [Contact site extraction](contact_site_extraction.md) (step 4)
-
-* [Identification of synapses and extraction of a wiring diagram](contact_site_classification.md) (steps 4 and 8)
-
-
-## Package structure and data classes
-The basic data structures and initialization procedures are explained in the following sections:
-
-* SyConn operates with a pre-defined [working directory and config files](config.md)
-
-* Super voxels (and cellular organelles) are stored in the SegmentationObject data class ([SO](segmentation_datasets.md)), which are
-organized in [SegmentationDatasets](segmentation_datasets.md).
-
-* SyConn principally supports different [backends](backend.md) for data storage, the current default is a simple shared filesystem
-(such as lustre, Google Cloud Filestore or AWS Elastic File System).
-
-* Agglomerated super voxels (SVs) are implemented as SuperSegmentationObjects ([SSO](super_segmentation_objects.md)). The collection
- of super-SVs are usually defined in a region adjacency graph (RAG) which is used to initialize the SuperSegmentationDataset
-  ([SSD](super_segmentation_datasets.md)).
-
-* [Skeletons](skeletons.md) of (super) super voxels, usually computed from variants of the TEASAR algorithm (https://ieeexplore.ieee.org/document/883951).
-
-* [Mesh](meshes.md) generation and representation of SOs
-
-* Multi-view representation of SSOs (see docs for [glia](glia_removal.md) and [neuron](neuron_analysis.md) analysis and [article](https://www.nature.com/articles/s41467-019-10836-3) in Nature Communications)
-
-
-## Flowchart of SyConn
-
-<img src="https://docs.google.com/drawings/d/e/2PACX-1vSY7p2boPxb9OICxNhSrHQlvuHTBRbSMeIOgQ4_NV6pflxc0FKJvPBtskYMAgJsX_OP-6CNmb08tLC5/pub?w=1920&amp;h=1024">

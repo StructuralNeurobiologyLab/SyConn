@@ -37,12 +37,14 @@ for ix in ssv_ixs:
         continue
     # background label is 5 -> unpredicted is background_label + 1 = 6, average over 50 nearest
     # vertex predictions
+    print(ix, len(sso.skeleton['nodes']), len(sso.mesh[1].reshape((-1, 3))))
     node_preds = sso.semseg_for_coords(sso.skeleton['nodes'],
                                        semseg_key=global_params.view_properties_semsegax['semseg_key'],
                                        **map_properties)
     pred_key = "axoness{}_k{}".format(pred_key_appendix, map_properties['k'])
     sso.skeleton[pred_key] = node_preds
     # this will save sso.skeleton, -> also saves `sso.skeleton[pred_key]`
+    # TODO: perform this only on 0, 1, 2 -> axon, dendrite and soma, not on bouton predictions
     majority_vote_compartments(sso, pred_key)
 
 

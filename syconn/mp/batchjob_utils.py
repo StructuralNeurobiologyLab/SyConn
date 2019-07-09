@@ -621,7 +621,7 @@ def fallback_exec(cmd_exec):
         reported = False
         if 'error' in out.decode().lower() or \
                 'error' in err.decode().lower() or 'killed' in\
-                out.decode().lower() or 'killed' in err.decode.lower():
+                out.decode().lower() or 'killed' in err.decode().lower():
             log_mp.error(out.decode())
             log_mp.error(err.decode())
             reported = True

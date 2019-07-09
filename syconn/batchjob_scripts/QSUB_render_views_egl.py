@@ -47,12 +47,11 @@ for ssv_ix in ch:
     # locking is explicitly enabled when saving SV views, no need to enable it for reading data
     sso = SuperSegmentationObject(ssv_ix, working_dir=wd,
                                   enable_locking_so=False)
-    if len(sso.sample_locations()) > 1e3:
+    if len(sso.sample_locations()) > 1e3:  # TODO: add as parameter to global_params.py
         ssvs_large.append(sso)
     else:
         ssvs_small.append(sso)
 
-# that
 # this job is always started using half of the node and with one GPU
 for ssv in ssvs_large:
     render_sso_coords_multiprocessing(ssv, wd, n_parallel_jobs,
