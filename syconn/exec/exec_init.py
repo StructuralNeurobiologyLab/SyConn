@@ -13,6 +13,7 @@ from multiprocessing import Process
 import shutil
 import networkx as nx
 import numpy as np
+from typing import Optional, Callable
 knossosdataset._set_noprint(True)
 from knossos_utils import chunky
 from syconn import global_params
@@ -25,7 +26,19 @@ from syconn.proc.graphs import create_ccsize_dict
 from syconn.handler.basics import chunkify, kd_factory
 
 
-def sd_init(co, max_n_jobs, log=None):
+def sd_init(co: str, max_n_jobs: int, log=None):
+    """
+    Initialize :class:`~syconn.reps.segmentation.SegmentationDataset` of given
+    supervoxel type `co`.
+
+    Args:
+        co ():
+        max_n_jobs ():
+        log ():
+
+    Returns:
+
+    """
     sd_seg = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir,
                                  version="0")
     multi_params = chunkify(sd_seg.so_dir_paths, max_n_jobs)
@@ -47,8 +60,32 @@ def sd_init(co, max_n_jobs, log=None):
         sd_proc.dataset_analysis(sd_seg, recompute=False, compute_meshprops=True)
 
 
-def kd_init(co, chunk_size, transf_func_kd_overlay, load_cellorganelles_from_kd_overlaycubes,
+def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
+            load_cellorganelles_from_kd_overlaycubes,
     cube_of_interest_bb, log):
+    """
+    Initializes a per-object segmentation KnossosDataset for the given supervoxel type
+    `co` based on an initial prediction which location has to be defined in the config.ini file
+    for the `co` object, e.g. `kd_mi` for `co='mi'`
+    (see :func:`~syconn.handler.config.get_default_conf_str`). Results will be stored as a
+    KnossosDataset at `"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)`.
+    Appropriate parameters have to be set inside the config.ini file, see
+    :func:`~syconn.extraction.object_extraction_wrapper.generate_subcell_kd_from_proba`
+    or :func:`~syconn.handler.config.get_default_conf_str` for more details.
+
+    Args:
+        co (): Type of cell organelle supervoxels, e.g 'mi' for mitochondria or 'vc' for
+            vesicle clouds.
+        chunk_size (): Cube size processed by each worker.
+        transf_func_kd_overlay (): Transformation function applied on the prob. map or segmentation
+            data.
+        load_cellorganelles_from_kd_overlaycubes ():
+        cube_of_interest_bb ():
+        log ():
+
+    Returns:
+
+    """
     oew.generate_subcell_kd_from_proba(
         co, chunk_size=chunk_size, transf_func_kd_overlay=transf_func_kd_overlay,
         load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
@@ -135,10 +172,6 @@ def run_create_rag():
     else:
         stores pruned RAG at `global_params.config.working_dir + /glia/neuron_rag.bz2`, required
         for `run_create_neuron_ssd`.
-
-    Returns
-    -------
-
     """
     log = initialize_logging('create_rag', global_params.config.working_dir +
                              '/logs/', overwrite=True)

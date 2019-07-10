@@ -15,6 +15,7 @@ except ImportError:
     print("fasteners could not be imported. Locking will be disabled by default."
           "Please install fasteners to enable locking (pip install fasteners).")
     LOCKING = False
+from typing import List, Tuple, Optional
 import numpy as np
 import h5py
 import os
@@ -25,23 +26,20 @@ __all__ = ['arrtolz4string', 'lz4stringtoarr', 'load_lz4_compressed',
            'save_to_h5py', 'lz4string_listtoarr', 'arrtolz4string_list']
 
 
-def arrtolz4string(arr):
+def arrtolz4string(arr: np.ndarray) -> bytes:
     """
-    Converts (multi-dimensional) array to lz4 compressed string.
+    Converts (multi-dimensional) array to list of lz4 compressed strings.
 
-    Parameters
-    ----------
-    arr : np.array
+    Args:
+        arr (): input array
 
-    Returns
-    -------
-    byte
+    Returns:
         lz4 compressed string
     """
     if isinstance(arr, list):
         arr = np.array(arr)
     if len(arr) == 0:
-        return ""
+        return b""
     try:
         comp_arr = compress(arr.tobytes())
     except OverflowError:
@@ -52,20 +50,18 @@ def arrtolz4string(arr):
     return comp_arr
 
 
-def lz4stringtoarr(string, dtype=np.float32, shape=None):
+def lz4stringtoarr(string: bytes, dtype: np.dtype = np.float32,
+                   shape: Optional[Tuple[int]] = None):
     """
     Converts lz4 compressed string to 1d array.
 
-    Parameters
-    ----------
-    string : byte
-    dtype : type
-    shape : tuple
+    Args:
+        string (): Serialized array
+        dtype (): data type of original array
+        shape (): shape of original array
 
-    Returns
-    -------
-    np.array
-        1d array
+    Returns:
+        N-dimensional numpy array.
     """
     if len(string) == 0:
         return np.zeros((0, ), dtype=dtype)
@@ -78,47 +74,42 @@ def lz4stringtoarr(string, dtype=np.float32, shape=None):
     return arr_1d
 
 
-def arrtolz4string_list(arr):
+def arrtolz4string_list(arr: np.ndarray) -> List[bytes]:
     """
     Converts (multi-dimensional) array to list of lz4 compressed strings.
 
-    Parameters
-    ----------
-    arr : np.array
+    Args:
+        arr (): input array
 
-    Returns
-    -------
-    list of str
+    Returns:
         lz4 compressed string
     """
     if isinstance(arr, list):
         arr = np.array(arr)
     if len(arr) == 0:
-        return [""]
+        return [b""]
     try:
         str_lst = [compress(arr.tobytes())]
     # catch Value error which is thrown in py3 lz4 version
     except (OverflowError, ValueError):
         half_ix = len(arr) // 2
         str_lst = arrtolz4string_list(arr[:half_ix]) + \
-                   arrtolz4string_list(arr[half_ix:])
+                  arrtolz4string_list(arr[half_ix:])
     return str_lst
 
 
-def lz4string_listtoarr(str_lst, dtype=np.float32, shape=None):
+def lz4string_listtoarr(str_lst: List[bytes], dtype: np.dtype = np.float32,
+                        shape: Optional[Tuple[int]] = None) -> np.ndarray:
     """
     Converts lz4 compressed strings to array.
 
-    Parameters
-    ----------
-    str_lst : List[str]
-    dtype : type
-    shape : tuple
+    Args:
+        str_lst ():
+        dtype ():
+        shape ():
 
-    Returns
-    -------
-    np.array
-        1d array
+    Returns:
+        1d numpy array
     """
     if len(str_lst) == 0:
         return np.zeros((0, ), dtype=dtype)
@@ -128,24 +119,28 @@ def lz4string_listtoarr(str_lst, dtype=np.float32, shape=None):
     return np.concatenate(arr_lst)
 
 
-def multi_lz4stringtoarr(args):
+def multi_lz4stringtoarr(args: tuple) -> np.ndarray:
+    """
+    Helper function for multiprocessing.
+
+    Args:
+        args (): see :func:`~syconn.handler.compression.lz4string_listtoarr`
+
+    Returns:
+        1d numpy array
+    """
     return lz4string_listtoarr(*args)
 
 
-def save_lz4_compressed(p, arr, dtype=np.float32):
+def save_lz4_compressed(p: str, arr: np.ndarray, dtype: np.dtype = np.float32):
     """
     Saves array as lz4 compressed string. Due to overflow in python2 added
     error handling by recursive splitting.
 
-    Parameters
-    ----------
-    p : str
-    arr : np.array
-    dtype : np.dtype
-
-    Returns
-    -------
-    None
+    Args:
+        p ():
+        arr ():
+        dtype ():
     """
     arr = arr.astype(dtype)
     try:
@@ -155,7 +150,7 @@ def save_lz4_compressed(p, arr, dtype=np.float32):
     except (OverflowError, ValueError):
         # save dummy (emtpy) file
         text_file = open(p, "wb")
-        text_file.write("")
+        text_file.write(b"")
         text_file.close()
         half_ix = len(arr) // 2
         new_p1 = p[:-4] + "_1" + p[-4:]
@@ -164,7 +159,8 @@ def save_lz4_compressed(p, arr, dtype=np.float32):
         save_lz4_compressed(new_p2, arr[half_ix:])
 
 
-def load_lz4_compressed(p, shape=(-1, 20, 2, 128, 256), dtype=np.float32):
+def load_lz4_compressed(p: str, shape: Tuple[int] = (-1, 20, 2, 128, 256),
+                        dtype: np.dtype = np.float32):
     """
     Shape must be known in order to load (multi-dimensional) array from binary
     string. Due to overflow in python2 added recursive loading.
@@ -195,7 +191,7 @@ def load_lz4_compressed(p, shape=(-1, 20, 2, 128, 256), dtype=np.float32):
 # ------------------------------------------------------------------------------
 def load_from_h5py(path, hdf5_names=None, as_dict=False):
     """
-    Loads data from a h5py File
+    Loads data from a h5py File.
 
     Parameters
     ----------

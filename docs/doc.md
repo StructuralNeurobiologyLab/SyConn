@@ -91,7 +91,7 @@ handled by the `SegmentationDatasets`. For a more detailed description see [here
   ([SSD](super_segmentation_datasets.md)).
 
 * [Skeletons](skeletons.md) of (super-) supervoxels, usually computed from variants of the TEASAR algorithm (https://ieeexplore.ieee.org/document/883951)
-- currently a fall-back to a sampling procedure is in use.
+ \- currently a fall-back to a sampling procedure is in use.
 
 * [Mesh](meshes.md) generation and representation of supervoxels
 

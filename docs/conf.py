@@ -53,6 +53,8 @@ m2r_parse_relative_links = True
 m2r_anonymous_references = False
 m2r_disable_inline_math = False
 
+napoleon_include_private_with_doc = True
+
 # The encoding of source files.
 #
 # source_encoding = 'utf-8-sig'

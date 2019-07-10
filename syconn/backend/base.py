@@ -30,9 +30,7 @@ __all__ = ['FSBase', 'BTBase']
 
 class StorageBase(dict):
     """
-    Base class for data interface with all attributes and methods necessary:
-    input parameter for init:
-    identifier, read_only=True, disable_locking=False
+    Interface class for data IO.
     """
     def __init__(self, cache_decomp):
         super(StorageBase, self).__init__()
@@ -120,9 +118,21 @@ class FSBase(StorageBase):
     kwarg 'cache_decomp' can be enabled to cache decompressed arrays
     additionally (save decompressing time when accessing items frequently).
     """
-    def __init__(self, inp_p, cache_decomp=False, read_only=True,
-                 max_delay=100, timeout=1000, disable_locking=False,
-                 max_nb_attempts=100):
+    def __init__(self, inp_p : str, cache_decomp: bool = False,
+                 read_only: bool = True, max_delay: int = 100,
+                 timeout: int = 1000, disable_locking: bool = False,
+                 max_nb_attempts: int = 100):
+        """
+
+        Args:
+            inp_p (): Path to file.
+            cache_decomp (): Cache deserialized arrays.
+            read_only (): In case locking is enabled, no semaphore will be placed.
+            max_delay (): attempt delay
+            timeout (): Will throw `RuntimeError` after `timeout` seconds.
+            disable_locking (): Disable file locking
+            max_nb_attempts (): Number of total attempts
+        """
         super(FSBase, self).__init__(cache_decomp)
         if not LOCKING or global_params.DISABLE_LOCKING:
             disable_locking = True
@@ -195,7 +205,13 @@ class FSBase(StorageBase):
     def keys(self):
         return self._dc_intern.keys()
 
-    def push(self, dest=None):
+    def push(self, dest: str = None):
+        """
+        Pushes data to destination.
+
+        Args:
+            dest (): storage destination
+        """
         if dest is None:
             dest = self._path
         if self._path is None:  # support virtual / temporary SSO objects
@@ -207,7 +223,13 @@ class FSBase(StorageBase):
         if not self.read_only and not self.disable_locking:
             self.a_lock.release()
 
-    def pull(self, source=None):
+    def pull(self, source: str = None):
+        """
+        Fetches data from source.
+
+        Args:
+            source (): Source location
+        """
         if source is None:
             source = self._path
         fold, fname = os.path.split(source)
