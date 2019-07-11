@@ -52,35 +52,35 @@ class SuperSegmentationDataset(object):
 
         After successful executing :func:`syconn.exec.exec_multiview.run_create_neuron_ssd`,
         it is possible to load SSV properties via
-        :func:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset
-        .load_cached_data` using the following keys (ordering corresponds to
-        :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.ssv_ids`):
+        :func:`syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.load_cached_data`
+        using the following keys (ordering corresponds to
+        :attr:`syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.ssv_ids`):
             * 'id': ID array, identical to
-                :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.ssv_ids`.
-                All other properties have the same ordering as this array, i.e. if SSV with ID 1234
-                has index 42 in the 'id'-array you will find its properties at index 42 in all
-                other cache-arrays.
+              :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.ssv_ids`.
+              All other properties have the same ordering as this array, i.e. if SSV with ID 1234
+              has index 42 in the 'id'-array you will find its properties at index 42 in all
+              other cache-arrays.
             * 'bounding_box': Bounding box of every SSV.
             * 'size': Number voxels of each SSV.
             * 'rep_coord': Representative coordinates for each SSV.
             * 'sv': Supervoxel IDs for every SSV.
             * 'sample_locations': Lists of rendering locations for each SSV. Each entry is a
-                list (length corresponds to the number of supervoxels) of coordinate arrays for
-                the corresponding SSV.
+              list (length corresponds to the number of supervoxels) of coordinate arrays for
+              the corresponding SSV.
             * 'celltype_cnn_e3': Celltype classifications based on the elektronn3 CMN.
             * 'celltype_cnn_e3_probas': Celltype logits for the different types as an array of
-                shape (M, C; M: Number of predicted random multi-view sets, C: Number of
-                classes). In the example run there are currently 9 predicted classes:
-                STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, INT=8.
+              shape (M, C; M: Number of predicted random multi-view sets, C: Number of
+              classes). In the example run there are currently 9 predicted classes:
+              STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, INT=8.
             * 'syn_ssv': Synapse IDs assigned to each SSV.
             * 'syn_sign_ratio': Area-weighted atio of symmetric synapses, see
-                :func:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset
-                .syn_sign_ratio`.
+              :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
+              .syn_sign_ratio` .
             * 'sj': Synaptic junction object IDs which were mapped to each SSV. These are used
-                for view rendering and also to generate the 'syn_ssv' objects in combination
-                with contact sites (see corresponding section in the documentation).
+              for view rendering and also to generate the 'syn_ssv' objects in combination
+              with contact sites (see corresponding section in the documentation).
             * 'mapping_sj_ids': Synaptic junction objects which overlap with the respective
-                SSVs.
+              SSVs.
             * 'mapping_sj_ratios': Overlap ratio of the synaptic junctions.
             * 'vc': Vesicle clouds mapped to each SSV.
             * 'mapping_vc_ids': Vesicle cloud objects which overlap with the respective SSVs.
@@ -97,6 +97,7 @@ class SuperSegmentationDataset(object):
             n_synapses = ssd.load_cached_data('syn_ssv')
             n_synapes_per_type = {ct: np.sum(n_synapses[celltypes==ct) for ct in range(9)}
             print(n_synapes_per_type)
+
 
     """
     def __init__(self, working_dir: Optional[str] = None,

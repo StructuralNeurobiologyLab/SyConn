@@ -927,19 +927,18 @@ class SegmentationDataset(object):
         To initialize the :class:`~syconn.reps.segmentation.SegmentationDataset` for
         cell supervoxels you need to call ``sd_cell = SegmentationDataset('sv')``.
         This requires an initialized working directory, for this please refer to
-        :class:`~syconn.handler.config.DynConf` or see `SyConn/scripts/example_runs/start.py`.
+        :class:`~syconn.handler.config.DynConfig` or see `SyConn/scripts/example_runs/start.py`.
 
         After successfully executing
-        :class:`~syconn.exec_exec_init.init_cell_subcell_sds`, *cell* supervoxel properties
+        :class:`~syconn.exec.exec_init.init_cell_subcell_sds`, *cell* supervoxel properties
         can be loaded from cache via the following keys:
             * 'id': ID array, identical to
-                :attr:`~syconn.reps.segmentation_dataset.SegmentationDataset.ids`
+              :attr:`syconn.reps.segmentation_dataset.SegmentationDataset.ids`.
             * 'bounding_box': Bounding box of every SSV.
             * 'size': Number voxels of each SSV.
             * 'rep_coord': Representative coordinates for each SSV.
             * 'mesh_area': Surface area as computed from the object mesh triangles.
-            * 'mapping_sj_ids': Synaptic junction objects which overlap with the respective
-                SSVs.
+            * 'mapping_sj_ids': Synaptic junction objects which overlap with the respective SSVs.
             * 'mapping_sj_ratios': Overlap ratio of the synaptic junctions.
             * 'mapping_vc_ids': Vesicle cloud objects which overlap with the respective SSVs.
             * 'mapping_vc_ratios': Overlap ratio of the vesicle clouds.
@@ -951,46 +950,49 @@ class SegmentationDataset(object):
             locations, 2: 0-index=neuron, 1-index=glia).
 
         The 'mapping' attributes are only computed for cell supervoxels and not for cellular
-        organelles (e.g. 'mi', 'vc', etc.; see `syconn.global_params.existing_cell_organelles`).
+        organelles (e.g. 'mi', 'vc', etc.; see
+        :attr:`syconn.global_params.existing_cell_organelles`).
 
         For the :class:`~syconn.reps.segmentation.SegmentationDataset` of type 'syn_ssv'
         (which represent the actual synapses between two cell reconstructions), the following
         properties are cached:
             * 'id': ID array, identical to
-                :attr:`~syconn.reps.segmentation_dataset.SegmentationDataset.ids`
+              :attr:`syconn.reps.segmentation_dataset.SegmentationDataset.ids`.
             * 'bounding_box': Bounding box of every SSV.
             * 'size': Number voxels of each SSV.
             * 'rep_coord': Representative coordinates for each SSV.
             * 'mesh_area': Surface area as computed from the object mesh triangles.
             * 'mesh_bb': Bounding box of the object meshes (in nanometers). Approximately
-                the same as scaled 'bounding_box'.
+              the same as scaled 'bounding_box'.
             * 'latent_morph': Latent morphology vector at each rendering location; predicted by
-                the tCMN.
+              the tCMN.
             * 'neuron_partners': IDs of the two
-                :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
-                forming the synapse. The ordering of the subsequent 'partner' attributes is
-                identical to 'neuron_partners', e.g. 'neuron_partners'=[3, 49] and
-                'partner_celltypes'=[0, 1] means that SSV with ID 3 is an excitatory axon
-                targeting the MSN SSV with ID 49.
+              :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
+              forming the synapse. The ordering of the subsequent 'partner' attributes is
+              identical to 'neuron_partners', e.g. 'neuron_partners'=[3, 49] and
+              'partner_celltypes'=[0, 1] means that SSV with ID 3 is an excitatory axon
+              targeting the MSN SSV with ID 49.
             * 'partner_celltypes': Celltypes of the two SSVs.
-            * 'partner_spiness': Spine predictions (0: ....) of the two sites.
-            * 'partner_axoness': Compartment predictions (0: ...) of the two sites.
+            * 'partner_spiness': Spine predictions (0: neck, 1: head, 2: shaft, 3: other) of the
+              two sites.
+            * 'partner_axoness': Compartment predictions (0: dendrite, 1: axon, 2: soma,
+              3: en-passant bouton, 4: terminal bouton) of the two sites.
             * 'syn_prob': Synapse probability as inferred by the RFC (see corresponding
-                section the documentation).
+              section the documentation).
             * 'asym_prop': Mean probability of the 'syn_ssv' object voxels for the asymmetric
-                type. See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread`.
+              type. See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread` .
             * 'sym_prop': Mean probability of the 'syn_ssv' object voxels for the symmetric
-                type. See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread`.
+              type. See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread` .
             * 'syn_type_sym_ratio': ``sym_prop / float(asym_prop + sym_prop)``.
-                See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread`.
+              See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread` .
             * 'syn_sign': Synaptic "sign" (-1: symmetric, +1: asymmetric). For threshold see
-                :attr:`~syconn.global_params.sym_thresh`.
+              :attr:`~syconn.global_params.sym_thresh` .
             * 'cs_ids': Contact site IDs associated with each 'syn_ssv' synapse.
             * 'id_cs_ratio': Overlap ratio between contact site and synaptic junction (sj)
-                objects.
+              objects.
             * 'sj_ids': Synaptic junction IDs associated with each 'syn_ssv' synapse.
             * 'id_sj_ratio': Overlap ratio between synaptic junction (sj) and contact
-                site objects.
+              site objects.
 
     """
     def __init__(self, obj_type: str, version: Optional[str] = None,
