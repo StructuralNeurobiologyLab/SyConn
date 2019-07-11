@@ -465,7 +465,8 @@ def run_neuron_rendering(max_n_jobs=None):
 
 def run_create_neuron_ssd():
     """
-    Creates SuperSegmentationDataset with `version=0`.
+    Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
+    `version=0` at the currently active working directory.
     """
     log = initialize_logging('create_neuron_ssd', global_params.config.working_dir + '/logs/',
                              overwrite=False)
@@ -490,7 +491,8 @@ def run_create_neuron_ssd():
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir, version='0',
                                    ssd_type="ssv", sv_mapping=cc_dict_inv)
     # create cache-arrays for frequently used attributes
-    ssd.save_dataset_deep(n_max_co_processes=global_params.NCORE_TOTAL)  # also executes 'ssd.save_dataset_shallow()'
+    # also executes 'ssd.save_dataset_shallow()'
+    ssd.save_dataset_deep(n_max_co_processes=global_params.NCORE_TOTAL)
 
     exec_skeleton.run_skeleton_generation()
 

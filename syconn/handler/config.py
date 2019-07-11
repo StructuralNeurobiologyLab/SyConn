@@ -151,6 +151,12 @@ class DynConfig(Config):
     """
     Enables dynamic and SyConn-wide update of working directory 'wd' and provides an
     interface to all working directory dependent parameters.
+
+    Examples:
+        To initialize a working directory at the beginning of your script, run::
+
+            from syconn import global_params
+            global_params.wd = '~/SyConn/example_cube1/'
     """
     def __init__(self, wd: Optional[str] = None):
         """

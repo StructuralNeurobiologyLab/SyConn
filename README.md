@@ -22,7 +22,7 @@ If you use parts of this code base in your academic projects, please cite the co
 
 Documentation
 -------------
-The documentation for the refactored version is still work-in-progress and can be found [here](docs/doc.md). Alternatively see the latest [readthedocs build](https://syconn.readthedocs.io/en/latest/).
+The documentation for the refactored version is still work-in-progress and can be found [here](docs/doc.md). Alternatively and for API docs please refer to the latest [readthedocs build](https://syconn.readthedocs.io/en/latest/).
 
 For SyConn v1, please refer to the old [documentation](https://structuralneurobiologylab.github.io/SyConn/documentation/). We also present more general information about SyConn on our [Website](https://structuralneurobiologylab.github.io/SyConn/).
 

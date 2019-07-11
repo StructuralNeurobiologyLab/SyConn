@@ -8,6 +8,7 @@
 import numpy as np
 import re
 import glob
+from typing import List, Dict, Optional, Union, Tuple
 import os
 import shutil
 from multiprocessing.pool import ThreadPool
@@ -35,27 +36,92 @@ from . import log_reps
 
 
 class SuperSegmentationDataset(object):
-    def __init__(self, working_dir=None, version=None, ssd_type='ssv',
-                 version_dict=None, sv_mapping=None, scaling=None, config=None,
-                 sso_caching=False, sso_locking=False):
+    def __init__(self, working_dir: Optional[str] = None,
+                 version: Optional[str] = None, ssd_type: str = 'ssv',
+                 version_dict: Optional[Dict[str, str]] = None,
+                 sv_mapping: Optional[Union[Dict[int, int], str]] = None,
+                 scaling: Optional[Union[List, Tuple, np.ndarray]] = None,
+                 config: DynConfig = None, sso_caching: bool = False,
+                 sso_locking: bool = False):
         """
-        Class to hold a set of agglomerated supervoxels (SuperSegmentationObject).
+        Class to hold a set of agglomerated supervoxels (which are represented by
+        :class:`~syconn.reps.segmentation.SegmentationObject` and abbreviated as SSV).
 
-        Parameters
-        ----------
-        working_dir : str
-        version : str or int
-        ssd_type : str
-        version_dict : dict
-        sv_mapping : dict or str
-        scaling : np.array
-        config : Optional[Config]
-            DynConfig object, see syconn/handler/config.py
-        sso_caching : bool
-            WIP, enabes caching mechanisms in SuperSegmentationObjects returned via
-            `get_super_segmentation_object`
-        sso_locking : bool
-            if True, locking is enabled for SSO files.
+        Args:
+            working_dir (): Path to the working directory.
+            version (): Indicates the version of the dataset, e.g. '0', 'groundtruth' etc.
+            ssd_type (): Changes the directory prefix the dataset is stored in. Currently
+                there is no real use-case for this.
+            version_dict: Dictionary which contains the versions of other dataset types which share
+                the same working directory.
+            sv_mapping (): Dictionary mapping sueprvoxel IDs (key) to the super-supervoxel ID it
+                belongs to.
+            scaling (): Array defining the voxel size in XYZ
+            config (): Config. object, see `~syconn.handler.config.DynConfig`.
+            sso_caching (): WIP, enabes caching mechanisms in SuperSegmentationObjects returned via
+                `get_super_segmentation_object`
+            sso_locking (): If True, locking is enabled for SSV files.
+
+        Examples:
+            The following lines will initializes the
+            :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` of the
+            example run and explores some of the existing attributes::
+
+                import numpy as np
+                from syconn.reps.super_segmentation import *
+                ssd = SuperSegmentationDataset(working_dir='~/SyConn/example_cube1/')
+                n_synapses = [len(ssv.syn_ssv) for ssv in ssd.ssvs]
+                path_length = [ssv.total_edge_length() for ssv in ssd.ssvs]  # in NM
+                syn_densities = np.array(n_synapses) / np.array(path_length)
+                print(np.mean(syn_densities), np.std(syn_densities))
+
+            After successful executing :func:`syconn.exec.exec_multiview.run_create_neuron_ssd`,
+            it is possible to load SSV properties via
+            :func:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset
+            .load_cached_data` using the following keys (ordering corresponds to
+            :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.ssv_ids`):
+                * 'id': ID array, identical to
+                    :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.ssv_ids`.
+                    All other properties have the same ordering as this array, i.e. if SSV with ID 1234
+                    has index 42 in the 'id'-array you will find its properties at index 42 in all
+                    other cache-arrays.
+                * 'bounding_box': Bounding box of every SSV.
+                * 'size': Number voxels of each SSV.
+                * 'rep_coord': Representative coordinates for each SSV.
+                * 'sv': Supervoxel IDs for every SSV.
+                * 'sample_locations': Lists of rendering locations for each SSV. Each entry is a
+                    list (length corresponds to the number of supervoxels) of coordinate arrays for
+                    the corresponding SSV.
+                * 'celltype_cnn_e3': Celltype classifications based on the elektronn3 CMN.
+                * 'celltype_cnn_e3_probas': Celltype logits for the different types as an array of
+                    shape (M, C; M: Number of predicted random multi-view sets, C: Number of
+                    classes). In the example run there are currently 9 predicted classes:
+                    STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, INT=8.
+                * 'syn_ssv': Synapse IDs assigned to each SSV.
+                * 'syn_sign_ratio': Area-weighted atio of symmetric synapses, see
+                    :func:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset
+                    .syn_sign_ratio`.
+                * 'sj': Synaptic junction object IDs which were mapped to each SSV. These are used
+                    for view rendering and also to generate the 'syn_ssv' objects in combination
+                    with contact sites (see corresponding section in the documentation).
+                * 'mapping_sj_ids': Synaptic junction objects which overlap with the respective
+                    SSVs.
+                * 'mapping_sj_ratios': Overlap ratio of the synaptic junctions.
+                * 'vc': Vesicle clouds mapped to each SSV.
+                * 'mapping_vc_ids': Vesicle cloud objects which overlap with the respective SSVs.
+                * 'mapping_vc_ratios': Overlap ratio of the vesicle clouds.
+                * 'mi': Mitochondria mapped to each SSV.
+                * 'mapping_mi_ids': Mitochondria objects which overlap with the respective SSVs.
+                * 'mapping_mi_ratios': Overlap ratio of the mitochondria.
+
+            This can be used as follows to count the total number of synapses per cell type:
+
+                from syconn.reps.super_segmentation import *
+                ssd = SuperSegmentationDataset(working_dir='~/SyConn/example_cube1/')
+                celltypes = ssd.load_cached_data('celltype_cnn_e3')
+                n_synapses = ssd.load_cached_data('syn_ssv')
+                n_synapes_per_type = {ct: np.sum(n_synapses[celltypes==ct) for ct in range(9)}
+                print(n_synapes_per_type)
         """
         self.ssv_dict = {}
         self._mapping_dict = None
@@ -77,6 +143,12 @@ class SuperSegmentationDataset(object):
                       "`working_dir` or `config`."
                 log_reps.error(msg)
                 raise ValueError(msg)
+        elif config is not None:
+            if config.working_dir != working_dir:
+                raise ValueError('Inconsistent working directories in `config` and'
+                                 '`working_dir` kwargs.')
+            self._config = config
+            self._working_dir = working_dir
         else:
             self._working_dir = working_dir
             self._config = DynConfig(working_dir)
@@ -136,8 +208,8 @@ class SuperSegmentationDataset(object):
             self.apply_mergelist(sv_mapping)
 
     def __repr__(self):
-        return 'SSD of type "{}", version "{}" stored at "{}"'.format(self.type, self.version,
-                                                                      self.path)
+        return 'SSD of type "{}", version "{}" stored at "{}".'.format(self.type, self.version,
+                                                                       self.path)
 
     @property
     def type(self):
@@ -347,123 +419,6 @@ class SuperSegmentationDataset(object):
                           nb_cpus=nb_cpus, new_mapping=new_mapping,
                           n_max_co_processes=n_max_co_processes)
 
-    def reskeletonize_objects(self, stride=200, small=True, big=True,
-                              qsub_pe=None, qsub_queue=None, nb_cpus=1,
-                              n_max_co_processes=None):
-        multi_params = []
-        for ssv_id_block in [self.ssv_ids[i:i + stride]
-                             for i in
-                             range(0, len(self.ssv_ids), stride)]:
-            multi_params.append([ssv_id_block, self.version, self.version_dict,
-                                 self.working_dir])
-
-        if small:
-            if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-                results = sm.start_multiprocess(
-                    reskeletonize_objects_small_ones_thread,
-                    multi_params, nb_cpus=nb_cpus)
-
-            elif qu.batchjob_enabled():
-                path_to_out = qu.QSUB_script(multi_params,
-                                             "reskeletonize_objects_small_ones",
-                                             n_cores=nb_cpus,
-                                             pe=qsub_pe, queue=qsub_queue,
-                                             script_folder=None,
-                                             n_max_co_processes=
-                                             n_max_co_processes)
-            else:
-                raise Exception("QSUB not available")
-
-        if big:
-            if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-                results = sm.start_multiprocess(
-                    reskeletonize_objects_big_ones_thread,
-                    multi_params, nb_cpus=1)
-
-            elif qu.batchjob_enabled():
-                path_to_out = qu.QSUB_script(multi_params,
-                                             "reskeletonize_objects_big_ones",
-                                             n_cores=10,
-                                             n_max_co_processes=int(n_max_co_processes/10*nb_cpus),
-                                             remove_jobfolder=True)
-            else:
-                raise Exception("QSUB not available")
-
-    def export_skeletons(self, obj_types, apply_mapping=True, stride=1000,
-                         qsub_pe=None, qsub_queue=None, nb_cpus=1):
-        # TODO: there is another `export_skeletons` defined outside this class, refactor!
-        multi_params = []
-        for ssv_id_block in [self.ssv_ids[i:i + stride]
-                             for i in
-                             range(0, len(self.ssv_ids), stride)]:
-            multi_params.append([ssv_id_block, self.version, self.version_dict,
-                                 self.working_dir, obj_types, apply_mapping])
-
-        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-            results = sm.start_multiprocess(
-                reskeletonize_objects_small_ones_thread,
-                multi_params, nb_cpus=nb_cpus)
-            no_skel_cnt = np.sum(results)
-
-        elif qu.batchjob_enabled():
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "export_skeletons",
-                                         n_cores=nb_cpus, remove_jobfolder=True)
-            out_files = glob.glob(path_to_out + "/*")
-            no_skel_cnt = 0
-            for out_file in out_files:
-                with open(out_file, 'rb') as f:
-                    no_skel_cnt += np.sum(pkl.load(f))
-
-        else:
-            raise Exception("QSUB not available")
-
-        print("N no skeletons: %d" % no_skel_cnt)
-
-    def associate_objs_with_skel_nodes(self, obj_types, stride=1000,
-                                       qsub_pe=None, qsub_queue=None,
-                                       nb_cpus=1):
-        multi_params = []
-        for ssv_id_block in [self.ssv_ids[i:i + stride]
-                             for i in
-                             range(0, len(self.ssv_ids), stride)]:
-            multi_params.append([ssv_id_block, self.version, self.version_dict,
-                                 self.working_dir, obj_types])
-
-        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-            results = sm.start_multiprocess(
-                associate_objs_with_skel_nodes_thread,
-                multi_params, nb_cpus=nb_cpus)
-            no_skel_cnt = np.sum(results)
-
-        elif qu.batchjob_enabled():
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "associate_objs_with_skel_nodes",
-                                         n_cores=nb_cpus, remove_jobfolder=True)
-        else:
-            raise Exception("QSUB not available")
-
-    def predict_axoness_skelbased(self, stride=1000, qsub_pe=None, qsub_queue=None,
-                        nb_cpus=1):
-        multi_params = []
-        for ssv_id_block in [self.ssv_ids[i:i + stride]
-                             for i in
-                             range(0, len(self.ssv_ids), stride)]:
-            multi_params.append([ssv_id_block, self.version, self.version_dict,
-                                 self.working_dir])
-
-        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-            results = sm.start_multiprocess(
-                predict_axoness_skelbased_thread,
-                multi_params, nb_cpus=nb_cpus)
-
-        elif qu.batchjob_enabled():
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "predict_axoness_skelbased",
-                                         n_cores=nb_cpus, remove_jobfolder=True)
-        else:
-            raise Exception("QSUB not available")
-
     def predict_cell_types_skelbased(self, stride=1000, qsub_pe=None, qsub_queue=None,
                            nb_cpus=1):
         multi_params = []
@@ -525,9 +480,10 @@ def save_dataset_deep(ssd, extract_only=False, attr_keys=(), n_jobs=None,
     Saves attributes of all SSVs within the given SSD and computes properties
     like size and representative coordinate. `ids.npy` order may change after
     repeated runs.
-    TODO: make this method deterministic and allow partial
-     updates of a subset of attributes (e.g. use already existing `ids.npy` in
-     case of updating, aka `extract_only=True`)
+
+    Todo:
+        allow partial updates of a subset of attributes (e.g. use already
+        existing `ids.npy` in case of updating, aka `extract_only=True`)
 
     Parameters
     ----------
@@ -810,38 +766,6 @@ def _convert_knossosdataset_thread(args):
                                     nb_threads=nb_threads)
 
 
-def export_skeletons(ssd, obj_types, apply_mapping=True, stride=1000,
-                     qsub_pe=None, qsub_queue=None, nb_cpus=1):
-    multi_params = []
-    for ssv_id_block in [ssd.ssv_ids[i:i + stride]
-                         for i in
-                         range(0, len(ssd.ssv_ids), stride)]:
-        multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
-                             ssd.working_dir, obj_types, apply_mapping])
-
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess(
-            export_skeletons_thread,
-            multi_params, nb_cpus=nb_cpus)
-        no_skel_cnt = np.sum(results)
-
-    elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "export_skeletons",
-                                     n_cores=nb_cpus,)
-        out_files = glob.glob(path_to_out + "/*")
-        no_skel_cnt = 0
-        for out_file in out_files:
-            with open(out_file, 'rb') as f:
-                no_skel_cnt += np.sum(pkl.load(f))
-
-    else:
-        raise Exception("QSUB not available")
-
-    # log_reps.info("N no skeletons: %d" % no_skel_cnt)
-    log_reps.info("N missing skeletons during 'export_skeletons': %d" % no_skel_cnt)
-
-
 def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
     def _load_sv_voxels_thread(args):
         sv_id = args[0]
@@ -895,50 +819,6 @@ def load_voxels_downsampled(sso, downsampling=(2, 2, 1), nb_threads=10):
         map(_load_sv_voxels_thread, multi_params)
 
     return voxels
-
-
-def associate_objs_with_skel_nodes_thread(args):
-    # TODO: check functionality and whether this is deprecated, use 'skel_features'!
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-    obj_types = args[4]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-        ssv.load_skeleton()
-        if len(ssv.skeleton["nodes"]) > 0:
-            ssv.associate_objs_with_skel_nodes(obj_types)
-
-
-def predict_axoness_skelbased_thread(args):
-    """Skeleton-based axoness prediction"""
-    # TODO: check functionality, use 'predict_nodes'!
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-
-        if not ssv.load_skeleton():
-            continue
-
-        ssv.load_attr_dict()
-        if "assoc_sj" in ssv.attr_dict:
-            ssv.predict_axoness(feature_context_nm=5000, clf_name="rfc")
-        elif len(ssv.skeleton["nodes"]) > 0:
-            try:
-                ssv.associate_objs_with_skel_nodes(("sj", "mi", "vc"))
-                ssv.predict_axoness(feature_context_nm=5000, clf_name="rfc")
-            except:
-                pass
 
 
 def predict_cell_type_skelbased_thread(args):
@@ -1086,48 +966,6 @@ def convert_knossosdataset_thread(args):
                                     nb_threads=nb_threads)
 
 
-def reskeletonize_objects_small_ones_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        if np.product(ssv.shape) > 1e10:
-            continue
-        # elif np.product(ssv.shape) > 10**3:
-        #     ssv.calculate_skeleton(coord_scaling=(8, 8, 4))
-        elif ssv.size > 0:
-            ssv.calculate_skeleton(coord_scaling=(8, 8, 4), plain=True)
-        else:
-            ssv.skeleton = {"nodes": [], "edges": [], "diameters": []}
-        ssv.save_skeleton()
-        ssv.clear_cache()
-
-
-def reskeletonize_objects_big_ones_thread(args):
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = SuperSegmentationDataset(working_dir, version, version_dict)
-    ssd.load_mapping_dict()
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id, True)
-        if np.product(ssv.shape) > 1e10:
-            ssv.calculate_skeleton(coord_scaling=(10, 10, 5), plain=True)
-        else:
-            continue
-        ssv.save_skeleton()
-        ssv.clear_cache()
-
-
 def write_super_segmentation_dataset_thread(args):
     ssv_obj_ids = args[0]
     version = args[1]
@@ -1243,58 +1081,6 @@ def copy_ssvs2new_SSD_simple(ssvs, new_version, target_wd=None, n_jobs=1,
         old_ssv.copy2dir(dest_dir=new_ssv.ssv_dir, safe=safe)
     log_reps.info("Saving dataset deep.")
     new_ssd.save_dataset_deep(new_mapping=False, nb_cpus=n_jobs)
-
-
-def create_sso_skeletons_thread(args):
-    from ..proc.graphs import create_graph_from_coords
-    from ..reps.rep_helper import surface_samples
-    from ..handler.multiviews import generate_rendering_locs
-
-    ssv_obj_ids = args[0]
-    version = args[1]
-    version_dict = args[2]
-    working_dir = args[3]
-
-    ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
-                                   version_dict=version_dict)
-
-    for ssv_id in ssv_obj_ids:
-        ssv = ssd.get_super_segmentation_object(ssv_id)
-        if not global_params.config.allow_skel_gen:
-            # TODO: change to create_sso_skeleton_fast as soon as RAG edges
-            #  only connected spatially close SVs
-            create_sso_skeleton(ssv)
-        else:
-            # TODO: refactor together with `gen_skel_from_sample_locs`
-            verts = ssv.mesh[1].reshape(-1, 3)
-            # choose random subset of surface
-            np.random.seed(0)
-            ixs = np.arange(len(verts))
-            np.random.shuffle(ixs)
-            ixs = ixs[:int(0.5*len(ixs))]
-            if global_params.config.use_new_renderings_locs:
-                locs = generate_rendering_locs(verts[ixs], 1000)
-            else:
-                locs = surface_samples(verts[ixs], bin_sizes=(1000, 1000, 1000),
-                                       max_nb_samples=10000, r=500)
-            g = create_graph_from_coords(locs, mst=True)
-            if g.number_of_edges() == 1:
-                edge_list = np.array(list(g.edges()))
-            else:
-                edge_list = np.array(g.edges())
-            del g
-            if edge_list.ndim != 2:
-                raise ValueError("Edgelist must be a 2D array. Currently: {}\n{}".format(
-                    edge_list.ndim, edge_list))
-            ssv.skeleton = dict()
-            ssv.skeleton["nodes"] = locs / np.array(ssv.scaling)
-            ssv.skeleton["edges"] = edge_list
-            ssv.skeleton["diameters"] = np.ones(len(locs))
-            ssv.save_skeleton()
-            # ssv.load_skeleton()  # this will create skeleton from sample locations (edges might go out of the process)
-        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) == 0:
-            continue
-        ssv.save_skeleton()
 
 
 def preproc_sso_skelfeature_thread(args):

@@ -126,8 +126,8 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
-    log.info('Generating KnossosDatasets for subcellular structures {}.'
-             ''.format(global_params.existing_cell_organelles))
+    log.info('Converting predictions of cellular organelles to KnossosDatasets for every'
+             'type available: {}.'.format(global_params.existing_cell_organelles))
     start = time.time()
     ps = [Process(target=kd_init, args=[co, chunk_size, transf_func_kd_overlay,
                                         load_cellorganelles_from_kd_overlaycubes,

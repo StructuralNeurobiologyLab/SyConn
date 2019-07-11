@@ -174,9 +174,10 @@ def VoxelStorage(inp, **kwargs):
     obj = VoxelStorageClass(inp, **kwargs)
     if 'meta' in obj._dc_intern:  # TODO: Remove asap as soon as we switch to VoxelStorageDyn
         obj = VoxelStorageDyn(inp, **kwargs)
-    else:
-        log_backend.warning('VoxelStorage is deprecated. Please switch to'
-                            ' VoxelStorageDyn.')
+    # # TODO: activate as soon as synapse-detection pipelines is refactored.
+    # else:
+    #     log_backend.warning('VoxelStorage is deprecated. Please switch to'
+    #                         ' VoxelStorageDyn.')
     return obj
 
 

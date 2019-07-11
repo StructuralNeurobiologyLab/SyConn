@@ -16,12 +16,13 @@ from collections import defaultdict
 from scipy import spatial
 from knossos_utils.skeleton_utils import annotation_to_nx_graph,\
     load_skeleton as load_skeleton_kzip
+from collections.abc import Iterable
 try:
     from knossos_utils import mergelist_tools
 except ImportError:
     from knossos_utils import mergelist_tools_fallback as mergelist_tool
 
-from .rep_helper import assign_rep_values, colorcode_vertices
+from .rep_helper import assign_rep_values, colorcode_vertices, surface_samples
 from . import segmentation
 from .segmentation import SegmentationObject
 from .segmentation_helper import load_skeleton, find_missing_sv_views,\
@@ -33,6 +34,7 @@ from ..reps import log_reps
 from .. import global_params
 from ..proc.meshes import write_mesh2kzip
 from ..proc.rendering import render_sso_coords
+from ..proc.graphs import create_graph_from_coords
 try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
@@ -676,7 +678,7 @@ def stitch_skel_nx(skel_nx):
 
 def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     """
-    Creates the super super voxel skeleton
+    Creates the super-supervoxel skeleton.
 
     Parameters
     ----------
@@ -710,6 +712,50 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     sso.skeleton = radius_correction_found_vertices(sso)
 
     return sso
+
+
+def create_sso_skeletons_thread(ssvs, dest_paths=None):
+    if dest_paths is not None:
+        if not isinstance(dest_paths, Iterable):
+            raise ValueError('Destination paths given but are not iterable.')
+    else:
+        dest_paths = [None for _ in ssvs]
+
+    for ssv, dest_path in zip(ssvs, dest_paths):
+        if not global_params.config.allow_skel_gen:
+            # TODO: change to create_sso_skeleton_fast as soon as RAG edges
+            #  only connected spatially close SVs
+            # This merges existing SV skeletons
+            create_sso_skeleton(ssv)
+        else:
+            # TODO: add parameter to config
+            verts = ssv.mesh[1].reshape(-1, 3)
+            # choose random subset of surface
+            np.random.seed(0)
+            ixs = np.arange(len(verts))
+            np.random.shuffle(ixs)
+            ixs = ixs[:int(0.5*len(ixs))]
+            if global_params.config.use_new_renderings_locs:
+                locs = generate_rendering_locs(verts[ixs], 1000)
+            else:
+                locs = surface_samples(verts[ixs], bin_sizes=(1000, 1000, 1000),
+                                       max_nb_samples=10000, r=500)
+            g = create_graph_from_coords(locs, mst=True)
+            if g.number_of_edges() == 1:
+                edge_list = np.array(list(g.edges()))
+            else:
+                edge_list = np.array(g.edges())
+            del g
+            if edge_list.ndim != 2:
+                raise ValueError("Edgelist must be a 2D array. Currently: {}\n{}".format(
+                    edge_list.ndim, edge_list))
+            ssv.skeleton = dict()
+            ssv.skeleton["nodes"] = locs / np.array(ssv.scaling)
+            ssv.skeleton["edges"] = edge_list
+            ssv.skeleton["diameters"] = np.ones(len(locs))
+        ssv.save_skeleton()
+        if dest_path is not None:
+            ssv.save_skeleton_to_kzip(dest_path=dest_path)
 
 
 # New Implementation of skeleton generation which makes use of ssv.rag
@@ -1688,7 +1734,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             col = None  # set to None, because write_mesh2kzip only supports
             # RGBA colors and no labels
         log_reps.debug('Writing results to kzip.')
-        write_mesh2kzip(dest_path, sso.mesh[0], sso.mesh[1], sso.mesh[2],
+        write_mesh2kzip(dest_path, sso. mesh[0], sso.mesh[1], sso.mesh[2],
                         col, ply_fname=semseg_key + ".ply")
         return
     return sso.mesh[0], sso.mesh[1], sso.mesh[2], col

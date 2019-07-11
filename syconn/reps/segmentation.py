@@ -10,6 +10,7 @@ import re
 import networkx as nx
 from scipy import spatial
 from knossos_utils import knossosdataset
+from typing import Union, Tuple, List, Optional, Dict, Generator
 knossosdataset._set_noprint(True)
 from ..proc.meshes import mesh_area_calc
 
@@ -23,295 +24,6 @@ from ..handler.basics import get_filepaths_from_dir, safe_copy,\
     write_txt2kzip, temp_seed
 from .segmentation_helper import *
 from ..proc import meshes
-
-
-class SegmentationDataset(object):
-    def __init__(self, obj_type, version=None, working_dir=None, scaling=None,
-                 version_dict=None, create=False, config=None,
-                 n_folders_fs=None):
-        """
-        Class to represent a set of supervoxels.
-
-        Parameters
-        ----------
-        obj_type : str
-             type of objects; usually one of: vc, sj, mi, cs, sv
-        version : str or int
-            version of dataset to distinguish it from others of the same type
-        working_dir : str
-            path to working directory
-        scaling : List[int] or np.arry
-            scaling of the raw data to nanometer
-        version_dict : dict
-            versions of datasets of other types that correspond with this dataset
-        create : bool
-            whether or not to create this dataset on disk
-        config : str
-            content of configuration file
-        n_folders_fs : int
-        """
-
-        self._type = obj_type
-        self.object_dict = {}
-
-        self._n_folders_fs = n_folders_fs
-
-        self._sizes = None
-        self._ids = None
-        self._rep_coords = None
-        self._config = config
-
-        if n_folders_fs is not None:
-            if not n_folders_fs in [10**i for i in range(6)]:
-                raise Exception("n_folders_fs must be in",
-                                [10**i for i in range(6)])
-
-        if working_dir is None:
-            if global_params.wd is not None or version == 'tmp':
-                self._working_dir = global_params.wd
-            else:
-                msg = "No working directory (wd) given. It has to be" \
-                      " specified either in global_params, via kwarg " \
-                      "`working_dir` or `config`."
-                log_reps.error(msg)
-                raise ValueError(msg)
-        else:
-            self._working_dir = working_dir
-            self._config = DynConfig(working_dir)
-
-        if global_params.wd is None:
-            global_params.wd = self._working_dir
-
-        if not self._working_dir.endswith("/"):
-            self._working_dir += "/"
-
-        # self._config = parser.Config(self.working_dir)
-        self._scaling = scaling
-
-        if create and (version is None):
-            version = 'new'
-
-        if version is None and create is False:
-            try:
-                self._version = self.config.entries["Versions"][self.type]
-            except:
-                raise Exception("unclear value for version")
-        elif version == "new":
-            other_datasets = \
-                glob.glob(self.working_dir + "/%s_[0-9]" % self.type) + \
-                glob.glob(self.working_dir + "/%s_[0-9][0-9]" % self.type) + \
-                glob.glob(self.working_dir + "/%s_[0-9][0-9][0-9]" % self.type)
-
-            max_version = -1
-
-            for other_dataset in other_datasets:
-                other_version = \
-                    int(re.findall("[\d]+",
-                                   os.path.basename(other_dataset.strip('/')))[-1])
-                if max_version < other_version:
-                    max_version = other_version
-
-            self._version = max_version + 1
-        else:
-            self._version = version
-
-        if version_dict is None:
-            try:
-                self.version_dict = self.config.entries["Versions"]
-            except:
-                raise Exception("No version dict specified in config")
-        else:
-            if isinstance(version_dict, dict):
-                self.version_dict = version_dict
-            elif isinstance(version_dict, str) and version_dict == "load":
-                if self.version_dict_exists:
-                    self.load_version_dict()
-            else:
-                raise Exception("No version dict specified in config")
-
-        if create and not os.path.exists(self.path):
-            os.makedirs(self.path)
-
-        if create and not os.path.exists(self.so_storage_path):
-            os.makedirs(self.so_storage_path)
-
-    @property
-    def type(self):
-        return self._type
-
-    @property
-    def n_folders_fs(self):
-        if self._n_folders_fs is None:
-            ps = glob.glob("%s/%s*/" % (self.path, self.so_storage_path_base))
-            if len(ps) == 0:
-                raise Exception("No storage folder found at '{}' and no number of "
-                                "subfolders specified (n_folders_fs))".format(self.path))
-
-            bp = os.path.basename(ps[0].strip('/'))
-            for p in ps:
-                bp = os.path.basename(p.strip('/'))
-                if bp == self.so_storage_path_base:
-                    bp = os.path.basename(p.strip('/'))
-                    break
-
-            if bp == self.so_storage_path_base:
-                self._n_folders_fs = 100000
-            else:
-                self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
-
-        return self._n_folders_fs
-
-    @property
-    def working_dir(self):
-        return self._working_dir
-
-    @property
-    def version(self):
-        return str(self._version)
-
-    @property
-    def path(self):
-        return "%s/%s_%s/" % (self._working_dir, self.type, self.version)
-
-    @property
-    def exists(self):
-        return os.path.isdir(self.path)
-
-    @property
-    def path_sizes(self):
-        return self.path + "/sizes.npy"
-
-    @property
-    def path_rep_coords(self):
-        return self.path + "/rep_coords.npy"
-
-    @property
-    def path_ids(self):
-        return self.path + "/ids.npy"
-
-    @property
-    def version_dict_path(self):
-        return self.path + "/version_dict.pkl"
-
-    @property
-    def version_dict_exists(self):
-        return os.path.exists(self.version_dict_path)
-
-    @property
-    def so_storage_path_base(self):
-        return "so_storage"
-
-    @property
-    def so_storage_path(self):
-        if self._n_folders_fs is None and os.path.exists("%s/so_storage/" % self.path):
-            return "%s/so_storage/" % self.path
-        elif self._n_folders_fs == 100000 and os.path.exists("%s/so_storage/" % self.path):
-            return "%s/so_storage/" % self.path
-        else:
-            return "%s/%s_%d/" % (self.path, self.so_storage_path_base,
-                                  self.n_folders_fs)
-
-    @property
-    def so_dir_paths(self):
-        depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
-        p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
-        # TODO: do not perform a glob. all possible paths are determined by 'n_folders_fs' -> much faster, less IO
-        return glob.glob(p)
-
-    @property
-    def config(self):
-        if self._config is None:
-            self._config = global_params.config
-        return self._config
-
-    @property
-    def sizes(self):
-        if self._sizes is None:
-            if os.path.exists(self.path_sizes):
-                self._sizes = np.load(self.path_sizes)
-            else:
-                msg = "sizes were not calculated... Please run dataset_analysis"
-                log_reps.error(msg)
-                raise ValueError(msg)
-        return self._sizes
-
-    @property
-    def rep_coords(self):
-        if self._rep_coords is None:
-            if os.path.exists(self.path_rep_coords):
-                self._rep_coords = np.load(self.path_rep_coords)
-            else:
-                msg = "rep_coords were not calculated... Please run dataset_analysis"
-                log_reps.error(msg)
-                raise ValueError(msg)
-        return self._rep_coords
-
-    @property
-    def ids(self):
-        if self._ids is None:
-            acquire_obj_ids(self)
-        return self._ids
-
-    @property
-    def scaling(self):
-        if self._scaling is None:
-            self._scaling = \
-                np.array(self.config.entries["Dataset"]["scaling"],
-                         dtype=np.float32)
-
-        return self._scaling
-
-    @property
-    def sos(self):
-        ix = 0
-        tot_nb_sos = len(self.ids)
-        while ix < tot_nb_sos:
-            yield self.get_segmentation_object(self.ids[ix])
-            ix += 1
-
-    def load_cached_data(self, name):
-        if os.path.exists(self.path + name + "s.npy"):
-            return np.load(self.path + name + "s.npy")
-
-    def get_segmentationdataset(self, obj_type):
-        assert obj_type in self.version_dict
-        return SegmentationDataset(obj_type,
-                                   version=self.version_dict[obj_type],
-                                   working_dir=self.working_dir)
-
-    def get_segmentation_object(self, obj_id, create=False):
-        if np.isscalar(obj_id):
-            return SegmentationObject(obj_id=obj_id,
-                                      obj_type=self.type,
-                                      version=self.version,
-                                      working_dir=self.working_dir,
-                                      scaling=self.scaling,
-                                      create=create,
-                                      n_folders_fs=self.n_folders_fs,
-                                      config=self.config)
-        else:
-            res = []
-            for ix in obj_id:
-                obj = SegmentationObject(obj_id=ix,
-                                      obj_type=self.type,
-                                      version=self.version,
-                                      working_dir=self.working_dir,
-                                      scaling=self.scaling,
-                                      create=create,
-                                      n_folders_fs=self.n_folders_fs,
-                                      config=self.config)
-                res.append(obj)
-            return res
-
-    def save_version_dict(self):
-        write_obj2pkl(self.version_dict_path, self.version_dict)
-
-    def load_version_dict(self):
-        try:
-            self.version_dict = load_pkl2obj(self.version_dict_path)
-        except Exception as e:
-            raise FileNotFoundError('Version dictionary of SegmentationDataset'
-                                    ' not found.')
 
 
 class SegmentationObject(object):
@@ -1205,3 +917,416 @@ class SegmentationObject(object):
                             this_voxel_list[:, 1],
                             this_voxel_list[:, 2]] = True
                 save_voxels(new_so_obj, this_voxels, bb[0])
+
+
+class SegmentationDataset(object):
+    def __init__(self, obj_type: str, version: Optional[str] = None,
+                 working_dir: Optional[str] = None,
+                 scaling: Optional[Union[List, Tuple, np.ndarray]] = None,
+                 version_dict: Optional[Dict] = None, create: bool = False,
+                 config: Optional[str] = None,
+                 n_folders_fs: Optional[int] = None):
+        """
+        This class represents a set of supervoxels.
+
+        Args:
+            obj_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject`s; usually
+                one of: 'vc', 'sj', 'mi', 'cs', 'sv'.
+            version: Version of dataset to distinguish it from others of the same type
+            working_dir: Path to the working directory.
+            scaling: Scaling of the raw data to nanometer
+            version_dict: Dictionary which contains the versions of other dataset types which share
+                the same working directory.
+            create: Whether or not to create this dataset's directory.
+            config: Configuration file content.
+            n_folders_fs: Number of folders within the dataset's folder structure.
+
+        Examples:
+            To initialize the :class:`~syconn.reps.segmentation.SegmentationDataset` for
+            cell supervoxels you need to call ``sd_cell = SegmentationDataset('sv')``.
+            This requires an initialized working directory, for this please refer to
+            :class:`~syconn.handler.config.DynConf` or see `SyConn/scripts/example_runs/start.py`.
+
+            After successfully executing
+            :class:`~syconn.exec_exec_init.init_cell_subcell_sds`, *cell* supervoxel properties
+            can be loaded from cache via the following keys:
+
+                * 'id': ID array, identical to
+                    :attr:`~syconn.reps.segmentation_dataset.SegmentationDataset.ids`
+                * 'bounding_box': Bounding box of every SSV.
+                * 'size': Number voxels of each SSV.
+                * 'rep_coord': Representative coordinates for each SSV.
+                * 'mesh_area': Surface area as computed from the object mesh triangles.
+                * 'mapping_sj_ids': Synaptic junction objects which overlap with the respective
+                    SSVs.
+                * 'mapping_sj_ratios': Overlap ratio of the synaptic junctions.
+                * 'mapping_vc_ids': Vesicle cloud objects which overlap with the respective SSVs.
+                * 'mapping_vc_ratios': Overlap ratio of the vesicle clouds.
+                * 'mapping_mi_ids': Mitochondria objects which overlap with the respective SSVs.
+                * 'mapping_mi_ratios': Overlap ratio of the mitochondria.
+
+            If a glia separation is performed, the following attributes will be cached as well:
+                * 'glia_probas': Glia probabilities as array of shape (N, 2; N: Rendering
+                locations, 2: 0-index=neuron, 1-index=glia).
+
+            The 'mapping' attributes are only computed for cell supervoxels and not for cellular
+            organelles (e.g. 'mi', 'vc', etc.; see `syconn.global_params.existing_cell_organelles`).
+
+            For the :class:`~syconn.reps.segmentation.SegmentationDataset` of type 'syn_ssv'
+            (which represent the actual synapses between two cell reconstructions), the following
+            properties are cached:
+
+                * 'id': ID array, identical to
+                    :attr:`~syconn.reps.segmentation_dataset.SegmentationDataset.ids`
+                * 'bounding_box': Bounding box of every SSV.
+                * 'size': Number voxels of each SSV.
+                * 'rep_coord': Representative coordinates for each SSV.
+                * 'mesh_area': Surface area as computed from the object mesh triangles.
+                * 'mesh_bb': Bounding box of the object meshes (in nanometers). Approximately
+                    the same as scaled 'bounding_box'.
+                * 'latent_morph': Latent morphology vector at each rendering location; predicted by
+                    the tCMN.
+                * 'neuron_partners': IDs of the two
+                    :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
+                    forming the synapse. The ordering of the subsequent 'partner' attributes is
+                    identical to 'neuron_partners', e.g. 'neuron_partners'=[3, 49] and
+                    'partner_celltypes'=[0, 1] means that SSV with ID 3 is an excitatory axon
+                    targeting the MSN SSV with ID 49.
+                * 'partner_celltypes': Celltypes of the two SSVs.
+                * 'partner_spiness': Spine predictions (0: ....) of the two sites.
+                * 'partner_axoness': Compartment predictions (0: ...) of the two sites.
+                * 'syn_prob': Synapse probability as inferred by the RFC (see corresponding
+                    section the documentation).
+                * 'asym_prop': Mean probability of the 'syn_ssv' object voxels for the asymmetric
+                    type. See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread`.
+                * 'sym_prop': Mean probability of the 'syn_ssv' object voxels for the symmetric
+                    type. See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread`.
+                * 'syn_type_sym_ratio': ``sym_prop / float(asym_prop + sym_prop)``.
+                    See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread`.
+                * 'syn_sign': Synaptic "sign" (-1: symmetric, +1: asymmetric). For threshold see
+                    :attr:`~syconn.global_params.sym_thresh`.
+                * 'cs_ids': Contact site IDs associated with each 'syn_ssv' synapse.
+                * 'id_cs_ratio': Overlap ratio between contact site and synaptic junction (sj)
+                    objects.
+                * 'sj_ids': Synaptic junction IDs associated with each 'syn_ssv' synapse.
+                * 'id_sj_ratio': Overlap ratio between synaptic junction (sj) and contact
+                    site objects.
+
+        """
+
+        self._type = obj_type
+        self.object_dict = {}
+
+        self._n_folders_fs = n_folders_fs
+
+        self._sizes = None
+        self._ids = None
+        self._rep_coords = None
+        self._config = config
+
+        if n_folders_fs is not None:
+            if not n_folders_fs in [10**i for i in range(6)]:
+                raise Exception("n_folders_fs must be in",
+                                [10**i for i in range(6)])
+
+        if working_dir is None:
+            if global_params.wd is not None or version == 'tmp':
+                self._working_dir = global_params.wd
+            else:
+                msg = "No working directory (wd) given. It has to be" \
+                      " specified either in global_params, via kwarg " \
+                      "`working_dir` or `config`."
+                log_reps.error(msg)
+                raise ValueError(msg)
+        else:
+            self._working_dir = working_dir
+            self._config = DynConfig(working_dir)
+
+        if global_params.wd is None:
+            global_params.wd = self._working_dir
+
+        if not self._working_dir.endswith("/"):
+            self._working_dir += "/"
+
+        # self._config = parser.Config(self.working_dir)
+        self._scaling = scaling
+
+        if create and (version is None):
+            version = 'new'
+
+        if version is None and create is False:
+            try:
+                self._version = self.config.entries["Versions"][self.type]
+            except:
+                raise Exception("unclear value for version")
+        elif version == "new":
+            other_datasets = \
+                glob.glob(self.working_dir + "/%s_[0-9]" % self.type) + \
+                glob.glob(self.working_dir + "/%s_[0-9][0-9]" % self.type) + \
+                glob.glob(self.working_dir + "/%s_[0-9][0-9][0-9]" % self.type)
+
+            max_version = -1
+
+            for other_dataset in other_datasets:
+                other_version = \
+                    int(re.findall("[\d]+",
+                                   os.path.basename(other_dataset.strip('/')))[-1])
+                if max_version < other_version:
+                    max_version = other_version
+
+            self._version = max_version + 1
+        else:
+            self._version = version
+
+        if version_dict is None:
+            try:
+                self.version_dict = self.config.entries["Versions"]
+            except:
+                raise Exception("No version dict specified in config")
+        else:
+            if isinstance(version_dict, dict):
+                self.version_dict = version_dict
+            elif isinstance(version_dict, str) and version_dict == "load":
+                if self.version_dict_exists:
+                    self.load_version_dict()
+            else:
+                raise Exception("No version dict specified in config")
+
+        if create and not os.path.exists(self.path):
+            os.makedirs(self.path)
+
+        if create and not os.path.exists(self.so_storage_path):
+            os.makedirs(self.so_storage_path)
+
+    @property
+    def type(self) -> str:
+        """
+        The type of :class:`~syconn.reps.segmentation.SegmentationObject`s
+        contained in this :class:`~syconn.reps.segmentation.SegmentationDataset`.
+
+        Returns:
+            String identifier of the object type.
+        """
+        return self._type
+
+    @property
+    def n_folders_fs(self) -> int:
+        """
+        Returns:
+            The number of folders in this :class:`~syconn.reps.segmentation.SegmentationDataset`
+            directory tree.
+        """
+        if self._n_folders_fs is None:
+            ps = glob.glob("%s/%s*/" % (self.path, self.so_storage_path_base))
+            if len(ps) == 0:
+                raise Exception("No storage folder found at '{}' and no number of "
+                                "subfolders specified (n_folders_fs))".format(self.path))
+
+            bp = os.path.basename(ps[0].strip('/'))
+            for p in ps:
+                bp = os.path.basename(p.strip('/'))
+                if bp == self.so_storage_path_base:
+                    bp = os.path.basename(p.strip('/'))
+                    break
+
+            if bp == self.so_storage_path_base:
+                self._n_folders_fs = 100000
+            else:
+                self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
+
+        return self._n_folders_fs
+
+    @property
+    def working_dir(self) -> str:
+        """
+        Returns:
+            The working directory of this :class:`~syconn.reps.segmentation.SegmentationDataset`.
+        """
+        return self._working_dir
+
+    @property
+    def version(self) -> str:
+        """
+        Returns:
+            String identifier of the version.
+        """
+        return str(self._version)
+
+    @property
+    def path(self) -> str:
+        """
+        Returns:
+            The path to this :class:`~syconn.reps.segmentation.SegmentationDataset`.
+        """
+        return "%s/%s_%s/" % (self._working_dir, self.type, self.version)
+
+    @property
+    def exists(self) -> bool:
+        return os.path.isdir(self.path)
+
+    @property
+    def path_sizes(self) -> str:
+        """
+        Path to the cache array of the object voxel sizes.
+
+        Returns:
+            Path to the numpy file.
+        """
+        return self.path + "/sizes.npy"
+
+    @property
+    def path_rep_coords(self) -> str:
+        """
+        Path to the cache array of the object representative coordinates.
+
+        Returns:
+            Path to the numpy file.
+        """
+        return self.path + "/rep_coords.npy"
+
+    @property
+    def path_ids(self) -> str:
+        """
+        Path to the cache array of the object IDs.
+
+        Returns:
+            Path to the numpy file.
+        """
+        return self.path + "/ids.npy"
+
+    @property
+    def version_dict_path(self) -> str:
+        """
+        Path to the version dictionary pickle file.
+
+        Returns:
+            Path to the pickle file.
+        """
+        return self.path + "/version_dict.pkl"
+
+    @property
+    def version_dict_exists(self) -> bool:
+        return os.path.exists(self.version_dict_path)
+
+    @property
+    def so_storage_path_base(self) -> str:
+        return "so_storage"
+
+    @property
+    def so_storage_path(self) -> str:
+        if self._n_folders_fs is None and os.path.exists("%s/so_storage/" % self.path):
+            return "%s/so_storage/" % self.path
+        elif self._n_folders_fs == 100000 and os.path.exists("%s/so_storage/" % self.path):
+            return "%s/so_storage/" % self.path
+        else:
+            return "%s/%s_%d/" % (self.path, self.so_storage_path_base,
+                                  self.n_folders_fs)
+
+    @property
+    def so_dir_paths(self) -> List[str]:
+        depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
+        p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
+        # TODO: do not perform a glob. all possible paths are determined by 'n_folders_fs' -> much faster, less IO
+        return glob.glob(p)
+
+    @property
+    def config(self) -> DynConfig:
+        if self._config is None:
+            self._config = global_params.config
+        return self._config
+
+    @property
+    def sizes(self) -> np.ndarray:
+        if self._sizes is None:
+            if os.path.exists(self.path_sizes):
+                self._sizes = np.load(self.path_sizes)
+            else:
+                msg = "sizes were not calculated... Please run dataset_analysis"
+                log_reps.error(msg)
+                raise ValueError(msg)
+        return self._sizes
+
+    @property
+    def rep_coords(self) -> np.ndarray:
+        if self._rep_coords is None:
+            if os.path.exists(self.path_rep_coords):
+                self._rep_coords = np.load(self.path_rep_coords)
+            else:
+                msg = "rep_coords were not calculated... Please run dataset_analysis"
+                log_reps.error(msg)
+                raise ValueError(msg)
+        return self._rep_coords
+
+    @property
+    def ids(self) -> np.ndarray:
+        if self._ids is None:
+            acquire_obj_ids(self)
+        return self._ids
+
+    @property
+    def scaling(self) -> np.ndarray:
+        if self._scaling is None:
+            self._scaling = \
+                np.array(self.config.entries["Dataset"]["scaling"],
+                         dtype=np.float32)
+
+        return self._scaling
+
+    @property
+    def sos(self) -> Generator[SegmentationObject, None, None]:
+        ix = 0
+        tot_nb_sos = len(self.ids)
+        while ix < tot_nb_sos:
+            yield self.get_segmentation_object(self.ids[ix])
+            ix += 1
+
+    def load_cached_data(self, name) -> np.ndarray:
+        if os.path.exists(self.path + name + "s.npy"):
+            return np.load(self.path + name + "s.npy")
+
+    def get_segmentationdataset(self, obj_type):
+        if obj_type not in self.version_dict:
+            raise ValueError('Requested object type {} not part of version_dict'
+                             ' {}.'.format(obj_type, self.version_dict))
+        return SegmentationDataset(obj_type,
+                                   version=self.version_dict[obj_type],
+                                   working_dir=self.working_dir)
+
+    def get_segmentation_object(self, obj_id: Union[int, List[int]],
+                                create: bool = False)\
+            -> Union[SegmentationObject, List[SegmentationObject]]:
+        if np.isscalar(obj_id):
+            return SegmentationObject(obj_id=obj_id,
+                                      obj_type=self.type,
+                                      version=self.version,
+                                      working_dir=self.working_dir,
+                                      scaling=self.scaling,
+                                      create=create,
+                                      n_folders_fs=self.n_folders_fs,
+                                      config=self.config)
+        else:
+            res = []
+            for ix in obj_id:
+                obj = SegmentationObject(obj_id=ix,
+                                      obj_type=self.type,
+                                      version=self.version,
+                                      working_dir=self.working_dir,
+                                      scaling=self.scaling,
+                                      create=create,
+                                      n_folders_fs=self.n_folders_fs,
+                                      config=self.config)
+                res.append(obj)
+            return res
+
+    def save_version_dict(self):
+        write_obj2pkl(self.version_dict_path, self.version_dict)
+
+    def load_version_dict(self):
+        """
+        Loads the version dict ``self.version_dict``.
+        """
+        try:
+            self.version_dict = load_pkl2obj(self.version_dict_path)
+        except Exception as e:
+            raise FileNotFoundError('Version dictionary of SegmentationDataset'
+                                    ' not found. {}'.format(str(e)))
