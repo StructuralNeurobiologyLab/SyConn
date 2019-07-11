@@ -57,6 +57,12 @@ class SuperSegmentationObject(object):
         See `SyConn/docs/api.md`.
 
     Attributes:
+        version:
+        enable_locking_so:
+        nb_cpus:
+        skeleton:
+        view_dict:
+        version_dict:
 
     Todo:
         * add examples
