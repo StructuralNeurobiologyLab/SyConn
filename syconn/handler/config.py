@@ -157,6 +157,8 @@ class DynConfig(Config):
 
             from syconn import global_params
             global_params.wd = '~/SyConn/example_cube1/'
+            cfg = global_params.config  # this is the `DynConfig` object
+
     """
     def __init__(self, wd: Optional[str] = None):
         """

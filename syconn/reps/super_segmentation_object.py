@@ -56,12 +56,29 @@ class SuperSegmentationObject(object):
         See `SyConn/docs/api.md`.
 
     Attributes:
-        version:
-        enable_locking_so:
-        nb_cpus:
-        skeleton:
-        view_dict:
-        version_dict:
+        attr_dict: Attribute dictionary which serves as a general-purpose container. Accessed via
+            the :class:`~syconn.backend.storage.AttributeDict` interface.
+        skeleton: The skeleton representation of this super-supervoxel. Keys which are
+            currently in use:
+                * 'nodes': Array of the node coordinates (in nanometers).
+                * 'edges': Edges between nodes.
+                * 'diameters': Estimated cell diameter at every node.
+                * various node properties, e.g. 'axoness'. Check ``sso.skeleton.keys()``
+                  of the initialized
+                  :class:`~syconn.reps.segmentation.SegmentationObject` object ``sso``.
+        enable_locking_so: Locking flag for all :class:`syconn.reps.segmen
+            tation.SegmentationObject` assigned
+            to this object (e.g. SV, mitochondria, vesicle clouds, ...)
+        nb_cpus: Number of cpus for parallel jobs. will only be used in some
+            processing steps.
+        view_dict: A dictionary for caching 2D projection views. Those are stored as
+            a numpy array of shape (M, N, CH, x, y). M: Length of :py:attr:`~sample_locations` and
+            has the same ordering; N: Number of views per location; CH: Number of channels (1 for
+            glia prediction containing only the cell shape and 4 for neuron analysis containing
+            cell and cell organelle shapes. Stored at :py:attr:`~view_path` and accessed via the
+            :class:`~syconn.backend.storage.CompressedStorage` interface.
+        version_dict: A dictionary which contains the versions of other dataset types which share
+            the same working directory. Defaults to the `Versions` entry in the `config.ini`file.
 
     Todo:
         * add examples
@@ -80,15 +97,15 @@ class SuperSegmentationObject(object):
         """
 
         Args:
-            ssv_id: unique SSV ID
-            version: version string identifier. if 'tmp' is used, no data will
+            ssv_id: unique SSV ID.
+            version: Version string identifier. if 'tmp' is used, no data will
                 be saved to disk.
             version_dict: Dictionary which contains the versions of other dataset types which share
-                the same working directory.
+                the same working directory. Defaults to the `Versions` entry in the `config.ini`file.
             working_dir (): Path to the working directory.
-            create: whether to create a folder to store cache data
+            create: If True, the folder to its storage location :py:attr:`~ssv_dir` will be created.
             sv_ids: List of agglomerated supervoxels which define the neuron reconstruction.
-            scaling: Array defining the voxel size in XYZ
+            scaling: Array defining the voxel size in nanometers (XYZ).
             object_caching: :class:`~syconn.reps.segmentation.SegmentationObject` retrieved by
                 :func:`~syconn.reps.segmentation.SegmentationObject.get_seg_objects`
                 will be cached in a dictionary.
@@ -96,11 +113,11 @@ class SuperSegmentationObject(object):
                 :attr:`~syconn.reps.segmentation.SegmentationObject._voxels`.
             mesh_caching: Meshes (cell fragments, mitos, vesicles, ..) will be cached at
                 :attr:`~syconn.reps.segmentation.SegmentationObject._meshes`.
-            view_caching: Views can be cached at :attr:`~syconn.reps.segmentation.SegmentationObject._view_dict`
+            view_caching: Views can be cached at :py:attr:`~view_dict`.
             config: Retrieved from :attr:`~syconn.global_params.config`, otherwise must be
                 initialized with a :class:`~syconn.handler.config.DynConfig`
             nb_cpus: Number of cpus for parallel jobs. will only be used in some
-                processing steps
+                processing steps.
             enable_locking: Enable posix locking for IO operations.
             enable_locking_so: Locking flag for all :class:`syconn.reps.segmen
                 tation.SegmentationObject` assigned
@@ -126,7 +143,7 @@ class SuperSegmentationObject(object):
         self.enable_locking_so = enable_locking_so
         self.nb_cpus = nb_cpus
         self._id = ssv_id
-        self.attr_dict = {}  # dict(mi=[], sj=[], vc=[], sv=[])
+        self.attr_dict = {}
 
         self._type = ssd_type
         self._rep_coord = None
@@ -151,8 +168,8 @@ class SuperSegmentationObject(object):
         self._weighted_graph = None
         self._sample_locations = None
         self._rot_mat = None
-        self._label_dict = {}  # for caching labels, e.g. of vertices
-        self.view_dict = {}  # for caching views, stores list of views with length of sample_locations
+        self._label_dict = {}
+        self.view_dict = {}
 
         if sv_ids is not None:
             self.attr_dict["sv"] = sv_ids
@@ -383,25 +400,56 @@ class SuperSegmentationObject(object):
 
     @property
     def mesh(self) -> Optional[MeshType]:
+        """
+        Mesh of all cell supervoxels.
+        """
         return self.load_mesh("sv")
 
     @property
     def sj_mesh(self) -> Optional[MeshType]:
+        """
+        Mesh of all synaptic junction (sj) supervoxels. These objects are based
+        on the original synapse prediction and might contain merger.
+        """
         return self.load_mesh("sj")
 
     @property
     def vc_mesh(self) -> Optional[MeshType]:
+        """
+        Mesh of all vesicle clouds (vc) supervoxels.
+        """
         return self.load_mesh("vc")
 
     @property
     def mi_mesh(self) -> Optional[MeshType]:
+        """
+        Mesh of all mitochondria (mi) supervoxels.
+        """
         return self.load_mesh("mi")
 
     @property
     def syn_ssv_mesh(self) -> Optional[MeshType]:
+        """
+        Mesh of all inter-neuron synapses junction (syn_ssv) supervoxels. These
+        objects are generated as a combination of contact sites and synaptic
+        junctions (sj).
+        """
         return self.load_mesh("syn_ssv")
 
     def label_dict(self, data_type='vertex') -> np.ndarray:
+        """
+        Dictionary which stores various predictions. Currently used keys:
+            * 'vertex': Labels associated with the mesh vertices. The ordering
+              is the same as `self.mesh[1]`.
+
+        Uses the :class:`~syconn.backend.storage.CompressedStorage` interface.
+
+        Args:
+            data_type: Key for the stored labels.
+
+        Returns:
+            The stored array.
+        """
         if data_type == 'vertex':
             if data_type in self._label_dict:
                 pass
@@ -1104,10 +1152,10 @@ class SuperSegmentationObject(object):
 
     def total_edge_length(self) -> float:
         """
-        Total edge length in nanometers.
+        Total edge length of the super-supervoxel :attr:`~skeleton` in nanometers.
 
         Returns:
-            Sum of all edge lengths (L2 norm) in ``self.skeleton``.
+            Sum of all edge lengths (L2 norm) in :attr:`~skeleton`.
         """
         if self.skeleton is None:
             self.load_skeleton()
@@ -1351,13 +1399,13 @@ class SuperSegmentationObject(object):
     def clear_cache(self):
         """
         Clears the following, cached data:
-            * self._objects
-            * self._voxels
-            * self._voxels_xy_downsampled
-            * self._views
-            * self._sample_locations
-            * self._meshes
-            * self.skeleton
+            * :py:attr:`~voxels`
+            * :py:attr:`~voxels_xy_downsampled`
+            * :py:attr:`~sample_locations`
+            * :py:attr:`~objects`
+            * :py:attr:`~views`
+            * :py:attr:`~skeleton`
+            * :py:attr:`~meshes`
         """
         self._objects = {}
         self._voxels = None
@@ -1390,12 +1438,12 @@ class SuperSegmentationObject(object):
             To copy the content of this SSV object (``ssv_orig``) to the
             destination of another (e.g. yet not existing) SSV (``ssv_target``),
             call ``ssv_orig.copy2dir(ssv_target.ssv_dir)``. All files contained
-            in the directory ``ssv_dir`` of ``ssv_orig`` will be copied to
+            in the directory py:attr:`~ssv_dir` of ``ssv_orig`` will be copied to
             ``ssv_target.ssv_dir``.
 
         Args:
             dest_dir: Destination directory where all files contained in
-            ``self.ssv_dir`` will be copied to.
+                py:attr:`~ssv_dir` will be copied to.
             safe: If ``True``, will not overwrite existing data.
         """
         # get all files in home directory
@@ -2730,17 +2778,6 @@ class SuperSegmentationObject(object):
                           feature_context_nm=25000):
         raise DeprecationWarning('This method is deprecated. Use '
                                  '"predict_nodes" instead!')
-
-    def _gen_skel_from_sample_locs(self, dest_path=None):
-        """
-
-        Args:
-            dest_path: path where k.zip is stored
-
-        Returns:
-
-        """
-
 
     def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
                              largeFoV=True):

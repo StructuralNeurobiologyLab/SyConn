@@ -5,6 +5,7 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
+from typing import Dict, List, Union, Iterable, Optional, Tuple, TYPE_CHECKING
 import copy
 from collections import Counter
 from multiprocessing.pool import ThreadPool
@@ -35,6 +36,9 @@ from .. import global_params
 from ..proc.meshes import write_mesh2kzip
 from ..proc.rendering import render_sso_coords
 from ..proc.graphs import create_graph_from_coords
+if TYPE_CHECKING:
+    from ..reps.super_segmentation import SuperSegmentationObject, SuperSegmentationDataset
+    from torch.nn import Module
 try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
@@ -103,7 +107,8 @@ def nodes_in_pathlength(anno, max_path_len):
     return list_reachable_nodes
 
 
-def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
+def predict_sso_celltype(sso: 'SuperSegmentationObject', model: 'Module',
+                         nb_views: int = 20, overwrite: bool = False):
     """
     Celltype prediction based on local views and synapse type ratio feature.
     Uses on file system cached views (also used for axon and spine prediction).
@@ -139,7 +144,8 @@ def predict_sso_celltype(sso, model, nb_views=20, overwrite=False):
     sso.save_attributes(["celltype_cnn_e3_probas"], [res])
 
 
-def sso_views_to_modelinput(sso, nb_views, view_key=None):
+def sso_views_to_modelinput(sso: 'SuperSegmentationObject', nb_views: int,
+                            view_key: Optional[str] = None):
     np.random.seed(0)
     assert len(sso.sv_ids) > 0
     views = sso.load_views(view_key=view_key)
@@ -249,7 +255,7 @@ def radius_correction_found_vertices(sso, plump_factor=1, num_found_vertices=10)
 
 def get_sso_axoness_from_coord(sso, coord, k=5):
     """
-    Finds k nearest neighbor nodes within sso skeleton and returns majority 
+    Finds k nearest neighbor nodes within sso skeleton and returns majority
     class of dendrite (0), axon (1) or soma (2).
 
     Parameters
@@ -1852,8 +1858,8 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
     # this cache is only in-memory, and not file system cache
     assert sso.view_caching, "'view_caching' of {} has to be True in order to" \
                              " run 'view_embedding_of_sso_nocache'.".format(sso)
-
-    tmp_view_key = 'tmp_views' + pred_key_appendix # TODO: add hash of view properties, this would also a good mechanism to re-use the same views
+    # TODO: add hash of view properties, this would also a good mechanism to re-use the same views
+    tmp_view_key = 'tmp_views' + pred_key_appendix
     if tmp_view_key not in sso.view_dict or overwrite:
         views = render_sso_coords(sso, rendering_locs, **view_kwargs)  # shape: N, 4, nb_views, y, x
         sso.view_dict[tmp_view_key] = views  # required for `sso_views_to_modelinput`
@@ -1866,13 +1872,13 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
     inp = (views[:, :, 0], np.zeros_like(views[:, :, 0]), np.zeros_like(views[:, :, 0]))
     # return dist1, dist2, inp1, inp2, inp3 latent
     _, _, latent, _, _ = model.predict_proba(inp, bs=5)  # only use first view for now
-        # TODO: check if this is in-line with how `pred_key_appendix` is handled in `super_segmentation_object.py`
+    # TODO: check if this is in-line with how `pred_key_appendix` is handled in `super_segmentation_object.py`
     sso.save_attributes([pred_key], [latent])
 
 
-def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window, n_avg=1,
-                          dest_path=None, verbose=False):
-    # TODO: check if save=False is actually happening everywhere, it seems raw views are being saved
+def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
+                          nb_views: int, comp_window: float, n_avg: int = 1,
+                          dest_path: Optional[str] = None, verbose: bool = False):
     """
     Renders raw and index views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file system. Views will
@@ -1882,28 +1888,20 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window, n_a
     If sso._sample_locations is None it `generate_rendering_locs(verts, comp_window / 3)`
     will be called to generate rendering locations.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    model : nn.Module
-    semseg_key : str
-    ws : Tuple[int]
-        Window size in pixels [y, x]
-    nb_views : int
-        Number of views rendered at each rendering location.
-    comp_window : float
-        Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
-    n_avg : int
-        Number of nearest vertices to average over. If k=0 unpredicted vertices
-        will be treated as 'unpredicted' class.
-    dest_path : str
-        location of kzip in which colored vertices (according to semantic segmentation
-        prediction) are stored.
-    verbose : bool
-        Adds progress bars for view generation.
+    Args:
+        sso:
+        model:
+        semseg_key:
+        ws: Window size in pixels [y, x]
+        nb_views: Number of views rendered at each rendering location.
+        comp_window: Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
+        n_avg: Number of nearest vertices to average over. If k=0 unpredicted vertices will
+            be treated as 'unpredicted' class.
+        dest_path: location of kzip in which colored vertices (according to semantic
+            segmentation prediction) are stored.
+        verbose: Adds progress bars for view generation.
 
-    Returns
-    -------
+    Returns:
 
     """
     view_kwargs = dict(ws=ws, comp_window=comp_window, nb_views=nb_views,
@@ -1935,7 +1933,20 @@ def semseg_of_sso_nocache(sso, model, semseg_key, ws, nb_views, comp_window, n_a
         log_reps.debug('Finished mapping of vertex predictions to mesh.')
 
 
-def assemble_from_mergelist(ssd, mergelist):
+# TODO: figure out how to enable type hinting without explicitly importing the classes.
+def assemble_from_mergelist(ssd, mergelist: Union[Dict, str]):
+    """
+    Creates
+    :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.reversed_mapping_dict`,
+    :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.mapping_dict` and
+    :attr:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.id_changer` and finally calls
+    :func:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset.save_dataset_shallow`.
+
+    Args:
+        ssd: SuperSegmentationDataset
+        mergelist: Definition of supervoxel agglomeration.
+
+    """
     if mergelist is not None:
         assert "sv" in ssd.version_dict
         if isinstance(mergelist, dict):

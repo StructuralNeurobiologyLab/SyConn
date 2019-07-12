@@ -76,7 +76,7 @@ finished the following analysis steps for an example cube of shape \[2180 2180 1
 
 
 ## Example scripts and API usage
-Example scripts can be found [here](examples.md) and code examples [here](api.md).
+An introduction on how to use the example scripts can be found [here](examples.md) and API code examples [here](api.md).
 
 ## Package structure and data classes
 The basic data structures and initialization procedures are explained in the following sections:
