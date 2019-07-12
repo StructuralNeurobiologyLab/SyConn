@@ -15,7 +15,6 @@ import shutil
 import time
 import tqdm
 from collections import Counter, defaultdict
-from scipy.misc import imsave
 from scipy import spatial
 from typing import Optional, Dict, List, Tuple, Any, Union
 from knossos_utils import skeleton
@@ -2773,6 +2772,7 @@ class SuperSegmentationObject(object):
 
     def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
                                obj_to_render=("sv", )):
+        from scipy.misc import imsave
         if colors is None:
             colors = {"sv": (0.5, 0.5, 0.5, 0.5), "mi": (0, 0, 1, 1),
                       "vc": (0, 1, 0, 1), "sj": (1, 0, 0, 1)}
