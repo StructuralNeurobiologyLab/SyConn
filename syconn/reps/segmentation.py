@@ -934,7 +934,8 @@ class SegmentationObject(object):
 
     def mergelist2kzip(self, dest_path: str):
         """
-
+        Writes the supervoxel agglomeration to a KNOSSOS compatible format.
+        
         Args:
             dest_path: Path to k.zip file.
         """

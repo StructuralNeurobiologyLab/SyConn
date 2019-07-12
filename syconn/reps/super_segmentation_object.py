@@ -253,56 +253,103 @@ class SuperSegmentationObject(object):
     #                                                       IMMEDIATE PARAMETERS
     @property
     def type(self) -> str:
+        """
+        The type of this super-sueprvoxel. Default: 'ssv'.
+
+        Returns:
+            String identifier of the object type.
+        """
         return self._type
 
     @property
     def id(self) -> int:
+        """
+        Default value is the smalles SV ID which is part of this cell
+        reconstruction.
+
+        Returns:
+              Globally unique identifier of this object.
+          """
         return self._id
 
     @property
     def version(self) -> str:
+        """
+        Version of the `~SuperSegmentationDataset` this object
+        belongs to. Can be any character or string like '0' or 'axongroundtruth'.
+
+        Returns:
+            String identifier of the object's version.
+        """
         return str(self._version)
 
     @property
     def object_caching(self) -> bool:
+        """If True, :class:`~syconn.reps.segmentation.SegmentationObject`s which
+        are part of this cell reconstruction are cached."""
         return self._object_caching
 
     @property
     def voxel_caching(self) -> bool:
+        """If True, voxel data is cached."""
         return self._voxel_caching
 
     @property
     def mesh_caching(self) -> bool:
+        """If True, mesh data is cached."""
         return self._mesh_caching
 
     @property
     def view_caching(self) -> bool:
+        """If True, view data is cached."""
         return self._view_caching
 
     @property
     def scaling(self) -> np.ndarray:
+        """
+        Voxel size in nanometers (XYZ). Default is taken from the `config.ini` file and
+        accessible via `self.config`.
+        """
         return self._scaling
 
     #                                                                      PATHS
     @property
     def working_dir(self) -> str:
+        """
+        Working directory.
+        """
         return self._working_dir
 
     @property
     def identifier(self) -> str:
+        """
+        Identifier used to create the folder name of the
+        `~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset`
+        this object belongs to.
+        """
         return "%s_%s" % (self.type, self.version.lstrip("_"))
 
     @property
     def ssds_dir(self) -> str:
+        """
+        Path to the `~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset`
+        directory this object belongs to.
+        """
         return "%s/%s/" % (self.working_dir, self.identifier)
 
     @property
     def ssv_dir(self) -> str:
+        """
+        Path to the folder where the data of this super-supervoxel is stored.
+        """
         return "%s/so_storage/%s/" % (self.ssds_dir,
                                       subfold_from_ix_SSO(self.id))
 
     @property
     def attr_dict_path(self) -> str:
+        """
+         Path to the attribute storage. :py:attr:`~attr_dict` can be loaded from here.
+         """
         # Kept for backwards compatibility, remove if not needed anymore
         if os.path.isfile(self.ssv_dir + "atrr_dict.pkl"):
             return self.ssv_dir + "atrr_dict.pkl"
@@ -310,10 +357,18 @@ class SuperSegmentationObject(object):
 
     @property
     def skeleton_kzip_path(self) -> str:
+        """
+        Path to the skeleton storage.
+        """
         return self.ssv_dir + "skeleton.k.zip"
 
     @property
     def skeleton_kzip_path_views(self) -> str:
+        """
+        Todo:
+            * probably deprecated.
+        Path to the skeleton storage.
+        """
         return self.ssv_dir + "skeleton_views.k.zip"
 
     @property
@@ -349,47 +404,99 @@ class SuperSegmentationObject(object):
     #                                                                        IDS
     @property
     def sv_ids(self) -> np.ndarray:
+        """
+        All cell supervoxel IDs which are assigned to this cell reconstruction.
+        """
         return self.lookup_in_attribute_dict("sv")
 
     @property
     def sj_ids(self) -> np.ndarray:
+        """
+        All synaptic junction (sj) supervoxel IDs which are assigned to this
+        cell reconstruction.
+        """
         return self.lookup_in_attribute_dict("sj")
 
     @property
     def mi_ids(self) -> np.ndarray:
+        """
+        All mitochondria (mi) supervoxel IDs which are assigned to this
+        cell reconstruction.
+        """
         return self.lookup_in_attribute_dict("mi")
 
     @property
     def vc_ids(self) -> np.ndarray:
+        """
+        All vesicle cloud (vc) supervoxel IDs which are assigned to this
+        cell reconstruction.
+        """
         return self.lookup_in_attribute_dict("vc")
 
     @property
     def dense_kzip_ids(self) -> Dict[str, int]:
+        """
+        ?
+        """
         return dict([("mi", 1), ("vc", 2), ("sj", 3)])
 
     #                                                        SEGMENTATIONOBJECTS
     @property
     def svs(self) -> List[SegmentationObject]:
+        """
+        All cell :class:`~syconn.reps.segmentation.SegmentationObjects` objects
+        which are assigned to this cell reconstruction.
+        """
         return self.get_seg_objects("sv")
 
     @property
     def sjs(self) -> List[SegmentationObject]:
+        """
+        All synaptic junction (sj) :class:`~syconn.reps.segmentation.SegmentationObjects` objects
+        which are assigned to this cell reconstruction. These objects are based on the
+        initial synapse predictions and may contain synapse-synapse merger.
+        See :py:attr:`~syn_ssv` for merger-free inter-neuron synapses.
+        """
         return self.get_seg_objects("sj")
 
     @property
     def mis(self) -> List[SegmentationObject]:
+        """
+        All mitochondria (mi) :class:`~syconn.reps.segmentation.SegmentationObjects` objects
+        which are assigned to this cell reconstruction.
+        """
         return self.get_seg_objects("mi")
 
     @property
     def vcs(self) -> List[SegmentationObject]:
+        """
+        All vesicle cloud (vc) :class:`~syconn.reps.segmentation.SegmentationObjects`
+        objects
+        which are assigned to this cell reconstruction.
+        """
         return self.get_seg_objects("vc")
 
     @property
     def syn_ssv(self) -> List[SegmentationObject]:
+        """
+        All inter-neuron synapse (syn_ssv) :class:`~syconn.reps.segmentation.SegmentationObject`
+        objects which are assigned to this cell reconstruction. These objects are generated
+        as a combination of synaptic junction (sj) and contact site (cs) objects.
+        """
         return self.get_seg_objects("syn_ssv")
 
     #                                                                     MESHES
     def load_mesh(self, mesh_type) -> Optional[MeshType]:
+        """
+        Load mesh of a specific type, e.g. 'mi', 'sv', etc.
+
+        Args:
+            mesh_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject` used for
+                mesh retrieval.
+
+        Returns:
+            Three flat arrays: indices, vertices, normals
+        """
         if not mesh_type in self._meshes:
             return None
         if self._meshes[mesh_type] is None:
