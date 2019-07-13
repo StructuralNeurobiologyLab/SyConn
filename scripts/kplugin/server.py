@@ -15,7 +15,7 @@ import argparse
 import os
 
 from syconn.reps import super_segmentation as ss
-from syconn.reps import connectivity_helper as conn
+from syconn.reps import depr_connectivity_helper as conn
 from syconn import global_params
 from syconn.handler.logger import log_main as log_gate
 from syconn.handler.multiviews import int2str_converter
