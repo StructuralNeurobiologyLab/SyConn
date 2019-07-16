@@ -16,7 +16,9 @@ import time
 import tqdm
 from collections import Counter, defaultdict
 from scipy import spatial
-from typing import Optional, Dict, List, Tuple, Any, Union
+from typing import Optional, Dict, List, Tuple, Any, Union, TYPE_CHECKING, Iterable
+if TYPE_CHECKING:
+    from torch.nn import Module
 from knossos_utils import skeleton
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
@@ -53,22 +55,94 @@ class SuperSegmentationObject(object):
     list of agglomerated supervoxels (see :class:`~syconn.reps.segmentation.SegmentationObject`).
 
     Examples:
-        See `SyConn/docs/api.md`.
+        This class can be used to create a cell reconstruction object after successful executing
+        :func:`syconn.exec.exec_multiview.run_create_neuron_ssd` as follows::
+
+            from syconn import global_params
+            # import SuperSegmentationObject and SuperSegmentationDataset
+            from syconn.reps.super_segmentation import *
+            # set the current working directory SyConn-wide
+            global_params.wd = '~/SyConn/example_cube1/'
+
+            ssd = SuperSegmentationDataset()
+            cell_reconstr_ids = ssd.ssv_ids
+            # call constructor explicitly ...
+            cell = SuperSegmentationObject(cell_reconstr_ids[0])
+            # ... or via the SuperSegmentationDataset - both contain the same data
+            cell = ssd.get_super_segmentation_object(cell_reconstr_ids[0])
+            # inspect existing attributes
+            cell.load_attr_dict()
+            print(cell.attr_dict.keys())
+            # get
+
+        Subsequent analysis steps (see the ``SyConn/scripts/example_run/start.py``) augment the
+        cell reconstruction with more properties::
+
+            # to iterate over all cell reconstructions use the generator:
+            for cell in ssd.ssvs:
+                # e.g. collect some analysis results
+                cell.load_attr_dict()
+                n_synapses = len(cell.syn_ssv)
+                celltype = cell.attr_dict["celltype_cnn_e3"]
+                ...
+                # write out cell mesh
+                cell.mesh2kzip('~/cell{}_mesh.k.zip'.format(cell.id))
+                # write out cell mesh and meshes of all existing cell organelles
+                cell.meshes2kzip('~/cell{}_meshes.k.zip'.format(cell.id))
+                # color the cell mesh according to a semantic prediction
+                cell.semseg2mesh(semseg_key='spiness', dest_path='~/cell{}_spines.k.zip'.format(cell.id))
+
+
+        See also `SyConn/docs/api.md` (WIP).
 
     Attributes:
         attr_dict: Attribute dictionary which serves as a general-purpose container. Accessed via
-            the :class:`~syconn.backend.storage.AttributeDict` interface.
+            the :class:`~syconn.backend.storage.AttributeDict` interface. After successfully
+            executing :func:`syconn.exec.exec_multiview.run_create_neuron_ssd`
+            and subsequent analysis steps (see the ``SyConn/scripts/example_run/start.py``) the
+            following keys are present in :attr:`~attr_dict`:
+                * 'id': ID array, identical to :py:attr:`~ssv_ids`. All other properties have the same
+                  ordering as this array, i.e. if SSV with ID 1234 has index 42 in the 'id'-array
+                  you will find its properties at index 42 in all other cache-arrays.
+                * 'bounding_box': Bounding box of every SSV.
+                * 'size': Number voxels of each SSV.
+                * 'rep_coord': Representative coordinates for each SSV.
+                * 'sv': Supervoxel IDs for every SSV.
+                * 'sample_locations': Lists of rendering locations for each SSV. Each entry is a
+                  list (length corresponds to the number of supervoxels) of coordinate arrays for
+                  the corresponding SSV.
+                * 'celltype_cnn_e3': Celltype classifications based on the elektronn3 CMN.
+                * 'celltype_cnn_e3_probas': Celltype logits for the different types as an array of
+                  shape (M, C; M: Number of predicted random multi-view sets, C: Number of
+                  classes). In the example run there are currently 9 predicted classes:
+                  STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, INT=8.
+                * 'syn_ssv': Synapse IDs assigned to each SSV.
+                * 'syn_sign_ratio': Area-weighted atio of symmetric synapses, see
+                  :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.syn_sign_ratio`.
+                * 'sj': Synaptic junction object IDs which were mapped to each SSV. These are used
+                  for view rendering and also to generate the 'syn_ssv' objects in combination
+                  with contact sites (see corresponding section in the documentation).
+                * 'mapping_sj_ids': Synaptic junction objects which overlap with the respective
+                  SSVs.
+                * 'mapping_sj_ratios': Overlap ratio of the synaptic junctions.
+                * 'vc': Vesicle clouds mapped to each SSV.
+                * 'mapping_vc_ids': Vesicle cloud objects which overlap with the respective SSVs.
+                * 'mapping_vc_ratios': Overlap ratio of the vesicle clouds.
+                * 'mi': Mitochondria mapped to each SSV.
+                * 'mapping_mi_ids': Mitochondria objects which overlap with the respective SSVs.
+                * 'mapping_mi_ratios': Overlap ratio of the mitochondria.
+
         skeleton: The skeleton representation of this super-supervoxel. Keys which are
             currently in use:
                 * 'nodes': Array of the node coordinates (in nanometers).
                 * 'edges': Edges between nodes.
                 * 'diameters': Estimated cell diameter at every node.
-                * various node properties, e.g. 'axoness'. Check ``sso.skeleton.keys()``
-                  of the initialized
-                  :class:`~syconn.reps.segmentation.SegmentationObject` object ``sso``.
-        enable_locking_so: Locking flag for all :class:`syconn.reps.segmen
-            tation.SegmentationObject` assigned
-            to this object (e.g. SV, mitochondria, vesicle clouds, ...)
+                * various node properties, e.g. 'axoness' and 'axoness_avg10000'. Check the
+                available keys ``sso.skeleton.keys()`` of an initialized :class:`~SuperSegmentationObject`
+                object ``sso`` after loading the skeleton (``sso.load_skeleton()``).
+        enable_locking_so: Locking flag for all
+            :class:`syconn.reps.segmentation.SegmentationObject` assigned to this
+            object (e.g. SV, mitochondria, vesicle clouds, ...)
         nb_cpus: Number of cpus for parallel jobs. will only be used in some
             processing steps.
         view_dict: A dictionary for caching 2D projection views. Those are stored as
@@ -78,7 +152,7 @@ class SuperSegmentationObject(object):
             cell and cell organelle shapes. Stored at :py:attr:`~view_path` and accessed via the
             :class:`~syconn.backend.storage.CompressedStorage` interface.
         version_dict: A dictionary which contains the versions of other dataset types which share
-            the same working directory. Defaults to the `Versions` entry in the `config.ini`file.
+            the same working directory. Defaults to the `Versions` entry in the `config.ini` file.
 
     Todo:
         * add examples
@@ -110,11 +184,11 @@ class SuperSegmentationObject(object):
                 :func:`~syconn.reps.segmentation.SegmentationObject.get_seg_objects`
                 will be cached in a dictionary.
             voxel_caching: Voxel array will be cached at
-                :attr:`~syconn.reps.segmentation.SegmentationObject._voxels`.
+                :py:attr:`~syconn.reps.segmentation.SegmentationObject._voxels`.
             mesh_caching: Meshes (cell fragments, mitos, vesicles, ..) will be cached at
-                :attr:`~syconn.reps.segmentation.SegmentationObject._meshes`.
+                :py:attr:`~syconn.reps.segmentation.SegmentationObject._meshes`.
             view_caching: Views can be cached at :py:attr:`~view_dict`.
-            config: Retrieved from :attr:`~syconn.global_params.config`, otherwise must be
+            config: Retrieved from :py:attr:`~syconn.global_params.config`, otherwise must be
                 initialized with a :class:`~syconn.handler.config.DynConfig`
             nb_cpus: Number of cpus for parallel jobs. will only be used in some
                 processing steps.
@@ -308,7 +382,7 @@ class SuperSegmentationObject(object):
     def scaling(self) -> np.ndarray:
         """
         Voxel size in nanometers (XYZ). Default is taken from the `config.ini` file and
-        accessible via `self.config`.
+        accessible via :py:attr:`~config`.
         """
         return self._scaling
 
@@ -324,7 +398,7 @@ class SuperSegmentationObject(object):
     def identifier(self) -> str:
         """
         Identifier used to create the folder name of the
-        `~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset`
+        :class: `~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset`
         this object belongs to.
         """
         return "%s_%s" % (self.type, self.version.lstrip("_"))
@@ -332,7 +406,8 @@ class SuperSegmentationObject(object):
     @property
     def ssds_dir(self) -> str:
         """
-        Path to the `~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset`
+        Path to the
+        :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset`
         directory this object belongs to.
         """
         return "%s/%s/" % (self.working_dir, self.identifier)
@@ -365,9 +440,10 @@ class SuperSegmentationObject(object):
     @property
     def skeleton_kzip_path_views(self) -> str:
         """
+        Path to the skeleton storage.
+
         Todo:
             * probably deprecated.
-        Path to the skeleton storage.
         """
         return self.ssv_dir + "skeleton_views.k.zip"
 
@@ -543,11 +619,12 @@ class SuperSegmentationObject(object):
         """
         return self.load_mesh("syn_ssv")
 
-    def label_dict(self, data_type='vertex') -> np.ndarray:
+    def label_dict(self, data_type='vertex') -> CompressedStorage:
         """
         Dictionary which stores various predictions. Currently used keys:
+
             * 'vertex': Labels associated with the mesh vertices. The ordering
-              is the same as `self.mesh[1]`.
+              is the same as the vertex order in ``self.mesh[1]``.
 
         Uses the :class:`~syconn.backend.storage.CompressedStorage` interface.
 
@@ -592,7 +669,7 @@ class SuperSegmentationObject(object):
 
         Args:
             add_node_attr: To-be-added node attributes. Must exist in
-            `self.skeleton`.
+            :py:attr`~skeleton`.
 
         Returns:
             The skeleton of this SSV object as a graph.
@@ -668,8 +745,8 @@ class SuperSegmentationObject(object):
     @property
     def rep_coord(self) -> np.ndarray:
         """
-        Representative coordinate of this SSV object. Will be the `rep_coord`
-        of the first supervoxel in `self.svs`.
+        Representative coordinate of this SSV object. Will be the representative
+        coordinate of the first supervoxel in :py:attr:`~svs`.
 
         Returns:
             1D array of the coordinate (XYZ).
@@ -685,7 +762,7 @@ class SuperSegmentationObject(object):
     @property
     def attr_dict_exists(self) -> bool:
         """
-        Checks if a attribute dictionary file exists at `self.attr_dict_path`.
+        Checks if a attribute dictionary file exists at :py:attr:`~attr_dict_path`.
 
         Returns:
             True if the attribute dictionary file exists.
@@ -694,15 +771,15 @@ class SuperSegmentationObject(object):
 
     def mesh_exists(self, obj_type: str) -> bool:
         """
-        Checks if the mesh of `~syconn.reps.segmentation.SegmentationObject`s
-        of type ``obj_type`` exists in the `MeshStorage` located at
-        ``self.mesh_dc_path``.
+        Checks if the mesh of :class:`~syconn.reps.segmentation.SegmentationObject`s
+        of type `obj_type` exists in the :class:`~syconn.backend.storage.MeshStorage`
+        located at :py:attr:`~mesh_dc_path`.
 
         Args:
-            obj_type: Type of requested `~syconn.reps.segmentation.SegmentationObject`s.
+            obj_type: Type of requested :class:`~syconn.reps.segmentation.SegmentationObject`s.
 
         Returns:
-            ``True`` if the mesh exists.
+            True if the mesh exists.
         """
         mesh_dc = MeshStorage(self.mesh_dc_path,
                               disable_locking=not self.enable_locking)
@@ -760,7 +837,8 @@ class SuperSegmentationObject(object):
         object.
 
         Returns:
-            Supervoxel graph with nodes of type `~syconn.reps.segmentation.SegmentationObject`.
+            Supervoxel graph with nodes of type
+            :class:`~syconn.reps.segmentation.SegmentationObject`.
         """
         if self._rag is None:
             self._rag = self.load_sv_graph()
@@ -781,7 +859,7 @@ class SuperSegmentationObject(object):
     def _load_compartment_meshes(self, overwrite: bool = False):
         """
         Loading compartment meshes in-place as 'axon', 'dendrite', 'soma' to
-        :attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject._meshes`.
+        :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject._meshes`.
 
         Args:
             overwrite: Overwrites existing compartment meshes
@@ -814,15 +892,14 @@ class SuperSegmentationObject(object):
 
     def get_seg_objects(self, obj_type: str) -> List[SegmentationObject]:
         """
-        Factory method for `~syconn.reps.segmentation.SegmentationObject`s of
-        type ``obj_type``.
+        Factory method for :class:`~syconn.reps.segmentation.SegmentationObject`s of
+        type `obj_type`.
 
         Args:
-            obj_type: Type of requested `~syconn.reps.segmentation.SegmentationObject`s.
-            obj_id:
+            obj_type: Type of requested :class:`~syconn.reps.segmentation.SegmentationObject`s.
 
         Returns:
-            The `~syconn.reps.segmentation.SegmentationObject`s of type ``obj_type``
+            The :class:`~syconn.reps.segmentation.SegmentationObject`s of type `obj_type`
             sharing the same working directory as this SSV object.
         """
         if obj_type not in self._objects:
@@ -840,15 +917,15 @@ class SuperSegmentationObject(object):
 
     def get_seg_obj(self, obj_type: str, obj_id: int) -> SegmentationObject:
         """
-        Factory method for `~syconn.reps.segmentation.SegmentationObject` of
-        type ``obj_type``.
+        Factory method for :class:`~syconn.reps.segmentation.SegmentationObject` of
+        type `obj_type`.
 
         Args:
-            obj_type: Type of requested `~syconn.reps.segmentation.SegmentationObject`.
-            obj_id:
+            obj_type: Type of requested :class:`~syconn.reps.segmentation.SegmentationObject`.
+            obj_id: ID of the requested object.
 
         Returns:
-            The `~syconn.reps.segmentation.SegmentationObject` of type ``obj_type``
+            The :class:`~syconn.reps.segmentation.SegmentationObject` of type `obj_type`
             sharing the same working directory as this SSV object.
         """
         return SegmentationObject(obj_id=obj_id, obj_type=obj_type,
@@ -859,14 +936,14 @@ class SuperSegmentationObject(object):
 
     def get_seg_dataset(self, obj_type: str) -> SegmentationDataset:
         """
-        Factory method for `~syconn.reps.segmentation.SegmentationDataset` of
-        type ``obj_type``.
+        Factory method for :class:`~syconn.reps.segmentation.SegmentationDataset` of
+        type `obj_type`.
 
         Args:
-            obj_type: Type of requested `~syconn.reps.segmentation.SegmentationDataset`.
+            obj_type: Type of requested :class:`~syconn.reps.segmentation.SegmentationDataset`.
 
         Returns:
-            The `~syconn.reps.segmentation.SegmentationDataset` of type ``obj_type``
+            The :class:`~syconn.reps.segmentation.SegmentationDataset` of type `obj_type`
             sharing the same working directory as this SSV object.
         """
         return SegmentationDataset(obj_type, version_dict=self.version_dict,
@@ -877,7 +954,7 @@ class SuperSegmentationObject(object):
     def load_attr_dict(self) -> int:
         """
         Load the attribute dictionary of this SSV object stored at
-        ``self.ssv_dir``.
+        :py:attr:`~ssv_dir`.
         """
         try:
             self.attr_dict = load_pkl2obj(self.attr_dict_path)
@@ -889,11 +966,11 @@ class SuperSegmentationObject(object):
         """
         Load the supervoxel graph (node objects will be of type
         :class:`~syconn.reps.segmentation.SegmentationObject`) of this SSV object.
-         It is generated from the supervoxel ID graph stored in ``self._sv_graph``
-         or the edge list stored at ``self.edgelist_path``.
+         It is generated from the supervoxel ID graph stored in :py:attr:`_sv_graph`
+         or the edge list stored at :py:attr:`edgelist_path`.
 
         Returns:
-            The supervoxel graph with `~syconn.reps.segmentation.SegmentationObject`
+            The supervoxel graph with :class:`~syconn.reps.segmentation.SegmentationObject`
             nodes.
         """
         if self._sv_graph is not None:
@@ -926,13 +1003,21 @@ class SuperSegmentationObject(object):
                            self.get_seg_obj("sv", e[1]))
         return new_G
 
-    def load_edgelist(self) -> list:
+    def load_edgelist(self) -> List[Tuple[int, int]]:
+        """
+        Load the edges within the supervoxel graph.
+
+        Returns:
+            Edge list representing the supervoxel graph.
+        """
         g = self.load_sv_graph()
         return list(g.edges())
 
     def _load_obj_mesh(self, obj_type: str = "sv",
                        rewrite: bool = False) -> MeshType:
         """
+        Load the mesh of a given `obj_type`. If :func:`~mesh_exists` is False,
+        loads the meshes from the underlying sueprvoxel objects.
         TODO: Currently does not support color array!
         TODO: add support for sym. asym synapse type
 
@@ -969,7 +1054,7 @@ class SuperSegmentationObject(object):
 
     def _load_obj_mesh_compr(self, obj_type: str = "sv") -> MeshType:
         """
-        Load meshes of all objects of type ``obj_type`` assigned to this SSV.
+        Load meshes of all objects of type `obj_type` assigned to this SSV.
 
         Args:
             obj_type: Type of requested objects.
@@ -1050,14 +1135,14 @@ class SuperSegmentationObject(object):
             attr_key: Attribute key.
 
         Returns:
-            ``True`` if the key exists in ``self.attr_dict``.
+            True if the key exists in :py:attr:`~attr_dict`.
         """
         return attr_key in self.attr_dict
 
     def lookup_in_attribute_dict(self, attr_key: str) -> Optional[Any]:
         """
-        Returns the value to ``attr_key`` stored in ``self.attr_dict`` or
-        ``None`` if the key is not existent.
+        Returns the value to `attr_key` stored in :py:attr:`~attr_dict` or
+        None if the key is not existent.
 
         Args:
             attr_key: Attribute key.
@@ -1080,17 +1165,17 @@ class SuperSegmentationObject(object):
                            nb_cpus: Optional[int] = None):
         """
         Collect attributes from :class:`~syconn.reps.segmentation.SegmentationObject`
-        of type ``obj_type``.
-        The attribute value ordering for each key is the same as ``self.svs``.
+        of type `obj_type`.
+        The attribute value ordering for each key is the same as :py:attr:`~svs`.
 
         Args:
             obj_type: Type of :class:`~syconn.reps.segmentation.SegmentationObject`.
             attr_keys: Keys of desired properties. Must exist for the requested
-             ``obj_type``.
+             `obj_type`.
             nb_cpus: Number of CPUs to use for the calculation.
 
         Returns:
-            Attribute values for each key in ``attr_keys``.
+            Attribute values for each key in `attr_keys`.
         """
         if nb_cpus is None:
             nb_cpus = self.nb_cpus
@@ -1103,7 +1188,7 @@ class SuperSegmentationObject(object):
 
     def calculate_size(self, nb_cpus: Optional[int] = None):
         """
-        Calculates ``self.size``.
+        Calculates :py:attr:`size`.
 
         Args:
             nb_cpus: Number of CPUs to use for the calculation.
@@ -1113,7 +1198,7 @@ class SuperSegmentationObject(object):
 
     def calculate_bounding_box(self, nb_cpus: Optional[int] = None):
         """
-        Calculates ``self.bounding_box`` (and ``self.size``).
+        Calculates :py:attr:`~bounding_box` (and :py:attr:`size`).
 
         Args:
             nb_cpus: Number of CPUs to use for the calculation.
@@ -1137,10 +1222,10 @@ class SuperSegmentationObject(object):
         Merges existing supervoxel skeletons (``allow_skel_gen=False``) or calculates them
         from scratch using :func:`~syconn.reps.super_segmentation_helper
         .create_sso_skeletons_thread` otherwise (requires ``allow_skel_gen=True``).
-        Skeleton will be saved at ``self.skeleton_path``.
+        Skeleton will be saved at :py:attr:`~skeleton_path`.
 
         Args:
-            force: Skips ``load_skeleton`` if ``force=True``.
+            force: Skips :func:`~load_skeleton` if ``force=True``.
         """
         if force:  #
             return ssh.create_sso_skeletons_thread([self])
@@ -1158,7 +1243,7 @@ class SuperSegmentationObject(object):
             dest_path: Destination path for k.zip file.
             additional_keys: Additional skeleton keys which are converted into
             KNOSSOS skeleton node properties. Will always attempt to write out the
-            keys ``axoness``, ``cell_type`` and ``meta``.
+            keys 'axoness', 'cell_type' and 'meta'.
 
         Returns:
             Saves KNOSSOS compatible k.zip file containing the SSV skeleton and
@@ -1184,8 +1269,10 @@ class SuperSegmentationObject(object):
                 r = self.skeleton["diameters"][i_node] / 2
                 skel_nodes.append(skeleton.SkeletonNode().
                                   from_scratch(a, c[0], c[1], c[2], radius=r))
-                if "axoness" in self.skeleton:
-                    skel_nodes[-1].data["axoness"] = self.skeleton["axoness"][
+                pred_key_ax = "{}_avg{}".format(global_params.view_properties_semsegax['semseg_key'],
+                                                global_params.DIST_AXONESS_AVERAGING)
+                if pred_key_ax in self.skeleton:
+                    skel_nodes[-1].data[pred_key_ax] = self.skeleton[pred_key_ax][
                         i_node]
                 if "cell_type" in self.skeleton:
                     skel_nodes[-1].data["cell_type"] = \
@@ -1207,8 +1294,20 @@ class SuperSegmentationObject(object):
         except Exception as e:
             log_reps.warning("[SSO: %d] Could not load/save skeleton:\n%s" % (self.id, repr(e)))
 
-    def save_objects_to_kzip_sparse(self, obj_types=("sj", "mi", "vc"),
-                                    dest_path=None):
+    def save_objects_to_kzip_sparse(self, obj_types: Optional[Iterable[str]] = None,
+                                    dest_path: Optional[str] = None):
+        """
+        Export cellular organelles as coordinates with size, shape and overlap
+        properties in a KNOSSOS compatible format.
+
+        Args:
+            obj_types: Type identifiers of the supervoxel objects which are exported.
+            dest_path: Path to the destination file. If None, results will be
+                stored at :py:attr:`~skeleton_kzip_path`:
+
+        """
+        if obj_types is None:
+            obj_types = global_params.existing_cell_organelles
         annotations = []
         for obj_type in obj_types:
             assert obj_type in self.attr_dict
@@ -1245,7 +1344,22 @@ class SuperSegmentationObject(object):
             dest_path = self.skeleton_kzip_path
         write_skeleton_kzip(dest_path, annotations)
 
-    def save_objects_to_kzip_dense(self, obj_types: List[str]):
+    def save_objects_to_kzip_dense(self, obj_types: List[str],
+                                   dest_path: Optional[str] = None):
+        """
+        Export cellular organelles as coordinates with size, shape and overlap
+        properties in a KNOSSOS compatible format.
+
+        Args:
+            obj_types: Type identifiers of the supervoxel objects which are
+                exported.
+            dest_path: Path to the destination file. If None, result will be
+                stored at :py:attr:`~objects_dense_kzip_path`:
+
+
+        """
+        if dest_path is None:
+            dest_path = self.objects_dense_kzip_path
         if os.path.exists(self.objects_dense_kzip_path[:-6]):
             shutil.rmtree(self.objects_dense_kzip_path[:-6])
         if os.path.exists(self.objects_dense_kzip_path):
@@ -1254,15 +1368,15 @@ class SuperSegmentationObject(object):
         for obj_type in obj_types:
             so_objs = self.get_seg_objects(obj_type)
             for so_obj in so_objs:
-                so_obj.save_kzip(path=self.objects_dense_kzip_path,
+                so_obj.save_kzip(path=dest_path,
                                  write_id=self.dense_kzip_ids[obj_type])
 
     def total_edge_length(self) -> float:
         """
-        Total edge length of the super-supervoxel :attr:`~skeleton` in nanometers.
+        Total edge length of the super-supervoxel :py:attr:`~skeleton` in nanometers.
 
         Returns:
-            Sum of all edge lengths (L2 norm) in :attr:`~skeleton`.
+            Sum of all edge lengths (L2 norm) in :py:attr:`~skeleton`.
         """
         if self.skeleton is None:
             self.load_skeleton()
@@ -1296,7 +1410,7 @@ class SuperSegmentationObject(object):
         ``allow_skel_gen=True``).
 
         Returns:
-            ``True`` if successfully loaded/generated skeleton, else ``False``.
+            True if successfully loaded/generated skeleton, else False.
         """
         try:
             self.skeleton = load_pkl2obj(self.skeleton_path)
@@ -1347,9 +1461,8 @@ class SuperSegmentationObject(object):
                                                save: bool = False):
         """
         Aggregates mapping information of cellular organelles from the SSV's
-        supervoxels. After this step,
-        :func:`~syconn.super_segmentation_object.SuperSegmentationObject.apply_mapping_decision`
-        can be called to apply final assignments.
+        supervoxels. After this step, :func:`~apply_mapping_decision` can be
+        called to apply final assignments.
 
         Examples:
             A mitochondrion can extend over multiple supervoxels, so it will
@@ -1357,7 +1470,7 @@ class SuperSegmentationObject(object):
             of all supervoxels assigned to this SSV will be aggregated.
         Args:
             obj_types: Cell organelles types to process.
-            save: Save ``self.attribute_dict`` at the end.
+            save: Save :yp:attr:`~attribute_dict` at the end.
         """
         assert isinstance(obj_types, list)
 
@@ -1391,8 +1504,7 @@ class SuperSegmentationObject(object):
         Applies mapping decision of cellular organelles to this SSV object. A
         :class:`~syconn.reps.segmentation.SegmentationObject` in question is
         assigned to this :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
-        if they share the highest overlap. See `SyConn/docs/object_mapping.md`
-        for more details.
+        if they share the highest overlap. For more details see ``SyConn/docs/object_mapping.md``.
         Default parameters for the mapping will be taken from the `config.ini` file.
 
         Args:
@@ -1403,7 +1515,7 @@ class SuperSegmentationObject(object):
             upper_ratio: Maximum ratio s.t. objects are mapped.
             sizethreshold: Minimum voxel size of an object, objects below will be
                 ignored.
-            save: If ``True``, ``self.attr_dict`` will be saved.
+            save: If True, :py:attr:`~attr_dict` will be saved.
 
         Todo:
             * check what ``correct_for_background`` was for. Any usecase for
@@ -1489,7 +1601,7 @@ class SuperSegmentationObject(object):
                          save: bool = True):
         """
         Wrapper function for mapping all existing cell organelles (as defined in
-        :attr:`~syconn.global_params.existing_cell_organelles`).
+        :py:attr:`~syconn.global_params.existing_cell_organelles`).
 
         Args:
             obj_types: Type of :class:`~syconn.reps.super_segmentation_object
@@ -1509,10 +1621,10 @@ class SuperSegmentationObject(object):
             * :py:attr:`~voxels`
             * :py:attr:`~voxels_xy_downsampled`
             * :py:attr:`~sample_locations`
-            * :py:attr:`~objects`
-            * :py:attr:`~views`
+            * :py:attr:`~_objects`
+            * :py:attr:`~_views`
             * :py:attr:`~skeleton`
-            * :py:attr:`~meshes`
+            * :py:attr:`~_meshes`
         """
         self._objects = {}
         self._voxels = None
@@ -1528,30 +1640,29 @@ class SuperSegmentationObject(object):
         candidates), cache object meshes and calculate the SSV skeleton.
 
         Todo:
-            * Check what ``clear_cache()`` was for.
+            * Check what the ``clear_cache()`` call was for.
         """
         self.load_attr_dict()
         self._map_cellobjects()
-        _ = self._load_obj_mesh(obj_type="mi", rewrite=False)
-        _ = self._load_obj_mesh(obj_type="sj", rewrite=False)
-        _ = self._load_obj_mesh(obj_type="vc", rewrite=False)
-        _ = self._load_obj_mesh(obj_type="sv", rewrite=False)
+        for sv_type in global_params.existing_cell_organelles + ["sv", "syn_ssv"]:
+            _ = self._load_obj_mesh(obj_type=sv_type, rewrite=False)
         self.calculate_skeleton()
         self.clear_cache()
 
     def copy2dir(self, dest_dir: str, safe: bool = True):
         """
+        Copies the content at :py:attr:`~ssv_dir` to another directory.
+
         Examples:
-            To copy the content of this SSV object (``ssv_orig``) to the
-            destination of another (e.g. yet not existing) SSV (``ssv_target``),
-            call ``ssv_orig.copy2dir(ssv_target.ssv_dir)``. All files contained
-            in the directory py:attr:`~ssv_dir` of ``ssv_orig`` will be copied to
-            ``ssv_target.ssv_dir``.
+            To copy the data of this SSV object (``ssv_orig``) to another yet not
+            existing SSV (``ssv_target``). call ``ssv_orig.copy2dir(ssv_target.ssv_dir)``.
+            All files contained in the directory py:attr:`~ssv_dir` of ``ssv_orig``
+            will be copied to ``ssv_target.ssv_dir``.
 
         Args:
             dest_dir: Destination directory where all files contained in
                 py:attr:`~ssv_dir` will be copied to.
-            safe: If ``True``, will not overwrite existing data.
+            safe: If True, will not overwrite existing data.
         """
         # get all files in home directory
         fps = get_filepaths_from_dir(self.ssv_dir, ending=["pkl", "k.zip"])
@@ -1581,7 +1692,7 @@ class SuperSegmentationObject(object):
                      lo_first_n: Optional[int] = None) -> List[List[Any]]:
         """
         Splits the supervoxel graph of this SSV into subgraphs. Default values
-        are generated from :attr:`syconn.global_params`.
+        are generated from :py:attr:`syconn.global_params`.
 
         Args:
             max_nb_sv: Number of supervoxels per subgraph
@@ -1606,13 +1717,11 @@ class SuperSegmentationObject(object):
         """
         This will only save views on SSV level and not for each individual SV!
 
-        Parameters
-        ----------
-        views : np.array
-        view_key : str
+        Args:
+            views: The view array.
+            view_key: The key used for the look-up.
 
-        Returns
-        -------
+        Returns:
 
         """
         if self.version == 'tmp':
@@ -1625,35 +1734,29 @@ class SuperSegmentationObject(object):
         view_dc[view_key] = views
         view_dc.push()
 
-    def load_views(self, view_key=None, woglia=True, raw_only=False,
-                   force_reload=False, cache_default_views=False, nb_cpus=None,
-                   ignore_missing=False, index_views=False):
+    def load_views(self, view_key: Optional[str] = None, woglia: bool = True,
+                   raw_only: bool = False, force_reload: bool = False,
+                   nb_cpus: Optional[int] = None, ignore_missing: bool = False,
+                   index_views: bool = False) -> np.ndarray:
         """
-        Load views which were stored by 'save_views' given the key 'view_key',
-        i.e. this operates on SSV level.
-        If 'view_key' is not given, then returns the views of the SSV's
-        SVs (woglia and raw_only is then used).
+        Load views which are stored in :py:attr:`~view_dict` or if not present attempts
+        to retrieve data from :py:attr:`view_path` given the key `view_key`,
+        i.e. this operates on SSV level. If the given key does not exist on
+        :class:`~SuperSegmentationObject` level or is None, attempts to load the views from
+        the underlying :class:`~syconn.reps.segmentation.SegmentationObject`s.
 
-        Parameters
-        ----------
-        woglia : bool
-        view_key : str
-        raw_only : bool
-        force_reload : bool
-            if True will force reloading the SV views.
-        ignore_missing : bool
-            if True, it will not raise KeyError if SV does not exist
-        cache_default_views : bool
-            Stores views in SSV cache if True.
-        nb_cpus : int
-        index_views : bool
-            load index views
+        Args:
+            view_key: The key used for the look-up.
+            woglia: If True, will load the views render from the glia-free agglomeration.
+            raw_only: If True, will only return the cell shape channel in the views.
+            force_reload: If True will force reloading the SV views.
+            nb_cpus: Number of CPUs.
+            ignore_missing: If True, it will not raise KeyError if SV does not exist.
+            index_views: Views which contain the indices of the vertices at the respective pixels.
+                Used as look-up to map the predicted semantic labels onto the mesh vertices.
 
-        Returns
-        -------
-        np.array
-            Concatenated views for each SV in self.svs with shape
-             [N_LOCS, N_CH, N_VIEWS, X, Y]
+        Returns:
+            Concatenated views for each SV in self.svs with shape [N_LOCS, N_CH, N_VIEWS, X, Y].
         """
         if self.view_caching and view_key in self.view_dict:
             # self.view_dict stores list of views with length of sample_locations
@@ -1679,13 +1782,20 @@ class SuperSegmentationObject(object):
             self.view_dict[view_key] = views
         return views
 
-    def view_existence_old(self, woglia=True):
-        params = [[sv, {"woglia": woglia}] for sv in self.svs]
-        so_views_exist = sm.start_multiprocess_obj("views_exist", params,
-                                                   nb_cpus=self.nb_cpus)
-        return so_views_exist
+    def view_existence(self, woglia: bool = True, index_views: bool = False,
+                       view_key: Optional[str] = None) -> List[bool]:
+        """
+        Checks whether a specific set of views exists for this object.
 
-    def view_existence(self, woglia=True, index_views=False, view_key=None):
+        Args:
+            woglia: If True, will load the views render from the glia-free agglomeration.
+            index_views: Views which contain the indices of the vertices at the respective pixels.
+                Used as look-up to map the predicted semantic labels onto the mesh vertices.
+            view_key: The key used for the look-up.
+
+        Returns:
+            True if the specified views exist.
+        """
         view_paths = set([sv.view_path(woglia=woglia, index_views=index_views,
                                        view_key=view_key) for sv in self.svs])
         cached_ids = []
@@ -1695,61 +1805,43 @@ class SuperSegmentationObject(object):
         so_views_exist = [svid in cached_ids for svid in self.sv_ids]
         return so_views_exist
 
-    def render_views(self, add_cellobjects=False, verbose=False,
-                     overwrite=True, cellobjects_only=False,
-                     woglia=True, skip_indexviews=False, qsub_co_jobs=300,
-                     resume_job=False):
+    def render_views(self, add_cellobjects: bool = False, verbose: bool = False,
+                     overwrite: bool = True, cellobjects_only: bool =False,
+                     woglia: bool = True, skip_indexviews: bool = False,
+                     qsub_co_jobs: int = 300, resume_job: bool = False):
         """
         Renders views for each SV based on SSV context and stores them
         on SV level. Usually only used once: for initial glia or axoness
         prediction.
-        THE RESULTS WILL BE SAVED DISTRIBUTED AT EACH SV VIEW DICTIONARY -
-        IT IS NOT CACHED IN THE ATTR-DICT OF THE SSV. Used during initial
-        predictions.
-        See '_render_rawviews' for how to store views in the SSV storage, which
+        The results will be saved distributed at each
+        class:`~syconn.reps.segmentation.SegmentationObject` of this object.
+        It is not cached in :py:attr:`view_dict` nor :py:attr:`view_path`.
+        Used during initial glia, compartment and cell type predictions.
+        See :func:`~_render_rawviews` for how to store views in the SSV storage, which
         is e.g. used during GT generation.
 
-        Parameters
-        ----------
-        add_cellobjects : bool
-        qsub_pe : str
-        overwrite : bool
-        cellobjects_only : bool
-        woglia : bool
-        skip_indexviews : bool
-            Index views will not be generated, import for e.g. initial SSV
-            rendering prior to glia-splitting.
-        qsub_co_jobs : int
-            Number of parallel jobs if QSUB is used
-        resume_job : bool
-        Returns
-        -------
-
+        Args:
+            add_cellobjects: Add cellular organelle channels in the 2D projection views.
+            verbose: Log additional information.
+            overwrite: Re-render at all rendering locations.
+            cellobjects_only: Render only cellular organelle channels. Currently not in use.
+            woglia: If True, will load the views render from the glia-free agglomeration.
+            skip_indexviews: Index views will not be generated, used for initial SSV
+                glia-removal rendering.
+            qsub_co_jobs: Number of parallel jobs if batchjob is used.
+            resume_job: Batchjob parameter. Resumes a interrupted batchjob.
         """
         # TODO: partial rendering currently does not support index view generation (-> vertex
         #  indices will be different for each partial mesh)
         if len(self.sv_ids) > global_params.RENDERING_MAX_NB_SV and not woglia:
+            if not skip_indexviews:
+                raise ValueError('Index view rendering is currently not supported with partial '
+                                 'cell rendering.')
             part = self.partition_cc()
             log_reps.info('Partitioned huge SSV into {} subgraphs with each {}'
                           ' SVs.'.format(len(part), len(part[0])))
             log_reps.info("Rendering SSO. {} SVs left to process"
                           ".".format(len(self.svs)))
-            # TODO: Does not work
-            # if not overwrite:  # check existence of glia preds
-            #     views_exist = np.array(self.view_existence(woglia=woglia), dtype=np.int)
-            #     log_reps.info("Rendering SSO. {}/{} views left to process"
-            #                   ".".format(np.sum(views_exist == 0), len(self.svs)))
-            #     ex_dc = {}
-            #     for ii, k in enumerate(self.svs):
-            #         ex_dc[k] = views_exist[ii]
-            #     for k in part.keys():
-            #         if ex_dc[k]:  # delete SO's with existing views
-            #             del part[k]
-            #             continue
-            #     del ex_dc
-            # else:
-            #     log_reps.info("Rendering SSO. {} SVs left to process"
-            #                   ".".format(len(self.svs)))
             params = [[so.id for so in el] for el in part]
 
             params = chunkify(params, global_params.NGPU_TOTAL * 2)
@@ -1814,19 +1906,16 @@ class SuperSegmentationObject(object):
             except KeyError:
                 pass
         locs = np.concatenate(self.sample_locations(cache=False))
-        start = time.time()
         if self._rot_mat is None:
             index_views, rot_mat = render_sso_coords_index_views(
                 self, locs, nb_views=nb_views, verbose=verbose,
                 return_rot_matrices=True, ws=ws, comp_window=comp_window)
             self._rot_mat = rot_mat
         else:
-            index_views = render_sso_coords_index_views(self, locs, nb_views=nb_views, verbose=verbose,
+            index_views = render_sso_coords_index_views(self, locs, nb_views=nb_views,
+                                                        verbose=verbose,
                                                         rot_mat=self._rot_mat, ws=ws,
                                                         comp_window=comp_window)
-        end_ix_views = time.time()
-        # log_reps.debug("Rendering views took {:.2f} s. {:.2f} views/s".format(
-        #     end_ix_views - start, len(index_views) / (end_ix_views - start)))
         if self.view_caching:
             self.view_dict[view_key] = index_views
         if not save:
@@ -1962,34 +2051,40 @@ class SuperSegmentationObject(object):
                                 nb_cpus=self.nb_cpus, verbose=verbose,
                                 return_pred=self.version == 'tmp')  # do not write to disk
 
-    def semseg2mesh(self, semseg_key, dest_path=None, nb_views=None, k=1,
-                    force_recompute=False, index_view_key=None):
+    def semseg2mesh(self, semseg_key: str, dest_path: Optional[str] = None,
+                    nb_views: Optional[int] = None, k: int = 1,
+                    force_recompute: bool = False,
+                    index_view_key: Optional[str] = None):
         """
         Generates vertex labels and stores it in the SSV's label storage under
-        the key 'semseg_key'.
-        Default situation:
-            semseg_key = 'spiness', nb_views=None
-            This will load the index and label views stored at the SSV's SVs.
-        Non-default:
-            semseg_key = 'spiness4', nb_views=4
-            This requires to run 'self._render_rawviews(nb_views=4)',
-            'self.render_indexviews(nb_views=4)' and 'predict_semseg(MODEL,
-            'spiness4', nb_views=4)
-            This method then has to be called like:
-                'self.semseg2mesh('spiness4', nb_views=4)'
+        the key `semseg_key`.
 
-        Parameters
-        ----------
-        semseg_key : str
-        nb_views : Optional[int]
-        dest_path : str
-        k : int
-            Number of nearest vertices to average over. If k=0 unpredicted vertices
-            will be treated as 'unpredicted' class.
-        force_recompute : bool
-        index_view_key : str
+        Examples:
+            Default situation:
+                ``semseg_key = 'spiness'``, ``nb_views=None``
+                This will load the index and label views stored at the SSV's SVs.
+
+            Non-default:
+                ``semseg_key = 'spiness4'``, ``nb_views=4``
+                This requires to run ``self._render_rawviews(nb_views=4)``,
+                ``self.render_indexviews(nb_views=4)`` and ``predict_semseg(MODEL,
+                'spiness4', nb_views=4)``.
+                This method then has to be called like: ``self.semseg2mesh('spiness4', nb_views=4)``
+
+        Args:
+            semseg_key: Key used to retrieve the semantic segmentation results.
+            dest_path: Path where the mesh will be stored as .ply in a k.zip.
+            nb_views: Number of views used
+            k: Number of nearest vertices to average over. If k=0 unpredicted vertices
+                will be treated as 'unpredicted' class.
+            force_recompute: Force recompute.
+            index_view_key: Key usedc to retrieve the index views.
+
+        Returns:
+
         """
-        # colors are only needed if dest_path is given (last two colors correspond to background and undpredicted vertices (k=0))
+        # colors are only needed if dest_path is given
+        # (last two colors correspond to background and undpredicted vertices (k=0))
         cols = None
         if dest_path is not None:
             if 'spiness' in semseg_key:
@@ -2008,7 +2103,7 @@ class SuperSegmentationObject(object):
                                  [0.1, 0.1, 0.9, 1]])
                 cols = (cols * 255).astype(np.uint8)
             else:
-                raise ValueError('Semantic segmentation of "{}" is not (yet) supported.'
+                raise ValueError('Semantic segmentation of "{}" is not supported.'
                                  ''.format(semseg_key))
         return ssh.semseg2mesh(self, semseg_key, nb_views, dest_path, k,
                                cols, force_recompute=force_recompute,
@@ -2017,8 +2112,8 @@ class SuperSegmentationObject(object):
     def semseg_for_coords(self, coords, semseg_key, k=5, ds_vertices=20,
                           ignore_labels=None):
         """
-        Dies not need to be axoness, it supports any attribut stored in
-        self.skeleton.
+        Get the semantic segmentation with key `semseg_key` from the `k` nearest
+        vertices at every coordinate in `coords`.
 
         Parameters
         ----------
@@ -2039,7 +2134,8 @@ class SuperSegmentationObject(object):
             Same length as coords. For every coordinate in coords returns the
             majority label within radius_nm
         """
-        # TODO: Allow multiple keys as in self.attr_for_coords, e.g. to include semseg axoness in a single query
+        # TODO: Allow multiple keys as in self.attr_for_coords, e.g. to
+        #  include semseg axoness in a single query
         if ignore_labels is None:
             ignore_labels = []
         coords = np.array(coords) * self.scaling
@@ -2057,31 +2153,26 @@ class SuperSegmentationObject(object):
                                       return_color=False, nb_cpus=self.nb_cpus)
         return maj_vote
 
-    def get_spine_compartments(self, semseg_key='spiness', k=1,
-                               min_spine_cc_size=None, dest_folder=None):
+    def get_spine_compartments(self, semseg_key: str = 'spiness', k: int = 1,
+                               min_spine_cc_size: Optional[int] = None,
+                               dest_folder: Optional[str] = None) \
+            -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
         """
-        Retrieve connected components of vertex spine predictions
+        Retrieve connected components of vertex spine predictions.
 
-        Parameters
-        ----------
-        semseg_key : str
-        k : int
-            number of nearest neighbors for majority label vote (smoothing of
-             classification results).
-        min_spine_cc_size : int
-            Minimum number of vertices to consider a connected component a
-             valid object
-        dest_folder : str
-            Default is None, else provide a path (str) to a folder. The mean
-            location and size of the head and neck connected components will be
-             stored as numpy array file (npy)
+        Args:
+            semseg_key: Key of the used semantic segmentation.
+            k: Number of nearest neighbors for majority label vote (smoothing of
+                classification results).
+            min_spine_cc_size: Minimum number of vertices to consider a connected
+                component a valid object.
+            dest_folder: Default is None, else provide a path (str) to a folder.
+                The mean location and size of the head and neck connected
+                components will be stored as numpy array file (npy).
 
-        Returns
-        -------
-        np.array, np.array, np.array, np.array
+        Returns:
             Neck locations, neck sizes, head locations, head sizes. Location
-             and size arrays have the same ordering.
-
+            and size arrays have the same ordering.
         """
         if min_spine_cc_size is None:
             min_spine_cc_size = global_params.min_spine_cc_size
@@ -2214,6 +2305,7 @@ class SuperSegmentationObject(object):
     def mesh2kzip(self, dest_path=None, obj_type="sv", ext_color=None):
         """
         Writes mesh of SSV to kzip as .ply file.
+
         Parameters
         ----------
         dest_path :
@@ -2225,9 +2317,6 @@ class SuperSegmentationObject(object):
             If array, it has to be of type uint/int and of shape (N, 4) while N
             is the number of vertices of the SSV cell surface mesh:
             N = len(self.mesh[1].reshape((-1, 3)))
-
-        Returns
-        -------
 
         """
         color = None
@@ -2277,14 +2366,14 @@ class SuperSegmentationObject(object):
 
     def meshes2kzip(self, dest_path=None, sv_color=None, synssv_instead_sj=False):
         """
-        Writes SV, mito, vesicle cloud and synaptic junction meshes to k.zip
+        Writes SV, mito, vesicle cloud and synaptic junction meshes to k.zip.
 
         Parameters
         ----------
         dest_path : str
         sv_color : np.array
             array with RGBA values or None to use default values
-            (see 'mesh2kzip')
+            (see :func:`~mesh2kzip`).
         synssv_instead_sj : bool
 
         Returns
@@ -2293,8 +2382,7 @@ class SuperSegmentationObject(object):
         """
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
-        for ot in ["sj", "vc", "mi",
-                   "sv"]:  # determins rendering order in KNOSSOS
+        for ot in ["sj", "vc", "mi", "sv"]:  # determins rendering order in KNOSSOS
             if ot == "sj" and synssv_instead_sj:
                 ot = 'syn_ssv'
             self.mesh2kzip(obj_type=ot, dest_path=dest_path, ext_color=sv_color if
@@ -2319,28 +2407,31 @@ class SuperSegmentationObject(object):
         mesh2obj_file(dest_path, self.mesh, center=center, color=color,
                       scale=scale)
 
-    def export2kzip(self, dest_path, attr_keys=(), rag=None, sv_color=None,
-                    synssv_instead_sj=False):
+    def export2kzip(self, dest_path: str, attr_keys: Iterable[str] = (),
+                    rag: Optional[nx.Graph] = None,
+                    sv_color: Optional[np.ndarray] = None,
+                    synssv_instead_sj: bool = False):
         """
-        Writes the sso to a KNOSSOS loadable kzip.
-        Color is specified as rgba, 0 to 255.
+        Writes the SSO to a KNOSSOS loadable kzip including the mergelist
+        (:func:`~mergelist2kzip`), its meshes (:func:`~meshes2kzip`), data set
+        specific information and additional data (`attr_keys`).
+        0 to 255. Saved SSO can also be re-loaded as an SSO instance via
+        :func:`~syconn.proc.ssd_assembly.init_sso_from_kzip`.
 
-        Will not invoke `load_attr_dict`
+        Notes:
+            Will not invoke :func:`~load_attr_dict`.
 
-        Saved SSO can also be re-loaded as an SSO instance via
-        `syconn.proc.ssd_assembly.init_sso_from_kzip`
+        Args:
+            dest_path: Path to destination kzip file.
+            attr_keys: Currently allowed: 'sample_locations', 'skeleton',
+                'attr_dict', 'rag'.
+            rag: SV graph of SSV with uint nodes.
+            sv_color: Cell supervoxel colors. Array with RGBA (0...255) values
+                or None to use default values (see :func:`~mesh2kzip`).
+            synssv_instead_sj: If True, will use 'syn_ssv' objects instead of 'sj'.
 
-        Parameters
-        ----------
-        dest_path : str
-        attr_keys : Iterable[str]
-            currently allowed: 'sample_locations', 'skeleton', 'attr_dict', 'rag'
-        rag : nx.Graph
-            SV graph of SSV with uint nodes
-        sv_color : 4-tuple of int
-        synssv_instead_sj : bool
         """
-        # # The next two calls are probably deprecated
+        # # The next two calls are deprecated but might be usefull at some point
         # self.save_skeleton_to_kzip(dest_path=dest_path)
         # self.save_objects_to_kzip_sparse(["mi", "sj", "vc"],
         #                                  dest_path=dest_path)
@@ -2718,6 +2809,7 @@ class SuperSegmentationObject(object):
         Query skeleton node attributes at given coordinates. Supports any
         attribute stored in self.skeleton. If radius_nm is given, will
         assign majority attribute value.
+
         Parameters
         ----------
         coords : np.array
@@ -2823,7 +2915,8 @@ class SuperSegmentationObject(object):
                                 view_key=None):
         """
         This will save a latent vector which captures a local morphology fingerprint for every
-        skeleton node location as self.sekeleton['latent_morph'] based on the nearest rendering location.
+        skeleton node location as :py:attr:`~skeleton`['latent_morph'] based on the nearest rendering
+        location.
 
         Parameters
         ----------
@@ -2863,20 +2956,40 @@ class SuperSegmentationObject(object):
         self.enable_locking = False  # all SV operations are read-only
         # (enable_locking is inherited by sso.svs);
         # SSV operations not, but SSO file structure is not chunked
-        res = ssh._cnn_axoness2skel(self, **kwargs)
+        res = ssh.cnn_axoness2skel(self, **kwargs)
         self.enable_locking = locking_tmp
         return res
 
     def average_node_axoness_views(self, **kwargs):
+        """
+        Apply a sliding window averaging along the axon predictions stored at the
+        nodes of the :py:attr:`~skeleton`. See
+        :func:`~syconn.reps.super_segmentation_helper._average_node_axoness_views`
+        for details.
+
+        Args:
+            **kwargs: Key word arguments used in
+                :func:`~syconn.reps.super_segmentation_helper._average_node_axoness_views`.
+
+        """
         locking_tmp = self.enable_locking
         self.enable_locking = False  # all SV operations are read-only
         # (enable_locking is inherited by sso.svs);
         # SSV operations not, but SSO file structure is not chunked
-        res = ssh._average_node_axoness_views(self, **kwargs)
+        res = ssh.average_node_axoness_views(self, **kwargs)
         self.enable_locking = locking_tmp
         return res
 
     def axoness2mesh(self, dest_path, k=1, pred_key_appendix=''):
+        """
+        Deprecated. See :func:`~semseg2mesh`. Write the per-location CMN axon
+        predictions (img2scalar) to a kzip file.
+
+        Args:
+            dest_path: Path to the kzip file.
+            k: Number of nearest neighbors used for the majority vote.
+            pred_key_appendix: Key to load specific predictions.
+        """
         ssh.write_axpred_cnn(self, pred_key_appendix=pred_key_appendix, k=k,
                              dest_path=dest_path)
 

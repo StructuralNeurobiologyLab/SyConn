@@ -31,10 +31,10 @@ def arrtolz4string(arr: np.ndarray) -> bytes:
     Converts (multi-dimensional) array to list of lz4 compressed strings.
 
     Args:
-        arr (): input array
+        arr: Input array.
 
     Returns:
-        lz4 compressed string
+        lz4 compressed string.
     """
     if isinstance(arr, list):
         arr = np.array(arr)
@@ -56,9 +56,9 @@ def lz4stringtoarr(string: bytes, dtype: np.dtype = np.float32,
     Converts lz4 compressed string to 1d array.
 
     Args:
-        string (): Serialized array
-        dtype (): data type of original array
-        shape (): shape of original array
+        string: Serialized array.
+        dtype: Data type of original array.
+        shape: Shape of original array.
 
     Returns:
         N-dimensional numpy array.
@@ -79,10 +79,10 @@ def arrtolz4string_list(arr: np.ndarray) -> List[bytes]:
     Converts (multi-dimensional) array to list of lz4 compressed strings.
 
     Args:
-        arr (): input array
+        arr: Input array.
 
     Returns:
-        lz4 compressed string
+        lz4 compressed string.
     """
     if isinstance(arr, list):
         arr = np.array(arr)
@@ -104,12 +104,12 @@ def lz4string_listtoarr(str_lst: List[bytes], dtype: np.dtype = np.float32,
     Converts lz4 compressed strings to array.
 
     Args:
-        str_lst ():
-        dtype ():
-        shape ():
+        str_lst: Binary string representation of the array.
+        dtype: Data type of the serialized array.
+        shape: Shape of the serialized array.
 
     Returns:
-        1d numpy array
+        1d numpy array.
     """
     if len(str_lst) == 0:
         return np.zeros((0, ), dtype=dtype)
@@ -124,10 +124,10 @@ def multi_lz4stringtoarr(args: tuple) -> np.ndarray:
     Helper function for multiprocessing.
 
     Args:
-        args (): see :func:`~syconn.handler.compression.lz4string_listtoarr`
+        args: see :func:`~syconn.handler.compression.lz4string_listtoarr`.
 
     Returns:
-        1d numpy array
+        1d numpy array.
     """
     return lz4string_listtoarr(*args)
 
@@ -138,9 +138,9 @@ def save_lz4_compressed(p: str, arr: np.ndarray, dtype: np.dtype = np.float32):
     error handling by recursive splitting.
 
     Args:
-        p ():
-        arr ():
-        dtype ():
+        p: Path to the destination file.
+        arr: Numpy array.
+        dtype: Data type in which the array should be stored.
     """
     arr = arr.astype(dtype)
     try:

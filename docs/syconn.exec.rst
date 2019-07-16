@@ -1,4 +1,4 @@
-syconn.extraction package
+syconn.exec package
 =========================
 
 Submodules

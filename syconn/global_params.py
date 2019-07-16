@@ -118,10 +118,12 @@ gt_path_spineseg = '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'  # TODO:
 DIST_AXONESS_AVERAGING = 10000
 gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness' \
                   '/all_bouton_data/'  # TODO: add to config
+# `n_avg=0` will not map predictions to unpredicted vertices -> faster
 view_properties_semsegax = dict(verbose=False, ws=(1024, 512), nb_views=3,
-                                comp_window=40.96e3 * 1.5, semseg_key='axoness',
-                                n_avg=0)  # this will not map predictions to unpredicted vertices
-map_properties_semsegax = dict(k=50, ds_vertices=2, ignore_labels=[5, 6])
+                                comp_window=40.96e3 * 1., semseg_key='axoness',
+                                n_avg=0)
+# ignore labels 5 (background) and unpredicted (6)
+map_properties_semsegax = dict(k=50, ds_vertices=1, ignore_labels=[5, 6])
 
 
 # --------- CELLTYPE PARAMETERS

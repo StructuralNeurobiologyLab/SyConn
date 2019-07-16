@@ -163,10 +163,11 @@ class VoxelStorageL(StorageClass):
 
 def VoxelStorage(inp, **kwargs):
     """
-    Deprecated storage for voxel data
+    Deprecated storage for voxel data.
+
     Args:
-        inp ():
-        **kwargs ():
+        inp:
+        **kwargs:
 
     Returns:
 
@@ -204,13 +205,13 @@ class VoxelStorageDyn(CompressedStorage):
     Similar to `VoxelStorageL` but does not store the voxels explicitly,
     but the information necessary to query the voxels of an object.
 
-    If `voxel_mode = True` getter method will operate on underlying data set
+    If ``voxel_mode = True`` getter method will operate on underlying data set
     to retrieve voxels of an object. `__setitem__` throws `RuntimeError`.
     `__getitem__` will return a list of 3D binary cubes with ones at the
     object's locations (key: object ID). Note: The item ID has to match the
     object ID in the segmentation.
 
-    Otherwise (`voxel_mode = False`) `__getitem__` and `__setitem__` allow
+    Otherwise (``voxel_mode = False``) `__getitem__` and `__setitem__` allow
     manipulation of the object's bounding box. In this case `voxeldata_path`
     has to be given or already be existent in loaded dictionary. Expects the
     source path of a KnossoDataset (see knossos_utils), like

@@ -24,4 +24,4 @@ Dataset-wide predictions can be started via the respective scripts:
 * Cell compartments: `axoness_prediction.py` and `spiness_prediction.py`
 * Cell types: `celltype_prediction.py`
 
-Their results are stored on SSV level and used for [extracting the wiring diagram](contact_size_classification.md) later on.
+Their results are stored on SSV level and used for [extracting the wiring diagram](contact_site_classification.md) later on.

@@ -12,6 +12,7 @@ import os
 from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union
 if TYPE_CHECKING:
     from ..reps.segmentation import SegmentationObject, SegmentationDataset
+    from ..reps.super_segmentation import SuperSegmentationObject
 
 from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
     VoxelStorage, SkeletonStorage, VoxelStorageDyn
@@ -22,6 +23,17 @@ from .. import global_params
 
 
 def glia_pred_so(so: 'SegmentationObject', thresh: float, pred_key_appendix: str) -> int:
+    """
+    Perform the glia classification of a cell supervoxel (0: neuron, 1: glia).
+
+    Args:
+        so: The cell supervoxel object.
+        thresh: Threshold used for the classification.
+        pred_key_appendix: Additional prediction key.
+
+    Returns:
+
+    """
     assert so.type == "sv"
     pred_key = "glia_probas" + pred_key_appendix
     if not pred_key in so.attr_dict:
@@ -41,13 +53,10 @@ def glia_pred_so(so: 'SegmentationObject', thresh: float, pred_key_appendix: str
 
 
 def acquire_obj_ids(sd: 'SegmentationDataset'):
-    """ Acquires all obj ids present in the dataset
-
-    Loads id array if available. Assembles id list by iterating over all
-    voxel / attribute dicts, otherwise (very slow).
-
-    :param sd: SegmentationDataset
-
+    """
+    Acquires all obj ids present in the dataset. Loads id array if available.
+    Assembles id list by iterating over all voxel / attribute dicts,
+    otherwise (very slow).
     """
     if os.path.exists(sd.path_ids):
         sd._ids = np.load(sd.path_ids)

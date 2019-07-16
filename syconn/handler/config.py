@@ -567,6 +567,7 @@ class DynConfig(Config):
 def get_default_conf_str(example_wd: str, scaling: Union[Tuple, np.ndarray],
                          py36path: str = "", syntype_avail: bool = True,
                          use_large_fov_views_ct: bool = False,
+                         allow_skel_gen: bool = True,
                          use_new_renderings_locs: bool = False,
                          kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
                          kd_asym: Optional[str] = None,
@@ -655,6 +656,7 @@ def get_default_conf_str(example_wd: str, scaling: Union[Tuple, np.ndarray],
         py36path:
         syntype_avail:
         use_large_fov_views_ct:
+        allow_skel_gen:
         use_new_renderings_locs:
         kd_seg:
         kd_sym:
@@ -734,7 +736,7 @@ allow_mesh_gen_cells = {}
 use_new_meshing = {}
 
 [Skeleton]
-allow_skel_gen = True
+allow_skel_gen = {}
 
 [Views]
 use_large_fov_views_ct = {}
@@ -745,8 +747,8 @@ prior_glia_removal = {}
     """.format(kd_seg, kd_sym, kd_asym, kd_sj, kd_vc, kd_mi, init_rag_p,
                py36path, use_new_subfold, scaling[0], scaling[1], scaling[2],
                str(syntype_avail), str(allow_mesh_gen_cells), str(use_new_meshing),
-               str(use_large_fov_views_ct), str(use_new_renderings_locs),
-               str(prior_glia_removal))
+               str(allow_skel_gen), str(use_large_fov_views_ct),
+               str(use_new_renderings_locs), str(prior_glia_removal))
 
     configspec_str = """
 [Versions]

@@ -3,7 +3,7 @@
 The relevant code for the object mapping is in `syconn.proc.sd_proc` and `syconn.proc.ssd_proc`.
 
 ## Prerequisites
-* SegmentationDatasets of cellular organelles (see [object mapping](object_mapping.md) and [SegmentationDataset](segmentation_dataset.md))
+* SegmentationDatasets of cellular organelles (see [object mapping](object_mapping.md) and [SegmentationDataset](segmentation_datasets.md))
 * Segmentation- and KnossosDataset of supervoxel segmentation (i.e. 64 bit Knossos cubes).
 * [SSD](super_segmentation_datasets.md) of cellular supervoxels for the aggregation to SSVs.
 

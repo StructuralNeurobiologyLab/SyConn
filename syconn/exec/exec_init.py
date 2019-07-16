@@ -32,9 +32,9 @@ def sd_init(co: str, max_n_jobs: int, log=None):
     supervoxel type `co`.
 
     Args:
-        co ():
-        max_n_jobs ():
-        log ():
+        co:
+        max_n_jobs:
+        log:
 
     Returns:
 
@@ -74,14 +74,14 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
     or :func:`~syconn.handler.config.get_default_conf_str` for more details.
 
     Args:
-        co (): Type of cell organelle supervoxels, e.g 'mi' for mitochondria or 'vc' for
+        co: Type of cell organelle supervoxels, e.g 'mi' for mitochondria or 'vc' for
             vesicle clouds.
-        chunk_size (): Cube size processed by each worker.
-        transf_func_kd_overlay (): Transformation function applied on the prob. map or segmentation
+        chunk_size: Cube size processed by each worker.
+        transf_func_kd_overlay: Transformation function applied on the prob. map or segmentation
             data.
-        load_cellorganelles_from_kd_overlaycubes ():
-        cube_of_interest_bb ():
-        log ():
+        load_cellorganelles_from_kd_overlaycubes:
+        cube_of_interest_bb:
+        log:
 
     Returns:
 

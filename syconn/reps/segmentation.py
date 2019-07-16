@@ -33,16 +33,30 @@ class SegmentationObject(object):
     Represents individual supervoxels. Used for cell shape ('sv'), cell organelles,
     e.g. mitochondria ('mi'), vesicle clouds ('vc') and synaptic junctions ('sj').
 
+    Examples:
+            Can be used to initialized single :class:`~SegmentationObject` object of
+            a specific type, is also returned by :func:`~SegmentationDataset.get_segmentation_object`::
+
+                from syconn.reps.segmentation import SegmentationObject, SegmentationDataset
+                cell_sv = SegmentationObject(obj_id=.., obj_type='sv', working_dir='..')
+                cell_sv.load_attr_dict()  # populates `cell_sv.attr_dict`
+
+                cell_sd = SegmentationDataset(obj_type='sv', working_dir='..')
+                cell_sv_from_sd = cell_sd.get_segmentation_object(obj_id=cell_sv.id)
+                cell_sv_from_sd.load_attr_dict()
+
+                keys1 = set(cell_sv.attr_dict.keys())
+                keys2 = set(cell_sv_from_sd.attr_dict.keys())
+                print(keys1 == keys2)
+
+    Todo:
+        * Add examples.
+
     Attributes:
         attr_dict: Attribute dictionary which serves as a general-purpose container. Accessed via
             the :class:`~syconn.backend.storage.AttributeDict` interface.
         enable_locking: If True, enables file locking.
 
-    Examples:
-
-
-    Todo:
-        *
     """
     def __init__(self, obj_id: int, obj_type: str = "sv",
                  version: Optional[str] = None, working_dir: Optional[str] = None,
@@ -183,15 +197,32 @@ class SegmentationObject(object):
     @property
     def type(self) -> str:
         """
-        Type of the supervoxel, keys used currently are:
-            * 'mi': Mitochondria
-            * 'vc': Vesicle clouds
-            * 'sj': Synaptic junction
-            * 'syn_ssv': Synapses between two
-            * 'syn': Synapse fragment between two
-            :class:`~syconn.reps.segmentation.SegmentationObject`s.
-            :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`s.
-            * 'cs': Contact site
+        The `type` of the supervoxel.
+
+        Examples:
+            Keys which are currently used:
+                * 'mi': Mitochondria.
+                * 'vc': Vesicle clouds.
+                * 'sj': Synaptic junction.
+                * 'syn_ssv': Synapses between two
+                * 'syn': Synapse fragment between two :class:`~SegmentationObject` objects.
+                * 'cs': Contact site.
+
+            Can be used to initialized single :class:`~SegmentationObject` object of
+            a specific type or the corresponding dataset collection handled with the
+            :class:`~SegmentationDataset` class::
+
+                from syconn.reps.segmentation import SegmentationObject, SegmentationDataset
+                cell_sv = SegmentationObject(obj_id=.., obj_type='sv', working_dir='..')
+                cell_sv.load_attr_dict()  # populates `cell_sv.attr_dict`
+
+                cell_sd = SegmentationDataset(obj_type='sv', working_dir='..')
+                cell_sv_from_sd = cell_sd.get_segmentation_object(obj_id=cell_sv.id)
+                cell_sv_from_sd.load_attr_dict()
+
+                keys1 = set(cell_sv.attr_dict.keys())
+                keys2 = set(cell_sv_from_sd.attr_dict.keys())
+                print(keys1 == keys2)
 
         Returns:
             String identifier.
@@ -201,9 +232,9 @@ class SegmentationObject(object):
     @property
     def n_folders_fs(self) -> int:
         """
-        Number of folders used to store the data of `~SegmentationObject`s. Defines
+        Number of folders used to store the data of :class:`~SegmentationObject`s. Defines
         the hierarchy of the folder structure organized by
-        `~syconn.reps.segmentation.SegmentationDataset`.
+        :class:`~SegmentationDataset`.
 
         Returns:
             The number of (leaf-) folders used for storing supervoxel data.
@@ -240,7 +271,7 @@ class SegmentationObject(object):
     @property
     def version(self) -> str:
         """
-        Version of the `~syconn.reps.segmentation.SegmentationDataset` this object
+        Version of the :class:`~SegmentationDataset` this object
         belongs to.
 
         Returns:
@@ -265,7 +296,7 @@ class SegmentationObject(object):
 
     @property
     def view_caching(self):
-        """If true, view data is cached."""
+        """If True, view data is cached."""
         return self._view_caching
 
     @property
@@ -341,9 +372,11 @@ class SegmentationObject(object):
         Path to entry folder of the directory tree where all supervoxel data of
         the corresponding `~syconn.reps.segmentation.SegmentationDataset` is located.
         """
-        if self._n_folders_fs is None and os.path.exists("%s/%s/" % (self.segds_dir, self.so_storage_path_base)):
+        if self._n_folders_fs is None and os.path.exists("%s/%s/" % (
+                self.segds_dir, self.so_storage_path_base)):
             return "%s/%s/" % (self.segds_dir, self.so_storage_path_base)
-        elif self._n_folders_fs == 100000 and os.path.exists("%s/%s/" % (self.segds_dir, self.so_storage_path_base)):
+        elif self._n_folders_fs == 100000 and os.path.exists("%s/%s/" % (
+                self.segds_dir, self.so_storage_path_base)):
             return "%s/%s/" % (self.segds_dir, self.so_storage_path_base)
         else:
             return "%s/%s_%d/" % (self.segds_dir, self.so_storage_path_base,
@@ -359,8 +392,9 @@ class SegmentationObject(object):
             return "%s/%s/" % (self.so_storage_path,
                                subfold_from_ix(self.id, self.n_folders_fs))
         else:
-            return "%s/%s/" % (self.so_storage_path,
-                               subfold_from_ix(self.id, self.n_folders_fs, old_version=True))   # TODO: why True?
+            # TODO: why True?
+            return "%s/%s/" % (self.so_storage_path, subfold_from_ix(
+                self.id, self.n_folders_fs, old_version=True))
 
     @property
     def mesh_path(self) -> str:
@@ -719,7 +753,7 @@ class SegmentationObject(object):
                 loc_dc.push()
             return coords.astype(np.float32)
 
-    def load_voxels(self, voxel_dc: Optional[Dict] = None):
+    def load_voxels(self, voxel_dc: Optional[Dict[int, np.ndarray]] = None):
         """
         Loader method of :py:attr:`~voxels`.
 
@@ -836,7 +870,7 @@ class SegmentationObject(object):
         Total edge length of the supervoxel :py:attr:`~skeleton` in nanometers.
 
         Returns:
-            Sum of all edge lengths (L2 norm) in ``self.skeleton``.
+            Sum of all edge lengths (L2 norm) in :py:attr:`~skeleton`.
         """
         if self.skeleton is None:
             self.load_skeleton()
@@ -846,13 +880,15 @@ class SegmentationObject(object):
         return np.sum([np.linalg.norm(
             self.scaling*(nodes[e[0]] - nodes[e[1]])) for e in edges])
 
-    def _mesh_from_scratch(self, downsampling=None, n_closings=None, **kwargs):
+    def _mesh_from_scratch(self, downsampling: Optional[Tuple[int, int, int]] = None,
+                           n_closings: Optional[int] = None, **kwargs):
         """
+        Calculate the mesh based on :func:`~syconn.proc.meshes.get_object_mesh`.
 
         Args:
-            downsampling ():
-            n_closings ():
-            **kwargs ():
+            downsampling: Downsampling of the object's voxel data.
+            n_closings: Number of closings before Marching cubes is applied.
+            **kwargs: Key word arguments passed to :func:`~syconn.proc.meshes.triangulation`.
 
         Returns:
 
@@ -872,15 +908,13 @@ class SegmentationObject(object):
     def _save_mesh(self, ind: np.ndarray, vert: np.ndarray,
                    normals: np.ndarray):
         """
-        Save given mesh at :py:attr:`~mesh_path`. Uses :class:`~syconn.backend.storage.MeshStorage`
-        interface.
+        Save given mesh at :py:attr:`~mesh_path`. Uses
+        the :class:`~syconn.backend.storage.MeshStorage` interface.
 
         Args:
             ind: Flat index array.
             vert: Flat vertex array.
             normals: Flat normal array.
-
-        Returns:
 
         """
         mesh_dc = MeshStorage(self.mesh_path, read_only=False,
@@ -1120,7 +1154,7 @@ class SegmentationObject(object):
         else:
             return None
 
-    def calculate_rep_coord(self, voxel_dc: Optional[Dict] = None):
+    def calculate_rep_coord(self, voxel_dc: Optional[Dict[int, np.ndarray]] = None):
         """
         Calculate/loads supervoxel representative coordinate.
 
@@ -1188,7 +1222,7 @@ class SegmentationObject(object):
 
         self._rep_coord = found_point + central_block_offset
 
-    def calculate_bounding_box(self, voxel_dc: Optional[Dict] = None):
+    def calculate_bounding_box(self, voxel_dc: Optional[Dict[int, np.ndarray]] = None):
         """
         Calculate supervoxel bounding box.
 
@@ -1205,7 +1239,7 @@ class SegmentationObject(object):
             bb = np.array([bbs[:, 0].min(axis=0), bbs[:, 1].max(axis=0)])
             self._bounding_box = bb
 
-    def calculate_size(self, voxel_dc: Optional[Dict] = None):
+    def calculate_size(self, voxel_dc: Optional[Dict[int, np.ndarray]] = None):
         """
         Calculate supervoxel size.
 
@@ -1371,7 +1405,9 @@ class SegmentationDataset(object):
         To initialize the :class:`~syconn.reps.segmentation.SegmentationDataset` for
         cell supervoxels you need to call ``sd_cell = SegmentationDataset('sv')``.
         This requires an initialized working directory, for this please refer to
-        :class:`~syconn.handler.config.DynConfig` or see `SyConn/scripts/example_runs/start.py`.
+        :class:`~syconn.handler.config.DynConfig` or see::
+
+            $ python SyConn/scripts/example_runs/start.py
 
         After successfully executing
         :class:`~syconn.exec.exec_init.init_cell_subcell_sds`, *cell* supervoxel properties
@@ -1390,7 +1426,7 @@ class SegmentationDataset(object):
 
         If a glia separation is performed, the following attributes will be cached as well:
             * 'glia_probas': Glia probabilities as array of shape (N, 2; N: Rendering
-            locations, 2: 0-index=neuron, 1-index=glia).
+              locations, 2: 0-index=neuron, 1-index=glia).
 
         The 'mapping' attributes are only computed for cell supervoxels and not for cellular
         organelles (e.g. 'mi', 'vc', etc.; see
@@ -1441,7 +1477,7 @@ class SegmentationDataset(object):
     def __init__(self, obj_type: str, version: Optional[str] = None,
                  working_dir: Optional[str] = None,
                  scaling: Optional[Union[List, Tuple, np.ndarray]] = None,
-                 version_dict: Optional[Dict] = None, create: bool = False,
+                 version_dict: Optional[Dict[str, str]] = None, create: bool = False,
                  config: Optional[str] = None,
                  n_folders_fs: Optional[int] = None):
         """
@@ -1459,7 +1495,6 @@ class SegmentationDataset(object):
         """
 
         self._type = obj_type
-        self.object_dict = {}
 
         self._n_folders_fs = n_folders_fs
 
@@ -1668,13 +1703,25 @@ class SegmentationDataset(object):
 
     @property
     def so_dir_paths(self) -> List[str]:
+        """
+        Paths to all supervoxel object directories in the directory tree
+        :py:attr:`~so_storage_path`.
+        """
         depth = int(np.log10(self.n_folders_fs) // 2 + np.log10(self.n_folders_fs) % 2)
         p = "".join([self.so_storage_path] + ["/*" for _ in range(depth)])
-        # TODO: do not perform a glob. all possible paths are determined by 'n_folders_fs' -> much faster, less IO
+        # TODO: do not perform a glob. all possible paths are determined by
+        #  'n_folders_fs' -> much faster, less IO
         return glob.glob(p)
 
     @property
     def config(self) -> DynConfig:
+        """
+        The configuration object which contain all dataset-specific parameters.
+        See :class:`~syconn.handler.config.DynConfig`.
+
+        Returns:
+            The configuration object.
+        """
         if self._config is None:
             self._config = global_params.config
         return self._config

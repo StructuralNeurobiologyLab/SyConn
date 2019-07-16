@@ -15,7 +15,7 @@ import argparse
 import os
 
 from syconn.reps import super_segmentation as ss
-from syconn.reps import depr_connectivity_helper as conn
+from syconn.reps import connectivity_helper as conn
 from syconn import global_params
 from syconn.handler.logger import log_main as log_gate
 from syconn.handler.multiviews import int2str_converter
@@ -235,10 +235,13 @@ class SyConnBackend(object):
         if skeleton is None:
             return {}
         skel_attr = ["nodes", "edges", "diameters"]
-        avg_dst = global_params.DIST_AXONESS_AVERAGING
+        pred_key_ax = "{}_avg{}".format(global_params.view_properties_semsegax['semseg_key'],
+                                        global_params.DIST_AXONESS_AVERAGING)
         keys = [
                 # "axoness_avg{}".format(avg_dst),
                 # "axoness_avg{}_comp_maj".format(avg_dst),
+                global_params.view_properties_semsegax['semseg_key'],
+                pred_key_ax,
                 "axoness_k{}".format(global_params.map_properties_semsegax['k']),
                 "axoness_k{}_comp_maj".format(global_params.map_properties_semsegax['k'])]
         for k in keys:

@@ -125,13 +125,13 @@ class FSBase(StorageBase):
         """
 
         Args:
-            inp_p (): Path to file.
-            cache_decomp (): Cache deserialized arrays.
-            read_only (): In case locking is enabled, no semaphore will be placed.
-            max_delay (): attempt delay
-            timeout (): Will throw `RuntimeError` after `timeout` seconds.
-            disable_locking (): Disable file locking
-            max_nb_attempts (): Number of total attempts
+            inp_p: Path to file.
+            cache_decomp: Cache deserialized arrays.
+            read_only: In case locking is enabled, no semaphore will be placed.
+            max_delay: attempt delay
+            timeout: Will throw `RuntimeError` after `timeout` seconds.
+            disable_locking: Disable file locking
+            max_nb_attempts: Number of total attempts
         """
         super(FSBase, self).__init__(cache_decomp)
         if not LOCKING or global_params.DISABLE_LOCKING:
@@ -210,7 +210,7 @@ class FSBase(StorageBase):
         Pushes data to destination.
 
         Args:
-            dest (): storage destination
+            dest: storage destination
         """
         if dest is None:
             dest = self._path
@@ -228,7 +228,7 @@ class FSBase(StorageBase):
         Fetches data from source.
 
         Args:
-            source (): Source location
+            source: Source location
         """
         if source is None:
             source = self._path
