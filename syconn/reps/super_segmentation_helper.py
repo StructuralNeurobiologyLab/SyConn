@@ -657,7 +657,7 @@ def stitch_skel_nx(skel_nx):
 
 def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     """
-    Creates the super-supervoxel skeleton.
+    Creates the super-supervoxel skeleton based on existing supervoxel skeletons.
 
     Parameters
     ----------
@@ -693,7 +693,32 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
     return sso
 
 
-def create_sso_skeletons_thread(ssvs, dest_paths=None):
+def create_sso_skeletons_wrapper(ssvs: List['SuperSegmentationObject'],
+                                 dest_paths: Optional[str] = None,
+                                 nb_cpus: Optional[int] = None):
+    """
+    Used within :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
+    to generate a skeleton representation of the cell. If
+    ``global_params.config.allow_skel_gen = True``, the skeleton will be created using
+    a sampling procedure based on the cell surface, i.e. the resulting skeleton
+    might fall out of the cell's segmentation and its nodes will always be close
+    to the cell surface.
+    If ``global_params.config.allow_skel_gen = False``, supervoxel skeleton must already
+    exist and those will be pruned, stitched and finally a per-node diameter estimation will
+    be performed.
+    This method will invoke ``ssv.save_skeleton`` and the results will also be available in every
+    object of ``ssvs`` via ``ssv.skeleton``.
+
+    Args:
+        ssvs: An iterable of cell reconstruction objects.
+        dest_paths: Paths to kzips for each object in `ssvs`.
+        nb_cpus: Number of CPUs used for every ``ssv`` in `ssvs`.
+
+    Returns:
+
+    """
+    if nb_cpus is None:
+        nb_cpus = global_params.NCORES_PER_NODE
     if dest_paths is not None:
         if not isinstance(dest_paths, Iterable):
             raise ValueError('Destination paths given but are not iterable.')
@@ -701,15 +726,17 @@ def create_sso_skeletons_thread(ssvs, dest_paths=None):
         dest_paths = [None for _ in ssvs]
 
     for ssv, dest_path in zip(ssvs, dest_paths):
+        ssv.nb_cpus = nb_cpus
         if not global_params.config.allow_skel_gen:
             # TODO: change to create_sso_skeleton_fast as soon as RAG edges
             #  only connected spatially close SVs
             # This merges existing SV skeletons
-            create_sso_skeleton(ssv)
+            create_sso_skeleton_fast(ssv)
+            # create_sso_skeleton(ssv)
         else:
             # TODO: add parameter to config
             verts = ssv.mesh[1].reshape(-1, 3)
-            # choose random subset of surface
+            # choose random subset of surface vertices
             np.random.seed(0)
             ixs = np.arange(len(verts))
             np.random.shuffle(ixs)
@@ -739,7 +766,7 @@ def create_sso_skeletons_thread(ssvs, dest_paths=None):
 
 # New Implementation of skeleton generation which makes use of ssv.rag
 
-def from_netkx_to_arr(skel_nx):
+def from_netkx_to_arr(skel_nx: nx.Graph) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     skeleton = {}
     skeleton['nodes'] = np.array(
         [skel_nx.node[ix]['position'] for ix in skel_nx.nodes()],
@@ -747,6 +774,7 @@ def from_netkx_to_arr(skel_nx):
     skeleton['diameters'] = np.zeros(len(skeleton['nodes']), dtype=np.float32)
 
     # Important bit, please don't remove (needed after pruning)
+    # This transforms the edge values to contiguous node indices
     temp_edges = np.array(list(skel_nx.edges())).reshape(-1)
     temp_edges_sorted = np.unique(np.sort(temp_edges))
     temp_edges_dict = {}
@@ -765,7 +793,7 @@ def from_netkx_to_arr(skel_nx):
 def sparsify_skeleton_fast(skel_nx, scal=None, dot_prod_thresh=0.8,
                            max_dist_thresh=500, min_dist_thresh=50):
     """
-    Reduces nodes in the skeleton. (from dense stacking to sparsed stacking)
+    Reduces nodes in the skeleton.
 
     Parameters
     ----------
@@ -811,7 +839,19 @@ def sparsify_skeleton_fast(skel_nx, scal=None, dot_prod_thresh=0.8,
 
 
 def create_new_skeleton_fast(args):
-    so, sparsify = args
+    """
+    Similar to :func:`~create_new_skeleton` but used as multi-process helper
+    method in :func:`~from_sso_to_netkx_fast`.
+
+    Args:
+        args: Supervoxel ID (int) and sparse flag (bool).
+
+    Returns:
+        Three arrays: Node coordinates [in voxels], diameter estimation per node,
+        edges.
+    """
+    so_id, sparsify = args
+    so = SegmentationObject(obj_type="sv", obj_id=so_id)
     so.enable_locking = False
     so.load_attr_dict()
     # ignore diameters, will be populated at the and of create_sso_skeleton_fast
@@ -829,24 +869,38 @@ def create_new_skeleton_fast(args):
         skel_nx = sparsify_skeleton_fast(skel_nx)
     n_cc = nx.number_connected_components(skel_nx)
     if n_cc > 1:
-        log_reps.critical('SV {} contained {} connected components in its skel'
-                          'eton representation. Stitching now.'
-                          ''.format(so.id, n_cc))
-        skel_nx = stitch_skel_nx(skel_nx)
+        log_reps.warning('SV {} contained {} connected components in its skel'
+                         'eton representation. Stitching now.'
+                         ''.format(so.id, n_cc))
+        # make edge values and node IDs contiguous prior to stitching
+        temp_edges = np.array(skel_nx.edges()).reshape(-1)
+        temp_nodes_sorted = np.array(np.sort(skel_nx.nodes()).reshape(-1))
+        temp_edges_dict = {}
+        for ii, ix in enumerate(temp_nodes_sorted):
+            temp_edges_dict[ix] = ii
+        temp_edges = [temp_edges_dict[ix] for ix in temp_edges]
+        temp_edges = np.array(temp_edges, dtype=np.uint).reshape([-1, 2])
+        skel_nx_tmp = nx.Graph()
+        skel_nx_tmp.add_nodes_from([(temp_edges_dict[ix], skel_nx.node[ix]) for ix in
+                                    skel_nx.nodes()])
+        skel_nx_tmp.add_edges_from(temp_edges)
+        skel_nx = stitch_skel_nx(skel_nx_tmp)
     nodes, diameters, edges = from_netkx_to_arr(skel_nx)
     # just get nodes, diameters and edges
     return nodes, diameters, edges
 
 
-def from_sso_to_netkx_fast(sso, sparsify=True):
+def from_sso_to_netkx_fast(sso, sparsify=True, max_edge_length=5e3):
     """
-    Stitches the SV skeletons using sso.rag
+    Stitches the SV skeletons using the supervoxel graph ``sso.rag``.
 
     Parameters
     ----------
     sso : SuperSegmentationObject
     sparsify : bool
         Sparsify SV skeletons before stitching
+    max_edge_length: float
+        Maximum edge length in nanometers.
 
     Returns
     -------
@@ -856,8 +910,9 @@ def from_sso_to_netkx_fast(sso, sparsify=True):
     sso.load_attr_dict()
     ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
     res = start_multiprocess_imap(create_new_skeleton_fast,
-                                  [(sv, sparsify) for sv in sso.svs],
-                                  nb_cpus=sso.nb_cpus, show_progress=False)
+                                  [(sv_id, sparsify) for sv_id in sso.sv_ids],
+                                  nb_cpus=sso.nb_cpus, show_progress=False,
+                                  debug=False)
     nodes, diameters, edges, sv_id_arr = [], [], [], []
     # first offset is 0, last length is not needed
     n_nodes_per_sv = [0] + list(
@@ -876,11 +931,13 @@ def from_sso_to_netkx_fast(sso, sparsify=True):
     ssv_skel['diameters'] = np.concatenate(diameters, axis=0)
     sv_id_arr = np.concatenate(sv_id_arr)
     node_ix_arr = np.arange(len(sv_id_arr))
+
+    added_edges = set()
     # stitching
     if len(sso.sv_ids) > 1:
         # iterates over SV object edges
         for e1, e2 in sso.load_edgelist():
-            # get closest edge between SV nodes in question and new edge add to edges
+            # get closest edge between SV nodes in question and add new edge to edges
             nodes1 = ssv_skel['nodes'][sv_id_arr == e1.id] * sso.scaling
             nodes2 = ssv_skel['nodes'][sv_id_arr == e2.id] * sso.scaling
             nodes1 = nodes1.astype(np.float32)
@@ -894,11 +951,18 @@ def from_sso_to_netkx_fast(sso, sparsify=True):
             # # get global index of nodes
             ix2 = nodes2_ix[np.argmin(dists)]
             ix1 = nodes1_ix[node_ixs1[np.argmin(dists)]]
-            # node_dist_check = np.linalg.norm(ssv_skel['nodes'][ix1].astype(np.float32) -
-            #                                   ssv_skel['nodes'][ix2].astype(np.float32))
-            # if np.min(dists) < node_dist_check or node_dist_check > 10e3:
-            #     raise ValueError
+            added_edges.add((sv_id_arr[ix1], sv_id_arr[ix2]))
+            node_dist_check = np.linalg.norm(ssv_skel['nodes'][ix1].astype(np.float32) *
+                                             sso.scaling - ssv_skel['nodes'][ix2].astype(
+                np.float32) * sso.scaling)
+            if np.min(dists) < node_dist_check or node_dist_check > max_edge_length:
+                log_reps.warning(f'Did not add edge of length {node_dist_check:.0f} nm between SVs '
+                                 f'{e1.id} and {e2.id} although they were connected within the '
+                                 f'SV graph.')
+                continue
             edges.append(np.array([[ix1, ix2]], dtype=np.uint32))
+        g_debug = nx.Graph()
+        g_debug.add_edges_from(list(added_edges))
     ssv_skel['edges'] = np.concatenate(edges)
 
     if len(ssv_skel['nodes']) == 0:
@@ -910,12 +974,15 @@ def from_sso_to_netkx_fast(sso, sparsify=True):
     skel_nx.add_edges_from(edges)
     if nx.number_connected_components(skel_nx) != 1:
         msg = 'Stitching of SV skeletons failed during "from_sso_to_netkx_' \
-              'fast" with {} connected components. Please check the underlying'\
-              ' RAG of SSV {}. Performing stitching method to add missing edg' \
-              'es recursively.'.format(nx.number_connected_components(skel_nx),
-                                       sso.id)
+              'fast" with {} connected components using the underlying SSV ' \
+              'agglomeration. Please check the underlying RAG of SSV {}. ' \
+              'Now performing a slower stitching method to add missing edg' \
+              'es recursively between the closest connected components. ' \
+              'This warning might also occur if two supervoxels are connected ' \
+              'over supervoxel(s) without skeleton!' \
+              ''.format(nx.number_connected_components(skel_nx), sso.id)
         skel_nx = stitch_skel_nx(skel_nx)
-        log_reps.critical(msg)
+        log_reps.warning(msg)
         assert nx.number_connected_components(skel_nx) == 1
     sso.skeleton = ssv_skel
     return skel_nx
@@ -923,11 +990,12 @@ def from_sso_to_netkx_fast(sso, sparsify=True):
 
 def create_sso_skeleton_fast(sso, pruning_thresh=700, sparsify=True):
     """
-    Creates the super super voxel skeleton. NOTE: If the underlying RAG does
-    not connect close-by SVs do not use this method,
-    use 'create_sso_skeleton' instead. The latter will recursively add the
-    shortest edge between two different SVs. It is ~10x faster on single CPU.
-    To use multi-processing, set ssv.nb_cpus > 1
+    Creates the super-supervoxel skeleton. NOTE: If the underlying RAG does
+    not connect close-by SVs it will be slower than :func:`~create_sso_skeleton`.
+    The latter will recursively add the shortest edge between two different SVs.
+    This method will add edges between supervoxels which are connected in the
+    supervoxel graph. It is ~10x faster on single CPU. To use multi-processing,
+    set ssv.nb_cpus > 1.
 
     Parameters
     ----------
@@ -942,20 +1010,20 @@ def create_sso_skeleton_fast(sso, pruning_thresh=700, sparsify=True):
 
     """
     # Creating network kx graph from sso skel
-    log_reps.debug('Creating skeleton of SSO {}'.format(sso.id))
+    # log_reps.debug('Creating skeleton of SSO {}'.format(sso.id))
     skel_nx = from_sso_to_netkx_fast(sso)
-    log_reps.debug('Number CC after stitching and sparsifying SSO {}:'.format(sso.id),
-          nx.number_connected_components(skel_nx))
+    # log_reps.debug('Number CC after stitching and sparsifying SSO {}: {}'.format(sso.id,
+    #       nx.number_connected_components(skel_nx)))
     # Sparse again after stitching. Inexpensive.
     if sparsify:
         sso, skel_nx = sparsify_skeleton(sso, skel_nx)
-        log_reps.debug(
-            'Number CC after 2nd sparsification SSO {}:'.format(sso.id),
-            nx.number_connected_components(skel_nx))
+        # log_reps.debug(
+        #     'Number CC after 2nd sparsification SSO {}: {}'.format(sso.id,
+        #     nx.number_connected_components(skel_nx)))
     # Pruning the stitched sso skeletons
     sso, skel_nx = prune_stub_branches(sso, skel_nx, len_thres=pruning_thresh)
-    log_reps.debug('Number CC after pruning SSO {}:'.format(sso.id),
-          nx.number_connected_components(skel_nx))
+    # log_reps.debug('Number CC after pruning SSO {}: {}'.format(sso.id,
+    #       nx.number_connected_components(skel_nx)))
     # Estimating the radii
     sso.skeleton = radius_correction_found_vertices(sso)
 
@@ -1298,7 +1366,8 @@ def average_node_axoness_views(sso: 'SuperSegmentationObject',
     node and collected while traversing the skeleton. The majority of the
     set of their predictions will be assigned to the source node.
     By default, will create 'axoness_preds_cnn' attribute in SSV attribute dict
-     and save new skeleton attribute with key "%s_views_avg%d" % (pred_key, max_dist).
+    and save new skeleton attribute with key "%s_views_avg%d" % (pred_key, max_dist).
+    Will not call ``sso.save_skeleton()``.
 
     Parameters
     ----------
@@ -1361,13 +1430,12 @@ def average_node_axoness_views(sso: 'SuperSegmentationObject',
     if return_res:
         return avg_pred
     sso.skeleton["axoness%s_avg%d" % (pred_key_appendix, max_dist)] = avg_pred
-    sso.save_skeleton()
 
 
 def majority_vote_compartments(sso, ax_pred_key='axoness'):
     """
     By default, will save new skeleton attribute with key
-     ax_pred_key + "_comp_maj".
+     ax_pred_key + "_comp_maj". Will not call ``sso.save_skeleton()``.
 
     Parameters
     ----------
@@ -1402,6 +1470,41 @@ def majority_vote_compartments(sso, ax_pred_key='axoness'):
         new_axoness_arr[n] = d[ax_pred_key]
     sso.skeleton[ax_pred_key + "_comp_maj"] = new_axoness_arr
     sso.save_skeleton()
+
+
+def majorityvote_skeleton_property(sso: 'SuperSegmentationObject',
+                                   prop_key: str, max_dist: int = 10000,
+                                   return_res: bool = False) -> np.ndarray:
+    """
+    Applies a sliding window majority vote along the skeleton of a given
+    :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`.
+    Will not call ``sso.save_skeleton()``.
+
+    Args:
+        sso: The cell reconstruction object.
+        prop_key: Key of the property which will be processed.
+        max_dist: Maximum traversal distance along L2-distance weighted graph.
+        return_res: If True, majority result will be returned.
+
+    Returns:
+        The majority vote of the requested property.
+    """
+    if not prop_key in sso.skeleton:
+        raise ValueError(f'Given property "{prop_key}" does not exist in '
+                         f'skeleton of SSV {sso.id}.')
+    g = sso.weighted_graph()
+    avg_prop = []
+    for n in range(g.number_of_nodes()):
+        paths = nx.single_source_dijkstra_path(g, n, max_dist)
+        neighs = np.array(list(paths.keys()), dtype=np.int)
+        prop_vals, cnts = np.unique(sso.skeleton[prop_key][neighs],
+                                    return_counts=True)
+        c = prop_vals[np.argmax(cnts)]
+        avg_prop.append(c)
+    avg_prop = np.array(avg_prop)
+    if return_res:
+        return avg_prop
+    sso.skeleton["%s_avg%d" % (prop_key, max_dist)] = avg_prop
 
 
 def find_incomplete_ssv_views(ssd, woglia, n_cores=global_params.NCORES_PER_NODE):
@@ -1536,14 +1639,12 @@ def pred_svs_semseg(model, views, pred_key=None, svs=None, return_pred=False,
 
 def pred_sv_chunk_semseg(args):
     """
+    Helper method to predict the 2D projects of supervoxels.
 
     Parameters
     ----------
-    args :
-
-    Returns
-    -------
-
+    args : Paths to the supervoxel storages which are processed, model,
+        supervoxel and prediction parameters.
     """
     from syconn.proc.sd_proc import sos_dict_fact, init_sos
     from elektronn3.models.base import InferenceModel
@@ -1636,8 +1737,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             i_views = sso.load_views(index_view_key).flatten()
         semseg_views = sso.load_views(semseg_key).flatten()
         ts1 = time.time()
-        log_reps.debug('Time to load index and shape views: '
-                       '{:.2f}s.'.format(ts1 - ts0))
+        # log_reps.debug('Time to load index and shape views: '
+        #                '{:.2f}s.'.format(ts1 - ts0))
         dc = defaultdict(list)
         background_id = np.max(i_views)
 
@@ -1650,8 +1751,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             # get vertex ids into dictionary
             dc[vertex_ix].append(l)
         ts2 = time.time()
-        log_reps.debug('Time to generate look-up dict: '
-                       '{:.2f}s.'.format(ts2 - ts1))
+        # log_reps.debug('Time to generate look-up dict: '
+        #                '{:.2f}s.'.format(ts2 - ts1))
         # background label is highest label in prediction (see 'generate_palette' or
         # 'remap_rgb_labelviews' in multiviews.py)
         background_l = np.max(semseg_views)
@@ -1674,8 +1775,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             predicted_vertices = predicted_vertices[predictions != background_id]
             predictions = predictions[predictions != background_id]
         ts3 = time.time()
-        log_reps.debug('Time to map predictions on vertices: '
-                       '{:.2f}s.'.format(ts3 - ts2))
+        # log_reps.debug('Time to map predictions on vertices: '
+        #                '{:.2f}s.'.format(ts3 - ts2))
         # TODO: add optimized procedure in case k==1 -> only map onto unpredicted vertices
         #  instead of averaging all
         if k > 0:  # map predictions of predicted vertices to all vertices
@@ -1685,8 +1786,8 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         else:  # no vertex mask was applied in this case
             maj_vote = predictions
         ts4 = time.time()
-        log_reps.debug('Time to map predictions on unpredicted vertices / to average vertex '
-                       'predictions: {:.2f}s.'.format(ts4 - ts3))
+        # log_reps.debug('Time to map predictions on unpredicted vertices / to average vertex '
+        #                'predictions: {:.2f}s.'.format(ts4 - ts3))
         # add prediction to mesh storage
         ld[semseg_key] = maj_vote
         ld.push()
@@ -1966,3 +2067,5 @@ def assemble_from_mergelist(ssd, mergelist: Union[Dict[int, int], str]):
         ssd._id_changer[sv_id] = mergelist[sv_id]
 
     ssd.save_dataset_shallow()
+
+

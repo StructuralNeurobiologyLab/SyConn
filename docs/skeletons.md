@@ -19,7 +19,7 @@ one can reskeletonize this SSV by calling:
 from syconn.reps.super_segmentation_helper import create_sso_skeleton
 from syconn.reps.super_segmentation_object import SuperSegmentationObject
 sso = SuperSegmentationObject(SSV_ID, working_dir=PATH_TO_WORKING_DIR)
-create_sso_skeleton(sso)
+sso.calculate_skeleton()
 ```
 The object `sso` then has a attribute `sso.skeleton` which stores nodes, edges
 and possible properties in a dictionary.

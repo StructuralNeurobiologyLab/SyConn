@@ -608,7 +608,7 @@ def run_glia_splitting():
      in `init_cell_subcell_sds`.
 
     Stores neuron RAG at `"{}/glia/neuron_rag{}.bz2".format(global_params.config.working_dir,
-    suffix)` which is then used by `run_create_neuron_ssd`
+    suffix)` which is then used by `run_create_neuron_ssd`.
 
     Returns
     -------

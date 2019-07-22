@@ -26,7 +26,7 @@ from multiprocessing import cpu_count
 from .segmentation import SegmentationDataset, SegmentationObject
 from ..handler.basics import load_pkl2obj, write_obj2pkl, chunkify, kd_factory
 from ..handler.config import DynConfig
-from .super_segmentation_helper import create_sso_skeleton
+from .super_segmentation_helper import create_sso_skeleton, associate_objs_with_skel_nodes
 from .super_segmentation_helper import assemble_from_mergelist
 from ..mp import batchjob_utils as qu
 from .super_segmentation_object import SuperSegmentationObject
@@ -37,14 +37,14 @@ from . import log_reps
 
 class SuperSegmentationDataset(object):
     """
-    Class which organizes a set of agglomerated supervoxels (which are represented by
-    :class:`~syconn.reps.segmentation.SegmentationObject` and abbreviated as SSV).
+    This class represents a set of agglomerated supervoxels, which themselves are
+    represented by :class:`~syconn.reps.segmentation.SegmentationObject`.
 
     Examples:
         After successfully executing :func:`syconn.exec.exec_multiview.run_create_neuron_ssd`,
         and subsequent analysis steps (see the ``SyConn/scripts/example_run/start.py``) it is
-        possible to load SSV properties via :func:`~load_cached_data` with the following keys (
-        ordering corresponds to :py:attr:`~ssv_ids`):
+        possible to load SSV properties via :func:`~load_cached_data` with the following keys
+        (the ordering of the arrays corresponds to :py:attr:`~ssv_ids`):
             * 'id': ID array, identical to :py:attr:`~ssv_ids`. All other properties have the same
               ordering as this array, i.e. if SSV with ID 1234 has index 42 in the 'id'-array you
               will find its properties at index 42 in all other cache-arrays.
@@ -76,9 +76,9 @@ class SuperSegmentationDataset(object):
             * 'mapping_mi_ids': Mitochondria objects which overlap with the respective SSVs.
             * 'mapping_mi_ratios': Overlap ratio of the mitochondria.
 
-        The following lines will initializes the
+        The following lines initialize the
         :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` of the
-        example run and explores some of the existing attributes::
+        example run and explore some of the existing attributes::
 
             import numpy as np
             from syconn.reps.super_segmentation import *
@@ -88,8 +88,8 @@ class SuperSegmentationDataset(object):
             syn_densities = np.array(n_synapses) / np.array(path_length)
             print(np.mean(syn_densities), np.std(syn_densities))
 
-        We then can make use of the cached arrays to obtain the total number of synapses per
-        cell type::
+        We can make use of the cached arrays to obtain the total number of synapses per
+        cell type as follows::
 
             celltypes = ssd.load_cached_data('celltype_cnn_e3')
             n_synapses = np.array([len(el) for el in ssd.load_cached_data('syn_ssv')])
@@ -394,20 +394,20 @@ class SuperSegmentationDataset(object):
         """
         Flat array of supervoxels which are part of all super-supervoxels in this
         :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` object.
+
+        Todo:
+            * add a non-flat, ragged array version and rename this into `sv_ids_flat`.
         """
         self.load_mapping_dict()
-        return np.concatenate(self.mapping_dict.values())
+        return np.concatenate(list(self.mapping_dict.values()))
 
     @property
     def id_changer(self) -> List[int]:
         """
 
         Todo:
-            * Understand reason for 'id_changer' and replace it by
-              'mapping_dict_reversed' if appropriate.
-
-        Returns:
-
+            * Understand reason for 'id_changer' and replace it by 'mapping_dict_reversed' if
+              appropriate.
         """
         if len(self._id_changer) == 0:
             self.load_id_changer()
@@ -425,7 +425,7 @@ class SuperSegmentationDataset(object):
         Returns:
             Loaded cache array.
         """
-        # TODO: remove this 's' concept
+        # TODO: remove 's' concept
         if os.path.exists(self.path + name + "s.npy"):
             return np.load(self.path + name + "s.npy", allow_pickle=True)
 
@@ -561,7 +561,7 @@ class SuperSegmentationDataset(object):
                           nb_cpus=nb_cpus, new_mapping=new_mapping,
                           n_max_co_processes=n_max_co_processes)
 
-    def predict_cell_types_skelbased(self, stride: int = 1000, qsub_pe=None, qsub_queue=None,
+    def predict_cell_types_skelbased(self, stride: int = 1000,
                            nb_cpus=1):
         """
         Todo:
@@ -574,17 +574,13 @@ class SuperSegmentationDataset(object):
             multi_params.append([ssv_id_block, self.version, self.version_dict,
                                  self.working_dir])
 
-        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-            results = sm.start_multiprocess(
-                predict_cell_type_skelbased_thread,
-                multi_params, nb_cpus=nb_cpus)
+        if not qu.batchjob_enabled():
+            sm.start_multiprocess(predict_cell_type_skelbased_thread,
+                                  multi_params, nb_cpus=nb_cpus)
 
-        elif qu.batchjob_enabled():
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "predict_cell_type_skelbased",
-                                         n_cores=nb_cpus, remove_jobfolder=True)
         else:
-            raise Exception("QSUB not available")
+            qu.QSUB_script(multi_params, "predict_cell_type_skelbased",
+                           n_cores=nb_cpus, remove_jobfolder=True)
 
     def save_version_dict(self):
         """
@@ -661,9 +657,9 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
 
     Args:
         ssd: SuperSegmentationDataset
-        extract_only: Only cache attributes (see`attr_keys` from attribute dict. This will add
-      a suffix `_sel` to the numpy cache array file names (-> updates will not
-      apply to the `load_cached_data` method).
+        extract_only: Only cache attributes (see`attr_keys` from attribute dict.
+            This will add a suffix `_sel` to the numpy cache array file names
+            (-> updates will not apply to the `load_cached_data` method).
         attr_keys: Attributes to cache, only used if `extract_only=True`
         n_jobs: Currently requires any string to enable batch job system,
             will be replaced by a global flag soon
@@ -798,25 +794,20 @@ def _write_super_segmentation_dataset_thread(args):
     return attr_dict
 
 
-def export_to_knossosdataset(ssd, kd, stride=1000, qsub_pe=None,
-                             qsub_queue=None, nb_cpus=10):
+def export_to_knossosdataset(ssd, kd, stride=1000, nb_cpus=10):
     multi_params = []
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]
                          for i in range(0, len(ssd.ssv_ids), stride)]:
         multi_params.append([ssv_id_block, ssd.version, ssd.version_dict,
                              ssd.working_dir, kd.knossos_path, nb_cpus])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess(_export_ssv_to_knossosdataset_thread,
-                                        multi_params, nb_cpus=nb_cpus)
-
-    elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "export_ssv_to_knossosdataset",
-                                     remove_jobfolder=True)
+    if not qu.batchjob_enabled():
+        sm.start_multiprocess(_export_ssv_to_knossosdataset_thread,
+                              multi_params, nb_cpus=nb_cpus)
 
     else:
-        raise Exception("QSUB not available")
+        qu.QSUB_script(multi_params, "export_ssv_to_knossosdataset",
+                       remove_jobfolder=True)
 
 
 def _export_ssv_to_knossosdataset_thread(args):
@@ -1005,7 +996,7 @@ def predict_cell_type_skelbased_thread(args):
             ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
         elif len(ssv.skeleton["nodes"]) > 0:
             try:
-                ssv.associate_objs_with_skel_nodes(("sj", "mi", "vc"))
+                associate_objs_with_skel_nodes(ssv, ("sj", "mi", "vc"))
                 ssv.predict_cell_type(feature_context_nm=25000, clf_name="rfc")
             except:
                 pass
@@ -1290,7 +1281,7 @@ def preproc_sso_skelfeature_thread(args: Tuple):
                                ssv.id, feat_ctx_nm, e))
 
 
-def map_ssv_semseg(args: Tuple):
+def map_ssv_semseg(args: Union[tuple, list]):
     """
     Helper function to map predicted vertex labels onto the entire mesh.
     See :py:func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
@@ -1317,7 +1308,7 @@ def map_ssv_semseg(args: Tuple):
         ssv.semseg2mesh(**kwargs_semseg2mesh)
 
 
-def exctract_ssv_morphology_embedding(args: Tuple):
+def exctract_ssv_morphology_embedding(args: Union[tuple, list]):
     """
     Helper function to infer local morphology embeddings of a cell
     reconstruction. See :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject

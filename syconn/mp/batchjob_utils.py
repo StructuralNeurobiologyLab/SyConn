@@ -69,8 +69,13 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 disable_batchjob=False, send_notification=False, use_dill=False,
                 remove_jobfolder=False, log=None, show_progress=True,
                 allow_resubm_all_fail=False):
-    # TODO: Switch to JobArrays!
     """
+
+    Todo:
+        * Remove folders of failed job submission attempts in case the last one
+          is successful.
+        * Use JobArrays
+
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
 
@@ -231,7 +236,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 ' but SLURM was set as batch system. Converting "-V" to "--export=ALL".')
             additional_flags = additional_flags.replace('-V ', '--export=ALL ')
         if not '--mem=' in additional_flags and not disable_mem_flag:
-            # Node memory limit is 250,000M and not 250G! -> max memory per core is 250000M/20, leave safety margin
+            # Node memory limit is 250,000M and not 250G! ->
+            # max memory per core is 250000M/20, leave safety margin
             mem_lim = int(
                 global_params.MEM_PER_NODE * n_cores / global_params.NCORES_PER_NODE)
             additional_flags += ' --mem={}M'.format(mem_lim)
@@ -254,20 +260,6 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             job_id = params_orig_id[i_job]
         else:
             job_id = i_job
-        # if n_max_co_processes is not None:
-        #     while last_diff_rp == 0:
-        #         nb_rp = number_of_running_processes(job_name)
-        #         last_diff_rp = n_max_co_processes - nb_rp
-        #
-        #         if last_diff_rp == 0:
-        #             n_jobs_done = len(glob.glob(path_to_out + "*.pkl"))
-        #             diff = n_jobs_done - n_jobs_finished
-        #             pbar.update(diff)
-        #             n_jobs_finished = n_jobs_done
-        #             time.sleep(sleep_time)
-        #     last_diff_rp -= 1
-        #     sleep_time = 1
-
         this_storage_path = path_to_storage + "job_%d.pkl" % job_id
         this_sh_path = path_to_sh + "job_%d.sh" % job_id
         this_out_path = path_to_out + "job_%d.pkl" % job_id
@@ -300,21 +292,6 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 priority, additional_flags, this_sh_path)
             subprocess.call(cmd_exec, shell=True)
         elif BATCH_PROC_SYSTEM == 'SLURM':
-            # if '--gres=gpu' in additional_flags:
-            #     # additional_flags = "-n%d" % n_cores
-            #     # otherwise multiprocessing will run on one CPU only if cpu binding is not modified within each process
-            #     additional_flags += " --cpu-bind=none --cpus-per-task=" + str(n_cores)
-            #     cmd_exec = "srun {0} --output={1} --error={2}" \
-            #                " --job-name={3} {4} &".format(  # ntasks-per-node=1
-            #         # because MP is organized by the launched job
-            #         additional_flags, job_log_path, job_err_path,
-            #         job_name, this_sh_path)
-            # else:
-            # import datetime
-            # then = datetime.datetime(2019, 4, 24, 8, 0, 0)
-            # dt = (then - datetime.datetime.now()).seconds // 60 - 1  # 1 min safety
-            # add_cmd = "" #"--time={}".format(dt)
-
             if n_cores > 1:
                 additional_flags += " -n%d" % n_cores
             cmd_exec = "sbatch {0} --output={1} --error={2}" \
@@ -323,8 +300,6 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                 job_name, this_sh_path)
             if priority is not None and priority != 0:
                 log_batchjob.warning('Priorities are not supported with SLURM.')
-            # added '--quiet' flag to prevent submission messages, errors will still be printed
-            # (https://slurm.schedmd.com/sbatch.html), DOES NOT WORK
             start = time.time()
             subprocess.call(cmd_exec, shell=True)
             dtime_sub += time.time() - start
@@ -344,8 +319,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         n_jobs_finished = n_jobs_done
         time.sleep(sleep_time)
     pbar.close()
-    log_batchjob.info("All batch jobs have finished after {:.2f} s ({:.2f} s submission): {"
-                      "}".format(time.time()-start_all, dtime_sub, name))
+    log_batchjob.info("All batch jobs have finished after {:.2f} s ({:.2f} "
+                      "s submission): {}".format(time.time()-start_all, dtime_sub, name))
 
     # Submit singleton job to send status email after jobs have been completed
     if send_notification:
@@ -412,9 +387,6 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             else:
                 m = re.search('(?<=--mem=)\w+', additional_flags)
                 additional_flags = additional_flags.replace('--mem=' + m.group(0), '--mem=0')
-        # if all jobs failed, increase number of cores
-        if remove_jobfolder:  # remove old job folder
-            shutil.rmtree(job_folder)
         return QSUB_script(
             missed_params, name, queue=queue, pe=pe, max_iterations=max_iterations,
             priority=priority, additional_flags=additional_flags, script_folder=None,

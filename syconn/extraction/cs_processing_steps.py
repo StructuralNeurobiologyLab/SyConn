@@ -126,17 +126,17 @@ def _collect_properties_from_ssv_partners_thread(args):
             ct = -1
         celltypes = [ct] * len(ssv_synids)
 
+        # # This does not allow to query a sliding window averaged prediction
+        # pred_key = global_params.view_properties_semsegax['semseg_key']
+        # curr_ax = ssv_o.semseg_for_coords(ssv_syncoords, pred_key,
+        #                                   **global_params.map_properties_semsegax)
+        pred_key_ax = "{}_avg{}".format(global_params.view_properties_semsegax['semseg_key'],
+                                        global_params.DIST_AXONESS_AVERAGING)
         curr_ax, latent_morph = ssv_o.attr_for_coords(
-            ssv_syncoords, attr_keys=['axoness_avg10000', 'latent_morph'])
+            ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
 
         # TODO: think about refactoring or combining both axoness predictions
         curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness')
-        # TODO: maybe switch to per-compartment majority vote for axon classification,
-        #  use ssv.skeleton to query `'{}_comp_maj'.format(global_params.view_properties_semsegax[
-        #  'semseg_key'])`
-        curr_ax = ssv_o.semseg_for_coords(
-            ssv_syncoords, global_params.view_properties_semsegax['semseg_key'],
-            **global_params.map_properties_semsegax)
 
         cache_dc['partner_axoness'] = np.array(curr_ax)
         cache_dc['synssv_ids'] = np.array(ssv_synids)

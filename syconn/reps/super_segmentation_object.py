@@ -93,7 +93,7 @@ class SuperSegmentationObject(object):
                 cell.semseg2mesh(semseg_key='spiness', dest_path='~/cell{}_spines.k.zip'.format(cell.id))
 
 
-        See also `SyConn/docs/api.md` (WIP).
+        See also ``SyConn/docs/api.md`` (WIP).
 
     Attributes:
         attr_dict: Attribute dictionary which serves as a general-purpose container. Accessed via
@@ -1221,19 +1221,19 @@ class SuperSegmentationObject(object):
         """
         Merges existing supervoxel skeletons (``allow_skel_gen=False``) or calculates them
         from scratch using :func:`~syconn.reps.super_segmentation_helper
-        .create_sso_skeletons_thread` otherwise (requires ``allow_skel_gen=True``).
+        .create_sso_skeletons_wrapper` otherwise (requires ``allow_skel_gen=True``).
         Skeleton will be saved at :py:attr:`~skeleton_path`.
 
         Args:
             force: Skips :func:`~load_skeleton` if ``force=True``.
         """
         if force:  #
-            return ssh.create_sso_skeletons_thread([self])
+            return ssh.create_sso_skeletons_wrapper([self])
         self.load_skeleton()
         if self.skeleton is not None and len(self.skeleton["nodes"]) != 0 \
                 and not force:
             return
-        ssh.create_sso_skeletons_thread([self])
+        ssh.create_sso_skeletons_wrapper([self])
 
     def save_skeleton_to_kzip(self, dest_path: Optional[str] = None,
                               additional_keys: Optional[List[str]] = None):
@@ -2965,7 +2965,7 @@ class SuperSegmentationObject(object):
         Apply a sliding window averaging along the axon predictions stored at the
         nodes of the :py:attr:`~skeleton`. See
         :func:`~syconn.reps.super_segmentation_helper._average_node_axoness_views`
-        for details.
+        for details. Will call :func:`~save_skeleton`.
 
         Args:
             **kwargs: Key word arguments used in
@@ -2977,6 +2977,7 @@ class SuperSegmentationObject(object):
         # (enable_locking is inherited by sso.svs);
         # SSV operations not, but SSO file structure is not chunked
         res = ssh.average_node_axoness_views(self, **kwargs)
+        self.save_skeleton()
         self.enable_locking = locking_tmp
         return res
 

@@ -1641,6 +1641,9 @@ class SegmentationDataset(object):
 
     @property
     def exists(self) -> bool:
+        """
+        Checks whether :py:attr:`~path` exists.
+        """
         return os.path.isdir(self.path)
 
     @property
@@ -1685,14 +1688,23 @@ class SegmentationDataset(object):
 
     @property
     def version_dict_exists(self) -> bool:
+        """
+        Checks whether :py:attr:`~version_dict_path` exists.
+        """
         return os.path.exists(self.version_dict_path)
 
     @property
     def so_storage_path_base(self) -> str:
+        """
+        Name of the base of the root folder (``'so_storage'``).
+        """
         return "so_storage"
 
     @property
     def so_storage_path(self) -> str:
+        """
+        Path to the root folder.
+        """
         if self._n_folders_fs is None and os.path.exists("%s/so_storage/" % self.path):
             return "%s/so_storage/" % self.path
         elif self._n_folders_fs == 100000 and os.path.exists("%s/so_storage/" % self.path):

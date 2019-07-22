@@ -41,7 +41,7 @@ def run_skeleton_generation(max_n_jobs=None):
         len(ssd.ssv_ids)))
     qu.QSUB_script(multi_params, "export_skeletons_new", log=log,
                    n_max_co_processes=global_params.NCORE_TOTAL,
-                   remove_jobfolder=True)
+                   remove_jobfolder=True, n_cores=2)
 
     log.info('Finished skeleton generation.')
     # # run skeleton feature extraction # Not needed anymore, will be kept in
