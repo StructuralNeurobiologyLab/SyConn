@@ -6,6 +6,7 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 import numpy as np
+from typing import Optional
 from syconn.mp import batchjob_utils as qu
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.handler.basics import chunkify
@@ -15,7 +16,14 @@ from syconn.global_params import NCORES_PER_NODE
 from syconn import global_params
 
 
-def run_skeleton_generation(max_n_jobs=None):
+def run_skeleton_generation(max_n_jobs: Optional[int] = None):
+    """
+    Generate the cell reconstruction skeletons.
+
+    Args:
+        max_n_jobs: Number of parallel jobs.
+
+    """
     if max_n_jobs is None:
         max_n_jobs = global_params.NCORE_TOTAL * 2
     log = initialize_logging('skeleton_generation', global_params.config.working_dir + '/logs/',
@@ -52,6 +60,9 @@ def run_skeleton_generation(max_n_jobs=None):
 
 
 def run_skeleton_axoness():
+    """
+    Prepares the RFC models for skeleton-based axon inference.
+    """
     # # run skeleton feature extraction # Not needed anymore, will be kept in
     # case skeleton features should remain a feature of SyConn
     sbc = SkelClassifier("axoness", working_dir=global_params.config.working_dir)

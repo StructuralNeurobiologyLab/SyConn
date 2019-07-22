@@ -14,6 +14,7 @@ import networkx as nx
 import time
 import re
 import shutil
+from typing import Optional, Union, Dict, List
 from multiprocessing import Queue, Process
 
 from syconn.reps.rep_helper import knossos_ml_from_ccs
@@ -39,7 +40,18 @@ from syconn.mp import batchjob_utils as qu
 from syconn.exec import exec_skeleton
 
 
-def run_morphology_embedding(max_n_jobs=None):
+def run_morphology_embedding(max_n_jobs: Optional[int] = None):
+    """
+    Infer local morphology embeddings for all neuron reconstructions base on
+    triplet-loss trained cellular morphology learning network (tCMN).
+
+    Args:
+        max_n_jobs: Number of parallel jobs.
+
+    Notes:
+        Requires :func:`~run_create_neuron_ssd`, :func:`~run_neuron_rendering` and
+        :func:`~syconn.exec.skeleton.run_skeleton_generation`.
+    """
     if max_n_jobs is None:
         max_n_jobs = global_params.NGPU_TOTAL * 2
     log = initialize_logging('morphology_embedding', global_params.config.working_dir
@@ -62,7 +74,20 @@ def run_morphology_embedding(max_n_jobs=None):
     log.info('Finished extraction of cell morphology embedding.')
 
 
-def run_axoness_mapping(max_n_jobs=None):
+def run_axoness_mapping(max_n_jobs: Optional[int] = None):
+    """
+    Map ``img2scalar`` CMN results of the 2D projections onto the cell
+    reconstruction mesh. See :func:`~run_semsegaxoness_mapping` for the
+    semantic segmentation approach.
+
+    Args:
+        max_n_jobs: Number of parallel jobs.
+
+    Notes:
+        Requires :func:`~run_create_neuron_ssd`, :func:`~run_neuron_rendering`,
+        :func:`run_axoness_prediction` and
+        :func:`~syconn.exec.skeleton.run_skeleton_generation`.
+    """
     if max_n_jobs is None:
         max_n_jobs = global_params.NCORE_TOTAL * 2
     """Maps axon prediction of rendering locations onto SSV skeletons"""
@@ -88,7 +113,20 @@ def run_axoness_mapping(max_n_jobs=None):
     log.info('Finished axoness mapping.')
 
 
-def run_axoness_prediction(max_n_jobs_gpu=None, e3=False):
+def run_axoness_prediction(max_n_jobs_gpu: Optional[int] = None,
+                           e3: bool = True):
+    """
+    Run the axoness inference based on the ``img2scalar`` CMN. See
+    :func:`~run_semsegaxoness_prediction` for the semantic segmentation model.
+
+    Args:
+        max_n_jobs_gpu: Number of parallel jobs.
+        e3: If True, use elektronn3 models.
+
+    Notes:
+        Requires :func:`~run_create_neuron_ssd`, :func:`~run_neuron_rendering` and
+        :func:`~syconn.exec.skeleton.run_skeleton_generation`.
+    """
     log = initialize_logging('axon_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     if max_n_jobs_gpu is None:
@@ -149,7 +187,16 @@ def run_axoness_prediction(max_n_jobs_gpu=None, e3=False):
         log.info('Success.')
 
 
-def run_celltype_prediction(max_n_jobs_gpu=None):
+def run_celltype_prediction(max_n_jobs_gpu: Optional[int] = None):
+    """
+    Run the celltype inference based on the ``img2scalar`` CMN.
+
+    Args:
+        max_n_jobs_gpu: Number of parallel GPU jobs.
+
+    Notes:
+        Requires :func:`~run_create_neuron_ssd` and :func:`~run_neuron_rendering`.
+    """
     if max_n_jobs_gpu is None:
         max_n_jobs_gpu = global_params.NGPU_TOTAL * 2
     log = initialize_logging('celltype_prediction', global_params.config.working_dir+ '/logs/',
@@ -192,7 +239,19 @@ def run_celltype_prediction(max_n_jobs_gpu=None):
         log.info('Success.')
 
 
-def run_semsegaxoness_mapping(max_n_jobs=None):
+def run_semsegaxoness_mapping(max_n_jobs: Optional[int] = None):
+    """
+    Map semantic segmentation results of the 2D projections onto the cell
+    reconstruction mesh.
+
+    Args:
+        max_n_jobs: Number of parallel jobs.
+
+    Notes:
+        Requires :func:`~run_create_neuron_ssd`, :func:`~run_neuron_rendering`,
+        :func:`~run_semsegaxoness_prediction` and
+        :func:`~syconn.exec.skeleton.run_skeleton_generation`.
+    """
     if max_n_jobs is None:
         max_n_jobs = global_params.NCORE_TOTAL * 2
     """Maps axon prediction of rendering locations onto SSV skeletons"""
@@ -218,19 +277,19 @@ def run_semsegaxoness_mapping(max_n_jobs=None):
     log.info('Finished axoness mapping.')
 
 
-def run_semsegaxoness_prediction(max_n_jobs_gpu=None):
+def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     """
     Will store semantic axoness labels as `view_properties_semsegax['semseg_key']` inside
      ssv.label_dict('vertex')[semseg_key]
-    TODO: run rendering chunk-wise instead of on-the-fly and then perform
-     prediction chunk-wise as well, adopt from spiness step
 
-    Parameters
-    ----------
-    max_n_jobs_gpu : int
+    Todo:
+        * run rendering chunk-wise instead of on-the-fly and then perform
+          prediction chunk-wise as well, adopt from spiness step.
 
-    Returns
-    -------
+    Args:
+        max_n_jobs_gpu: Number of parallel GPU jobs.
+
+    Returns:
 
     """
     if max_n_jobs_gpu is None:
@@ -277,7 +336,19 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu=None):
     shutil.rmtree(os.path.abspath(path_to_out + "/../"), ignore_errors=True)
 
 
-def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
+def run_spiness_prediction(max_n_jobs_gpu: Optional[int] = None,
+                           max_n_jobs: Optional[int] = None):
+    """
+    Will store semantic spine labels inside``ssv.label_dict('vertex')['spiness]``.
+
+    Todo:
+        * run rendering chunk-wise instead of on-the-fly and then perform
+          prediction chunk-wise as well, adopt from spiness step.
+
+    Args:
+        max_n_jobs_gpu: Number of parallel GPU jobs. Used for the inference.
+        max_n_jobs : Number of parallel CPU jobs. Used for the mapping step.
+    """
     if max_n_jobs is None:
         max_n_jobs = global_params.NCORE_TOTAL * 2
     if max_n_jobs_gpu is None:
@@ -325,7 +396,18 @@ def run_spiness_prediction(max_n_jobs_gpu=None, max_n_jobs=None):
     log.info('Finished spine mapping.')
 
 
-def _run_neuron_rendering_small_helper(max_n_jobs=None):
+def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
+    """
+    Render the default views as defined in ``global_params`` [WIP] of small
+    neuron reconstructions. Helper method of :func:`~run_neuron_rendering`.
+
+    Args:
+        max_n_jobs: Number of parallel jobs.
+
+    Notes:
+        Requires :func:`~run_create_neuron_ssd`.
+    """
+
     if max_n_jobs is None:
         max_n_jobs = global_params.NGPU_TOTAL * 4 if global_params.PYOPENGL_PLATFORM == 'egl' \
             else global_params.NCORE_TOTAL * 4
@@ -383,7 +465,17 @@ def _run_neuron_rendering_small_helper(max_n_jobs=None):
                                                         len(nb_svs_per_ssv)))
 
 
-def _run_neuron_rendering_big_helper(max_n_jobs=None):
+def _run_neuron_rendering_big_helper(max_n_jobs: Optional[int] = None):
+    """
+    Render the default views as defined in ``global_params`` [WIP] of huge
+    neuron reconstructions. Helper method of :func:`~run_neuron_rendering`.
+
+    Args:
+        max_n_jobs: Number of parallel jobs.
+
+    Notes:
+        Requires :func:`~run_create_neuron_ssd`.
+    """
     if max_n_jobs is None:
         max_n_jobs = global_params.NNODES_TOTAL * 2
     log = initialize_logging('neuron_view_rendering_big',
@@ -441,7 +533,16 @@ def _run_neuron_rendering_big_helper(max_n_jobs=None):
                                                             len(nb_svs_per_ssv)))
 
 
-def run_neuron_rendering(max_n_jobs=None):
+def run_neuron_rendering(max_n_jobs: Optional[int] = None):
+    """
+    Render the default views as defined in ``global_params`` [WIP].
+
+    Args:
+        max_n_jobs: Number of parallel jobs.
+
+    Notes:
+        Requires :func:`~run_create_neuron_ssd`.
+    """
     log = initialize_logging('neuron_view_rendering',
                              global_params.config.working_dir + '/logs/')
     ps = [Process(target=_run_neuron_rendering_big_helper, args=(max_n_jobs, )),
@@ -466,7 +567,11 @@ def run_neuron_rendering(max_n_jobs=None):
 def run_create_neuron_ssd():
     """
     Creates a :class:`~syconn.reps.super_segmentation_dataset.SuperSegmentationDataset` with
-    `version=0` at the currently active working directory.
+    ``version=0`` at the currently active working directory.
+
+    Notes:
+        Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
+        optionally :func:`~run_glia_splitting`.
     """
     log = initialize_logging('create_neuron_ssd', global_params.config.working_dir + '/logs/',
                              overwrite=False)
@@ -526,7 +631,17 @@ def run_create_neuron_ssd():
     log.info('Finished saving individual SSV RAGs.')
 
 
-def run_glia_prediction(e3=False):
+def run_glia_prediction(e3: bool = False):
+    """
+    Predict glia supervoxels based on the ``img2scalar`` CMN.
+
+    Args:
+        e3: If True, use elektronn3 models.
+
+    Notes:
+        Requires :func:`~syconn.exec_init.init_cell_subcell_sds` and
+        :func:`~run_glia_rendering`.
+    """
     log = initialize_logging('glia_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
     # only append to this key if needed (for e.g. different versions, change accordingly in 'axoness_mapping.py')
@@ -604,15 +719,17 @@ def run_glia_prediction(e3=False):
 
 def run_glia_splitting():
     """
-    Uses the pruned RAG (stored as edge list .bz2 file) which is computed
-     in `init_cell_subcell_sds`.
+    Uses the pruned RAG at ``global_params.config.pruned_rag_path`` (stored as edge list .bz2 file)
+    which is  computed in :func:`~syconn.exec.exec_init.init_cell_subcell_sds` to split glia
+    fragments from neuron reconstructions and separate those and entire glial cells from
+    the neuron supervoxel graph.
 
-    Stores neuron RAG at `"{}/glia/neuron_rag{}.bz2".format(global_params.config.working_dir,
-    suffix)` which is then used by `run_create_neuron_ssd`.
+    Stores neuron RAG at ``"{}/glia/neuron_rag{}.bz2".format(global_params.config.working_dir,
+    suffix)`` which is then used by :func:`~run_create_neuron_ssd`.
 
-    Returns
-    -------
-
+    Notes:
+        Requires :func:`~syconn.exec_init.init_cell_subcell_sds`,
+        :func:`~run_glia_rendering` and :func:`~run_glia_prediction`.
     """
     log = initialize_logging('glia_splitting', global_params.config.working_dir + '/logs/',
                              overwrite=False)
@@ -639,7 +756,15 @@ def run_glia_splitting():
              "".format(global_params.config.working_dir + "/glia/"))
 
 
-def _run_huge_ssv_render_worker(q, q_out):
+def _run_huge_ssv_render_worker(q: Queue, q_out: Queue):
+    """
+    Helper method of :func:`~run_glia_rendering`.
+
+    Args:
+        q: Input queue.
+        q_out: Output queue.
+
+    """
     while True:
         inp = q.get()
         if inp == -1:
@@ -661,18 +786,15 @@ def _run_huge_ssv_render_worker(q, q_out):
         q_out.put(0)
 
 
-def run_glia_rendering(max_n_jobs=None):
+def run_glia_rendering(max_n_jobs: Optional[int] = None):
     """
-    Uses the pruned RAG (stored as edge list .bz2 file) which is computed
-     in `init_cell_subcell_sds`.
+    Uses the pruned RAG at ``global_params.config.pruned_rag_path``
+    (stored as edge list .bz2 file) which is computed in
+    :func:`~syconn.exec.exec_init.init_cell_subcell_sds` to aggregate the
+    rendering context from the underlying supervoxel graph.
 
-    Parameters
-    ----------
-    max_n_jobs :
-
-    Returns
-    -------
-
+    Args:
+        max_n_jobs: Number of parallel jobs.
     """
     if max_n_jobs is None:
         max_n_jobs = global_params.NGPU_TOTAL * 4 if global_params.PYOPENGL_PLATFORM == 'egl' \
@@ -766,8 +888,3 @@ def run_glia_rendering(max_n_jobs=None):
     else:
         log.info('All SVs now contain views required for glia prediction.')
     # TODO: remove temporary SSV datasets
-
-
-def axoness_pred_exists(sv):
-    sv.load_attr_dict()
-    return 'axoness_probas' in sv.attr_dict

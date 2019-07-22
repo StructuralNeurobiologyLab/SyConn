@@ -90,6 +90,7 @@ meshing_props = dict(normals=True, simplification_factor=300, max_simplification
 
 
 # --------- VIEW PARAMETERS
+# TODO: move all default view parameters here
 NB_VIEWS = 2
 
 # --------- GLIA PARAMETERS
