@@ -194,7 +194,7 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
     Returns
     -------
     list, list
-        Neuron, glia connected components
+        Neuron, glia connected components.
     """
     glia_key = "glia_probas"
     if clahe:

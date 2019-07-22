@@ -23,7 +23,7 @@ knossosdataset._set_noprint(True)
 def run_matrix_export():
     """
     Export the matrix as a ``.csv`` file at the ``connectivity_matrix`` folder
-    in the currently active working directory.
+    of the currently active working directory.
     """
     # cache cell attributes
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)

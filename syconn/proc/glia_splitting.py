@@ -25,7 +25,7 @@ from . import log_proc
 def qsub_glia_splitting():
     """
     Start glia splitting -> generate final connected components of neuron vs.
-    glia SVs
+    glia SVs.
     """
     cc_dict = load_pkl2obj(global_params.config.working_dir + "/glia/cc_dict_rag_graphs.pkl")
     huge_ssvs = [it[0] for it in cc_dict.items() if len(it[1]) > RENDERING_MAX_NB_SV]
@@ -133,9 +133,6 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
         Bounding box diagonal in NM
     suffix : str
         Suffix for saved RAGs
-    Returns
-    -------
-
     """
     if type(rag) is str:
         assert os.path.isfile(rag), "RAG has to be given."
@@ -218,10 +215,6 @@ def transform_rag_edgelist2pkl(rag):
     Parameters
     ----------
     rag : networkx.Graph
-
-    Returns
-    -------
-
     """
     ccs = nx.connected_component_subgraphs(rag)
     cc_dict_graph = {}

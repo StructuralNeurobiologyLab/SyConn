@@ -69,4 +69,3 @@ def run_skeleton_axoness():
     ft_context = [1000, 2000, 4000, 8000, 12000]
     sbc.generate_data(feature_contexts_nm=ft_context, nb_cpus=NCORES_PER_NODE)
     sbc.classifier_production(ft_context, nb_cpus=NCORES_PER_NODE)
-

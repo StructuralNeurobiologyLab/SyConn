@@ -12,19 +12,16 @@ import os
 import numpy as np
 import networkx as nx
 import time
-import re
 import shutil
-from typing import Optional, Union, Dict, List
+from typing import Optional
 from multiprocessing import Queue, Process
 
-from syconn.reps.rep_helper import knossos_ml_from_ccs
 from syconn.reps.segmentation_helper import find_missing_sv_views
 from syconn.reps.super_segmentation import SuperSegmentationObject
 from syconn.global_params import rag_suffix, RENDERING_MAX_NB_SV
 from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
     write_glia_rag, transform_rag_edgelist2pkl
 from syconn.reps.segmentation import SegmentationDataset
-from syconn.reps.segmentation_helper import find_missing_sv_attributes
 from syconn.handler.prediction import get_glia_model
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.proc.rendering import render_sso_coords_multiprocessing
@@ -243,6 +240,13 @@ def run_semsegaxoness_mapping(max_n_jobs: Optional[int] = None):
     """
     Map semantic segmentation results of the 2D projections onto the cell
     reconstruction mesh.
+    Generates the following attributes by default in
+    :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.skeleton`:
+        * "axoness": Vertex predictions mapped to skeleton (see
+          ``global_params.map_properties_semsegax``.
+        * "axoness_avg10000": Sliding window average along skeleton (10um traversal length).
+        * "axoness_avg10000_comp_maj": Majority vote on connected components after removing the
+          soma.
 
     Args:
         max_n_jobs: Number of parallel jobs.
@@ -280,7 +284,7 @@ def run_semsegaxoness_mapping(max_n_jobs: Optional[int] = None):
 def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     """
     Will store semantic axoness labels as `view_properties_semsegax['semseg_key']` inside
-     ssv.label_dict('vertex')[semseg_key]
+    ssv.label_dict('vertex')[semseg_key]
 
     Todo:
         * run rendering chunk-wise instead of on-the-fly and then perform

@@ -662,10 +662,11 @@ class SuperSegmentationObject(object):
                          ' {}'.format(self.id))
         return self.lookup_in_attribute_dict("cell_type_ratios")
 
-    def weighted_graph(self, add_node_attr: Tuple[str] = ()) -> nx.Graph:
+    def weighted_graph(self, add_node_attr: Iterable[str] = ()) -> nx.Graph:
         """
-        Creates a Euclidean distance weighted graph representation of the
-        skeleton of this SSV object.
+        Creates a Euclidean distance (in nanometers) weighted graph representation of the
+        skeleton of this SSV object. The node IDs represent the index in
+        the ``'node'`` array part of :py:attr:`~skeleton`.
 
         Args:
             add_node_attr: To-be-added node attributes. Must exist in
@@ -3067,10 +3068,56 @@ class SuperSegmentationObject(object):
             maj_votes[ii] = maj_label
         return maj_votes
 
+    def shortestpath2soma(self, coordinates: np.ndarray) -> List[float]:
+        """
+        Computes the shortest path to the soma along :py:attr:`~skeleton`.
+        Cell compartment predictions must exist in ``self.skeleton['axoness_avg10000']``,
+        see :func:`~syconn.exec.exec_multiview.run_semsegaxoness_mapping`.
+        Requires a populated :py:attr:`~skeleton`, e.g. via :func:`~load_skeleton`.
+
+        Args:
+            coordinates: Starting coordinates in voxel coordinates; shape of (N, 3).
+
+        Raises:
+            KeyError: If axon prediction does not exist.
+
+        Examples:
+            To get the shortest paths between all synapses and the soma use::
+
+                from syconn.reps.super_segmentation import *
+                from syconn import global_params
+
+                global_params.wd = '~/SyConn/example_cube1/'
+                ssd = SuperSegmentationDataset()
+                # get any cell reconstruction
+                ssv = ssd.get_super_segmentation_object(ssd.ssv_ids[0])
+                # get synapse coordinates in voxels.
+                syns = np.array([syn.rep_coord for syn in ssv.syn_ssv])
+                shortest_paths = ssv.shortestpath2soma(syns)
+
+        Returns:
+            The shortest path in nanometers for each start coordinate.
+        """
+        nodes = self.skeleton['nodes']
+        soma_ixs = np.nonzero(self.skeleton['axoness'] == 2)[0]
+        if np.sum(soma_ixs) == 0:
+            return [np.inf] * len(coordinates)
+        graph = self.weighted_graph(add_node_attr=['axoness_avg10000'])
+        kdt = scipy.spatial.cKDTree(nodes)
+        dists, start_ixs = kdt.query(coordinates, n_jobs=self.nb_cpus)
+        log_reps.debug(f'Computing shortest paths to soma for {len(start_ixs)} '
+                       f'starting nodes.')
+        shortest_paths_of_interest = []
+        for ix in start_ixs:
+            shortest_paths = nx.single_source_dijkstra_path_length(graph, ix)
+            shortest_path_nodes = nx.single_source_shortest_path_length(graph, ix)
+            # get the shortest path to a soma
+            curr_path = np.min([shortest_paths[soma_ix] for soma_ix in soma_ixs])
+            shortest_paths_of_interest.append(curr_path)
+        return shortest_paths_of_interest
 
 # ------------------------------------------------------------------------------
 # SO rendering code
-
 def render_sampled_sos_cc(sos, ws=(256, 128), verbose=False, woglia=True,
                           render_first_only=0, add_cellobjects=True,
                           overwrite=False, cellobjects_only=False,

@@ -9,14 +9,11 @@ from knossos_utils import knossosdataset
 import time
 from logging import Logger
 import os
-import sys
 from multiprocessing import Process
 import shutil
 import networkx as nx
 import numpy as np
-from typing import Optional, Callable, List, Dict, Tuple
-knossosdataset._set_noprint(True)
-from knossos_utils import chunky
+from typing import Optional, Callable, Tuple
 from syconn import global_params
 from syconn.extraction import object_extraction_wrapper as oew
 from syconn.proc import sd_proc
@@ -25,6 +22,7 @@ from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.handler.basics import chunkify, kd_factory
+knossosdataset._set_noprint(True)
 
 
 def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
@@ -75,12 +73,13 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
     Args:
         co: Type of cell organelle supervoxels, e.g 'mi' for mitochondria or 'vc' for
             vesicle clouds.
-        chunk_size: Cube size processed by each worker.
-        transf_func_kd_overlay: Transformation function applied on the prob. map or segmentation
+        chunk_size: Size of the cube which are processed by each worker.
+        transf_func_kd_overlay: Transformation applied on the prob. map or segmentation
             data.
         load_cellorganelles_from_kd_overlaycubes:
-        cube_of_interest_bb:
-        log:
+        cube_of_interest_bb: Bounding of the (sub-) volume of the dataset
+            which is processed.
+        log: Logger.
     """
     oew.generate_subcell_kd_from_proba(
         co, chunk_size=chunk_size, transf_func_kd_overlay=transf_func_kd_overlay,
@@ -96,13 +95,19 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
         * Don't extract sj objects and replace their use-cases with syn objects (?).
 
     Args:
-        chunk_size:
-        n_folders_fs:
-        n_folders_fs_sc:
-        max_n_jobs:
+        chunk_size: Size of the cube which are processed by each worker.
+        n_folders_fs: Number of folders used to create the folder structure in
+            the resulting :class:`~syconn.reps.segmentation.SegmentationDataset`
+            for the cell supervoxels (``version='sv'``).
+        n_folders_fs_sc: Number of folders used to create the folder structure in
+            the resulting :class:`~syconn.reps.segmentation.SegmentationDataset`
+            for the cell organelle supervxeols (e.g. ``version='mi'``).
+        max_n_jobs: Number of parallel jobs.
         load_cellorganelles_from_kd_overlaycubes:
-        transf_func_kd_overlay:
-        cube_of_interest_bb:
+        transf_func_kd_overlay: Transformation applied on the prob. map or segmentation
+            data.
+        cube_of_interest_bb: Bounding of the (sub-) volume of the dataset
+            which is processed.
     """
     log = initialize_logging('create_sds', global_params.config.working_dir +
                              '/logs/', overwrite=True)

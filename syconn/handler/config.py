@@ -145,8 +145,6 @@ class Config(object):
             # f.write(configspec_str)
 
 
-# TODO: add generic parser method for initial RAG and handle case without glia-splitting, refactor RAG path handling
-# TODO:(cover case if glia removal was not performed, change resulting rag paths after glia removal from 'glia' to 'rag'
 class DynConfig(Config):
     """
     Enables dynamic and SyConn-wide update of working directory 'wd' and provides an
@@ -174,13 +172,13 @@ class DynConfig(Config):
 
     def _check_actuality(self):
         """
-        Checks os.environ and global_params and triggers an update if the therein specified WD is not the same as
-         `self.working dir`.
+        Checks os.environ and global_params and triggers an update if the therein
+         specified WD is not the same as :py:attr:`~working dir`.
         """
-        # first check if working directory was set in environ, else check if it was changed in memory.
+        # first check if working directory was set in environ,
+        # else check if it was changed in memory.
         if 'syconn_wd' in os.environ and os.environ['syconn_wd'] is not None and \
             len(os.environ['syconn_wd']) > 0 and os.environ['syconn_wd'] != "None":
-
             if super().working_dir != os.environ['syconn_wd']:
                 super().__init__(os.environ['syconn_wd'])
         elif (global_params.wd is not None) and (len(global_params.wd) > 0) and \
