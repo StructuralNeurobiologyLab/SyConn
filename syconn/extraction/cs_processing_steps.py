@@ -38,6 +38,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     Collect axoness, cell types and spiness from synaptic partners and stores
     them in syn_ssv objects. Also maps syn_type_sym_ratio to the synaptic sign
     (-1 for asym., 1 for sym. synapses).
+
     Parameters
     ----------
     wd : str
@@ -125,14 +126,17 @@ def _collect_properties_from_ssv_partners_thread(args):
             ct = -1
         celltypes = [ct] * len(ssv_synids)
 
+        # # This does not allow to query a sliding window averaged prediction
+        # pred_key = global_params.view_properties_semsegax['semseg_key']
+        # curr_ax = ssv_o.semseg_for_coords(ssv_syncoords, pred_key,
+        #                                   **global_params.map_properties_semsegax)
+        pred_key_ax = "{}_avg{}".format(global_params.view_properties_semsegax['semseg_key'],
+                                        global_params.DIST_AXONESS_AVERAGING)
         curr_ax, latent_morph = ssv_o.attr_for_coords(
-            ssv_syncoords, attr_keys=['axoness_avg10000', 'latent_morph'])
+            ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
 
         # TODO: think about refactoring or combining both axoness predictions
         curr_sp = ssv_o.semseg_for_coords(ssv_syncoords, 'spiness')
-        curr_ax = ssv_o.semseg_for_coords(
-            ssv_syncoords, global_params.view_properties_semsegax['semseg_key'],
-            **global_params.map_properties_semsegax)
 
         cache_dc['partner_axoness'] = np.array(curr_ax)
         cache_dc['synssv_ids'] = np.array(ssv_synids)
@@ -441,9 +445,6 @@ def _combine_and_split_syn_thread(args):
             syn_props_agg['sym_prop'] = sym_prop
             syn_props_agg['asym_prop'] = asym_prop
 
-            del syn_props_agg['cs_size']
-            del syn_props_agg['sj_size_pseudo']
-
             if sym_prop + asym_prop == 0:
                 sym_ratio = -1
             else:
@@ -452,6 +453,8 @@ def _combine_and_split_syn_thread(args):
             syn_sign = -1 if sym_ratio > global_params.sym_thresh else 1
             syn_props_agg["syn_sign"] = syn_sign
 
+            del syn_props_agg['cs_size']
+            del syn_props_agg['sj_size_pseudo']
             # add syn_ssv dict to AttributeStorage
             this_attr_dc = dict(neuron_partners=ssv_ids)
             this_attr_dc.update(syn_props_agg)
@@ -466,7 +469,7 @@ def _combine_and_split_syn_thread(args):
             voxel_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
                               "/voxel.pkl")
             attr_dc.push(sd_syn_ssv.so_storage_path + voxel_rel_paths[cur_path_id] +
-                             "/attr_dict.pkl")
+                         "/attr_dict.pkl")
 
             cur_path_id += 1
             n_items_for_path = 0

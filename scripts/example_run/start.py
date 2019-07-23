@@ -23,8 +23,6 @@ from syconn import global_params
 from syconn.exec import exec_init, exec_syns, exec_multiview
 
 
-# TODO add materialize button and store current process in config.ini
-#  -> allows to resume interrupted processes
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='',
@@ -36,7 +34,7 @@ if __name__ == '__main__':
     example_cube_id = args.example_cube
     if args.working_dir == "":  # by default use cube dependent working dir
         args.working_dir = "~/SyConn/example_cube{}/".format(example_cube_id)
-    example_wd = os.path.expanduser(args.working_dir)
+    example_wd = os.path.expanduser(args.working_dir) + "/"
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
 
     # PREPARE TOY DATA
@@ -63,7 +61,7 @@ if __name__ == '__main__':
 
     bb = parse_movement_area_from_zip(kzip_p)
     prior_glia_removal = True
-    use_new_meshing = True  # TODO: optimize write-out and investigate find_mesh complexity
+    use_new_meshing = True
     offset = np.array([0, 0, 0])
     bd = bb[1] - bb[0]
     scale = np.array([10, 10, 20])
@@ -76,8 +74,9 @@ if __name__ == '__main__':
     global_params.NNODES_TOTAL = 1
 
     # PREPARE CONFIG
-    log.critical('Example run started. Working directory is overwritten and set'
-                 ' to "{}".'.format(example_wd))
+    if global_params.wd is not None:
+        log.critical('Example run started. Working directory was overwritten and set'
+                     ' to "{}".'.format(example_wd))
     if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
         py36path = subprocess.check_output(
             'source deactivate; source activate py36;f which python',
@@ -115,44 +114,35 @@ if __name__ == '__main__':
     # INITIALIZE DATA
     # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
     kd = knossosdataset.KnossosDataset()
-    # kd.set_channel('jpg')
     kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
                               offset=offset, boundary=bd, fast_downsampling=True,
                               data_path=h5_dir + 'raw.h5', mags=[1, 2], hdf5_names=['raw'])
 
     seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
-    # seg_d = seg_d.astype(np.uint32)
-    # TODO: currently KnossosDataset class does not infer the correct type automatically,
-    #  see knossos config and handling in detail
     kd.from_matrix_to_cubes(offset, mags=[1, 2], data=seg_d,
                             fast_downsampling=True, as_raw=False)
 
     kd_mi = knossosdataset.KnossosDataset()
-    # kd_mi.set_channel('jpg')
     kd_mi.initialize_from_matrix(global_params.config.kd_mi_path, scale, experiment_name,
                                  offset=offset, boundary=bd, fast_downsampling=True,
                                  data_path=h5_dir + 'mi.h5', mags=[1, 2], hdf5_names=['mi'])
 
     kd_vc = knossosdataset.KnossosDataset()
-    # kd_vc.set_channel('jpg')
     kd_vc.initialize_from_matrix(global_params.config.kd_vc_path, scale, experiment_name,
                                  offset=offset, boundary=bd, fast_downsampling=True,
                                  data_path=h5_dir + 'vc.h5', mags=[1, 2], hdf5_names=['vc'])
 
     kd_sj = knossosdataset.KnossosDataset()
-    # kd_sj.set_channel('jpg')
     kd_sj.initialize_from_matrix(global_params.config.kd_sj_path, scale, experiment_name,
                                  offset=offset, boundary=bd, fast_downsampling=True,
                                  data_path=h5_dir + 'sj.h5', mags=[1, 2], hdf5_names=['sj'])
 
     kd_sym = knossosdataset.KnossosDataset()
-    # kd_sym.set_channel('jpg')
     kd_sym.initialize_from_matrix(global_params.config.kd_sym_path, scale, experiment_name,
                                   offset=offset, boundary=bd, fast_downsampling=True,
                                   data_path=h5_dir + 'sym.h5', mags=[1, 2], hdf5_names=['sym'])
 
     kd_asym = knossosdataset.KnossosDataset()
-    # kd_asym.set_channel('jpg')
     kd_asym.initialize_from_matrix(global_params.config.kd_asym_path, scale,
                                    experiment_name, offset=offset, boundary=bd,
                                    fast_downsampling=True, data_path=h5_dir + 'asym.h5',
@@ -186,6 +176,7 @@ if __name__ == '__main__':
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
 
+    # TODO: launch steps 3 and 4 in parallel
     log.info('Step 3/8 - Neuron rendering')
     exec_multiview.run_neuron_rendering()
     time_stamps.append(time.time())
@@ -197,10 +188,6 @@ if __name__ == '__main__':
     step_idents.append('Synapse detection')
 
     log.info('Step 5/8 - Axon prediction')
-    # # OLD
-    # exec_multiview.run_axoness_prediction(e3=True)
-    # exec_multiview.run_axoness_mapping()
-
     exec_multiview.run_semsegaxoness_prediction()
     exec_multiview.run_semsegaxoness_mapping()
     time_stamps.append(time.time())

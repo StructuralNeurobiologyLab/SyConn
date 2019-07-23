@@ -235,15 +235,23 @@ class SyConnBackend(object):
         if skeleton is None:
             return {}
         skel_attr = ["nodes", "edges", "diameters"]
-        avg_dst = global_params.DIST_AXONESS_AVERAGING
-        keys = ["axoness_avg{}".format(avg_dst),
-                "axoness_avg{}_comp_maj".format(avg_dst),
-                "axoness_k{}".format(global_params.map_properties_semsegax['k'])]
+        pred_key_ax = "{}_avg{}".format(global_params.view_properties_semsegax['semseg_key'],
+                                        global_params.DIST_AXONESS_AVERAGING)
+        keys = [
+                # "axoness_avg{}".format(avg_dst),
+                # "axoness_avg{}_comp_maj".format(avg_dst),
+                global_params.view_properties_semsegax['semseg_key'],
+                pred_key_ax,
+                "axoness_k{}".format(global_params.map_properties_semsegax['k']),
+                "axoness_k{}_comp_maj".format(global_params.map_properties_semsegax['k'])]
         for k in keys:
             if k in skeleton:
                 skel_attr.append(k)
                 if type(skeleton[k]) is list:
                     skeleton[k] = np.array(skeleton[k])
+            else:
+                log_gate.warning("Couldn't find requested key in "
+                                 "skeleton '{}'. Existing keys: {}".format(k, skeleton.keys()))
         return {k: skeleton[k].flatten().tolist() for k in
                 skel_attr}
 

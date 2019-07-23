@@ -191,6 +191,9 @@ def int2str_converter(label, gt_type):
         l_dc_inv = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7)
         l_dc_inv["?"] = 8
         l_dc = {v: k for k, v in l_dc_inv.items()}
+        # Do not distinguish between FS and INT/?
+        l_dc[8] = "INT"
+        l_dc[6] = "INT"
         try:
             return l_dc[label]
         except KeyError:
@@ -201,6 +204,16 @@ def int2str_converter(label, gt_type):
 
 
 def img_rand_coloring(img):
+    """
+
+    Parameters
+    ----------
+    img :
+
+    Returns
+    -------
+
+    """
     if img.ndim == 3 and img.shape[2] > 1:
         raise ValueError("Input image must not contain rgb values")
     colored_img = np.zeros(list(img.shape) + [3], dtype=np.uint8)
@@ -331,9 +344,9 @@ def id2rgba_array_contiguous(id_arr):
     x3 = np.arange(256).astype(np.uint8)
     x4 = np.arange(256).astype(np.uint8)
     xx1, xx2, xx3, xx4 = np.meshgrid(x1, x2, x3, x4, sparse=False, copy=False)
-    rgba_arr = np.concatenate([xx4.flatten()[:, None], xx1.flatten()[:, None],
-                               xx3.flatten()[:, None], xx2.flatten()[:, None]],
-                              axis=-1)[:nb_ids]
+    rgba_arr = np.concatenate([xx4.flatten()[:, None], xx3.flatten()[:, None],
+                               xx1.flatten()[:, None], xx2.flatten()[:, None]],
+                              axis=-1)[:nb_ids]  # 4,3,1,2  with numpy 1.16, PS 14June2019
     return rgba_arr
 
 

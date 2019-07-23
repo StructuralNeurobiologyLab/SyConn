@@ -33,6 +33,7 @@ def helper_func_sd(paths):
         num_locs += [len(sl) for sl in sample_locs]
     return num_locs
 
+
 # TODO: make this a test on toy data (which has to be created and added to the repo)
 if __name__ == '__main__':
     # performed on SSD at '/wholebrain/songbird/j0126/areaxfs_v6//ssv_0/', 17Jan02019
@@ -91,7 +92,7 @@ if __name__ == '__main__':
                 ssv_tmp.nb_cpus = 10  # default when using GPU
                 print('Predicting SSV {} with {} sample locations.'.format(
                     ssv_tmp.id, len(np.concatenate(ssv_tmp.sample_locations()))))
-                ssv_tmp.predict_celltype_cnn(m, overwrite=True)
+                ssv_tmp.predict_celltype_cnn(m, force_recompute=True)
             print('Run {}: {:.4f}'.format(ii, time.time() - start))
         del m
 
@@ -141,7 +142,7 @@ if __name__ == '__main__':
             start = time.time()
             for ssv_tmp in ssvs_tmp:
                 ssv_tmp.nb_cpus = 2
-                ssv_tmp.semseg2mesh('spiness', force_overwrite=True)
+                ssv_tmp.semseg2mesh('spiness', force_recompute=True)
             print('Run {}: {:.4f}'.format(ii, time.time() - start))
 
 

@@ -5,7 +5,7 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-# TODO: outsource all skeletonization code, currently not used and methods are spread all over code base
+# TODO: outsource all skeletonization code, currently not used
 try:
     import cPickle as pkl
 except ImportError:

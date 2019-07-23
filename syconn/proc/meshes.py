@@ -57,7 +57,7 @@ except ImportError:
 __all__ = ['MeshObject', 'get_object_mesh', 'merge_meshes', 'triangulation',
            'get_random_centered_coords', 'write_mesh2kzip', 'write_meshes2kzip',
            'compartmentalize_mesh', 'mesh_chunk', 'mesh_creator_sso', 'merge_meshes_incl_norm',
-           'mesh_area_calc']
+           'mesh_area_calc', 'mesh2obj_file']
 
 
 class MeshObject(object):
@@ -444,7 +444,7 @@ def calc_rot_matrices(coords, vertices, edge_length, nb_cpus=1):
     params = [(coords_ch, vertices, edge_length) for coords_ch in
               np.array_split(coords, nb_cpus, axis=0)]
     res = start_multiprocess_imap(calc_rot_matrices_helper, params,
-                                  nb_cpus=nb_cpus)
+                                  nb_cpus=nb_cpus, show_progress=False)
     rot_matrices = np.concatenate(res)
     return rot_matrices
 

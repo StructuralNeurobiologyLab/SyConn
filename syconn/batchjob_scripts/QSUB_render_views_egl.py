@@ -37,6 +37,7 @@ if len(args) > 2:
     render_kwargs = None
 else:
     render_kwargs = dict(add_cellobjects=True, woglia=True, overwrite=True)
+
 # render huge SSVs in parallel, multiple jobs per SSV
 n_parallel_jobs = global_params.NCORES_PER_NODE  # // global_params.NGPUS_PER_NODE  # Assumes
 
@@ -46,18 +47,18 @@ for ssv_ix in ch:
     # locking is explicitly enabled when saving SV views, no need to enable it for reading data
     sso = SuperSegmentationObject(ssv_ix, working_dir=wd,
                                   enable_locking_so=False)
-    if len(sso.sample_locations()) > 1e3:
+    if len(sso.sample_locations()) > 1e3:  # TODO: add as parameter to global_params.py
         ssvs_large.append(sso)
     else:
         ssvs_small.append(sso)
 
-# that
 # this job is always started using half of the node and with one GPU
 for ssv in ssvs_large:
-    render_sso_coords_multiprocessing(ssvs_large, wd, n_parallel_jobs,
+    render_sso_coords_multiprocessing(ssv, wd, n_parallel_jobs,
                                       render_indexviews=False, return_views=False,
                                       render_kwargs=render_kwargs)
-    render_sso_coords_multiprocessing(ssvs_large, wd, n_parallel_jobs,
+
+    render_sso_coords_multiprocessing(ssv, wd, n_parallel_jobs,
                                       render_indexviews=True, return_views=False,
                                       render_kwargs=render_kwargs)
 

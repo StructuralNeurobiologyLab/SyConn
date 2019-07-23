@@ -15,6 +15,7 @@ from ..reps.super_segmentation_helper import get_sso_axoness_from_coord
 from ..reps.segmentation import SegmentationDataset, SegmentationObject
 from ..reps.super_segmentation import SuperSegmentationObject
 from . import log_proc
+from .. import global_params
 
 
 def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
@@ -79,8 +80,9 @@ def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
     neuron_sv_ids += list(sso.sv_ids)
     sv_ids_in_seg = np.array([ix in ids for ix in neuron_sv_ids], dtype=bool)
     assert np.sum(sv_ids_in_seg) >= 2
+    scale = np.array(global_params.config.entries["Dataset"]["scaling"])
     nb_cov_vx, frac_cov_vx = get_glia_coverage(seg, neuron_sv_ids, glia_sv_ids,
-                                               300, kd.scale)
+                                               300, scale)
 
     so.save_attributes(["glia_vol_frac", "glia_sv_ids",
                         "glia_cov_frac", "glia_cov"],

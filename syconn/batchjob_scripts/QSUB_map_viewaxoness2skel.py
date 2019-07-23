@@ -50,6 +50,7 @@ for ix in ssv_ixs:
         continue
     pred_key = "axoness{}_avg{}".format(pred_key_appendix, max_dist)
     majority_vote_compartments(sso, pred_key)
+    sso.save_skeleton()
 
 
 with open(path_out_file, "wb") as f:

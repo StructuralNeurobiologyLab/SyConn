@@ -1,4 +1,4 @@
-syconn.extraction package
+syconn.exec package
 =========================
 
 Submodules
@@ -15,7 +15,7 @@ syconn.exec.exec\_init module
 syconn.exec.exec\_multiview module
 ----------------------------------------------
 
-.. automodule:: syconn.exec.multiview
+.. automodule:: syconn.exec.exec_multiview
     :members:
     :undoc-members:
     :show-inheritance:
@@ -23,7 +23,7 @@ syconn.exec.exec\_multiview module
 syconn.exec.exec\_skeleton module
 ----------------------------------------------
 
-.. automodule:: syconn.exec.skeleton
+.. automodule:: syconn.exec.exec_skeleton
     :members:
     :undoc-members:
     :show-inheritance:
@@ -31,7 +31,7 @@ syconn.exec.exec\_skeleton module
 syconn.exec.exec\_syns module
 ----------------------------------------------
 
-.. automodule:: syconn.exec.syns
+.. automodule:: syconn.exec.exec_syns
     :members:
     :undoc-members:
     :show-inheritance:

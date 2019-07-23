@@ -6,6 +6,7 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 from scipy import spatial
+from typing import List, Optional, Dict, Any
 import networkx as nx
 import numpy as np
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
@@ -100,7 +101,8 @@ def chunkify_contiguous(l, n):
         yield l[i:i + n]
 
 
-def split_subcc_join(g, subgraph_size, lo_first_n=1):
+def split_subcc_join(g: nx.Graph, subgraph_size: int,
+                     lo_first_n: int = 1) -> List[List[Any]]:
     """
     Creates a subgraph for each node consisting of nodes until maximum number of
     nodes is reached.
@@ -192,7 +194,7 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
     Returns
     -------
     list, list
-        Neuron, glia connected components
+        Neuron, glia connected components.
     """
     glia_key = "glia_probas"
     if clahe:

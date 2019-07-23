@@ -259,7 +259,7 @@ class InputDialog(QtGui.QDialog):
 
         # --The Button------------------------------#
         layout = QtGui.QHBoxLayout()
-        button = QtGui.QPushButton("okay")  # string or icon
+        button = QtGui.QPushButton("connect")  # string or icon
         self.connect(button, QtCore.SIGNAL("clicked()"), self.close)
         layout.addWidget(button)
 
@@ -285,24 +285,30 @@ class main_class(QtGui.QDialog):
             pass
 
         # get port
-        inputter = InputDialog(parent)
-        inputter.exec_()
-            # try:
-        port = int(inputter.text.text.decode())
-            # except Exception as e:
-            #     print(e)
-        #self.start_logging()
-        host = inputter.text_ip.text.decode()
-        self.syconn_gate = None
-        self.host = host
-        self.port = port
-        self.ssv_selected1 = 0
-        self.obj_tree_ids = set()
-        self.obj_id_offs = 2000000000
-        self.all_syns = None
-
-        self.init_syconn()
-        self.build_gui()
+        while True:
+            inputter = InputDialog(parent)
+            inputter.exec_()
+                # try:
+            port = int(inputter.text.text.decode())
+                # except Exception as e:
+                #     print(e)
+            #self.start_logging()
+            host = inputter.text_ip.text.decode()
+            self.syconn_gate = None
+            self.host = host
+            self.port = port
+            self.ssv_selected1 = 0
+            self.syn_selected1 = None
+            self.obj_tree_ids = set()
+            self.obj_id_offs = 2000000000
+            self.all_syns = None
+            try:
+                self.init_syconn()
+                self.build_gui()
+                break
+            except requests.exceptions.ConnectionError:
+                print("Failed to establish connection to SyConn Server.")
+                pass
 
         self.timer = QtCore.QTimer()
         self.timer.timeout.connect(self.exploration_mode_callback_check)
@@ -427,6 +433,8 @@ class main_class(QtGui.QDialog):
         self.synapse_field1.setItem(2, 1, QTableWidgetItem(str(self.all_syns["synaptivity_proba"][ix])))
         # synaptic size (area in um^2)
         self.synapse_field1.setItem(3, 1, QTableWidgetItem(str(syn_size)))
+        # object ID
+        self.synapse_field1.setItem(4, 1, QTableWidgetItem(str(syn_id)))
 
         # pre- and post synaptic properties
         # IDs
@@ -461,7 +469,8 @@ class main_class(QtGui.QDialog):
         #layout = QtGui.QVBoxLayout()
         self.setLayout(layout)
 
-        self.show_button = QtGui.QPushButton('Show neurite')
+        self.show_button_neurite = QtGui.QPushButton('Show neurite')
+        self.show_button_synapse = QtGui.QPushButton('Show synapse')
         self.clear_knossos_view_button = QtGui.QPushButton('Clear view')
 
         self.ssv_selector = QtGui.QListView()
@@ -474,23 +483,29 @@ class main_class(QtGui.QDialog):
 
         self.direct_ssv_id_input = QtGui.QLineEdit()
         self.direct_ssv_id_input.setValidator(QtGui.QIntValidator())
-        self.direct_ssv_id_input.setMaxLength(16)
+        self.direct_ssv_id_input.setMaxLength(8)
+
+        self.direct_syn_id_input = QtGui.QLineEdit()
+        self.direct_syn_id_input.setValidator(QtGui.QIntValidator())
+        self.direct_syn_id_input.setMaxLength(8)
 
         # celltype
         self.celltype_field = QtGui.QLabel("CellType:      ", self)
 
         # synapse
         self.synapse_field1 = QTableWidget()
-        self.synapse_field1.setRowCount(4)
+        self.synapse_field1.setRowCount(5)
         self.synapse_field1.setColumnCount(2)
         self.synapse_field1.setItem(0, 0, QTableWidgetItem("coordinate"))
-        self.synapse_field1.setItem(0, 1, QTableWidgetItem("value"))
+        self.synapse_field1.setItem(0, 1, QTableWidgetItem(""))
         self.synapse_field1.setItem(1, 0, QTableWidgetItem("synaptic type"))
         self.synapse_field1.setItem(1, 1, QTableWidgetItem(""))
         self.synapse_field1.setItem(2, 0, QTableWidgetItem("syn. proba."))
         self.synapse_field1.setItem(2, 1, QTableWidgetItem(""))
         self.synapse_field1.setItem(3, 0, QTableWidgetItem("size [um^2]"))
         self.synapse_field1.setItem(3, 1, QTableWidgetItem(""))
+        self.synapse_field1.setItem(4, 0, QTableWidgetItem("Object ID"))
+        self.synapse_field1.setItem(4, 1, QTableWidgetItem(""))
         # self.synapse_field1.setEditTriggers(QtWidgets.QTableWidget.NoEditTriggers)  # qt5
         header = self.synapse_field1.horizontalHeader()
         header.setSectionResizeMode(0, QtGui.QHeaderView.Stretch)
@@ -517,10 +532,11 @@ class main_class(QtGui.QDialog):
         self.send_synapsetype_label_button = QtGui.QPushButton('Send')
 
         self.synapsetype_label = QtGui.QLabel()
-        self.synapsetype_label.setText("Synapse type label [-1: inhib.; 1: excit.]:")
+        self.synapsetype_label.setText("Synapse type label [-1: inhib.; 0: non-syn.; 1: "
+                                       "excit.]:")
         self.synapsetype_label_text = QtGui.QLineEdit()
         self.send_button_response_label = QtGui.QLabel()
-        self.send_button_response_label.setText("")
+        self.send_button_response_label.setText(None)
 
         self.exploration_mode_chk_box = QtGui.QCheckBox('Exploration mode')
         self.exploration_mode_chk_box.setChecked(True)
@@ -540,12 +556,14 @@ class main_class(QtGui.QDialog):
         self.populate_syn_list()
         print('Connected to SyConn gate')
 
-        layout.addWidget(self.direct_ssv_id_input, 1, 0, 1, 2)
+        layout.addWidget(self.direct_ssv_id_input, 1, 0, 1, 1)
+        layout.addWidget(self.direct_syn_id_input, 1, 1, 1, 1)
         layout.addWidget(self.ssv_selector, 2, 0, 1, 1)
         layout.addWidget(self.syn_selector, 2, 1, 1, 1)
-        layout.addWidget(self.show_button, 3, 0, 1, 1)
-        layout.addWidget(self.clear_knossos_view_button, 3, 1, 1, 1)
-        layout.addWidget(self.exploration_mode_chk_box, 4, 0, 1, 2)
+        layout.addWidget(self.show_button_neurite, 3, 0, 1, 1)
+        layout.addWidget(self.show_button_synapse, 3, 1, 1, 1)
+        layout.addWidget(self.clear_knossos_view_button, 4, 0, 1, 1)
+        layout.addWidget(self.exploration_mode_chk_box, 5, 0, 1, 2)
         layout.addWidget(self.celltype_field, 1, 2, 1, 2)
 
         layout.addWidget(self.synapse_field1, 2, 2, 1, 1)
@@ -558,7 +576,8 @@ class main_class(QtGui.QDialog):
         #self.ssv_select_model.itemChanged.connect(self.on_ssv_selector_changed)
         #self.selectionModel.selectionChanged.connect(self.on_ssv_selector_changed)
 
-        self.show_button.clicked.connect(self.show_button_clicked)
+        self.show_button_neurite.clicked.connect(self.show_button_neurite_clicked)
+        self.show_button_synapse.clicked.connect(self.show_button_synapse_clicked)
         self.clear_knossos_view_button.clicked.connect(self.clear_knossos_view_button_clicked)
         self.send_synapsetype_label_button.clicked.connect(self.send_synapsetype_label_button_clicked)
         self.exploration_mode_chk_box.stateChanged.connect(self.exploration_mode_changed)
@@ -670,7 +689,7 @@ class main_class(QtGui.QDialog):
             if obj_id_to_test in obj_mesh_ids:
                 KnossosModule.skeleton.delete_tree(obj_id_to_test)
 
-    def show_button_clicked(self):
+    def show_button_neurite_clicked(self):
         try:
             self.ssv_selected1 = int(self.direct_ssv_id_input.text)
         except:
@@ -682,8 +701,20 @@ class main_class(QtGui.QDialog):
             self.update_celltype(self.ssv_selected1)
         return
 
-    def clear_knossos_view_button_clicked(self):
+    def show_button_synapse_clicked(self):
+        try:
+            self.syn_selected1 = int(self.direct_syn_id_input.text)
+        except:
+            pass
+        # TODO
+        if self.syn_selected1:
+            # TODO: could be optimized: currently we need to get the index,
+            #  and in on_syn_selector_changed the synapse ID is retrieved again
+            syn_ix = self.syn_item_model.index(self.all_syns['ids'].index(self.syn_selected1), 0)
+            self.on_syn_selector_changed(syn_ix)
+        return
 
+    def clear_knossos_view_button_clicked(self):
         # delete all existing objects in mergelist
         all_objects = KnossosModule.segmentation.objects()
         [KnossosModule.segmentation.remove_object(obj) for obj in all_objects]
@@ -696,13 +727,14 @@ class main_class(QtGui.QDialog):
 
     def send_synapsetype_label_button_clicked(self):
         syntype_label = self.synapsetype_label_text.text.decode()
-        if not syntype_label in ["-1", "1"]:
+        if not syntype_label in ["-1", "0", "1"]:
             self.send_button_response_label.setText("INVALID LABEL '{}'".format(syntype_label))
         else:
             # TODO: parse syn_ssv ID from currently clicked synapse
             curr_syn_id = self._currently_active_syn
             r = self.syconn_gate.push_so_attr(so_id=str(curr_syn_id), so_type='syn_ssv',
-                                              attr_key='gt_syntype', attr_value=syntype_label)
+                                              attr_key='gt_syntype_viewer',
+                                              attr_value=syntype_label)
             if len(r) == 0:
                 r = "push successful."
             self.send_button_response_label.setText(r)
@@ -927,6 +959,9 @@ def int2str_label_converter(label, gt_type):
         l_dc_inv = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7)
         l_dc_inv["?"] = 8
         l_dc = {v: k for k, v in l_dc_inv.items()}
+        # Do not distinguish between FS and INT/?
+        l_dc[8] = "INT"
+        l_dc[6] = "INT"
         try:
             return l_dc[label]
         except KeyError:

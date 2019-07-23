@@ -31,11 +31,11 @@ config = {
     'install_requires': [
         # included in requirements.txt, but excluded here to enable readthedocs build.
                         #'knossos_utils', 'elektronn3', 'openmesh==1.1.3',
-                         'numpy==1.16.3', 'scipy', 'lz4', 'h5py', 'networkx', 'ipython<7.0.0',
+                         'numpy==1.16.0', 'scipy', 'lz4', 'h5py', 'networkx', 'ipython<7.0.0',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn==0.19.1',
                          'scikit-image==0.14.2', 'plyfile', 'termcolor',
-                         'pytest', 'tqdm', 'dill', 'zmesh',
+                         'pytest', 'tqdm', 'dill', 'zmesh', 'seaborn',
                          'pytest-runner', 'prompt-toolkit<2.0', 'numba==0.41.0',
                          'llvmlite==0.26.0', 'matplotlib', 'vtki'],
     #numba/llvmluite

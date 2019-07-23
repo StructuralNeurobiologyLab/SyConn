@@ -309,7 +309,7 @@ def normalize_vol(sv, edge_size, center_coord):
     """
     returns cube with given edge size and sv centered at center coordinate
 
-    Paraemters
+    Parameters
     ----------
     sv :  np.array [N x 3]
         coordinates of voxels in supervoxel

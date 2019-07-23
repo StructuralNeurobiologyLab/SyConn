@@ -3,24 +3,26 @@
 ## Installation
 * Python 3.6
 * The whole pipeline was designed and tested on Linux systems
-* SyConn is based on the packages [elektronn](http://elektronn.org) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
-* cmake >= 3.1
+* SyConn is based on the packages [elektronn3](https://github.com/ELEKTRONN/elektronn3) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
 * [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.
 
+1.We recommend installing Anaconda and setting up a python environment:
 
-We recommend installing Anaconda and setting up a python environment:
 ```
 conda create -n pysy python=3.6 anaconda
 conda activate pysy
 ```
-Git clone and install syconn and all prerequisites:
+
+2.a) Either git clone and install syconn with all prerequisites:
+
 ```
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 cd SyConn
 sh install.sh
 ```
 
-For manual installation run:
+2.b) Or alternatively run these commands to install them manually:
+
 ```
 conda install cmake
 conda install vigra -c conda-forge
@@ -73,38 +75,36 @@ finished the following analysis steps for an example cube of shape \[2180 2180 1
 \[8/8] Matrix export                     00h:00min:37s                   0%
 
 
-## More examples
-[here](examples.md)
+## Example scripts and API usage
+An introduction on how to use the example scripts can be found [here](examples.md) and API code examples [here](api.md).
 
-## SyConn KNOSSOS viewer
-The following packages have to be available for the system's python2 interpreter
-(will differ from the conda environment):
+## Package structure and data classes
+The basic data structures and initialization procedures are explained in the following sections:
 
-- numpy
+* SyConn operates with a pre-defined [working directory and config files](config.md)
 
-- lz4
+* Supervoxels (and cellular organelles) are organized as `SegmentationObject` which are
+handled by the `SegmentationDatasets`. For a more detailed description see [here](segmentation_datasets.md)).
 
-- requests
+* SyConn principally supports different [backends](backend.md) for data storage. The current default is a simple shared filesystem
+(such as lustre, Google Cloud Filestore or AWS Elastic File System).
 
-In order to inspect the resulting data via the SyConnViewer KNOSSOS-plugin follow these steps:
+* Agglomerated supervoxels (SVs) are implemented as SuperSegmentationObjects ([SSO](super_segmentation_objects.md)). The collection
+ of super-SVs are usually defined in a region adjacency graph (RAG) which is used to initialize the SuperSegmentationDataset
+  ([SSD](super_segmentation_datasets.md)).
 
-- wait until `start.py` finished. For restarting the server run `SyConn/scripts/kplugin/
-server.py --working_dir=<path>` pointing to your working directory (`<path>`). The server address and
-port will be printed here.
+* [Skeletons](skeletons.md) of (super-) supervoxels, usually computed from variants of the TEASAR algorithm (https://ieeexplore.ieee.org/document/883951)
+ \- currently a fall-back to a sampling procedure is in use.
 
-- download and run the nightly build of KNOSSOS (https://github.com/knossos-project/knossos/releases/tag/nightly)
+* [Mesh](meshes.md) generation and representation of supervoxels
 
-- in KNOSSOS -> File -> Choose Dataset -> browse to your working directory and open
-`knossosdatasets/seg/mag1/knossos.conf` with enabled 'load_segmentation_overlay' (at the bottom of the dialog).
+* Multi-view representation of neurpn reconstructions for [glia](glia_removal.md) and
+ [neuron](neuron_analysis.md) analysis (published in [Nature Communications](https://www.nature.com/articles/s41467-019-10836-3))
 
-- then go to Scripting (top row) -> Run file -> browse to `SyConn/scripts/kplugin/syconn_knossos_viewer.py`, open it and enter
-the port and address of the syconn server.
 
-- After the SyConnViewer window has opened, the selection of segmentation fragments in the slice-viewports (exploration mode) or in the
-list of cell IDs followed by pressing 'show neurite' will trigger the rendering of the corresponding cell reconstruction mesh in the 3D viewport.
- The plugin will display additional information about the selected cell and a list of detected synapses (shown as tuples of cell IDs;
- clicking the entry will trigger a jump to the synapse location) and their respective
- properties. In case the window does not pop-up check Scripting->Interpreter for errors.
+## Flowchart of SyConn
+
+<img src="https://docs.google.com/drawings/d/e/2PACX-1vSY7p2boPxb9OICxNhSrHQlvuHTBRbSMeIOgQ4_NV6pflxc0FKJvPBtskYMAgJsX_OP-6CNmb08tLC5/pub?w=1920&amp;h=800">
 
 
 ## Analysis steps
@@ -121,28 +121,29 @@ compartments (e.g. axons and spines) and to perform morphology based cell type c
 * [Identification of synapses and extraction of a wiring diagram](contact_site_classification.md) (steps 4 and 8)
 
 
-## Package structure and data classes
-The basic data structures and initialization procedures are explained in the following sections:
+## SyConn KNOSSOS viewer
+The following packages have to be available in the system's python2 interpreter
+(will differ from the conda environment):
 
-* SyConn operates with a pre-defined [working directory and config files](config.md)
+- numpy
+- lz4
+- requests
 
-* Super voxels (and cellular organelles) are stored in the SegmentationObject data class ([SO](segmentation_datasets.md)), which are
-organized in [SegmentationDatasets](segmentation_datasets.md).
+In order to inspect the resulting data via the SyConnViewer KNOSSOS-plugin follow these steps:
 
-* SyConn principally supports different [backends](backend.md) for data storage, the current default is a simple shared filesystem
-(such as lustre, Google Cloud Filestore or AWS Elastic File System).
+- Wait until `start.py` finished. For restarting the server run `SyConn/scripts/kplugin/server.py --working_dir=<path>`
+pointing to your working directory (`<path>`). The server address and port will be printed here.
 
-* Agglomerated super voxels (SVs) are implemented as SuperSegmentationObjects ([SSO](super_segmentation_objects.md)). The collection
- of super-SVs are usually defined in a region adjacency graph (RAG) which is used to initialize the SuperSegmentationDataset
-  ([SSD](super_segmentation_datasets.md)).
+- Download and run the nightly build of KNOSSOS (https://github.com/knossos-project/knossos/releases/tag/nightly)
 
-* [Skeletons](skeletons.md) of (super) super voxels, usually computed from variants of the TEASAR algorithm (https://ieeexplore.ieee.org/document/883951).
+- In KNOSSOS -> File -> Choose Dataset -> browse to your working directory and open
+`knossosdatasets/seg/mag1/knossos.conf` with enabled 'load_segmentation_overlay' (at the bottom of the dialog).
 
-* [Mesh](meshes.md) generation and representation of SOs
+- Then go to Scripting (top row) -> Run file -> browse to `SyConn/scripts/kplugin/syconn_knossos_viewer.py`, open it and enter
+the port and address of the syconn server.
 
-* Multi-view representation of SSOs (see docs for [glia](glia_removal.md) and [neuron](neuron_analysis.md) analysis; [preprint](https://www.biorxiv.org/content/early/2018/07/06/364034) on biorXiv)
-
-
-## Flowchart of SyConn
-
-<img src="https://docs.google.com/drawings/d/e/2PACX-1vSY7p2boPxb9OICxNhSrHQlvuHTBRbSMeIOgQ4_NV6pflxc0FKJvPBtskYMAgJsX_OP-6CNmb08tLC5/pub?w=1920&amp;h=1024">
+- After the SyConnViewer window has opened, the selection of segmentation fragments in the slice-viewports (exploration mode) or in the
+list of cell IDs followed by pressing 'show neurite' will trigger the rendering of the corresponding cell reconstruction mesh in the 3D viewport.
+ The plugin will display additional information about the selected cell and a list of detected synapses (shown as tuples of cell IDs;
+ clicking the entry will trigger a jump to the synapse location) and their respective
+ properties. In case the window does not pop-up check Scripting->Interpreter for errors.

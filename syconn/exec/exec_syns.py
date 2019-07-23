@@ -7,21 +7,30 @@
 
 from knossos_utils import knossosdataset
 import numpy as np
-knossosdataset._set_noprint(True)
-from knossos_utils import chunky
+from typing import Tuple, Optional
 from syconn.extraction import cs_extraction_steps as ces
 from syconn import global_params
 from syconn.reps.segmentation import SegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 from syconn.proc.sd_proc import dataset_analysis
 from syconn.proc.ssd_proc import map_synssv_objects
 from syconn.extraction import cs_processing_steps as cps
 from syconn.handler.config import initialize_logging
 from syconn.handler.basics import kd_factory
+knossosdataset._set_noprint(True)
 
 
 def run_matrix_export():
+    """
+    Export the matrix as a ``.csv`` file at the ``connectivity_matrix`` folder
+    of the currently active working directory.
+    """
+    # cache cell attributes
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+    ssd.save_dataset_deep()
     log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
                              overwrite=True)
+
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
 
@@ -48,25 +57,29 @@ def run_matrix_export():
     log.info('Exporting connectivity matrix now.')
     dest_folder = global_params.config.working_dir + '/connectivity_matrix/'
     cps.export_matrix(dest_folder=dest_folder)
-    log.info('Connectivity matrix was epxorted to "{}".'.format(dest_folder))
+    log.info('Connectivity matrix was exported to "{}".'.format(dest_folder))
 
 
-def run_syn_generation(chunk_size=(512, 512, 512), n_folders_fs=10000,
-                       max_n_jobs=None, cube_of_interest_bb=None):
+def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
+                       n_folders_fs: int = 10000,
+                       max_n_jobs: Optional[int] = None,
+                       cube_of_interest_bb: Optional[Tuple[np.ndarray]] = None):
     """
+    Run the synapse generation. Will create
+    :class:`~syconn.reps.segmentation.SegmentationDataset` objects with the following versions:
+        * 'cs': Contact site objects between supervoxels.
+        * 'syn': Objects representing the overlap between 'cs' and the initial
+          synaptic junction predictions. Note: These objects effectively represent
+          synapse fragments between supervoxels.
+        * 'syn_ssv': Agglomerated 'syn' objects based on the supervoxel graph.
 
-    Parameters
-    ----------
-    chunk_size :
-    n_folders_fs :
-    max_n_jobs :
-    cube_of_interest_bb : Tuple[np.ndarray]
-        Defines the bounding box of the cube to process. By default this is
-        set to (np.zoers(3); kd.boundary).
-
-    Returns
-    -------
-
+    Args:
+        chunk_size: The size of processed cubes.
+        n_folders_fs: Number of folders used to create the folder structure in
+            each :class:`~syconn.reps.segmentation.SegmentationDataset`.
+        max_n_jobs: Number of parallel jobs.
+        cube_of_interest_bb: Defines the bounding box of the cube to process.
+            By default this is set to (np.zoers(3); kd.boundary).
     """
     if max_n_jobs is None:
         max_n_jobs = global_params.NCORE_TOTAL * 2

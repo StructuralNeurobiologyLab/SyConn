@@ -16,8 +16,16 @@ from . import log_reps
 from .. import global_params
 
 
-# TODO: unclear what and when this was used for, refactor and use in current project
 def extract_connectivity_thread(args):
+    """
+    Used within :class:`~syconn.reps.connectivity.ConnectivityMatrix`.
+
+    Args:
+        args:
+
+    Returns:
+
+    """
     sj_obj_ids = args[0]
     sj_version = args[1]
     ssd_version = args[2]

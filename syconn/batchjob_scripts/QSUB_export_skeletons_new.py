@@ -11,7 +11,8 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconn.reps.super_segmentation_dataset import create_sso_skeletons_thread
+from syconn.reps.super_segmentation_helper import create_sso_skeletons_wrapper
+from syconn.reps.super_segmentation import SuperSegmentationDataset
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -24,7 +25,15 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-create_sso_skeletons_thread(args)
+ssv_ids = args[0]
+version = args[1]
+version_dict = args[2]
+working_dir = args[3]
+
+ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
+                               version_dict=version_dict)
+ssvs = ssd.get_super_segmentation_object(ssv_ids)
+create_sso_skeletons_wrapper(ssvs)
 
 
 with open(path_out_file, "wb") as f:
