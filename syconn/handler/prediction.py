@@ -620,8 +620,8 @@ def predict_dense_to_kd(kd_path, target_path, model_path, n_channel, target_name
 
     log.info('Starting dense prediction.')
     path_to_out = qu.QSUB_script(multi_params, "predict_dense",
-                                 n_max_co_processes=1,#global_params.NGPU_TOTAL,
-                                 suffix="", n_cores=1)#global_params.NCORES_PER_NODE/(global_params.NGPU_TOTAL/NNODES_TOTAL))
+                                 n_max_co_processes=global_params.NGPU_TOTAL,
+                                 suffix="", n_cores=global_params.NCORES_PER_NODE/(global_params.NGPU_TOTAL/NNODES_TOTAL))
     
     log.info('Finished dense prediction of {} Chunks'.format(len(chunk_ids)))
 
@@ -689,16 +689,21 @@ def dense_predictor(args):
             ids = target_channels[j]
             path = target_kd_path_list[j]
             data = np.zeros_like(pred[0]).astype(np.uint8)
+            n=0
             for i in ids:
                 t = channel_thresholds[i]
-                if t is not None:
+                if t is not None or len(ids)>i:
+                    if t is None:
+                        t = 255/2
+                    if t <1.:
+                        t = 255*t
                     data += ((pred[i]>t)*n).astype(np.uint8)
                     n+=1
                 else:
                     data = pred[i]
 
             target_kd_dict[path].from_matrix_to_cubes(ch.coordinates,data=data,mags=mag,fast_downsampling=False,
-                overwrite=True,nb_threads=1,#global_params.NCORES_PER_NODE/(global_params.NGPU_TOTAL/NNODES_TOTAL),
+                overwrite=True,nb_threads=global_params.NCORES_PER_NODE/(global_params.NGPU_TOTAL/NNODES_TOTAL),
                 as_raw=True,datatype=np.uint8)
 
         
