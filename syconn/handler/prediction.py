@@ -613,8 +613,7 @@ def predict_dense_to_kd(kd_path, target_path, model_path, n_channel, target_name
 
     #init QSUB parameters
     multi_params = list(chunk_ids)
-    max_n_jobs_gpu = global_params.NGPU_TOTAL * 2
-    max_n_jobs_gpu = np.max([max_n_jobs_gpu, len(multi_params) // 100]) 
+    max_n_jobs_gpu = global_params.NGPU_TOTAL
     multi_params = chunkify(multi_params, max_n_jobs_gpu)
     multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape, tile_shape, chunk_size, output_dim, target_channels,target_kd_path_list,channel_thresholds, mag) for ch_ids in multi_params]
 
@@ -702,7 +701,7 @@ def dense_predictor(args):
                 else:
                     data = pred[i]
 
-            target_kd_dict[path].from_matrix_to_cubes(ch.coordinates,data=data,mags=mag,fast_downsampling=False,
+            target_kd_dict[path].from_matrix_to_cubes(ch.coordinates,data=data,data_mag=mag,mags=kd.mag,fast_downsampling=False,
                 overwrite=True,nb_threads=global_params.NCORES_PER_NODE/(global_params.NGPU_TOTAL/NNODES_TOTAL),
                 as_raw=True,datatype=np.uint8)
 
