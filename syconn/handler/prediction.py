@@ -424,50 +424,9 @@ def parse_movement_area_from_zip(zip_fname):
 
 
 def pred_dataset(*args, **kwargs):
-    log_handler.warning("'pred_dataset' will be replaced by 'predict_dataset' in"
+    log_handler.warning("'pred_dataset' will be replaced by 'predict_dense_to_kd' in"
                         " the near future.")
-    return pred_dataset(*args, **kwargs)
-
-
-def predict_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
-                    mfp_active=False, gpu_ids=(0, ), overwrite=True):
-    """
-    Runs prediction on the complete knossos dataset.
-    Imposed patch size has to be given in Z, X, Y!
-
-    Parameters
-    ----------
-    kd_p : str
-        path to knossos dataset .conf file
-    kd_pred_p : str
-        path to the knossos dataset head folder which will contain the
-        prediction (will be created)
-    cd_p : str
-        destination folder for the chunk dataset containing prediction
-        (will be created)
-    model_p : str
-        path to the ELEKTRONN2 model
-    imposed_patch_size : tuple or None
-        patch size (Z, X, Y) of the model
-    mfp_active : bool
-        activate max-fragment pooling (might be necessary to change patch_size)
-    gpu_ids : tuple of int
-        the GPU/GPUs to be used
-    overwrite : bool
-        True: fresh predictions ; False: earlier prediction continues
-
-
-    Returns
-    -------
-
-    """
-    if isinstance(gpu_ids, int) or len(gpu_ids) == 1:
-        _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size,
-                 mfp_active, gpu_ids, overwrite)
-    else:
-        print("Starting multi-gpu prediction with GPUs:", gpu_ids)
-        # TODO: replace by QSUB script
-        _multi_gpu_ds_pred(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size, gpu_ids)
+    return _pred_dataset(*args, **kwargs)
 
 
 def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
@@ -1200,26 +1159,3 @@ def views2tripletinput(views):
                             np.ones_like(views),
                             np.ones_like(views)], axis=2)
     return out_d.astype(np.float32)
-
-
-def _multi_gpu_ds_pred(kd_p, kd_pred_p, cd_p, model_p,
-                       imposed_patch_size=None, gpu_ids=(0, 1)):
-    # TODO: replace by QSUB_script
-    import threading
-
-    def start_partial_pred(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size,
-                           gpuid, i, n):
-
-        fpath = os.path.dirname(os.path.abspath(__file__))
-        path, file = os.path.split(os.path.dirname(fpath))
-        cmd = "python {0}/syconn/handler/partial_ds_pred.py {1} {2} {3} {4}" \
-              " {5} {6} {7} {8}".format(path, kd_p, kd_pred_p, cd_p, model_p,
-                                        imposed_patch_size, gpuid, i, n)
-        os.system(cmd)
-
-    for ii, gi in enumerate(gpu_ids):
-        args = (kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size, gi, ii,
-                len(gpu_ids))
-        t = threading.Thread(target=start_partial_pred, args=args)
-        t.daemon = True
-        t.start()
