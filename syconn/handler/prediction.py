@@ -26,7 +26,8 @@ from .basics import read_txt_from_zip, get_filepaths_from_dir,\
 from .. import global_params
 
 
-def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
+def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
+                      mag=1):
     """
     Loads ground truth from zip file, generated with Knossos. Corresponding
     dataset config file is locatet at kd_p.
@@ -42,6 +43,8 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
         use 'kd.scaling' to account for dataset anisotropy if scalar or a
         list of length 3 hast to be provided for a custom x, y, z offset.
     verbose : bool
+    mag : int
+        Data mag. level.
 
     Returns
     -------
@@ -66,11 +69,11 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False):
             raise ValueError("Offset for raw cubes has to have length 3.")
         else:
             raw_data_offset = np.array(raw_data_offset)
-        raw = kd.from_raw_cubes_to_matrix(size + 2 * raw_data_offset,
-                                          offset - raw_data_offset, nb_threads=2,
-                                          mag=1, show_progress=False)
+        raw = kd.from_raw_cubes_to_matrix(size // mag + 2 * raw_data_offset,
+                                          offset // mag - raw_data_offset, nb_threads=2,
+                                          mag=mag, show_progress=False)
         raw_data.append(raw[..., None])
-        label = kd.from_kzip_to_matrix(zip_fname, size, offset, mag=1,
+        label = kd.from_kzip_to_matrix(zip_fname, size // mag, offset // mag, mag=mag,
                                        verbose=False, show_progress=False)
         label = label.astype(np.uint16)
         label_data.append(label[..., None])
@@ -257,7 +260,7 @@ def zxy2xyz(vol):
 
 
 def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True,
-                        raw_data_offset=75, debug=False):
+                        raw_data_offset=75, debug=False, mag=1, squeeze_data=False):
     """
     Create .h5 files for ELEKTRONN input. Only supports binary labels
      (0=background, 1=foreground).
@@ -282,6 +285,10 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True,
         if True, file will have an additional 'debug' suffix and
         raw_data_offset is set to 0. Also their bit depths are adatped to be the
         same
+    mag: int
+        Data mag. level.
+    squeeze_data : bool
+        If True, label and raw data will be squeezed.
     """
     fname, ext = os.path.splitext(zip_fname)
     if fname[-2:] == ".k":
@@ -295,8 +302,11 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True,
     if os.path.isfile(fname_dest) and not overwrite:
         print("File at {} already exists. Skipping.".format(fname_dest))
         return
-    raw, label = load_gt_from_kzip(zip_fname, kd_p,
+    raw, label = load_gt_from_kzip(zip_fname, kd_p, mag=mag,
                                    raw_data_offset=raw_data_offset)
+    if squeeze_data:
+        raw = raw.squeeze()
+        label = label.squeeze()
     if foreground_ids is None:
         try:
             cc_dc = parse_cc_dict_from_kzip(zip_fname)
@@ -329,6 +339,9 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None, debug=False):
         will store labels and raw as uint8 ranging from 0 to 255
     """
     print(os.path.split(fname)[1])
+    print("Raw:", raw.shape, raw.dtype, raw.min(), raw.max())
+    print("Label:", label.shape, label.dtype, label.min(), label.max())
+    print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
     label = binarize_labels(label, foreground_ids)
     label = xyz2zxy(label)
     raw = xyz2zxy(raw)
