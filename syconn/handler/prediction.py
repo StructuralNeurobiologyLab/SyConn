@@ -10,6 +10,7 @@ import os
 import sys
 import time
 import tqdm
+import shutil
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from collections import Counter
@@ -18,13 +19,19 @@ from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
 from knossos_utils.knossosdataset import KnossosDataset
 
+from syconn.handler.config import initialize_logging
+from syconn.reps import log_reps
+from syconn.mp import batchjob_utils as qu
+from syconn.handler.basics import chunkify
+from elektronn3.inference import Predictor
+
 from ..handler import log_handler
 from syconn.handler import log_main
 from .compression import load_from_h5py, save_to_h5py
 from .basics import read_txt_from_zip, get_filepaths_from_dir,\
     parse_cc_dict_from_kzip
 from .. import global_params
-
+#import syconn.extraction.object_extraction_wrapper
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
                       mag=1):
@@ -237,8 +244,8 @@ def xyz2zxy(vol):
     """
     # assert vol.ndim == 3  # removed for multi-channel support
     # adapt data to ELEKTRONN conventions (speed-up)
-    vol = vol.swapaxes(1, 0)  # y x z
-    vol = vol.swapaxes(0, 2)  # z x y
+    vol = vol.swapaxes(-2, -3)  # y x z
+    vol = vol.swapaxes(-3, -1)  # z x y
     return vol
 
 
@@ -254,8 +261,8 @@ def zxy2xyz(vol):
     np.array [X, Y, Z]
     """
     # assert vol.ndim == 3  # removed for multi-channel support
-    vol = vol.swapaxes(1, 0)  # x z y
-    vol = vol.swapaxes(1, 2)  # x y z
+    vol = vol.swapaxes(-2, -3)  # x z y
+    vol = vol.swapaxes(-2, -1)  # x y z
     return vol
 
 
@@ -542,6 +549,191 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
                                         kd.experiment_name, mags=[1, 2, 4, 8])
         cd.export_cset_to_kd(kd_pred, "pred", ["pred"], [4, 4], as_raw=True,
                              stride=[256, 256, 256])
+
+
+def predict_dense_to_kd(kd_path, target_path, model_path, n_channel, target_names=None, target_channels=None, channel_thresholds=None, log=None, mag=1):
+    
+    """
+    Helper function for dense dataset prediction. Runs prediction on whole
+    knossos dataset
+
+    Parameters
+    ----------
+    kd_path : str
+        path to knossos dataset .conf file
+    target_path : str
+        destination folder for target knossos datasets containing prediction
+    model_path : str
+        path to elektronn3 model for predictions
+    n_channel: int
+        number of channels predicted by model
+        eg.: n_channel=3
+    target_names: list
+        names of target knossos datasets
+        eg.:  target_names=['synapse_fb','synapse_type']
+    target_channels: list of tuples
+        channel_ids in prediction for each target knossos data set
+        eg. target_channels=[(0,),(1,2)]
+    channel_thresholds: list
+        thresholds for channels: 
+        if None and number of channels for target kd is 1: probabilities are stored
+        else: 0.5 as default
+        eg. channel_thresholds=[None,0.5,0.5]
+    log:
+        
+    Returns
+    -------
+
+    """
+
+    if target_names is None:
+        target_names = ['pred']
+    if target_channels is None:
+        target_channels = [[i] for i in range(n_channel)]
+    if channel_thresholds is None:
+        channel_thresholds = [None for i in range(n_channel)]    
+    if log is None:
+        log = initialize_logging('dense_prediction', global_params.config.working_dir+ '/logs/', overwrite=False)
+
+    #init KnossosDataset:
+    kd = KnossosDataset()
+    kd.initialize_from_knossos_path(kd_path, fixed_mag=mag)
+
+    #chunck properties:
+    chunk_size = np.array([512,512,512])
+    n_tiles = np.array([4,4,16])
+    overlap_shape=np.array([8,8,4])
+    tile_shape = (chunk_size/n_tiles)
+    output_dim = n_channel
+
+    #init ChunckDataset:    
+    cd = ChunkDataset()
+    cd.initialize(kd, kd.boundary//mag, chunk_size, target_path, box_coords=np.zeros(3), fit_box_size=True)
+    ch_dc = cd.chunk_dict
+    chunk_ids = ch_dc.keys()
+    
+    #init target KnossosDatasets:
+    target_kd_path_list = [target_path+'/kd_{}/'.format(tn) for tn in target_names]
+    for path in target_kd_path_list:
+        if os.path.isdir(path):
+            log.debug('Found existing KD at {}. Removing it now.'.format(path))
+            shutil.rmtree(path)
+    for path in target_kd_path_list:
+        target_kd = knossosdataset.KnossosDataset()
+        target_kd.initialize_without_conf(path, cd.box_size, kd.scale, kd.experiment_name, kd.mag)
+        target_kd = knossosdataset.KnossosDataset()
+        target_kd.initialize_from_knossos_path(path)
+
+    #init QSUB parameters
+    multi_params = list(chunk_ids)
+    max_n_jobs_gpu = global_params.NGPU_TOTAL
+    multi_params = chunkify(multi_params, max_n_jobs_gpu)
+    multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape, tile_shape, chunk_size, output_dim, target_channels,target_kd_path_list,channel_thresholds, mag) for ch_ids in multi_params]
+
+    log.info('Starting dense prediction.')
+    path_to_out = qu.QSUB_script(multi_params, "predict_dense",
+                                 n_max_co_processes=global_params.NGPU_TOTAL,
+                                 suffix="", n_cores=global_params.NCORES_PER_NODE/(global_params.NGPU_TOTAL/NNODES_TOTAL))
+    
+    log.info('Finished dense prediction of {} Chunks'.format(len(chunk_ids)))
+
+
+
+
+def dense_predictor(args):
+    """
+
+    Parameters
+    ----------
+    args : tuplel
+        (
+        chunk_ids: list
+            list of chunks in chunck dataset
+        kd_p : str
+            path to knossos dataset .conf file
+        cd_p : str
+            destination folder for chunk dataset containing prediction
+        model_p : str
+            path to model
+        offset : 
+        chunk_size:
+        )
+
+    Returns
+    -------
+
+    """
+  
+    chunk_ids, kd_p, target_p, model_p, overlap_shape, tile_shape, chunk_size, output_dim, target_channels, target_kd_path_list,channel_thresholds, mag  = args
+    
+    
+    #init KnossosDataset:
+    kd = KnossosDataset()
+    kd.initialize_from_knossos_path(kd_p, fixed_mag=1)
+
+    #init ChunckDataset:
+    cd = ChunkDataset()
+    cd.initialize(kd, kd.boundary//mag, chunk_size, target_p,
+                    box_coords=np.zeros(3), fit_box_size=True)
+
+    #init Target KnossosDataset
+    target_kd_dict = {}
+    for path in target_kd_path_list:
+        target_kd = knossosdataset.KnossosDataset()
+        target_kd.initialize_from_knossos_path(path)
+        target_kd_dict[path] = target_kd
+    
+    #init Predictor
+    out_shape = np.insert(chunk_size[::-1],0,3) #output must equal chunck size
+    predictor = Predictor(model_p,strict_shapes=True,tile_shape=tile_shape[::-1],out_shape=out_shape,overlap_shape=overlap_shape[::-1],apply_softmax=False)
+    predictor.model.ae = False
+    
+    #predict Chunks:
+    pbar = tqdm.tqdm(total=len(chunk_ids))
+    for ch_id in chunk_ids:
+        ch = cd.chunk_dict[ch_id]
+        size = np.array(np.array(ch.size), dtype=np.int)
+        coords = np.array(np.array(ch.coordinates), dtype=np.int)
+        raw = kd.from_raw_cubes_to_matrix(size, coords, mag=mag)
+        pred = dense_predicton_helper(raw, predictor)
+        
+        for j in range(len(target_channels)):
+            ids = target_channels[j]
+            path = target_kd_path_list[j]
+            data = np.zeros_like(pred[0]).astype(np.uint8)
+            n=0
+            for i in ids:
+                t = channel_thresholds[i]
+                if t is not None or len(ids)>i:
+                    if t is None:
+                        t = 255/2
+                    if t <1.:
+                        t = 255*t
+                    data += ((pred[i]>t)*n).astype(np.uint8)
+                    n+=1
+                else:
+                    data = pred[i]
+
+            target_kd_dict[path].from_matrix_to_cubes(ch.coordinates,data=data,data_mag=mag,mags=kd.mag,fast_downsampling=False,
+                overwrite=True,nb_threads=global_params.NCORES_PER_NODE/(global_params.NGPU_TOTAL/NNODES_TOTAL),
+                as_raw=True,datatype=np.uint8)
+
+        
+        pbar.update(1)
+    pbar.close()
+       
+
+def dense_predicton_helper(raw, predictor):
+    #transform raw data
+    raw = xyz2zxy(raw)
+    raw = raw.astype(np.float32) / 255.
+    #predict: pred of the form (N, C, [D,], H, W) 
+    pred = predictor.predict(raw[None,None,])
+    pred = np.array(pred[0])* 255
+    pred = pred.astype(np.uint8)
+    pred = zxy2xyz(pred)
+    return pred
+
 
 
 def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p,

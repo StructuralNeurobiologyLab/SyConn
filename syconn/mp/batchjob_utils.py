@@ -149,7 +149,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         n_cores = 1
     if disable_batchjob or not batchjob_enabled():
         return batchjob_fallback(params, name, n_cores, suffix,
-                                 script_folder, python_path,
+                                 script_folder, python_path, 
+                                 n_max_co_processes=n_max_co_processes,
                                  remove_jobfolder=remove_jobfolder,
                                  show_progress=show_progress)
     if queue is None:
@@ -174,8 +175,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
                                           log_dir=job_folder)
     else:
         log_batchjob = log
-    n_max_co_processes = np.min([global_params.NCORE_TOTAL // n_cores,
-                                 len(params)])
+    if n_max_co_processes is None:
+        n_max_co_processes = np.min([global_params.NCORE_TOTAL // n_cores,
+                                     len(params)])
     n_max_co_processes = np.max([n_max_co_processes, 1])
     log_batchjob.info('Started BatchJob script "{}" with {} tasks using {}'
                       ' parallel jobs, each using {} core(s).'.format(
