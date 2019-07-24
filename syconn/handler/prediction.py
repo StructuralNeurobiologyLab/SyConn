@@ -79,13 +79,13 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
         raw = kd.from_raw_cubes_to_matrix(size // mag + 2 * raw_data_offset,
                                           offset // mag - raw_data_offset, nb_threads=2,
                                           mag=mag, show_progress=False)
-        raw_data.append(raw[..., None])
+        raw_data.append(raw[None, ])
         label = kd.from_kzip_to_matrix(zip_fname, size // mag, offset // mag, mag=mag,
                                        verbose=False, show_progress=False)
         label = label.astype(np.uint16)
-        label_data.append(label[..., None])
-    raw = np.concatenate(raw_data, axis=-1).astype(np.float32)
-    label = np.concatenate(label_data, axis=-1).astype(np.uint16)
+        label_data.append(label[None, ])
+    raw = np.concatenate(raw_data, axis=0).astype(np.float32)
+    label = np.concatenate(label_data, axis=0).astype(np.uint16)
     try:
         _ = parse_cc_dict_from_kzip(zip_fname)
     except:  # mergelist.txt does not exist
