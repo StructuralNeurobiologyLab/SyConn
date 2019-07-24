@@ -15,14 +15,14 @@ except ImportError:
     print("fasteners could not be imported. Locking will be disabled by default."
           "Please install fasteners to enable locking (pip install fasteners).")
     LOCKING = False
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Iterable, Union, Dict
 import numpy as np
 import h5py
 import os
 
 from ..handler import log_handler
 __all__ = ['arrtolz4string', 'lz4stringtoarr', 'load_lz4_compressed',
-           'save_lz4_compressed', 'load_compressed', 'load_from_h5py',
+           'save_lz4_compressed', 'load_from_h5py',
            'save_to_h5py', 'lz4string_listtoarr', 'arrtolz4string_list']
 
 
@@ -189,22 +189,20 @@ def load_lz4_compressed(p: str, shape: Tuple[int] = (-1, 20, 2, 128, 256),
 
 # ---------------------------- HDF5
 # ------------------------------------------------------------------------------
-def load_from_h5py(path, hdf5_names=None, as_dict=False):
+def load_from_h5py(path: str, hdf5_names: Optional[Iterable[str]] = None,
+                   as_dict: bool = False)\
+        -> Union[Dict[str, np.ndarray], List[np.ndarray]]:
     """
     Loads data from a h5py File.
 
-    Parameters
-    ----------
-    path: str
-    hdf5_names: list of str
-        if None, all keys will be loaded
-    as_dict: boolean
-        if False a list is returned
+    Args:
+        path: Path to .h5 file.
+        hdf5_names: If None, all keys will be loaded.
+        as_dict: If True, returns a dictionary.
 
-    Returns
-    -------
-    data: dict or np.array
-
+    Returns:
+        The data stored at `path` either as list of arrays
+        (ordering as `hdf5_names`) or as dictionary.
     """
     if as_dict:
         data = {}
@@ -228,28 +226,21 @@ def load_from_h5py(path, hdf5_names=None, as_dict=False):
     return data
 
 
-def save_to_h5py(data, path, hdf5_names=None, overwrite=False, compression=True):
+def save_to_h5py(data: Union[Dict[str, np.ndarray], List[np.ndarray]],
+                 path: str, hdf5_names: Optional[List[str]] = None,
+                 overwrite: bool = False,
+                 compression: bool = True):
     """
     Saves data to h5py File.
 
-    Parameters
-    ----------
-    data: list or dict of np.arrays
-        if list, hdf5_names has to be set.
-    path: str
-        forward-slash separated path to file
-    hdf5_names: List[str]
-        has to be the same length as data
-    overwrite : bool
-        determines whether existing files are overwritten
-    compression : bool
-        True: compression='gzip' is used which is recommended for sparse and
-        ordered data
-
-    Returns
-    -------
-    nothing
-
+    Args:
+        data: If list, hdf5_names has to be set.
+        path: Forward-slash separated path to file.
+        hdf5_names: Keys used to store arrays in `data`.
+            Has to be the same length as `data`.
+        overwrite: Determines whether existing files are overwritten.
+        compression: If True, ``compression='gzip'`` is used which is
+            recommended for sparse and ordered data.
     """
     if (not type(data) is dict) and hdf5_names is None:
         raise TypeError("hdf5names has to be set, when data is a list")
@@ -276,9 +267,3 @@ def save_to_h5py(data, path, hdf5_names=None, overwrite=False, compression=True)
             else:
                 f.create_dataset(hdf5_names[nb_data], data=data[nb_data])
     f.close()
-
-
-def load_compressed(p):
-    f = np.load(p)
-    assert len(f.keys()) == 1, "More than one key in .npz file"
-    return f[f.keys()[0]]
