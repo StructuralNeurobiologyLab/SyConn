@@ -7,6 +7,7 @@
 
 from typing import Dict, List, Union, Iterable, Optional, Tuple, TYPE_CHECKING
 import copy
+import os
 from collections import Counter
 from multiprocessing.pool import ThreadPool
 import networkx as nx
@@ -15,6 +16,7 @@ import scipy
 import scipy.ndimage
 from collections import defaultdict
 from scipy import spatial
+from knossos_utils.knossosdataset import KnossosDataset
 from knossos_utils.skeleton_utils import annotation_to_nx_graph,\
     load_skeleton as load_skeleton_kzip
 from collections.abc import Iterable
@@ -557,9 +559,10 @@ def smooth_skeleton(skel_nx, scal=None):
                     p = [(int(skel_nx.node[right_node]['position'][ix] + int(skel_nx.node[left_node]['position'][ix]))*x_dist/(x_dist +y_dist)) for ix in range(3)]
 
                     final_node = (1*p + skel_nx.node[visiting_node]['position']*99)/100
-                    print ('original ' , skel_nx.node[visiting_node]['position'], 'final ',final_node)
+                    print('original ', skel_nx.node[visiting_node]['position'], 'final ',
+                          final_node)
 
-                    skel_nx.node[visiting_node]['position'] = np.array(final_node, dtype = np.int)
+                    skel_nx.node[visiting_node]['position'] = np.array(final_node, dtype=np.int)
 
     return skel_nx
 
@@ -695,7 +698,8 @@ def create_sso_skeleton(sso, pruning_thresh=700, sparsify=True):
 
 def create_sso_skeletons_wrapper(ssvs: List['SuperSegmentationObject'],
                                  dest_paths: Optional[str] = None,
-                                 nb_cpus: Optional[int] = None):
+                                 nb_cpus: Optional[int] = None,
+                                 map_myelin: bool = False):
     """
     Used within :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`
     to generate a skeleton representation of the cell. If
@@ -713,9 +717,14 @@ def create_sso_skeletons_wrapper(ssvs: List['SuperSegmentationObject'],
         ssvs: An iterable of cell reconstruction objects.
         dest_paths: Paths to kzips for each object in `ssvs`.
         nb_cpus: Number of CPUs used for every ``ssv`` in `ssvs`.
+        map_myelin: Map myelin predictions at every ``ssv.skeleton["nodes"] stored as
+            ``ssv.skeleton["myelin"]`` with :func:`~map_myelin2coords`. The myelin
+            predictions are smoothed via a sliding window majority vote
+            (see :func:`~majorityvote_skeleton_property`) with a traversal distance
+             of 10 micrometers.
 
-    Returns:
-
+    Todo:
+        * Add sliding window majority vote for smooth myelin prediction to ``global_params``.
     """
     if nb_cpus is None:
         nb_cpus = global_params.NCORES_PER_NODE
@@ -759,13 +768,55 @@ def create_sso_skeletons_wrapper(ssvs: List['SuperSegmentationObject'],
             ssv.skeleton["nodes"] = (locs / np.array(ssv.scaling)).astype(np.int)
             ssv.skeleton["edges"] = edge_list
             ssv.skeleton["diameters"] = np.ones(len(locs))
+        if map_myelin:
+            ssv.skeleton["myelin"] = map_myelin2coords(ssv.skeleton["nodes"], mag=4)
+            majorityvote_skeleton_property(ssv, prop_key='myelin')
         ssv.save_skeleton()
         if dest_path is not None:
             ssv.save_skeleton_to_kzip(dest_path=dest_path)
 
 
-# New Implementation of skeleton generation which makes use of ssv.rag
+def map_myelin2coords(coords: np.ndarray,
+                      cube_edge_avg: np.ndarray = np.array([21, 21, 11]),
+                      thresh_proba: float = 255//2, thresh_majority: float = 0.1,
+                      mag: int = 1) -> np.ndarray:
+    """
+    Retrieves a myelin prediction at every location in `coords`. The classification
+    is the majority label within a cube of size `cube_edge_avg` around the
+    respective location. Voxel-wise myelin predictions are found by thresholding the
+    probability for myelinated voxels at `thresh` stored in the KnossosDataset at
+    ``global_params.config.working_dir+'/knossosdatasets/myelin/'``.
 
+    Args:
+        coords: Coordinates used to retrieve myelin predictions. In voxel coordinates (``mag=1``).
+        cube_edge_avg: Cube size used for averaging myelin predictions for each location.
+            The laoded data cube will always have the extent given by `cube_edge_avg`, regardless
+            of the value of `mag`.
+        thresh_proba: Classification threshold in uint8 values (0..255).
+        thresh_majority: Majority ratio for myelin (between 0..1), i.e.
+            ``thresh_majority=0.1`` means that 10% myelin voxels within ``cube_edge_avg``
+            will flag the corresponding locations as myelinated.
+        mag: Data mag. level used to retrieve the prediction results.
+
+    Returns:
+        Myelin prediction (0: no myelin, 1: myelinated neuron) at every coordinate.
+    """
+    myelin_kd_p = global_params.config.working_dir + "/knossosdatasets/myelin/"
+    if not os.path.isdir(myelin_kd_p):
+        raise ValueError(f'Could not find myelin KnossosDataset at {myelin_kd_p}.')
+    kd = KnossosDataset()
+    kd.initialize_from_knossos_path(myelin_kd_p)
+    myelin_preds = np.zeros((len(coords)), dtype=np.uint8)
+    n_cube_vx = np.prod(cube_edge_avg)
+    for ix, c in enumerate(coords):
+        offset, size = c // mag - cube_edge_avg // 2, cube_edge_avg
+        myelin_proba = kd.from_raw_cubes_to_matrix(size, offset, mag=mag)
+        myelin_ratio = np.sum(myelin_proba > thresh_proba) / n_cube_vx
+        myelin_preds[ix] = myelin_ratio > thresh_majority
+    return myelin_preds
+
+
+# New Implementation of skeleton generation which makes use of ssv.rag
 def from_netkx_to_arr(skel_nx: nx.Graph) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     skeleton = {}
     skeleton['nodes'] = np.array(
@@ -2069,3 +2120,37 @@ def assemble_from_mergelist(ssd, mergelist: Union[Dict[int, int], str]):
     ssd.save_dataset_shallow()
 
 
+def compartments_graph(ssv: 'SuperSegmentationObject',
+                       axoness_key: str) -> Tuple[nx.Graph, nx.Graph, nx.Graph]:
+    """
+
+    Args:
+        ssv: Cell reconstruction. Its skeleton must exist and must contain keys
+        ``'edges'``, ``'nodes'`` and `axoness_key`.
+        axoness_key: Key used to retrieve axon predictions in ``ssv.skeleton``
+            (0: dendrite, 1: axon, 2: soma). Converts labels 3 (en-passant bouton)
+            and 4 (terminal bouton) into 1 (axon).
+
+    Returns:
+        Three graphs for dendrite, axon and soma compartment respectively.
+    """
+    nodes = ssv.skeleton['nodes']
+    axon_prediction = np.array(ssv.skeleton[axoness_key])
+    axon_prediction[axon_prediction == 3] = 1
+    axon_prediction[axon_prediction == 4] = 1
+    axon_ixs = np.nonzero(axon_prediction == 1)
+    dendrite_ixs = np.nonzero(axon_prediction == 0)
+    soma_ixs = np.nonzero(axon_prediction == 2)
+    so_graph = ssv.weighted_graph(add_node_attr=[axoness_key])
+    ax_graph = so_graph.copy()
+    den_graph = so_graph.copy()
+    for ix in axon_ixs:
+        so_graph.remove_node(ix)
+        den_graph.remove_node(ix)
+    for ix in dendrite_ixs:
+        so_graph.remove_node(ix)
+        ax_graph.remove_node(ix)
+    for ix in soma_ixs:
+        ax_graph.remove_node(ix)
+        den_graph.remove_node(ix)
+    return den_graph, ax_graph, so_graph

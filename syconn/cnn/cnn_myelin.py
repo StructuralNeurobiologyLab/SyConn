@@ -19,7 +19,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('-n', '--exp-name', default='myelin_unet_4b_32f_gtv1', help='Manually set '
+parser.add_argument('-n', '--exp-name', default='myelin_unet_4b_2p_32f_gtv1', help='Manually set '
                                                                            'experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=1000,
@@ -77,8 +77,8 @@ logger.info(f'Running on device: {device}')
 
 model = UNet(
     n_blocks=4,
-    start_filts=32,
-    planar_blocks=(0,),
+    start_filts=16,
+    planar_blocks=(0, 2),
     activation='relu',
     batch_norm=True,
     # conv_mode='valid',

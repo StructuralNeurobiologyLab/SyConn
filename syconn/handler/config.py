@@ -403,7 +403,7 @@ class DynConfig(Config):
         Trained on a large field of view.
 
         Returns:
-            Path to model trained on prediction cell types from multi-view sets.
+            Path to model trained to infer cell types from multi-view sets.
         """
         return self.model_dir + '/celltype_large_e3/'
 
@@ -434,10 +434,21 @@ class DynConfig(Config):
         Trained on a large field of view.
 
         Returns:
-            Path to model trained on prediction local 2D projections into glia
+            Path to model trained to classify local 2D projections into glia
             vs. neuron (img2scalar).
         """
         return self.model_dir + '/glia_e3/'
+
+    @property
+    def mpath_myelin(self) -> str:
+        """
+        Trained on a large field of view.
+
+        Returns:
+            Path to model trained to identify myelinated cell parts within 3D
+            image data.
+        """
+        return self.model_dir + '/myelin/model.pt'
 
     @property
     def mpath_syn_rfc(self) -> str:

@@ -150,7 +150,6 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     if disable_batchjob or not batchjob_enabled():
         return batchjob_fallback(params, name, n_cores, suffix,
                                  script_folder, python_path, 
-                                 n_max_co_processes=n_max_co_processes,
                                  remove_jobfolder=remove_jobfolder,
                                  show_progress=show_progress)
     if queue is None:
@@ -488,21 +487,24 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
 
 def batchjob_fallback(params, name, n_cores=1, suffix="",
-                      script_folder=None, python_path=None, n_max_co_processes=None,
+                      script_folder=None, python_path=None,
                       remove_jobfolder=False, show_progress=True):
     """
     # TODO: utilize log and error files ('path_to_err', path_to_log')
-    Fallback method in case no batchjob submission system is available.
+    Fallback method in case no batchjob submission system is available. Always uses
+    ``n_max_co_processes = cpu_count()``.
 
     Parameters
     ----------
-    params :
-    name :
+    params : List[Any]
+    name : str
     n_cores : int
-        CPUs per job
-    suffix :
-    script_folder :
-    python_path :
+        CPUs per job.
+    suffix : str
+    script_folder : str
+    python_path : str
+    remove_jobfolder : bool
+    show_progress : bool
 
     Returns
     -------
@@ -516,9 +518,8 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
         shutil.rmtree(job_folder, ignore_errors=True)
     log_batchjob = initialize_logging("{}".format(name + suffix),
                                       log_dir=job_folder)
-    if n_max_co_processes is None:
-        n_max_co_processes = cpu_count()
-    n_max_co_processes = np.min([n_max_co_processes // n_cores, n_max_co_processes])
+    n_max_co_processes = cpu_count()
+    n_max_co_processes = np.min([cpu_count() // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
     n_max_co_processes = np.max([n_max_co_processes, 1])
     log_batchjob.debug('Started BatchJobFallback script "{}" with {} tasks using {}'

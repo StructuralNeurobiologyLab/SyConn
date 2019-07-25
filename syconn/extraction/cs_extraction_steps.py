@@ -450,8 +450,6 @@ def _write_props_to_syn_singlenode_thread(args):
         log_extraction.critical('No object keys found during '
                                 '`_write_props_to_syn_singlenode_thread`')
         return
-    log_extraction.debug('Processing {} contact sites.'.format(len(
-        all_obj_keys)))
     # keep only relevant data
     cs_props = [{}, {}, {}]
     for k in all_obj_keys:

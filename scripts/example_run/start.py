@@ -20,7 +20,7 @@ from syconn.handler.prediction import parse_movement_area_from_zip
 from syconn.handler.config import get_default_conf_str, initialize_logging
 from syconn.handler.compression import load_from_h5py
 from syconn import global_params
-from syconn.exec import exec_init, exec_syns, exec_multiview
+from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_prediction
 
 
 if __name__ == '__main__':
@@ -116,10 +116,10 @@ if __name__ == '__main__':
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
                               offset=offset, boundary=bd, fast_downsampling=True,
-                              data_path=h5_dir + 'raw.h5', mags=[1, 2], hdf5_names=['raw'])
+                              data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'])
 
     seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
-    kd.from_matrix_to_cubes(offset, mags=[1, 2], data=seg_d,
+    kd.from_matrix_to_cubes(offset, mags=[1, 2, 4], data=seg_d,
                             fast_downsampling=True, as_raw=False)
 
     kd_mi = knossosdataset.KnossosDataset()
@@ -155,6 +155,11 @@ if __name__ == '__main__':
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
     # START SyConn
+    log.info('Step 0/8 - Predicting sub-cellular structures')
+    exec_dense_prediction.predict_myelin()
+    time_stamps.append(time.time())
+    step_idents.append('Dense predictions')
+
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
                                     n_folders_fs_sc=n_folders_fs_sc)

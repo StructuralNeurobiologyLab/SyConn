@@ -10,7 +10,9 @@ import os
 import sys
 import time
 import tqdm
+from logging import Logger
 import shutil
+from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from collections import Counter
@@ -31,7 +33,7 @@ from .compression import load_from_h5py, save_to_h5py
 from .basics import read_txt_from_zip, get_filepaths_from_dir,\
     parse_cc_dict_from_kzip
 from .. import global_params
-#import syconn.extraction.object_extraction_wrapper
+
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
                       mag=1):
@@ -453,11 +455,6 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
         the GPU used
     overwrite : bool
         True: fresh predictions ; False: earlier prediction continues
-        
-
-    Returns
-    -------
-
     """
     from elektronn2.utils.gpu import initgpu
     initgpu(gpu_id)
@@ -510,106 +507,100 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
                              stride=[256, 256, 256])
 
 
-def predict_dense_to_kd(kd_path, target_path, model_path, n_channel, target_names=None,
-                        target_channels=None, channel_thresholds=None, log=None, mag=1):
-    
+def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
+                        n_channel: int,
+                        target_names: Optional[Iterable[str]]=None,
+                        target_channels: Optional[Iterable[Iterable[int]]] = None,
+                        channel_thresholds: Optional[Iterable[Union[float, Any]]] = None,
+                        log: Optional[Logger] = None,
+                        mag: int = 1):
     """
     Helper function for dense dataset prediction. Runs prediction on whole
-    knossos dataset
+    knossos dataset.
 
-    Parameters
-    ----------
-    kd_path : str
-        path to knossos dataset .conf file
-    target_path : str
-        destination folder for target knossos datasets containing prediction
-    model_path : str
-        path to elektronn3 model for predictions
-    n_channel: int
-        number of channels predicted by model
-        eg.: n_channel=3
-    target_names: list
-        names of target knossos datasets
-        eg.:  target_names=['synapse_fb','synapse_type']
-    target_channels: list of tuples
-        channel_ids in prediction for each target knossos data set
-        eg. target_channels=[(0,),(1,2)]
-    channel_thresholds: list
-        thresholds for channels: 
-        if None and number of channels for target kd is 1: probabilities are stored
-        else: 0.5 as default
-        eg. channel_thresholds=[None,0.5,0.5]
-    log:
-        
-    Returns
-    -------
-
+    Args:
+        kd_path: Path to knossos dataset .conf file.
+        target_path: Destination folder for target knossos datasets containing
+            prediction.
+        model_path: Path to elektronn3 model for predictions. Loaded via the
+            :class:`~elektronn3.inference.inference.Predictor`.
+        n_channel: Number of channels predicted by model, e.g. ``n_channel=3``.
+        target_names: Names of target knossos datasets, e.g.
+            ``target_names=['synapse_fb', 'synapse_type']``.
+        target_channels: Channel_ids in prediction for each target knossos data set
+            e.g. ``target_channels=[(0,),(1,2)]``.
+        channel_thresholds: Thresholds for channels: If None and number of channels
+            for target kd is 1: probabilities are stored else: 0.5 as default
+            e.g. ``channel_thresholds=[None,0.5,0.5]``.
+        log: Logger.
+        mag: Data mag. level.
     """
-
+    if log is None:
+        log_name = 'dense_prediction'
+        if target_names is not None:
+            log_name += '_' + "".join(target_names)
+        log = initialize_logging(log_name, global_params.config.working_dir + '/logs/',
+                                 overwrite=False)
     if target_names is None:
         target_names = ['pred']
     if target_channels is None:
         target_channels = [[i] for i in range(n_channel)]
     if channel_thresholds is None:
-        channel_thresholds = [None for i in range(n_channel)]    
-    if log is None:
-        log = initialize_logging('dense_prediction', global_params.config.working_dir+ '/logs/',
-                                 overwrite=False)
+        channel_thresholds = [None for i in range(n_channel)]
 
     # init KnossosDataset:
     kd = KnossosDataset()
-    kd.initialize_from_knossos_path(kd_path, fixed_mag=mag)
+    kd.initialize_from_knossos_path(kd_path)
 
-    # chunck properties:
-    chunk_size = np.array([512, 512, 512])
-    n_tiles = np.array([4, 4, 16])
-    overlap_shape = np.array([8, 8, 4])
+    # chunk properties:
+    chunk_size = np.array([512, 512, 256])
+    n_tiles = np.array([2, 2, 16])
+    overlap_shape = np.array([20, 20, 10])
     tile_shape = (chunk_size/n_tiles)
-    output_dim = n_channel
 
-    # init ChunckDataset:
+    # init ChunkDataset:
     cd = ChunkDataset()
-    cd.initialize(kd, kd.boundary//mag, chunk_size, target_path, box_coords=np.zeros(3),
-                  fit_box_size=True)
-    ch_dc = cd.chunk_dict
-    chunk_ids = ch_dc.keys()
-    
+    cd.initialize(kd, kd.boundary//4, chunk_size, target_path + '/cd_tmp/',
+                  box_coords=np.zeros(3), list_of_coords=[],
+                  fit_box_size=True, overlap=overlap_shape)
+    chunk_ids = list(cd.chunk_dict.keys())
+
     # init target KnossosDatasets:
-    target_kd_path_list = [target_path+'/kd_{}/'.format(tn) for tn in target_names]
+    target_kd_path_list = [target_path+'/{}/'.format(tn) for tn in target_names]
     for path in target_kd_path_list:
         if os.path.isdir(path):
             log.debug('Found existing KD at {}. Removing it now.'.format(path))
             shutil.rmtree(path)
     for path in target_kd_path_list:
         target_kd = knossosdataset.KnossosDataset()
-        target_kd.initialize_without_conf(path, cd.box_size, kd.scale, kd.experiment_name, kd.mag)
+        target_kd.initialize_without_conf(path, kd.boundary, kd.scale,
+                                          kd.experiment_name, [2**x for x in range(5)])
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_from_knossos_path(path)
-
     # init QSUB parameters
-    multi_params = list(chunk_ids)
-    max_n_jobs_gpu = global_params.NGPU_TOTAL
-    multi_params = chunkify(multi_params, max_n_jobs_gpu)
-    multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
-                     tile_shape, chunk_size, output_dim, target_channels,
+    multi_params = chunk_ids
+    # multi_params = chunkify(multi_params, max_n_jobs_gpu)
+    multi_params = [([ch_ids], kd_path, target_path, model_path, overlap_shape,
+                     tile_shape, chunk_size, n_channel, target_channels,
                      target_kd_path_list, channel_thresholds, mag) for ch_ids in multi_params]
-
-    log.info('Starting dense prediction.')
+    log.info('Starting dense prediction of {:d} chunks.'.format(len(chunk_ids)))
+    n_cores_per_job = global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE if\
+        not 'example' in global_params.config.working_dir else global_params.NCORES_PER_NODE
     qu.QSUB_script(multi_params, "predict_dense", n_max_co_processes=global_params.NGPU_TOTAL,
-                   n_cores=global_params.NCORES_PER_NODE/global_params.NGPUS_PER_NODE)
-    
+                   n_cores=n_cores_per_job)
     log.info('Finished dense prediction of {} Chunks'.format(len(chunk_ids)))
 
 
 def dense_predictor(args):
     """
+    TODO: Threshold mechanism requires refactoring.
 
     Parameters
     ----------
     args : tuplel
         (
         chunk_ids: list
-            list of chunks in chunck dataset
+            list of chunks in chunk dataset
         kd_p : str
             path to knossos dataset .conf file
         cd_p : str
@@ -626,16 +617,16 @@ def dense_predictor(args):
     """
   
     chunk_ids, kd_p, target_p, model_p, overlap_shape, tile_shape, chunk_size,\
-    output_dim, target_channels, target_kd_path_list,channel_thresholds, mag = args
+    n_channel, target_channels, target_kd_path_list, channel_thresholds, mag = args
 
     # init KnossosDataset:
     kd = KnossosDataset()
-    kd.initialize_from_knossos_path(kd_p, fixed_mag=1)
+    kd.initialize_from_knossos_path(kd_p)
 
-    # init ChunckDataset:
+    # init ChunkDataset:
     cd = ChunkDataset()
-    cd.initialize(kd, kd.boundary//mag, chunk_size, target_p,
-                    box_coords=np.zeros(3), fit_box_size=True)
+    cd.initialize(kd, kd.boundary//mag, chunk_size, target_p + '/cd_tmp/', box_coords=np.zeros(3),
+                  fit_box_size=True, overlap=overlap_shape, list_of_coords=[])
 
     # init Target KnossosDataset
     target_kd_dict = {}
@@ -643,56 +634,63 @@ def dense_predictor(args):
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_from_knossos_path(path)
         target_kd_dict[path] = target_kd
-    
+
     # init Predictor
-    out_shape = np.insert(chunk_size[::-1],0,3)  # output must equal chunck size
+    out_shape = np.insert(chunk_size[::-1], 0, n_channel)  # output must equal chunk size
     predictor = Predictor(model_p, strict_shapes=True, tile_shape=tile_shape[::-1],
                           out_shape=out_shape, overlap_shape=overlap_shape[::-1],
-                          apply_softmax=False)
+                          apply_softmax=True)
     predictor.model.ae = False
-    
     # predict Chunks:
-    pbar = tqdm.tqdm(total=len(chunk_ids))
     for ch_id in chunk_ids:
         ch = cd.chunk_dict[ch_id]
         size = np.array(np.array(ch.size), dtype=np.int)
         coords = np.array(np.array(ch.coordinates), dtype=np.int)
         raw = kd.from_raw_cubes_to_matrix(size, coords, mag=mag)
-        pred = dense_predicton_helper(raw, predictor)
-        
+        pred = dense_predicton_helper(raw.astype(np.float32) / 255., predictor)
         for j in range(len(target_channels)):
             ids = target_channels[j]
             path = target_kd_path_list[j]
             data = np.zeros_like(pred[0]).astype(np.uint8)
-            n=0
+            n = 0
             for i in ids:
                 t = channel_thresholds[i]
-                if t is not None or len(ids)>i:
+                if t is not None or len(ids) > i:
                     if t is None:
-                        t = 255/2
-                    if t <1.:
-                        t = 255*t
-                    data += ((pred[i]>t)*n).astype(np.uint8)
-                    n+=1
+                        t = 255 / 2
+                    if t < 1.:
+                        t = 255 * t
+                    print('ERROR: IF', ids, t, n)
+                    data += ((pred[i] > t) * n).astype(np.uint8)
+                    n += 1
                 else:
                     data = pred[i]
-
+                    print('ERROR: ELSE')
+            print('ERROR', data.shape, data.min(), data.max())
             target_kd_dict[path].from_matrix_to_cubes(
-                ch.coordinates, data=data, data_mag=mag, mags=kd.mag, fast_downsampling=False,
-                overwrite=True, nb_threads=global_params.NCORES_PER_NODE/global_params.NGPUS_PER_NODE,
+                ch.coordinates, data=data, data_mag=mag, mags=[mag, mag*2, mag*4],
+                fast_downsampling=False,
+                overwrite=True, upsample=False,
+                nb_threads=global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE,
                 as_raw=True, datatype=np.uint8)
-        
-        pbar.update(1)
-    pbar.close()
-       
 
-def dense_predicton_helper(raw, predictor):
+
+def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor') -> np.ndarray:
+    """
+
+    Args:
+        raw: The input data array in CXYZ.
+        predictor: The model which performs the inference. Requires ``predictor.predict``.
+
+    Returns:
+        The inference result in CXYZ as uint8 between 0..255.
+    """
     # transform raw data
     raw = xyz2zxy(raw)
-    raw = raw.astype(np.float32) / 255.
     # predict: pred of the form (N, C, [D,], H, W)
-    pred = predictor.predict(raw[None,None,])
-    pred = np.array(pred[0])* 255
+    pred = predictor.predict(raw[None, None])
+    print('ERROR', pred.shape, pred.max(), pred.min(), raw.shape, raw.max())
+    pred = np.array(pred[0]) * 255  # remove N-axis
     pred = pred.astype(np.uint8)
     pred = zxy2xyz(pred)
     return pred
@@ -923,14 +921,7 @@ def get_glia_model_e3():
 
 def get_celltype_model(init_gpu=None):
     """
-    retrained on new GT on Jan. 13th, 2019
-    Parameters
-    ----------
-    init_gpu
-
-    Returns
-    -------
-
+    Retrained on new GT on Jan. 13th, 2019.
     """
     # this model was trained with 'naive_view_normalization_new'
     m = NeuralNetworkInterface(global_params.config.mpath_celltype,
@@ -950,10 +941,11 @@ def get_celltype_model_e3():
       not be normalized."""
     try:
         from elektronn3.models.base import InferenceModel
-    except Exception as e:  # ImportError as e:
-        log_main.error(
-            "elektronn3 could not be imported ({}). Please see 'https://github."
-            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    except ImportError as e:
+        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
+              "com/ELEKTRONN/elektronn3' for more information.".format(e)
+        log_main.error(msg)
+        raise ImportError(msg)
     path = global_params.config.mpath_celltype_e3
     m = InferenceModel(path)
     return m
@@ -967,10 +959,11 @@ def get_celltype_model_large_e3():
       not be normalized."""
     try:
         from elektronn3.models.base import InferenceModel
-    except Exception as e:  # ImportError as e:
-        log_main.error(
-            "elektronn3 could not be imported ({}). Please see 'https://github."
-            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    except ImportError as e:
+        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
+              "com/ELEKTRONN/elektronn3' for more information.".format(e)
+        log_main.error(msg)
+        raise ImportError(msg)
     path = global_params.config.mpath_celltype_large_e3
     m = InferenceModel(path)
     return m
@@ -979,10 +972,11 @@ def get_celltype_model_large_e3():
 def get_semseg_spiness_model():
     try:
         from elektronn3.models.base import InferenceModel
-    except Exception as e:  # ImportError as e:
-        log_main.error(
-            "elektronn3 could not be imported ({}). Please see 'https://github."
-            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    except ImportError as e:
+        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
+              "com/ELEKTRONN/elektronn3' for more information.".format(e)
+        log_main.error(msg)
+        raise ImportError(msg)
     path = global_params.config.mpath_spiness
     m = InferenceModel(path)
     m._path = path
@@ -992,10 +986,11 @@ def get_semseg_spiness_model():
 def get_semseg_axon_model():
     try:
         from elektronn3.models.base import InferenceModel
-    except Exception as e:  # ImportError as e:
-        log_main.error(
-            "elektronn3 could not be imported ({}). Please see 'https://github."
-            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    except ImportError as e:
+        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
+              "com/ELEKTRONN/elektronn3' for more information.".format(e)
+        log_main.error(msg)
+        raise ImportError(msg)
     path = global_params.config.mpath_axonsem
     m = InferenceModel(path)
     m._path = path
@@ -1006,10 +1001,11 @@ def get_tripletnet_model_e3():
     """Those networks are typically trained with `naive_view_normalization_new` """
     try:
         from elektronn3.models.base import InferenceModel
-    except Exception as e:  # ImportError as e:
-        log_main.error(
-            "elektronn3 could not be imported ({}). Please see 'https://github."
-            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    except ImportError as e:
+        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
+              "com/ELEKTRONN/elektronn3' for more information.".format(e)
+        log_main.error(msg)
+        raise ImportError(msg)
     m_path = global_params.config.mpath_tnet
     m = InferenceModel(m_path)
     return m
@@ -1019,11 +1015,31 @@ def get_tripletnet_model_large_e3():
     """Those networks are typically trained with `naive_view_normalization_new` """
     try:
         from elektronn3.models.base import InferenceModel
-    except Exception as e:  # ImportError as e:
-        log_main.error(
-            "elektronn3 could not be imported ({}). Please see 'https://github."
-            "com/ELEKTRONN/elektronn3' for more information.".format(e))
+    except ImportError as e:
+        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
+              "com/ELEKTRONN/elektronn3' for more information.".format(e)
+        log_main.error(msg)
+        raise ImportError(msg)
     m_path = global_params.config.mpath_tnet_large
+    m = InferenceModel(m_path)
+    return m
+
+
+def get_myelin_cnn():
+    """
+    elektronn3 model trained to predict binary myelin-in class.
+
+    Returns:
+        The trained Inference model.
+    """
+    try:
+        from elektronn3.models.base import InferenceModel
+    except ImportError as e:
+        msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
+              "com/ELEKTRONN/elektronn3' for more information.".format(e)
+        log_main.error(msg)
+        raise ImportError(msg)
+    m_path = global_params.config.mpath_myelin
     m = InferenceModel(m_path)
     return m
 

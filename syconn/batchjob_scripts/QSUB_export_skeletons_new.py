@@ -29,11 +29,12 @@ ssv_ids = args[0]
 version = args[1]
 version_dict = args[2]
 working_dir = args[3]
+map_myelin = args[4]
 
 ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
                                version_dict=version_dict)
 ssvs = ssd.get_super_segmentation_object(ssv_ids)
-create_sso_skeletons_wrapper(ssvs)
+create_sso_skeletons_wrapper(ssvs, map_myelin=map_myelin)
 
 
 with open(path_out_file, "wb") as f:

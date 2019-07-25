@@ -23,7 +23,6 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-
 ch = args[0]
 missing = celltype_predictor(ch)
 

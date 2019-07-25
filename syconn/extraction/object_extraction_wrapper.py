@@ -90,7 +90,8 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
     cd_dir = "{}/chunkdatasets/{}/".format(global_params.config.working_dir, co)
     cd = chunky.ChunkDataset()
     cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
-                  box_coords=[0, 0, 0], fit_box_size=True)
+                  box_coords=[0, 0, 0], fit_box_size=True,
+                  list_of_coords=[])
     log.info('Started object extraction of cellular organelles "{}" from '
              '{} chunks.'.format(co, len(cd.chunk_dict)))
     prob_kd_path_dict = {co: getattr(global_params.config, 'kd_{}_path'.format(co))}

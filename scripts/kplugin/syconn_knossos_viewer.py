@@ -5,9 +5,9 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-# TODO: move code to syconn/ui/
 from PythonQt import QtGui, Qt, QtCore
 from PythonQt.QtGui import QTableWidget, QTableWidgetItem
+import traceback
 try:
     import KnossosModule
 except ImportError:
@@ -779,54 +779,62 @@ class main_class(QtGui.QDialog):
             vc_id = self.obj_id_offs + ssv_id + 3
             neuron_id = self.obj_id_offs + ssv_id + 4
 
-            mi_start = time.time()
-            mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
-            print("Mi time:", time.time() - mi_start)
-            mi_start = time.time()
-            if len(mi_mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh[1], mi_mesh[2],
-                                                     mi_mesh[0],
-                                                     [], 4, False)
-                KnossosModule.skeleton.set_tree_color(mi_id,
-                                                      QtGui.QColor(0, 0, 255, 255))
-            print("Mi time (Knossos):", time.time() - mi_start)
+            params = [(self, ssv_id, neuron_id, 'sv', (255, 0, 0, 128)),
+                      (self, ssv_id, mi_id, 'mi', (0, 0, 255, 255)),
+                      (self, ssv_id, vc_id, 'vc', (0, 255, 0, 255)),
+                      (self, ssv_id, sj_id, 'sj', (0, 0, 0, 255))]
 
-            sj_start = time.time()
-            sj_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'sj')
-            print("SJ time:", time.time() - sj_start)
-            sj_start = time.time()
-            if len(sj_mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh[1], sj_mesh[2],
-                                                     sj_mesh[0],
-                                                     [], 4, False)
-                KnossosModule.skeleton.set_tree_color(sj_id,
-                                                      QtGui.QColor(0, 0, 0, 255))
-            print("SJ time (Knossos):", time.time() - sj_start)
+            for par in params:
+                mesh_loader(*par)
 
-            vc_start = time.time()
-            vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
-            print("VC time:", time.time() - vc_start)
-            vc_start = time.time()
-            if len(vc_mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh[1], vc_mesh[2],
-                                                     vc_mesh[0],
-                                                     [], 4, False)
-                KnossosModule.skeleton.set_tree_color(vc_id,
-                                                      QtGui.QColor(0, 255, 0, 255))
-            print("VC time (Knossos):", time.time() - vc_start)
-
-            sv_start = time.time()
-            k_tree = KnossosModule.skeleton.add_tree(ssv_id)
-            mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
-            print("SV time:", time.time() - sv_start)
-            sv_start = time.time()
-            if len(mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(neuron_id, mesh[1], mesh[2],
-                                                     mesh[0],
-                                                     [], 4, False)
-                KnossosModule.skeleton.set_tree_color(neuron_id,
-                                                      QtGui.QColor(255, 0, 0, 128))
-            print("SV time (Knossos):", time.time() - sv_start)
+            # mi_start = time.time()
+            # mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
+            # print("Mi time:", time.time() - mi_start)
+            # mi_start = time.time()
+            # if len(mi_mesh[0]) > 0:
+            #     KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh[1], mi_mesh[2],
+            #                                          mi_mesh[0],
+            #                                          [], 4, False)
+            #     KnossosModule.skeleton.set_tree_color(mi_id,
+            #                                           QtGui.QColor(0, 0, 255, 255))
+            # print("Mi time (Knossos):", time.time() - mi_start)
+            #
+            # sj_start = time.time()
+            # sj_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'sj')
+            # print("SJ time:", time.time() - sj_start)
+            # sj_start = time.time()
+            # if len(sj_mesh[0]) > 0:
+            #     KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh[1], sj_mesh[2],
+            #                                          sj_mesh[0],
+            #                                          [], 4, False)
+            #     KnossosModule.skeleton.set_tree_color(sj_id,
+            #                                           QtGui.QColor(0, 0, 0, 255))
+            # print("SJ time (Knossos):", time.time() - sj_start)
+            #
+            # vc_start = time.time()
+            # vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
+            # print("VC time:", time.time() - vc_start)
+            # vc_start = time.time()
+            # if len(vc_mesh[0]) > 0:
+            #     KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh[1], vc_mesh[2],
+            #                                          vc_mesh[0],
+            #                                          [], 4, False)
+            #     KnossosModule.skeleton.set_tree_color(vc_id,
+            #                                           QtGui.QColor(0, 255, 0, 255))
+            # print("VC time (Knossos):", time.time() - vc_start)
+            #
+            # sv_start = time.time()
+            # k_tree = KnossosModule.skeleton.add_tree(ssv_id)
+            # mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
+            # print("SV time:", time.time() - sv_start)
+            # sv_start = time.time()
+            # if len(mesh[0]) > 0:
+            #     KnossosModule.skeleton.add_tree_mesh(neuron_id, mesh[1], mesh[2],
+            #                                          mesh[0],
+            #                                          [], 4, False)
+            #     KnossosModule.skeleton.set_tree_color(neuron_id,
+            #                                           QtGui.QColor(255, 0, 0, 128))
+            # print("SV time (Knossos):", time.time() - sv_start)
         else:
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
             k_tree = KnossosModule.skeleton.add_tree(ssv_id)
@@ -876,6 +884,21 @@ class main_class(QtGui.QDialog):
                 signalsBlocked)
             KnossosModule.knossos_global_skeletonizer.resetData()
         return
+
+
+def mesh_loader(gate_obj, ssv_id, tree_id, obj_type, color):
+    start = time.time()
+    mesh = gate_obj.syconn_gate.get_ssv_obj_mesh(ssv_id, obj_type)
+    print("Download time:", time.time() - start)
+    start = time.time()
+    if len(mesh[0]) > 0:
+        KnossosModule.skeleton.add_tree_mesh(tree_id, mesh[1], mesh[2],
+                                             mesh[0],
+                                             [], 4, False)
+        KnossosModule.skeleton.set_tree_color(tree_id,
+                                              QtGui.QColor(*color))
+    print("Loading {}-mesh time (pure KNOSSOS): {:.2f} s".format(
+        obj_type, time.time() - start))
 
 
 def lz4stringtoarr(string, dtype=np.float32, shape=None):

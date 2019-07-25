@@ -3068,7 +3068,8 @@ class SuperSegmentationObject(object):
             maj_votes[ii] = maj_label
         return maj_votes
 
-    def shortestpath2soma(self, coordinates: np.ndarray) -> List[float]:
+    def shortestpath2soma(self, coordinates: np.ndarray,
+                          axoness_key: Optional[str] = None) -> List[float]:
         """
         Computes the shortest path to the soma along :py:attr:`~skeleton`.
         Cell compartment predictions must exist in ``self.skeleton['axoness_avg10000']``,
@@ -3077,6 +3078,7 @@ class SuperSegmentationObject(object):
 
         Args:
             coordinates: Starting coordinates in voxel coordinates; shape of (N, 3).
+            axoness_key: Key to axon prediction stored in :py:attr:`~skeleton`.
 
         Raises:
             KeyError: If axon prediction does not exist.
@@ -3098,11 +3100,13 @@ class SuperSegmentationObject(object):
         Returns:
             The shortest path in nanometers for each start coordinate.
         """
+        if axoness_key is None:
+            axoness_key = 'axoness_avg{}'.format(global_params.DIST_AXONESS_AVERAGING)
         nodes = self.skeleton['nodes']
-        soma_ixs = np.nonzero(self.skeleton['axoness'] == 2)[0]
+        soma_ixs = np.nonzero(self.skeleton[axoness_key] == 2)[0]
         if np.sum(soma_ixs) == 0:
             return [np.inf] * len(coordinates)
-        graph = self.weighted_graph(add_node_attr=['axoness_avg10000'])
+        graph = self.weighted_graph(add_node_attr=[axoness_key])
         kdt = scipy.spatial.cKDTree(nodes)
         dists, start_ixs = kdt.query(coordinates, n_jobs=self.nb_cpus)
         log_reps.debug(f'Computing shortest paths to soma for {len(start_ixs)} '
@@ -3110,11 +3114,11 @@ class SuperSegmentationObject(object):
         shortest_paths_of_interest = []
         for ix in start_ixs:
             shortest_paths = nx.single_source_dijkstra_path_length(graph, ix)
-            shortest_path_nodes = nx.single_source_shortest_path_length(graph, ix)
             # get the shortest path to a soma
             curr_path = np.min([shortest_paths[soma_ix] for soma_ix in soma_ixs])
             shortest_paths_of_interest.append(curr_path)
         return shortest_paths_of_interest
+
 
 # ------------------------------------------------------------------------------
 # SO rendering code

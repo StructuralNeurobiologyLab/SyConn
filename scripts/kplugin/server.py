@@ -242,6 +242,7 @@ class SyConnBackend(object):
                 # "axoness_avg{}_comp_maj".format(avg_dst),
                 global_params.view_properties_semsegax['semseg_key'],
                 pred_key_ax,
+                'myelin_avg10000',  # TODO: use global_params.py value !
                 "axoness_k{}".format(global_params.map_properties_semsegax['k']),
                 "axoness_k{}_comp_maj".format(global_params.map_properties_semsegax['k'])]
         for k in keys:
@@ -572,7 +573,18 @@ class ServerState(object):
 
         self.logger.info('SyConn gate server starting up on working directory '
                          '"{}".'.format(global_params.wd))
-        self.backend = SyConnBackend(global_params.config.working_dir, logger=self.logger)
+        if not np.any(['syn_ssv' in name for name in os.listdir(global_params.config.working_dir)]):
+            msg = 'Could not find synapse results in working directory ' \
+                  f'{global_params.config.working_dir}.'
+            self.logger.error(msg)
+            raise RuntimeError(msg)
+        try:
+            self.backend = SyConnBackend(global_params.config.working_dir, logger=self.logger)
+        except TypeError as e:
+            msg = 'TypeError during server initialization. Make sure SyConn has' \
+                  f' successfully finished the data set analysis. \nError: {str(e)}'
+            self.logger.error(msg)
+            raise TypeError(msg)
         self.logger.info('SyConn gate server running at {}, {}.'.format(
             self.host, self.port))
         return
