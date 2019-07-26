@@ -17,6 +17,7 @@ from syconn.reps.segmentation import SegmentationDataset
 from syconn import global_params
 from syconn.handler import log_main as log_cnn
 import os
+import threading
 from sklearn.model_selection import train_test_split
 try:
     from torch.utils.data import Dataset
@@ -39,6 +40,103 @@ np.random.seed(0)
 
 # -------------------------------------- elektronn3 ----------------------------
 if elektronn3_avail:
+    class MultiviewDataCached(Dataset):
+        """
+        Multiview spine data loader.
+        """
+        def __init__(self,
+                    base_dir,
+                    train=True,
+                    inp_key='raw',
+                    target_key='label',
+                    transform: Callable = Identity(),
+                    num_read_limit=5 # num_times each sample point should be used before corresponding h5py file is released
+                    ):
+            super().__init__()
+            #IMPORTANT while creating dataloader from this class, num_workers must be <=1
+            cube_id = "train" if train else "valid"
+            self.fnames_inp = sorted(glob.glob(base_dir + "/raw_{}*.h5".format(cube_id)))
+            self.fnames_target = sorted(glob.glob(base_dir + "/label_{}*.h5".format(cube_id)))
+            assert len(self.fnames_inp) == len(self.fnames_target)
+            print('Using {} .h5 GT files for {}.'.format(
+                len(self.fnames_inp), "training" if train else "validation"))
+            self.inp_key = inp_key
+            self.target_key = target_key
+            self.transform = transform
+            self.train = train
+
+            if self.train:
+                self.num_read_limit = num_read_limit
+            else:
+                self.num_read_limit = 1  #no need to repeat sample points in validation
+            self.secondary = self.secondary_t = None
+            self.read(0)
+            self.primary, self.primary_t = self.secondary, self.secondary_t
+            self.close_files()
+            self.secondary = self.secondary_t = None
+
+            self.num_samples_in_curr_file = self.primary.shape[0]
+            self.index_array = np.array(list(range(self.num_samples_in_curr_file))*self.num_read_limit)
+            np.random.shuffle(self.index_array)
+
+            self.current_count = 0
+            self.file_pointer = 1
+            self.num_samples_in_already_read_files = 0
+            self.thread_launched = False
+
+        def __getitem__(self, index):
+            # index = index - self.num_samples_in_already_read_files
+            index = np.random.randint(0, len(self.index_array), 1)[0]
+            if self.current_count > int(0.5*len(self.index_array)) and self.thread_launched == False : #adjust 0.5
+                print("Launching parallel thread.")
+                start = time.time()
+                self.read_thread = threading.Thread(target=self.read, args=[self.file_pointer])
+                self.read_thread.start()
+                dt = time.time() - start
+                print(f"parallel thread launched after {dt:.2f}")
+                self.thread_launched = True
+
+            if self.current_count == len(self.index_array) - 1:
+                print("Joining parallel thread.")
+                start = time.time()
+                self.read_thread.join()
+                dt = time.time() - start
+                print(f"parallel thread joined after {dt:.2f}")
+
+                temp, temp_t = self.primary[self.index_array[index]], self.primary_t[self.index_array[index]]
+                self.num_samples_in_already_read_files += len(self.index_array)
+                self.primary, self.primary_t = self.secondary, self.secondary_t
+                self.close_files()
+                self.secondary = self.secondary_t = None
+                self.num_samples_in_curr_file = self.primary.shape[0]
+                self.index_array = np.array(list(range(self.num_samples_in_curr_file))*self.num_read_limit)
+                if self.file_pointer == 0: self.num_samples_in_already_read_files = 0
+                self.file_pointer = (self.file_pointer+1)%len(self.fnames_inp)
+                self.current_count = 0
+                self.thread_launched = False
+                return temp, np.squeeze(temp_t, axis=0)
+
+            self.current_count += 1
+            return self.transform(self.primary[self.index_array[index]], np.squeeze(
+                self.primary_t[self.index_array[index]], axis=0))
+
+        def read(self, file_pointer):
+            self.file_inp = h5py.File(os.path.expanduser(self.fnames_inp[file_pointer]), 'r')
+            self.file_target = h5py.File(os.path.expanduser(self.fnames_target[file_pointer]), 'r')
+            self.secondary = self.file_inp[self.inp_key][()]/255
+            self.secondary = self.secondary.astype(np.float32)
+            self.secondary_t = self.file_target[self.target_key][()].astype(np.int64)
+            self.secondary, self.secondary_t = self.secondary, self.secondary_t
+            print(f"read h5 file {self.fnames_inp[file_pointer]} contains {self.secondary.shape[0]} samples") #, {self.secondary_t.shape[0]} labels")
+
+        def __len__(self):
+            return 2000 if self.train else 200
+
+        def close_files(self):
+            self.file_inp.close()
+            self.file_target.close()
+
+
     class MultiviewData(Dataset):
         """
         Multiview spine data loader.
@@ -51,6 +149,8 @@ if elektronn3_avail:
                 transform: Callable = Identity()
         ):
             super().__init__()
+            if not os.path.isdir(base_dir):
+                raise RuntimeError('Could not find specified base directory "{}".'.format(base_dir))
             self.train = train
             cube_id = "train" if train else "valid"
             fnames_inp = sorted(glob.glob(base_dir + "/raw_{}*.h5".format(cube_id)))
@@ -64,8 +164,8 @@ if elektronn3_avail:
                 self.inp_file = h5py.File(os.path.expanduser(fnames_inp[ii]), 'r')
                 self.target_file = h5py.File(os.path.expanduser(fnames_target[ii]), 'r')
                 data = self.inp_file[inp_key][()]
-                # self.inp.append(data[:, :4].astype(np.float32) / 255.)  # TODO: ':4' was used during spine semseg;  What was it for?
-                self.inp.append(data.astype(np.float32) / 255.)  # TODO: here we 'normalize' differently (just dividing by 255)
+                # 'normalize': division by 255
+                self.inp.append(data.astype(np.float32) / 255.)
                 data_t = self.target_file[target_key][()].astype(np.int64)
                 self.target.append(data_t[:, 0])
                 del data, data_t
@@ -441,7 +541,7 @@ class MultiViewData(Data):
                  label_dict=None, view_kwargs=None, naive_norm=True,
                  load_data=True, train_fraction=None, random_seed=0):
         if view_kwargs is None:
-            view_kwargs = dict(raw_only=False, cache_default_views=True,
+            view_kwargs = dict(raw_only=False,
                                nb_cpus=nb_cpus, ignore_missing=True,
                                force_reload=False)
         self.gt_dir = working_dir + "/ssv_%s/" % gt_type

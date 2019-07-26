@@ -660,13 +660,10 @@ def dense_predictor(args):
                         t = 255 / 2
                     if t < 1.:
                         t = 255 * t
-                    print('ERROR: IF', ids, t, n)
                     data += ((pred[i] > t) * n).astype(np.uint8)
                     n += 1
                 else:
                     data = pred[i]
-                    print('ERROR: ELSE')
-            print('ERROR', data.shape, data.min(), data.max())
             target_kd_dict[path].from_matrix_to_cubes(
                 ch.coordinates, data=data, data_mag=mag, mags=[mag, mag*2, mag*4],
                 fast_downsampling=False,
@@ -689,7 +686,6 @@ def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor') -> np.ndarra
     raw = xyz2zxy(raw)
     # predict: pred of the form (N, C, [D,], H, W)
     pred = predictor.predict(raw[None, None])
-    print('ERROR', pred.shape, pred.max(), pred.min(), raw.shape, raw.max())
     pred = np.array(pred[0]) * 255  # remove N-axis
     pred = pred.astype(np.uint8)
     pred = zxy2xyz(pred)

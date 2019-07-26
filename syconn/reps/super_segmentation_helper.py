@@ -787,6 +787,32 @@ def map_myelin2coords(coords: np.ndarray,
     probability for myelinated voxels at `thresh` stored in the KnossosDataset at
     ``global_params.config.working_dir+'/knossosdatasets/myelin/'``.
 
+    Examples:
+
+        The entire myelin prediction for a single cell reconstruction including a smoothing
+        via :func:`~majorityvote_skeleton_property` is implemented as follows::
+
+            from syconn import global_params
+            from syconn.reps.super_segmentation import *
+            from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
+
+            # init. example data set
+            global_params.wd = '~/SyConn/example_cube1/'
+
+            # initialize example cell reconstruction
+            ssd = SuperSegmentationDataset()
+            ssv = list(ssd.ssvs)[0]
+            ssv.load_skeleton()
+
+            # get myelin predictions
+            myelinated = map_myelin2coords(ssv.skeleton["nodes"], mag=4)
+            ssv.skeleton["myelin"] = myelinated
+            # this will generate a smoothed version at ``ssv.skeleton["myelin_avg10000"]``
+            majorityvote_skeleton_property(ssv, "myelin")
+            # store results as a KNOSSOS readable k.zip file
+            ssv.save_skeleton_to_kzip(dest_path='~/{}_myelin.k.zip'.format(ssv.id),
+                additional_keys=['myelin', 'myelin_avg10000'])
+
     Args:
         coords: Coordinates used to retrieve myelin predictions. In voxel coordinates (``mag=1``).
         cube_edge_avg: Cube size used for averaging myelin predictions for each location.

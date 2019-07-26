@@ -19,7 +19,7 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('-n', '--exp-name', default='myelin_unet_4b_2p_32f_gtv1', help='Manually set '
+parser.add_argument('-n', '--exp-name', default='myelin_unet_4b_35f_gtv3', help='Manually set '
                                                                            'experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=1000,
@@ -27,7 +27,7 @@ parser.add_argument(
          'validation/preview/extended-stat calculation phases.'
 )
 parser.add_argument(
-    '-m', '--max-steps', type=int, default=500000,
+    '-m', '--max-steps', type=int, default=1000000,
     help='Maximum number of training steps to perform.'
 )
 parser.add_argument(
@@ -77,14 +77,21 @@ logger.info(f'Running on device: {device}')
 
 model = UNet(
     n_blocks=4,
-    start_filts=16,
-    planar_blocks=(0, 2),
+    start_filts=35,
+    planar_blocks=(0, ),
     activation='relu',
     batch_norm=True,
     # conv_mode='valid',
     # up_mode='resizeconv_nearest',  # Enable to avoid checkerboard artifacts
     adaptive=True  # Experimental. Disable if results look weird.
-).to(device)
+)
+batchsize = 1
+if torch.cuda.device_count() > 1:
+    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    batch_size = batchsize * torch.cuda.device_count()
+    # dim = 0 [20, xxx] -> [10, ...], [10, ...] on 2 GPUs
+    model = nn.DataParallel(model)
+model = model.to(device)
 
 # USER PATHS
 save_root = os.path.expanduser('~/e3training/')
@@ -93,13 +100,14 @@ os.makedirs(save_root, exist_ok=True)
 data_root = os.path.expanduser('~/')
 input_h5data = [
     (os.path.join(data_root, f'myelin_{i}.h5'), 'raw')
-    for i in [0, 2]
+    for i in [0, 2, 0, 2, 3]
 ]
 target_h5data = [
     (os.path.join(data_root, f'myelin_{i}.h5'), 'label')
-    for i in [0, 2]
+    for i in [0, 2, 0, 2, 3]
 ]
-valid_indices = []
+# re-use training cubes for validation
+valid_indices = [2, 3]
 
 max_steps = args.max_steps
 max_runtime = args.max_runtime
@@ -136,7 +144,7 @@ train_transform = transforms.Compose(common_transforms + [
     transforms.RandomFlip(ndim_spatial=3),
     transforms.RandomGrayAugment(channels=[0], prob=0.3),
     transforms.RandomGammaCorrection(gamma_std=0.25, gamma_min=0.25, prob=0.3),
-    transforms.AdditiveGaussianNoise(sigma=0.1, channels=[0], prob=0.3),
+    transforms.AdditiveGaussianNoise(sigma=0.05, channels=[0], prob=0.1),
 ])
 valid_transform = transforms.Compose(common_transforms + [])
 
@@ -176,7 +184,7 @@ valid_dataset = None if not valid_indices else PatchCreator(
 
 optimizer = optim.SGD(
     model.parameters(),
-    lr=0.001,  # Learning rate is set by the lr_sched below
+    lr=0.00075,
     momentum=0.9,
     weight_decay=0.5e-4,
 )
@@ -213,7 +221,7 @@ trainer = Trainer(
     device=device,
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
-    batchsize=1,
+    batchsize=batchsize,
     num_workers=1,
     save_root=save_root,
     exp_name=args.exp_name,
