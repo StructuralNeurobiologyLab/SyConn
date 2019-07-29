@@ -65,6 +65,45 @@ def run_skeleton_generation(max_n_jobs: Optional[int] = None,
     #                    remove_jobfolder=True)
 
 
+def map_myelin_global(max_n_jobs: Optional[int] = None):
+    """
+    Stand-alone myelin mapping to cell reconstruction skeletons. See kwarg ``map_myelin``
+    in :func:`run_skeleton_generation` for a mapping right after skeleton generation.
+
+    Args:
+        max_n_jobs: Number of parallel jobs.
+
+    """
+    if max_n_jobs is None:
+        max_n_jobs = global_params.NCORE_TOTAL * 2
+    log = initialize_logging('myelin_mapping', global_params.config.working_dir + '/logs/',
+                             overwrite=False)
+    ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
+
+    # TODO: think about using create_sso_skeleton_fast if underlying RAG
+    #  obeys spatial correctness (> 10x faster)
+    # list of SSV IDs and SSD parameters need to be given to a single QSUB job
+    multi_params = ssd.ssv_ids
+    nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
+                               for ssv_id in ssd.ssv_ids])
+    ordering = np.argsort(nb_svs_per_ssv)
+    multi_params = multi_params[ordering[::-1]]
+    multi_params = chunkify(multi_params, max_n_jobs)
+
+    # add ssd parameters
+    multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir)
+                    for ssv_ids in multi_params]
+
+    # create SSV skeletons, requires SV skeletons!
+    log.info('Starting myelin mapping of {} SSVs.'.format(
+        len(ssd.ssv_ids)))
+    qu.QSUB_script(multi_params, "map_myelin2skel", log=log,
+                   n_max_co_processes=global_params.NCORE_TOTAL,
+                   remove_jobfolder=True, n_cores=2)
+
+    log.info('Finished myelin mapping.')
+
+
 def run_skeleton_axoness():
     """
     Prepares the RFC models for skeleton-based axon inference.

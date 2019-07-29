@@ -12,7 +12,7 @@ import time
 import tqdm
 from logging import Logger
 import shutil
-from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING
+from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING, Tuple
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from collections import Counter
@@ -508,12 +508,11 @@ def _pred_dataset(kd_p, kd_pred_p, cd_p, model_p, imposed_patch_size=None,
 
 
 def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
-                        n_channel: int,
-                        target_names: Optional[Iterable[str]]=None,
+                        n_channel: int, target_names: Optional[Iterable[str]] = None,
                         target_channels: Optional[Iterable[Iterable[int]]] = None,
                         channel_thresholds: Optional[Iterable[Union[float, Any]]] = None,
-                        log: Optional[Logger] = None,
-                        mag: int = 1):
+                        log: Optional[Logger] = None, mag: int = 1,
+                        overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20)):
     """
     Helper function for dense dataset prediction. Runs prediction on whole
     knossos dataset.
@@ -534,6 +533,16 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
             e.g. ``channel_thresholds=[None,0.5,0.5]``.
         log: Logger.
         mag: Data mag. level.
+        overlap_shape_tiles: Overlap in voxels [XYZ] used for each tile predicted during inference.
+            Currently the following chunk/tile properties are used additionally
+            (`overlap_shape` is the per-chunk overlap)::
+
+                chunk_size = np.array([1024, 1024, 256], dtype=np.int)  # XYZ
+                n_tiles = np.array([4, 4, 16])
+                tile_shape = (chunk_size / n_tiles).astype(np.int)
+                # the final input shape must be a multiple of tile_shape
+                overlap_shape = tile_shape // 2
+
     """
     if log is None:
         log_name = 'dense_prediction'
@@ -547,24 +556,20 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         target_channels = [[i] for i in range(n_channel)]
     if channel_thresholds is None:
         channel_thresholds = [None for i in range(n_channel)]
-    ind_not_None = channel_thresholds!=None
-    if np.any(channel_thresholds[ind_not_None])<1.:
-        channel_thresholds[ind_not_None] *= 250
-    target_thresholds = []
-    for ids in ids_list:
-        t = t_list[ids]
-        if len(t)>1 and np.any(t==None):
-            t = np.ones_like(t)*255/2
-        target_thresholds.append(t)
+
     # init KnossosDataset:
     kd = KnossosDataset()
     kd.initialize_from_knossos_path(kd_path)
 
     # chunk properties:
-    chunk_size = np.array([512, 512, 256])
-    n_tiles = np.array([2, 2, 16])
-    overlap_shape = np.array([20, 20, 10])
-    tile_shape = (chunk_size/n_tiles)
+    chunk_size = np.array([1024, 1024, 256], dtype=np.int)  # XYZ
+    n_tiles = np.array([4, 4, 16])
+    if 'example' in global_params.config.working_dir:
+        chunk_size = np.array([512, 512, 256], dtype=np.int)  # XYZ
+        n_tiles = np.array([2, 2, 16])
+    tile_shape = (chunk_size / n_tiles).astype(np.int)
+    # the final input shape must be a multiple of tile_shape
+    overlap_shape = tile_shape // 2
 
     # init ChunkDataset:
     cd = ChunkDataset()
@@ -572,7 +577,6 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                   box_coords=np.zeros(3), list_of_coords=[],
                   fit_box_size=True, overlap=overlap_shape)
     chunk_ids = list(cd.chunk_dict.keys())
-
     # init target KnossosDatasets:
     target_kd_path_list = [target_path+'/{}/'.format(tn) for tn in target_names]
     for path in target_kd_path_list:
@@ -587,10 +591,11 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         target_kd.initialize_from_knossos_path(path)
     # init QSUB parameters
     multi_params = chunk_ids
-    # multi_params = chunkify(multi_params, max_n_jobs_gpu)
+    # on avg. two jobs per GPU
+    multi_params = chunkify(multi_params, global_params.NGPU_TOTAL * 2)
     multi_params = [([ch_ids], kd_path, target_path, model_path, overlap_shape,
-                     tile_shape, chunk_size, n_channel, target_channels,
-                     target_kd_path_list, target_thresholds, mag) for ch_ids in multi_params]
+                     overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
+                     target_kd_path_list, channel_thresholds, mag) for ch_ids in multi_params]
     log.info('Starting dense prediction of {:d} chunks.'.format(len(chunk_ids)))
     n_cores_per_job = global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE if\
         not 'example' in global_params.config.working_dir else global_params.NCORES_PER_NODE
@@ -605,7 +610,7 @@ def dense_predictor(args):
 
     Parameters
     ----------
-    args : tuplel
+    args : Tuple
         (
         chunk_ids: list
             list of chunks in chunk dataset
@@ -624,8 +629,8 @@ def dense_predictor(args):
 
     """
   
-    chunk_ids, kd_p, target_p, model_p, overlap_shape, tile_shape, chunk_size,\
-    n_channel, target_channels, target_kd_path_list, target_thresholds, mag = args
+    chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles, tile_shape, chunk_size,\
+    n_channel, target_channels, target_kd_path_list, channel_thresholds, mag = args
 
     # init KnossosDataset:
     kd = KnossosDataset()
@@ -644,27 +649,41 @@ def dense_predictor(args):
         target_kd_dict[path] = target_kd
 
     # init Predictor
-    out_shape = np.insert(chunk_size[::-1], 0, n_channel)  # output must equal chunk size
+    # TODO: be consistent with the axis order: either ZYX or ZXY
+    out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int)[::-1]  # ZYX
+    out_shape = np.insert(out_shape, 0, n_channel)  # output must equal chunk size
     predictor = Predictor(model_p, strict_shapes=True, tile_shape=tile_shape[::-1],
-                          out_shape=out_shape, overlap_shape=overlap_shape[::-1],
+                          out_shape=out_shape, overlap_shape=overlap_shape_tiles[::-1],
                           apply_softmax=True)
     predictor.model.ae = False
     # predict Chunks:
     for ch_id in chunk_ids:
         ch = cd.chunk_dict[ch_id]
-        size = np.array(np.array(ch.size), dtype=np.int)
-        coords = np.array(np.array(ch.coordinates), dtype=np.int)
+        ol = ch.overlap
+        size = np.array(np.array(ch.size) + 2 * np.array(ol),
+                        dtype=np.int)
+        coords = np.array(np.array(ch.coordinates) - np.array(ol),
+                          dtype=np.int)
         raw = kd.from_raw_cubes_to_matrix(size, coords, mag=mag)
         pred = dense_predicton_helper(raw.astype(np.float32) / 255., predictor)
+        # slice out the original input volume along XYZ, i.e. the last three axes
+        pred = pred[..., ol[0]:-ol[0], ol[1]:-ol[1], ol[2]:-ol[2]]
         for j in range(len(target_channels)):
             ids = target_channels[j]
             path = target_kd_path_list[j]
-            t = target_thresholds[j]
-            if np.any(t == None):
-                data = T[ids[0]]
-            else:
-                data = np.greater(pred.T[ids],t)*np.linspace(1,len(ids),len(ids))
-                data = np.sum(data.T,axis=0).astype(np.uint8)
+            data = np.zeros_like(pred[0]).astype(np.uint8)
+            n = 0
+            for i in ids:
+                t = channel_thresholds[i]
+                if t is not None or len(ids) > i:
+                    if t is None:
+                        t = 255 / 2
+                    if t < 1.:
+                        t = 255 * t
+                    data += ((pred[i] > t) * n).astype(np.uint8)
+                    n += 1
+                else:
+                    data = pred[i]
             target_kd_dict[path].from_matrix_to_cubes(
                 ch.coordinates, data=data, data_mag=mag, mags=[mag, mag*2, mag*4],
                 fast_downsampling=False,
@@ -711,7 +730,8 @@ def to_knossos_dataset(kd_p, kd_pred_p, cd_p, model_p,
 
     """
     from elektronn2.neuromancer.model import modelload
-
+    log_reps.warning('Depracation Warning; "to_knossos_dataset" is deprecated and will be '
+                     'replaced by "predict_dense_to_kd" which immediately .')
     kd = KnossosDataset()
     kd.initialize_from_knossos_path(kd_p, fixed_mag=1)
     kd_pred = KnossosDataset()

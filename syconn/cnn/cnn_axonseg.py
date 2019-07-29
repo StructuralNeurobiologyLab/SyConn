@@ -49,7 +49,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
     parser.add_argument('-n', '--exp-name',
-                        default="axonseg-FCN-Dice-40nmGT-BOUTON_v4_biggerbatch_2gpus_run3",
+                        default="axonseg-FCN-Dice-40nmGT-BOUTON_v4_biggerbatch_2gpus_run3_resumed",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=5000000,
