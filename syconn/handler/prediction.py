@@ -547,7 +547,15 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         target_channels = [[i] for i in range(n_channel)]
     if channel_thresholds is None:
         channel_thresholds = [None for i in range(n_channel)]
-
+    ind_not_None = channel_thresholds!=None
+    if np.any(channel_thresholds[ind_not_None])<1.:
+        channel_thresholds[ind_not_None] *= 250
+    target_thresholds = []
+    for ids in ids_list:
+        t = t_list[ids]
+        if len(t)>1 and np.any(t==None):
+            t = np.ones_like(t)*255/2
+        target_thresholds.append(t)
     # init KnossosDataset:
     kd = KnossosDataset()
     kd.initialize_from_knossos_path(kd_path)
@@ -582,7 +590,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     # multi_params = chunkify(multi_params, max_n_jobs_gpu)
     multi_params = [([ch_ids], kd_path, target_path, model_path, overlap_shape,
                      tile_shape, chunk_size, n_channel, target_channels,
-                     target_kd_path_list, channel_thresholds, mag) for ch_ids in multi_params]
+                     target_kd_path_list, target_thresholds, mag) for ch_ids in multi_params]
     log.info('Starting dense prediction of {:d} chunks.'.format(len(chunk_ids)))
     n_cores_per_job = global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE if\
         not 'example' in global_params.config.working_dir else global_params.NCORES_PER_NODE
@@ -617,7 +625,7 @@ def dense_predictor(args):
     """
   
     chunk_ids, kd_p, target_p, model_p, overlap_shape, tile_shape, chunk_size,\
-    n_channel, target_channels, target_kd_path_list, channel_thresholds, mag = args
+    n_channel, target_channels, target_kd_path_list, target_thresholds, mag = args
 
     # init KnossosDataset:
     kd = KnossosDataset()
@@ -651,19 +659,12 @@ def dense_predictor(args):
         for j in range(len(target_channels)):
             ids = target_channels[j]
             path = target_kd_path_list[j]
-            data = np.zeros_like(pred[0]).astype(np.uint8)
-            n = 0
-            for i in ids:
-                t = channel_thresholds[i]
-                if t is not None or len(ids) > i:
-                    if t is None:
-                        t = 255 / 2
-                    if t < 1.:
-                        t = 255 * t
-                    data += ((pred[i] > t) * n).astype(np.uint8)
-                    n += 1
-                else:
-                    data = pred[i]
+            t = target_thresholds[j]
+            if np.any(t == None):
+                data = T[ids[0]]
+            else:
+                data = np.greater(pred.T[ids],t)*np.linspace(1,len(ids),len(ids))
+                data = np.sum(data.T,axis=0).astype(np.uint8)
             target_kd_dict[path].from_matrix_to_cubes(
                 ch.coordinates, data=data, data_mag=mag, mags=[mag, mag*2, mag*4],
                 fast_downsampling=False,
