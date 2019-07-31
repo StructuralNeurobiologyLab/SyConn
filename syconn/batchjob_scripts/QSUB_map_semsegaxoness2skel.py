@@ -55,18 +55,18 @@ for ix in ssv_ixs:
                                    max_dist=max_dist)
     # suffix '_avg{}' is added by `_average_node_axoness_views`
     nodes_ax_den_so = sso.skeleton["{}_avg{}".format(pred_key, max_dist)]
-    # recover bouton predictions and store smoothed result
-    nodes_ax_den_so[node_preds == 3] = 3
-    nodes_ax_den_so[node_preds == 4] = 4
+    # recover bouton predictions within axons and store smoothed result
+    nodes_ax_den_so[(node_preds == 3) & (nodes_ax_den_so == 1)] = 3
+    nodes_ax_den_so[(node_preds == 4) & (nodes_ax_den_so == 1)] = 4
     sso.skeleton["{}_avg{}".format(pred_key, max_dist)] = nodes_ax_den_so
 
     # will create a compartment majority voting after removing all soma nodes
     # the restul will be written to: ``ax_pred_key + "_comp_maj"``
     majority_vote_compartments(sso, "{}_avg{}".format(pred_key, max_dist))
     nodes_ax_den_so = sso.skeleton["{}_avg{}_comp_maj".format(pred_key, max_dist)]
-    # recover bouton predictions and store smoothed result
-    nodes_ax_den_so[node_preds == 3] = 3
-    nodes_ax_den_so[node_preds == 4] = 4
+    # recover bouton predictions within axons and store majority result
+    nodes_ax_den_so[(node_preds == 3) & (nodes_ax_den_so == 1)] = 3
+    nodes_ax_den_so[(node_preds == 4) & (nodes_ax_den_so == 1)] = 4
     sso.skeleton["{}_avg{}_comp_maj".format(pred_key, max_dist)] = nodes_ax_den_so
     sso.save_skeleton()
 

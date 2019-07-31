@@ -593,7 +593,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     multi_params = chunk_ids
     # on avg. two jobs per GPU
     multi_params = chunkify(multi_params, global_params.NGPU_TOTAL * 2)
-    multi_params = [([ch_ids], kd_path, target_path, model_path, overlap_shape,
+    multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
                      overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
                      target_kd_path_list, channel_thresholds, mag) for ch_ids in multi_params]
     log.info('Starting dense prediction of {:d} chunks.'.format(len(chunk_ids)))

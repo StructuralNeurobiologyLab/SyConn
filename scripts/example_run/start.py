@@ -112,7 +112,6 @@ if __name__ == '__main__':
         shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
 
     # INITIALIZE DATA
-    # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
                               offset=offset, boundary=bd, fast_downsampling=True,
@@ -156,7 +155,7 @@ if __name__ == '__main__':
 
     # START SyConn
     log.info('Step 0/8 - Predicting sub-cellular structures')
-    exec_dense_prediction.predict_myelin()
+    exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
     time_stamps.append(time.time())
     step_idents.append('Dense predictions')
 

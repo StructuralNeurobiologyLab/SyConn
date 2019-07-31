@@ -14,6 +14,8 @@ if __name__ == '__main__':
     parser.add_argument('--kzip', type=str, default='',
                         help='path to kzip file which contains a cell reconstruction (see '
                              'SuperSegmentationObject().export2kzip())')
+    parser.add_argument('--modelpath', type=str, default=None,
+                        help='path to the model.pt file of the trained model.')
     args = parser.parse_args()
 
     # path to working directory of example cube - required to load pretrained models
@@ -22,12 +24,27 @@ if __name__ == '__main__':
     # path to cell reconstruction k.zip
     cell_kzip_fn = os.path.abspath(os.path.expanduser(args.kzip))
     if not os.path.isfile(cell_kzip_fn):
-        raise FileNotFoundError
+        raise FileNotFoundError('Could not find a cell reconstruction file at the specified '
+                                'location.')
     # set working directory to obtain models
     global_params.wd = path_to_workingdir
 
+    model_p = args.modelpath
+
+    if model_p is None:
+        m = get_semseg_axon_model()
+    else:
+        try:
+            from elektronn3.models.base import InferenceModel
+        except ImportError as e:
+            msg = "elektronn3 could not be imported ({}). Please see 'https://github." \
+                  "com/ELEKTRONN/elektronn3' for more information.".format(e)
+            raise ImportError(msg)
+        m = InferenceModel(model_p)
+        m._path = model_p
+
     # get model for compartment detection
-    m = get_semseg_axon_model()
+
     view_props = global_params.view_properties_semsegax
     view_props["verbose"] = True
 

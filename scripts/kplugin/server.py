@@ -11,6 +11,7 @@ import time
 import numpy as np
 from flask import Flask
 import json
+from multiprocessing import cpu_count
 import argparse
 import os
 
@@ -156,6 +157,7 @@ class SyConnBackend(object):
 
         self.sds = dict(syn_ssv=SegmentationDataset(working_dir=syconn_path,
                                                     obj_type='syn_ssv'))
+        self.nb_cpus = cpu_count()
 
         # flat array representation of all synapses
         self.conn_dict = conn.load_cached_data_dict()
@@ -173,6 +175,7 @@ class SyConnBackend(object):
         start = time.time()
         self.logger.info('Loading ssv mesh {}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         mesh = {'vertices': mesh[1],
@@ -193,6 +196,7 @@ class SyConnBackend(object):
         start = time.time()
         self.logger.info('Loading {} ssv mesh indices'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         dtime = time.time() - start
@@ -212,6 +216,7 @@ class SyConnBackend(object):
         start = time.time()
         self.logger.info('Loading ssv {} mesh vertices'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         dtime = time.time() - start
@@ -230,6 +235,7 @@ class SyConnBackend(object):
         """
         self.logger.info('Loading ssv skeleton {}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_skeleton()
         skeleton = ssv.skeleton
         if skeleton is None:
@@ -243,6 +249,7 @@ class SyConnBackend(object):
                 global_params.view_properties_semsegax['semseg_key'],
                 pred_key_ax,
                 'myelin_avg10000',  # TODO: use global_params.py value !
+                'myelin',  # TODO: use global_params.py value !
                 "axoness_k{}".format(global_params.map_properties_semsegax['k']),
                 "axoness_k{}_comp_maj".format(global_params.map_properties_semsegax['k'])]
         for k in keys:
@@ -268,6 +275,7 @@ class SyConnBackend(object):
         start = time.time()
         self.logger.info('Loading ssv {} mesh normals'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         dtime = time.time() - start
@@ -288,6 +296,7 @@ class SyConnBackend(object):
         :return: dict
         """
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
@@ -321,6 +330,7 @@ class SyConnBackend(object):
         self.logger.info('Loading ssv {} {} mesh indices'
                          ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
@@ -352,6 +362,7 @@ class SyConnBackend(object):
         self.logger.info('Loading ssv {} {} mesh vertices'
                          ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
@@ -386,6 +397,7 @@ class SyConnBackend(object):
         self.logger.info('Loading ssv {} {} mesh normals'
                          ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
@@ -431,6 +443,7 @@ class SyConnBackend(object):
         """
         # TODO: changed to new cell type predictions, work this in everywhere
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         label = ""
         if "celltype_cnn_e3_probas" in ssv.attr_dict:  # new prediction
@@ -453,6 +466,7 @@ class SyConnBackend(object):
         :return: dict
         """
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         return {'svs': ssv.sv_ids.tolist()}
 

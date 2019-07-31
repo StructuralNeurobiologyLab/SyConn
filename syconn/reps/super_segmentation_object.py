@@ -2110,8 +2110,9 @@ class SuperSegmentationObject(object):
                                cols, force_recompute=force_recompute,
                                index_view_key=index_view_key)
 
-    def semseg_for_coords(self, coords, semseg_key, k=5, ds_vertices=20,
-                          ignore_labels=None):
+    def semseg_for_coords(self, coords: np.ndarray, semseg_key: str, k: int = 5,
+                          ds_vertices: int = 20,
+                          ignore_labels: Optional[Iterable[int]] = None):
         """
         Get the semantic segmentation with key `semseg_key` from the `k` nearest
         vertices at every coordinate in `coords`.
@@ -2132,8 +2133,8 @@ class SuperSegmentationObject(object):
         Returns
         -------
         np.array
-            Same length as coords. For every coordinate in coords returns the
-            majority label within radius_nm
+            Same length as `coords`. For every coordinate in `coords` returns the
+            majority label based on its k-nearest neighbors.
         """
         # TODO: Allow multiple keys as in self.attr_for_coords, e.g. to
         #  include semseg axoness in a single query

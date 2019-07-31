@@ -13,6 +13,7 @@ except ImportError:
     import pickle as pkl
 from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
 from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn import global_params
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -35,7 +36,8 @@ ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
 for ssv in ssd.get_super_segmentation_object(ssv_ids):
     ssv.load_skeleton()
     ssv.skeleton["myelin"] = map_myelin2coords(ssv.skeleton["nodes"], mag=4)
-    majorityvote_skeleton_property(ssv, prop_key='myelin')
+    majorityvote_skeleton_property(ssv, prop_key='myelin',
+                                   max_dist=global_params.DIST_AXONESS_AVERAGING)
     ssv.save_skeleton()
 
 with open(path_out_file, "wb") as f:
