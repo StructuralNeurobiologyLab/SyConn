@@ -1283,21 +1283,29 @@ def preproc_sso_skelfeature_thread(args: Tuple):
 
 def map_ssv_semseg(args: Union[tuple, list]):
     """
-    Helper function to map predicted vertex labels onto the entire mesh.
+    # TODO: Use also for axoness?
+    Helper function to map predicted vertex labels on the cell reconstruction
+    mesh and its skeleton.
     See :py:func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
-    .semseg2mesh` for details.
+    .semseg2mesh` (vertex predictions to mesh) and
+    :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
+    .semseg_for_coords` (mesh labels to skeleton nodes) for details.
 
     Args:
         *args: `ssv_obj_ids`: Cell reconstruction IDs, `args[1:4]` used to
             initialize the :class:`~syconn.reps.super_segmentation_dataset
             .SuperSegmentationDataset`, `kwargs_semseg2mesh`: kwargs used in
-            :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.semseg2mesh`.
+            :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.semseg2mesh`,
+            `kwargs_semsegforcoords`: kwargs used in
+            :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject
+            .semseg_for_coords`.
     """
     ssv_obj_ids = args[0]
     version = args[1]
     version_dict = args[2]
     working_dir = args[3]
     kwargs_semseg2mesh = args[4]
+    kwargs_semsegforcoords = args[5]
     global_params.wd = working_dir
 
     ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
@@ -1306,6 +1314,16 @@ def map_ssv_semseg(args: Union[tuple, list]):
     for ssv_id in ssv_obj_ids:
         ssv = ssd.get_super_segmentation_object(ssv_id)
         ssv.semseg2mesh(**kwargs_semseg2mesh)
+        ssv.load_skeleton()
+        if ssv.skeleton is None or len(ssv.skeleton["nodes"]) < 2:
+            log_reps.warning(f"Skeleton of SSV {ssv_id} has zero or less than two nodes.")
+            continue
+        # vertex predictions
+        node_preds = ssv.semseg_for_coords(ssv.skeleton['nodes'],
+                                           kwargs_semseg2mesh['semseg_key'],
+                                           **kwargs_semsegforcoords)
+        ssv.skeleton[kwargs_semseg2mesh['semseg_key']] = node_preds
+        ssv.save_skeleton()
 
 
 def exctract_ssv_morphology_embedding(args: Union[tuple, list]):

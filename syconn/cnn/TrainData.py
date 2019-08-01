@@ -9,10 +9,12 @@
 import matplotlib
 matplotlib.use("agg", warn=False, force=True)
 import numpy as np
+from knossos_utils import KnossosDataset
+from typing import Optional, Tuple, Dict, List, Union
 import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
-from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
 from syconn.reps.segmentation import SegmentationDataset
 from syconn import global_params
 from syconn.handler import log_main as log_cnn
@@ -1509,3 +1511,41 @@ def add_gt_sample(ssv_id, label, gt_type, set_type="train"):
     labels = load_pkl2obj("{}/axgt_labels.pkl".format(base_dir))
     splitting[set_type].append(ssv_id)
     labels[ssv_id] = label
+
+
+def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
+                               raw_offset: Tuple[int, int, int] = (50, 50, 25))\
+        -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Retrieve the type segmentation data (0: background, ) of a single 'syn_ssv' object.
+    Used for sparse acquistion of synapse type ground truth.
+
+    Args:
+        syn_ssv: The synapse supervoxel object used to fetch the segmentation data.
+        raw_offset: Offset used for fetching the raw data. Raw cube shape will be
+            the segmentation cube shape + 2*raw_offset
+
+    Returns:
+        Volumetric raw and segmentation data.
+    """
+    raw_offset = np.array(raw_offset)
+    coord_raw = syn_ssv.bounding_box[0] - raw_offset
+    size_raw = syn_ssv.bounding_box[1] - syn_ssv.bounding_box[0] + 2 * raw_offset
+    segmentation = syn_ssv.voxels  # volumetric, binary mask
+    kd = KnossosDataset()
+    kd.initialize_from_conf(global_params.config.kd_seg_path)
+    raw = kd.from_cubes_to_matrix(size_raw, coord_raw)
+    if 'syn_sign' not in syn_ssv.attr_dict:
+        raise ValueError(f'Key "syn_sign" does not exist in AttributeDict of'
+                         f' {str(syn_ssv)}.')
+    syntype_label = 1 if syn_ssv.attr_dict["syn_sign"] == 1 else 2  # TODO: verify labels
+    return raw, segmentation * syntype_label
+
+
+def parse_gt_usable_synssv():
+    """
+
+    Returns:
+
+    """
+    return

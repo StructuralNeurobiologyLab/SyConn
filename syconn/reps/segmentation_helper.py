@@ -111,6 +111,9 @@ def load_voxels(so: 'SegmentationObject',
     """
     Helper function to load voxels of a SegmentationObject as 3D array.
 
+    Todo:
+        * Currently the attribute ``so._bounding_box`` is always resetred.
+
     Parameters
     ----------
     so : SegmentationObject

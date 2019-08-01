@@ -566,7 +566,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     n_tiles = np.array([4, 4, 16])
     if 'example' in global_params.config.working_dir:
         chunk_size = np.array([512, 512, 256], dtype=np.int)  # XYZ
-        n_tiles = np.array([2, 2, 16])
+        n_tiles = np.array([4, 4, 16])
     tile_shape = (chunk_size / n_tiles).astype(np.int)
     # the final input shape must be a multiple of tile_shape
     overlap_shape = tile_shape // 2

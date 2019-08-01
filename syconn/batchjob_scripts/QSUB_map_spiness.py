@@ -24,6 +24,8 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
+# this will map the semantic segmentation of the given cell reconstructions
+# to their mesh vertices and skeleton nodes
 map_ssv_semseg(args)
 
 with open(path_out_file, "wb") as f:

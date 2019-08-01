@@ -283,8 +283,8 @@ def run_semsegaxoness_mapping(max_n_jobs: Optional[int] = None):
 
 def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     """
-    Will store semantic axoness labels as `view_properties_semsegax['semseg_key']` inside
-    ssv.label_dict('vertex')[semseg_key]
+    Will store semantic axoness labels as ``view_properties_semsegax['semseg_key']`` inside
+    ``ssv.label_dict('vertex')``.
 
     Todo:
         * run rendering chunk-wise instead of on-the-fly and then perform
@@ -360,7 +360,6 @@ def run_spiness_prediction(max_n_jobs_gpu: Optional[int] = None,
     log = initialize_logging('spine_identification', global_params.config.working_dir
                              + '/logs/', overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
-    pred_key = "spiness"
 
     # run semantic spine segmentation on multi views
     sd = ssd.get_segmentationdataset("sv")
@@ -370,7 +369,7 @@ def run_spiness_prediction(max_n_jobs_gpu: Optional[int] = None,
     model_kwargs = dict(src=global_params.config.mpath_spiness,
                         multi_gpu=False)
     so_kwargs = dict(working_dir=global_params.config.working_dir)
-    pred_kwargs = dict(pred_key=pred_key)
+    pred_kwargs = dict(pred_key=global_params.semseg2mesh_spines['semseg_key'])
     multi_params = [[par, model_kwargs, so_kwargs, pred_kwargs]
                     for par in multi_params]
     log.info('Starting spine prediction.')
@@ -391,9 +390,10 @@ def run_spiness_prediction(max_n_jobs_gpu: Optional[int] = None,
     multi_params = multi_params[np.argsort(nb_svs_per_ssv)[::-1]]
     multi_params = chunkify(multi_params, max_n_jobs)
     # add ssd parameters
-    kwargs_semseg2mesh = dict(semseg_key=pred_key, force_recompute=True)
+    kwargs_semseg2mesh = global_params.semseg2mesh_spines
+    kwargs_semsegforcoords = global_params.semseg2coords_spines
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
-                     kwargs_semseg2mesh) for ssv_ids in multi_params]
+                     kwargs_semseg2mesh, kwargs_semsegforcoords) for ssv_ids in multi_params]
     log.info('Starting mapping of spine predictions to neurite surfaces.')
     qu.QSUB_script(multi_params, "map_spiness", n_max_co_processes=global_params.NCORE_TOTAL,
                    n_cores=4, suffix="", additional_flags="", remove_jobfolder=True, log=log)
