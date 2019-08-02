@@ -1514,16 +1514,27 @@ def add_gt_sample(ssv_id, label, gt_type, set_type="train"):
 
 
 def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
-                               raw_offset: Tuple[int, int, int] = (50, 50, 25))\
+                               syntype_label: Optional[int] = None,
+                               raw_offset: Tuple[int, int, int] = (50, 50, 25),
+                               pad_offset: int = 10)\
         -> Tuple[np.ndarray, np.ndarray]:
     """
-    Retrieve the type segmentation data (0: background, ) of a single 'syn_ssv' object.
-    Used for sparse acquistion of synapse type ground truth.
+    Retrieve the type segmentation data (0: background, 1: symmetric, 2: asymmetric)
+     of a single 'syn_ssv' object.
+    Used for sparse acquisition of synapse type ground truth.
+
+    Todo:
+        * Verify synapse type label.
 
     Args:
         syn_ssv: The synapse supervoxel object used to fetch the segmentation data.
+        syntype_label: If None, uses ``syn_sign`` stored in ``syn_ssv.attr_dict``
+            and transforms the object segmentation into the respective label
+            (1: symmetric, 2: asymmetric).
         raw_offset: Offset used for fetching the raw data. Raw cube shape will be
             the segmentation cube shape + 2*raw_offset
+        pad_offset: Number of voxels padded with 0-value around the synapse
+            segmentation.
 
     Returns:
         Volumetric raw and segmentation data.
@@ -1534,11 +1545,12 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
     segmentation = syn_ssv.voxels  # volumetric, binary mask
     kd = KnossosDataset()
     kd.initialize_from_conf(global_params.config.kd_seg_path)
-    raw = kd.from_cubes_to_matrix(size_raw, coord_raw)
-    if 'syn_sign' not in syn_ssv.attr_dict:
-        raise ValueError(f'Key "syn_sign" does not exist in AttributeDict of'
-                         f' {str(syn_ssv)}.')
-    syntype_label = 1 if syn_ssv.attr_dict["syn_sign"] == 1 else 2  # TODO: verify labels
+    raw = kd.from_raw_cubes_to_matrix(size_raw, coord_raw)
+    if syntype_label is None:
+        if 'syn_sign' not in syn_ssv.attr_dict:
+            raise ValueError(f'Key "syn_sign" does not exist in AttributeDict of'
+                             f' {str(syn_ssv)}.')
+        syntype_label = 1 if syn_ssv.attr_dict["syn_sign"] == -1 else 2
     return raw, segmentation * syntype_label
 
 
@@ -1546,6 +1558,42 @@ def parse_gt_usable_synssv():
     """
 
     Returns:
-
+        Two lists. One contains the 'syn_ssv' used to fetch the raw and
+        segmentation data and the other the synapse type (1: symmetric, 2: asymmetric).
     """
-    return
+    syn_objs_total, syn_type_total = [], []
+    sd_syn_ssv = SegmentationDataset('syn_ssv', working_dir=global_params.config.working_dir)
+    syn_cts = sd_syn_ssv.load_cached_data('partner_celltypes')
+    syn_axs = sd_syn_ssv.load_cached_data('partner_axoness')
+    syn_prob = sd_syn_ssv.load_cached_data('syn_prob')
+    m_prob = syn_prob > 0.95
+    # set bouton predictions to axon label
+    syn_axs[syn_axs == 3] = 1
+    syn_axs[syn_axs == 4] = 1
+    # dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, GPe=5, INT=8)
+    # asymmetric STN, HVC, LMAN synapses
+    m_exc = (syn_cts == 0) | (syn_cts == 3) | (syn_cts == 3)
+    # excitatory cell is pre-synaptic, high probability synapse, synapse must be on a
+    # dendrite or soma
+    pre_mask = np.any(m_exc & (syn_axs == 1), axis=1) & m_prob & \
+               np.any((syn_axs == 0) | (syn_axs == 2), axis=1)
+    pre_syns = sd_syn_ssv.get_segmentation_object(sd_syn_ssv.ids[pre_mask])
+    syn_objs_total += pre_syns
+    syn_type_total += [2] * len(pre_syns)
+
+    # symmetric MSN, INT, TAN, FS synapses
+    m_inh = (syn_cts == 2) | (syn_cts == 6) | (syn_cts == 7) | (syn_cts == 8)
+    # inhibitory cell is pre-synaptic, high probability synapse, synapse must be on a
+    # dendrite or soma
+    pre_mask = np.any(m_inh & (syn_axs == 1), axis=1) & m_prob & \
+               np.any((syn_axs == 0) | (syn_axs == 2), axis=1)
+    pre_syns = sd_syn_ssv.get_segmentation_object(sd_syn_ssv.ids[pre_mask])
+    syn_objs_total += pre_syns
+    syn_type_total += [1] * len(pre_syns)
+
+    m_non_syn = sd_syn_ssv.get_segmentation_object(sd_syn_ssv.ids[m_prob < 0.1])
+    syn_objs_total += m_non_syn
+    syn_type_total += [0] * len(m_non_syn)
+    log_cnn.info('Gathered the following synapses: {}'.format(
+        np.unique(syn_type_total, return_counts=True)))
+    return syn_objs_total, syn_type_total

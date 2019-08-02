@@ -123,9 +123,9 @@ def route_ct_of_sv(ssv_id):
     return json.dumps(sg_state.backend.ct_of_ssv(ssv_id), cls=MyEncoder)
 
 
-@app.route('/all_syn_meta', methods=['GET'])
-def route_all_syn_meta():
-    return json.dumps(sg_state.backend.all_syn_meta_data(), cls=MyEncoder)
+@app.route('/all_syn_meta/<params>', methods=['GET'])
+def route_all_syn_meta(params):
+    return json.dumps(sg_state.backend.all_syn_meta_data(json.loads(params)), cls=MyEncoder)
 
 
 @app.route("/", methods=['GET'])
@@ -134,7 +134,7 @@ def route_hello():
 
 
 class SyConnBackend(object):
-    def __init__(self, syconn_path='', logger=None):
+    def __init__(self, syconn_path='', logger=None, synthresh=0.5, axodend_only=True):
         """
         Initializes a SyConn backend for operation.
         This includes in-memory initialization of the
@@ -158,7 +158,8 @@ class SyConnBackend(object):
         self.sds = dict(syn_ssv=SegmentationDataset(working_dir=syconn_path,
                                                     obj_type='syn_ssv'))
         self.nb_cpus = cpu_count()
-
+        self.synthresh = synthresh
+        self.axodend_only = axodend_only
         # flat array representation of all synapses
         self.conn_dict = conn.load_cached_data_dict()
         self.logger.info('In memory cache of synapses initialized.')
@@ -470,13 +471,25 @@ class SyConnBackend(object):
         ssv.load_attr_dict()
         return {'svs': ssv.sv_ids.tolist()}
 
-    def all_syn_meta_data(self):
+    def all_syn_meta_data(self, params):
         """
         Returns all synapse meta data. This works only well for fast
-        connections and less than 1e6 synapses or so.
+        connections and less than 1e6 synapses or so. `synthresh` is transmitted
+        with a scaling factor of 1000 (-> maximum precision is 4 digits).
         :return:
         """
-
+        synthresh = params['synthresh']
+        axodend_only = params['axodend_only']
+        if (synthresh != self.synthresh) or (axodend_only != self.axodend_only):
+            self.synthresh = synthresh
+            # flat array representation of all synapses
+            self.conn_dict = conn.load_cached_data_dict(thresh_syn_prob=synthresh,
+                                                        axodend_only=axodend_only)
+            self.logger.info(f'In memory cache of synapses re-initialized with '
+                             f'threshold {synthresh} and "axodend_only={axodend_only}".')
+            # directed networkx graph of connectivity
+            self.conn_graph = conn.connectivity_to_nx_graph(self.conn_dict)
+            self.logger.info('Connectivity graph re-initialized.')
         all_syn_meta_dict = copy.copy(self.conn_dict)
 
         # the self.conn_dict is not json serializeble, due to the numpy arrays

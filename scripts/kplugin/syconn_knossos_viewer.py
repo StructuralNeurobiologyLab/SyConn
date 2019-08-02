@@ -33,12 +33,14 @@ class SyConnGateInteraction(object):
     """
     Query the SyConn backend server.
     """
-    def __init__(self, server):
+    def __init__(self, server, synthresh=0.5, axodend_only=True):
         self.server = server
         self.session = requests.Session()
         self.ssv_from_sv_cache = dict()
         self.ct_from_cache = dict()
         self.svs_from_ssv = dict()
+        self.synthresh = synthresh
+        self.axodend_only = axodend_only
 
     def get_ssv_mesh(self, ssv_id):
         """
@@ -179,7 +181,9 @@ class SyConnGateInteraction(object):
         -------
 
         """
-        r = self.session.get(self.server + '/all_syn_meta')
+        params = {'synthresh': self.synthresh, 'axodend_only': self.axodend_only}
+        # r = self.session.get('{}/all_syn_meta/{:d}'.format(self.server, int(self.synthresh * 1000)))
+        r = self.session.get('{}/all_syn_meta/{}'.format(self.server, json.dumps(params)))
         return json.loads(r.content)
 
     def push_so_attr(self, so_id, so_type, attr_key, attr_value):
@@ -238,7 +242,7 @@ class InputDialog(QtGui.QDialog):
 
     def __init__(self, parent=None):
         QtGui.QWidget.__init__(self, parent)
-
+        self.aborted = False
         # --Layout Stuff---------------------------#
         mainLayout = QtGui.QVBoxLayout()
 
@@ -254,6 +258,19 @@ class InputDialog(QtGui.QDialog):
         layout.addWidget(self.ip)
         self.text_ip = QtGui.QLineEdit("0.0.0.0")
         layout.addWidget(self.text_ip)
+        mainLayout.addLayout(layout)
+
+        layout = QtGui.QHBoxLayout()
+        self.synapse_tresh = QtGui.QLabel()
+        self.synapse_tresh.setText("Syn. prob. thresh.")
+        layout.addWidget(self.synapse_tresh)
+        self.text_synthresh = QtGui.QLineEdit("0.6")
+        layout.addWidget(self.text_synthresh)
+
+        self.axodend_button = QtGui.QPushButton("Axo-dendr. syn. only")
+        self.axodend_button.setCheckable(True)
+        self.axodend_button.toggle()
+        layout.addWidget(self.axodend_button)
 
         mainLayout.addLayout(layout)
 
@@ -263,11 +280,20 @@ class InputDialog(QtGui.QDialog):
         self.connect(button, QtCore.SIGNAL("clicked()"), self.close)
         layout.addWidget(button)
 
+        button = QtGui.QPushButton("abort")  # string or icon
+        self.connect(button, QtCore.SIGNAL("clicked()"), self.abort_button_clicked)
+        layout.addWidget(button)
+
         mainLayout.addLayout(layout)
         self.setLayout(mainLayout)
 
-        self.resize(250, 100)
+        self.resize(450, 300)
         self.setWindowTitle("SyConnGate Settings")
+
+    def abort_button_clicked(self):
+        print('Closing SyConnGate.')
+        self.aborted = True
+        self.close()
 
 
 class main_class(QtGui.QDialog):
@@ -288,12 +314,12 @@ class main_class(QtGui.QDialog):
         while True:
             inputter = InputDialog(parent)
             inputter.exec_()
-                # try:
+            if inputter.aborted:
+                return
             port = int(inputter.text.text.decode())
-                # except Exception as e:
-                #     print(e)
-            #self.start_logging()
             host = inputter.text_ip.text.decode()
+            self._synthresh = float(inputter.text_synthresh.text.decode())
+            self._axodend_only = inputter.axodend_button.isChecked()
             self.syconn_gate = None
             self.host = host
             self.port = port
@@ -305,21 +331,20 @@ class main_class(QtGui.QDialog):
             try:
                 self.init_syconn()
                 self.build_gui()
+                self.timer = QtCore.QTimer()
+                self.timer.timeout.connect(self.exploration_mode_callback_check)
+                self.timer.start(1000)
                 break
-            except requests.exceptions.ConnectionError:
-                print("Failed to establish connection to SyConn Server.")
+            except requests.exceptions.ConnectionError as e:
+                print("Failed to establish connection to SyConn Server.", str(e))
                 pass
-
-        self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self.exploration_mode_callback_check)
-        self.timer.start(1000)
 
     def init_syconn(self):
         # move to config file
         syconn_gate_server = 'http://{}:{}'.format(self.host, self.port)
-        self.syconn_gate = SyConnGateInteraction(syconn_gate_server)
-
-        return
+        self.syconn_gate = SyConnGateInteraction(syconn_gate_server,
+                                                 self._synthresh,
+                                                 self._axodend_only)
 
     def populate_ssv_list(self):
         all_ssv_ids = self.syconn_gate.get_list_of_all_ssv_ids()['ssvs']
@@ -554,7 +579,7 @@ class main_class(QtGui.QDialog):
         self.populate_ssv_list()
 
         self.populate_syn_list()
-        print('Connected to SyConn gate')
+        print('Connected to SyConnGate.')
 
         layout.addWidget(self.direct_ssv_id_input, 1, 0, 1, 1)
         layout.addWidget(self.direct_syn_id_input, 1, 1, 1, 1)
