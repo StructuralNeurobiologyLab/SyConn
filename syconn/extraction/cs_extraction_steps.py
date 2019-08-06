@@ -126,6 +126,13 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
         merge_prop_dicts([syn_props, curr_syn_props])
         merge_type_dicts([tot_asym_cnt, asym_cnt])
         merge_type_dicts([tot_sym_cnt, sym_cnt])
+
+    #  correct for the bad concatenation
+    # if cs_props[1].shape[1] != 2 or cs_props[1].shape != 3:
+    #     cs_props[1] = np.concatenate(cs_props[1])
+    # if syn_props[1].shape[1] != 2 or syn_props[1].shape != 3:
+    #     syn_props[1] = np.concatenate(syn_props[1])
+
     log.info('Finished cs ({}) and syn ({}) extraction.'.format(
         len(cs_props[0]), len(syn_props[0])))
     if len(syn_props[0]) == 0:
@@ -137,26 +144,32 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     #  rendering the neuron views (which need subcellular structures, there one can then use mi,
     #  vc and syn (instead of sj))
 
+    st_time = time.time()
     #  dump intermediate results
     dict_paths = []
     p_h5py = "{}/cs_prop_dict.h5".format(global_params.config.temp_path)
     dict_paths.append(p_h5py)
     f = h5py.File(p_h5py, "w")
-    for ii in range(len(cs_props)):
+    for ii in [0, 1]:
         grp = f.create_group(str(ii))
         for key, val in cs_props[ii].items():
-            print("\n\n\n key= ", key, " ii= ", ii, "val= ", val)
-            grp.create_dataset(str(key), data=val)
+            grp.create_dataset(str(key), data=val, compression="lzf")
+    grp = f.create_group(str(2))
+    for key, val in cs_props[2].items():
+        grp.create_dataset(str(key), data=val)
     del cs_props
     f.close()
 
     p_h5py = "{}/syn_prop_dict.h5".format(global_params.config.temp_path)
     dict_paths.append(p_h5py)
     f = h5py.File(p_h5py, "w")
-    for ii in range(len(syn_props)):
+    for ii in [0, 1]:
         grp = f.create_group(str(ii))
         for key, val in syn_props[ii].items():
-            grp.create_dataset(str(key), data=val)
+            grp.create_dataset(str(key), data=val, compression="lzf")
+    grp = f.create_group(str(2))
+    for key, val in syn_props[2].items():
+        grp.create_dataset(str(key), data=val)
     del syn_props
     f.close()
 
@@ -170,6 +183,10 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     dict_paths.append(p_h5py)
     compression.save_to_h5py(tot_asym_cnt, p_h5py, compression=False)
     del tot_asym_cnt
+
+    st_time = st_time - time.time()
+
+    print("\n\n\n st_time= ", st_time)
 
     # write cs and syn segmentation to KD and SD
     chunky.save_dataset(cset)
@@ -235,8 +252,7 @@ def _contact_site_extraction_thread(args):
     knossos_path = args[1]
 
     kd = kd_factory(knossos_path)
-    # TODO: change back to kd.kd_sj_path (proba maps -> get rid of SJ extraction)
-    kd_syn = kd_factory(global_params.config.kd_organelle_seg_paths['sj'])
+    kd_syn = kd_factory(global_params.config.kd_sj_path)
     if global_params.config.syntype_available:
         kd_syntype_sym = kd_factory(global_params.config.kd_sym_path)
         kd_syntype_asym = kd_factory(global_params.config.kd_asym_path)
@@ -267,8 +283,7 @@ def _contact_site_extraction_thread(args):
         # syn_d = (kd_syn.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config.entries[
         #     'Probathresholds']['sj']).astype(np.uint8)
         syn_d = (kd_syn.from_overlaycubes_to_matrix(size, offset, datatype=np.uint64) > 0).astype(np.uint8)
-        # get binary mask for symmetric and asymmetric syn. type per voxel  # TODO: add
-        #  thresholds to global_params
+        # get binary mask for symmetric and asymmetric syn. type per voxel  # TODO: add thresholds to global_params
         if global_params.config.syntype_available:
             sym_d = (kd_syntype_sym.from_raw_cubes_to_matrix(size, offset) >= 123).astype(
                 np.uint8)
@@ -292,6 +307,7 @@ def _contact_site_extraction_thread(args):
         compression.save_to_h5py([contacts],
                                  chunk.folder +
                                  "syn.h5", ['syn'])
+
         merge_prop_dicts([cs_props, curr_cs_p], offset=offset)
         merge_prop_dicts([syn_props, curr_syn_p], offset=offset)
         merge_type_dicts([tot_asym_cnt, asym_cnt])
