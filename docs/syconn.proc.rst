@@ -4,30 +4,6 @@ syconn.proc package
 Submodules
 ----------
 
-syconn.proc.checking module
----------------------------
-
-.. automodule:: syconn.proc.checking
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-syconn.proc.checking\_helper module
------------------------------------
-
-.. automodule:: syconn.proc.checking_helper
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-syconn.proc.connectivity module
--------------------------------
-
-.. automodule:: syconn.proc.connectivity
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 syconn.proc.general module
 --------------------------
 
@@ -64,14 +40,6 @@ syconn.proc.meshes module
 -------------------------
 
 .. automodule:: syconn.proc.meshes
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-syconn.proc.realignment\_trafo module
--------------------------------------
-
-.. automodule:: syconn.proc.realignment_trafo
     :members:
     :undoc-members:
     :show-inheritance:

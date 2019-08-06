@@ -144,7 +144,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
 
 
 def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
-                  n_voting=40, ws=(256, 128), comp_window=8e3):
+                  n_voting=40, ws=(256, 128), comp_window=8e3, h5_suffix=""):
     """
     Generates a .npy GT file from all kzip paths.
 
@@ -179,8 +179,9 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
         os.makedirs(dest_p_cache)
     start_multiprocess_imap(gt_generation_helper, params, nb_cpus=cpu_count(),
                             debug=False)
-    if gt_type == 'axgt':
-        return
+    # TODO: in case GT is too big to hold all views in memory
+    # if gt_type == 'axgt':
+    #     return
     # Create Dataset splits for training, validation and test
     all_raw_views = []
     all_label_views = []
@@ -191,7 +192,7 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
         dest_p = "{}/{}/".format(dest_p_cache, sso_id)
         raw_v = np.load(dest_p + "raw.npy")
         label_v = np.load(dest_p + "label.npy")
-        index_v = np.load(dest_p + "index.npy")  # Removed index views
+        # index_v = np.load(dest_p + "index.npy")  # Removed index views
         all_raw_views.append(raw_v)
         all_label_views.append(label_v)
         # all_index_views.append(index_v)  # Removed index views
@@ -214,22 +215,23 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
     all_label_views = all_label_views.reshape((-1, 1, ws[1], ws[0]))
     # # all_index_views = all_index_views.reshape((-1, 1, 128, 256))  # Removed index views
     # # all_raw_views = np.concatenate([all_raw_views, all_index_views], axis=1)  # Removed index views
-    raw_train, raw_valid, label_train, label_valid = train_test_split(all_raw_views, all_label_views, train_size=0.8,
+    raw_train, raw_valid, label_train, label_valid = train_test_split(all_raw_views,
+                                                                      all_label_views, train_size=0.9,
                                                                       shuffle=False)
     # # raw_valid, raw_test, label_valid, label_test = train_test_split(raw_other, label_other, train_size=0.5, shuffle=False)  # Removed index views
     print("Writing h5 files.")
     os.makedirs(dest_dir, exist_ok=True)
     # chunk output data
     for ii in range(5):
-        save_to_h5py([raw_train[ii::5]], dest_dir + "/raw_train_{}.h5".format(ii),
+        save_to_h5py([raw_train[ii::5]], dest_dir + "/raw_train_{}_{}.h5".format(ii, h5_suffix),
                      ["raw"])
-        save_to_h5py([raw_valid[ii::5]], dest_dir + "/raw_valid_{}.h5".format(ii),
+        save_to_h5py([raw_valid[ii::5]], dest_dir + "/raw_valid_{}_{}.h5".format(ii, h5_suffix),
                      ["raw"])
         # save_to_h5py([raw_test], dest_dir + "/raw_test.h5",
         # ["raw"])  # Removed index views
-        save_to_h5py([label_train[ii::5]], dest_dir + "/label_train_{}.h5".format(ii),
+        save_to_h5py([label_train[ii::5]], dest_dir + "/label_train_{}_{}.h5".format(ii, h5_suffix),
                      ["label"])
-        save_to_h5py([label_valid[ii::5]], dest_dir + "/label_valid_{}.h5".format(ii),
+        save_to_h5py([label_valid[ii::5]], dest_dir + "/label_valid_{}_{}.h5".format(ii, h5_suffix),
                      ["label"])
     # save_to_h5py([label_test], dest_dir + "/label_test.h5",
     # ["label"])  # Removed index views
@@ -282,28 +284,35 @@ def gt_generation_helper(args):
 if __name__ == "__main__":
     # spiness
     if 0:
+        comp_window = 10240  # 40 nm pixel size
+        ws = (256, 128)
+        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegspiness/gt_h5_files_20nm_{" \
+                      "}/".format(ws[0])
+        os.makedirs(dest_gt_dir, exist_ok=True)
+        global_params.wd = "/wholebrain/scratch/areaxfs3/"
         assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
         initial_run = False
-        n_views = 2
+        n_views = 3
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_spgt/" \
                             "spiness_skels_annotated/"
         file_names = ["/27965455.039.k.zip",
                       "/23044610.037.k.zip", "/4741011.074.k.zip",
                       "/18279774.089.k.zip", "/26331138.046.k.zip"]
         file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
-        GT_generation(file_paths, 'spgt', 'spgt', n_views, ws=(256, 128), comp_window=8e3)
+        GT_generation(file_paths, 'spgt', 'spgt', n_views, ws=ws, comp_window=comp_window)
 
     # axoness
     if 1:
-        initial_run = False
+        initial_run = True
         ws = (1024, 512)
+        comp_window = 40.96e3 * 1.0  # ~40nm pixel size
         n_views = 6  # increase views per location due to higher pixel size, also increases GT
         # diversity
 
-        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_{" \
-                      "}/".format(ws[0])
 
         # # Process original data
+        # dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_{" \
+        #               "}/".format(ws[0])
         # global_params.wd = "/wholebrain/scratch/areaxfs3/"
         # assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
         # label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
@@ -328,13 +337,27 @@ if __name__ == "__main__":
         # GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
         #               ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)
 
-        # bouton GT
-        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_{" \
-                      "}_with_BOUTONS/".format(ws[0])
-        global_params.wd = "/wholebrain/scratch/areaxfs3/"
-        assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
+        # # # bouton GT
+        # # BATCH 1
+        # dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_40nm_{" \
+        #               "}_with_BOUTONS_batch1_v2/".format(ws[0])
+        # global_params.wd = "/wholebrain/scratch/areaxfs3/"
+        # assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
+        # label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
+        #                     "/gt_axoness_semseg_skeletons/NEW_including_boutons/batch1_results/"
+        # file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
+        # GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
+        #               ws=ws, comp_window=comp_window, n_voting=0, h5_suffix="batch1")  # disable
+        # # BFS smoothing on
+        # # vertices (probalby not needed on cell compartment level)
+        # # Batch 2
+        dest_gt_dir = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_40nm_{" \
+                      "}_with_BOUTONS_batch2_v5/".format(ws[0])
+        global_params.wd = "/wholebrain/songbird/j0126/areaxfs_v6/"
+        assert global_params.wd == "/wholebrain/songbird/j0126/areaxfs_v6/"
         label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_semsegaxoness" \
-                            "/gt_axoness_semseg_skeletons/NEW_including_boutons/batch1_results/"
+                            "/gt_axoness_semseg_skeletons/NEW_including_boutons/batch2_results_v2/"
         file_paths = glob.glob(label_file_folder + '*.k.zip', recursive=False)
         GT_generation(file_paths, 'semsegaxoness', 'axgt', n_views, dest_dir=dest_gt_dir,
-                      ws=ws, comp_window=40.96e3*2, n_voting=0)  # disable BFS smoothing on vertices (probalby not needed on cell compartment level)
+                      ws=ws, comp_window=comp_window, n_voting=0, h5_suffix="batch2")  # disable
+        # BFS smoothing on

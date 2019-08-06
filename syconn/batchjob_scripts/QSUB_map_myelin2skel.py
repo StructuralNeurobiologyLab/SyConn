@@ -11,8 +11,9 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-from syconn.reps.super_segmentation_helper import create_sso_skeletons_wrapper
+from syconn.reps.super_segmentation_helper import map_myelin2coords, majorityvote_skeleton_property
 from syconn.reps.super_segmentation import SuperSegmentationDataset
+from syconn import global_params
 
 path_storage_file = sys.argv[1]
 path_out_file = sys.argv[2]
@@ -29,13 +30,15 @@ ssv_ids = args[0]
 version = args[1]
 version_dict = args[2]
 working_dir = args[3]
-map_myelin = args[4]
 
 ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
                                version_dict=version_dict)
-ssvs = ssd.get_super_segmentation_object(ssv_ids)
-create_sso_skeletons_wrapper(ssvs, map_myelin=map_myelin)
-
+for ssv in ssd.get_super_segmentation_object(ssv_ids):
+    ssv.load_skeleton()
+    ssv.skeleton["myelin"] = map_myelin2coords(ssv.skeleton["nodes"], mag=4)
+    majorityvote_skeleton_property(ssv, prop_key='myelin',
+                                   max_dist=global_params.DIST_AXONESS_AVERAGING)
+    ssv.save_skeleton()
 
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

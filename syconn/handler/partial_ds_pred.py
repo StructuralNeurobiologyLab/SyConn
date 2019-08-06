@@ -8,7 +8,7 @@ import time
 
 from syconn.handler.prediction import _pred_dataset
 
-
+# TODO: refactor
 if __name__ == '__main__':
     while True:
         # import error might occur when saving project...
@@ -18,7 +18,6 @@ if __name__ == '__main__':
             break
         except ImportError:
             time.sleep(0.2)
-
 
     args = sys.argv
     kd_p = np.array(args[1])

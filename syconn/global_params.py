@@ -41,7 +41,7 @@ BATCH_QUEUE = 'all.q'
 MEM_PER_NODE = 249.5e3  # in MB
 NCORES_PER_NODE = 20
 NGPUS_PER_NODE = 2
-NNODES_TOTAL = 16
+NNODES_TOTAL = 17
 NCORE_TOTAL = NNODES_TOTAL * NCORES_PER_NODE
 NGPU_TOTAL = NNODES_TOTAL * NGPUS_PER_NODE
 
@@ -86,8 +86,11 @@ MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0,
                 "conn": 4, 'syn_ssv': 20}
 MESH_MIN_OBJ_VX = 100  # adapt to size threshold
 
+meshing_props = dict(normals=True, simplification_factor=300, max_simplification_error=40)
+
 
 # --------- VIEW PARAMETERS
+# TODO: move all default view parameters here
 NB_VIEWS = 2
 
 # --------- GLIA PARAMETERS
@@ -102,7 +105,6 @@ RENDERING_MAX_NB_SV = 5e3
 # number of SV for which views are rendered in one pass
 SUBCC_CHUNK_SIZE_BIG_SSV = 9
 
-
 # --------- RFC PARAMETERS
 SKEL_FEATURE_CONTEXT = {"axoness": 8000, "spiness": 1000}  # in nm
 
@@ -114,9 +116,26 @@ gt_path_spineseg = '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'  # TODO:
 
 
 # --------- COMPARTMENT PARAMETERS
-DIST_AXONESS_AVERAGING = 10000
-gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm/'  # TODO: add to config
+DIST_AXONESS_AVERAGING = 10000  # also used for myelin averaging
+gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness' \
+                  '/all_bouton_data/'  # TODO: add to config
 
+# `n_avg=0` will not map predictions to unpredicted vertices -> faster
+# `n_avg` is used as the `k` parameter in `semseg2mesh`
+view_properties_semsegax = dict(verbose=False, ws=(1024, 512), nb_views=3,
+                                comp_window=40.96e3 * 1., semseg_key='axoness',
+                                n_avg=0)
+# ignore labels 5 (background) and unpredicted (6), use labels of the k-nearest vertices
+map_properties_semsegax = dict(k=50, ds_vertices=1, ignore_labels=[5, 6])
+
+# TODO: add view properties for spine prediction
+# mapping parameters of the semantic segmentation prediction to the cell mesh
+# Note: ``k=1`` means that the predictions are propagated to unpredicted and backround labels
+# via nearest neighbors.
+semseg2mesh_spines = dict(semseg_key="spiness", force_recompute=True, k=5)
+# no ignore labels used for the spine predictions because the predictions were propagated to
+# unpredicted and background vertices via `semseg2mesh`
+semseg2coords_spines = dict(k=50, ds_vertices=1)
 
 # --------- CELLTYPE PARAMETERS
 view_properties_large = dict(verbose=False, ws=(512, 512), nb_views_render=6,

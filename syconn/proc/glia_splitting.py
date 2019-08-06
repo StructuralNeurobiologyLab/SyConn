@@ -25,16 +25,17 @@ from . import log_proc
 def qsub_glia_splitting():
     """
     Start glia splitting -> generate final connected components of neuron vs.
-    glia SVs
+    glia SVs.
     """
     cc_dict = load_pkl2obj(global_params.config.working_dir + "/glia/cc_dict_rag_graphs.pkl")
     huge_ssvs = [it[0] for it in cc_dict.items() if len(it[1]) > RENDERING_MAX_NB_SV]
     if len(huge_ssvs):
         log_proc.info("{} huge SSVs detected (#SVs > {})".format(len(huge_ssvs),
                                                          RENDERING_MAX_NB_SV))
-    chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True), global_params.NCORE_TOTAL)
+    chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True),
+                   global_params.NCORE_TOTAL * 2)
     qu.QSUB_script(chs, "split_glia", n_cores=1,
-                   n_max_co_processes=global_params.NCORE_TOTAL,
+                   n_max_co_processes=global_params.NCORE_TOTAL * 2,
                    remove_jobfolder=True)
 
 
@@ -62,7 +63,7 @@ def collect_glia_sv():
     log_proc.info("Collected SV glianess.")
     # get SSV glia splits
     chs = chunkify(list(cc_dict.keys()), global_params.NCORES_PER_NODE)
-    glia_svs = np.concatenate(start_multiprocess(collect_gliaSV_helper, chs,
+    glia_svs = np.concatenate(start_multiprocess(collect_gliaSV_helper, chs, debug=False,
                                                  nb_cpus=global_params.NCORES_PER_NODE))
     log_proc.info("Collected SSV glia SVs.")
     # add missing SV glianess and store whole dataset classification
@@ -132,9 +133,6 @@ def write_glia_rag(rag, min_ssv_size, suffix=""):
         Bounding box diagonal in NM
     suffix : str
         Suffix for saved RAGs
-    Returns
-    -------
-
     """
     if type(rag) is str:
         assert os.path.isfile(rag), "RAG has to be given."
@@ -217,10 +215,6 @@ def transform_rag_edgelist2pkl(rag):
     Parameters
     ----------
     rag : networkx.Graph
-
-    Returns
-    -------
-
     """
     ccs = nx.connected_component_subgraphs(rag)
     cc_dict_graph = {}

@@ -8,25 +8,27 @@
 import numpy as np
 from scipy import spatial
 from collections import Counter
+from typing import Tuple, Optional, Union, List, Dict, Any
 
 from ..reps import log_reps
 from .. import global_params
 
 
-def knossos_ml_from_svixs(sv_ixs, coords=None, comments=None):
+def knossos_ml_from_svixs(sv_ixs: Union[np.ndarray, List],
+                          coords: Optional[Union[np.ndarray, List[np.ndarray]]] = None,
+                          comments: Optional[Union[List[str], np.ndarray]] = None) -> str:
     """
+    Generate a KNOSSOS merge list of an array of supervoxels with optional
+    coordinates and comments.
 
-    Parameters
-    ----------
-    sv_ixs : np.array or list
-    coords : np.array or list
-    comments : np.array or lost
+    Args:
+        sv_ixs: Supervoxel IDs.
+        coords: Representative coordinates of each supervoxel (in voxels).
+        comments: Comments for each supervoxel.
 
-    Returns
-    -------
-    str
+    Returns:
+        A KNOSSOS compatible merge list in string representation.
     """
-    # create pseudo mergle list, to fit input types of write_knossos_mergelist
     txt = ""
     if comments is not None:
         assert len(comments) == len(sv_ixs)
@@ -45,21 +47,22 @@ def knossos_ml_from_svixs(sv_ixs, coords=None, comments=None):
     return txt
 
 
-def knossos_ml_from_ccs(cc_ixs, ccs, coords=None, comments=None):
+def knossos_ml_from_ccs(cc_ixs: Union[List[int], np.ndarray],
+                        ccs: List[List[int]],
+                        coords: Optional[np.ndarray] = None,
+                        comments: Optional[List[str]] = None) -> str:
     """
     Converts list of connected components (i.e. list of SV IDs) into knossos
     merge list string.
 
-    Parameters
-    ----------
-    cc_ixs : List[int]
-    ccs : List[List[int]]
-    coords : List[np.array]
-    comments : List[List[str]]
+    Args:
+        cc_ixs: Connected component IDs, i.e. super-supervoxel IDs.
+        ccs: Supervoxel IDs for every connected component.
+        coords: Coordinates to each connected component (in voxels).
+        comments: Comments for each connected component.
 
-    Returns
-    -------
-    str
+    Returns:
+        A KNOSSOS compatible merge list in string representation.
     """
     if coords is None:
         coords = [None] * len(cc_ixs)
@@ -83,20 +86,19 @@ def knossos_ml_from_ccs(cc_ixs, ccs, coords=None, comments=None):
     return txt
 
 
-def knossos_ml_from_sso(sso, comment=None):
+def knossos_ml_from_sso(sso: 'SuperSegmentationObject',
+                        comment: Optional[str] = None):
     """
-    Converts list of connected components (i.e. list of SV IDs) into knossos
-    merge list string.
+    Converts the sueprvoxels which are part of the `sso` into a KNOSSOS
+    compatible merge list string.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-        Connected component
-    comment : None or list of str
+    Args:
+        sso: :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject` object.
+        comment: Comment.
 
-    Returns
-    -------
-    str
+    Returns:
+        A KNOSSOS compatible merge list in string representation.
+
     """
     cc_ix = sso.id
     txt = "%d 0 0 " % cc_ix
@@ -116,31 +118,6 @@ def knossos_ml_from_sso(sso, comment=None):
         txt += str(comment)
     txt += "\n"
     return txt
-
-
-def get_rel_path(obj_name, filename, suffix=""):
-    """
-    Returns path from ChunkDataset folder to SegmentationDataset folder.
-
-    Parameters
-    ----------
-    obj_name: str
-        ie. hdf5name
-    filename: str
-        Filename of the prediction in the chunkdataset
-    suffix: str
-        suffix of name
-
-    Returns
-    -------
-    rel_path: str
-        relative path from ChunkDataset folder to UltrastructuralDataset folder
-
-    """
-    if len(suffix) > 0 and not suffix[0] == "_":
-        suffix = "_" + suffix
-    return "/obj_" + obj_name + "_" + \
-           filename + suffix + "/"
 
 
 def subfold_from_ix(ix, n_folders, old_version=False):
@@ -325,6 +302,8 @@ def colorcode_vertices(vertices, rep_coords, rep_values, colors=None,
             log_reps.error(msg)
             raise ValueError(msg)
     hull_tree = spatial.cKDTree(rep_coords)
+    if k > len(rep_coords):
+        k = rep_coords
     dists, ixs = hull_tree.query(vertices, n_jobs=nb_cpus, k=k)
     hull_rep = np.zeros((len(vertices)), dtype=np.int)
     for i in range(len(ixs)):
@@ -380,12 +359,14 @@ def assign_rep_values(target_coords, rep_coords, rep_values,
     return hull_rep
 
 
-def surface_samples(coords, bin_sizes=(2000, 2000, 2000), max_nb_samples=5000,
-                    r=1000):
+def surface_samples(coords: np.ndarray,
+                    bin_sizes: Tuple[int, int, int] = (2000, 2000, 2000),
+                    max_nb_samples: int = 5000,
+                    r: int = 1000) -> np.ndarray:
     """'TODO: optimization required -- maybe use simple downsampling instead of histogram
     Sample locations from density grid given by coordinates and bin sizes.
-    At each grid center, collects coordinates within r to calculate center of
-    mass for sample location.
+    At each grid center, collects coordinates within the given radius to
+    calculate the center of mass which yields the sample location.
     
     Parameters
     ----------
@@ -423,7 +404,19 @@ def surface_samples(coords, bin_sizes=(2000, 2000, 2000), max_nb_samples=5000,
     return samples
 
 
-def find_object_properties(cube):
+def find_object_properties(cube: np.ndarray) -> \
+        Tuple[Dict[int, Any], Dict[int, Any], Dict[int, Any]]:
+    """
+    Interface method for :func:`~_find_object_properties` (python fallback) and
+    :func:`~find_object_properties_C` (cython).
+
+    Args:
+        cube: The segmentation cube as a 3D array.
+
+    Returns:
+        A list of dictionaries with supervoxel IDs as keys: representative
+        coordinate pointing to an object voxel, bounding box, size (in voxels).
+    """
     try:
         from . find_object_properties_C import find_object_propertiesC
         return find_object_propertiesC(cube)
@@ -431,23 +424,20 @@ def find_object_properties(cube):
         return _find_object_properties(cube)
 
 
-def _find_object_properties(cube):
+def _find_object_properties(cube: np.ndarray) -> \
+        Tuple[Dict[int, Any], Dict[int, Any], Dict[int, Any]]:
     """
     Extracts representative coordinate, bounding box and size for each segmentation objects
     within `cube`. Ignores ID=0.
     TODO: find a way to use bincount and find_objects for very large IDs -> use
      ID remapping to make segmentation IDs contiguous
 
-    Parameters
-    ----------
-    cube : np.ndarray
-    3D segmentation data, shape: [N, M, K]
+    Args:
+        cube:
 
-    Returns
-    -------
-    List[Dict]
-        Representative coordinate pointing to an object voxel, bounding box and size
-         of the objects
+    Returns:
+        A list of dictionaries with supervoxel IDs as keys: representative
+        coordinate pointing to an object voxel, bounding box, size (in voxels).
 
     """
     from scipy.ndimage import find_objects
@@ -459,12 +449,8 @@ def _find_object_properties(cube):
     log_reps.debug("Cube size: {}, min/max ID: {}/{}".format(cube.shape, min_id + 1,
                                                              np.max(cube)))
     cube[mask] = cube[mask] - min_id
-    # bincount requires int... TODO: unsafe behaviour for high ID values
-    # try:
     cnts = np.bincount(cube.flatten().astype(np.int64))
     ids = np.nonzero(cnts)[0]
-    # except ValueError:  # ValueError: array is too big; `arr.size * arr.dtype.itemsize` is larger than the maximum possible size.
-    # ids, cnts = np.unique(cube, return_counts=True)
     # get bounding boxes
     res = find_objects(
         cube)  # returns a list of bounding boxes, first entry will correspond to ID=1
@@ -485,5 +471,5 @@ def _find_object_properties(cube):
         bbs[obj_id] = np.array([min_vec, max_vec], dtype=np.int)
         sizes[obj_id] = cnts[ii]
         rep_coords[
-            obj_id] = min_vec + rand_obj_coord  # TODO: think of another efficient way to get a more representative coordinate
+            obj_id] = min_vec + rand_obj_coord
     return rep_coords, bbs, sizes

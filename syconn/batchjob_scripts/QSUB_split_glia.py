@@ -29,6 +29,8 @@ with open(path_storage_file, 'rb') as f:
             break
 
 scaling = global_params.config.entries['Dataset']['scaling']
+# TODO: This coulb be cunked by loading `mesh_bb` and glia prob. prediction cache arrays
+#  (might have to be create via `dataset_analysis`)
 for cc in args:
     svixs = list(cc.nodes())
     cc_ix = np.min(svixs)
@@ -44,12 +46,8 @@ for cc in args:
     sd = sos_dict_fact(svixs)
     sos = init_sos(sd)
     sso._objects["sv"] = sos
-    try:
-        sso.gliasplit(verbose=False)
-    except Exception as e:
-        print("\n-------------------------------------\n"
-              "ERROR: Splitting of SSV %d failed with %s."
-              "\n-------------------------------------\n" % (cc_ix, e))
+    sso.load_attr_dict()
+    sso.gliasplit(verbose=False, recompute=False)
 
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

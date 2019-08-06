@@ -20,6 +20,7 @@ except ImportError:
 from knossos_utils.skeleton import SkeletonAnnotation, SkeletonNode
 from knossos_utils import KnossosDataset
 import re
+import gc
 import signal
 import networkx as nx
 import contextlib
@@ -521,6 +522,7 @@ def write_obj2pkl(path, objects):
         destianation
     """
     # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
+    gc.disable()
     if isinstance(path, str):
         with open(path, 'wb') as output:
             pkl.dump(objects, output, -1)
@@ -529,6 +531,7 @@ def write_obj2pkl(path, objects):
                          "'objects' (python object).")
         with open(objects, 'wb') as output:
             pkl.dump(path, output, -1)
+    gc.enable()
 
 
 def load_pkl2obj(path):
@@ -541,15 +544,16 @@ def load_pkl2obj(path):
 
     Returns
     -------
-    SegmentationDatasetObject
     """
+    gc.disable()
     try:
         with open(path, 'rb') as inp:
             objects = pkl.load(inp)
-    except UnicodeDecodeError: # python3 compatibility
+    except UnicodeDecodeError:  # python3 compatibility
         with open(path, 'rb') as inp:
             objects = pkl.loads(inp.read(), encoding='bytes')
         objects = convert_keys_byte2str(objects)
+    gc.enable()
     return objects
 
 

@@ -39,6 +39,9 @@ sso = SuperSegmentationObject(**sso_kwargs)
 views = 0  # in case no rendering locations are given
 file = 'file'
 file = file + str(file_store_number)
+# TODO: refactor kwargs
+if 'overwrite' in kwargs:
+    del kwargs['overwrite']
 if render_indexviews:
     if 'add_cellobjects' in kwargs:
         del kwargs['add_cellobjects']
@@ -50,12 +53,12 @@ if render_indexviews:
         del kwargs['cellobjects_only']
     if 'return_rot_mat' in kwargs:
         del kwargs['return_rot_mat']
-    if 'wo_glia' in kwargs:
-        del kwargs['wo_glia']
+    if 'woglia' in kwargs:
+        del kwargs['woglia']
     views = render_sso_coords_index_views(sso, coords, **kwargs)
 else:
-    if 'wo_glia' in kwargs:
-        del kwargs['wo_glia']
+    if 'woglia' in kwargs:
+        del kwargs['woglia']
     views = render_sso_coords(sso, coords, **kwargs)
 
 with open(path_out_file, "wb") as f:

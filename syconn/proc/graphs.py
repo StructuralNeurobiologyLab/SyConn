@@ -6,6 +6,7 @@
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
 
 from scipy import spatial
+from typing import List, Optional, Dict, Any
 import networkx as nx
 import numpy as np
 from knossos_utils.skeleton import Skeleton, SkeletonAnnotation, SkeletonNode
@@ -100,7 +101,8 @@ def chunkify_contiguous(l, n):
         yield l[i:i + n]
 
 
-def split_subcc_join(g, subgraph_size, lo_first_n=1):
+def split_subcc_join(g: nx.Graph, subgraph_size: int,
+                     lo_first_n: int = 1) -> List[List[Any]]:
     """
     Creates a subgraph for each node consisting of nodes until maximum number of
     nodes is reached.
@@ -192,10 +194,8 @@ def split_glia_graph(nx_g, thresh, clahe=False, shortest_paths_dest_dir=None,
     Returns
     -------
     list, list
-        Neuron, glia connected components
+        Neuron, glia connected components.
     """
-    _ = start_multiprocess_obj("mesh_bb", [[sv, ] for sv in nx_g.nodes()],
-                               nb_cpus=nb_cpus, verbose=verbose)
     glia_key = "glia_probas"
     if clahe:
         glia_key += "_clahe"
@@ -237,8 +237,11 @@ def split_glia(sso, thresh, clahe=False, shortest_paths_dest_dir=None,
     return nonglia_ccs, glia_ccs
 
 
-def create_ccsize_dict(g, sizes):
-    ccs = nx.connected_components(g)
+def create_ccsize_dict(g, sizes, is_connected_components=False):
+    if not is_connected_components:
+        ccs = nx.connected_components(g)
+    else:
+        ccs = g
     node2cssize_dict = {}
     for cc in ccs:
         mesh_bbs = np.concatenate([sizes[n] for n in cc])
