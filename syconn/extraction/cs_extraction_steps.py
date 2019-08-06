@@ -7,6 +7,7 @@
 # Authors: Philipp Schubert, Joergen Kornfeld
 
 from collections import defaultdict
+
 try:
     import cPickle as pkl
 except ImportError:
@@ -19,6 +20,7 @@ import scipy.ndimage
 import h5py
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
+
 knossosdataset._set_noprint(True)
 import os
 from ..backend.storage import AttributeDict, VoxelStorageDyn, VoxelStorage
@@ -27,10 +29,11 @@ from ..mp import batchjob_utils as qu
 from ..handler import compression, basics
 from ..reps import segmentation
 from ..handler.basics import kd_factory, chunkify
-from . object_extraction_steps import export_cset_to_kd_batchjob
+from .object_extraction_steps import export_cset_to_kd_batchjob
 from . import log_extraction
 from .object_extraction_wrapper import from_ids_to_objects, calculate_chunk_numbers_for_box
 from ..mp.mp_utils import start_multiprocess_imap
+
 try:
     from .block_processing_C import process_block_nonzero, extract_cs_syntype
 except ImportError as e:
@@ -71,7 +74,7 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
     if chunk_size is None:
-        chunk_size=(512, 512, 512)
+        chunk_size = (512, 512, 512)
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
 
@@ -105,10 +108,10 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
 
     if not qu.batchjob_enabled():
         results = start_multiprocess_imap(_contact_site_extraction_thread, multi_params,
-                                    debug=False, nb_cpus=n_max_co_processes)
+                                          debug=False, nb_cpus=n_max_co_processes)
     else:
         path_to_out = qu.QSUB_script(multi_params, "contact_site_extraction",
-                           n_max_co_processes=n_max_co_processes, log=log)
+                                     n_max_co_processes=n_max_co_processes, log=log)
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -144,11 +147,8 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     for ii in range(len(cs_props)):
         grp = f.create_group(str(ii))
         for key, val in cs_props[ii].items():
-            if ii == 2:
-                grp.create_dataset(str(key), data=val)
-            else:
-                print("\n\n\n ii= ", ii, "key= ", key, " val= ", val)
-                grp.create_dataset(str(key), data=val, compression="gzip")
+            print("\n\n\n key= ", key, " ii= ", ii, "val= ", val)
+            grp.create_dataset(str(key), data=val)
     del cs_props
     f.close()
 
@@ -158,10 +158,7 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     for ii in range(len(syn_props)):
         grp = f.create_group(str(ii))
         for key, val in syn_props[ii].items():
-            if ii == 2:
-                grp.create_dataset(str(key), data=val)
-            else:
-                grp.create_dataset(str(key), data=val, compression="gzip")
+            grp.create_dataset(str(key), data=val)
     del syn_props
     f.close()
 
@@ -321,7 +318,7 @@ def _write_props_to_syn_thread(args):
                                           working_dir=global_params.config.working_dir, version=0)
 
     sd_cs = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs, obj_type='cs',
-                                          working_dir=global_params.config.working_dir, version=0)
+                                             working_dir=global_params.config.working_dir, version=0)
     # iterate over the subcellular SV ID chunks
     for obj_id_mod in cs_ids_ch:
         obj_keys = dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]
@@ -331,8 +328,9 @@ def _write_props_to_syn_thread(args):
         cs_props = load_h5_spec_dict(obj_keys, f_cs_props)
         syn_props = load_h5_spec_dict(obj_keys, f_syn_props)
         cs_sym_cnt = compression.load_from_h5py("{}/cs_sym_cnt.h5".format(global_params.config.temp_path), as_dict=True)
-        cs_asym_cnt = compression.load_from_h5py("{}/cs_asym_cnt.h5".format(global_params.config.temp_path), as_dict=True)
-        
+        cs_asym_cnt = compression.load_from_h5py("{}/cs_asym_cnt.h5".format(global_params.config.temp_path),
+                                                 as_dict=True)
+
         # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so = sd.get_segmentation_object(obj_id_mod)
         attr_p = dummy_so.attr_dict_path
@@ -391,17 +389,17 @@ def _write_props_to_syn_thread(args):
             # TODO: these should be refactored at some point, currently its not the same
             #  as before because the bounding box of the overlap object is used instead of
             #  the SJ bounding box. ALso the background ratio was adapted
-            n_vxs_in_sjbb = np.prod(bb[1] - bb[0]) # number of CS voxels in syn BB
+            n_vxs_in_sjbb = np.prod(bb[1] - bb[0])  # number of CS voxels in syn BB
             id_ratio = size_cs / n_vxs_in_sjbb  # this is the fraction of CS voxels within the syn BB
             cs_ratio = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size
             background_overlap_ratio = 1 - id_ratio  # TODO: not the same as before anymore: local
             # inverse 'CS' density: c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb  (previous version)
             add_feat_dict = {'sj_id': cs_id, 'cs_id': cs_id,
-                            'id_sj_ratio': id_ratio,
-                            'sj_size_pseudo': n_vxs_in_sjbb,
-                            'id_cs_ratio': cs_ratio,
-                            'cs_size': size_cs,
-                            'background_overlap_ratio': background_overlap_ratio}
+                             'id_sj_ratio': id_ratio,
+                             'sj_size_pseudo': n_vxs_in_sjbb,
+                             'id_cs_ratio': cs_ratio,
+                             'cs_size': size_cs,
+                             'background_overlap_ratio': background_overlap_ratio}
             this_attr_dc[cs_id].update(add_feat_dict)
             voxel_dc[cs_id] = bbs
             voxel_dc.increase_object_size(cs_id, size)
@@ -409,7 +407,7 @@ def _write_props_to_syn_thread(args):
 
             # write voxels explicitely, Assumes, reasonably sized synapses!
             voxel_dc_store[cs_id] = voxel_dc.get_voxeldata(cs_id)
-            
+
         voxel_dc_store.push()  # write voxel data explicitly
         voxel_dc_cs.push()
         this_attr_dc.push()
@@ -417,9 +415,8 @@ def _write_props_to_syn_thread(args):
 
 
 def load_h5_spec_dict(obj_keys, file):
-
     obj_keys = np.intersect1d(obj_keys, list(file['0'].keys()))
-    
+
     out_dict = [{}, defaultdict(list), {}]
     for obj_key in obj_keys:
         out_dict[0][int(obj_key)] = file['0'][obj_key][:]
