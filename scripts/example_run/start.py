@@ -110,7 +110,7 @@ if __name__ == '__main__':
         shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_rag_path)
     else:
         shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
-    #
+
     # # INITIALIZE DATA
     # kd = knossosdataset.KnossosDataset()
     # kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,

@@ -150,10 +150,16 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     p_h5py = "{}/cs_prop_dict.h5".format(global_params.config.temp_path)
     dict_paths.append(p_h5py)
     f = h5py.File(p_h5py, "w")
-    for ii in [0, 1]:
-        grp = f.create_group(str(ii))
-        for key, val in cs_props[ii].items():
-            grp.create_dataset(str(key), data=val, compression="lzf")
+    grp = f.create_group(str(0))
+    for key, val in cs_props[0].items():
+        grp.create_dataset(str(key), data=val, compression="lzf")
+
+    grp = f.create_group(str(1))
+    for key, val in cs_props[1].items():
+        if len(np.shape(val)) != 4:
+            val = np.concatenate(val)
+        grp.create_dataset(str(key), data=val, compression="lzf")
+
     grp = f.create_group(str(2))
     for key, val in cs_props[2].items():
         grp.create_dataset(str(key), data=val)
@@ -163,17 +169,20 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     p_h5py = "{}/syn_prop_dict.h5".format(global_params.config.temp_path)
     dict_paths.append(p_h5py)
     f = h5py.File(p_h5py, "w")
-    for ii in [0, 1]:
-        grp = f.create_group(str(ii))
-        for key, val in syn_props[ii].items():
-            grp.create_dataset(str(key), data=val, compression="lzf")
+    grp = f.create_group(str(0))
+    for key, val in syn_props[0].items():
+        grp.create_dataset(str(key), data=val, compression="lzf")
+
+    grp = f.create_group(str(1))
+    for key, val in syn_props[1].items():
+        grp.create_dataset(str(key), data=val, compression="lzf")
+
     grp = f.create_group(str(2))
     for key, val in syn_props[2].items():
         grp.create_dataset(str(key), data=val)
     del syn_props
-    f.close()
+    f.close()  # convert counting dicts to store ratio of syn. type voxels
 
-    # convert counting dicts to store ratio of syn. type voxels
     p_h5py = "{}/cs_sym_cnt.h5".format(global_params.config.temp_path)
     dict_paths.append(p_h5py)
     compression.save_to_h5py(tot_sym_cnt, p_h5py, compression=False)
