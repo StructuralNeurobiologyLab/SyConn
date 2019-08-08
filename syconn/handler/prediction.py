@@ -84,14 +84,14 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
         raw_data.append(raw[None, ])
         label = kd.from_kzip_to_matrix(zip_fname, size // mag, offset // mag, mag=mag,
                                        verbose=False, show_progress=False)
-        label = label.astype(np.uint16)
+        label = label
         label_data.append(label[None, ])
     raw = np.concatenate(raw_data, axis=0).astype(np.float32)
-    label = np.concatenate(label_data, axis=0).astype(np.uint16)
+    label = np.concatenate(label_data, axis=0)
     try:
         _ = parse_cc_dict_from_kzip(zip_fname)
     except:  # mergelist.txt does not exist
-        label = np.zeros(size).astype(np.uint16)
+        label = np.zeros(size)
         return raw.astype(np.float32) / 255., label
     return raw.astype(np.float32) / 255., label
 
@@ -268,37 +268,52 @@ def zxy2xyz(vol):
     return vol
 
 
-def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True,
-                        raw_data_offset=75, debug=False, mag=1, squeeze_data=False):
+def create_h5_from_kzip(zip_fname: str, kd_p: str,
+                        foreground_ids: Optional[Iterable[int]] = None,
+                        overwrite: bool = True, raw_data_offset: int = 75,
+                        debug: bool = False, mag: int = 1,
+                        squeeze_data: int = False,
+                        target_labels: Optional[Iterable[int]] = None):
     """
-    Create .h5 files for ELEKTRONN input. Only supports binary labels
-     (0=background, 1=foreground).
+    Create .h5 files for ELEKTRONN (zyx) input. Only supports binary labels
+    (0=background, 1=foreground).
 
-    Parameters
-    ----------
-    zip_fname: str
-    kd_p : str
-    foreground_ids : iterable
-        ids which have to be converted to foreground, i.e. 1. Everything
-        else is considered background (0). If None, everything except 0 is
-        treated as foreground.
-    overwrite : bool
-        If True, will overwrite existing .h5 files
-    raw_data_offset : int
-        number of voxels used for additional raw offset, i.e. the offset for the
-        raw data will be label_offset - raw_data_offset, while the raw data
-        volume will be label_volume + 2*raw_data_offset. It will
-        use 'kd.scaling' to account for dataset anisotropy if scalar or a
-        list of length 3 hast to be provided for a custom x, y, z offset.
-    debug : bool
-        if True, file will have an additional 'debug' suffix and
-        raw_data_offset is set to 0. Also their bit depths are adatped to be the
-        same
-    mag: int
-        Data mag. level.
-    squeeze_data : bool
-        If True, label and raw data will be squeezed.
+    Examples:
+        Suppose your k.zip file contains the segmentation GT with two segmentation
+        IDs 1, 2 and is stored at ``kzip_fname``. The corresponding
+        ``KnossosDataset`` is located at ``kd_path`` .
+        The following code snippet will create an ``.h5`` file in the folder of
+        ``kzip_fname`` with the raw data (additional offset controlled by
+        ``raw_data_offset``) and the label data (either binary or defined by
+        ``target_labels``) with the keys ``raw`` and ``label`` respectively::
+
+            create_h5_from_kzip(d_p=kd_path, raw_data_offset=75,
+            zip_fname=kzip_fname, mag=1, foreground_ids=[1, 2],
+            target_labels=[1, 2])
+
+    Args:
+        zip_fname: Path to the annotated kzip file.
+        kd_p: Path to the underlying raw data stored as KnossosDataset.
+        foreground_ids: IDs which have to be converted to foreground, i.e. 1. Everything
+            else is considered background (0). If None, everything except 0 is
+            treated as foreground.
+        overwrite: If True, will overwrite existing .h5 files
+        raw_data_offset: Number of voxels used for additional raw offset, i.e. the offset for the
+            raw data will be label_offset - raw_data_offset, while the raw data
+            volume will be label_volume + 2*raw_data_offset. It will
+            use 'kd.scaling' to account for dataset anisotropy if scalar or a
+            list of length 3 hast to be provided for a custom x, y, z offset.
+        debug: If True, file will have an additional 'debug' suffix and
+            raw_data_offset is set to 0. Also their bit depths are adatped to be the
+            same.
+        mag: Data mag. level.
+        squeeze_data: If True, label and raw data will be squeezed.
+        target_labels: If set, `foreground_ids` must also be set. Each ID in
+            `foreground_ids` will be mapped to the corresponding label in
+            `target_labels`.
     """
+    if target_labels is not None and foreground_ids is None:
+        raise ValueError('`target_labels` is set, but `foreground_ids` is None.')
     fname, ext = os.path.splitext(zip_fname)
     if fname[-2:] == ".k":
         fname = fname[:-2]
@@ -324,10 +339,14 @@ def create_h5_from_kzip(zip_fname, kd_p, foreground_ids=None, overwrite=True,
             foreground_ids = []
         print("Foreground IDs not assigned. Inferring from "
               "'mergelist.txt' in k.zip.:", foreground_ids)
-    create_h5_gt_file(fname_dest, raw, label, foreground_ids, debug=debug)
+    create_h5_gt_file(fname_dest, raw, label, foreground_ids, debug=debug,
+                      target_labels=target_labels)
 
 
-def create_h5_gt_file(fname, raw, label, foreground_ids=None, debug=False):
+def create_h5_gt_file(fname: str, raw: np.ndarray, label: np.ndarray,
+                      foreground_ids: Optional[Iterable[int]] = None,
+                      target_labels: Optional[Iterable[int]] = None,
+                      debug: bool = False):
     """
     Create .h5 files for ELEKTRONN input from two arrays.
     Only supports binary labels (0=background, 1=foreground). E.g. for creating
@@ -344,18 +363,21 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None, debug=False):
         ids which have to be converted to foreground, i.e. 1. Everything
         else is considered background (0). If None, everything except 0 is
         treated as foreground.
+    target_labels: Iterable
+        If set, `foreground_ids` must also be set. Each ID in `foreground_ids` will
+        be mapped to the corresponding label in `target_labels`.
     debug : bool
         will store labels and raw as uint8 ranging from 0 to 255
     """
+    if target_labels is not None and foreground_ids is None:
+        raise ValueError('`target_labels` is set, but `foreground_ids` is None.')
     print(os.path.split(fname)[1])
-    print("Raw:", raw.shape, raw.dtype, raw.min(), raw.max())
-    print("Label:", label.shape, label.dtype, label.min(), label.max())
-    print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
-    label = binarize_labels(label, foreground_ids)
+    print("Label (before):", label.shape, label.dtype, label.min(), label.max())
+    label = binarize_labels(label, foreground_ids, target_labels=target_labels)
     label = xyz2zxy(label)
     raw = xyz2zxy(raw)
     print("Raw:", raw.shape, raw.dtype, raw.min(), raw.max())
-    print("Label:", label.shape, label.dtype, label.min(), label.max())
+    print("Label (after mapping):", label.shape, label.dtype, label.min(), label.max())
     print("-----------------\nGT Summary:\n%s\n" %str(Counter(label.flatten()).items()))
     if not fname[-2:] == "h5":
         fname = fname + ".h5"
@@ -365,15 +387,19 @@ def create_h5_gt_file(fname, raw, label, foreground_ids=None, debug=False):
     save_to_h5py([raw, label], fname, hdf5_names=["raw", "label"])
 
 
-def binarize_labels(labels, foreground_ids):
+def binarize_labels(labels: np.ndarray, foreground_ids: Iterable[int],
+                    target_labels: Optional[Iterable[int]] = None):
     """
-    Transforms label array to binary label array (0=background, 1=foreground),
-    given foreground ids.
+    Transforms label array to binary label array (0=background, 1=foreground) or
+    to the labels provided in `target_labels` by mapping the foreground IDs
+    accordingly.
 
     Parameters
     ----------
     labels : np.array
     foreground_ids : iterable
+    target_labels: Iterable
+        labels used for mapping foreground IDs.
 
     Returns
     -------
@@ -381,6 +407,7 @@ def binarize_labels(labels, foreground_ids):
     """
     new_labels = np.zeros_like(labels)
     if foreground_ids is None:
+        target_labels = [1]
         if len(np.unique(labels)) > 2:
             print("------------ WARNING -------------\n"
                   "Found more than two different labels during label "
@@ -392,13 +419,15 @@ def binarize_labels(labels, foreground_ids):
             _ = iter(foreground_ids)
         except TypeError:
             foreground_ids = [foreground_ids]
-        for ix in foreground_ids:
-            new_labels[labels == ix] = 1
+        if target_labels is None:
+            target_labels = [1 for _ in foreground_ids]
+        for ii, ix in enumerate(foreground_ids):
+            new_labels[labels == ix] = target_labels[ii]
     labels = new_labels
-    assert len(np.unique(labels)) <= 2
-    assert 0 <= np.max(labels) <= 1
-    assert 0 <= np.min(labels) <= 1
-    return labels
+    assert len(np.unique(labels)) <= len(target_labels) + 1
+    assert 0 <= np.max(labels) <= np.max(target_labels)
+    assert 0 <= np.min(labels) <= np.max(target_labels)
+    return labels.astype(np.uint16)
 
 
 def parse_movement_area_from_zip(zip_fname):
@@ -600,7 +629,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     n_cores_per_job = global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE if\
         not 'example' in global_params.config.working_dir else global_params.NCORES_PER_NODE
     qu.QSUB_script(multi_params, "predict_dense", n_max_co_processes=global_params.NGPU_TOTAL,
-                   n_cores=n_cores_per_job)
+                   n_cores=n_cores_per_job, remove_jobfolder=True)
     log.info('Finished dense prediction of {} Chunks'.format(len(chunk_ids)))
 
 

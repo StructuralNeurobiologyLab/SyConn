@@ -13,10 +13,11 @@ from sklearn import ensemble, externals
 from sklearn.model_selection import cross_val_score
 from knossos_utils.chunky import load_dataset
 from knossos_utils import knossosdataset, skeleton_utils, skeleton
-
+from typing import Union, Optional, Dict, List, Callable, TYPE_CHECKING, Tuple
 knossosdataset._set_noprint(True)
 import time
 import datetime
+import tqdm
 import shutil
 import pickle as pkl
 
@@ -29,10 +30,11 @@ from ..backend.storage import AttributeDict, VoxelStorage, CompressedStorage
 from ..handler.basics import chunkify
 from . import log_extraction
 from .. import global_params
+if TYPE_CHECKING:
+    from ..reps.segmentation import SegmentationDataset
 
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
-                                         qsub_pe=None, qsub_queue=None,
                                          n_max_co_processes=None, debug=False):
     """
     Collect axoness, cell types and spiness from synaptic partners and stores
@@ -43,9 +45,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     ----------
     wd : str
     obj_version : str
-    ssd_version : int
-    qsub_pe : str
-    qsub_queue : str
+    ssd_version : str
     n_max_co_processes : int
         Number of parallel jobs
     debug : bool
@@ -376,7 +376,9 @@ def _combine_and_split_syn_thread(args):
         syn_attr_list = np.array(syn_attr_list)
         synix_list = np.array(synix_list)
         if len(voxel_list) == 0:
-            raise ValueError('Empty voxel list')
+            msg = 'Voxels not available for syn-object {}.'.format(str(syn))
+            log_extraction.error(msg)
+            raise ValueError(msg)
         ccs = cc_large_voxel_lists(voxel_list * scaling, cs_gap_nm)
         for this_cc in ccs:
             this_cc_mask = np.array(list(this_cc))
@@ -404,9 +406,7 @@ def _combine_and_split_syn_thread(args):
                 log_extraction.error(msg)
                 np.save(debug_out_fname, this_vx)
                 raise ValueError(msg)
-            # aggregate syn properties:
-            # ['sj_id', 'cs_id', 'id_sj_ratio', 'id_cs_ratio', 'background_overlap_ratio',
-            #  'cs_size', 'sj_size_pseudo']
+            # aggregate syn properties
             syn_props_agg = {}
             for dc in this_attr:
                 for k in ['background_overlap_ratio', 'id_cs_ratio', 'id_sj_ratio', 'cs_id',
@@ -716,7 +716,8 @@ def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000,
     return ccs
 
 
-# Code for mapping SJ to CS, three different ways: via ChunkDataset (currently used), KnossosDataset, SegmentationDataset+
+# Code for mapping SJ to CS, three different ways: via ChunkDataset
+# (currently used), KnossosDataset, SegmentationDataset+
 # TODO: SegmentationDataset version of below, probably not necessary anymore
 def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
                              n_folders_fs=10000,
@@ -968,7 +969,8 @@ def syn_gen_via_cset_thread(args):
             cs_ids = cs_cset.from_chunky_to_matrix(size, offset, 'cs', ['cs'],
                                                    dtype=np.uint64)['cs']
             u_cs_ids, c_cs_ids = np.unique(cs_ids, return_counts=True)
-            n_vxs_in_sjbb = float(np.sum(c_cs_ids))  # equivalent to .size which is the  total volume
+            # equivalent to .size which is the total volume
+            n_vxs_in_sjbb = float(np.sum(c_cs_ids))
             zero_ratio = c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb
             for cs_id in u_cs_ids:
                 if cs_id == 0:
@@ -989,8 +991,10 @@ def syn_gen_via_cset_thread(args):
                 vx_block[overlap_vx[:, 0], overlap_vx[:, 1], overlap_vx[:, 2]] = True
 
                 voxel_dc[next_syn_id] = [vx_block], [bounding_box[0]]
-                # also store cs size and sj bounding box (equivalent to the sum of all cs voxels including background...)
-                # for faster calculation  of aggregated syn properties during 'syn_ssv' generation ('combine_and_split_syn')
+                # also store cs size and sj bounding box (equivalent to the sum
+                # of all cs voxels including background...)
+                # for faster calculation  of aggregated syn properties during
+                # 'syn_ssv' generation ('combine_and_split_syn')
                 attr_dc[next_syn_id] = {'sj_id': sj_id, 'cs_id': cs_id,
                                         'id_sj_ratio': id_ratio,
                                         'sj_size_pseudo': n_vxs_in_sjbb,
@@ -1245,14 +1249,36 @@ def write_conn_gt_kzips(conn, n_objects, folder):
         skeleton_utils.write_skeleton(folder + "/obj_%d.k.zip" % conn_id, [a])
 
 
-def create_syn_gt(conn, path_kzip):
+def create_syn_gt(conn: 'SegmentationDataset', path_kzip: str) -> \
+        Tuple[ensemble.RandomForestClassifier, np.ndarray, np.ndarray]:
+    """
+    Trains a random forest classifier (RFC) to distinguish between synaptic and non-synaptic
+    objects. Features are generated from the objects in `conn` associated with the annotated
+    coordinates stored in `path_kzip`.
+    Will write the trained classifier to ``global_params.config.mpath_syn_rfc``.
+
+    Args:
+        conn: :class:`~syconn.reps.segmentation.SegmentationDataset` object of
+            type ``syn_ssv``. Used to identify synaptic object candidates annotated
+            in the kzip file at `path_kzip`.
+        path_kzip: Path to kzip file with synapse labels as node comments
+            ("non-synaptic", "synaptic"; labels used for classifier are 0 and 1
+            respectively).
+
+    Returns:
+        The trained random forest classifier and the feature and label data.
+    """
     annos = skeleton_utils.loadj0126NML(path_kzip)
+    if len(annos) != 1:
+        raise ValueError('Zero or more than one annotation object in GT kzip.')
 
     label_coords = []
     labels = []
-    for anno in annos:
-        node = list(anno.getNodes())[0]
-        labels.append(node.getComment())
+    for node in annos[0].getNodes():
+        c = node.getComment()
+        if not ((c == 'synaptic') | (c == 'non-synaptic')):
+            continue
+        labels.append(c)
         label_coords.append(np.array(node.getCoordinate()))
 
     labels = np.array(labels)
@@ -1263,58 +1289,61 @@ def create_syn_gt(conn, path_kzip):
 
     synssv_ids = conn.ids[list_ids]
     mapped_synssv_objects_kzip = os.path.split(path_kzip)[0] + '/mapped_synssv.k.zip'
-    # for label_id in np.where(ds > 0)[0]:
-    #     dists, close_ids = conn_kdtree.query(label_coords[label_id] * conn.scaling,
-    #                                          k=100)
-    #
-    #     for close_id in close_ids[np.argsort(dists)]:
-    #         conn_o = conn.get_segmentation_object(conn.ids[close_id])
-    #         if len(conn_o.mesh[1]) == 0:  # only big synapses..
-    #             continue
-    #         vx_ds = np.sum(np.abs(conn_o.voxel_list - label_coords[label_id]),
-    #                        axis=-1)
-    #         print('voxel dist:', np.min(vx_ds))
-    #         synssv_ids[label_id] = conn.ids[close_id]
-    #         break
-    #         # if np.min(vx_ds) == 0:
-    #         #     synssv_ids[label_id] = conn.ids[close_id]
-    #         #     break
-    #
-    #     # assert 0 in vx_ds
-
+    log_extraction.info(f'Mapped {len(labels)} GT coordinates to {conn.type}-objects.')
+    for label_id in np.where(ds > 0)[0]:
+        dists, close_ids = conn_kdtree.query(label_coords[label_id] * conn.scaling,
+                                             k=100)
+        for close_id in close_ids[np.argsort(dists)]:
+            conn_o = conn.get_segmentation_object(conn.ids[close_id])
+            vx_ds = np.sum(np.abs(conn_o.voxel_list - label_coords[label_id]),
+                           axis=-1)
+            if np.min(vx_ds) == 0:
+                synssv_ids[label_id] = conn.ids[close_id]
+                break
+    log_extraction.info(f'Synapse features will now be generated and written to '
+                        f'{mapped_synssv_objects_kzip}.')
     features = []
     skel = skeleton.Skeleton()
     anno = skeleton.SkeletonAnnotation()
     anno.scaling = conn.scaling
+    pbar = tqdm.tqdm(total=len(synssv_ids))
     for kk, synssv_id in enumerate(synssv_ids):
         synssv_o = conn.get_segmentation_object(synssv_id)
-        synssv_o.mesh2kzip(mapped_synssv_objects_kzip, ext_color=None, ply_name='{}.ply'.format(synssv_id))
+        # synssv_o.mesh2kzip(mapped_synssv_objects_kzip, ext_color=None,
+        # ply_name='{}.ply'.format(synssv_id))
         n = skeleton.SkeletonNode().from_scratch(anno, synssv_o.rep_coord[0], synssv_o.rep_coord[1],
                                                  synssv_o.rep_coord[2])
         n.setComment('{}'.format(labels[kk]))
         anno.addNode(n)
         features.append(synssv_o_features(synssv_o))
+        pbar.update(1)
+    pbar.close()
     skel.add_annotation(anno)
     skel.to_kzip(mapped_synssv_objects_kzip)
     features = np.array(features)
     rfc = ensemble.RandomForestClassifier(n_estimators=200, max_features='sqrt',
-                                          n_jobs=-1)
-    v_features = features[labels != "ambiguous"]
-    v_labels = labels[labels != "ambiguous"]
-    v_labels = v_labels == "synaptic"
-    v_labels = v_labels.astype(np.int)
+                                          n_jobs=-1, random_state=0)
+    mask_annotated = (labels == "synaptic") | (labels == 'non-synaptic')
+    v_features = features[mask_annotated]
+    v_labels = labels[mask_annotated]
+    v_labels = (v_labels == "synaptic").astype(np.int)
     score = cross_val_score(rfc, v_features, v_labels, cv=10)
-    log_extraction.info('Mean score +- std: {} +- {}'.format(np.mean(score),
-                                                             np.std(score)))
+    log_extraction.info('RFC CV score +- std: {:.4f} +- {:.4f}'.format(
+        np.mean(score), np.std(score)))
 
     rfc.fit(v_features, v_labels)
-    log_extraction.info('RFC importances:' + str(rfc.feature_importances_))
+    feature_names = synssv_o_featurenames()
+    feature_imp = rfc.feature_importances_
+    assert len(feature_imp) == len(feature_names)
+    log_extraction.info('RFC importances:\n' + "\n".join(
+        [f"{feature_names[ii]}: {feature_imp[ii]}" for ii in range(len(feature_imp))]))
 
     model_base_dir = os.path.split(global_params.config.mpath_syn_rfc)[0]
     os.makedirs(model_base_dir, exist_ok=True)
 
-    # unclear why there is 'rfc' after it
     externals.joblib.dump(rfc, global_params.config.mpath_syn_rfc)
+    log_extraction.info(f'Wrote parameters of trained RFC to '
+                        f'{global_params.config.mpath_syn_rfc}.')
 
     return rfc, v_features, v_labels
 
@@ -1346,11 +1375,17 @@ def synssv_o_features(synssv_o):
     return features
 
 
+def synssv_o_featurenames():
+    return ['size', 'id_sj_ratio', 'id_cs_ratio', 'n_mi_objs_neuron1',
+            'n_mi_vxs_neuron1', 'n_vc_objs_neuron1', 'n_vc_vxs_neuron1',
+            'n_mi_objs_neuron2', 'n_mi_vxs_neuron2', 'n_vc_objs_neuron2',
+            'n_vc_vxs_neuron2']
+
+
 def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
                           mi_version=None, vc_version=None, max_vx_dist_nm=None,
-                          max_rep_coord_dist_nm=None, qsub_pe=None, log=None,
-                          qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
-    # TODO: remove `qsub_pe`and `qsub_queue`
+                          max_rep_coord_dist_nm=None, log=None,
+                          nb_cpus=None, n_max_co_processes=None):
     # TODO: optimize
     """
     Maps cellular organelles to syn_ssv objects. Needed for the RFC model which
@@ -1379,18 +1414,17 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
 
     # chunk params
     multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.NCORE_TOTAL * 2)
-    multi_params = [(so_dir_paths, wd, obj_version, mi_version, vc_version, ssd_version, max_vx_dist_nm,
-                     max_rep_coord_dist_nm) for so_dir_paths in multi_params]
+    multi_params = [(so_dir_paths, wd, obj_version, mi_version, vc_version,
+                     ssd_version, max_vx_dist_nm, max_rep_coord_dist_nm) for
+                    so_dir_paths in multi_params]
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_map_objects_to_synssv_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+        sm.start_multiprocess_imap(_map_objects_to_synssv_thread,
+                                   multi_params, nb_cpus=nb_cpus)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "map_objects_to_synssv", log=log,
-                                     n_max_co_processes=n_max_co_processes,
-                                     remove_jobfolder=True)
+        qu.QSUB_script(multi_params, "map_objects_to_synssv", log=log,
+                       n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
 
 
 def _map_objects_to_synssv_thread(args):

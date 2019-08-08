@@ -21,7 +21,7 @@ if __name__ == "__main__":
     str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, GPe=5, INT=8, GLIA=9)
     str2int_label["?"] = 8
     str2int_label["GP "] = 5  # typo
-    csv_p = '/wholebrain/songbird/j0126/cell_type_gt_AREAXFS6_updated_April_06_2019.csv'
+    csv_p = '/wholebrain/songbird/j0126/GT/cell_type_gt_AREAXFS6_updated_April_06_2019.csv'
     gt = df = pandas.io.parsers.read_csv(csv_p).values
     ssv_ids = df[:, 0].astype(np.uint)
     str_labels = df[:, 1]

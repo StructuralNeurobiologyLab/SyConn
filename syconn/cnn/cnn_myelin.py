@@ -19,7 +19,8 @@ import numpy as np
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('-n', '--exp-name', default='myelin_unet_4b_2p_32f_gtv3', help='Manually set '
+parser.add_argument('-n', '--exp-name', default='myelin_unet_4b_2p_32f_gtv3_noBN', help='Manually '
+                                                                                      'set '
                                                                            'experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=1000,
@@ -80,7 +81,7 @@ model = UNet(
     start_filts=16,
     planar_blocks=(0, 2),
     activation='relu',
-    batch_norm=True,
+    batch_norm=False,
     # conv_mode='valid',
     # up_mode='resizeconv_nearest',  # Enable to avoid checkerboard artifacts
     adaptive=True  # Experimental. Disable if results look weird.

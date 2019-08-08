@@ -87,9 +87,12 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
         cube_of_interest_bb=cube_of_interest_bb, log=log)
 
 
-def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=10000, max_n_jobs=None,
-                          load_cellorganelles_from_kd_overlaycubes=False,
-                          transf_func_kd_overlay=None, cube_of_interest_bb=None):
+def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
+                          n_folders_fs: int = 10000, n_folders_fs_sc: int = 10000,
+                          max_n_jobs: Optional[int] = None,
+                          load_cellorganelles_from_kd_overlaycubes: bool = False,
+                          transf_func_kd_overlay: Optional[Callable] = None,
+                          cube_of_interest_bb: Optional[np.ndarray] = None):
     """
     Todo:
         * Don't extract sj objects and replace their use-cases with syn objects (?).
@@ -138,7 +141,7 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
-             ' cell supervoxels'.format(global_params.existing_cell_organelles))
+             ' cell supervoxels.'.format(global_params.existing_cell_organelles))
     start = time.time()
     sd_proc.map_subcell_extract_props(
         global_params.config.kd_seg_path, global_params.config.kd_organelle_seg_paths,

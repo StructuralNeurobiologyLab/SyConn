@@ -321,8 +321,8 @@ class SuperSegmentationObject(object):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return 'SSO object (ID: {}, type: "{}", version: "{}", path: "{}"'.format(
-            self.id, self.type, self.version, self.ssv_dir)
+        return '{} with ID: {}, type: "{}", version: "{}", path: "{}"'.format(
+            type(self).__name__, self.id, self.type, self.version, self.ssv_dir)
 
     #                                                       IMMEDIATE PARAMETERS
     @property
@@ -1429,6 +1429,9 @@ class SuperSegmentationObject(object):
                        recompute: bool = False) -> float:
         """
         Ratio of symmetric synapses (between 0 and 1; -1 if no synapse objects).
+
+        Todo:
+            * Distinguish pre- and post-synaptic site -> retrain celltype classifier.
 
         Args:
             weighted: Compute synapse-area weighted ratio.
@@ -3294,20 +3297,10 @@ def semsegaxoness_predictor(args):
         ssv.nb_cpus = nb_cpus
         ssv._view_caching = True
         try:
-            try:
-                ssh.semseg_of_sso_nocache(ssv, m, **view_props)
-            except Exception:
-                # retry # TODO: facing cuda OOM errors after certain number of iterations
-                del m
-                del ssv
-                ssv = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
-                ssv.nb_cpus = nb_cpus
-                ssv._view_caching = True
-                m = get_semseg_axon_model()
-                ssh.semseg_of_sso_nocache(ssv, m, **view_props)
+            ssh.semseg_of_sso_nocache(ssv, m, **view_props)
         except Exception as e:
             missing_ssvs.append((ssv.id, str(e)))
-            msg = 'ERROR during sem. seg. prediction of SSV {}. {}'.format(ssv.id, repr(e))
+            msg = 'Error during sem. seg. prediction of SSV {}. {}'.format(ssv.id, repr(e))
             log_reps.error(msg)
         pbar.update()
     pbar.close()

@@ -28,7 +28,8 @@ def run_matrix_export():
     # cache cell attributes
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     ssd.save_dataset_deep()
-    log = initialize_logging('synapse_analysis', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('synapse_analysis',
+                             global_params.config.working_dir + '/logs/',
                              overwrite=True)
 
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
@@ -63,10 +64,11 @@ def run_matrix_export():
 def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
                        n_folders_fs: int = 10000,
                        max_n_jobs: Optional[int] = None,
-                       cube_of_interest_bb: Optional[Tuple[np.ndarray]] = None):
+                       cube_of_interest_bb: Optional[np.ndarray] = None):
     """
     Run the synapse generation. Will create
-    :class:`~syconn.reps.segmentation.SegmentationDataset` objects with the following versions:
+    :class:`~syconn.reps.segmentation.SegmentationDataset` objects with
+    the following versions:
         * 'cs': Contact site objects between supervoxels.
         * 'syn': Objects representing the overlap between 'cs' and the initial
           synaptic junction predictions. Note: These objects effectively represent
@@ -84,7 +86,8 @@ def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
     if max_n_jobs is None:
         max_n_jobs = global_params.NCORE_TOTAL * 2
 
-    log = initialize_logging('synapse_generation', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('synapse_generation',
+                             global_params.config.working_dir + '/logs/',
                              overwrite=True)
 
     kd_seg_path = global_params.config.kd_seg_path
@@ -104,7 +107,7 @@ def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
                               cs_gap_nm=global_params.cs_gap_nm, log=log,
                               n_folders_fs=n_folders_fs)
     log.info('Synapse objects were created.')
-    #
+
     sd_syn_ssv = SegmentationDataset(working_dir=global_params.config.working_dir,
                                      obj_type='syn_ssv')
 
@@ -121,7 +124,8 @@ def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
              'dictionary.')
     # This needs to be run after `classify_synssv_objects` and before
     # `map_synssv_objects` if the latter uses thresholding for synaptic objects
-    dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)  # just collect new data
+    # just collect new data: ``recompute=False``
+    dataset_analysis(sd_syn_ssv, compute_meshprops=False, recompute=False)
     # TODO: decide whether this should happen after prob thresholding or not
     map_synssv_objects(log=log)
     log.info('Finished.')

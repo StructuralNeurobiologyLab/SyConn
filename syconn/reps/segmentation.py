@@ -178,6 +178,10 @@ class SegmentationObject(object):
     def __ne__(self, other):
         return not self.__eq__(other)
 
+    def __repr__(self):
+        return '{} with ID: {}, type: "{}", version: "{}", path: "{}"'.format(
+            type(self).__name__, self.id, self.type, self.version, self.segobj_dir)
+
     def __reduce__(self):
         """
         Support pickling of class instances.
@@ -1282,8 +1286,6 @@ class SegmentationObject(object):
                                 data=self.voxels.astype(np.uint64) * write_id,
                                 datatype=np.uint64,
                                 kzip_path=path,
-                                # TODO: check existence of `overwrite_kzip` kwarg
-                                overwrite_kzip=False,
                                 overwrite=False)
 
     def clear_cache(self):
@@ -1474,7 +1476,7 @@ class SegmentationDataset(object):
               site objects.
 
     """
-    def __init__(self, obj_type: str, version: Optional[str] = None,
+    def __init__(self, obj_type: str, version: Optional[Union[str, int]] = None,
                  working_dir: Optional[str] = None,
                  scaling: Optional[Union[List, Tuple, np.ndarray]] = None,
                  version_dict: Optional[Dict[str, str]] = None, create: bool = False,
@@ -1576,6 +1578,10 @@ class SegmentationDataset(object):
 
         if create and not os.path.exists(self.so_storage_path):
             os.makedirs(self.so_storage_path)
+
+    def __repr__(self):
+        return '{} of type: "{}", version: "{}", path: "{}"'.format(
+            type(self).__name__, self.type, self.version, self.path)
 
     @property
     def type(self) -> str:

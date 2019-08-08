@@ -65,9 +65,11 @@ def run_morphology_embedding(max_n_jobs: Optional[int] = None):
     # add ssd parameters
     multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
                      pred_key_appendix) for ssv_ids in multi_params]
-    qu.QSUB_script(multi_params, "generate_morphology_embedding", n_max_co_processes=global_params.NGPU_TOTAL,
-                   n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE, log=log,
-                   suffix="", additional_flags="--gres=gpu:1", remove_jobfolder=True)
+    qu.QSUB_script(multi_params, "generate_morphology_embedding",
+                   n_max_co_processes=global_params.NGPU_TOTAL,
+                   n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                   log=log, suffix="", additional_flags="--gres=gpu:1",
+                   remove_jobfolder=True)
     log.info('Finished extraction of cell morphology embedding.')
 
 
@@ -128,7 +130,8 @@ def run_axoness_prediction(max_n_jobs_gpu: Optional[int] = None,
                              overwrite=False)
     if max_n_jobs_gpu is None:
         max_n_jobs_gpu = global_params.NGPU_TOTAL * 2
-    # here because all qsub jobs will start a script referring to 'global_params.config.working_dir'
+    # here because all qsub jobs will start a script referring to
+    # 'global_params.config.working_dir'
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     sd = ssd.get_segmentationdataset("sv")
     # chunk them
@@ -145,7 +148,8 @@ def run_axoness_prediction(max_n_jobs_gpu: Optional[int] = None,
                             imposed_batch_size=m.imposed_batch_size, nb_labels=m.nb_labels,
                             channels_to_load=m.channels_to_load)
     
-    #all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
+    # all other kwargs like obj_type='sv' and version are the current SV
+    # SegmentationDataset by default
     so_kwargs = dict(working_dir=global_params.config.working_dir)
     # for axoness views set woglia to True (because glia were removed beforehand),
     #  raw_only to False
@@ -168,7 +172,7 @@ def run_axoness_prediction(max_n_jobs_gpu: Optional[int] = None,
     else:
         for par in multi_params:
             mk = par[1]
-            # Single GPUs are made available for every job via slurm, no need for random assignments.
+            # SLURM is GPU aware, no need for random assignments.
             mk["init_gpu"] = 0  # np.random.rand(0, 2)
         _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked", log=log,
                            n_max_co_processes=global_params.NGPU_TOTAL // 2,
@@ -316,10 +320,14 @@ def run_semsegaxoness_prediction(max_n_jobs_gpu: Optional[int] = None):
     # one list as parameter one needs an additonal axis
     multi_params = [(ixs, ) for ixs in multi_params]
 
+    if not 'example' in global_params.config.working_dir:
+        n_cores = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE
+    else:
+        n_cores = global_params.NCORES_PER_NODE
     path_to_out = qu.QSUB_script(multi_params, "predict_axoness_semseg", log=log,
                                  n_max_co_processes=global_params.NNODES_TOTAL,
                                  suffix="", additional_flags="--gres=gpu:1",
-                                 n_cores=global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE,
+                                 n_cores=n_cores,
                                  remove_jobfolder=False)
     log.info('Finished prediction of {} SSVs. Checking completeness.'
              ''.format(len(ordering)))
@@ -439,29 +447,29 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = [(ixs, global_params.config.working_dir) for ixs in multi_params]
     log.info('Started rendering of {} SSVs. '.format(np.sum(size_mask)))
-        # generic
+
     if global_params.PYOPENGL_PLATFORM == 'osmesa':  # utilize all CPUs
-        path_to_out = qu.QSUB_script(multi_params, "render_views", log=log,
-                           n_max_co_processes=global_params.NCORE_TOTAL,
-                           remove_jobfolder=False)
+        qu.QSUB_script(multi_params, "render_views", log=log,
+                       n_max_co_processes=global_params.NCORE_TOTAL,
+                       remove_jobfolder=False)
     elif global_params.PYOPENGL_PLATFORM == 'egl':  # utilize 1 GPU per task
         # run EGL on single node: 20 parallel jobs
         if global_params.config.working_dir is not None and 'example_cube' in \
                 global_params.config.working_dir:
             n_cores = 1
             n_parallel_jobs = global_params.NCORES_PER_NODE
-            path_to_out = qu.QSUB_script(multi_params, "render_views",
-                               n_max_co_processes=n_parallel_jobs, log=log,
-                               additional_flags="--gres=gpu:2",
-                               n_cores=n_cores, remove_jobfolder=False)
+            qu.QSUB_script(multi_params, "render_views",
+                           n_max_co_processes=n_parallel_jobs, log=log,
+                           additional_flags="--gres=gpu:2",
+                           n_cores=n_cores, remove_jobfolder=True)
         # run on whole cluster
         else:
             n_cores = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE
             n_parallel_jobs = global_params.NGPU_TOTAL
-            path_to_out = qu.QSUB_script(multi_params, "render_views_egl",
-                               n_max_co_processes=n_parallel_jobs, log=log,
-                               additional_flags="--gres=gpu:1",
-                               n_cores=n_cores, remove_jobfolder=True)
+            qu.QSUB_script(multi_params, "render_views_egl",
+                           n_max_co_processes=n_parallel_jobs, log=log,
+                           additional_flags="--gres=gpu:1",
+                           n_cores=n_cores, remove_jobfolder=True)
     else:
         raise RuntimeError('Specified OpenGL platform "{}" not supported.'
                            ''.format(global_params.PYOPENGL_PLATFORM))
@@ -522,10 +530,10 @@ def _run_neuron_rendering_big_helper(max_n_jobs: Optional[int] = None):
         multi_params = chunkify(multi_params, max_n_jobs)
         # list of SSV IDs and SSD parameters need to be given to a single QSUB job
         multi_params = [(ixs, sso_kwargs, render_kwargs) for ixs in multi_params]
-        path_to_out = qu.QSUB_script(multi_params, "render_views",
-                           n_max_co_processes=n_parallel_jobs, log=log,
-                           additional_flags="--gres=gpu:1",
-                           n_cores=n_cores, remove_jobfolder=True)
+        qu.QSUB_script(multi_params, "render_views",
+                       n_max_co_processes=n_parallel_jobs, log=log,
+                       additional_flags="--gres=gpu:1",
+                       n_cores=n_cores, remove_jobfolder=True)
         # # render index-views only
         for ssv_id in big_ssv:
             ssv = SuperSegmentationObject(ssv_id, working_dir=global_params.config.working_dir)
@@ -648,7 +656,8 @@ def run_glia_prediction(e3: bool = False):
     """
     log = initialize_logging('glia_prediction', global_params.config.working_dir + '/logs/',
                              overwrite=False)
-    # only append to this key if needed (for e.g. different versions, change accordingly in 'axoness_mapping.py')
+    # only append to this key if needed (for e.g. different versions,
+    # change accordingly in 'axoness_mapping.py')
     pred_key = "glia_probas"
 
     # Load initial RAG from  Knossos mergelist text file.
@@ -670,7 +679,8 @@ def run_glia_prediction(e3: bool = False):
                             imposed_batch_size=m.imposed_batch_size,
                             nb_labels=m.nb_labels,
                             channels_to_load=m.channels_to_load)
-    # all other kwargs like obj_type='sv' and version are the current SV SegmentationDataset by default
+    # all other kwargs like obj_type='sv' and version are the current SV
+    # SegmentationDataset by default
     so_kwargs = dict(working_dir=global_params.config.working_dir)
     # for glia views set woglia to False (because glia are included),
     #  raw_only to True
@@ -851,7 +861,8 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
             q_in.put((kk, g, version))
         for _ in range(n_threads):
             q_in.put(-1)
-        ps = [Process(target=_run_huge_ssv_render_worker, args=(q_in, q_out)) for _ in range(n_threads)]
+        ps = [Process(target=_run_huge_ssv_render_worker, args=(q_in, q_out))
+              for _ in range(n_threads)]
         for p in ps:
             p.start()
             time.sleep(0.5)
@@ -860,7 +871,10 @@ def run_glia_rendering(max_n_jobs: Optional[int] = None):
         for p in ps:
             p.join()
         if q_out.qsize() != len(big_ssv):
-            raise ValueError('Not all `_run_huge_ssv_render_worker` jobs completed successfully.')
+            msg = 'Not all `_run_huge_ssv_render_worker` jobs completed ' \
+                  'successfully.'
+            log.error(msg)
+            raise ValueError(msg)
     # render small SSV without overhead and single cpus on whole cluster
     multi_params = small_ssv
     np.random.shuffle(multi_params)

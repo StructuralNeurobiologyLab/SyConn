@@ -29,10 +29,12 @@ def run_skeleton_generation(max_n_jobs: Optional[int] = None,
 
     """
     if map_myelin is None:
-        map_myelin = os.path.isdir(global_params.config.working_dir + '/knossosdatasets/myelin/')
+        map_myelin = os.path.isdir(global_params.config.working_dir +
+                                   '/knossosdatasets/myelin/')
     if max_n_jobs is None:
         max_n_jobs = global_params.NCORE_TOTAL * 2
-    log = initialize_logging('skeleton_generation', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('skeleton_generation',
+                             global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
@@ -47,8 +49,8 @@ def run_skeleton_generation(max_n_jobs: Optional[int] = None,
     multi_params = chunkify(multi_params, max_n_jobs)
 
     # add ssd parameters
-    multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir, map_myelin)
-                    for ssv_ids in multi_params]
+    multi_params = [(ssv_ids, ssd.version, ssd.version_dict, ssd.working_dir,
+                     map_myelin) for ssv_ids in multi_params]
 
     # create SSV skeletons, requires SV skeletons!
     log.info('Starting skeleton generation of {} SSVs.'.format(
@@ -76,7 +78,8 @@ def map_myelin_global(max_n_jobs: Optional[int] = None):
     """
     if max_n_jobs is None:
         max_n_jobs = global_params.NCORE_TOTAL * 2
-    log = initialize_logging('myelin_mapping', global_params.config.working_dir + '/logs/',
+    log = initialize_logging('myelin_mapping',
+                             global_params.config.working_dir + '/logs/',
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 

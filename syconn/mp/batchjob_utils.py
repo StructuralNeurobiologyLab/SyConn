@@ -295,6 +295,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         elif BATCH_PROC_SYSTEM == 'SLURM':
             if n_cores > 1:
                 additional_flags += " -n%d" % n_cores
+            # TODO: remove
+            additional_flags += ' --time=0-12'
             cmd_exec = "sbatch {0} --output={1} --error={2}" \
                        " --job-name={3} {4}".format(
                 additional_flags, job_log_path, job_err_path,

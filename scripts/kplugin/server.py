@@ -134,7 +134,8 @@ def route_hello():
 
 
 class SyConnBackend(object):
-    def __init__(self, syconn_path='', logger=None, synthresh=0.5, axodend_only=True):
+    def __init__(self, syconn_path: str = '', logger=None, synthresh=0.5,
+                 axodend_only=True):
         """
         Initializes a SyConn backend for operation.
         This includes in-memory initialization of the
@@ -145,7 +146,11 @@ class SyConnBackend(object):
         might be served.
         All backend functions must return dicts.
 
-        :param syconn_path: str
+        Args:
+            syconn_path:
+            logger:
+            synthresh: All synapses below `synthresh` will be excluded.
+            axodend_only: If True, only axo-dendritic synapses will be loaded.
         """
         self.logger = logger
         self.logger.info('Initializing SyConn backend')

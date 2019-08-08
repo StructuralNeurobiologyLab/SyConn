@@ -183,7 +183,8 @@ class SuperSegmentationDataset(object):
                                        os.path.basename(other_dataset))[-1])
                     if max_version < other_version:
                         max_version = other_version
-                except IndexError:  # version is not an integer, found version could be e.g. 'tmp'
+                # version is not an integer, found version could be e.g. 'tmp'
+                except IndexError:
                     pass
 
             self._version = max_version + 1
@@ -211,8 +212,8 @@ class SuperSegmentationDataset(object):
             self.apply_mergelist(sv_mapping)
 
     def __repr__(self):
-        return 'SSD of type "{}", version "{}" stored at "{}".'.format(self.type, self.version,
-                                                                       self.path)
+        return '{} of type: "{}", version: "{}", path: "{}"'.format(
+            type(self).__name__, self.type, self.version, self.path)
 
     @property
     def type(self) -> str:
@@ -842,7 +843,8 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
     sv_kd = kd_factory(sv_kd_path)
     if not os.path.exists(ssv_kd_path):
         ssv_kd = knossosdataset.KnossosDataset()
-        scale = np.array(global_params.config.entries["Dataset"]["scaling"], dtype=np.float32)
+        scale = np.array(global_params.config.entries["Dataset"]["scaling"],
+                         dtype=np.float32)
         ssv_kd.initialize_without_conf(ssv_kd_path, sv_kd.boundary, scale,
                                        sv_kd.experiment_name, mags=[1])
 
@@ -867,14 +869,11 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
                              size])
 
     if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess(_convert_knossosdataset_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+        sm.start_multiprocess(_convert_knossosdataset_thread,
+                              multi_params, nb_cpus=nb_cpus)
 
     elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "convert_knossosdataset",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None)
+        qu.QSUB_script(multi_params, "convert_knossosdataset")
 
     else:
         raise Exception("QSUB not available")
