@@ -12,7 +12,7 @@ if __name__ == '__main__':
     parser.add_argument('--working_dir', type=str,
                         default=os.path.expanduser("~/SyConn/example_cube1/"),
                         help='Working directory of SyConn')
-    parser.add_argument('--kzip', type=str, default='',
+    parser.add_argument('--kzip', type=str, default='/u/atultm/reconstruction_kzips_1/28479489.k.zip',
                         help='path to kzip file which contains a cell reconstruction (see '
                              'SuperSegmentationObject().export2kzip())')
     args = parser.parse_args()

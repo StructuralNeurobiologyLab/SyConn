@@ -37,6 +37,12 @@ try:
     from ..proc.in_bounding_boxC import in_bounding_box
 except ImportError:
     from ..proc.in_bounding_box import in_bounding_box
+try:
+    from .semseg_helper import semseg2mesh_sub2
+except ImportError as e:    #log_extraction.warning('Could not import cython version of `block_processing`.')
+    from .semseg_helper import semseg2mesh_sub
+
+
 
 
 def majority_vote(anno, prop, max_dist):
@@ -1651,6 +1657,121 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             maj_vote = colorcode_vertices(
                 sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
                 return_color=False, nb_cpus=sso.nb_cpus)
+        else:  # no vertex mask was applied in this case
+            maj_vote = predictions
+        ts4 = time.time()
+        log_reps.debug('Time to map predictions on unpredicted vertices: '
+                       '{:.2f}s.'.format(ts4 - ts3))
+        # add prediction to mesh storage
+        ld[semseg_key] = maj_vote
+        ld.push()
+    else:
+        maj_vote = ld[semseg_key]
+    if colors is not None:
+        col = colors[maj_vote].astype(np.uint8)
+        if np.sum(col) == 0:
+            log_reps.warn('All colors-zero warning during "semseg2mesh"'
+                          ' of SSO {}. Make sure color values have uint8 range '
+                          '0...255'.format(sso.id))
+    else:
+        col = maj_vote
+    if dest_path is not None:
+        if colors is None:
+            col = None  # set to None, because write_mesh2kzip only supports
+            # RGBA colors and no labels
+        write_mesh2kzip(dest_path, sso.mesh[0], sso.mesh[1], sso.mesh[2],
+                        col, ply_fname=semseg_key + ".ply")
+        return
+
+    return sso.mesh[0], sso.mesh[1], sso.mesh[2], col
+
+
+def semseg2mesh_new(sso, semseg_key, nb_views=None, dest_path=None, k=1,
+                colors=None, force_recompute=False, index_view_key=None):
+    """
+    # TODO: optimize with cython
+    # TODO: throws index error for huge SSV?
+    Maps semantic segmentation to SSV mesh.
+
+    Parameters
+    ----------
+    sso : SuperSegmentationObject
+    semseg_key : str
+    nb_views : int
+    dest_path : Optional[str]
+        Colored mesh will be written to k.zip and not returned.
+    k : int
+        Number of nearest vertices to average over. If k=0 unpredicted vertices
+         will be treated as 'unpredicted' class.
+    colors : Optional[Tuple[list]]
+        np.array with as many entries as the maximum label of 'semseg_key'
+        predictions with values between 0 and 255 (will be interpreted as uint8).
+        If it is None, the majority label according to kNN will be returned
+        instead. Note to add a color for unpredicted vertices if k==0; here
+        illustrated with by the spine prediction example:
+        if k=0: [neck, head, shaft, other, background, unpredicted]
+        else: [neck, head, shaft, other, background]
+    force_recompute : bool
+    index_view_key : str
+
+    Returns
+    -------
+    np.array, np.array, np.array, np.array
+        indices, vertices, normals, color
+    """
+    ld = sso.label_dict('vertex')
+    if force_recompute or not semseg_key in ld:
+        ts0 = time.time()  # view loading
+        if nb_views is None and index_view_key is None:
+            # load default
+            i_views = sso.load_views(index_views=True).flatten()
+        else:
+            if index_view_key is None:
+                index_view_key = "index{}".format(nb_views)
+            # load special views
+            i_views = sso.load_views(index_view_key).flatten()
+        semseg_views = sso.load_views(semseg_key).flatten()
+        ts1 = time.time()
+        log_reps.debug('Time to load index and shape views: '
+                       '{:.2f}s.'.format(ts1 - ts0))
+        background_id = np.max(i_views)
+        background_l = np.max(semseg_views)
+        unpredicted_l = background_l + 1
+        pp = len(sso.mesh[1]) // 3
+        arr = np.zeros((pp, background_l + 1), dtype='int')
+        arr = semseg2mesh_sub2(i_views, semseg_views, background_id, pp, background_l, arr)
+        vertex_labels = np.argmax(arr, axis=1)
+        mask = np.sum(arr, axis=1) == 0
+        vertex_labels[mask] = unpredicted_l
+        ts2 = time.time()
+        log_reps.debug('Time to generate look-up dict: '
+                       '{:.2f}s.'.format(ts2 - ts1))
+        # background label is highest label in prediction (see 'generate_palette' or
+        # 'remap_rgb_labelviews' in multiviews.py)
+        if unpredicted_l > 255:
+            raise ValueError('Overflow in label view array.')
+        if k == 0:  # map actual prediction situation / coverage
+            # keep unpredicted vertices and vertices with background labels
+            predicted_vertices = sso.mesh[1].reshape(-1, 3)
+            predictions = vertex_labels
+        else:
+            # remove unpredicted vertices
+            predicted_vertices = sso.mesh[1].reshape(-1, 3)[vertex_labels != unpredicted_l]
+            predictions = vertex_labels[vertex_labels != unpredicted_l]
+            # remove background class
+            predicted_vertices = predicted_vertices[predictions != background_id]
+            predictions = predictions[predictions != background_id]
+        ts3 = time.time()
+        log_reps.debug('Time to map predictions on vertices: '
+                       '{:.2f}s.'.format(ts3 - ts2))
+        #TODO:colorcode_vertices() behaves weirdly, increases the unpredicted mapping time compared to semseg2mesh()
+        if k > 0:  # map predictions of predicted vertices to all vertices
+            maj_vote = colorcode_vertices(
+                sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
+                return_color=False, nb_cpus=sso.nb_cpus)
+            t = time.time()
+            log_reps.debug('Time for k=0: '
+                           '{:.2f}s.'.format(t - ts3))
         else:  # no vertex mask was applied in this case
             maj_vote = predictions
         ts4 = time.time()
