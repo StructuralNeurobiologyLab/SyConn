@@ -138,7 +138,6 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     #  vc and syn (instead of sj))
 
     #  dump intermediate results
-    int_time = time.time()    
     dict_paths = []
     # dump intermediate results
     dict_p = "{}/cs_prop_dict.pkl".format(global_params.config.temp_path)
@@ -165,8 +164,6 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
         pkl.dump(tot_asym_cnt, f)
     del tot_asym_cnt
     dict_paths.append(dict_p)
-
-    int_time -=time.time() 
 
     # write cs and syn segmentation to KD and SD
     chunky.save_dataset(cset)
@@ -199,18 +196,12 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     #     storage_location_ids, max_n_jobs)]
     multi_params = [(sv_id_block, n_folders_fs, path, path_cs) for sv_id_block in basics.chunkify(
         storage_location_ids, 1)]
-    int_time2 = time.time()
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_syn_thread,
                                 multi_params, nb_cpus=n_max_co_processes, debug=False)
     else:
         qu.QSUB_script(multi_params, "write_props_to_syn", log=log,
                        n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
-    
-    int_time2 -= time.time()
-    print("\n\n\n int_time1= ", int_time)
-    print("\n\n\n int_time_2= ", int_time2)
-    sys.exit()    
     sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                           obj_type='syn', version=0)
     dataset_analysis(sd, recompute=True, compute_meshprops=False)
