@@ -32,7 +32,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
     example_cube_id = args.example_cube
     if args.working_dir == "":  # by default use cube dependent working dir
-        args.working_dir = "~/example_cube{}/".format(example_cube_id)
+        args.working_dir = "/wholebrain/scratch/mariakaw/example_cube{}/".format(example_cube_id)
     example_wd = os.path.expanduser(args.working_dir) + "/"
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
 
@@ -147,10 +147,10 @@ if __name__ == '__main__':
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs, n_folders_fs_sc=n_folders_fs_sc)
     exec_init.run_create_rag()
-    
+
     time_stamps.append(time.time())
     step_idents.append('SD generation')
-    
+
     if global_params.config.prior_glia_removal:
         log.info('Step 1.5/8 - Glia separation')
         exec_multiview.run_glia_rendering()
@@ -158,12 +158,12 @@ if __name__ == '__main__':
         exec_multiview.run_glia_splitting()
         time_stamps.append(time.time())
         step_idents.append('Glia separation')
-    
+
     log.info('Step 2/8 - Creating SuperSegmentationDataset')
     exec_multiview.run_create_neuron_ssd()
     time_stamps.append(time.time())
     step_idents.append('SSD generation')
-    
+
     # TODO: launch steps 3 and 4 in parallel
     log.info('Step 3/8 - Neuron rendering')
     exec_multiview.run_neuron_rendering()
@@ -174,53 +174,51 @@ if __name__ == '__main__':
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
-
-    log.info('Step 5/8 - Axon prediction')
-    exec_multiview.run_semsegaxoness_prediction()
-    exec_multiview.run_semsegaxoness_mapping()
-    time_stamps.append(time.time())
-    step_idents.append('Axon prediction')
-
-    log.info('Step 6/8 - Spine prediction')
-    exec_multiview.run_spiness_prediction()
-    time_stamps.append(time.time())
-    step_idents.append('Spine prediction')
-
-    log.info('Step 7/9 - Morphology extraction')
-    exec_multiview.run_morphology_embedding()
-    time_stamps.append(time.time())
-    step_idents.append('Morphology extraction')
-
-    log.info('Step 8/9 - Celltype analysis')
-    exec_multiview.run_celltype_prediction()
-    time_stamps.append(time.time())
-    step_idents.append('Celltype analysis')
-
-    log.info('Step 9/9 - Matrix export')
-    exec_syns.run_matrix_export()
-    time_stamps.append(time.time())
-    step_idents.append('Matrix export')
-
-    time_stamps = np.array(time_stamps)
-    dts = time_stamps[1:] - time_stamps[:-1]
-    dt_tot = time_stamps[-1] - time_stamps[0]
-    dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
-    time_summary_str = "\nEM data analysis of experiment '{}' finished after" \
-                       " {}.\n".format(experiment_name, dt_tot_str)
-    n_steps = len(step_idents[1:]) - 1
-    for i in range(len(step_idents[1:])):
-        step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
-        step_dt_perc = int(dts[i] / dt_tot * 100)
-        step_str = "[{}/{}] {}\t\t\t{}\t\t\t{}%\n".format(
-            i, n_steps, step_idents[i+1], step_dt, step_dt_perc)
-        time_summary_str += step_str
-    log.info(time_summary_str)
-    log.info('Setting up flask server for inspection. Annotated cell reconst'
-             'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
-             ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    fname_server = os.path.dirname(os.path.abspath(__file__)) + \
-                   '/../kplugin/server.py'
-    os.system('python {} --working_dir={} --port=10001'.format(
-        fname_server, example_wd))
-    marysia_time -= time.time()
-    print("\n\n\n marysia_time= ", marysia_time)
+    #
+    # log.info('Step 5/8 - Axon prediction')
+    # exec_multiview.run_semsegaxoness_prediction()
+    # exec_multiview.run_semsegaxoness_mapping()
+    # time_stamps.append(time.time())
+    # step_idents.append('Axon prediction')
+    #
+    # log.info('Step 6/8 - Spine prediction')
+    # exec_multiview.run_spiness_prediction()
+    # time_stamps.append(time.time())
+    # step_idents.append('Spine prediction')
+    #
+    # log.info('Step 7/9 - Morphology extraction')
+    # exec_multiview.run_morphology_embedding()
+    # time_stamps.append(time.time())
+    # step_idents.append('Morphology extraction')
+    #
+    # log.info('Step 8/9 - Celltype analysis')
+    # exec_multiview.run_celltype_prediction()
+    # time_stamps.append(time.time())
+    # step_idents.append('Celltype analysis')
+    #
+    # log.info('Step 9/9 - Matrix export')
+    # exec_syns.run_matrix_export()
+    # time_stamps.append(time.time())
+    # step_idents.append('Matrix export')
+    #
+    # time_stamps = np.array(time_stamps)
+    # dts = time_stamps[1:] - time_stamps[:-1]
+    # dt_tot = time_stamps[-1] - time_stamps[0]
+    # dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
+    # time_summary_str = "\nEM data analysis of experiment '{}' finished after" \
+    #                    " {}.\n".format(experiment_name, dt_tot_str)
+    # n_steps = len(step_idents[1:]) - 1
+    # for i in range(len(step_idents[1:])):
+    #     step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
+    #     step_dt_perc = int(dts[i] / dt_tot * 100)
+    #     step_str = "[{}/{}] {}\t\t\t{}\t\t\t{}%\n".format(
+    #         i, n_steps, step_idents[i+1], step_dt, step_dt_perc)
+    #     time_summary_str += step_str
+    # log.info(time_summary_str)
+    # log.info('Setting up flask server for inspection. Annotated cell reconst'
+    #          'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
+    #          ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    # fname_server = os.path.dirname(os.path.abspath(__file__)) + \
+    #                '/../kplugin/server.py'
+    # os.system('python {} --working_dir={} --port=10001'.format(
+    #     fname_server, example_wd))

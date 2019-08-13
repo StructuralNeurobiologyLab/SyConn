@@ -14,6 +14,7 @@ except ImportError:
     import pickle as pkl
 import time
 import shutil
+import sys
 import glob
 import numpy as np
 import scipy.ndimage
@@ -33,7 +34,7 @@ from .object_extraction_steps import export_cset_to_kd_batchjob
 from . import log_extraction
 from .object_extraction_wrapper import from_ids_to_objects, calculate_chunk_numbers_for_box
 from ..mp.mp_utils import start_multiprocess_imap
-
+from new_projects.properties_storage import H5Dictionary, PropertiesStorage
 try:
     from .block_processing_C import process_block_nonzero, extract_cs_syntype
 except ImportError as e:
@@ -139,52 +140,30 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     #  rendering the neuron views (which need subcellular structures, there one can then use mi,
     #  vc and syn (instead of sj))
 
-    #  dump intermediate results
+    #  save intermediate results
     dict_paths = []
     p_h5py = "{}/cs_prop_dict.h5".format(global_params.config.temp_path)
     dict_paths.append(p_h5py)
-    f = h5py.File(p_h5py, "w")
-    grp = f.create_group(str(0))
-    for key, val in cs_props[0].items():
-        grp.create_dataset(str(key), data=val, compression="lzf")
-
-    grp = f.create_group(str(1))
-    for key, val in cs_props[1].items():
-        if len(np.shape(val)) != 4:
-            val = np.concatenate(val)
-        grp.create_dataset(str(key), data=val, compression="lzf")
-
-    grp = f.create_group(str(2))
-    for key, val in cs_props[2].items():
-        grp.create_dataset(str(key), data=val)
+    cs_props_h5 = PropertiesStorage(p_h5py, write=True)
+    cs_props_h5.save_properties(cs_props)
     del cs_props
-    f.close()
 
     p_h5py = "{}/syn_prop_dict.h5".format(global_params.config.temp_path)
     dict_paths.append(p_h5py)
-    f = h5py.File(p_h5py, "w")
-    grp = f.create_group(str(0))
-    for key, val in syn_props[0].items():
-        grp.create_dataset(str(key), data=val, compression="lzf")
-
-    grp = f.create_group(str(1))
-    for key, val in syn_props[1].items():
-        grp.create_dataset(str(key), data=val, compression="lzf")
-
-    grp = f.create_group(str(2))
-    for key, val in syn_props[2].items():
-        grp.create_dataset(str(key), data=val)
+    syn_props_h5 = PropertiesStorage(p_h5py, write=True)
+    syn_props_h5.save_properties(syn_props)
     del syn_props
-    f.close()  # convert counting dicts to store ratio of syn. type voxels
 
     p_h5py = "{}/cs_sym_cnt.h5".format(global_params.config.temp_path)
     dict_paths.append(p_h5py)
-    compression.save_to_h5py(tot_sym_cnt, p_h5py, compression=False)
+    tot_sym_cnt_h5 = H5Dictionary(p_h5py, write=True)
+    tot_sym_cnt_h5.save_properties(tot_sym_cnt)
     del tot_sym_cnt
 
     p_h5py = "{}/cs_asym_cnt.h5".format(global_params.config.temp_path)
     dict_paths.append(p_h5py)
-    compression.save_to_h5py(tot_asym_cnt, p_h5py, compression=False)
+    tot_asym_cnt_h5 = H5Dictionary(p_h5py, write=True)
+    tot_asym_cnt_h5.save_properties(tot_asym_cnt)
     del tot_asym_cnt
 
     # write cs and syn segmentation to KD and SD
@@ -218,12 +197,18 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     #     storage_location_ids, max_n_jobs)]
     multi_params = [(sv_id_block, n_folders_fs, path, path_cs) for sv_id_block in basics.chunkify(
         storage_location_ids, 1)]
+
+    time1 = time.time()
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_syn_thread,
                                 multi_params, nb_cpus=n_max_co_processes, debug=False)
     else:
         qu.QSUB_script(multi_params, "write_props_to_syn", log=log,
                        n_max_co_processes=n_max_co_processes, remove_jobfolder=True)
+
+    time1 -= time.time()
+    print("\n\n\n time1= ", time1)
+    sys.exit()
     sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
                                           obj_type='syn', version=0)
     dataset_analysis(sd, recompute=True, compute_meshprops=False)
@@ -317,10 +302,16 @@ def _write_props_to_syn_thread(args):
     knossos_path_cs = args[3]
 
     p_h5py = "{}/cs_prop_dict.h5".format(global_params.config.temp_path)
-    f_cs_props = h5py.File(p_h5py, 'r')
+    f_cs_props = PropertiesStorage(p_h5py)
 
     p_h5py = "{}/syn_prop_dict.h5".format(global_params.config.temp_path)
-    f_syn_props = h5py.File(p_h5py, 'r')
+    f_syn_props = PropertiesStorage(p_h5py)
+
+    p_h5py = "{}/cs_sym_cnt.h5".format(global_params.config.temp_path)
+    f_cs_sym_cnt = H5Dictionary(p_h5py)
+
+    p_h5py = "{}/cs_asym_cnt.h5".format(global_params.config.temp_path)
+    f_cs_asym_cnt = H5Dictionary(p_h5py)
 
     # store destinations for each existing obj
     dest_dc = defaultdict(list)
@@ -339,11 +330,10 @@ def _write_props_to_syn_thread(args):
 
         if len(obj_keys) == 0:
             continue
-        cs_props = load_h5_spec_dict(obj_keys, f_cs_props)
-        syn_props = load_h5_spec_dict(obj_keys, f_syn_props)
-        cs_sym_cnt = compression.load_from_h5py("{}/cs_sym_cnt.h5".format(global_params.config.temp_path), as_dict=True)
-        cs_asym_cnt = compression.load_from_h5py("{}/cs_asym_cnt.h5".format(global_params.config.temp_path),
-                                                 as_dict=True)
+        cs_props = f_cs_props.read_properties(obj_keys)
+        syn_props = f_syn_props.read_properties(obj_keys)
+        cs_sym_cnt = f_cs_sym_cnt.read_properties(obj_keys)
+        cs_asym_cnt = f_cs_asym_cnt.read_properties(obj_keys)
 
         # get dummy segmentation object to fetch attribute dictionary for this batch of object IDs
         dummy_so = sd.get_segmentation_object(obj_id_mod)
