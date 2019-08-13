@@ -6,20 +6,23 @@
 * SyConn is based on the packages [elektronn3](https://github.com/ELEKTRONN/elektronn3) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
 * [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.
 
+1.We recommend installing Anaconda and setting up a python environment:
 
-1. We recommend installing Anaconda and setting up a python environment:
 ```
 conda create -n pysy python=3.6 anaconda
 conda activate pysy
 ```
-2. a) Either git clone and install syconn with all prerequisites:
+
+2.a) Either git clone and install syconn with all prerequisites:
+
 ```
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 cd SyConn
 sh install.sh
 ```
 
-2. b) Or alternatively run these commands to install them manually:
+2.b) Or alternatively run these commands to install them manually:
+
 ```
 conda install cmake
 conda install vigra -c conda-forge
@@ -73,28 +76,30 @@ finished the following analysis steps for an example cube of shape \[2180 2180 1
 
 
 ## Example scripts and API usage
-Example scripts can be found [here](examples.md) and code examples [here](api.md).
+An introduction on how to use the example scripts can be found [here](examples.md) and API code examples [here](api.md).
 
 ## Package structure and data classes
 The basic data structures and initialization procedures are explained in the following sections:
 
 * SyConn operates with a pre-defined [working directory and config files](config.md)
 
-* Super voxels (and cellular organelles) are stored in the SegmentationObject data class ([SO](segmentation_datasets.md)), which are
-organized in [SegmentationDatasets](segmentation_datasets.md).
+* Supervoxels (and cellular organelles) are organized as `SegmentationObject` which are
+handled by the `SegmentationDatasets`. For a more detailed description see [here](segmentation_datasets.md)).
 
-* SyConn principally supports different [backends](backend.md) for data storage, the current default is a simple shared filesystem
+* SyConn principally supports different [backends](backend.md) for data storage. The current default is a simple shared filesystem
 (such as lustre, Google Cloud Filestore or AWS Elastic File System).
 
-* Agglomerated super voxels (SVs) are implemented as SuperSegmentationObjects ([SSO](super_segmentation_objects.md)). The collection
+* Agglomerated supervoxels (SVs) are implemented as SuperSegmentationObjects ([SSO](super_segmentation_objects.md)). The collection
  of super-SVs are usually defined in a region adjacency graph (RAG) which is used to initialize the SuperSegmentationDataset
   ([SSD](super_segmentation_datasets.md)).
 
-* [Skeletons](skeletons.md) of (super) super voxels, usually computed from variants of the TEASAR algorithm (https://ieeexplore.ieee.org/document/883951).
+* [Skeletons](skeletons.md) of (super-) supervoxels, usually computed from variants of the TEASAR algorithm (https://ieeexplore.ieee.org/document/883951)
+ \- currently a fall-back to a sampling procedure is in use.
 
-* [Mesh](meshes.md) generation and representation of SOs
+* [Mesh](meshes.md) generation and representation of supervoxels
 
-* Multi-view representation of SSOs (see docs for [glia](glia_removal.md) and [neuron](neuron_analysis.md) analysis and [article](https://www.nature.com/articles/s41467-019-10836-3) in Nature Communications)
+* Multi-view representation of neurpn reconstructions for [glia](glia_removal.md) and
+ [neuron](neuron_analysis.md) analysis (published in [Nature Communications](https://www.nature.com/articles/s41467-019-10836-3))
 
 
 ## Flowchart of SyConn
@@ -117,13 +122,11 @@ compartments (e.g. axons and spines) and to perform morphology based cell type c
 
 
 ## SyConn KNOSSOS viewer
-The following packages have to be available for the system's python2 interpreter
+The following packages have to be available in the system's python2 interpreter
 (will differ from the conda environment):
 
 - numpy
-
 - lz4
-
 - requests
 
 In order to inspect the resulting data via the SyConnViewer KNOSSOS-plugin follow these steps:

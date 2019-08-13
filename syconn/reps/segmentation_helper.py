@@ -9,6 +9,10 @@ import glob
 import numpy as np
 from scipy import ndimage
 import os
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union
+if TYPE_CHECKING:
+    from ..reps.segmentation import SegmentationObject, SegmentationDataset
+    from ..reps.super_segmentation import SuperSegmentationObject
 
 from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
     VoxelStorage, SkeletonStorage, VoxelStorageDyn
@@ -18,7 +22,18 @@ from . import log_reps
 from .. import global_params
 
 
-def glia_pred_so(so, thresh, pred_key_appendix):
+def glia_pred_so(so: 'SegmentationObject', thresh: float, pred_key_appendix: str) -> int:
+    """
+    Perform the glia classification of a cell supervoxel (0: neuron, 1: glia).
+
+    Args:
+        so: The cell supervoxel object.
+        thresh: Threshold used for the classification.
+        pred_key_appendix: Additional prediction key.
+
+    Returns:
+
+    """
     assert so.type == "sv"
     pred_key = "glia_probas" + pred_key_appendix
     if not pred_key in so.attr_dict:
@@ -37,14 +52,11 @@ def glia_pred_so(so, thresh, pred_key_appendix):
     return 0
 
 
-def acquire_obj_ids(sd):
-    """ Acquires all obj ids present in the dataset
-
-    Loads id array if available. Assembles id list by iterating over all
-    voxel / attribute dicts, otherwise (very slow).
-
-    :param sd: SegmentationDataset
-
+def acquire_obj_ids(sd: 'SegmentationDataset'):
+    """
+    Acquires all obj ids present in the dataset. Loads id array if available.
+    Assembles id list by iterating over all voxel / attribute dicts,
+    otherwise (very slow).
     """
     if os.path.exists(sd.path_ids):
         sd._ids = np.load(sd.path_ids)
@@ -67,7 +79,8 @@ def acquire_obj_ids(sd):
         np.save(sd.path_ids, sd._ids)
 
 
-def save_voxels(so, bin_arr, offset, overwrite=False):
+def save_voxels(so: 'SegmentationObject', bin_arr: np.ndarray,
+                offset: np.ndarray, overwrite: bool = False):
     """
     Helper function to save SegmentationObject voxels.
 
@@ -93,9 +106,13 @@ def save_voxels(so, bin_arr, offset, overwrite=False):
     voxel_dc.push(so.voxel_path)
 
 
-def load_voxels(so, voxel_dc=None):
+def load_voxels(so: 'SegmentationObject',
+                voxel_dc: Optional[Dict] = None) -> np.ndarray:
     """
     Helper function to load voxels of a SegmentationObject as 3D array.
+
+    Todo:
+        * Currently the attribute ``so._bounding_box`` is always resetred.
 
     Parameters
     ----------
@@ -144,7 +161,9 @@ def load_voxels(so, voxel_dc=None):
     return voxels
 
 
-def load_voxels_downsampled(so, downsampling=(2, 2, 1)):
+def load_voxels_downsampled(
+        so: 'SegmentationObject',
+        downsampling: Tuple[int, int, int] = (2, 2, 1)) -> Union[np.ndarray, List]:
     if isinstance(so.voxels, int):
         return []
 
@@ -220,7 +239,8 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
     return voxel_list
 
 
-def load_mesh(so, recompute=False):
+def load_mesh(so: 'SegmentationObject', recompute: bool = False)\
+        -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Load mesh of SegmentationObject.
     TODO: Currently ignores potential color/label array
@@ -270,7 +290,8 @@ def load_mesh(so, recompute=False):
     return indices, vertices, normals
 
 
-def load_skeleton(so, recompute=False):
+def load_skeleton(so: 'SegmentationObject', recompute: bool = False) \
+        -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
 
     Parameters
@@ -312,7 +333,7 @@ def load_skeleton(so, recompute=False):
     return nodes, diameters, edges
 
 
-def save_skeleton(so, overwrite=False):
+def save_skeleton(so: 'SegmentationObject', overwrite: bool = False):
     skeleton_dc = SkeletonStorage(so.skeleton_path, read_only=False,
                                   disable_locking=not so.enable_locking)
     if not overwrite and so.id in skeleton_dc:

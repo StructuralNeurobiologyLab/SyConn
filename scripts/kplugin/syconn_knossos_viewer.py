@@ -5,9 +5,9 @@
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
 
-# TODO: move code to syconn/ui/
 from PythonQt import QtGui, Qt, QtCore
 from PythonQt.QtGui import QTableWidget, QTableWidgetItem
+import traceback
 try:
     import KnossosModule
 except ImportError:
@@ -33,12 +33,15 @@ class SyConnGateInteraction(object):
     """
     Query the SyConn backend server.
     """
-    def __init__(self, server):
+    def __init__(self, server, synthresh=0.5, axodend_only=True):
         self.server = server
         self.session = requests.Session()
         self.ssv_from_sv_cache = dict()
         self.ct_from_cache = dict()
+        self.ctcertain_from_cache = dict()
         self.svs_from_ssv = dict()
+        self.synthresh = synthresh
+        self.axodend_only = axodend_only
 
     def get_ssv_mesh(self, ssv_id):
         """
@@ -168,9 +171,15 @@ class SyConnGateInteraction(object):
         """
         # if not ssv_id in self.ct_from_cache:
         r = self.session.get(self.server + '/ct_of_ssv/{0}'.format(ssv_id))
-        self.ct_from_cache[ssv_id] = json.loads(r.content)["ct"]
+        dc = json.loads(r.content)
+        self.ct_from_cache[ssv_id] = dc["ct"]
+        if 'certainty' in dc:
+            certainty = '{:.3f}'.format(dc["certainty"])
+        else:
+            certainty = 'nan'
+        self.ctcertain_from_cache[ssv_id] = certainty
         print("Celltype: {}".format(self.ct_from_cache[ssv_id]))
-        return self.ct_from_cache[ssv_id]
+        return self.ct_from_cache[ssv_id], certainty
 
     def get_all_syn_metda_data(self):
         """
@@ -179,7 +188,8 @@ class SyConnGateInteraction(object):
         -------
 
         """
-        r = self.session.get(self.server + '/all_syn_meta')
+        params = {'synthresh': self.synthresh, 'axodend_only': self.axodend_only}
+        r = self.session.get('{}/all_syn_meta/{}'.format(self.server, json.dumps(params)))
         return json.loads(r.content)
 
     def push_so_attr(self, so_id, so_type, attr_key, attr_value):
@@ -238,7 +248,7 @@ class InputDialog(QtGui.QDialog):
 
     def __init__(self, parent=None):
         QtGui.QWidget.__init__(self, parent)
-
+        self.aborted = False
         # --Layout Stuff---------------------------#
         mainLayout = QtGui.QVBoxLayout()
 
@@ -254,6 +264,19 @@ class InputDialog(QtGui.QDialog):
         layout.addWidget(self.ip)
         self.text_ip = QtGui.QLineEdit("0.0.0.0")
         layout.addWidget(self.text_ip)
+        mainLayout.addLayout(layout)
+
+        layout = QtGui.QHBoxLayout()
+        self.synapse_tresh = QtGui.QLabel()
+        self.synapse_tresh.setText("Syn. prob. thresh.")
+        layout.addWidget(self.synapse_tresh)
+        self.text_synthresh = QtGui.QLineEdit("0.6")
+        layout.addWidget(self.text_synthresh)
+
+        self.axodend_button = QtGui.QPushButton("Axo-dendr. syn. only")
+        self.axodend_button.setCheckable(True)
+        self.axodend_button.toggle()
+        layout.addWidget(self.axodend_button)
 
         mainLayout.addLayout(layout)
 
@@ -263,11 +286,20 @@ class InputDialog(QtGui.QDialog):
         self.connect(button, QtCore.SIGNAL("clicked()"), self.close)
         layout.addWidget(button)
 
+        button = QtGui.QPushButton("abort")  # string or icon
+        self.connect(button, QtCore.SIGNAL("clicked()"), self.abort_button_clicked)
+        layout.addWidget(button)
+
         mainLayout.addLayout(layout)
         self.setLayout(mainLayout)
 
-        self.resize(250, 100)
+        self.resize(450, 300)
         self.setWindowTitle("SyConnGate Settings")
+
+    def abort_button_clicked(self):
+        print('Closing SyConnGate.')
+        self.aborted = True
+        self.close()
 
 
 class main_class(QtGui.QDialog):
@@ -288,12 +320,12 @@ class main_class(QtGui.QDialog):
         while True:
             inputter = InputDialog(parent)
             inputter.exec_()
-                # try:
+            if inputter.aborted:
+                return
             port = int(inputter.text.text.decode())
-                # except Exception as e:
-                #     print(e)
-            #self.start_logging()
             host = inputter.text_ip.text.decode()
+            self._synthresh = float(inputter.text_synthresh.text.decode())
+            self._axodend_only = inputter.axodend_button.isChecked()
             self.syconn_gate = None
             self.host = host
             self.port = port
@@ -305,21 +337,20 @@ class main_class(QtGui.QDialog):
             try:
                 self.init_syconn()
                 self.build_gui()
+                self.timer = QtCore.QTimer()
+                self.timer.timeout.connect(self.exploration_mode_callback_check)
+                self.timer.start(1000)
                 break
-            except requests.exceptions.ConnectionError:
-                print("Failed to establish connection to SyConn Server.")
+            except requests.exceptions.ConnectionError as e:
+                print("Failed to establish connection to SyConn Server.", str(e))
                 pass
-
-        self.timer = QtCore.QTimer()
-        self.timer.timeout.connect(self.exploration_mode_callback_check)
-        self.timer.start(1000)
 
     def init_syconn(self):
         # move to config file
         syconn_gate_server = 'http://{}:{}'.format(self.host, self.port)
-        self.syconn_gate = SyConnGateInteraction(syconn_gate_server)
-
-        return
+        self.syconn_gate = SyConnGateInteraction(syconn_gate_server,
+                                                 self._synthresh,
+                                                 self._axodend_only)
 
     def populate_ssv_list(self):
         all_ssv_ids = self.syconn_gate.get_list_of_all_ssv_ids()['ssvs']
@@ -554,7 +585,7 @@ class main_class(QtGui.QDialog):
         self.populate_ssv_list()
 
         self.populate_syn_list()
-        print('Connected to SyConn gate')
+        print('Connected to SyConnGate.')
 
         layout.addWidget(self.direct_ssv_id_input, 1, 0, 1, 1)
         layout.addWidget(self.direct_syn_id_input, 1, 1, 1, 1)
@@ -741,8 +772,8 @@ class main_class(QtGui.QDialog):
         return
 
     def update_celltype(self, ssv_id):
-        ct = self.syconn_gate.get_celltype_of_ssv(ssv_id)
-        self.celltype_field.setText("CellType: {}".format(ct))
+        ct, certainty = self.syconn_gate.get_celltype_of_ssv(ssv_id)
+        self.celltype_field.setText("CellType: {} ({})".format(ct, certainty))
 
     def ssv_to_knossos(self, ssv_id):
         start = time.time()
@@ -779,54 +810,62 @@ class main_class(QtGui.QDialog):
             vc_id = self.obj_id_offs + ssv_id + 3
             neuron_id = self.obj_id_offs + ssv_id + 4
 
-            mi_start = time.time()
-            mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
-            print("Mi time:", time.time() - mi_start)
-            mi_start = time.time()
-            if len(mi_mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh[1], mi_mesh[2],
-                                                     mi_mesh[0],
-                                                     [], 4, False)
-                KnossosModule.skeleton.set_tree_color(mi_id,
-                                                      QtGui.QColor(0, 0, 255, 255))
-            print("Mi time (Knossos):", time.time() - mi_start)
+            params = [(self, ssv_id, neuron_id, 'sv', (255, 0, 0, 128)),
+                      (self, ssv_id, mi_id, 'mi', (0, 0, 255, 255)),
+                      (self, ssv_id, vc_id, 'vc', (0, 255, 0, 255)),
+                      (self, ssv_id, sj_id, 'sj', (0, 0, 0, 255))]
 
-            sj_start = time.time()
-            sj_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'sj')
-            print("SJ time:", time.time() - sj_start)
-            sj_start = time.time()
-            if len(sj_mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh[1], sj_mesh[2],
-                                                     sj_mesh[0],
-                                                     [], 4, False)
-                KnossosModule.skeleton.set_tree_color(sj_id,
-                                                      QtGui.QColor(0, 0, 0, 255))
-            print("SJ time (Knossos):", time.time() - sj_start)
+            for par in params:
+                mesh_loader(*par)
 
-            vc_start = time.time()
-            vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
-            print("VC time:", time.time() - vc_start)
-            vc_start = time.time()
-            if len(vc_mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh[1], vc_mesh[2],
-                                                     vc_mesh[0],
-                                                     [], 4, False)
-                KnossosModule.skeleton.set_tree_color(vc_id,
-                                                      QtGui.QColor(0, 255, 0, 255))
-            print("VC time (Knossos):", time.time() - vc_start)
-
-            sv_start = time.time()
-            k_tree = KnossosModule.skeleton.add_tree(ssv_id)
-            mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
-            print("SV time:", time.time() - sv_start)
-            sv_start = time.time()
-            if len(mesh[0]) > 0:
-                KnossosModule.skeleton.add_tree_mesh(neuron_id, mesh[1], mesh[2],
-                                                     mesh[0],
-                                                     [], 4, False)
-                KnossosModule.skeleton.set_tree_color(neuron_id,
-                                                      QtGui.QColor(255, 0, 0, 128))
-            print("SV time (Knossos):", time.time() - sv_start)
+            # mi_start = time.time()
+            # mi_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'mi')
+            # print("Mi time:", time.time() - mi_start)
+            # mi_start = time.time()
+            # if len(mi_mesh[0]) > 0:
+            #     KnossosModule.skeleton.add_tree_mesh(mi_id, mi_mesh[1], mi_mesh[2],
+            #                                          mi_mesh[0],
+            #                                          [], 4, False)
+            #     KnossosModule.skeleton.set_tree_color(mi_id,
+            #                                           QtGui.QColor(0, 0, 255, 255))
+            # print("Mi time (Knossos):", time.time() - mi_start)
+            #
+            # sj_start = time.time()
+            # sj_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'sj')
+            # print("SJ time:", time.time() - sj_start)
+            # sj_start = time.time()
+            # if len(sj_mesh[0]) > 0:
+            #     KnossosModule.skeleton.add_tree_mesh(sj_id, sj_mesh[1], sj_mesh[2],
+            #                                          sj_mesh[0],
+            #                                          [], 4, False)
+            #     KnossosModule.skeleton.set_tree_color(sj_id,
+            #                                           QtGui.QColor(0, 0, 0, 255))
+            # print("SJ time (Knossos):", time.time() - sj_start)
+            #
+            # vc_start = time.time()
+            # vc_mesh = self.syconn_gate.get_ssv_obj_mesh(ssv_id, 'vc')
+            # print("VC time:", time.time() - vc_start)
+            # vc_start = time.time()
+            # if len(vc_mesh[0]) > 0:
+            #     KnossosModule.skeleton.add_tree_mesh(vc_id, vc_mesh[1], vc_mesh[2],
+            #                                          vc_mesh[0],
+            #                                          [], 4, False)
+            #     KnossosModule.skeleton.set_tree_color(vc_id,
+            #                                           QtGui.QColor(0, 255, 0, 255))
+            # print("VC time (Knossos):", time.time() - vc_start)
+            #
+            # sv_start = time.time()
+            # k_tree = KnossosModule.skeleton.add_tree(ssv_id)
+            # mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
+            # print("SV time:", time.time() - sv_start)
+            # sv_start = time.time()
+            # if len(mesh[0]) > 0:
+            #     KnossosModule.skeleton.add_tree_mesh(neuron_id, mesh[1], mesh[2],
+            #                                          mesh[0],
+            #                                          [], 4, False)
+            #     KnossosModule.skeleton.set_tree_color(neuron_id,
+            #                                           QtGui.QColor(255, 0, 0, 128))
+            # print("SV time (Knossos):", time.time() - sv_start)
         else:
             mesh = self.syconn_gate.get_ssv_mesh(ssv_id)
             k_tree = KnossosModule.skeleton.add_tree(ssv_id)
@@ -876,6 +915,21 @@ class main_class(QtGui.QDialog):
                 signalsBlocked)
             KnossosModule.knossos_global_skeletonizer.resetData()
         return
+
+
+def mesh_loader(gate_obj, ssv_id, tree_id, obj_type, color):
+    start = time.time()
+    mesh = gate_obj.syconn_gate.get_ssv_obj_mesh(ssv_id, obj_type)
+    print("Download time:", time.time() - start)
+    start = time.time()
+    if len(mesh[0]) > 0:
+        KnossosModule.skeleton.add_tree_mesh(tree_id, mesh[1], mesh[2],
+                                             mesh[0],
+                                             [], 4, False)
+        KnossosModule.skeleton.set_tree_color(tree_id,
+                                              QtGui.QColor(*color))
+    print("Loading {}-mesh time (pure KNOSSOS): {:.2f} s".format(
+        obj_type, time.time() - start))
 
 
 def lz4stringtoarr(string, dtype=np.float32, shape=None):

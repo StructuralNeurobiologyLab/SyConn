@@ -1,9 +1,10 @@
 [![Documentation Status](https://readthedocs.org/projects/syconn/badge/?version=latest)](https://syconn.readthedocs.io/en/latest/?badge=latest)
 
-<img align="right" width="200" src="./docs/_static/logo_SyConn.png">
+<img align="right" width="300" src="./docs/_static/logo_SyConn.png"><br/>
 
 
-# SyConn
+SyConn
+------
 Refactored version of SyConn for automated synaptic connectivity inference based on dense EM segmentation data. For the first version
  see below or checkout the branch [dorkenwald2017nm](https://github.com/StructuralNeurobiologyLab/SyConn/tree/dorkenwald2017nm).
 
@@ -21,14 +22,14 @@ If you use parts of this code base in your academic projects, please cite the co
 
 Documentation
 -------------
-The documentation for the refactored version is still work-in-progress and can be found [here](docs/doc.md). Alternatively see the latest [readthedocs build](https://syconn.readthedocs.io/en/latest/).
+The documentation for the refactored version is still work-in-progress and can be found [here](docs/doc.md). Alternatively and for API docs please refer to the latest [readthedocs build](https://syconn.readthedocs.io/en/latest/).
 
 For SyConn v1, please refer to the old [documentation](https://structuralneurobiologylab.github.io/SyConn/documentation/). We also present more general information about SyConn on our [Website](https://structuralneurobiologylab.github.io/SyConn/).
 
 
 The Team
 --------
-The Synaptic connectivity inference toolkit is developed at the Max-Planck-Institute of Neurobiology in Martinsried by
+The Synaptic connectivity inference toolkit is currently developed at the Max-Planck-Institute of Neurobiology in Martinsried by
  Philipp Schubert, Maria Kawula, Carl Constantin v. Wedemeyer, Atul Mohite, Gaurav Kumar and Joergen Kornfeld.
 
 
@@ -38,7 +39,8 @@ We are especially grateful for the support by Winfried Denk who enabled this wor
 and his group at the MPCDF for cluster support and deepmind for providing egl extension code to handle multi-gpu rendering on the same machine.
 The original code snippet (under the Apache License 2.0) used for our project can be found
 [here](https://github.com/deepmind/dm_control/blob/30069ac11b60ee71acbd9159547d0bc334d63281/dm_control/_render/pyopengl/egl_ext.py).
-Thanks to Julia Kuhl (see http://somedonkey.com/ for more beautiful work) for designing and creating the logo!
+Thanks to Julia Kuhl (see http://somedonkey.com/ for more beautiful work) for designing and creating the logo and to
+ Rangoli Saxena, Mariana Shumliakivska and Josef Mark for code contributions.
 
 
 Publications

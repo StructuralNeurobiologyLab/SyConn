@@ -6,6 +6,8 @@
 Welcome to SyConn's documentation!
 ==================================
 
+For the API documentation please refer to:
+
 .. toctree::
    :maxdepth: 1
 

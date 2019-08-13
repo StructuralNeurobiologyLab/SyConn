@@ -7,14 +7,13 @@
 
 from knossos_utils import knossosdataset
 import time
+from logging import Logger
 import os
-import sys
 from multiprocessing import Process
 import shutil
 import networkx as nx
 import numpy as np
-knossosdataset._set_noprint(True)
-from knossos_utils import chunky
+from typing import Optional, Callable, Tuple
 from syconn import global_params
 from syconn.extraction import object_extraction_wrapper as oew
 from syconn.proc import sd_proc
@@ -23,9 +22,19 @@ from syconn.handler.config import initialize_logging
 from syconn.mp import batchjob_utils as qu
 from syconn.proc.graphs import create_ccsize_dict
 from syconn.handler.basics import chunkify, kd_factory
+knossosdataset._set_noprint(True)
 
 
-def sd_init(co, max_n_jobs, log=None):
+def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
+    """
+    Initialize :class:`~syconn.reps.segmentation.SegmentationDataset` of given
+    supervoxel type `co`.
+
+    Args:
+        co: Cellular organelle identifier (e.g. 'mi', 'vc', ...).
+        max_n_jobs: Number of parallel jobs.
+        log: Logger.
+    """
     sd_seg = SegmentationDataset(obj_type=co, working_dir=global_params.config.working_dir,
                                  version="0")
     multi_params = chunkify(sd_seg.so_dir_paths, max_n_jobs)
@@ -47,33 +56,61 @@ def sd_init(co, max_n_jobs, log=None):
         sd_proc.dataset_analysis(sd_seg, recompute=False, compute_meshprops=True)
 
 
-def kd_init(co, chunk_size, transf_func_kd_overlay, load_cellorganelles_from_kd_overlaycubes,
-    cube_of_interest_bb, log):
+def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
+            load_cellorganelles_from_kd_overlaycubes: bool,
+            cube_of_interest_bb: Tuple[np.ndarray],
+            log: Logger):
+    """
+    Initializes a per-object segmentation KnossosDataset for the given supervoxel type
+    `co` based on an initial prediction which location has to be defined in the config.ini file
+    for the `co` object, e.g. `kd_mi` for `co='mi'`
+    (see :func:`~syconn.handler.config.get_default_conf_str`). Results will be stored as a
+    KnossosDataset at `"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)`.
+    Appropriate parameters have to be set inside the config.ini file, see
+    :func:`~syconn.extraction.object_extraction_wrapper.generate_subcell_kd_from_proba`
+    or :func:`~syconn.handler.config.get_default_conf_str` for more details.
+
+    Args:
+        co: Type of cell organelle supervoxels, e.g 'mi' for mitochondria or 'vc' for
+            vesicle clouds.
+        chunk_size: Size of the cube which are processed by each worker.
+        transf_func_kd_overlay: Transformation applied on the prob. map or segmentation
+            data.
+        load_cellorganelles_from_kd_overlaycubes:
+        cube_of_interest_bb: Bounding of the (sub-) volume of the dataset
+            which is processed.
+        log: Logger.
+    """
     oew.generate_subcell_kd_from_proba(
         co, chunk_size=chunk_size, transf_func_kd_overlay=transf_func_kd_overlay,
         load_cellorganelles_from_kd_overlaycubes=load_cellorganelles_from_kd_overlaycubes,
         cube_of_interest_bb=cube_of_interest_bb, log=log)
 
 
-def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=10000, max_n_jobs=None,
-                          load_cellorganelles_from_kd_overlaycubes=False,
-                          transf_func_kd_overlay=None, cube_of_interest_bb=None):
-    # TODO: Don't extract sj objects and replace their use-cases with syn objects (?)
+def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
+                          n_folders_fs: int = 10000, n_folders_fs_sc: int = 10000,
+                          max_n_jobs: Optional[int] = None,
+                          load_cellorganelles_from_kd_overlaycubes: bool = False,
+                          transf_func_kd_overlay: Optional[Callable] = None,
+                          cube_of_interest_bb: Optional[np.ndarray] = None):
     """
-    Parameters
-    ----------
-    chunk_size :
-    n_folders_fs :
-    n_folders_fs_sc :
-    max_n_jobs :
-    generate_sv_meshes :
-    load_cellorganelles_from_kd_overlaycubes :
-    transf_func_kd_overlay :
-    cube_of_interest_bb :
+    Todo:
+        * Don't extract sj objects and replace their use-cases with syn objects (?).
 
-    Returns
-    -------
-
+    Args:
+        chunk_size: Size of the cube which are processed by each worker.
+        n_folders_fs: Number of folders used to create the folder structure in
+            the resulting :class:`~syconn.reps.segmentation.SegmentationDataset`
+            for the cell supervoxels (``version='sv'``).
+        n_folders_fs_sc: Number of folders used to create the folder structure in
+            the resulting :class:`~syconn.reps.segmentation.SegmentationDataset`
+            for the cell organelle supervxeols (e.g. ``version='mi'``).
+        max_n_jobs: Number of parallel jobs.
+        load_cellorganelles_from_kd_overlaycubes:
+        transf_func_kd_overlay: Transformation applied on the prob. map or segmentation
+            data.
+        cube_of_interest_bb: Bounding of the (sub-) volume of the dataset
+            which is processed.
     """
     log = initialize_logging('create_sds', global_params.config.working_dir +
                              '/logs/', overwrite=True)
@@ -89,8 +126,8 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
-    log.info('Generating KnossosDatasets for subcellular structures {}.'
-             ''.format(global_params.existing_cell_organelles))
+    log.info('Converting predictions of cellular organelles to KnossosDatasets for every'
+             'type available: {}.'.format(global_params.existing_cell_organelles))
     start = time.time()
     ps = [Process(target=kd_init, args=[co, chunk_size, transf_func_kd_overlay,
                                         load_cellorganelles_from_kd_overlaycubes,
@@ -104,7 +141,7 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
-             ' cell supervoxels'.format(global_params.existing_cell_organelles))
+             ' cell supervoxels.'.format(global_params.existing_cell_organelles))
     start = time.time()
     sd_proc.map_subcell_extract_props(
         global_params.config.kd_seg_path, global_params.config.kd_organelle_seg_paths,
@@ -129,16 +166,13 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
 
 def run_create_rag():
     """
-    If `global_params.config.prior_glia_removal==True`:
-        stores pruned RAG at `global_params.config.pruned_rag_path`, required for all glia
-        removal steps. `run_glia_splitting` will finally return `neuron_rag.bz2`
+    If ``global_params.config.prior_glia_removal==True``:
+        stores pruned RAG at ``global_params.config.pruned_rag_path``, required for all glia
+        removal steps. :func:`~syconn.exec.exec_multiview.run_glia_splitting`
+        will finally store the ``neuron_rag.bz2`` at the currently active working directory.
     else:
-        stores pruned RAG at `global_params.config.working_dir + /glia/neuron_rag.bz2`, required
-        for `run_create_neuron_ssd`.
-
-    Returns
-    -------
-
+        stores pruned RAG at ``global_params.config.working_dir + /glia/neuron_rag.bz2``,
+        required by :func:`~syconn.exec.exec_multiview.run_create_neuron_ssd`.
     """
     log = initialize_logging('create_rag', global_params.config.working_dir +
                              '/logs/', overwrite=True)

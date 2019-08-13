@@ -5,7 +5,7 @@ Each `SuperSegmentationObject` owns cellular objects (see section 'Mapping of ce
  interface for analysis and visualization methods (e.g. cellular compartment, spine, cell type classification), 
  which will be described in more detail under 'Classification procedures' and 'Visualization'.
  
- In order to aggregate the mapping information of the cellular objects from SSO's super voxels, see [here](object_mapping.md).
+ In order to aggregate the mapping information of the cellular objects from SSO's supervoxels, see [here](object_mapping.md).
 
 ## Visualization
 _in progress_

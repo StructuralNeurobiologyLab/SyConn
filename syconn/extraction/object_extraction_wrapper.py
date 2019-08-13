@@ -60,13 +60,14 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
     """
     Generate KnossosDatasets for given subcellular structure key (e.g. 'mi').
     The required initial data format is a chunkdataset located at
-    `"{}/chunkdatasets/{}/".format(global_params.config.working_dir, co)`.
+    ``"{}/chunkdatasets/{}/".format(global_params.config.working_dir, co)``.
     Resulting KD will be stored at
-    `"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)`.
-    See `from_probabilities_to_kd` for details of the conversion process from
-    the initial probability map to the SV segmentation. Default: thresholding and
-    connected components, thresholds are stored in
-    `global_params.config.entries["Probathresholds"]`.
+    ``"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)``.
+    See :func:`~syconn.extraction.object_extraction_wrapper.from_probabilities_to_kd` for details of
+    the conversion process from the initial probability map to the SV segmentation. Default:
+    thresholding and connected components, thresholds are set via the `config.ini` file, check
+    ``syconn.global_params.config.entries["Probathresholds"]`` of an initialized
+    :calss:`~syconn.handler.config.DynConfig` object.
 
     Parameters
     ----------
@@ -89,7 +90,8 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
     cd_dir = "{}/chunkdatasets/{}/".format(global_params.config.working_dir, co)
     cd = chunky.ChunkDataset()
     cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
-                  box_coords=[0, 0, 0], fit_box_size=True)
+                  box_coords=[0, 0, 0], fit_box_size=True,
+                  list_of_coords=[])
     log.info('Started object extraction of cellular organelles "{}" from '
              '{} chunks.'.format(co, len(cd.chunk_dict)))
     prob_kd_path_dict = {co: getattr(global_params.config, 'kd_{}_path'.format(co))}

@@ -35,7 +35,7 @@ config = {
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn==0.19.1',
                          'scikit-image==0.14.2', 'plyfile', 'termcolor',
-                         'pytest', 'tqdm', 'dill', 'zmesh',
+                         'pytest', 'tqdm', 'dill', 'zmesh', 'seaborn',
                          'pytest-runner', 'prompt-toolkit<2.0', 'numba==0.41.0',
                          'llvmlite==0.26.0', 'matplotlib', 'vtki'],
     #numba/llvmluite

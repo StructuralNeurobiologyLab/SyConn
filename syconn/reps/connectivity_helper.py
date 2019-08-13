@@ -16,8 +16,16 @@ from . import log_reps
 from .. import global_params
 
 
-# TODO: unclear what and when this was used for, refactor and use in current project
 def extract_connectivity_thread(args):
+    """
+    Used within :class:`~syconn.reps.connectivity.ConnectivityMatrix`.
+
+    Args:
+        args:
+
+    Returns:
+
+    """
     sj_obj_ids = args[0]
     sj_version = args[1]
     ssd_version = args[2]
@@ -134,10 +142,9 @@ def connectivity_to_nx_graph(cd_dict):
     return nxg
 
 
-def load_cached_data_dict(wd=None, syn_version=None, thresh_syn_prob=None):
+def load_cached_data_dict(wd=None, syn_version=None, thresh_syn_prob=None,
+                          axodend_only=True):
     """
-    # TODO: allow synapses between axon and soma
-    # TODO: COnsider moving syn-prob. masking on client side
     Loads all cached data from a contact site segmentation dataset into a
     dictionary for further processing.
 
@@ -146,6 +153,9 @@ def load_cached_data_dict(wd=None, syn_version=None, thresh_syn_prob=None):
     wd : str
     syn_version : str
     thresh_syn_prob : float
+        All synapses below `thresh_syn_prob` will be filtered.
+    axodend_only: If True, returns only axo-dendritic synapse, all
+        synapses otherwise.
 
     Returns
     -------
@@ -193,18 +203,26 @@ def load_cached_data_dict(wd=None, syn_version=None, thresh_syn_prob=None):
     log_reps.debug('Getting {1} objects took: {0}'.format(time.time() - start,
                                                           len(csd.ids)))
 
-    idx_filter = cd_dict['synaptivity_proba'] > thresh_syn_prob
+    idx_filter = cd_dict['synaptivity_proba'] >= thresh_syn_prob
+    cd_dict['neuron_partner_ax_0'][cd_dict['neuron_partner_ax_0'] == 3] = 1
+    cd_dict['neuron_partner_ax_0'][cd_dict['neuron_partner_ax_0'] == 4] = 1
+    cd_dict['neuron_partner_ax_1'][cd_dict['neuron_partner_ax_1'] == 3] = 1
+    cd_dict['neuron_partner_ax_1'][cd_dict['neuron_partner_ax_1'] == 4] = 1
     #  & (df_dict['syn_size'] < 5.)  # TODO: think about size criteria
     n_syns = np.sum(idx_filter)
-    idx_filter = idx_filter & ((cd_dict['neuron_partner_ax_0'] +
-                                cd_dict['neuron_partner_ax_1']) == 1)
-    n_syns_axden = np.sum(idx_filter)
+    if axodend_only:
+        idx_filter = idx_filter & ((cd_dict['neuron_partner_ax_0'] +
+                                    cd_dict['neuron_partner_ax_1']) == 1)
+    n_syns_after_axdend = np.sum(idx_filter)
     for k, v in cd_dict.items():
         cd_dict[k] = v[idx_filter]
 
     log_reps.debug('Finished conn. dictionary with {} synaptic '
-                   'objects. {} above prob. threshold. {} ax-den syn.'
-                   ''.format(len(idx_filter), n_syns, n_syns_axden))
+                   'objects. {} above prob. threshold {}. '
+                   '{} syns after axo-dend. filter '
+                   '(changes only if "axodend_only=True").'
+                   ''.format(len(idx_filter), n_syns, thresh_syn_prob,
+                             n_syns, n_syns_after_axdend))
 
     return cd_dict
 

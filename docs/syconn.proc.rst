@@ -4,22 +4,6 @@ syconn.proc package
 Submodules
 ----------
 
-syconn.proc.checking module
----------------------------
-
-.. automodule:: syconn.proc.checking
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
-syconn.proc.checking\_helper module
------------------------------------
-
-.. automodule:: syconn.proc.checking_helper
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 syconn.proc.general module
 --------------------------
 

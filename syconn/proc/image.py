@@ -309,7 +309,7 @@ def normalize_vol(sv, edge_size, center_coord):
     """
     returns cube with given edge size and sv centered at center coordinate
 
-    Paraemters
+    Parameters
     ----------
     sv :  np.array [N x 3]
         coordinates of voxels in supervoxel
@@ -436,7 +436,7 @@ def _multi_mop_findobjects(mop_func, overlay, n_iters, background_only=True,
         # only dilate/erode background/the objects itself
         if "erosion" in mop_func.__name__:
             overlay[new_obj_slices][binary_mask == 1] = res[binary_mask == 1] * ix
-        elif "dilation" in mop_func.__name__:
+        elif ("dilation" in mop_func.__name__) or ("closing" in mop_func.__name__):
             proc_mask = (binary_mask == 1) | (sub_vol == 0)  # dilate only background
             overlay[new_obj_slices][proc_mask] = res[proc_mask] * ix
         else:

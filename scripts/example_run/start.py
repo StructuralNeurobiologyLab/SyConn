@@ -20,7 +20,7 @@ from syconn.handler.prediction import parse_movement_area_from_zip
 from syconn.handler.config import get_default_conf_str, initialize_logging
 from syconn.handler.compression import load_from_h5py
 from syconn import global_params
-from syconn.exec import exec_init, exec_syns, exec_multiview
+from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_prediction
 
 
 if __name__ == '__main__':
@@ -70,7 +70,7 @@ if __name__ == '__main__':
     n_folders_fs_sc = 1000
     experiment_name = 'j0126_example'
     global_params.NCORE_TOTAL = 20
-    global_params.NGPU_TOTAL = 2
+    global_params.NGPU_TOTAL = 1
     global_params.NNODES_TOTAL = 1
 
     # PREPARE CONFIG
@@ -98,8 +98,9 @@ if __name__ == '__main__':
     global_params.wd = example_wd
     os.makedirs(global_params.config.temp_path, exist_ok=True)
 
-    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype',
-                      'mpath_axoness', 'mpath_glia']:
+    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype_e3',
+                      'mpath_axonsem', 'mpath_glia_e3', 'mpath_myelin',
+                      'mpath_tnet']:
         mpath = getattr(global_params.config, mpath_key)
         if not (os.path.isfile(mpath) or os.path.isdir(mpath)):
             raise ValueError('Could not find model "{}". Make sure to copy the'
@@ -112,14 +113,13 @@ if __name__ == '__main__':
         shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
 
     # INITIALIZE DATA
-    # TODO: data too big to put into github repository, add alternative to pull data into h5_dir
     kd = knossosdataset.KnossosDataset()
     kd.initialize_from_matrix(global_params.config.kd_seg_path, scale, experiment_name,
                               offset=offset, boundary=bd, fast_downsampling=True,
-                              data_path=h5_dir + 'raw.h5', mags=[1, 2], hdf5_names=['raw'])
+                              data_path=h5_dir + 'raw.h5', mags=[1, 2, 4], hdf5_names=['raw'])
 
     seg_d = load_from_h5py(h5_dir + 'seg.h5', hdf5_names=['seg'])[0]
-    kd.from_matrix_to_cubes(offset, mags=[1, 2], data=seg_d,
+    kd.from_matrix_to_cubes(offset, mags=[1, 2, 4], data=seg_d,
                             fast_downsampling=True, as_raw=False)
 
     kd_mi = knossosdataset.KnossosDataset()
@@ -155,6 +155,11 @@ if __name__ == '__main__':
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
     # START SyConn
+    log.info('Step 0/8 - Predicting sub-cellular structures')
+    exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
+    time_stamps.append(time.time())
+    step_idents.append('Dense predictions')
+
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,
                                     n_folders_fs_sc=n_folders_fs_sc)

@@ -7,6 +7,7 @@
 
 import numpy as np
 from collections import defaultdict
+from typing import Any
 from ..backend import log_backend
 try:
     from lz4.block import compress, decompress
@@ -19,6 +20,9 @@ from ..backend import StorageClass
 
 
 class AttributeDict(StorageClass):
+    """
+    General purpose dictionary class inherited from :class:`syconn.backend.base.StorageClass`.
+    """
     def __init__(self, inp_p, **kwargs):
         super(AttributeDict, self).__init__(inp_p, **kwargs)
 
@@ -158,9 +162,23 @@ class VoxelStorageL(StorageClass):
 
 
 def VoxelStorage(inp, **kwargs):
+    """
+    Deprecated storage for voxel data.
+
+    Args:
+        inp:
+        **kwargs:
+
+    Returns:
+
+    """
     obj = VoxelStorageClass(inp, **kwargs)
     if 'meta' in obj._dc_intern:  # TODO: Remove asap as soon as we switch to VoxelStorageDyn
         obj = VoxelStorageDyn(inp, **kwargs)
+    # # TODO: activate as soon as synapse-detection pipelines is refactored.
+    # else:
+    #     log_backend.warning('VoxelStorage is deprecated. Please switch to'
+    #                         ' VoxelStorageDyn.')
     return obj
 
 
@@ -187,13 +205,13 @@ class VoxelStorageDyn(CompressedStorage):
     Similar to `VoxelStorageL` but does not store the voxels explicitly,
     but the information necessary to query the voxels of an object.
 
-    If `voxel_mode = True` getter method will operate on underlying data set
+    If ``voxel_mode = True`` getter method will operate on underlying data set
     to retrieve voxels of an object. `__setitem__` throws `RuntimeError`.
     `__getitem__` will return a list of 3D binary cubes with ones at the
     object's locations (key: object ID). Note: The item ID has to match the
     object ID in the segmentation.
 
-    Otherwise (`voxel_mode = False`) `__getitem__` and `__setitem__` allow
+    Otherwise (``voxel_mode = False``) `__getitem__` and `__setitem__` allow
     manipulation of the object's bounding box. In this case `voxeldata_path`
     has to be given or already be existent in loaded dictionary. Expects the
     source path of a KnossoDataset (see knossos_utils), like
@@ -235,7 +253,7 @@ class VoxelStorageDyn(CompressedStorage):
             kd = kd_factory(voxeldata_path)
             self.voxeldata = kd
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: str, value: Any):
         if self.voxel_mode:
             raise RuntimeError('`VoxelStorageDyn.__setitem__` may only '
                                'be used when `voxel_mode=False`.')

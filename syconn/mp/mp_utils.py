@@ -10,7 +10,7 @@ try:
 except ImportError:
     import pickle as pkl
 from multiprocessing import cpu_count
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor, as_completed, ThreadPoolExecutor
 import multiprocessing.pool
 import time
 import tqdm

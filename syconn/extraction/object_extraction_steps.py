@@ -850,8 +850,6 @@ def _extract_voxels_thread(args):
     n_folders_fs = args[8]
     transform_func = args[9]
     transform_func_kwargs = args[10]
-    # TODO: finish support for syn object extraction -- do not extract all voxels, instead compute bounding box
-    # TODO: and enable dynamic queries via VoxelStorage only if neccessary
 
     map_dict = {}
     for hdf5_name in hdf5names:

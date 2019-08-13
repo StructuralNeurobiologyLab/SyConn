@@ -11,6 +11,7 @@ import time
 import numpy as np
 from flask import Flask
 import json
+from multiprocessing import cpu_count
 import argparse
 import os
 
@@ -122,9 +123,9 @@ def route_ct_of_sv(ssv_id):
     return json.dumps(sg_state.backend.ct_of_ssv(ssv_id), cls=MyEncoder)
 
 
-@app.route('/all_syn_meta', methods=['GET'])
-def route_all_syn_meta():
-    return json.dumps(sg_state.backend.all_syn_meta_data(), cls=MyEncoder)
+@app.route('/all_syn_meta/<params>', methods=['GET'])
+def route_all_syn_meta(params):
+    return json.dumps(sg_state.backend.all_syn_meta_data(json.loads(params)), cls=MyEncoder)
 
 
 @app.route("/", methods=['GET'])
@@ -133,7 +134,8 @@ def route_hello():
 
 
 class SyConnBackend(object):
-    def __init__(self, syconn_path='', logger=None):
+    def __init__(self, syconn_path: str = '', logger=None, synthresh=0.5,
+                 axodend_only=True):
         """
         Initializes a SyConn backend for operation.
         This includes in-memory initialization of the
@@ -144,7 +146,11 @@ class SyConnBackend(object):
         might be served.
         All backend functions must return dicts.
 
-        :param syconn_path: str
+        Args:
+            syconn_path:
+            logger:
+            synthresh: All synapses below `synthresh` will be excluded.
+            axodend_only: If True, only axo-dendritic synapses will be loaded.
         """
         self.logger = logger
         self.logger.info('Initializing SyConn backend')
@@ -156,7 +162,9 @@ class SyConnBackend(object):
 
         self.sds = dict(syn_ssv=SegmentationDataset(working_dir=syconn_path,
                                                     obj_type='syn_ssv'))
-
+        self.nb_cpus = cpu_count()
+        self.synthresh = synthresh
+        self.axodend_only = axodend_only
         # flat array representation of all synapses
         self.conn_dict = conn.load_cached_data_dict()
         self.logger.info('In memory cache of synapses initialized.')
@@ -173,6 +181,7 @@ class SyConnBackend(object):
         start = time.time()
         self.logger.info('Loading ssv mesh {}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         mesh = {'vertices': mesh[1],
@@ -193,6 +202,7 @@ class SyConnBackend(object):
         start = time.time()
         self.logger.info('Loading {} ssv mesh indices'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         dtime = time.time() - start
@@ -212,6 +222,7 @@ class SyConnBackend(object):
         start = time.time()
         self.logger.info('Loading ssv {} mesh vertices'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         dtime = time.time() - start
@@ -230,15 +241,21 @@ class SyConnBackend(object):
         """
         self.logger.info('Loading ssv skeleton {}'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_skeleton()
         skeleton = ssv.skeleton
         if skeleton is None:
             return {}
         skel_attr = ["nodes", "edges", "diameters"]
-        avg_dst = global_params.DIST_AXONESS_AVERAGING
+        pred_key_ax = "{}_avg{}".format(global_params.view_properties_semsegax['semseg_key'],
+                                        global_params.DIST_AXONESS_AVERAGING)
         keys = [
                 # "axoness_avg{}".format(avg_dst),
                 # "axoness_avg{}_comp_maj".format(avg_dst),
+                global_params.view_properties_semsegax['semseg_key'],
+                pred_key_ax,
+                'myelin_avg10000',  # TODO: use global_params.py value !
+                'myelin',  # TODO: use global_params.py value !
                 "axoness_k{}".format(global_params.map_properties_semsegax['k']),
                 "axoness_k{}_comp_maj".format(global_params.map_properties_semsegax['k'])]
         for k in keys:
@@ -264,6 +281,7 @@ class SyConnBackend(object):
         start = time.time()
         self.logger.info('Loading ssv {} mesh normals'.format(ssv_id))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         mesh = ssv._load_obj_mesh_compr("sv")
         dtime = time.time() - start
@@ -284,6 +302,7 @@ class SyConnBackend(object):
         :return: dict
         """
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
@@ -317,6 +336,7 @@ class SyConnBackend(object):
         self.logger.info('Loading ssv {} {} mesh indices'
                          ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
@@ -348,6 +368,7 @@ class SyConnBackend(object):
         self.logger.info('Loading ssv {} {} mesh vertices'
                          ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
@@ -382,6 +403,7 @@ class SyConnBackend(object):
         self.logger.info('Loading ssv {} {} mesh normals'
                          ''.format(ssv_id, obj_type))
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         if obj_type == "sj":
             try:
@@ -427,6 +449,7 @@ class SyConnBackend(object):
         """
         # TODO: changed to new cell type predictions, work this in everywhere
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         label = ""
         if "celltype_cnn_e3_probas" in ssv.attr_dict:  # new prediction
@@ -434,14 +457,16 @@ class SyConnBackend(object):
             # ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             # label = ct_label_dc[l]
             label = int2str_converter(l, gt_type='ctgt_v2')
+            certainty = ssv.certainty_celltype()
         elif "celltype_cnn" in ssv.attr_dict:
             ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             l = ssv.attr_dict["celltype_cnn"]
             label = ct_label_dc[l]
+            certainty = 'nan'
         else:
             log_gate.warning("Celltype prediction not present in attribute "
                              "dict of SSV {} at {}.".format(ssv_id, ssv.attr_dict_path))
-        return {'ct': label}
+        return {'ct': label, 'certainty': certainty}
 
     def svs_of_ssv(self, ssv_id):
         """
@@ -449,16 +474,29 @@ class SyConnBackend(object):
         :return: dict
         """
         ssv = self.ssd.get_super_segmentation_object(int(ssv_id))
+        ssv.nb_cpus = self.nb_cpus
         ssv.load_attr_dict()
         return {'svs': ssv.sv_ids.tolist()}
 
-    def all_syn_meta_data(self):
+    def all_syn_meta_data(self, params):
         """
         Returns all synapse meta data. This works only well for fast
-        connections and less than 1e6 synapses or so.
+        connections and less than 1e6 synapses or so. `synthresh` is transmitted
+        with a scaling factor of 1000 (-> maximum precision is 4 digits).
         :return:
         """
-
+        synthresh = params['synthresh']
+        axodend_only = params['axodend_only']
+        if (synthresh != self.synthresh) or (axodend_only != self.axodend_only):
+            self.synthresh = synthresh
+            # flat array representation of all synapses
+            self.conn_dict = conn.load_cached_data_dict(thresh_syn_prob=synthresh,
+                                                        axodend_only=axodend_only)
+            self.logger.info(f'In memory cache of synapses re-initialized with '
+                             f'threshold {synthresh} and "axodend_only={axodend_only}".')
+            # directed networkx graph of connectivity
+            self.conn_graph = conn.connectivity_to_nx_graph(self.conn_dict)
+            self.logger.info('Connectivity graph re-initialized.')
         all_syn_meta_dict = copy.copy(self.conn_dict)
 
         # the self.conn_dict is not json serializeble, due to the numpy arrays
@@ -569,7 +607,18 @@ class ServerState(object):
 
         self.logger.info('SyConn gate server starting up on working directory '
                          '"{}".'.format(global_params.wd))
-        self.backend = SyConnBackend(global_params.config.working_dir, logger=self.logger)
+        if not np.any(['syn_ssv' in name for name in os.listdir(global_params.config.working_dir)]):
+            msg = 'Could not find synapse results in working directory ' \
+                  f'{global_params.config.working_dir}.'
+            self.logger.error(msg)
+            raise RuntimeError(msg)
+        try:
+            self.backend = SyConnBackend(global_params.config.working_dir, logger=self.logger)
+        except TypeError as e:
+            msg = 'TypeError during server initialization. Make sure SyConn has' \
+                  f' successfully finished the data set analysis. \nError: {str(e)}'
+            self.logger.error(msg)
+            raise TypeError(msg)
         self.logger.info('SyConn gate server running at {}, {}.'.format(
             self.host, self.port))
         return
