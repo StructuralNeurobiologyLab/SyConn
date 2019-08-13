@@ -50,8 +50,14 @@ if __name__ == '__main__':
 
     # load SSO instance from k.zip file
     sso = init_sso_from_kzip(cell_kzip_fn, sso_id=1)
-
     # run prediction and store result in new kzip
     cell_kzip_fn_axon = cell_kzip_fn[:-6] + '_axon.k.zip'
     semseg_of_sso_nocache(sso, dest_path=cell_kzip_fn_axon, model=m,
                           **view_props)
+
+    node_preds = sso.semseg_for_coords(
+        sso.skeleton['nodes'], view_props['semseg_key'],
+        **global_params.map_properties_semsegax)
+    sso.skeleton[view_props['semseg_key']] = node_preds
+    sso.save_skeleton_to_kzip(dest_path=cell_kzip_fn_axon,
+                              additional_keys=view_props['semseg_key'])

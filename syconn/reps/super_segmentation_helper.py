@@ -11,6 +11,7 @@ import os
 from collections import Counter
 from multiprocessing.pool import ThreadPool
 import networkx as nx
+from numba import jit
 import numpy as np
 import scipy
 import scipy.ndimage
@@ -135,7 +136,7 @@ def predict_sso_celltype(sso: 'SuperSegmentationObject', model: 'Module',
     inp_d = sso_views_to_modelinput(sso, nb_views)
     inp_d = naive_view_normalization_new(inp_d)
     if global_params.config.syntype_available:
-        synsign_ratio = np.array([sso.syn_sign_ratio()] * len(inp_d))[..., None]
+        synsign_ratio = np.array([syn_sign_ratio_celltype(sso)] * len(inp_d))[..., None]
         res = model.predict_proba((inp_d, synsign_ratio))
     else:
         res = model.predict_proba(inp_d)
@@ -1443,8 +1444,9 @@ def average_node_axoness_views(sso: 'SuperSegmentationObject',
     node and collected while traversing the skeleton. The majority of the
     set of their predictions will be assigned to the source node.
     By default, will create 'axoness_preds_cnn' attribute in SSV attribute dict
-    and save new skeleton attribute with key "%s_views_avg%d" % (pred_key, max_dist).
-    Will not call ``sso.save_skeleton()``.
+    and save new skeleton attribute with key
+    ``"%s_views_avg%d" % (pred_key, max_dist)``. This method will not call
+    ``sso.save_skeleton()``.
 
     Parameters
     ----------
@@ -1768,41 +1770,70 @@ def pred_sv_chunk_semseg(args):
         label_vd.push()
 
 
+@jit(nopython=True)
+def semseg2mesh_counter(index_arr: np.ndarray, label_arr: np.ndarray,
+                        bg_label: int, count_arr: np.ndarray) -> np.ndarray:
+    """
+    Count the labels in `label_arr` of every ID in `index_arr`.
+
+    Args:
+        index_arr: Flat array of contiguous vertex IDs.
+            Order must match `label_arr`.
+        label_arr: Semantic segmentation prediction results as flat array.
+            Order must match `index_arr`. Maximum value must be below `bg_label`.
+        bg_label: Background label, will not be counted.
+        count_arr: Zero-initialized array storing the per-vertex counted labels
+            as given in `label_arr`. Must have shape (M, bg_label) where M is
+            the number of vertices of the underyling mesh.
+
+    Returns:
+        Array filled with the per-vertex label counts.
+    """
+    for ii in range(len(index_arr)):
+        vertex_ix = index_arr[ii]
+        if vertex_ix == bg_label:
+            continue
+        l = label_arr[ii]  # vertex label
+        count_arr[vertex_ix][l] += 1
+    return count_arr
+
+
 def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
                 colors=None, force_recompute=False, index_view_key=None):
     """
-    # TODO: optimize with cython
     Maps semantic segmentation to SSV mesh.
 
-    Parameters
-    ----------
-    sso : SuperSegmentationObject
-    semseg_key : str
-    nb_views : int
-    dest_path : Optional[str]
-        Colored mesh will be written to k.zip and not returned.
-    k : int
-        Number of nearest vertices to average over. If k=0 unpredicted vertices
-         will be treated as 'unpredicted' class (`np.max(semseg_views)+1`,
-          bigger than background label).
-    colors : Optional[Tuple[list]]
-        np.array with as many entries as the maximum label of 'semseg_key'
-        predictions with values between 0 and 255 (will be interpreted as uint8).
-        If it is None, the majority label according to kNN will be returned
-        instead. Note to add a color for unpredicted vertices if k==0; here
-        illustrated with by the spine prediction example:
-        if k=0: [neck, head, shaft, other, background, unpredicted]
-        else: [neck, head, shaft, other, background]
-    force_recompute : bool
-    index_view_key : str
+    Notes:
+        * ``k>0`` should only be used if a prediction for all vertices is
+          absolutely required. Filtering of background and unpredicted vertices
+          should be favored if time complexity is critical.
 
-    Returns
-    -------
-    np.array, np.array, np.array, np.array
+    Args:
+        sso: The cell reconstruction.
+        semseg_key: The key of the views which contain the semantic
+            segmentation results, i.e. pixel-wise labels.
+        index_view_key: Key of the views which hold the vertex indices at every
+            pixel. If `index_view_key` is set, `nb_views` is ignored.
+        nb_views: Number of views used for the prediction. Required for loading
+            the correct index views if `index_view_key` is not set.
+        dest_path: Colored mesh will be written to k.zip and not returned.
+        k: Number of nearest vertices to average over. If k=0 unpredicted vertices
+            will be treated as 'unpredicted' class.
+        colors: Array with as many entries as the maximum label of 'semseg_key'
+            predictions with values between 0 and 255 (will be interpreted as uint8).
+            If it is None, the majority label according to kNN will be returned
+            instead. Note to add a color for unpredicted vertices if k==0; here
+            illustrated with by the spine prediction example:
+            if k=0: [neck, head, shaft, other, background, unpredicted]
+            else: [neck, head, shaft, other, background].
+        force_recompute: Force re-mapping of the predicted labels to the
+            mesh vertices.
+
+    Returns:
         indices, vertices, normals, color
     """
     ld = sso.label_dict('vertex')
-    if force_recompute or not semseg_key in ld:
+    if force_recompute or semseg_key not in ld:
         ts0 = time.time()  # view loading
         if nb_views is None and index_view_key is None:
             # load default
@@ -1814,32 +1845,24 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             i_views = sso.load_views(index_view_key).flatten()
         semseg_views = sso.load_views(semseg_key).flatten()
         ts1 = time.time()
-        # log_reps.debug('Time to load index and shape views: '
-        #                '{:.2f}s.'.format(ts1 - ts0))
-        dc = defaultdict(list)
+        log_reps.debug('Time to load index and shape views: '
+                       '{:.2f}s.'.format(ts1 - ts0))
         background_id = np.max(i_views)
-
-        # color buffer now stores the vertex ID
-        for ii in range(len(i_views)):
-            vertex_ix = i_views[ii]
-            if vertex_ix == background_id:
-                continue
-            l = semseg_views[ii]  # vertex label
-            # get vertex ids into dictionary
-            dc[vertex_ix].append(l)
-        ts2 = time.time()
-        # log_reps.debug('Time to generate look-up dict: '
-        #                '{:.2f}s.'.format(ts2 - ts1))
-        # background label is highest label in prediction (see 'generate_palette' or
-        # 'remap_rgb_labelviews' in multiviews.py)
         background_l = np.max(semseg_views)
         unpredicted_l = background_l + 1
+        pp = len(sso.mesh[1]) // 3
+        count_arr = np.zeros((pp, background_l + 1), dtype=np.uint8)
+        count_arr = semseg2mesh_counter(i_views, semseg_views, background_id,
+                                        count_arr)
+        # np.argmax returns int64 array.. `colorcode_vertices` complexity is
+        # sensitive to the datatype of vertex_labels!
+        vertex_labels = np.argmax(count_arr, axis=1).astype(np.uint8)
+        mask = np.sum(count_arr, axis=1) == 0
+        vertex_labels[mask] = unpredicted_l
+        # background label is highest label in prediction (see 'generate_palette' or
+        # 'remap_rgb_labelviews' in multiviews.py)
         if unpredicted_l > 255:
             raise ValueError('Overflow in label view array.')
-        vertex_labels = np.ones((len(sso.mesh[1]) // 3), dtype=np.uint8) * unpredicted_l
-        for ix, v in dc.items():
-            l, cnts = np.unique(v, return_counts=True)
-            vertex_labels[ix] = l[np.argmax(cnts)]
         if k == 0:  # map actual prediction situation / coverage
             # keep unpredicted vertices and vertices with background labels
             predicted_vertices = sso.mesh[1].reshape(-1, 3)
@@ -1851,20 +1874,21 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
             # remove background class
             predicted_vertices = predicted_vertices[predictions != background_id]
             predictions = predictions[predictions != background_id]
-        ts3 = time.time()
-        # log_reps.debug('Time to map predictions on vertices: '
-        #                '{:.2f}s.'.format(ts3 - ts2))
-        # TODO: add optimized procedure in case k==1 -> only map onto unpredicted vertices
-        #  instead of averaging all
+        ts2 = time.time()
+        log_reps.debug('Time to map predictions on vertices: '
+                       '{:.2f}s.'.format(ts2 - ts1))
+        # High time complexity!
         if k > 0:  # map predictions of predicted vertices to all vertices
             maj_vote = colorcode_vertices(
-                sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions, k=k,
+                sso.mesh[1].reshape((-1, 3)), predicted_vertices, predictions,
+                k=k,
                 return_color=False, nb_cpus=sso.nb_cpus)
+            ts3 = time.time()
+            log_reps.debug('Time to map predictions on unpredicted vertices'
+                           'with k={}: {:.2f}s.'.format(k, ts3 - ts2))
         else:  # no vertex mask was applied in this case
             maj_vote = predictions
-        ts4 = time.time()
-        # log_reps.debug('Time to map predictions on unpredicted vertices / to average vertex '
-        #                'predictions: {:.2f}s.'.format(ts4 - ts3))
+
         # add prediction to mesh storage
         ld[semseg_key] = maj_vote
         ld.push()
@@ -1882,8 +1906,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
         if colors is None:
             col = None  # set to None, because write_mesh2kzip only supports
             # RGBA colors and no labels
-        log_reps.debug('Writing results to kzip.')
-        write_mesh2kzip(dest_path, sso. mesh[0], sso.mesh[1], sso.mesh[2],
+        write_mesh2kzip(dest_path, sso.mesh[0], sso.mesh[1], sso.mesh[2],
                         col, ply_fname=semseg_key + ".ply")
         return
     return sso.mesh[0], sso.mesh[1], sso.mesh[2], col
@@ -1894,9 +1917,10 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
                             overwrite=True):
     """
     Renders raw views at rendering locations determined by `comp_window`
-    and according to given view properties without storing them on the file system. Views will
-    be predicted with the given `model`. By default, resulting predictions and probabilities are
-    stored as `celltype_cnn_e3` and `celltype_cnn_e3_probas`.
+    and according to given view properties without storing them on the file
+    system. Views will be predicted with the given `model`. By default,
+    resulting predictions and probabilities are stored as 'celltype_cnn_e3'
+    and 'celltype_cnn_e3_probas' in the attribute dictionary.
 
     Parameters
     ----------
@@ -1943,7 +1967,7 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
 
     from ..handler.prediction import naive_view_normalization_new
     inp_d = sso_views_to_modelinput(sso, nb_views_model, view_key=tmp_view_key)
-    synsign_ratio = np.array([sso.syn_sign_ratio()] * len(inp_d))[..., None]
+    synsign_ratio = np.array([syn_sign_ratio_celltype(sso)] * len(inp_d))[..., None]
     inp_d = naive_view_normalization_new(inp_d)
     res = model.predict_proba((inp_d, synsign_ratio), bs=5)
     clf = np.argmax(res, axis=1)
@@ -2020,7 +2044,7 @@ def view_embedding_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_mode
 
 
 def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
-                          nb_views: int, comp_window: float, n_avg: int = 1,
+                          nb_views: int, comp_window: float, k: int = 1,
                           dest_path: Optional[str] = None, verbose: bool = False):
     """
     Renders raw and index views at rendering locations determined by `comp_window`
@@ -2064,7 +2088,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
         ws: Window size in pixels [y, x]
         nb_views: Number of views rendered at each rendering location.
         comp_window: Physical extent in nm of the view-window along y (see `ws` to infer pixel size)
-        n_avg: Number of nearest vertices to average over. If k=0 unpredicted vertices will
+        k: Number of nearest vertices to average over. If k=0 unpredicted vertices will
             be treated as 'unpredicted' class.
         dest_path: location of kzip in which colored vertices (according to semantic
             segmentation prediction) are stored.
@@ -2097,7 +2121,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
         log_reps.debug('Finished index-view rendering.')
     # map prediction onto mesh and saves it to sso._label_dict['vertex'][semseg_key] (also pushed to file system!)
     sso.semseg2mesh(semseg_key, index_view_key=index_view_key, dest_path=dest_path,
-                    force_recompute=True, k=n_avg)
+                    force_recompute=True, k=k)
     if verbose:
         log_reps.debug('Finished mapping of vertex predictions to mesh.')
 
@@ -2149,6 +2173,8 @@ def assemble_from_mergelist(ssd, mergelist: Union[Dict[int, int], str]):
 def compartments_graph(ssv: 'SuperSegmentationObject',
                        axoness_key: str) -> Tuple[nx.Graph, nx.Graph, nx.Graph]:
     """
+    Creates a axon, dendrite and soma graph based on the skeleton node
+    CMN predictions.
 
     Args:
         ssv: Cell reconstruction. Its skeleton must exist and must contain keys
@@ -2160,7 +2186,6 @@ def compartments_graph(ssv: 'SuperSegmentationObject',
     Returns:
         Three graphs for dendrite, axon and soma compartment respectively.
     """
-    nodes = ssv.skeleton['nodes']
     axon_prediction = np.array(ssv.skeleton[axoness_key])
     axon_prediction[axon_prediction == 3] = 1
     axon_prediction[axon_prediction == 4] = 1
@@ -2180,3 +2205,78 @@ def compartments_graph(ssv: 'SuperSegmentationObject',
         ax_graph.remove_node(ix)
         den_graph.remove_node(ix)
     return den_graph, ax_graph, so_graph
+
+
+def syn_sign_ratio_celltype(ssv: 'SuperSegmentationObject',
+                            weighted: bool = True, recompute: bool = True,
+                            comp_types: Optional[List[int]] = None) -> float:
+    """
+    Ratio of symmetric synapses (between 0 and 1; -1 if no synapse objects)
+    on specified functional compartments (`comp_types`) of the cell
+    reconstruction. Does not include compartment information of the partner
+    cell. See :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.syn_sign_ration`
+     for this.
+
+    Todo:
+        * Check default of synapse type if synapse type predictions are not
+          available -> propagate to this method and return -1.
+
+    Notes:
+        Bouton predictions are converted into axon label,
+        i.e. 3 (en-passant) -> 1 and 4 (terminal) -> 1.
+
+        The compartment type of the other cell cannot be inferred at this
+        point. Think about adding the property collection before celltype
+        reodiction -> would allow more detailed filtering of the synapses,
+        but adds an additional round of property collection.
+
+        The compartment predictions are collected after the first access of this attribute
+        during the celltype prediction. The key 'partner_axoness' is not available within ``
+        self.syn_ssv`` until :func:`~syconn.extraction.cs_processing_steps
+        ._collect_properties_from_ssv_partners_thread` is called (see
+        :func:`~syconn.exec.exec_syns.run_matrix_export`).
+
+    Args:
+        ssv: The cell reconstruction.
+        weighted: Compute synapse-area weighted ratio.
+        recompute: Ignore existing value.
+        comp_types: All synapses that are formed on any of the
+        functional compartment types given in `comp_types` on the cell
+        reconstruction are used for computing the ratio (0: dendrite,
+        1: axon, 2: soma). Default: [1, ].
+
+    Returns:
+        (Area-weighted) ratio of symmetric synapses or -1 if no synapses.
+    """
+    if comp_types is None:
+        comp_types = [1, ]
+    ratio = ssv.lookup_in_attribute_dict("syn_sign_ratio")
+    if not recompute and ratio is not None:
+        return ratio
+
+    pred_key_ax = "{}_avg{}".format(global_params.view_properties_semsegax['semseg_key'],
+                                    global_params.DIST_AXONESS_AVERAGING)
+    if len(ssv.syn_ssv) == 0:
+        return -1
+    syn_axs = ssv.attr_for_coords([syn.rep_coord for syn in ssv.syn_ssv],
+                                   attr_keys=[pred_key_ax, ])[0]
+    # convert boutons to axon class
+    syn_axs[syn_axs == 3] = 1
+    syn_axs[syn_axs == 4] = 1
+    syn_signs = []
+    syn_sizes = []
+    for syn_ix, syn in enumerate(ssv.syn_ssv):
+        if syn_axs[syn_ix] not in comp_types:
+            continue
+        syn.load_attr_dict()
+        syn_signs.append(syn.attr_dict["syn_sign"])
+        syn_sizes.append(syn.mesh_area / 2)
+    if len(syn_signs) == 0 or np.sum(syn_sizes) == 0:
+        return -1
+    syn_signs = np.array(syn_signs)
+    syn_sizes = np.array(syn_sizes)
+    if weighted:
+        ratio = np.sum(syn_sizes[syn_signs == -1]) / float(np.sum(syn_sizes))
+    else:
+        ratio = np.sum(syn_signs == -1) / float(len(syn_signs))
+    return ratio

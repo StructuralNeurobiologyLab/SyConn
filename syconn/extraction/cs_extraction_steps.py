@@ -137,8 +137,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
         merge_prop_dicts([syn_props, curr_syn_props])
         merge_type_dicts([tot_asym_cnt, asym_cnt])
         merge_type_dicts([tot_sym_cnt, sym_cnt])
-    log.info('Finished cs ({}) and syn ({}) extraction.'.format(
-        len(cs_props[0]), len(syn_props[0])))
+    log.info('Finished contact site (#objects: {}) and synapse (#objects: {})'
+             ' extraction.'.format(len(cs_props[0]), len(syn_props[0])))
     if len(syn_props[0]) == 0:
         log.critical('WARNING: Did not find any synapses during extraction step.')
     # TODO: extract syn objects! maybe replace sj_0 Segmentation dataset by the overlapping CS<->
@@ -346,9 +346,9 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         merge_type_dicts([tot_asym_cnt, asym_cnt])
         merge_type_dicts([tot_sym_cnt, sym_cnt])
         del curr_cs_p, curr_syn_p, asym_cnt, sym_cnt
-    log_extraction.error("Cum. time for loading data: {:.2f} s; for processing: {:.2f} "
-                         "s for processing2: {:.2f} s. {} cs and {} syn.".format(
-        cum_dt_data, cum_dt_proc, cum_dt_proc2, len(cs_props[0]), len(syn_props[0])))
+    # log_extraction.error("Cum. time for loading data: {:.2f} s; for processing: {:.2f} "
+    #                      "s for processing2: {:.2f} s. {} cs and {} syn.".format(
+    #     cum_dt_data, cum_dt_proc, cum_dt_proc2, len(cs_props[0]), len(syn_props[0])))
     return cs_props, syn_props, tot_asym_cnt, tot_sym_cnt
 
 

@@ -457,14 +457,16 @@ class SyConnBackend(object):
             # ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             # label = ct_label_dc[l]
             label = int2str_converter(l, gt_type='ctgt_v2')
+            certainty = ssv.certainty_celltype()
         elif "celltype_cnn" in ssv.attr_dict:
             ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             l = ssv.attr_dict["celltype_cnn"]
             label = ct_label_dc[l]
+            certainty = 'nan'
         else:
             log_gate.warning("Celltype prediction not present in attribute "
                              "dict of SSV {} at {}.".format(ssv_id, ssv.attr_dict_path))
-        return {'ct': label}
+        return {'ct': label, 'certainty': certainty}
 
     def svs_of_ssv(self, ssv_id):
         """

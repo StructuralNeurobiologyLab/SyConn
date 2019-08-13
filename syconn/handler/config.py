@@ -41,7 +41,7 @@ class Config(object):
     @property
     def entries(self) -> Any:
         """
-        Entries stored in the config.ini file.
+        Entries stored in the ``config.ini`` file.
 
         Returns:
             All entries.
@@ -150,6 +150,12 @@ class DynConfig(Config):
     Enables dynamic and SyConn-wide update of working directory 'wd' and provides an
     interface to all working directory dependent parameters.
 
+    Todo:
+        * Start to use ``__getitem__`` instead of :py:attr:`~entries`.
+        * Adapt all ``global_params.config.`` usages accordingly.
+        * Consider ``.json`` instead of ``.ini``.
+        * Reduce
+
     Examples:
         To initialize a working directory at the beginning of your script, run::
 
@@ -169,6 +175,27 @@ class DynConfig(Config):
         else:
             verbose = False
         super().__init__(wd, verbose=verbose)
+        self._default_conf = None
+
+    def __getitem__(self, item: str) -> Any:
+        """
+        If `item` is not set in this config, the return value will be taken from
+         the default ``config.ini`` and ``configspec.ini``.
+
+        Notes:
+            Do not replace ``self.entries`` calls for now in order to maintain
+            backwards compatibility.
+
+        Args:
+            item: Key of the requested value.
+
+        Returns:
+            The value which corresponds to `item`.
+        """
+        try:
+            return self.entries[item]
+        except KeyError:
+            return self.default_conf.entries[item]
 
     def _check_actuality(self):
         """
@@ -184,6 +211,17 @@ class DynConfig(Config):
         elif (global_params.wd is not None) and (len(global_params.wd) > 0) and \
                 (global_params.wd != "None") and (super().working_dir != global_params.wd):
             super().__init__(global_params.wd)
+
+    @property
+    def default_conf(self) -> Config:
+        """
+        Load default ``config.ini`` if necessary.
+        """
+        if self._default_conf is None:
+            self._default_conf = Config(os.path.split(os.path.abspath(__file__))[0],
+                                        verbose=False)
+            self._default_conf._working_dir = None
+        return self._default_conf
 
     @property
     def entries(self):
@@ -587,6 +625,7 @@ def get_default_conf_str(example_wd: str, scaling: Union[Tuple, np.ndarray],
                          allow_mesh_gen_cells: bool = True,
                          use_new_subfold: bool = True) -> Tuple[str, str]:
     """
+    # TODO:
     Default SyConn config and variable type specifications. Paths to ``KnossosDatasets``
     containing various predictions, prob. maps and segmentations have to be given depending on
     what specifically is going to be processed. See ``SyConn/scripts/example_run/start.py``
@@ -595,6 +634,10 @@ def get_default_conf_str(example_wd: str, scaling: Union[Tuple, np.ndarray],
     By default it is set to ``init_rag = working_dir + "rag.bz2"``, which then
     requires manual generation of the file, see ``SyConn/scripts/example_run/start.py``.
     The parameter ``py36path`` is currently not in use.
+
+    Todo:
+        * load ``config.ini`` and ``configspec.ini`` and manipulate the given entries.
+        * Switch to use only as a getter function and manipulate outside or using ``**kwargs``.
 
     Examples:
         Example content of the `config.ini` file::
@@ -744,6 +787,24 @@ vc = 0.285714286
 allow_mesh_gen_cells = {}
 use_new_meshing = {}
 
+[MeshDownsampling]
+sv = 4, 4, 2
+sj = 2, 2, 1
+vc = 4, 4, 2
+mi = 8, 8, 4
+cs = 2, 2, 1
+conn = 2, 2, 1
+syn_ssv = 2, 2, 1
+                
+[MeshClosing]
+sv = 0
+s = 0
+vc = 0
+mi = 0
+cs = 0
+conn = 4
+syn_ssv = 0
+
 [Skeleton]
 allow_skel_gen = {}
 
@@ -786,6 +847,12 @@ __many__ = float
 [Mesh]
 allow_mesh_gen_cells = boolean
 use_new_meshing = boolean
+
+[MeshDownsampling]
+__many__ = int_list(min=3, max=3)
+
+[MeshClosing]
+__many__ = int
 
 [Skeleton]
 allow_skel_gen = boolean
@@ -883,7 +950,8 @@ class TimeFilter(logging.Filter):
         except AttributeError:
           last = record.relativeCreated
 
-        delta = datetime.datetime.fromtimestamp(record.relativeCreated/1000.0) - datetime.datetime.fromtimestamp(last/1000.0)
+        delta = datetime.datetime.fromtimestamp(record.relativeCreated/1000.0) - \
+                datetime.datetime.fromtimestamp(last/1000.0)
 
         record.relative = '{0:.1f}'.format(delta.seconds / 60.)
 

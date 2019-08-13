@@ -15,6 +15,7 @@ import warnings
 from syconn.handler.basics import load_pkl2obj, temp_seed
 from syconn.handler.prediction import naive_view_normalization, naive_view_normalization_new
 from syconn.reps.super_segmentation import SuperSegmentationDataset, SegmentationObject
+from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
 from syconn import global_params
 from syconn.handler import log_main as log_cnn
@@ -804,9 +805,8 @@ class CelltypeViews(MultiViewData):
                 sso = self.ssd.get_super_segmentation_object(ix)
                 sso.nb_cpus = self.nb_cpus
                 ssos.append(sso)
-            self.view_cache[source] = [sso.load_views(view_key=self.view_key)
-                                       for sso in ssos]
-            self.syn_sign_cache[source] = np.array([sso.syn_sign_ratio() for sso in ssos])
+            self.view_cache[source] = [sso.load_views(view_key=self.view_key) for sso in ssos]
+            self.syn_sign_cache[source] = np.array([syn_sign_ratio_celltype(sso) for sso in ssos])
             for ii in range(len(self.view_cache[source])):
                 views = self.view_cache[source][ii]
                 views = naive_view_normalization_new(views)
@@ -1626,8 +1626,10 @@ def parse_gt_usable_synssv(mask_celltypes: bool = True,
     # m_non_syn = sd_syn_ssv.get_segmentation_object(sd_syn_ssv.ids[(syn_prob < 0.1) & (sd_syn_ssv.sizes > 200)])
     # syn_objs_total += m_non_syn
     # syn_type_total += [0] * len(m_non_syn)
-    log_cnn.info('Gathered the following synapses: {}'.format(
-        np.unique(syn_type_total, return_counts=True)))
+
     if mask_celltypes is False:
         return syn_objs_total, np.ones_like(syn_type_total) * -1
+    log_cnn.info('Gathered the following synapses: {}'.format(
+        np.unique(syn_type_total, return_counts=True)))
     return syn_objs_total, syn_type_total
+

@@ -20,7 +20,8 @@ from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
 from knossos_utils.knossosdataset import KnossosDataset
-
+from sklearn.metrics import log_loss
+from scipy.special import softmax
 from syconn.handler.config import initialize_logging
 from syconn.reps import log_reps
 from syconn.mp import batchjob_utils as qu
@@ -1221,3 +1222,38 @@ def views2tripletinput(views):
                             np.ones_like(views),
                             np.ones_like(views)], axis=2)
     return out_d.astype(np.float32)
+
+
+def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
+    """
+    Estimates the certainty of (independent) predictions of the same sample:
+        1. If `is_logit` is True, Generate pseudo-probabilities from the
+           input using softmax.
+        2. Sum the evidence per class and rescale.
+        3. Compare the sorted evidence to the ideal outcome
+           (one-hot vector) via logloss.
+        4. Scale the logloss with the worst outcome (equal probabilities)
+           and subtract it from 1.
+    Args:
+        inp: 2D array of prediction results (N: number of samples,
+            C: Number of classes)
+        is_logit: If True, applies ``softmax(inp, axis=1)``.
+
+    Returns:
+        Certainty measure based on the logloss of a set of (independent)
+        predictions.
+    """
+    if is_logit:
+        proba = softmax(inp, axis=1)
+    else:
+        proba = inp
+    proba = np.sum(proba, axis=0)
+    # sort. Ideally, result should be one-hot vector
+    proba = np.sort(proba)[::-1] / np.sum(proba)
+    if np.max(proba) == 1:
+        return 1
+    y_true = np.zeros_like(proba)
+    y_true[0] = 1
+    loss = log_loss(y_true, proba)
+    loss_worst = log_loss(y_true, np.ones_like(y_true) / len(y_true))
+    return 1 - loss / loss_worst

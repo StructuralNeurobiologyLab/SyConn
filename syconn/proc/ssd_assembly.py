@@ -23,7 +23,7 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
         - Mesh files: 'sv.ply', 'mi.ply', 'sj.ply', 'vc.ply'
         - meta dict: 'meta.pkl'
         - [Optional] Rendering locations: 'sample_locations.pkl'
-        (currently broekn to use .npy, fixed in python 3.7)
+          (currently broekn to use .npy, fixed in python 3.7)
         - [Optional] Supervoxel graph: 'rag.bz2'
         - [Optional] Skeleton representation: 'skeleton.pkl'
         - [Optional] attribute dict: 'attr_dict.pkl'
@@ -57,8 +57,17 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
         for k in meta_dc['version_dict']:
             meta_dc['version_dict'][k] = 'tmp'
         meta_dc['working_dir'] = None
-
-    sso = SuperSegmentationObject(sso_id, version="tmp", **meta_dc)
+        meta_dc['version'] = 'tmp'
+        if 'sso_id' in meta_dc:
+            del meta_dc['sso_id']
+    else:
+        if 'sso_id' not in meta_dc or meta_dc['sso_id'] is None:
+            raise ValueError('Loading cell reconstruction with load_as_tmp=False '
+                             'which requires the SuperSegmentationObject ID. None '
+                             'found in meta dictionary.')
+        sso_id = meta_dc['sso_id']
+        del meta_dc['sso_id']
+    sso = SuperSegmentationObject(sso_id, **meta_dc)
     # Required to enable prediction in 'tmp' SSVs # TODO: change those properties in SSO constructor
     sso._mesh_caching = True
     sso._view_caching = True
@@ -73,7 +82,7 @@ def init_sso_from_kzip(path, load_as_tmp=True, sso_id=None):
     if "skeleton.pkl" in files:
         with zipfile.ZipFile(path, allowZip64=True) as z:
             f = z.open("skeleton.pkl")
-            sso._skeleton = pkl.load(f)  # or loads?  returns a dict
+            sso.skeleton = pkl.load(f)  # or loads?  returns a dict
 
     # attribute dictionary
     if "attr_dict.pkl" in files:

@@ -18,7 +18,8 @@ from torch import optim
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('-n', '--exp-name', default='syntype_unet_sameConv_noBN_run_fancydice_run2',
+parser.add_argument('-n', '--exp-name',
+                    default='cellorganelle_unet_sameConv_noBN_run2',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=200,
@@ -93,7 +94,7 @@ model = UNet(
 ).to(device)
 
 # Example for a model-compatible input.
-example_input = torch.randn(1, 1, 48, 144, 144)
+example_input = torch.randn(1, 1, 40, 144, 144)
 
 enable_save_trace = False if args.jit == 'disabled' else True
 if args.jit == 'onsave':
@@ -112,19 +113,16 @@ elif args.jit == 'train':
 # USER PATHS
 save_root = os.path.expanduser('~/e3_training/')
 os.makedirs(save_root, exist_ok=True)
-data_root = os.path.expanduser('/wholebrain/songbird/j0126/GT/synapsetype_gt/')
+gt_dir = os.path.expanduser('/wholebrain/songbird/j0126/GT/cellorganelle_gt/')
 
-gt_dir = data_root + '/Segmentierung_von_Synapsentypen_v1/'
-fnames = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
-gt_dir = data_root + '/synssv_reconnects_nosomamerger/'
-fnames += sorted([gt_dir + f for f in os.listdir(gt_dir)[:900] if f.endswith('.h5')])
+fnames = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('e3.h5') and 'd' in f])
+fnames_l = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('e3.h5') and 'l' in f])
 
-input_h5data = [(f, 'raw') for f in fnames + fnames[-1:]]
-target_h5data = [(f, 'label') for f in fnames + fnames[-1:]]
-valid_indices = [3]
+input_h5data = [(f, 'raw') for f in fnames[:1] + fnames]
+target_h5data = [(f, 'label') for f in fnames_l[:1] + fnames_l]
+valid_indices = [0]
 
-# Class weights for imbalanced dataset, the last one is used as ignore label
-class_weights = torch.tensor([0.33, 0.33, 0.33, 0]).to(device)
+class_weights = torch.tensor([0.25, 0.25, 0.25, 0.25]).to(device)
 
 max_steps = args.max_steps
 max_runtime = args.max_runtime
@@ -169,7 +167,7 @@ train_dataset = PatchCreator(
     warp_kwargs={
         'sample_aniso': aniso_factor != 1,
         'perspective': True,
-        'warp_amount': 0.05,
+        'warp_amount': 0.1,
     },
     transform=train_transform,
     **common_data_kwargs
@@ -207,8 +205,7 @@ schedulers = {'lr': lr_sched}
 valid_metrics = {
 }
 
-criterion = DiceLossFancy(apply_softmax=True, weights=class_weights,
-                          ignore_index=3)
+criterion = DiceLoss(apply_softmax=True, weight=class_weights)
 
 # Create trainer
 trainer = Trainer(

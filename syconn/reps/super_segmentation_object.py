@@ -34,6 +34,7 @@ from .rep_helper import knossos_ml_from_sso, colorcode_vertices, \
     knossos_ml_from_svixs, subfold_from_ix_SSO
 from ..handler.basics import write_txt2kzip, get_filepaths_from_dir, safe_copy, \
     coordpath2anno, load_pkl2obj, write_obj2pkl, flatten_list, chunkify, data2kzip
+from ..handler.prediction import certainty_estimate
 from ..backend.storage import CompressedStorage, MeshStorage
 from ..proc.graphs import split_glia, split_subcc_join, create_graph_from_coords
 from ..proc.meshes import write_mesh2kzip, merge_someshes, \
@@ -153,10 +154,6 @@ class SuperSegmentationObject(object):
             :class:`~syconn.backend.storage.CompressedStorage` interface.
         version_dict: A dictionary which contains the versions of other dataset types which share
             the same working directory. Defaults to the `Versions` entry in the `config.ini` file.
-
-    Todo:
-        * add examples
-        * add most important attributes
     """
     def __init__(self, ssv_id: int, version: Optional[str] = None,
                  version_dict: Optional[Dict[str, str]] = None,
@@ -381,8 +378,8 @@ class SuperSegmentationObject(object):
     @property
     def scaling(self) -> np.ndarray:
         """
-        Voxel size in nanometers (XYZ). Default is taken from the `config.ini` file and
-        accessible via :py:attr:`~config`.
+        Voxel size in nanometers (XYZ). Default is taken from the `config.ini`
+        file and accessible via :py:attr:`~config`.
         """
         return self._scaling
 
@@ -1372,7 +1369,7 @@ class SuperSegmentationObject(object):
                 so_obj.save_kzip(path=dest_path,
                                  write_id=self.dense_kzip_ids[obj_type])
 
-    def total_edge_length(self) -> float:
+    def total_edge_length(self) -> Union[np.ndarray, float]:
         """
         Total edge length of the super-supervoxel :py:attr:`~skeleton` in nanometers.
 
@@ -1415,8 +1412,7 @@ class SuperSegmentationObject(object):
         """
         try:
             self.skeleton = load_pkl2obj(self.skeleton_path)
-            # stored as uint32, if used for computations
-            # e.g. edge length then it will overflow
+            # nodes are stored as uint32, TODO: look into that and change if possible.
             self.skeleton["nodes"] = self.skeleton["nodes"].astype(np.float32)
             return True
         except:
@@ -1426,20 +1422,39 @@ class SuperSegmentationObject(object):
             return False
 
     def syn_sign_ratio(self, weighted: bool = True,
-                       recompute: bool = False) -> float:
+                       recompute: bool = True,
+                       comp_types: Optional[List[int]] = None,
+                       comp_types_partner: Optional[List[int]] = None) -> float:
         """
-        Ratio of symmetric synapses (between 0 and 1; -1 if no synapse objects).
+        Ratio of symmetric synapses (between 0 and 1; -1 if no synapse objects)
+        between functional compartments specified via `comp_types` and
+        `comp_types_partner`.
 
         Todo:
-            * Distinguish pre- and post-synaptic site -> retrain celltype classifier.
+            * Check default of synapse type if synapse type predictions are not
+              available -> propagate to this method and return -1.
+
+        Notes:
+            Bouton predictions are converted into axon label,
+            i.e. 3 (en-passant) -> 1 and 4 (terminal) -> 1.
 
         Args:
             weighted: Compute synapse-area weighted ratio.
             recompute: Ignore existing value.
+            comp_types: All synapses that are formed on any of the
+                functional compartment types given in `comp_types` on the cell
+                reconstruction are used for computing the ratio (0: dendrite,
+                1: axon, 2: soma). Default: [1, ].
+            comp_types_partner: Compartment type of the partner cell. Default:
+                [0, ].
 
         Returns:
-            Type ratio of all synapses (``syn_ssv``) assigned to this object.
+            (Area-weighted) ratio of symmetric synapses or -1 if no synapses.
         """
+        if comp_types is None:
+            comp_types = [1, ]
+        if comp_types_partner is None:
+            comp_types_partner = [0, ]
         ratio = self.lookup_in_attribute_dict("syn_sign_ratio")
         if not recompute and ratio is not None:
             return ratio
@@ -1447,6 +1462,19 @@ class SuperSegmentationObject(object):
         syn_sizes = []
         for syn in self.syn_ssv:
             syn.load_attr_dict()
+            ax = np.array(syn.attr_dict['partner_axoness'])
+            # convert boutons to axon class
+            ax[ax == 3] = 1
+            ax[ax == 4] = 1
+            partners = syn.attr_dict['neuron_partners']
+            this_cell_ix = list(partners).index(self.id)
+            other_cell_ix = 1 - this_cell_ix
+            if ax[this_cell_ix] not in comp_types:
+                continue
+            if ax[other_cell_ix] not in comp_types_partner:
+                continue
+            if ax[other_cell_ix] != 1:
+                continue
             syn_signs.append(syn.attr_dict["syn_sign"])
             syn_sizes.append(syn.mesh_area / 2)
         if len(syn_signs) == 0 or np.sum(syn_sizes) == 0:
@@ -1457,8 +1485,6 @@ class SuperSegmentationObject(object):
             ratio = np.sum(syn_sizes[syn_signs == -1]) / float(np.sum(syn_sizes))
         else:
             ratio = np.sum(syn_signs == -1) / float(len(syn_signs))
-        self.attr_dict["syn_sign_ratio"] = ratio
-        self.save_attributes(["syn_sign_ratio"], [ratio])
         return ratio
 
     def aggregate_segmentation_object_mappings(self, obj_types: List[str],
@@ -2423,6 +2449,10 @@ class SuperSegmentationObject(object):
         0 to 255. Saved SSO can also be re-loaded as an SSO instance via
         :func:`~syconn.proc.ssd_assembly.init_sso_from_kzip`.
 
+        Todo:
+            * Switch to .json format for storing meta information.
+            * Save actual SSV ID in meta dictionary.
+
         Notes:
             Will not invoke :func:`~load_attr_dict`.
 
@@ -2472,7 +2502,8 @@ class SuperSegmentationObject(object):
         target_fnames.append('{}.pkl'.format('meta'))
         write_obj2pkl(tmp_dest_p[-1], {'version_dict': self.version_dict,
                                        'scaling': self.scaling,
-                                       'working_dir': self.working_dir})
+                                       'working_dir': self.working_dir,
+                                       'sso_id': self.id})
         # write all data
         data2kzip(dest_path, tmp_dest_p, target_fnames)
         self.meshes2kzip(dest_path=dest_path, sv_color=sv_color,
@@ -3045,6 +3076,27 @@ class SuperSegmentationObject(object):
                 imsave("%s/SSV_%d_%d.png" % (dest_folder, self.id, ii), v)
         else:
             return views
+
+    def certainty_celltype(self) -> float:
+        """
+        Certainty estimate of the celltype prediction:
+            1. Generate pseudo-probabilities from the predicted logits
+               ('celltype_cnn_e3_probas' inside :py:attr:`~attr_dict`) using
+               softmax.
+            2. Sum the evidence per class and rescale.
+            3. Compare the sorted evidence to the ideal outcome
+               (one-hot vector) via logloss.
+            4. Scale the logloss with the worst outcome (equal probabilities)
+               and subtract it from 1.
+
+        Notes:
+            Experimental!
+
+        Returns:
+            Certainty measure based on the logloss of the celltype logits.
+        """
+        logits = self.lookup_in_attribute_dict('celltype_cnn_e3_probas')
+        return certainty_estimate(logits, is_logit=True)
 
     def majority_vote(self, prop_key, max_dist):
         """

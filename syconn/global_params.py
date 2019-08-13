@@ -95,7 +95,8 @@ MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0,
                 "conn": 4, 'syn_ssv': 0}
 MESH_MIN_OBJ_VX = 100  # adapt to size threshold
 
-meshing_props = dict(normals=True, simplification_factor=300, max_simplification_error=40)
+meshing_props = dict(normals=True, simplification_factor=300,
+                     max_simplification_error=40)
 
 
 # --------- VIEW PARAMETERS
@@ -130,22 +131,23 @@ DIST_AXONESS_AVERAGING = 10000  # also used for myelin averaging
 gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness' \
                   '/all_bouton_data/'  # TODO: add to config
 
-# `n_avg=0` will not map predictions to unpredicted vertices -> faster
-# `n_avg` is used as the `k` parameter in `semseg2mesh`
+# `k=0` will not map predictions to unpredicted vertices -> faster
+# `k` is the parameter used in `semseg2mesh`
 view_properties_semsegax = dict(verbose=False, ws=(1024, 512), nb_views=3,
                                 comp_window=40.96e3 * 1., semseg_key='axoness',
-                                n_avg=0)
-# ignore labels 5 (background) and unpredicted (6), use labels of the k-nearest vertices
+                                k=0)
+# mapping of vertex labels to skeleton nodes; ignore labels 5 (background)
+# and unpredicted (6), use labels of the k-nearest vertices
 map_properties_semsegax = dict(k=50, ds_vertices=1, ignore_labels=[5, 6])
 
 # TODO: add view properties for spine prediction
 # mapping parameters of the semantic segmentation prediction to the cell mesh
-# Note: ``k=1`` means that the predictions are propagated to unpredicted and backround labels
+# Note: ``k>0`` means that the predictions are propagated to unpredicted and backround labels
 # via nearest neighbors.
-semseg2mesh_spines = dict(semseg_key="spiness", force_recompute=True, k=5)
+semseg2mesh_spines = dict(semseg_key="spiness", force_recompute=True, k=0)
 # no ignore labels used for the spine predictions because the predictions were propagated to
 # unpredicted and background vertices via `semseg2mesh`
-semseg2coords_spines = dict(k=50, ds_vertices=1)
+semseg2coords_spines = dict(k=50, ds_vertices=1, ignore_labels=[4, 5])
 
 # --------- CELLTYPE PARAMETERS
 view_properties_large = dict(verbose=False, ws=(512, 512), nb_views_render=6,

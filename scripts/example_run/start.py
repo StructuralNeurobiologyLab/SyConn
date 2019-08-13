@@ -70,7 +70,7 @@ if __name__ == '__main__':
     n_folders_fs_sc = 1000
     experiment_name = 'j0126_example'
     global_params.NCORE_TOTAL = 20
-    global_params.NGPU_TOTAL = 2
+    global_params.NGPU_TOTAL = 1
     global_params.NNODES_TOTAL = 1
 
     # PREPARE CONFIG
@@ -98,8 +98,9 @@ if __name__ == '__main__':
     global_params.wd = example_wd
     os.makedirs(global_params.config.temp_path, exist_ok=True)
 
-    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype',
-                      'mpath_axoness', 'mpath_glia']:
+    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype_e3',
+                      'mpath_axonsem', 'mpath_glia_e3', 'mpath_myelin',
+                      'mpath_tnet']:
         mpath = getattr(global_params.config, mpath_key)
         if not (os.path.isfile(mpath) or os.path.isdir(mpath)):
             raise ValueError('Could not find model "{}". Make sure to copy the'

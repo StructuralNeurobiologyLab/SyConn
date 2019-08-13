@@ -24,6 +24,17 @@ def run_matrix_export():
     """
     Export the matrix as a ``.csv`` file at the ``connectivity_matrix`` folder
     of the currently active working directory.
+    Also collects the following synapse properties from prior analysis
+    steps:
+        * 'partner_axoness': Cell compartment type (axon: 1, dendrite: 0, soma: 2,
+            en-passant bouton: 3, terminal bouton: 4) of the partner neurons.
+        * 'partner_spiness': Spine compartment predictions of both neurons.
+        * 'partner_celltypes': Celltype of the both neurons.
+        * 'latent_morph': Local morphology embeddings of the pre- and post-
+            synaptic partners.
+
+    Examples:
+        See :class:`~syconn.reps.segmentation.SegmentationDataset` for examples.
     """
     # cache cell attributes
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
@@ -118,7 +129,7 @@ def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
     log.info('Cellular organelles were mapped to "syn_ssv".')
 
     cps.classify_synssv_objects(global_params.config.working_dir, log=log)
-    log.info('Synapse property prediction finished.')
+    log.info('Synapse prediction finished.')
 
     log.info('Collecting and writing syn-ssv objects to SSV attribute '
              'dictionary.')
