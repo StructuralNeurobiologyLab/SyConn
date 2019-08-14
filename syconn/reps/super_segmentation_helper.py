@@ -527,6 +527,57 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500,
     return sso, nx_g
 
 
+def skeleton_optimization(sso: 'SuperSegmentationObject') \
+        -> 'SuperSegmentationObject':
+    """
+    Todo:
+        * Similar to :func:`~sparsify_skeleton` -> merge into single method
+        * Refactor, make use of
+        :py:attr:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.weighted_graph`.
+    Args:
+        sso: Cell reconstruction.
+
+    Returns:
+        The cell reconstruction object with modified ``skeleton`` attribute.
+    """
+    nx_g = sso.weighted_graph()
+    skel_coords = sso.skeleton['nodes'] * sso.scaling  # in NM
+    start = time.time()
+    deg_2_nodes = set({k for k, v in nx_g.degree if v == 2})
+    # sparsen skeleton
+    while True:
+        if len(deg_2_nodes):
+            node = deg_2_nodes.pop()
+        else:
+            break
+        # check neighbors
+        n1, n2 = nx_g.neighbors(node)
+        dist = np.linalg.norm(skel_coords[n1] - skel_coords[n2])  # in NM
+        if dist < 500:
+            # prune edge
+            nx_g.remove_node(node)
+            if not nx_g.has_edge(n1, n2):
+                nx_g.add_edge(n1, n2, weight=dist)
+            else:
+                # in case of cycles, do not add an edge, but remove the
+                # nodes from the set
+                if n1 in deg_2_nodes:
+                    deg_2_nodes.remove(n1)
+                if n2 in deg_2_nodes:
+                    deg_2_nodes.remove(n2)
+
+    log_reps.debug(f'sparsening took {time.time() - start}')
+    ############
+    # remove cycles using minimum spanning tree
+    start = time.time()
+    T = nx.minimum_spanning_tree(nx_g)
+    sso = from_netkx_to_sso(sso, T)
+    # reset weighted
+    sso._weighted_graph = None
+    log_reps.debug(f'mst took {time.time() - start}')
+    return sso
+
+
 def from_netkx_to_sso(sso, skel_nx):
     sso.skeleton = {}
     sso.skeleton['nodes'] = np.array([skel_nx.node[ix]['position'] for ix in
@@ -1027,7 +1078,8 @@ def from_sso_to_netkx_fast(sso, sparsify=True, max_edge_length=5e3):
     return skel_nx
 
 
-def create_sso_skeleton_fast(sso, pruning_thresh=700, sparsify=True):
+def create_sso_skeleton_fast(sso, pruning_thresh=700, sparsify=True,
+                             max_dist_thresh=700, dot_prod_thresh=0.95):
     """
     Creates the super-supervoxel skeleton. NOTE: If the underlying RAG does
     not connect close-by SVs it will be slower than :func:`~create_sso_skeleton`.
@@ -1040,9 +1092,15 @@ def create_sso_skeleton_fast(sso, pruning_thresh=700, sparsify=True):
     ----------
     sso : Super Segmentation Object
     pruning_thresh : int
-        threshold for pruning
+        threshold for pruning (in NM). Removes branches below this path length.
     sparsify : bool
         will sparsify if True otherwise not
+    max_dist_thresh: float
+        Maximum distance in NM of two adjacent edges in order to prune the node
+        in-between.
+    dot_prod_thresh: float
+        Dot product value of two adjacent edges. Above this value, the node
+        in-between will be pruned.
 
     Returns
     -------
@@ -1066,8 +1124,8 @@ def create_sso_skeleton_fast(sso, pruning_thresh=700, sparsify=True):
     if sparsify:
         # dot_prod_thresh=0.95: this allows to remove nodes which neighboring
         # edges have an angle below ~36°
-        sso, skel_nx = sparsify_skeleton(sso, skel_nx, max_dist_thresh=700,
-                                         dot_prod_thresh=0.95)
+        sso, skel_nx = sparsify_skeleton(sso, skel_nx, max_dist_thresh=max_dist_thresh,
+                                         dot_prod_thresh=dot_prod_thresh)
     skel_nx = nx.minimum_spanning_tree(skel_nx)
     sso = from_netkx_to_sso(sso, skel_nx)
     # reset weighted graph
