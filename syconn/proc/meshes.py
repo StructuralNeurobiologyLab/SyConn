@@ -28,7 +28,7 @@ from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip
 from .image import apply_pca
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
-from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING, MESH_MIN_OBJ_VX
+from ..global_params import MESH_MIN_OBJ_VX
 from .. import global_params
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 try:
@@ -1051,7 +1051,8 @@ def mesh_chunk(args):
             decimate_mesh = 0
         try:
             indices, vertices, normals = triangulation(
-                voxel_list, downsampling=MESH_DOWNSAMPLING[obj_type], n_closings=MESH_CLOSING[obj_type],
+                voxel_list, downsampling=global_params.config['MeshDownsampling'][obj_type],
+                n_closings=global_params.config['MeshClosing'][obj_type],
                 force_single_cc=obj_type == 'syn_ssv', decimate_mesh=decimate_mesh)
             vertices += 1  # account for knossos 1-indexing
             vertices = np.round(vertices * scaling)

@@ -469,8 +469,6 @@ class DynConfig(Config):
     @property
     def mpath_glia_e3(self) -> str:
         """
-        Trained on a large field of view.
-
         Returns:
             Path to model trained to classify local 2D projections into glia
             vs. neuron (img2scalar).
@@ -480,13 +478,20 @@ class DynConfig(Config):
     @property
     def mpath_myelin(self) -> str:
         """
-        Trained on a large field of view.
-
         Returns:
-            Path to model trained to identify myelinated cell parts within 3D
-            image data.
+            Path to model trained to identify myelinated cell parts
+            within 3D EM raw data.
         """
         return self.model_dir + '/myelin/model.pt'
+
+    @property
+    def mpath_syntype(self) -> str:
+        """
+        Returns:
+            Path to model trained to identify synapse types (symmetric
+            vs. asymmetric) within 3D EM raw data.
+        """
+        return self.model_dir + '/syntype/model.pt'
 
     @property
     def mpath_syn_rfc(self) -> str:

@@ -1225,7 +1225,7 @@ class SuperSegmentationObject(object):
         Args:
             force: Skips :func:`~load_skeleton` if ``force=True``.
         """
-        if force:  #
+        if force:
             return ssh.create_sso_skeletons_wrapper([self])
         self.load_skeleton()
         if self.skeleton is not None and len(self.skeleton["nodes"]) != 0 \

@@ -69,8 +69,8 @@ if __name__ == '__main__':
     n_folders_fs = 1000
     n_folders_fs_sc = 1000
     experiment_name = 'j0126_example'
-    global_params.NCORE_TOTAL = 20
-    global_params.NGPU_TOTAL = 1
+    global_params.NCORES_PER_NODE = 20
+    global_params.NGPUS_PER_NODE = 1
     global_params.NNODES_TOTAL = 1
 
     # PREPARE CONFIG

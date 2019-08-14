@@ -542,22 +542,30 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                         target_channels: Optional[Iterable[Iterable[int]]] = None,
                         channel_thresholds: Optional[Iterable[Union[float, Any]]] = None,
                         log: Optional[Logger] = None, mag: int = 1,
-                        overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20)):
+                        overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
+                        cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
-    Helper function for dense dataset prediction. Runs prediction on whole
-    knossos dataset.
+    Helper function for dense dataset prediction. Runs predictions on the whole
+    knossos dataset located at `kd_path`.
+    Prediction results will be written to KnossosDatasets called `target_names`
+    at `target_path`. If no threshold and only one channel per `target_names`
+    is given, the resulting KnossosDataset will contain a probability map.
+    Otherwise the classification results will be written (to the raw channel).
 
     Args:
         kd_path: Path to knossos dataset .conf file.
         target_path: Destination folder for target knossos datasets containing
-            prediction.
+            the prediction.
         model_path: Path to elektronn3 model for predictions. Loaded via the
             :class:`~elektronn3.inference.inference.Predictor`.
-        n_channel: Number of channels predicted by model, e.g. ``n_channel=3``.
+        n_channel: Number of channels predicted by the model.
         target_names: Names of target knossos datasets, e.g.
-            ``target_names=['synapse_fb', 'synapse_type']``.
+            ``target_names=['synapse_fb', 'synapse_type']``. Defaults to
+            ``['pred']``. Length must match with `target_channels`.
         target_channels: Channel_ids in prediction for each target knossos data set
-            e.g. ``target_channels=[(0,),(1,2)]``.
+            e.g. ``target_channels=[(1, 2)]`` if prediction has two foreground labels.
+            Defaults to ``[[ix for ix in range(n_channel)]]``.
+            Length must match with `target_names`.
         channel_thresholds: Thresholds for channels: If None and number of channels
             for target kd is 1: probabilities are stored else: 0.5 as default
             e.g. ``channel_thresholds=[None,0.5,0.5]``.
@@ -572,6 +580,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                 tile_shape = (chunk_size / n_tiles).astype(np.int)
                 # the final input shape must be a multiple of tile_shape
                 overlap_shape = tile_shape // 2
+        cube_of_interest: Bounding box of the volume of interest (minimum and maximum
+            coordinate in voxels in the respective magnification (see kwarg `mag`).
 
     """
     if log is None:
@@ -583,14 +593,18 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     if target_names is None:
         target_names = ['pred']
     if target_channels is None:
-        target_channels = [[i] for i in range(n_channel)]
+        target_channels = [[ix for ix in range(n_channel)]]
+    if not len(target_names) == len(target_channels):
+        msg = 'For every target name the target channels have to be specified.'
+        log_reps.error(msg)
+        raise ValueError(msg)
     if channel_thresholds is None:
-        channel_thresholds = [None for i in range(n_channel)]
-
+        channel_thresholds = [None for _ in range(n_channel)]
     # init KnossosDataset:
     kd = KnossosDataset()
     kd.initialize_from_knossos_path(kd_path)
-
+    if cube_of_interest is None:
+        cube_of_interest = (np.zeros(3, ), kd.boundary // mag)
     # chunk properties:
     chunk_size = np.array([1024, 1024, 256], dtype=np.int)  # XYZ
     n_tiles = np.array([4, 4, 16])
@@ -603,8 +617,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
 
     # init ChunkDataset:
     cd = ChunkDataset()
-    cd.initialize(kd, kd.boundary//4, chunk_size, target_path + '/cd_tmp/',
-                  box_coords=np.zeros(3), list_of_coords=[],
+    cd.initialize(kd, cube_of_interest[1], chunk_size, target_path + '/cd_tmp/',
+                  box_coords=cube_of_interest[0], list_of_coords=[],
                   fit_box_size=True, overlap=overlap_shape)
     chunk_ids = list(cd.chunk_dict.keys())
     # init target KnossosDatasets:
@@ -616,19 +630,19 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     for path in target_kd_path_list:
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_without_conf(path, kd.boundary, kd.scale,
-                                          kd.experiment_name, [2**x for x in range(5)])
+                                          kd.experiment_name, [2**x for x in range(6)])
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_from_knossos_path(path)
     # init QSUB parameters
     multi_params = chunk_ids
-    # on avg. two jobs per GPU
-    multi_params = chunkify(multi_params, global_params.NGPU_TOTAL * 2)
+    # on avg. four jobs per worker/GPU - reduce overhead of initializing model
+    multi_params = chunkify(multi_params, global_params.NGPU_TOTAL * 4)
     multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
                      overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
                      target_kd_path_list, channel_thresholds, mag) for ch_ids in multi_params]
     log.info('Starting dense prediction of {:d} chunks.'.format(len(chunk_ids)))
     n_cores_per_job = global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE if\
-        not 'example' in global_params.config.working_dir else global_params.NCORES_PER_NODE
+        'example' not in global_params.config.working_dir else global_params.NCORES_PER_NODE
     qu.QSUB_script(multi_params, "predict_dense", n_max_co_processes=global_params.NGPU_TOTAL,
                    n_cores=n_cores_per_job, remove_jobfolder=True)
     log.info('Finished dense prediction of {} Chunks'.format(len(chunk_ids)))
@@ -637,6 +651,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
 def dense_predictor(args):
     """
     TODO: Threshold mechanism requires refactoring.
+    TODO: Downsampling mechanism requires refactoring.
 
     Parameters
     ----------
@@ -702,21 +717,24 @@ def dense_predictor(args):
             ids = target_channels[j]
             path = target_kd_path_list[j]
             data = np.zeros_like(pred[0]).astype(np.uint8)
-            n = 0
-            for i in ids:
-                t = channel_thresholds[i]
-                if t is not None or len(ids) > i:
+            for label in ids:
+                t = channel_thresholds[label]
+                # if threshold is given or multiple target labels per dataset
+                # store classification restuls
+                if t is not None or len(ids) > 1:
                     if t is None:
                         t = 255 / 2
                     if t < 1.:
                         t = 255 * t
-                    data += ((pred[i] > t) * n).astype(np.uint8)
-                    n += 1
+                    pred_mask = pred[label] > t
+                    data[pred_mask] = label
                 else:
-                    data = pred[i]
+                    # no thresholding and only one label in the target KnossosDataset
+                    # -> store probability map.
+                    data = pred[label]
             target_kd_dict[path].from_matrix_to_cubes(
                 ch.coordinates, data=data, data_mag=mag, mags=[mag, mag*2, mag*4],
-                fast_downsampling=False,
+                fast_downsampling=True,
                 overwrite=True, upsample=False,
                 nb_threads=global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE,
                 as_raw=True, datatype=np.uint8)

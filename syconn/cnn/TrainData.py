@@ -1485,11 +1485,14 @@ def transform_tripletN_data_predonly(d, channels_to_load, view_striding):
 
 def add_gt_sample(ssv_id, label, gt_type, set_type="train"):
     """
+    # TODO: unused.
 
     Parameters
     ----------
     ssv_id : int
         Supersupervoxel ID
+    label: int
+
     gt_type : str
         e.g. 'axgt'
     set_type : str
@@ -1518,7 +1521,7 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
                                raw_offset: Tuple[int, int, int] = (50, 50, 25),
                                pad_offset: int = 0, pad_value: int = 0,
                                ignore_offset: int = 0, ignore_value: int = -1,
-                               n_closings: int = 0)\
+                               n_closings: int = 0, n_dilations: int = 0)\
         -> Tuple[np.ndarray, np.ndarray]:
     """
     Retrieve the type segmentation data (0: background, 1: asymmetric, 2: symmetric)
@@ -1543,6 +1546,7 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
             padded synapse segmentation.
         ignore_value: Value used for ignore-padding.
         n_closings: Number of closings performed on the segmentation.
+        n_dilations: Number of dilations performed after closing.
 
     Returns:
         Volumetric raw and segmentation data.
@@ -1557,6 +1561,9 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
     if n_closings > 0:
         segmentation = ndimage.binary_closing(segmentation.astype(np.bool),
                                               iterations=n_closings).astype(np.uint16)
+    if n_dilations > 0:
+        segmentation = ndimage.binary_dilation(segmentation.astype(np.bool),
+                                               iterations=n_dilations).astype(np.uint16)
     segmentation = np.pad(segmentation, ignore_offset, 'constant',
                           constant_values=ignore_value)
     kd = KnossosDataset()
@@ -1623,7 +1630,8 @@ def parse_gt_usable_synssv(mask_celltypes: bool = True,
 
     # TODO: Care about false negatives when using non-synaptic locations as GT due to additional
     #  raw offset -> Probably better to add true negative examples manually.
-    # m_non_syn = sd_syn_ssv.get_segmentation_object(sd_syn_ssv.ids[(syn_prob < 0.1) & (sd_syn_ssv.sizes > 200)])
+    # m_non_syn = sd_syn_ssv.get_segmentation_object(sd_syn_ssv.ids[(syn_prob < 0.1) \
+    # & (sd_syn_ssv.sizes > 200)])
     # syn_objs_total += m_non_syn
     # syn_type_total += [0] * len(m_non_syn)
 

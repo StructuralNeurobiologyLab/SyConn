@@ -181,9 +181,12 @@ def sso_views_to_modelinput(sso: 'SuperSegmentationObject', nb_views: int,
     return out_d
 
 
-def radius_correction_found_vertices(sso, plump_factor=1, num_found_vertices=10):
+def radius_correction_found_vertices(sso: 'SuperSegmentationObject',
+                                     plump_factor: int = 1,
+                                     num_found_vertices: int = 10):
     """
-    Algorithm finds two nearest vertices and takes the median of the distances for every node.
+    Algorithm finds two nearest vertices and takes the median of the
+    distances for every node.
 
     Parameters
     ----------
@@ -203,7 +206,8 @@ def radius_correction_found_vertices(sso, plump_factor=1, num_found_vertices=10)
 
     vert_sparse = sso.mesh[1].reshape((-1, 3))
     tree = spatial.cKDTree(vert_sparse)
-    dists, all_found_vertices_ixs = tree.query(skel_node * sso.scaling, num_found_vertices)
+    dists, all_found_vertices_ixs = tree.query(skel_node * sso.scaling,
+                                               num_found_vertices)
 
     for ii, el in enumerate(skel_node):
         diameters[ii] = np.median(dists[ii]) * 2 / 10
@@ -401,7 +405,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
 
     Returns
     -------
-    pruned network kx graph
+        pruned MST
     """
     if scal is None:
         scal = global_params.config.entries['Dataset']['scaling']
@@ -448,6 +452,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
     # # Important assert. Please don't remove
     # assert nx.number_connected_components(new_nx_g) == 1,\
     #     'Additional connected components created after pruning!'
+    new_nx_g = nx.minimum_spanning_tree(new_nx_g)
     if sso is not None:
         sso = from_netkx_to_sso(sso, new_nx_g)
     return sso, new_nx_g
@@ -520,52 +525,6 @@ def sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0.8, max_dist_thresh=500,
     nx_g.add_edges_from(np.array(temp_edges).reshape([-1, 2]))
 
     return sso, nx_g
-
-
-def smooth_skeleton(skel_nx, scal=None):
-    if scal is None:
-        scal = global_params.config.entries['Dataset']['scaling']
-    visiting_nodes = list({k for k, v in dict(skel_nx.degree()).items() if v == 2})
-
-    for index, visiting_node in enumerate(visiting_nodes):
-
-        neighbours = [n for n in skel_nx.neighbors(visiting_node)]
-
-        # Why all these if == 2 statements?
-        if skel_nx.degree(visiting_node) == 2:
-            left_node = neighbours[0]
-            right_node = neighbours[1]
-
-        if skel_nx.degree(left_node) == 2 and skel_nx.degree(right_node) == 2:
-                vector_left_node = np.array(
-                    [int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in
-                     range(3)]) * scal
-                vector_right_node = np.array(
-                    [int(skel_nx.node[right_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix
-                     in range(3)]) * scal
-
-                dot_prod = np.dot(vector_left_node / np.linalg.norm(vector_left_node),
-                                  vector_right_node / np.linalg.norm(vector_right_node))
-                dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix] * scal[ix]) - int(
-                    skel_nx.node[left_node]['position'][ix] * scal[ix]) for ix in range(3)])
-
-                if abs(dot_prod) < 0.3:
-
-                    x_dist = np.linalg.norm([int(skel_nx.node[visiting_node]['position'][ix] * scal[ix]) - int(
-                        skel_nx.node[left_node]['position'][ix] * scal[ix]) for ix in range(3)])
-
-                    y_dist = np.linalg.norm([int(skel_nx.node[visiting_node]['position'][ix] * scal[ix]) - int(
-                        skel_nx.node[right_node]['position'][ix] * scal[ix]) for ix in range(3)])
-
-                    p = [(int(skel_nx.node[right_node]['position'][ix] + int(skel_nx.node[left_node]['position'][ix]))*x_dist/(x_dist +y_dist)) for ix in range(3)]
-
-                    final_node = (1*p + skel_nx.node[visiting_node]['position']*99)/100
-                    print('original ', skel_nx.node[visiting_node]['position'], 'final ',
-                          final_node)
-
-                    skel_nx.node[visiting_node]['position'] = np.array(final_node, dtype=np.int)
-
-    return skel_nx
 
 
 def from_netkx_to_sso(sso, skel_nx):
@@ -725,7 +684,7 @@ def create_sso_skeletons_wrapper(ssvs: List['SuperSegmentationObject'],
              of 10 micrometers.
 
     Todo:
-        * Add sliding window majority vote for smooth myelin prediction to ``global_params``.
+        * Add sliding window majority vote for smoothing myelin prediction to ``global_params``.
     """
     if nb_cpus is None:
         nb_cpus = global_params.NCORES_PER_NODE
@@ -738,11 +697,8 @@ def create_sso_skeletons_wrapper(ssvs: List['SuperSegmentationObject'],
     for ssv, dest_path in zip(ssvs, dest_paths):
         ssv.nb_cpus = nb_cpus
         if not global_params.config.allow_skel_gen:
-            # TODO: change to create_sso_skeleton_fast as soon as RAG edges
-            #  only connected spatially close SVs
             # This merges existing SV skeletons
             create_sso_skeleton_fast(ssv)
-            # create_sso_skeleton(ssv)
         else:
             # TODO: add parameter to config
             verts = ssv.mesh[1].reshape(-1, 3)
@@ -873,6 +829,9 @@ def sparsify_skeleton_fast(skel_nx, scal=None, dot_prod_thresh=0.8,
     """
     Reduces nodes in the skeleton.
 
+    Todo:
+        Refactor. See :func:`~skeleton_optimization`.
+
     Parameters
     ----------
     sso : Super Segmentation Object
@@ -903,7 +862,8 @@ def sparsify_skeleton_fast(skel_nx, scal=None, dot_prod_thresh=0.8,
                 left_node = neighbours[0]
                 right_node = neighbours[1]
                 vector_left_node = np.array([int(skel_nx.node[left_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
-                vector_right_node =np.array([int(skel_nx.node[right_node]['position'][ix]) - int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
+                vector_right_node = np.array([int(skel_nx.node[right_node]['position'][ix]) -
+                                              int(skel_nx.node[visiting_node]['position'][ix]) for ix in range(3)]) * scal
 
                 dot_prod = np.dot(vector_left_node/ np.linalg.norm(vector_left_node),vector_right_node/ np.linalg.norm(vector_right_node))
                 dist = np.linalg.norm([int(skel_nx.node[right_node]['position'][ix]*scal[ix]) - int(skel_nx.node[left_node]['position'][ix]*scal[ix]) for ix in range(3)])
@@ -916,8 +876,9 @@ def sparsify_skeleton_fast(skel_nx, scal=None, dot_prod_thresh=0.8,
     return skel_nx
 
 
-def create_new_skeleton_fast(args):
+def create_new_skeleton_sv_fast(args):
     """
+    Create a sparse supervoxel skeleton. Initial skeleton must exist.
     Similar to :func:`~create_new_skeleton` but used as multi-process helper
     method in :func:`~from_sso_to_netkx_fast`.
 
@@ -987,7 +948,7 @@ def from_sso_to_netkx_fast(sso, sparsify=True, max_edge_length=5e3):
     skel_nx = nx.Graph()
     sso.load_attr_dict()
     ssv_skel = {'nodes': [], 'edges': [], 'diameters': []}
-    res = start_multiprocess_imap(create_new_skeleton_fast,
+    res = start_multiprocess_imap(create_new_skeleton_sv_fast,
                                   [(sv_id, sparsify) for sv_id in sso.sv_ids],
                                   nb_cpus=sso.nb_cpus, show_progress=False,
                                   debug=False)
@@ -1085,7 +1046,8 @@ def create_sso_skeleton_fast(sso, pruning_thresh=700, sparsify=True):
 
     Returns
     -------
-
+        The cell reconstruction with sparse skeleton (as MST) and radius
+         estimates.
     """
     # Creating network kx graph from sso skel
     # log_reps.debug('Creating skeleton of SSO {}'.format(sso.id))
@@ -1094,12 +1056,22 @@ def create_sso_skeleton_fast(sso, pruning_thresh=700, sparsify=True):
     #       nx.number_connected_components(skel_nx)))
     # Sparse again after stitching. Inexpensive.
     if sparsify:
-        sso, skel_nx = sparsify_skeleton(sso, skel_nx)
+        sso, skel_nx = sparsify_skeleton(sso, skel_nx, dot_prod_thresh=0)
         # log_reps.debug(
         #     'Number CC after 2nd sparsification SSO {}: {}'.format(sso.id,
         #     nx.number_connected_components(skel_nx)))
     # Pruning the stitched sso skeletons
+
     sso, skel_nx = prune_stub_branches(sso, skel_nx, len_thres=pruning_thresh)
+    if sparsify:
+        # dot_prod_thresh=0.95: this allows to remove nodes which neighboring
+        # edges have an angle below ~36°
+        sso, skel_nx = sparsify_skeleton(sso, skel_nx, max_dist_thresh=700,
+                                         dot_prod_thresh=0.95)
+    skel_nx = nx.minimum_spanning_tree(skel_nx)
+    sso = from_netkx_to_sso(sso, skel_nx)
+    # reset weighted graph
+    sso._weighted_graph = None
     # log_reps.debug('Number CC after pruning SSO {}: {}'.format(sso.id,
     #       nx.number_connected_components(skel_nx)))
     # Estimating the radii

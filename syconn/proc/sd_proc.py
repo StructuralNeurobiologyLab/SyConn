@@ -21,8 +21,7 @@ from knossos_utils import chunky
 from typing import Optional, List, Tuple, Dict, Union
 knossosdataset._set_noprint(True)
 
-from ..global_params import MESH_DOWNSAMPLING,\
-    MESH_CLOSING, NCORES_PER_NODE
+from ..global_params import NCORES_PER_NODE
 from .. import global_params
 from .image import single_conn_comp_img
 from ..mp import batchjob_utils as qu
@@ -69,7 +68,8 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
         n_jobs = global_params.NCORE_TOTAL  # individual tasks are very fast
     paths = sd.so_dir_paths
     if compute_meshprops:
-        if not (sd.type in MESH_DOWNSAMPLING and sd.type in MESH_CLOSING):
+        if not (sd.type in global_params.config['MeshDownsampling'] and sd.type in
+                global_params.config['MeshClosing']):
             msg = 'SegmentationDataset of type "{}" has no configured mesh parameters. ' \
                   'Please add them to global_params.py accordingly.'
             log_proc.error(msg)

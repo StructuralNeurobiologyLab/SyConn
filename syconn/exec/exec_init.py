@@ -110,7 +110,8 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         transf_func_kd_overlay: Transformation applied on the prob. map or segmentation
             data.
         cube_of_interest_bb: Bounding of the (sub-) volume of the dataset
-            which is processed.
+            which is processed (minimum and maximum coordinates in mag1 voxels,
+            XYZ).
     """
     log = initialize_logging('create_sds', global_params.config.working_dir +
                              '/logs/', overwrite=True)
@@ -120,8 +121,8 @@ def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
         chunk_size = [512, 512, 512]
     if max_n_jobs is None:
         max_n_jobs = global_params.NCORE_TOTAL * 2
-        # loading cached data or adapt number of jobs/cache size dynamically, dependent on the
-        # dataset
+        # loading cached data or adapt number of jobs/cache size dynamically,
+        # dependent on the dataset
     kd = kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]

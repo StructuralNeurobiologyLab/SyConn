@@ -85,20 +85,6 @@ max_rep_coord_dist_nm = 4000
 # (1, excitatory)
 sym_thresh = 0.225
 
-
-# --------- MESH PARAMETERS
-existing_cell_organelles = ['mi', 'sj', 'vc']
-MESH_DOWNSAMPLING = {"sv": (4, 4, 2), "sj": (2, 2, 1), "vc": (4, 4, 2),
-                     "mi": (8, 8, 4), "cs": (2, 2, 1), "conn": (2, 2, 1),
-                     'syn_ssv': (2, 2, 1)}
-MESH_CLOSING = {"sv": 0, "sj": 0, "vc": 0, "mi": 0, "cs": 0,
-                "conn": 4, 'syn_ssv': 0}
-MESH_MIN_OBJ_VX = 100  # adapt to size threshold
-
-meshing_props = dict(normals=True, simplification_factor=300,
-                     max_simplification_error=40)
-
-
 # --------- VIEW PARAMETERS
 # TODO: move all default view parameters here
 NB_VIEWS = 2
@@ -159,5 +145,9 @@ ndim_embedding = 10
 # general config object
 config = DynConfig()
 
+# --------- MESH PARAMETERS
+existing_cell_organelles = ['mi', 'sj', 'vc']
+MESH_MIN_OBJ_VX = 100  # adapt to size threshold
 
-
+meshing_props = dict(normals=True, simplification_factor=300,
+                     max_simplification_error=40)

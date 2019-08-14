@@ -15,7 +15,6 @@ knossosdataset._set_noprint(True)
 from ..proc.meshes import mesh_area_calc
 
 from .. import global_params
-from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
 from ..handler.multiviews import generate_rendering_locs
 from ..handler.config import DynConfig
@@ -898,9 +897,9 @@ class SegmentationObject(object):
 
         """
         if n_closings is None:
-            n_closings = MESH_CLOSING[self.type]
+            n_closings = global_params.config['MeshClosing'][self.type]
         if downsampling is None:
-            downsampling = MESH_DOWNSAMPLING[self.type]
+            downsampling = global_params.config['MeshDownsampling'][self.type]
         # Set 'force_single_cc' to True in case of syn_ssv objects!
         if self.type == 'syn_ssv' and 'force_single_cc' not in kwargs:
             kwargs['force_single_cc'] = True
