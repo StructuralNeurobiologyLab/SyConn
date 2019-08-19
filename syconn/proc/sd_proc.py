@@ -98,7 +98,7 @@ def dataset_analysis(sd, recompute=True, n_jobs=None, n_max_co_processes=None,
     # Creating summaries
     # TODO: This is a potential bottleneck for very large datasets
     # TODO: resulting cache-arrays might have different lengths if attribute is missing in
-    # some dictionatries -> add checks!
+    #  some dictionaries -> add checks!
     attr_dict = {}
     for this_attr_dict in results:
         for attribute in this_attr_dict:
@@ -164,6 +164,8 @@ def _dataset_analysis_thread(args):
                     so.attr_dict["size"] = so.size
                 if compute_meshprops:
                     # if mesh does not exist beforehand, it will be generated
+                    # TODO: remove the next line
+                    so.load_mesh(recompute=True)
                     so.attr_dict["mesh_bb"] = so.mesh_bb
                     so.attr_dict["mesh_area"] = so.mesh_area
                 for attribute in so.attr_dict.keys():

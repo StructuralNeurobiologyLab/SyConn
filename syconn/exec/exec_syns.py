@@ -112,8 +112,8 @@ def run_syn_generation(chunk_size: Tuple[int, int, int] = (512, 512, 512),
                               n_folders_fs=n_folders_fs)
     log.info('SegmentationDataset of type "cs" and "syn" was generated.')
 
-    # TODO: add check for SSD existence, which is required at this point
-    # This creates an SD of type 'syn_ssv'
+    # # TODO: add check for SSD existence, which is required at this point
+    # # This creates an SD of type 'syn_ssv'
     cps.combine_and_split_syn(global_params.config.working_dir, resume_job=False,
                               cs_gap_nm=global_params.cs_gap_nm, log=log,
                               n_folders_fs=n_folders_fs)

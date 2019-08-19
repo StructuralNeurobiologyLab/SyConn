@@ -4,6 +4,17 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+from ..handler.config import initialize_logging
+from ..reps import log_reps
+from ..mp import batchjob_utils as qu
+from ..handler.basics import chunkify
+
+from ..handler import log_handler, log_main
+from .compression import load_from_h5py, save_to_h5py
+from .basics import read_txt_from_zip, get_filepaths_from_dir,\
+    parse_cc_dict_from_kzip
+from .. import global_params
+
 import re
 import numpy as np
 import os
@@ -16,24 +27,13 @@ from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING, Tu
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from collections import Counter
+from knossos_utils.knossosdataset import KnossosDataset
+from sklearn.metrics import log_loss
+from scipy.stats import entropy
+from scipy.special import softmax
 from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
-from knossos_utils.knossosdataset import KnossosDataset
-from sklearn.metrics import log_loss
-from scipy.special import softmax
-from syconn.handler.config import initialize_logging
-from syconn.reps import log_reps
-from syconn.mp import batchjob_utils as qu
-from syconn.handler.basics import chunkify
-from elektronn3.inference import Predictor
-
-from ..handler import log_handler
-from syconn.handler import log_main
-from .compression import load_from_h5py, save_to_h5py
-from .basics import read_txt_from_zip, get_filepaths_from_dir,\
-    parse_cc_dict_from_kzip
-from .. import global_params
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
@@ -72,7 +72,8 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
         kd.initialize_from_knossos_path(curr_p)
         scaling = np.array(kd.scale, dtype=np.int)
         if np.isscalar(raw_data_offset):
-            raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling)
+            raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling,
+                                       dtype=np.int)
             if verbose:
                 print('Using scale adapted raw offset:', raw_data_offset)
         elif len(raw_data_offset) != 3:
@@ -639,7 +640,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     multi_params = chunkify(multi_params, global_params.NGPU_TOTAL * 4)
     multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
                      overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
-                     target_kd_path_list, channel_thresholds, mag) for ch_ids in multi_params]
+                     target_kd_path_list, channel_thresholds, mag, cube_of_interest)
+                    for ch_ids in multi_params]
     log.info('Starting dense prediction of {:d} chunks.'.format(len(chunk_ids)))
     n_cores_per_job = global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE if\
         'example' not in global_params.config.working_dir else global_params.NCORES_PER_NODE
@@ -674,8 +676,9 @@ def dense_predictor(args):
 
     """
   
-    chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles, tile_shape, chunk_size,\
-    n_channel, target_channels, target_kd_path_list, channel_thresholds, mag = args
+    chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles,\
+    tile_shape, chunk_size, n_channel, target_channels, target_kd_path_list, \
+    channel_thresholds, mag, cube_of_interest = args
 
     # init KnossosDataset:
     kd = KnossosDataset()
@@ -683,8 +686,9 @@ def dense_predictor(args):
 
     # init ChunkDataset:
     cd = ChunkDataset()
-    cd.initialize(kd, kd.boundary//mag, chunk_size, target_p + '/cd_tmp/', box_coords=np.zeros(3),
-                  fit_box_size=True, overlap=overlap_shape, list_of_coords=[])
+    cd.initialize(kd, cube_of_interest[1], chunk_size, target_p + '/cd_tmp/',
+                  box_coords=cube_of_interest[0], list_of_coords=[],
+                  fit_box_size=True, overlap=overlap_shape)
 
     # init Target KnossosDataset
     target_kd_dict = {}
@@ -694,6 +698,7 @@ def dense_predictor(args):
         target_kd_dict[path] = target_kd
 
     # init Predictor
+    from elektronn3.inference import Predictor
     # TODO: be consistent with the axis order: either ZYX or ZXY
     out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int)[::-1]  # ZYX
     out_shape = np.insert(out_shape, 0, n_channel)  # output must equal chunk size
@@ -1248,30 +1253,28 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
         1. If `is_logit` is True, Generate pseudo-probabilities from the
            input using softmax.
         2. Sum the evidence per class and rescale.
-        3. Compare the sorted evidence to the ideal outcome
-           (one-hot vector) via logloss.
-        4. Scale the logloss with the worst outcome (equal probabilities)
-           and subtract it from 1.
+        3. Compute the entropy, scale it with the maximum entropy (equal
+           probabilities) and subtract it from 1.
     Args:
         inp: 2D array of prediction results (N: number of samples,
             C: Number of classes)
         is_logit: If True, applies ``softmax(inp, axis=1)``.
 
     Returns:
-        Certainty measure based on the logloss of a set of (independent)
+        Certainty measure based on the entropy of a set of (independent)
         predictions.
     """
+    if not inp.ndim == 2:
+        raise ValueError('Input is not two dimensional.')
     if is_logit:
         proba = softmax(inp, axis=1)
     else:
         proba = inp
+    # sum probabilities across samples
     proba = np.sum(proba, axis=0)
-    # sort. Ideally, result should be one-hot vector
-    proba = np.sort(proba)[::-1] / np.sum(proba)
-    if np.max(proba) == 1:
-        return 1
-    y_true = np.zeros_like(proba)
-    y_true[0] = 1
-    loss = log_loss(y_true, proba)
-    loss_worst = log_loss(y_true, np.ones_like(y_true) / len(y_true))
-    return 1 - loss / loss_worst
+    # normalize
+    proba = proba / np.sum(proba)
+    # maximum entropy at equal probabilities: -sum(1/N*ln(1/N) = ln(N)
+    entr_max = np.log(len(proba))
+    entr_norm = entropy(proba) / entr_max
+    return 1 - entr_norm

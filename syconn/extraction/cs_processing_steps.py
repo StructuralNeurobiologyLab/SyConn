@@ -30,8 +30,6 @@ from ..backend.storage import AttributeDict, VoxelStorage, CompressedStorage
 from ..handler.basics import chunkify
 from . import log_extraction
 from .. import global_params
-if TYPE_CHECKING:
-    from ..reps.segmentation import SegmentationDataset
 
 
 def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
@@ -867,7 +865,8 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
                      n_chunk_jobs=1000, qsub_pe=None, qsub_queue=None,
                      resume_job=False, nb_cpus=None, n_max_co_processes=None):
     """
-    Creates SegmentationDataset of 'syn' objects from ChunkDataset of 'cs'
+    Creates a :class:`~syconn.reps.segmentation.SegmentationDataset`
+    of type 'syn' objects from a ChunkDataset of type 'cs'
     (result of contact_site extraction, does NOT require object extraction of
      'cs' only the chunkdataset) and 'sj' dataset.
     Syn objects have the following attributes:
@@ -1258,7 +1257,7 @@ def write_conn_gt_kzips(conn, n_objects, folder):
         skeleton_utils.write_skeleton(folder + "/obj_%d.k.zip" % conn_id, [a])
 
 
-def create_syn_gt(conn: 'SegmentationDataset', path_kzip: str) -> \
+def create_syn_gt(conn: 'segmentation.SegmentationDataset', path_kzip: str) -> \
         Tuple[ensemble.RandomForestClassifier, np.ndarray, np.ndarray]:
     """
     Trains a random forest classifier (RFC) to distinguish between synaptic and non-synaptic

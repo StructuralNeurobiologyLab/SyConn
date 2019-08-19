@@ -4,19 +4,18 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+from knossos_utils.skeleton_utils import load_skeleton
+from ..proc.graphs import bfs_smoothing
 import numpy as np
 from numba import jit
 from scipy import spatial
 from typing import Optional, Union, TYPE_CHECKING
 if TYPE_CHECKING:
-    from ..reps.super_segmentation import SuperSegmentationObject
-from knossos_utils.skeleton_utils import load_skeleton
-
-from ..proc.graphs import bfs_smoothing
+    from ..reps import super_segmentation
 
 
 def parse_skelnodes_labels_to_mesh(kzip_path: str,
-                                   sso: 'SuperSegmentationObject',
+                                   sso: 'super_segmentation.SuperSegmentationObject',
                                    gt_type: str,  n_voting: int = 40):
     """
 

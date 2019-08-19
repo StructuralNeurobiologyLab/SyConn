@@ -38,8 +38,6 @@ def run_skeleton_generation(max_n_jobs: Optional[int] = None,
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
-    # TODO: think about using create_sso_skeleton_fast if underlying RAG
-    #  obeys spatial correctness (> 10x faster)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = ssd.ssv_ids
     nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])
@@ -83,8 +81,6 @@ def map_myelin_global(max_n_jobs: Optional[int] = None):
                              overwrite=False)
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
 
-    # TODO: think about using create_sso_skeleton_fast if underlying RAG
-    #  obeys spatial correctness (> 10x faster)
     # list of SSV IDs and SSD parameters need to be given to a single QSUB job
     multi_params = ssd.ssv_ids
     nb_svs_per_ssv = np.array([len(ssd.mapping_dict[ssv_id])

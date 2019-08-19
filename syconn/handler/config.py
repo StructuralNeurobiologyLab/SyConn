@@ -479,7 +479,7 @@ class DynConfig(Config):
     def mpath_myelin(self) -> str:
         """
         Returns:
-            Path to model trained to identify myelinated cell parts
+            Path to model trained on identifying myelinated cell parts
             within 3D EM raw data.
         """
         return self.model_dir + '/myelin/model.pt'
@@ -488,10 +488,10 @@ class DynConfig(Config):
     def mpath_syntype(self) -> str:
         """
         Returns:
-            Path to model trained to identify synapse types (symmetric
+            Path to model trained on identifying synapse types (symmetric
             vs. asymmetric) within 3D EM raw data.
         """
-        return self.model_dir + '/syntype/model.pt'
+        return self.model_dir + '/syntype/model_best.pt'
 
     @property
     def mpath_syn_rfc(self) -> str:
@@ -857,7 +857,7 @@ use_new_meshing = boolean
 __many__ = int_list(min=3, max=3)
 
 [MeshClosing]
-__many__ = int
+__many__ = integer
 
 [Skeleton]
 allow_skel_gen = boolean

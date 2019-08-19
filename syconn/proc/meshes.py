@@ -210,7 +210,7 @@ def triangulation_wrapper(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=F
                   decimate_mesh=0, gradient_direction='ascent',
                   force_single_cc=False):
     # TODO: write wrapper method to handle triangulation of big objects by
-    #  recusrive chunking. The resulting meshes can be merged via `merge_meshes`
+    #  recursive chunking. The resulting meshes can be merged via `merge_meshes`
     return
 
 
@@ -252,7 +252,7 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
     if boundaryDistanceTransform is None:
         raise ImportError('"boundaryDistanceTransform" could not be imported from VIGRA. '
                           'Please install vigra, see SyConn documentation.')
-    assert type(downsampling) == tuple, "Downsampling has to be of type 'tuple'"
+    assert type(downsampling) in (tuple, list), "Downsampling has to be of type 'tuple' or list"
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
         "Point cloud used for mesh generation has wrong shape."
     if pts.ndim == 2:

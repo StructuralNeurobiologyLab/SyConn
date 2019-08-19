@@ -1546,7 +1546,7 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
             padded synapse segmentation.
         ignore_value: Value used for ignore-padding.
         n_closings: Number of closings performed on the segmentation.
-        n_dilations: Number of dilations performed after closing.
+        n_dilations: Number of dilations performed before closing.
 
     Returns:
         Volumetric raw and segmentation data.
@@ -1558,12 +1558,12 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
     segmentation = syn_ssv.voxels.astype(np.uint16)
     segmentation = np.pad(segmentation, pad_offset, 'constant',
                           constant_values=pad_value)  # volumetric binary mask
-    if n_closings > 0:
-        segmentation = ndimage.binary_closing(segmentation.astype(np.bool),
-                                              iterations=n_closings).astype(np.uint16)
     if n_dilations > 0:
         segmentation = ndimage.binary_dilation(segmentation.astype(np.bool),
                                                iterations=n_dilations).astype(np.uint16)
+    if n_closings > 0:
+        segmentation = ndimage.binary_closing(segmentation.astype(np.bool),
+                                              iterations=n_closings).astype(np.uint16)
     segmentation = np.pad(segmentation, ignore_offset, 'constant',
                           constant_values=ignore_value)
     kd = KnossosDataset()

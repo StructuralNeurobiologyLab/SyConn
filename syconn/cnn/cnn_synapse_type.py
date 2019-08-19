@@ -18,7 +18,7 @@ from torch import optim
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('-n', '--exp-name', default='syntype_unet_sameConv_noBN_run_fancydice_run2',
+parser.add_argument('-n', '--exp-name', default='syntype_unet_sameConv_noBN_run_fancydice_run4',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=200,
@@ -58,7 +58,7 @@ print(f'Running on device: {device}')
 # Don't move this stuff, it needs to be run this early to work
 import elektronn3
 elektronn3.select_mpl_backend('Agg')
-
+import numpy as np
 from elektronn3.data import PatchCreator, transforms, utils, get_preview_batch
 from elektronn3.training import Trainer, Backup, metrics, Padam, handlers
 from elektronn3.models.unet import UNet
@@ -89,7 +89,7 @@ model = UNet(
     batch_norm=False,
     # conv_mode='valid',
     #up_mode='resizeconv_nearest',  # Enable to avoid checkerboard artifacts
-    adaptive=True  # Experimental. Disable if results look weird.
+    adaptive=False  # Experimental. Disable if results look weird.
 ).to(device)
 
 # Example for a model-compatible input.
@@ -117,7 +117,12 @@ data_root = os.path.expanduser('/wholebrain/songbird/j0126/GT/synapsetype_gt/')
 gt_dir = data_root + '/Segmentierung_von_Synapsentypen_v1/'
 fnames = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
 gt_dir = data_root + '/synssv_reconnects_nosomamerger/'
-fnames += sorted([gt_dir + f for f in os.listdir(gt_dir)[:900] if f.endswith('.h5')])
+fnames_files = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
+random_ixs = np.arange(len(fnames_files))
+np.random.seed(0)
+np.random.shuffle(fnames_files)
+fnames_files = np.array(fnames_files)[random_ixs].tolist()
+fnames += fnames_files[:900]
 
 input_h5data = [(f, 'raw') for f in fnames + fnames[-1:]]
 target_h5data = [(f, 'label') for f in fnames + fnames[-1:]]

@@ -631,7 +631,7 @@ class SegmentationObject(object):
             return self._skeleton
 
     @property
-    def mesh_bb(self) -> float:
+    def mesh_bb(self) -> np.ndarray:
         """
         Bounding box of the object meshes (in nanometers). Approximately
         the same as scaled 'bounding_box'.
@@ -660,7 +660,6 @@ class SegmentationObject(object):
     @property
     def mesh_area(self) -> float:
         """
-
         Returns:
             Mesh surface area in um^2
         """

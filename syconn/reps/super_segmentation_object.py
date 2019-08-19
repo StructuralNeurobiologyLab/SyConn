@@ -17,8 +17,6 @@ import tqdm
 from collections import Counter, defaultdict
 from scipy import spatial
 from typing import Optional, Dict, List, Tuple, Any, Union, TYPE_CHECKING, Iterable
-if TYPE_CHECKING:
-    from torch.nn import Module
 from knossos_utils import skeleton
 from knossos_utils.skeleton_utils import load_skeleton as load_skeleton_kzip
 from knossos_utils.skeleton_utils import write_skeleton as write_skeleton_kzip
@@ -678,14 +676,19 @@ class SuperSegmentationObject(object):
                 self.load_skeleton()
 
             node_scaled = self.skeleton["nodes"] * self.scaling
+
             edges = np.array(self.skeleton["edges"], dtype=np.uint)
             edge_coords = node_scaled[edges]
             weights = np.linalg.norm(edge_coords[:, 0] - edge_coords[:, 1],
                                      axis=1)
             self._weighted_graph = nx.Graph()
+            self._weighted_graph.add_nodes_from(
+                [(ix, dict(position=coord)) for ix, coord in
+                 enumerate(self.skeleton['nodes'])])
             self._weighted_graph.add_weighted_edges_from(
                 [(edges[ii][0], edges[ii][1], weights[ii]) for
                  ii in range(len(weights))])
+
             for k in add_node_attr:
                 dc = {}
                 for n in self._weighted_graph.nodes():
