@@ -842,7 +842,7 @@ def make_ply_string_wocolor(dest_path, indices, vertices):
     if not vertices.ndim == 2:
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
     vertices = np.array([tuple(el) for el in vertices], dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
-    indices = np.array([tuple([el], ) for el in indices],dtype=[('vertex_indices', 'i4', (3,))])
+    indices = np.array([tuple([el], ) for el in indices], dtype=[('vertex_indices', 'i4', (3,))])
     PlyData([PlyElement.describe(vertices, 'vertex'),
              PlyElement.describe(indices, 'face')]).write(dest_path)
 

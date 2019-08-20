@@ -15,12 +15,12 @@ fasteners
 numpy==1.16.0
 coloredlogs
 termcolor
-scikit-learn==0.19.1
-scikit-image==0.14.2
+scikit-learn # ==0.19.1
+scikit-image  # ==0.14.2
 pyopengl
 opencv-python
 numba==0.41.0
-llvmlite==0.26.0
+# llvmlite==0.26.0
 plyfile
 openmesh==1.1.3
 pytest

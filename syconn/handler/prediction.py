@@ -212,7 +212,8 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     save_to_h5py([raw, pred], dest_p, [hdf5_data_key, dest_hdf5_data_key])
 
 
-def overlaycubes2kzip(dest_p, vol, offset, kd_path):
+def overlaycubes2kzip(dest_p: str, vol: np.ndarray, offset: np.ndarray,
+                      kd_path: str):
     """
     Writes segmentation volume to kzip.
 
@@ -220,8 +221,8 @@ def overlaycubes2kzip(dest_p, vol, offset, kd_path):
     ----------
     dest_p : str
         path to k.zip
-    vol : np.array [X, Y, Z]
-        Segmentation or prediction (uint)
+    vol : np.array
+        Segmentation or prediction (unsigned integer, XYZ).
     offset : np.array
     kd_path : str
 
@@ -235,9 +236,10 @@ def overlaycubes2kzip(dest_p, vol, offset, kd_path):
                             mags=[1], data=vol)
 
 
-def xyz2zxy(vol):
+def xyz2zxy(vol: np.ndarray) -> np.ndarray:
     """
     Swaps axes to ELEKTRONN convention ([M, .., X, Y, Z] -> [M, .., Z, X, Y]).
+
     Parameters
     ----------
     vol : np.array [M, .., X, Y, Z]
@@ -253,9 +255,10 @@ def xyz2zxy(vol):
     return vol
 
 
-def zxy2xyz(vol):
+def zxy2xyz(vol: np.ndarray) -> np.ndarray:
     """
     Swaps axes to ELEKTRONN convention ([M, .., Z, X, Y] -> [M, .., X, Y, Z]).
+
     Parameters
     ----------
     vol : np.array [M, .., Z, X, Y]
@@ -432,7 +435,7 @@ def binarize_labels(labels: np.ndarray, foreground_ids: Iterable[int],
     return labels.astype(np.uint16)
 
 
-def parse_movement_area_from_zip(zip_fname):
+def parse_movement_area_from_zip(zip_fname: str) -> np.ndarray:
     """
     Parse MovementArea (e.g. bounding box of labeled volume) from annotation.xml
     in (k.)zip file.
@@ -637,7 +640,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     # init QSUB parameters
     multi_params = chunk_ids
     # on avg. four jobs per worker/GPU - reduce overhead of initializing model
-    multi_params = chunkify(multi_params, global_params.NGPU_TOTAL * 4)
+    multi_params = chunkify(multi_params, global_params.NGPU_TOTAL)
     multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
                      overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
                      target_kd_path_list, channel_thresholds, mag, cube_of_interest)
@@ -847,7 +850,8 @@ def prediction_helper(raw, model, override_mfp=True,
     return zxy2xyz(pred)
 
 
-def chunk_pred(ch, model, debug=False):
+def chunk_pred(ch: 'chunky.Chunk', model: 'torch.nn.Module',
+               debug: bool = False):
     """
     Helper function to write chunks.
 
@@ -855,6 +859,7 @@ def chunk_pred(ch, model, debug=False):
     ----------
     ch : Chunk
     model : str or model object
+    debug: bool
     """
     raw = ch.raw_data()
     pred = prediction_helper(raw, model) * 255
@@ -869,7 +874,7 @@ class NeuralNetworkInterface(object):
     Inference class for elektronn2 models, support will end at some point.
     Switching to 'InferenceModel' in elektronn3.model.base in the long run.
     """
-    def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
+    def __init__(self, model_path, arch='', imposed_batch_size=1,
                  channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2,
                  normalize_data=False, normalize_func=None, init_gpu=None):
         self.imposed_batch_size = imposed_batch_size

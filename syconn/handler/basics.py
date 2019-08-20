@@ -38,14 +38,27 @@ __all__ = ['load_from_h5py', 'save_to_h5py', 'crop_bool_array',
            'safe_copy', 'temp_seed', 'kd_factory', 'parse_cc_dict_from_g']
 
 
-def kd_factory(kd_path, channel='jpg'):
+def kd_factory(kd_path: str, channel: str = 'jpg'):
+    """
+    Todo:
+        * Requires additional adjustment of the data type,
+          i.e. setting the channel explicitly currently leads to uint32 <->
+          uint64 issues in the CS segmentation.
+
+    Args:
+        kd_path: Path to the KnossosDataset.
+        channel: Channel which to use. Currently not used.
+
+    Returns:
+
+    """
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         # knossos_utils expects a path to the knossos.conf file
         if not kd_path.endswith('knossos.conf'):
             kd_path += "/mag1/knossos.conf"
         kd = KnossosDataset()  # Sets initial values of object
-        # kd.set_channel(channel)  # TODO: currently requires additional adjustment of the data type, i.e. setting the channel explicitely currently leads to uint32 <-> uint64 issues in the CS segmentation
+        # kd.set_channel(channel)  #
         # Initializes the dataset by parsing the knossos.conf in path + "mag1"
         kd.initialize_from_knossos_path(kd_path)
     return kd

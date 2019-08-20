@@ -21,7 +21,8 @@ from ..backend import StorageClass
 
 class AttributeDict(StorageClass):
     """
-    General purpose dictionary class inherited from :class:`syconn.backend.base.StorageClass`.
+    General purpose dictionary class inherited from
+    :class:`syconn.backend.base.StorageClass`.
     """
     def __init__(self, inp_p, **kwargs):
         super(AttributeDict, self).__init__(inp_p, **kwargs)

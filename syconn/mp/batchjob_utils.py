@@ -132,6 +132,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         Sends an notification email after completion. Currently does not contain any
         information about the job name, required time or CPU/MEM usage.
         TODO: use SLURM JobArrays to enable detailed notification emails
+    remove_jobfolder: bool
+        Remove the created folder after successfully processing.
     use_dill : bool
     show_progress : bool
         Currently only applies for `batchjob_fallback`
