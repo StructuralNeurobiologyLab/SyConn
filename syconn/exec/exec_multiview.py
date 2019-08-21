@@ -568,7 +568,7 @@ def run_neuron_rendering(max_n_jobs: Optional[int] = None):
     ssd = SuperSegmentationDataset(working_dir=global_params.config.working_dir)
     res = find_incomplete_ssv_views(ssd, woglia=True, n_cores=global_params.NCORES_PER_NODE)
     if len(res) != 0:
-        msg = "Not all SVs were predicted! {}/{} missing:\n" \
+        msg = "Not all SSVs were rendered! {}/{} missing:\n" \
               "{}".format(len(res), len(ssd.ssv_ids),
                           res[:10])
         log.error(msg)

@@ -560,7 +560,7 @@ def find_meshes(chunk: np.ndarray, offset: np.ndarray)\
         # the values of simplification_factor & max_simplification_error are random
 
         tmp.vertices[:] = (tmp.vertices[:, ::-1] + offset)  # zyx -> xyz
-        meshes[obj_id] = [tmp.faces.flatten().astype(np.uint32),
+        meshes[obj_id] = [tmp.faces[:, ::-1].flatten().astype(np.uint32),
                           tmp.vertices.flatten().astype(np.float32),
                           tmp.normals.flatten().astype(np.float32)]
         mesher.erase(obj_id)

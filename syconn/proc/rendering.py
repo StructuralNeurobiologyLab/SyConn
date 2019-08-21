@@ -1085,7 +1085,6 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
                                    smooth_shade=False, views_key="index",
                                    nb_views=nb_views, comp_window=comp_window,
                                    return_rot_matrices=return_rot_matrices)
-
     if ix_views.shape[-1] == 3:
         ix_views = rgb2id_array(ix_views)[:, None]
     else:

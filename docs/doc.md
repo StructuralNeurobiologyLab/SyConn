@@ -24,17 +24,17 @@ sh install.sh
 2.b) Or alternatively run these commands to install them manually:
 
 ```
-conda install cmake
 conda install vigra -c conda-forge
-conda install mesa -c menpo
+conda install mesa -c anaconda
 conda install osmesa -c menpo
 conda install freeglut
 conda install pyopengl
 conda install snappy
 conda install python-snappy
+# this seems to be necessary for cutting edge nvidia GPUs/drivers
+conda install -c pytorch pytorch==1.1.0 cuda100
+conda install numba==0.42.0 llvmlite==0.29
 conda install tensorboard tensorflow
-conda install -c conda-forge sip=4.18.1
-conda install gcc_impl_linux-64 gcc_linux-64 gxx_impl_linux-64 gxx_linux-64
 
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 cd SyConn

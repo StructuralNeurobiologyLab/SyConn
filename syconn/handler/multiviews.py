@@ -436,9 +436,11 @@ def rgba2id_array(rgb_arr: np.ndarray) -> np.ndarray:
     else:
         raise ValueError("Unsupported shape")
     rgb_arr_flat = rgb_arr.flatten().reshape((-1, 4))
+
     mask_arr = (rgb_arr_flat[:, 0] == 255) & (rgb_arr_flat[:, 1] == 255) & \
                (rgb_arr_flat[:, 2] == 255) & (rgb_arr_flat[:, 3] == 255)
     id_arr = np.zeros((len(rgb_arr_flat)), dtype=np.uint32)
+
     for ii in range(len(rgb_arr_flat)):
         if mask_arr[ii]:
             continue

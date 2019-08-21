@@ -1,4 +1,4 @@
-ipython<7.0.0
+ipython
 h5py
 matplotlib>=2.2.2
 tqdm
@@ -12,20 +12,19 @@ lz4
 configobj
 flask
 fasteners
-numpy==1.16.0
+numpy==1.16.4
 coloredlogs
 termcolor
-scikit-learn # ==0.19.1
-scikit-image  # ==0.14.2
+scikit-learn
+scikit-image
 pyopengl
 opencv-python
-numba==0.41.0
-# llvmlite==0.26.0
+numba==0.42.0
 plyfile
 openmesh==1.1.3
 pytest
 pytest-runner
-prompt-toolkit <2.0
+prompt-toolkit
 git+git://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
 git+git://github.com/ELEKTRONN/elektronn3@phil#egg=elektronn3
 vtki
