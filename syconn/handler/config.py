@@ -17,7 +17,7 @@ from termcolor import colored
 import os
 from .. import global_params
 
-__all__ = ['DynConfig', 'generate_default_conf_str', 'initialize_logging']
+__all__ = ['DynConfig', 'generate_default_conf', 'initialize_logging']
 
 
 class Config(object):
