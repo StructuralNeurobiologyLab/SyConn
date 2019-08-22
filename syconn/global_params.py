@@ -30,7 +30,7 @@ rag_suffix = ""  # identifier in case there will be more than one RAG, TODO: Rem
 # config.ini in the working directory
 
 # --------- BACKEND DEFINITIONS
-BATCH_PROC_SYSTEM = 'SLURM'  # If None, fall-back is single node multiprocessing
+BATCH_PROC_SYSTEM = None  # If None, fall-back is single node multiprocessing
 batchjob_script_folder = os.path.dirname(os.path.abspath(__file__)) + "/batchjob_scripts/"
 
 # TODO refactor syconn and get rid of all qsub_pe and qsub_queue kwargs and only

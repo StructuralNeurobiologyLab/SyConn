@@ -77,14 +77,9 @@ if __name__ == '__main__':
     if global_params.wd is not None:
         log.critical('Example run started. Working directory was overwritten and set'
                      ' to "{}".'.format(example_wd))
-    if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
-        py36path = subprocess.check_output(
-            'source deactivate; source activate py36;f which python',
-            shell=True).decode().replace('\n', '')
-    else:
-        py36path = ""
+    if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
+        log.warning('Using python < 3.6. This is untested.')
     config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale,
-                                                      py36path=py36path,
                                                       use_new_renderings_locs=True,
                                                       use_large_fov_views_ct=False,
                                                       use_new_meshing=use_new_meshing,
