@@ -1,15 +1,21 @@
-# SyConnFS
-# Copyright (c) 2016 Philipp J. Schubert
-# All rights reserved
-
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import numpy as np
 from scipy import spatial
+from knossos_utils import knossosdataset
+knossosdataset._set_noprint(True)
 from knossos_utils.knossosdataset import KnossosDataset
 from skimage.segmentation import find_boundaries
 
 from ..reps.super_segmentation_helper import get_sso_axoness_from_coord
 from ..reps.segmentation import SegmentationDataset, SegmentationObject
 from ..reps.super_segmentation import SuperSegmentationObject
+from . import log_proc
+from .. import global_params
 
 
 def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
@@ -32,13 +38,14 @@ def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
     if box_size is None:
         box_size = np.array([300, 300, 150])
     kd = KnossosDataset()
-    # Hack
+    # TODO: Hack
     kd.initialize_from_knossos_path(
         so.working_dir + "knossosdatasets/j0126_realigned_v4b_cbs_ext0_fix/")
     bndry = np.array(kd.boundary)
     if np.any(so.rep_coord >= bndry) or np.any(so.rep_coord < np.zeros_like(bndry)):
-        print(so.id, so.rep_coord)
-        so.save_attributes(["glia_vol_frac", "glia_sv_ids", "glia_cov_frac", "glia_cov"], [-1, -1, -1, -1])
+        log_proc.warning(so.id, so.rep_coord)
+        so.save_attributes(["glia_vol_frac", "glia_sv_ids", "glia_cov_frac",
+                            "glia_cov"], [-1, -1, -1, -1])
         return
     c = so.rep_coord - (box_size // 2)
     c, box_size = crop_box_to_bndry(c, box_size, bndry)
@@ -73,8 +80,9 @@ def map_glia_fraction(so, box_size=None, min_frag_size=10, overwrite=True):
     neuron_sv_ids += list(sso.sv_ids)
     sv_ids_in_seg = np.array([ix in ids for ix in neuron_sv_ids], dtype=bool)
     assert np.sum(sv_ids_in_seg) >= 2
+    scale = np.array(global_params.config.entries["Dataset"]["scaling"])
     nb_cov_vx, frac_cov_vx = get_glia_coverage(seg, neuron_sv_ids, glia_sv_ids,
-                                               300, kd.scale)
+                                               300, scale)
 
     so.save_attributes(["glia_vol_frac", "glia_sv_ids",
                         "glia_cov_frac", "glia_cov"],
@@ -149,6 +157,7 @@ def crop_box_to_bndry(offset, box_size, bndry):
     return offset, box_size
 
 
+# TODO: probably out-dated
 def map_cs_properties(cs):
     cs.load_attr_dict()
     if "neuron_partner_ct" in cs.attr_dict:

@@ -1,5 +1,11 @@
+# -*- coding: utf-8 -*-
+# SyConn - Synaptic connectivity inference toolkit
+#
+# Copyright (c) 2016 - now
+# Max Planck Institute of Neurobiology, Martinsried, Germany
+# Authors: Philipp Schubert, Joergen Kornfeld
 import os
-from syconn.mp import qsub_utils as qu
+from syconn.mp import batchjob_utils as qu
 from syconn.mp.mp_utils import start_multiprocess
 from syconn.reps.super_segmentation_dataset import SuperSegmentationDataset
 from syconn.handler.basics import chunkify

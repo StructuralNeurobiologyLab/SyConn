@@ -4,14 +4,28 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+
 import time
 import numpy as np
-from ..reps import super_segmentation as ss
 import networkx as nx
+import pandas as pd
+
+from ..reps import super_segmentation as ss
 from ..reps import segmentation
+from . import log_reps
+from .. import global_params
 
 
 def extract_connectivity_thread(args):
+    """
+    Used within :class:`~syconn.reps.connectivity.ConnectivityMatrix`.
+
+    Args:
+        args:
+
+    Returns:
+
+    """
     sj_obj_ids = args[0]
     sj_version = args[1]
     ssd_version = args[2]
@@ -95,36 +109,22 @@ def extract_connectivity_information(sj, ssd):
     return np.concatenate([sso_ids, sj_ids[:, None], sizes[:, None], sj_types[:, None], sj_coords], axis=1)
 
 
-def connectivity_to_nx_graph():
+def connectivity_to_nx_graph(cd_dict):
     """
     Creates a directed networkx graph with attributes from the
     stored raw connectivity data.
+
+        Parameters
+    ----------
+    cd_dict : dict
 
     Returns
     -------
 
     """
-
-    cd_dict = load_cached_data_dict()
-
-    idx_filter = cd_dict['synaptivity_proba'] > 0.5
-    #  & (df_dict['syn_size'] < 5.)
-
-    for k, v in cd_dict.items():
-        cd_dict[k] = v[idx_filter]
-
-
-    idx_filter = (cd_dict['neuron_partner_ax_0']\
-                 + cd_dict['neuron_partner_ax_1']) == 1
-
-    for k, v in cd_dict.items():
-        cd_dict[k] = v[idx_filter]
-
     nxg = nx.DiGraph()
     start = time.time()
-    print('Starting graph construction')
     for idx in range(0, len(cd_dict['ids'])):
-
         # find out which one is pre and which one is post
         # 1 indicates pre, i.e. identified as axon by the classifier
         if cd_dict['neuron_partner_ax_0'][idx] == 1:
@@ -136,40 +136,47 @@ def connectivity_to_nx_graph():
 
         nxg.add_edge(u, v)
         # for each synapse create edge with attributes
-    print('Done with graph construction, took {0}'.format(time.time()-start))
+    log_reps.debug('Done with graph ({1} nodes) construction, took {0}'.format(
+        time.time()-start, nxg.number_of_nodes()))
 
     return nxg
 
 
-def load_cached_data_dict(syconnfs_working_dir='/wholebrain/scratch/areaxfs/',
-                          cs_seg_ds_version = '33'):
+def load_cached_data_dict(wd=None, syn_version=None, thresh_syn_prob=None,
+                          axodend_only=True):
     """
     Loads all cached data from a contact site segmentation dataset into a
     dictionary for further processing.
 
     Parameters
     ----------
-    syconnfs_working_dir
-    cs_seg_ds_version
+    wd : str
+    syn_version : str
+    thresh_syn_prob : float
+        All synapses below `thresh_syn_prob` will be filtered.
+    axodend_only: If True, returns only axo-dendritic synapse, all
+        synapses otherwise.
 
     Returns
     -------
 
     """
+    if wd is None:
+        wd = global_params.config.working_dir
+    if thresh_syn_prob is None:
+        thresh_syn_prob = global_params.thresh_syn_proba
     start = time.time()
-    csd = segmentation.SegmentationDataset(obj_type='cs',
-                                 working_dir=syconnfs_working_dir,
-                                 version=cs_seg_ds_version)
-
-
+    csd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=wd,
+                                           version=syn_version)
     cd_dict = dict()
-
-    cd_dict['ids'] = csd.load_cached_data('ids')
+    cd_dict['ids'] = csd.load_cached_data('id')
     # in um2, overlap of cs and sj
     cd_dict['syn_size'] =\
-        csd.load_cached_data('overlap_area')
+        csd.load_cached_data('mesh_area') / 2  # as used in syn_analysis.py -> export_matrix
     cd_dict['synaptivity_proba'] = \
-        csd.load_cached_data('synaptivity_proba')
+        csd.load_cached_data('syn_prob')
+    cd_dict['syn_sign'] = \
+        csd.load_cached_data('syn_sign').astype(np.int)  # -1 for inhibitory, +1 for excitatory
     cd_dict['coord_x'] = \
         csd.load_cached_data('rep_coord')[:, 0].astype(np.int)
     cd_dict['coord_y'] = \
@@ -181,47 +188,67 @@ def load_cached_data_dict(syconnfs_working_dir='/wholebrain/scratch/areaxfs/',
     cd_dict['ssv_partner_1'] = \
         csd.load_cached_data('neuron_partners')[:, 1].astype(np.int)
     cd_dict['neuron_partner_ax_0'] = \
-        csd.load_cached_data('neuron_partner_ax')[:, 0].astype(np.int)
+        csd.load_cached_data('partner_axoness')[:, 0].astype(np.int)
     cd_dict['neuron_partner_ax_1'] = \
-        csd.load_cached_data('neuron_partner_ax')[:, 1].astype(np.int)
+        csd.load_cached_data('partner_axoness')[:, 1].astype(np.int)
     cd_dict['neuron_partner_ct_0'] = \
-        csd.load_cached_data('neuron_partner_ct')[:, 0].astype(np.int)
+        csd.load_cached_data('partner_celltypes')[:, 0].astype(np.int)
     cd_dict['neuron_partner_ct_1'] = \
-        csd.load_cached_data('neuron_partner_ct')[:, 1].astype(np.int)
+        csd.load_cached_data('partner_celltypes')[:, 1].astype(np.int)
+    cd_dict['neuron_partner_sp_0'] = \
+        csd.load_cached_data('partner_spiness')[:, 0].astype(np.int)
+    cd_dict['neuron_partner_sp_1'] = \
+        csd.load_cached_data('partner_spiness')[:, 1].astype(np.int)
 
-    print('Getting all objects took: {0}'.format(time.time() - start))
+    log_reps.debug('Getting {1} objects took: {0}'.format(time.time() - start,
+                                                          len(csd.ids)))
+
+    idx_filter = cd_dict['synaptivity_proba'] >= thresh_syn_prob
+    cd_dict['neuron_partner_ax_0'][cd_dict['neuron_partner_ax_0'] == 3] = 1
+    cd_dict['neuron_partner_ax_0'][cd_dict['neuron_partner_ax_0'] == 4] = 1
+    cd_dict['neuron_partner_ax_1'][cd_dict['neuron_partner_ax_1'] == 3] = 1
+    cd_dict['neuron_partner_ax_1'][cd_dict['neuron_partner_ax_1'] == 4] = 1
+    #  & (df_dict['syn_size'] < 5.)  # TODO: think about size criteria
+    n_syns = np.sum(idx_filter)
+    if axodend_only:
+        idx_filter = idx_filter & ((cd_dict['neuron_partner_ax_0'] +
+                                    cd_dict['neuron_partner_ax_1']) == 1)
+    n_syns_after_axdend = np.sum(idx_filter)
+    for k, v in cd_dict.items():
+        cd_dict[k] = v[idx_filter]
+
+    log_reps.debug('Finished conn. dictionary with {} synaptic '
+                   'objects. {} above prob. threshold {}. '
+                   '{} syns after axo-dend. filter '
+                   '(changes only if "axodend_only=True").'
+                   ''.format(len(idx_filter), n_syns, thresh_syn_prob,
+                             n_syns, n_syns_after_axdend))
 
     return cd_dict
 
 
-def connectivity_exporter(human_cell_type_labels = True,
-                          cell_type_map = {0: 'EA', 1: 'MSN', 2: 'GP', 3: 'INT'},
-                          human_pre_post_labels = True,
-                          pre_post_map = {1: 'pre', 0: 'post'},
-                          only_axo_dendritric = True,
-                          out_path = '/wholebrain/scratch/jkornfeld/j0126_matrix_v1.csv',
-                          out_format = 'csv',
-                          no_ids = True,
-                          only_synapses = True):
+def connectivity_exporter(human_cell_type_labels=True,
+                          cell_type_map={0: 'EA', 1: 'MSN', 2: 'GP', 3: 'INT'},
+                          human_pre_post_labels=True,
+                          pre_post_map={1: 'pre', 0: 'post'},
+                          only_axo_dendritric=True,
+                          out_path = None, no_ids=True, only_synapses=True):
     """
     Exports connectivity information to a csv file.
 
     -------
 
     """
-
-
-
+    if out_path is None:
+        out_path = global_params + '/connectivity_matrix/j0126_matrix_v1.csv'
     # parse contact site segmentation dataset
     df_dict = load_cached_data_dict()
-
-
 
     if only_synapses == False:
         start = time.time()
         df = pd.DataFrame(df_dict)
         df.to_csv(out_path, index=False)
-        print('Export to csv took: {0}'.format(time.time() - start))
+        log_reps.debug('Export to csv took: {0}'.format(time.time() - start))
     else:
 
         idx_filter = df_dict['synaptivity_proba'] > 0.5
@@ -230,7 +257,7 @@ def connectivity_exporter(human_cell_type_labels = True,
         for k, v in df_dict.items():
             df_dict[k] = v[idx_filter]
 
-        print('{0} synapses of'
+        log_reps.debug('{0} synapses of'
               '{1} contact sites'.format(sum(idx_filter),
                                          len(idx_filter)))
         if no_ids:
@@ -243,13 +270,13 @@ def connectivity_exporter(human_cell_type_labels = True,
                                               df_dict['neuron_partner_ct_1']])
 
         if only_axo_dendritric:
-            idx_filter = (df_dict['neuron_partner_ax_0']\
+            idx_filter = (df_dict['neuron_partner_ax_0']
                          + df_dict['neuron_partner_ax_1']) == 1
 
             for k, v in df_dict.items():
                 df_dict[k] = v[idx_filter]
 
-            print('{0} axo-dendritic synapses'.format(sum(idx_filter)))
+            log_reps.debug('{0} axo-dendritic synapses'.format(sum(idx_filter)))
 
         if human_pre_post_labels:
             df_dict['neuron_partner_ax_0'] = np.array([pre_post_map[int(el)] for el in
@@ -257,11 +284,9 @@ def connectivity_exporter(human_cell_type_labels = True,
             df_dict['neuron_partner_ax_1'] = np.array([pre_post_map[int(el)] for el in
                                               df_dict['neuron_partner_ax_1']])
 
-
-
         start = time.time()
         df = pd.DataFrame(df_dict)
         df.to_csv(out_path, index=False)
-        print('Export to csv took: {0}'.format(time.time() - start))
-
+        log_reps.debug('Export to csv took: {0}'.format(time.time() - start))
     return
+

@@ -1,21 +1,20 @@
-syconn package
-==============
+syconn API
+==========
 
 Subpackages
 -----------
 
 .. toctree::
 
-    syconn.QSUB_scripts
-    syconn.config
-    syconn.extraction
-    syconn.gate
-    syconn.handler
-    syconn.mp
-    syconn.proc
     syconn.reps
-    syconn.ui
-    syconn.utils
+    syconn.exec
+    syconn.config
+    syconn.proc
+    syconn.extraction
+    syconn.handler
+    syconn.backend
+    syconn.mp
+
 
 Module contents
 ---------------

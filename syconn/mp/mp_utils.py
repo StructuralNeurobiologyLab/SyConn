@@ -9,22 +9,68 @@ try:
     import cPickle as pkl
 except ImportError:
     import pickle as pkl
-import getpass
-from multiprocessing import cpu_count, Process
+from multiprocessing import cpu_count
+from concurrent.futures import ProcessPoolExecutor, as_completed, ThreadPoolExecutor
 import multiprocessing.pool
-import os
-import shutil
-import subprocess
-import sys
 import time
 import tqdm
+from . import log_mp
+
+MyPool = multiprocessing.Pool
 
 
-home_dir = os.environ['HOME'] + "/"
-path_to_scripts_default = os.path.dirname(__file__)
-subp_work_folder = "%s/SUBP/" % home_dir
-username = getpass.getuser()
-python_path = sys.executable
+def parallel_process(array, function, n_jobs, use_kwargs=False, front_num=0):
+    """From http://danshiebler.com/2016-09-14-parallel-progress-bar/
+        A parallel version of the map function with a progress bar.
+
+        Args:
+            array (array-like): An array to iterate over.
+            function (function): A python function to apply to the elements of
+            array n_jobs (int, default=16): The number of cores to use
+            use_kwargs (boolean, default=False): Whether to consider the
+            elements of array as dictionaries of keyword arguments to function
+            front_num (int, default=3): The number of iterations to run
+            serially before kicking off the parallel job.
+             Useful for catching bugs
+        Returns:
+            [function(array[0]), function(array[1]), ...]
+    """
+    # We run the first few iterations serially to catch bugs
+    if front_num > 0:
+        front = [function(**a) if use_kwargs else function(a) for a
+                 in array[:front_num]]
+    else:
+        front = []
+    # Assemble the workers
+    with ProcessPoolExecutor(max_workers=n_jobs) as pool:
+        # Pass the elements of array into function
+        if use_kwargs:
+            futures = [pool.submit(function, **a) for a in array[front_num:]]
+        else:
+            futures = [pool.submit(function, a) for a in array[front_num:]]
+        kwargs = {
+            'total': len(futures),
+            'unit': 'job',
+            'unit_scale': True,
+            'leave': False,
+            'ncols': 80,
+            'dynamic_ncols': False,
+            'miniters': 1,
+            'mininterval': 1
+        }
+        # Print out the progress as tasks complete
+        for f in tqdm.tqdm(as_completed(futures), **kwargs):
+            pass
+    out = []
+    # Get the results from the futures.
+    for i, future in enumerate(futures):
+        try:
+            out.append(future.result())
+        except Exception as e:
+            msg = "In function '{}': {}".format(str(function), e)
+            log_mp.error(msg)
+            out.append(e)
+    return front + out
 
 
 def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
@@ -43,30 +89,17 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
     result: list
         list of function returns
     """
-    # found NoDaemonProcess on stackexchange by Chris Arndt - enables
-    # hierarchical multiprocessing
-    class NoDaemonProcess(Process):
-        # make 'daemon' attribute always return False
-        def _get_daemon(self):
-            return False
-
-        def _set_daemon(self, value):
-            pass
-        daemon = property(_get_daemon, _set_daemon)
-
-    # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
-    # because the latter is only a wrapper function, not a proper class.
-    class MyPool(multiprocessing.pool.Pool):
-        Process = NoDaemonProcess
-
     if nb_cpus is None:
-        nb_cpus = max(cpu_count(), 1)
+        nb_cpus = cpu_count()
 
     if debug:
         nb_cpus = 1
 
+    nb_cpus = min(nb_cpus, len(params), cpu_count())
+
     if verbose:
-        print("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
+        log_mp.debug("Computing %d parameters with %d cpus." %
+                     (len(params), nb_cpus))
 
     start = time.time()
     if nb_cpus > 1:
@@ -78,7 +111,8 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
         result = list(map(func, params))
 
     if verbose:
-        print("\nTime to compute:", time.time() - start)
+        log_mp.debug("Time to compute: {:.1f} min".format((time.time() -
+                                                           start) / 60.))
 
     return result
 
@@ -86,11 +120,15 @@ def start_multiprocess(func, params, debug=False, verbose=False, nb_cpus=None):
 def start_multiprocess_imap(func, params, debug=False, verbose=False,
                             nb_cpus=None, show_progress=True):
     """
+    # TODO: support generator params; currently length is required for pbar
+    Multiprocessing method which supports progress bar (therefore using
+    imap instead of map).
 
     Parameters
     ----------
     func : function
-    params : function parameters
+    params : Iterable
+        function parameters
     debug : boolean
     verbose : bool
     nb_cpus : int
@@ -101,45 +139,30 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
     result: list
         list of function returns
     """
-    # found NoDaemonProcess on stackexchange by Chris Arndt - enables
-    # hierarchical multiprocessing
-    class NoDaemonProcess(Process):
-        # make 'daemon' attribute always return False
-        def _get_daemon(self):
-            return False
-
-        def _set_daemon(self, value):
-            pass
-        daemon = property(_get_daemon, _set_daemon)
-
-    # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
-    # because the latter is only a wrapper function, not a proper class.
-    class MyPool(multiprocessing.pool.Pool):
-        Process = NoDaemonProcess
-
     if nb_cpus is None:
-        nb_cpus = min(cpu_count(), len(params))
+        nb_cpus = cpu_count()
+
+    nb_cpus = min(nb_cpus, len(params), cpu_count())
 
     if debug:
         nb_cpus = 1
 
     if verbose:
-        print("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
+        log_mp.debug("Computing %d parameters with %d cpus." %
+                     (len(params), nb_cpus))
 
     start = time.time()
     if nb_cpus > 1:
-        pool = MyPool(nb_cpus)
         if show_progress:
-            result = list(tqdm.tqdm(pool.imap(func, params), total=len(params), ncols=80, leave=False,
-                             unit='jobs', unit_scale=True, dynamic_ncols=False, mininterval=1))
+            result = parallel_process(params, func, nb_cpus)
         else:
-            result = pool.imap(func, params)
-        pool.close()
-        pool.join()
+            with MyPool(nb_cpus) as pool:
+                result = list(pool.map(func, params))
     else:
         if show_progress:
-            pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False, mininterval=1,
-                                    unit='jobs', unit_scale=True, dynamic_ncols=False)
+            pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
+                             miniters=1, mininterval=1, unit='job',
+                             unit_scale=True, dynamic_ncols=False)
             result = []
             for p in params:
                 result.append(func(p))
@@ -150,19 +173,135 @@ def start_multiprocess_imap(func, params, debug=False, verbose=False,
             for p in params:
                 result.append(func(p))
     if verbose:
-        print("\nTime to compute:", time.time() - start)
+        log_mp.debug("Time to compute: {:.1f} min".format((time.time() -
+                                                           start) / 60.))
 
+    return result
+
+
+def parallel_threads(array, function, n_jobs, use_kwargs=False, front_num=0):
+    """From http://danshiebler.com/2016-09-14-parallel-progress-bar/
+        A parallel version of the map function with a progress bar.
+
+        Args:
+            array (array-like): An array to iterate over.
+            function (function): A python function to apply to the elements of array
+            n_jobs (int, default=16): The number of cores to use
+            use_kwargs (boolean, default=False): Whether to consider the elements of array as dictionaries of
+                keyword arguments to function
+            front_num (int, default=3): The number of iterations to run serially before kicking off the parallel job.
+                Useful for catching bugs
+        Returns:
+            [function(array[0]), function(array[1]), ...]
+    """
+    print("is in Parallel thread")
+    #We run the first few iterations serially to catch bugs
+    if front_num > 0:
+        print("is in Parallel thread 1")
+        front = [function(**a) if use_kwargs else function(a) for a in array[:front_num]]
+    else:
+        front = []
+        print("is in Parallel thread 2")
+
+    #Assemble the workers
+    with ThreadPoolExecutor(max_workers=n_jobs) as executor:
+        #Pass the elements of array into function
+
+        if use_kwargs:
+            futures = [executor.submit(function, **a) for a in array[front_num:]]
+            print("is in Parallel thread 3")
+
+        else:
+            futures = [executor.submit(function, a) for a in array[front_num:]]
+        kwargs = {
+            'total': len(futures),
+            'unit': 'job',
+            'unit_scale': True,
+            'leave': False,
+            'ncols': 80,
+            'dynamic_ncols': False
+        }
+        print("is in Parallel thread 4")
+
+        #Print out the progress as tasks complete
+        for f in tqdm.tqdm(as_completed(futures), **kwargs):
+            pass
+    out = []
+    print("is in Parallel thread 6")
+
+    #Get the results from the futures.
+    for i, future in enumerate(futures):
+
+        try:
+            out.append(future.result())
+        except Exception as e:
+            out.append(e)
+
+    print("finished in Parallel thread")
+
+    return front + out
+
+
+def start_multithread_imap(func, params, debug=False, verbose=False,
+                           nb_cpus=None, show_progress=True):
+    """
+    Parameters
+    ----------
+    func : function : to be multithreaded
+    params : Array: Iterable function parameters
+    debug : boolean
+    verbose : bool :
+    nb_cpus : int : number of parallel processes at a time
+    show_progress : bool
+
+    Returns
+    -------
+    result: list
+        list of function returns
+    """
+    if nb_cpus is None:
+        nb_cpus = cpu_count()
+    nb_cpus = min(nb_cpus, cpu_count(), len(params))
+    if debug:
+        nb_cpus = 1
+
+    if verbose:
+        log_mp.debug("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
+    start = time.time()
+
+    if nb_cpus > 1:
+        if show_progress:
+            result = parallel_threads(params, func, nb_cpus)
+        else:
+            pool = MyPool(nb_cpus)
+            result = list(pool.map(func, params))
+
+    else:
+        if show_progress:
+            pbar = tqdm.tqdm(total=len(params), ncols=80, leave=False,
+                             unit='job', unit_scale=True, dynamic_ncols=False)
+            result = []
+            for p in params:
+                result.append(func(p))
+                pbar.update(1)
+            pbar.close()
+        else:
+            result = []
+            for p in params:
+                result.append(func(p))
+    if verbose:
+        log_mp.debug("Time to compute: {:.1f} min".format((time.time() - start) / 60.))
     return result
 
 
 def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
                            nb_cpus=None):
     """
-
+    # TODO: broken for n_cpus > 1: `TypeError: can't pickle _thread.RLock objects`
     Parameters
     ----------
     func_name : str
-    params : list of list
+    params : List[List]
         each element in params must be object with attribute func_name
         (+ optional: kwargs)
     debug : boolean
@@ -171,33 +310,23 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
 
     Returns
     -------
-    result: list
+    result: List
         list of function returns
     """
-    # found NoDaemonProcess on stackexchange by Chris Arndt - enables
-    # hierarchical multiprocessing
-    class NoDaemonProcess(Process):
-        # make 'daemon' attribute always return False
-        def _get_daemon(self):
-            return False
-
-        def _set_daemon(self, value):
-            pass
-        daemon = property(_get_daemon, _set_daemon)
-
-    # We sub-class multi_proc.pool.Pool instead of multi_proc.Pool
-    # because the latter is only a wrapper function, not a proper class.
-    class MyPool(multiprocessing.pool.Pool):
-        Process = NoDaemonProcess
-
     if nb_cpus is None:
-        nb_cpus = max(cpu_count(), 1)
+        nb_cpus = cpu_count()
 
     if debug:
         nb_cpus = 1
 
+    nb_cpus = min(nb_cpus, len(params), cpu_count())
+    if nb_cpus > 1:
+        log_mp.warning('`start_multiprocess_imap` is broken for n_cpus > 1:'
+                       ' `TypeError: cant pickle _thread.RLock objects`')
+        nb_cpus = 1
     if verbose:
-        print("Computing %d parameters with %d cpus." % (len(params), nb_cpus))
+        log_mp.debug("Computing %d parameters with %d cpus." %
+                     (len(params), nb_cpus))
     for el in params:
         el.insert(0, func_name)
     start = time.time()
@@ -209,66 +338,9 @@ def start_multiprocess_obj(func_name, params, debug=False, verbose=False,
     else:
         result = list(map(multi_helper_obj, params))
     if verbose:
-        print("\nTime to compute:", time.time() - start)
+        log_mp.debug("Time to compute: {:.1f} min".format((time.time() -
+                                                           start) / 60.))
     return result
-
-
-
-def SUBP_script(params, name, suffix="", delay=0):
-    """
-    Runs multiple subprocesses on one node at the same time - no load
-    balancing, all jobs get executed right away (or with a specified delay)
-
-    Parameters
-    ----------
-    params: list
-        list of all paramter sets to be processed
-    name: str
-        name of job - specifies script with QSUB_%s % name
-    suffix: str
-        suffix for folder names - enables the execution of multiple subp jobs
-        for the same function
-    delay: int
-        delay between executions in seconds
-
-    Returns
-    -------
-    path_to_out: str
-        path to the output directory
-
-    """
-    if os.path.exists(subp_work_folder + "/%s_folder%s/" % (name, suffix)):
-        shutil.rmtree(subp_work_folder + "/%s_folder%s/" % (name, suffix))
-
-    path_to_script = path_to_scripts_default + "/QSUB_%s.py" % (name)
-    path_to_storage = subp_work_folder + "/%s_folder%s/storage/" % (name,
-                                                                    suffix)
-    path_to_out = subp_work_folder + "/%s_folder%s/out/" % (name, suffix)
-
-    if not os.path.exists(path_to_storage):
-        os.makedirs(path_to_storage)
-    if not os.path.exists(path_to_out):
-        os.makedirs(path_to_out)
-
-    processes = []
-    for ii in range(len(params)):
-        this_storage_path = path_to_storage + "job_%d.pkl" % ii
-        this_out_path = path_to_out + "job_%d.pkl" % ii
-
-        with open(this_storage_path, "wb") as f:
-            for param in params[ii]:
-                pkl.dump(param, f)
-
-        p = subprocess.Popen("%s %s %s %s" % (python_path, path_to_script,
-                                              this_storage_path, this_out_path),
-                             shell=True)
-        processes.append(p)
-        time.sleep(delay)
-
-    for p in processes:
-        p.wait()
-
-    return path_to_out
 
 
 def multi_helper_obj(args):

@@ -4,7 +4,6 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
-from ..handler import log_handler
 try:
     from lz4.block import compress, decompress
 except ImportError:
@@ -16,32 +15,31 @@ except ImportError:
     print("fasteners could not be imported. Locking will be disabled by default."
           "Please install fasteners to enable locking (pip install fasteners).")
     LOCKING = False
+from typing import List, Tuple, Optional, Iterable, Union, Dict
 import numpy as np
 import h5py
 import os
-import warnings
+
+from ..handler import log_handler
 __all__ = ['arrtolz4string', 'lz4stringtoarr', 'load_lz4_compressed',
-           'save_lz4_compressed', 'load_compressed', 'load_from_h5py',
-           'save_to_h5py', 'lz4string_listtoarr' 'arrtolz4string_list']
+           'save_lz4_compressed', 'load_from_h5py',
+           'save_to_h5py', 'lz4string_listtoarr', 'arrtolz4string_list']
 
 
-def arrtolz4string(arr):
+def arrtolz4string(arr: np.ndarray) -> bytes:
     """
-    Converts (multi-dimensional) array to lz4 compressed string.
+    Converts (multi-dimensional) array to list of lz4 compressed strings.
 
-    Parameters
-    ----------
-    arr : np.array
+    Args:
+        arr: Input array.
 
-    Returns
-    -------
-    str
-        lz4 compressed string
+    Returns:
+        lz4 compressed string.
     """
     if isinstance(arr, list):
         arr = np.array(arr)
     if len(arr) == 0:
-        return ""
+        return b""
     try:
         comp_arr = compress(arr.tobytes())
     except OverflowError:
@@ -52,20 +50,18 @@ def arrtolz4string(arr):
     return comp_arr
 
 
-def lz4stringtoarr(string, dtype=np.float32, shape=None):
+def lz4stringtoarr(string: bytes, dtype: np.dtype = np.float32,
+                   shape: Optional[Tuple[int]] = None):
     """
     Converts lz4 compressed string to 1d array.
 
-    Parameters
-    ----------
-    string : str
-    dtype : np.dtype
-    shape : tuple
+    Args:
+        string: Serialized array.
+        dtype: Data type of original array.
+        shape: Shape of original array.
 
-    Returns
-    -------
-    np.array
-        1d array
+    Returns:
+        N-dimensional numpy array.
     """
     if len(string) == 0:
         return np.zeros((0, ), dtype=dtype)
@@ -78,47 +74,42 @@ def lz4stringtoarr(string, dtype=np.float32, shape=None):
     return arr_1d
 
 
-def arrtolz4string_list(arr):
+def arrtolz4string_list(arr: np.ndarray) -> List[bytes]:
     """
     Converts (multi-dimensional) array to list of lz4 compressed strings.
 
-    Parameters
-    ----------
-    arr : np.array
+    Args:
+        arr: Input array.
 
-    Returns
-    -------
-    list of str
-        lz4 compressed string
+    Returns:
+        lz4 compressed string.
     """
     if isinstance(arr, list):
         arr = np.array(arr)
     if len(arr) == 0:
-        return [""]
+        return [b""]
     try:
         str_lst = [compress(arr.tobytes())]
     # catch Value error which is thrown in py3 lz4 version
     except (OverflowError, ValueError):
         half_ix = len(arr) // 2
         str_lst = arrtolz4string_list(arr[:half_ix]) + \
-                   arrtolz4string_list(arr[half_ix:])
+                  arrtolz4string_list(arr[half_ix:])
     return str_lst
 
 
-def lz4string_listtoarr(str_lst, dtype=np.float32, shape=None):
+def lz4string_listtoarr(str_lst: List[bytes], dtype: np.dtype = np.float32,
+                        shape: Optional[Tuple[int]] = None) -> np.ndarray:
     """
     Converts lz4 compressed strings to array.
 
-    Parameters
-    ----------
-    str_lst : list of str
-    dtype : np.dtype
-    shape : tuple
+    Args:
+        str_lst: Binary string representation of the array.
+        dtype: Data type of the serialized array.
+        shape: Shape of the serialized array.
 
-    Returns
-    -------
-    np.array
-        1d array
+    Returns:
+        1d numpy array.
     """
     if len(str_lst) == 0:
         return np.zeros((0, ), dtype=dtype)
@@ -128,24 +119,28 @@ def lz4string_listtoarr(str_lst, dtype=np.float32, shape=None):
     return np.concatenate(arr_lst)
 
 
-def multi_lz4stringtoarr(args):
+def multi_lz4stringtoarr(args: tuple) -> np.ndarray:
+    """
+    Helper function for multiprocessing.
+
+    Args:
+        args: see :func:`~syconn.handler.compression.lz4string_listtoarr`.
+
+    Returns:
+        1d numpy array.
+    """
     return lz4string_listtoarr(*args)
 
 
-def save_lz4_compressed(p, arr, dtype=np.float32):
+def save_lz4_compressed(p: str, arr: np.ndarray, dtype: np.dtype = np.float32):
     """
     Saves array as lz4 compressed string. Due to overflow in python2 added
     error handling by recursive splitting.
 
-    Parameters
-    ----------
-    p : str
-    arr : np.array
-    dtype : np.dtype
-
-    Returns
-    -------
-    None
+    Args:
+        p: Path to the destination file.
+        arr: Numpy array.
+        dtype: Data type in which the array should be stored.
     """
     arr = arr.astype(dtype)
     try:
@@ -155,7 +150,7 @@ def save_lz4_compressed(p, arr, dtype=np.float32):
     except (OverflowError, ValueError):
         # save dummy (emtpy) file
         text_file = open(p, "wb")
-        text_file.write("")
+        text_file.write(b"")
         text_file.close()
         half_ix = len(arr) // 2
         new_p1 = p[:-4] + "_1" + p[-4:]
@@ -164,7 +159,8 @@ def save_lz4_compressed(p, arr, dtype=np.float32):
         save_lz4_compressed(new_p2, arr[half_ix:])
 
 
-def load_lz4_compressed(p, shape=(-1, 20, 2, 128, 256), dtype=np.float32):
+def load_lz4_compressed(p: str, shape: Tuple[int] = (-1, 20, 2, 128, 256),
+                        dtype: np.dtype = np.float32):
     """
     Shape must be known in order to load (multi-dimensional) array from binary
     string. Due to overflow in python2 added recursive loading.
@@ -173,7 +169,7 @@ def load_lz4_compressed(p, shape=(-1, 20, 2, 128, 256), dtype=np.float32):
     ----------
     p : path to lz4 file
     shape : tuple
-    dtype : np.dtype
+    dtype : type
 
     Returns
     -------
@@ -193,22 +189,20 @@ def load_lz4_compressed(p, shape=(-1, 20, 2, 128, 256), dtype=np.float32):
 
 # ---------------------------- HDF5
 # ------------------------------------------------------------------------------
-def load_from_h5py(path, hdf5_names=None, as_dict=False):
+def load_from_h5py(path: str, hdf5_names: Optional[Iterable[str]] = None,
+                   as_dict: bool = False)\
+        -> Union[Dict[str, np.ndarray], List[np.ndarray]]:
     """
-    Loads data from a h5py File
+    Loads data from a h5py File.
 
-    Parameters
-    ----------
-    path: str
-    hdf5_names: list of str
-        if None, all keys will be loaded
-    as_dict: boolean
-        if False a list is returned
+    Args:
+        path: Path to .h5 file.
+        hdf5_names: If None, all keys will be loaded.
+        as_dict: If True, returns a dictionary.
 
-    Returns
-    -------
-    data: dict or np.array
-
+    Returns:
+        The data stored at `path` either as list of arrays
+        (ordering as `hdf5_names`) or as dictionary.
     """
     if as_dict:
         data = {}
@@ -220,39 +214,33 @@ def load_from_h5py(path, hdf5_names=None, as_dict=False):
             hdf5_names = f.keys()
         for hdf5_name in hdf5_names:
             if as_dict:
-                data[hdf5_name] = f[hdf5_name].value
+                data[hdf5_name] = f[hdf5_name][()]
             else:
-                data.append(f[hdf5_name].value)
+                data.append(f[hdf5_name][()])
     except Exception as e:
-        msg = "Error at Path: {}, with labels: {}".format(path, hdf5_names)
+        msg = "Error ({}) raised when loading h5-file at path:" \
+              " {}, with labels: {}".format(e, path, hdf5_names)
         log_handler.error(msg)
         raise Exception(e)
     f.close()
     return data
 
 
-def save_to_h5py(data, path, hdf5_names=None, overwrite=False, compression=True):
+def save_to_h5py(data: Union[Dict[str, np.ndarray], List[np.ndarray]],
+                 path: str, hdf5_names: Optional[List[str]] = None,
+                 overwrite: bool = False,
+                 compression: bool = True):
     """
     Saves data to h5py File.
 
-    Parameters
-    ----------
-    data: list or dict of np.arrays
-        if list, hdf5_names has to be set.
-    path: str
-        forward-slash separated path to file
-    hdf5_names: list of str
-        has to be the same length as data
-    overwrite : bool
-        determines whether existing files are overwritten
-    compression : bool
-        True: compression='gzip' is used which is recommended for sparse and
-        ordered data
-
-    Returns
-    -------
-    nothing
-
+    Args:
+        data: If list, hdf5_names has to be set.
+        path: Forward-slash separated path to file.
+        hdf5_names: Keys used to store arrays in `data`.
+            Has to be the same length as `data`.
+        overwrite: Determines whether existing files are overwritten.
+        compression: If True, ``compression='gzip'`` is used which is
+            recommended for sparse and ordered data.
     """
     if (not type(data) is dict) and hdf5_names is None:
         raise TypeError("hdf5names has to be set, when data is a list")
@@ -268,7 +256,10 @@ def save_to_h5py(data, path, hdf5_names=None, overwrite=False, compression=True)
     else:
         if len(hdf5_names) != len(data):
             f.close()
-            raise ValueError("Not enough or too many hdf5-names given!")
+            msg = "Not enough or too many hdf5-names ({}) given when during" \
+                  " h5-file load attempt!".format(hdf5_names)
+            log_handler.error(msg)
+            raise ValueError(msg)
         for nb_data in range(len(data)):
             if compression:
                 f.create_dataset(hdf5_names[nb_data], data=data[nb_data],
@@ -276,9 +267,3 @@ def save_to_h5py(data, path, hdf5_names=None, overwrite=False, compression=True)
             else:
                 f.create_dataset(hdf5_names[nb_data], data=data[nb_data])
     f.close()
-
-
-def load_compressed(p):
-    f = np.load(p)
-    assert len(f.keys()) == 1, "More than one key in .npz file"
-    return f[f.keys()[0]]

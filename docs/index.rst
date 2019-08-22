@@ -6,19 +6,18 @@
 Welcome to SyConn's documentation!
 ==================================
 
-Contents:
+For the API documentation please refer to:
 
 .. toctree::
    :maxdepth: 1
 
-   GettingStarted
-   installation
-   Examples
-
    syconn
 
+.. mdinclude:: doc.md
+
+
 Indices and tables
-==================
+------------------
 
 :ref:`genindex`
 :ref:`modindex`

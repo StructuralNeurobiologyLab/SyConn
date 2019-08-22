@@ -14,28 +14,25 @@ import numpy as np
 import os
 import re
 from collections import Counter
-from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier, AdaBoostClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 from sklearn.externals import joblib
-from sklearn.metrics import precision_recall_fscore_support, precision_recall_curve
 import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
 from matplotlib import pyplot as plt
 
 from . import skel_based_classifier_helper as sbch
 from ..handler.basics import load_pkl2obj
-from ..handler.logger import initialize_logging
+from ..handler.config import initialize_logging
 from ..reps import super_segmentation as ss
 from ..proc.stats import model_performance
-from ..mp import qsub_utils as qu
+from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
-from ..config.global_params import wd
-script_folder = os.path.abspath(os.path.dirname(__file__) + "/../QSUB_scripts/")
 logger_skel = initialize_logging('skeleton')
 feature_set = ["Mean diameter", "STD diameter", "Hist1", "Hist2", "Hist3",
                "Hist4", "Hist5", "Hist6", "Hist7", "Hist8", "Hist9", "Hist10",
                "Mean node degree", "N sj", "Mean size sj", "STD size sj",
                "N mi", "Mean size mi", "STD size mi", "N vc", "Mean size vc",
-               "STD size vc"]
+               "STD size vc", "node density"]
 
 colorVals = [[0.841, 0.138, 0.133, 1.],
              [0.35, 0.725, 0.106, 1.],
@@ -177,15 +174,15 @@ class SkelClassifier(object):
                                      self.feat_path + "/features_%d_%d.npy",
                                     comment_converter[self.ssd_version], overwrite])
 
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
             results = sm.start_multiprocess(sbch.generate_clf_data_thread,
                 multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "generate_clf_data",
                                          pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
+                                         script_folder=None)
         else:
             msg = "QSUB not available"
             logger_skel.critical(msg)
@@ -200,16 +197,16 @@ class SkelClassifier(object):
             multi_params.append([self.working_dir, self.target_type,
                                  clf_name, n_estimators,
                                  feature_context_nm, production])
-        if qsub_pe is None and qsub_queue is None:
+        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
             results = sm.start_multiprocess(classifier_production_thread,
                 multi_params, nb_cpus=nb_cpus)
 
-        elif qu.__QSUB__:
+        elif qu.batchjob_enabled():
             path_to_out = qu.QSUB_script(multi_params,
                                          "classifier_production",
                                          n_cores=nb_cpus,
                                          pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=script_folder)
+                                         script_folder=None)
 
         else:
             msg = "QSUB not available"

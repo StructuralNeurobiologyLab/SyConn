@@ -4,24 +4,25 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
+
+import numpy as np
+from collections import defaultdict
+from typing import Any
 from ..backend import log_backend
 try:
     from lz4.block import compress, decompress
 except ImportError:
     from lz4 import compress, decompress
-try:
-    import fasteners
-    LOCKING = True
-except ImportError:
-    print("fasteners could not be imported. Locking will be disabled by default."
-          "Please install fasteners to enable locking (pip install fasteners).")
-    LOCKING = False
-import numpy as np
+
 from ..handler.compression import lz4string_listtoarr, arrtolz4string_list
+from ..handler.basics import kd_factory
 from ..backend import StorageClass
 
 
 class AttributeDict(StorageClass):
+    """
+    General purpose dictionary class inherited from :class:`syconn.backend.base.StorageClass`.
+    """
     def __init__(self, inp_p, **kwargs):
         super(AttributeDict, self).__init__(inp_p, **kwargs)
 
@@ -160,64 +161,28 @@ class VoxelStorageL(StorageClass):
         self._dc_intern[key] = value_intern
 
 
-class MeshStorage(StorageClass):
+def VoxelStorage(inp, **kwargs):
     """
-    Customized dictionary to store compressed numpy arrays, but with a
-    intuitive user interface, i.e. compression will happen in background.
-    kwarg 'cache_decomp' can be enabled to cache decompressed arrays
-    additionally (save decompressing time).
+    Deprecated storage for voxel data.
+
+    Args:
+        inp:
+        **kwargs:
+
+    Returns:
+
     """
-
-    def __init__(self, inp, **kwargs):
-        super(MeshStorage, self).__init__(inp, **kwargs)
-
-    def __getitem__(self, item):
-        """
-
-        Parameters
-        ----------
-        item : int/str
-
-        Returns
-        -------
-        list of np.arrays
-            [indices, vertices]
-        """
-        try:
-            return self._cache_dc[item]
-        except KeyError:
-            pass
-        mesh = self._dc_intern[item]
-        # if no normals were given in file / cache append empty array
-        if len(mesh) == 2:
-            mesh.append([""])
-        decomp_arrs = [lz4string_listtoarr(mesh[0], dtype=np.uint32),
-                       lz4string_listtoarr(mesh[1], dtype=np.float32),
-                       lz4string_listtoarr(mesh[2], dtype=np.float32)]
-        if self._cache_decomp:
-            self._cache_dc[item] = decomp_arrs
-        return decomp_arrs
-
-    def __setitem__(self, key, mesh):
-        """
-
-        Parameters
-        ----------
-        key : int/str
-        mesh : list of np.array
-            [indices, vertices, optional: normals]
-        """
-        if len(mesh) == 2:
-            mesh.append(np.zeros((0, ), dtype=np.float32))
-        if self._cache_decomp:
-            self._cache_dc[key] = mesh
-        comp_ind = arrtolz4string_list(mesh[0].astype(dtype=np.uint32))
-        comp_vert = arrtolz4string_list(mesh[1].astype(dtype=np.float32))
-        comp_norm = arrtolz4string_list(mesh[2].astype(dtype=np.float32))
-        self._dc_intern[key] = [comp_ind, comp_vert, comp_norm]
+    obj = VoxelStorageClass(inp, **kwargs)
+    if 'meta' in obj._dc_intern:  # TODO: Remove asap as soon as we switch to VoxelStorageDyn
+        obj = VoxelStorageDyn(inp, **kwargs)
+    # # TODO: activate as soon as synapse-detection pipelines is refactored.
+    # else:
+    #     log_backend.warning('VoxelStorage is deprecated. Please switch to'
+    #                         ' VoxelStorageDyn.')
+    return obj
 
 
-class VoxelStorage(VoxelStorageL):
+class VoxelStorageClass(VoxelStorageL):
     """
     Customized dictionary to store compressed numpy arrays, but with a
     intuitive user interface, i.e. compression will happen in background.
@@ -230,9 +195,212 @@ class VoxelStorage(VoxelStorageL):
     def __init__(self, inp, **kwargs):
         if "disable_locking" in kwargs:
             assert kwargs["disable_locking"], "Locking must be disabled " \
-                                              "in this class. Use VoxelDictL" \
+                                              "in this class. Use VoxelDictL " \
                                               "to enable locking."
         super(VoxelStorageL, self).__init__(inp, **kwargs)
+
+
+class VoxelStorageDyn(CompressedStorage):
+    """
+    Similar to `VoxelStorageL` but does not store the voxels explicitly,
+    but the information necessary to query the voxels of an object.
+
+    If ``voxel_mode = True`` getter method will operate on underlying data set
+    to retrieve voxels of an object. `__setitem__` throws `RuntimeError`.
+    `__getitem__` will return a list of 3D binary cubes with ones at the
+    object's locations (key: object ID). Note: The item ID has to match the
+    object ID in the segmentation.
+
+    Otherwise (``voxel_mode = False``) `__getitem__` and `__setitem__` allow
+    manipulation of the object's bounding box. In this case `voxeldata_path`
+    has to be given or already be existent in loaded dictionary. Expects the
+    source path of a KnossoDataset (see knossos_utils), like
+        kd = KnossoDataset()
+        kd.initialize_from_knossos_path(SOURCE_PATH)
+    `__setitem__` requires the object ID as key and an 3 dimensional array with
+     all bounding boxes defining the object (N, 2, 3). Those BBs are then used to
+     query the object voxels. The bounding box is expected to be two 3D
+     coordinates which define the lower and the upper limits.
+
+
+    """
+
+    def __init__(self, inp, voxel_mode=True, voxeldata_path=None, **kwargs):
+        super().__init__(inp, **kwargs)
+        self.voxel_mode = voxel_mode
+        if not 'meta' in self._dc_intern:
+            # add meta information about underlying voxel data set to internal dictionary
+            self._dc_intern['meta'] = dict(voxeldata_path=voxeldata_path)
+        if not 'size' in self._dc_intern:
+            self._dc_intern['size'] = defaultdict(int)
+        if not 'rep_coord' in self._dc_intern:
+            self._dc_intern['rep_coord'] = dict()
+        if voxeldata_path is not None:
+            old_p = self._dc_intern['meta']['voxeldata_path']
+            new_p = voxeldata_path
+            if old_p != new_p:
+                log_backend.warn('Overwriting `voxeldata_path` in `VoxelStorag'
+                                 'eDyn` object (stored at "{}") '
+                                 'from `{}` to `{}`.'.format(inp, old_p, new_p))
+                self._dc_intern['meta']['voxeldata_path'] = voxeldata_path
+        voxeldata_path = self._dc_intern['meta']['voxeldata_path']
+        if voxel_mode:
+            if voxeldata_path is None:
+                msg = '`voxel_mode` is True but no path to' \
+                      ' voxeldata given / found.'
+                log_backend.error(msg)
+                raise ValueError(msg)
+            kd = kd_factory(voxeldata_path)
+            self.voxeldata = kd
+
+    def __setitem__(self, key: str, value: Any):
+        if self.voxel_mode:
+            raise RuntimeError('`VoxelStorageDyn.__setitem__` may only '
+                               'be used when `voxel_mode=False`.')
+        else:
+            return super().__setitem__(key, value)
+
+    def __getitem__(self, item):
+        if self.voxel_mode:
+            res = []
+            bbs = super().__getitem__(item)
+            for bb in bbs:  # iterate over all bounding boxes
+                size = bb[1] - bb[0]
+                off = bb[0]
+                curr_mask = self.voxeldata.from_overlaycubes_to_matrix(
+                    size, off, show_progress=False, verbose=False) == item
+                res.append(curr_mask)
+            return res, bbs[:, 0]  # N, 3 --> all offset
+        else:
+            return super().__getitem__(item)
+
+    def object_size(self, item):
+        if not self.voxel_mode:
+            log_backend.warn('`object_size` sould only be called during `voxel_mode=True`.')
+        if item not in self._dc_intern:
+            raise KeyError('KeyError: Could not find key "{}" in `self._dc_intern`.`'.format(item))
+        return self._dc_intern['size'][item]
+
+    def increase_object_size(self, item, value):
+        if self.voxel_mode:
+            log_backend.warn('`increase_object_size` sould only be called when `voxel_mode=False`.')
+        self._dc_intern['size'][item] += value
+
+    def object_repcoord(self, item):
+        if not self.voxel_mode:
+            log_backend.warn('`object_repcoord` sould only be called when `voxel_mode=True`.')
+        if item not in self._dc_intern:
+            raise KeyError('KeyError: Could not find key "{}" in `self._dc_intern`.`'.format(item))
+        return self._dc_intern['rep_coord'][item]
+
+    def set_object_repcoord(self, item, value):
+        if self.voxel_mode:
+            log_backend.warn('`set_object_repcoord` sould only be called when `voxel_mode=False`.')
+        self._dc_intern['rep_coord'][item] = value
+
+    def get_voxeldata(self, item):
+        old_vx_mode = self.voxel_mode
+        self.voxel_mode = True
+        if self._dc_intern['meta']['voxeldata_path'] is None:
+            msg = '`voxel_mode` is True but no path to' \
+                  ' voxeldata given / found.'
+            log_backend.error(msg)
+            raise ValueError(msg)
+        kd = kd_factory(self._dc_intern['meta']['voxeldata_path'])
+        self.voxeldata = kd
+        res = self[item]
+        self.voxel_mode = old_vx_mode
+        return res
+
+    def get_boundingdata(self, item):
+        old_vx_mode = self.voxel_mode
+        self.voxel_mode = False
+        res = self[item]
+        self.voxel_mode = old_vx_mode
+        return res
+
+    def keys(self):
+        # do not return 'meta' and other helper items in self._dc_intern, only object IDs
+        # TODO: make this a generator
+        obj_elements = list([k for k in self._dc_intern.keys() if (type(k) is str and k.isdigit())
+                             or (type(k) is not str)])
+        return obj_elements
+
+
+class MeshStorage(StorageClass):
+    """
+    Customized dictionary to store compressed numpy arrays, but with a
+    intuitive user interface, i.e. compression will happen in background.
+    kwarg 'cache_decomp' can be enabled to cache decompressed arrays
+    additionally (save decompressing time).
+    """
+
+    def __init__(self, inp, load_colarr=False, **kwargs):
+        self.load_colarr = load_colarr
+        super(MeshStorage, self).__init__(inp, **kwargs)
+
+    def __getitem__(self, item):
+        """
+
+        Parameters
+        ----------
+        item : int/str
+
+        Returns
+        -------
+        List[np.arrays]
+            [indices, vertices, normals, colors/labels]
+        """
+        try:
+            return self._cache_dc[item]
+        except KeyError:
+            pass
+        mesh = self._dc_intern[item]
+        # if no normals were given in file / cache append empty array
+        if len(mesh) == 2:
+            mesh.append([""])
+        # if no colors/labels were given in file / cache append empty array
+        if len(mesh) == 3:
+            mesh.append([""])
+        decomp_arrs = [lz4string_listtoarr(mesh[0], dtype=np.uint32),
+                       lz4string_listtoarr(mesh[1], dtype=np.float32),
+                       lz4string_listtoarr(mesh[2], dtype=np.float32),
+                       lz4string_listtoarr(mesh[3], dtype=np.uint8)]
+        if not self.load_colarr:
+            decomp_arrs = decomp_arrs[:3]
+        if self._cache_decomp:
+            self._cache_dc[item] = decomp_arrs
+        return decomp_arrs
+
+    def __setitem__(self, key, mesh):
+        """
+
+        Parameters
+        ----------
+        key : int/str
+        mesh : List[np.array]
+            [indices, vertices, normals, colors/labels]
+        """
+        if len(mesh) == 2:
+            mesh.append(np.zeros((0, ), dtype=np.float32))
+        if len(mesh) == 3:
+            mesh.append(np.zeros((0, ), dtype=np.uint8))
+        if self._cache_decomp:
+            self._cache_dc[key] = mesh
+        if len(mesh[2]) > 0 and len(mesh[1]) != len(mesh[2]):
+            log_backend.warning('Lengths of vertex array and length of normal'
+                                ' array differ!')
+        # test if lengths of vertex and color array are identical or test
+        # if vertex array length is equal to 3x label array length. Arrays are flattened.
+        if len(mesh[3]) > 0 and not (len(mesh[1]) == len(mesh[3]) or
+                                     len(mesh[1]) == len(mesh[3]) * 3):
+            log_backend.warning('Lengths of vertex array and length of color/'
+                                'label array differ!')
+        comp_ind = arrtolz4string_list(mesh[0].astype(dtype=np.uint32))
+        comp_vert = arrtolz4string_list(mesh[1].astype(dtype=np.float32))
+        comp_norm = arrtolz4string_list(mesh[2].astype(dtype=np.float32))
+        comp_col = arrtolz4string_list(mesh[3].astype(dtype=np.uint8))
+        self._dc_intern[key] = [comp_ind, comp_vert, comp_norm, comp_col]
 
 
 class SkeletonStorage(StorageClass):
