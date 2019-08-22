@@ -449,7 +449,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
     log.info('Started rendering of {} SSVs. '.format(np.sum(size_mask)))
 
     if global_params.PYOPENGL_PLATFORM == 'osmesa':  # utilize all CPUs
-        qu.QSUB_script(multi_params, "render_views", log=log,
+        qu.QSUB_script(multi_params, "render_views", log=log, suffix='_big',
                        n_max_co_processes=global_params.NCORE_TOTAL,
                        remove_jobfolder=False)
     elif global_params.PYOPENGL_PLATFORM == 'egl':  # utilize 1 GPU per task
@@ -458,7 +458,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
                 global_params.config.working_dir:
             n_cores = 1
             n_parallel_jobs = global_params.NCORES_PER_NODE
-            qu.QSUB_script(multi_params, "render_views",
+            qu.QSUB_script(multi_params, "render_views", suffix='_big',
                            n_max_co_processes=n_parallel_jobs, log=log,
                            additional_flags="--gres=gpu:2",
                            n_cores=n_cores, remove_jobfolder=True)
@@ -466,7 +466,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
         else:
             n_cores = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE
             n_parallel_jobs = global_params.NGPU_TOTAL
-            qu.QSUB_script(multi_params, "render_views_egl",
+            qu.QSUB_script(multi_params, "render_views_egl", suffix='_big',
                            n_max_co_processes=n_parallel_jobs, log=log,
                            additional_flags="--gres=gpu:1",
                            n_cores=n_cores, remove_jobfolder=True)
@@ -532,7 +532,7 @@ def _run_neuron_rendering_big_helper(max_n_jobs: Optional[int] = None):
         multi_params = [(ixs, sso_kwargs, render_kwargs) for ixs in multi_params]
         qu.QSUB_script(multi_params, "render_views",
                        n_max_co_processes=n_parallel_jobs, log=log,
-                       additional_flags="--gres=gpu:1",
+                       additional_flags="--gres=gpu:1", suffix='_big',
                        n_cores=n_cores, remove_jobfolder=True)
         # # render index-views only
         for ssv_id in big_ssv:

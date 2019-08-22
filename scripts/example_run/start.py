@@ -83,8 +83,8 @@ if __name__ == '__main__':
     if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
         log.warning('Python version <3.6. This is untested!')
     generate_default_conf_str(example_wd, scaling=scale, use_new_renderings_locs=True,
-                         use_large_fov_views_ct=False, use_new_meshing=use_new_meshing,
-                         allow_mesh_gen_cells=True, prior_glia_removal=prior_glia_removal)
+                              use_large_fov_views_ct=False, use_new_meshing=use_new_meshing,
+                              allow_mesh_gen_cells=True, prior_glia_removal=prior_glia_removal)
 
     global_params.wd = example_wd
     os.makedirs(global_params.config.temp_path, exist_ok=True)

@@ -18,7 +18,8 @@ from torch import optim
 
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
-parser.add_argument('-n', '--exp-name', default='syntype_unet_sameConv_noBN_run_fancydice_run4',
+parser.add_argument('-n', '--exp-name',
+                    default='syntype_unet_sameConv_BN_fancydice_gt2_bs4_inmem',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=200,
@@ -86,7 +87,7 @@ model = UNet(
     start_filts=28,
     planar_blocks=(0,),
     activation='relu',
-    batch_norm=False,
+    batch_norm=True,
     # conv_mode='valid',
     #up_mode='resizeconv_nearest',  # Enable to avoid checkerboard artifacts
     adaptive=False  # Experimental. Disable if results look weird.
@@ -112,9 +113,9 @@ elif args.jit == 'train':
 # USER PATHS
 save_root = os.path.expanduser('~/e3_training/')
 os.makedirs(save_root, exist_ok=True)
-data_root = os.path.expanduser('/wholebrain/songbird/j0126/GT/synapsetype_gt/')
+data_root = os.path.expanduser('/ssdscratch/pschuber/songbird/j0126/GT/synapsetype_gt/')
 
-gt_dir = data_root + '/Segmentierung_von_Synapsentypen_v1/'
+gt_dir = data_root + '/Segmentierung_von_Synapsentypen_v2/'
 fnames = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
 gt_dir = data_root + '/synssv_reconnects_nosomamerger/'
 fnames_files = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
@@ -171,6 +172,7 @@ train_dataset = PatchCreator(
     train=True,
     epoch_size=args.epoch_size,
     warp_prob=0.2,
+    in_memory=True,
     warp_kwargs={
         'sample_aniso': aniso_factor != 1,
         'perspective': True,
@@ -187,6 +189,7 @@ valid_dataset = None if not valid_indices else PatchCreator(
     warp_prob=0,
     warp_kwargs={'sample_aniso': aniso_factor != 1},
     transform=valid_transform,
+    in_memory=True,
     **common_data_kwargs
 )
 # Use first validation cube for previews. Can be set to any other data source.
@@ -223,8 +226,8 @@ trainer = Trainer(
     device=device,
     train_dataset=train_dataset,
     valid_dataset=valid_dataset,
-    batchsize=1,
-    num_workers=1,
+    batchsize=4,
+    num_workers=4,
     save_root=save_root,
     exp_name=args.exp_name,
     example_input=example_input,
