@@ -17,7 +17,7 @@ from termcolor import colored
 import os
 from .. import global_params
 
-__all__ = ['DynConfig', 'generate_default_conf_str', 'initialize_logging']
+__all__ = ['DynConfig', 'generate_default_conf', 'initialize_logging']
 
 
 class Config(object):
@@ -176,7 +176,9 @@ class DynConfig(Config):
         * Start to use ``__getitem__`` instead of :py:attr:`~entries`.
         * Adapt all ``global_params.config.`` usages accordingly.
         * Consider ``.json`` instead of ``.ini``.
-        * Reduce
+        * Do not replace any property call for now (e.g. `~allow_mesh_gen_cells`)
+          because they convey default parameters for old datasets in case they
+          are not present in the default ``config.ini``.
 
     Examples:
         To initialize a working directory at the beginning of your script, run::
@@ -204,9 +206,8 @@ class DynConfig(Config):
         If `item` is not set in this config, the return value will be taken from
          the default ``config.ini`` and ``configspec.ini``.
 
-        Notes:
-            Do not replace ``self.entries`` calls for now in order to maintain
-            backwards compatibility.
+        Todo:
+
 
         Args:
             item: Key of the requested value.

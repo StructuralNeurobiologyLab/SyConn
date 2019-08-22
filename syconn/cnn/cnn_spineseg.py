@@ -21,7 +21,7 @@ from elektronn3.data import transforms
 import torch
 from torch import nn
 from torch import optim
-from elektronn3.training.loss import BlurryBoarderLoss, DiceLoss, LovaszLoss
+from elektronn3.training.loss import DiceLoss, LovaszLoss
 
 
 def get_model():

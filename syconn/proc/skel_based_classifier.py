@@ -16,7 +16,6 @@ import re
 from collections import Counter
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
 import joblib
-from sklearn.externals import joblib as joblib_sklearn  # soon to be deprecated
 import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
 from matplotlib import pyplot as plt

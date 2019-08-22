@@ -24,9 +24,9 @@ from torch import nn
 from torch import optim
 from torch.utils.data.dataset import random_split
 try:
-    from elektronn3.training.loss import DiceLoss
-except ImportError:
     from elektronn3.modules.loss import DiceLoss
+except ImportError:
+    from elektronn3.training.loss import DiceLoss
 from elektronn3.training import metrics
 from elektronn3.models.fcn_2d import *
 from elektronn3.models.unet import UNet
