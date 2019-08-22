@@ -573,16 +573,26 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
     out_str = start_multiprocess_imap(fallback_exec, multi_params, debug=False,
                                       nb_cpus=n_max_co_processes,
                                       show_progress=show_progress)
-    if len("".join(out_str)) > 0:
-        log_batchjob.error('Errors occurred during "{}".:\n{}'.format(name, out_str))
     out_files = glob.glob(path_to_out + "*.pkl")
     if len(out_files) < len(params):
-        raise ValueError('{}/{} Batchjob fallback worker failed.'.format(len(params) - len(
-            out_files), len(params)))
-    if len("".join(out_str)) == 0:
+        # report errors
+        msg = 'Critical errors occurred during "{}". {}/{} Batchjob fallback worker ' \
+              'failed.\n{}'.format(name, len(params) - len(out_files),
+                                   len(params), out_str)
+        log_mp.error(msg)
+        log_batchjob.error(msg)
+        raise ValueError(msg)
+    elif len("".join(out_str)) == 0:
         if remove_jobfolder:
             shutil.rmtree(job_folder, ignore_errors=True)
-    log_batchjob.debug('Finished "{}" after {:.2f}s.'.format(name, time.time() - start))
+    else:
+        msg = 'Uncritical warnings/errors occurred during ' \
+              '"{}".:\n{} See logs at {} for details.'.format(name, out_str,
+                                                              job_folder)
+        log_mp.warning(msg)
+        log_batchjob.warning(msg)
+    log_batchjob.info('Finished "{}" after {:.2f}s.'.format(name, time.time()
+                                                            - start))
     return path_to_out
 
 
@@ -594,23 +604,15 @@ def fallback_exec(cmd_exec):
                           stderr=subprocess.PIPE)
     out, err = ps.communicate()
     out_str = ""
-    if log_mp.level == 10:
-        reported = False
-        if 'error' in out.decode().lower() or \
-                'error' in err.decode().lower() or 'killed' in\
-                out.decode().lower() or 'killed' in err.decode().lower():
-            log_mp.error(out.decode())
-            log_mp.error(err.decode())
-            reported = True
-            out_str = out.decode() + err.decode()
-        if not reported and ('warning' in out.decode().lower() or
-                             'warning' in err.decode().lower()):
-            log_mp.warning(out.decode())
-            log_mp.warning(err.decode())
-            out_str = out.decode() + err.decode()
-    if 'error' in err.decode().lower():
-        log_mp.error(out.decode())
-        log_mp.error(err.decode())
+    reported = False
+    if 'error' in out.decode().lower() or 'error' in err.decode().lower() \
+    or 'killed' in out.decode().lower() or 'killed' in err.decode().lower() \
+    or 'segmentation fault' in out.decode().lower() \
+    or 'segmentation fault' in err.decode().lower():
+        reported = True
+        out_str = out.decode() + err.decode()
+    if not reported and ('warning' in out.decode().lower() or
+                         'warning' in err.decode().lower()):
         out_str = out.decode() + err.decode()
     return out_str
 

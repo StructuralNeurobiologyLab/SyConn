@@ -15,7 +15,8 @@ import os
 import re
 from collections import Counter
 from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
-from sklearn.externals import joblib
+import joblib
+from sklearn.externals import joblib as joblib_sklearn  # soon to be deprecated
 import matplotlib
 matplotlib.use("Agg", warn=False, force=True)
 from matplotlib import pyplot as plt
@@ -541,7 +542,13 @@ class SkelClassifier(object):
                         prefix=""):
         save_p = self.clf_path + '/clf_%s_%d%s%s.pkl' % (
         name, feature_context_nm, "_prod" if production else "", prefix)
-        clf = joblib.load(save_p)
+        try:
+            clf = joblib.load(save_p)
+        except AttributeError:
+            logger_skel.warning('DeprecationWarning: Use joblib package instead '
+                                'of sklearn.externals.joblib!')
+            from sklearn.externals import joblib as joblib_sklearn  # soon to be deprecated
+            clf = joblib_sklearn.load(save_p)
         return clf
 
     def plot_lines(self, data, x_label, y_label, path, legend_labels=None):

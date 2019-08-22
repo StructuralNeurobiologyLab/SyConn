@@ -17,7 +17,7 @@ import time
 import argparse
 
 from syconn.handler.prediction import parse_movement_area_from_zip
-from syconn.handler.config import get_default_conf_str, initialize_logging
+from syconn.handler.config import generate_default_conf_str, initialize_logging
 from syconn.handler.compression import load_from_h5py
 from syconn import global_params
 from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_prediction
@@ -82,16 +82,9 @@ if __name__ == '__main__':
                      ' to "{}".'.format(example_wd))
     if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
         log.warning('Python version <3.6. This is untested!')
-    config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale,
-                                                      use_new_renderings_locs=True,
-                                                      use_large_fov_views_ct=False,
-                                                      use_new_meshing=use_new_meshing,
-                                                      allow_mesh_gen_cells=True,
-                                                      prior_glia_removal=prior_glia_removal)
-    with open(example_wd + 'config.ini', 'w') as f:
-        f.write(config_str)
-    with open(example_wd + 'configspec.ini', 'w') as f:
-        f.write(configspec_str)
+    generate_default_conf_str(example_wd, scaling=scale, use_new_renderings_locs=True,
+                         use_large_fov_views_ct=False, use_new_meshing=use_new_meshing,
+                         allow_mesh_gen_cells=True, prior_glia_removal=prior_glia_removal)
 
     global_params.wd = example_wd
     os.makedirs(global_params.config.temp_path, exist_ok=True)

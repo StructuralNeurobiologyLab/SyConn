@@ -9,11 +9,10 @@ echo y | conda install freeglut
 echo y | conda install pyopengl
 echo y | conda install snappy
 echo y | conda install python-snappy
-echo y | conda install numba==0.42.0 llvmlite==0.29
-# this seems to be necessary for cutting edge nvidia GPUs/drivers
-echo y | conda install -c pytorch pytorch==1.1.0 cuda100
+echo y | conda install numba==0.45.0 llvmlite==0.29
 echo y | conda install tensorboard tensorflow
-echo y | conda install -c pytorch cuda100
+# the following torch setting seems to be more stable for new GPU/driver
+echo y | conda install pytorch==1.1.0 torchvision cudatoolkit=10.0 -c pytorch
 
 
 pip install -r requirements.txt

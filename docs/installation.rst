@@ -30,12 +30,12 @@ Then install all prerequisites and finally git clone and install syconn:
 
     conda install python-snappy
 
-    conda install numba==0.42.0 llvmlite==0.29
-
-    # this seems to be necessary for cutting edge nvidia GPUs/drivers
-    conda install -c pytorch pytorch==1.1.0 cuda100
+    conda install numba==0.45.0 llvmlite==0.29
 
     conda install tensorboard tensorflow
+
+    # the following torch setting seems to be more stable for new GPU/driver
+    conda install pytorch==1.1.0 torchvision cudatoolkit=10.0 -c pytorch
 
     git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 

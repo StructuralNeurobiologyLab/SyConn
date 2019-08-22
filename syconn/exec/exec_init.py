@@ -64,11 +64,11 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
     Initializes a per-object segmentation KnossosDataset for the given supervoxel type
     `co` based on an initial prediction which location has to be defined in the config.ini file
     for the `co` object, e.g. `kd_mi` for `co='mi'`
-    (see :func:`~syconn.handler.config.get_default_conf_str`). Results will be stored as a
+    (see :func:`~syconn.handler.config.generate_default_conf`). Results will be stored as a
     KnossosDataset at `"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)`.
     Appropriate parameters have to be set inside the config.ini file, see
     :func:`~syconn.extraction.object_extraction_wrapper.generate_subcell_kd_from_proba`
-    or :func:`~syconn.handler.config.get_default_conf_str` for more details.
+    or :func:`~syconn.handler.config.generate_default_conf` for more details.
 
     Args:
         co: Type of cell organelle supervoxels, e.g 'mi' for mitochondria or 'vc' for

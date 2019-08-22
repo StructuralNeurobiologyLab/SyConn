@@ -17,7 +17,7 @@ from termcolor import colored
 import os
 from .. import global_params
 
-__all__ = ['DynConfig', 'get_default_conf_str', 'initialize_logging']
+__all__ = ['DynConfig', 'generate_default_conf_str', 'initialize_logging']
 
 
 class Config(object):
@@ -25,7 +25,8 @@ class Config(object):
     Basic config object base on the package ``configobj``.
     """
     def __init__(self, working_dir, validate=True, verbose=True):
-        self._entries = {}
+        self._config = None
+        self._configspec = None
         self._working_dir = working_dir
         self.initialized = False
         self.log_main = get_main_log()
@@ -49,7 +50,7 @@ class Config(object):
         if not self.initialized:
             raise ValueError('Config object was not initialized. "entries" '
                              'are not available.')
-        return self._entries
+        return self._config
 
     @property
     def working_dir(self) -> str:
@@ -123,26 +124,47 @@ class Config(object):
         assert self.path_config
         assert self.path_configspec or not validate
 
-        if validate:
-            configspec = ConfigObj(self.path_configspec, list_values=False,
-                                   _inspec=True)
-            config = ConfigObj(self.path_config, configspec=configspec)
+        if self.path_configspec is not None:
+            self._configspec = ConfigObj(self.path_configspec, list_values=False,
+                                         _inspec=True)
+        else:
+            self._configspec = None
 
+        config = ConfigObj(self.path_config, configspec=self._configspec)
+        if validate:
             if config.validate(Validator()):
-                self._entries = config
+                self._config = config
             else:
                 self.log_main.error('ERROR: Could not parse config at '
                                     '{}.'.format(self.path_config))
         else:
-            self._entries = ConfigObj(self.path_config)
+            self._config = config
 
-    def write_config(self):
-        # TODO: implement string conversion
-        raise NotImplementedError
-        # with open(self.working_dir + 'config.ini', 'w') as f:
-            # f.write(config_str)
-        # with open(self.working_dir + 'configspec.ini', 'w') as f:
-            # f.write(configspec_str)
+    def write_config(self, target_dir=None):
+        """
+        Write config and configspec to disk.
+
+        Args:
+            target_dir: If None, write config/configspec to
+                :py:attr:`~path_config`/:py:attr:`~path_configspec`. Else,
+                writes it to ``target_dir + 'config.ini'`` and
+                ``target_dir + 'configspec.ini'``, respectively.
+        """
+        if self._config is None:
+            raise ValueError('ConfigObj not yet parsed.')
+        if target_dir is None:
+            fname_conf = self.path_config
+            fname_confspec = self.path_configspec
+        else:
+            fname_conf = target_dir + '/config.ini'
+            fname_confspec = target_dir + '/configspec.ini'
+        self._config.filename = fname_conf
+        self._config.write()
+        self._config.filename = self.path_config
+        if self._configspec is not None:
+            self._configspec.filename = fname_confspec
+            self._configspec.write()
+            self._config.filename = self.path_configspec
 
 
 class DynConfig(Config):
@@ -584,7 +606,7 @@ class DynConfig(Config):
         Returns:
             Path to directory.
         """
-        return "%s/%s/" % (global_params.config.working_dir, # self.temp_path,
+        return "%s/%s/" % (global_params.config.working_dir,  # self.temp_path,
                            global_params.BATCH_PROC_SYSTEM)
 
     @property
@@ -616,21 +638,20 @@ class DynConfig(Config):
             return False
 
 
-def get_default_conf_str(example_wd: str, scaling: Union[Tuple, np.ndarray],
-                         py36path: str = "", syntype_avail: bool = True,
-                         use_large_fov_views_ct: bool = False,
-                         allow_skel_gen: bool = True,
-                         use_new_renderings_locs: bool = False,
-                         kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
-                         kd_asym: Optional[str] = None,
-                         kd_sj: Optional[str] = None,  kd_mi: Optional[str] = None,
-                         kd_vc: Optional[str] = None, init_rag_p: str = "",
-                         prior_glia_removal: bool = False,
-                         use_new_meshing: bool = False,
-                         allow_mesh_gen_cells: bool = True,
-                         use_new_subfold: bool = True) -> Tuple[str, str]:
+def generate_default_conf(example_wd: str, scaling: Union[Tuple, np.ndarray],
+                          py36path: str = "", syntype_avail: bool = True,
+                          use_large_fov_views_ct: bool = False,
+                          allow_skel_gen: bool = True,
+                          use_new_renderings_locs: bool = False,
+                          kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
+                          kd_asym: Optional[str] = None,
+                          kd_sj: Optional[str] = None,  kd_mi: Optional[str] = None,
+                          kd_vc: Optional[str] = None, init_rag_p: str = "",
+                          prior_glia_removal: bool = False,
+                          use_new_meshing: bool = False,
+                          allow_mesh_gen_cells: bool = True,
+                          use_new_subfold: bool = True):
     """
-    # TODO:
     Default SyConn config and variable type specifications. Paths to ``KnossosDatasets``
     containing various predictions, prob. maps and segmentations have to be given depending on
     what specifically is going to be processed. See ``SyConn/scripts/example_run/start.py``
@@ -638,7 +659,10 @@ def get_default_conf_str(example_wd: str, scaling: Union[Tuple, np.ndarray],
     ``init_rag`` can be set specifically in the config-file which is optional.
     By default it is set to ``init_rag = working_dir + "rag.bz2"``, which then
     requires manual generation of the file, see ``SyConn/scripts/example_run/start.py``.
-    The parameter ``py36path`` is currently not in use.
+    Writes the files ``config.ini`` and ``configspec.ini`` to `example_wd`.
+
+    Notes:
+        * The parameter ``py36path`` is currently not in use.
 
     Todo:
         * load ``config.ini`` and ``configspec.ini`` and manipulate the given entries.
@@ -726,9 +750,6 @@ def get_default_conf_str(example_wd: str, scaling: Union[Tuple, np.ndarray],
         use_new_meshing:
         allow_mesh_gen_cells:
         use_new_subfold:
-
-    Returns:
-        Content of config.ini and configspec.ini
     """
     if kd_seg is None:
         kd_seg = example_wd + 'knossosdatasets/seg/'
@@ -742,134 +763,34 @@ def get_default_conf_str(example_wd: str, scaling: Union[Tuple, np.ndarray],
         kd_mi = example_wd + 'knossosdatasets/mi/'
     if kd_vc is None:
         kd_vc = example_wd + 'knossosdatasets/vc/'
-    config_str = """[Versions]
-sv = 0
-vc = 0
-sj = 0
-syn = 0
-syn_ssv = 0
-mi = 0
-ssv = 0
-ax_gt = 0
-cs = 0
 
-[Paths]
-kd_seg = {}
-kd_sym = {}
-kd_asym = {}
-kd_sj = {}
-kd_vc = {}
-kd_mi = {}
-init_rag = {}
-py36path = {}
-use_new_subfold = {}
+    default_conf = Config(os.path.split(os.path.abspath(__file__))[0],
+                          verbose=False)
+    entries = default_conf.entries
+    entries['Paths']['kd_seg'] = kd_seg
+    entries['Paths']['kd_sym'] = kd_sym
+    entries['Paths']['kd_asym'] = kd_asym
+    entries['Paths']['kd_sj'] = kd_sj
+    entries['Paths']['kd_vc'] = kd_vc
+    entries['Paths']['kd_mi'] = kd_mi
+    entries['Paths']['init_rag'] = init_rag_p
+    entries['Paths']['py36path'] = py36path
+    entries['Paths']['use_new_subfold'] = use_new_subfold
 
-[Dataset]
-scaling = {}, {}, {}
-syntype_avail = {}
+    entries['Dataset']['scaling'] = list(scaling)
+    entries['Dataset']['syntype_avail'] = syntype_avail
 
-[LowerMappingRatios]
-mi = 0.5
-sj = 0.1
-vc = 0.5
+    entries['Mesh']['allow_mesh_gen_cells'] = allow_mesh_gen_cells
+    entries['Mesh']['use_new_meshing'] = use_new_meshing
 
-[UpperMappingRatios]
-mi = 1.
-sj = 0.9
-vc = 1.
+    entries['Skeleton']['allow_skel_gen'] = allow_skel_gen
 
-[Sizethresholds]
-mi = 2786
-sj = 498
-vc = 1584
+    entries['Views']['use_large_fov_views_ct'] = use_large_fov_views_ct
+    entries['Views']['use_new_renderings_locs'] = use_new_renderings_locs
 
-[Probathresholds]
-mi = 0.428571429
-sj = 0.19047619
-vc = 0.285714286
+    entries['Glia']['prior_glia_removal'] = prior_glia_removal
 
-[Mesh]
-allow_mesh_gen_cells = {}
-use_new_meshing = {}
-
-[MeshDownsampling]
-sv = 4, 4, 2
-sj = 2, 2, 1
-vc = 4, 4, 2
-mi = 8, 8, 4
-cs = 2, 2, 1
-conn = 2, 2, 1
-syn_ssv = 2, 2, 1
-                
-[MeshClosing]
-sv = 0
-s = 0
-vc = 0
-mi = 0
-cs = 0
-conn = 4
-syn_ssv = 0
-
-[Skeleton]
-allow_skel_gen = {}
-
-[Views]
-use_large_fov_views_ct = {}
-use_new_renderings_locs = {}
-
-[Glia]
-prior_glia_removal = {}
-    """.format(kd_seg, kd_sym, kd_asym, kd_sj, kd_vc, kd_mi, init_rag_p,
-               py36path, use_new_subfold, scaling[0], scaling[1], scaling[2],
-               str(syntype_avail), str(allow_mesh_gen_cells), str(use_new_meshing),
-               str(allow_skel_gen), str(use_large_fov_views_ct),
-               str(use_new_renderings_locs), str(prior_glia_removal))
-
-    configspec_str = """
-[Versions]
-__many__ = string
-
-[Paths]
-__many__ = string
-use_new_subfold = boolean
-
-[Dataset]
-scaling = float_list(min=3, max=3)
-syntype_avail = boolean
-
-[LowerMappingRatios]
-__many__ = float
-
-[UpperMappingRatios]
-__many__ = float
-
-[Sizethresholds]
-__many__ = integer
-
-[Probathresholds]
-__many__ = float
-
-[Mesh]
-allow_mesh_gen_cells = boolean
-use_new_meshing = boolean
-
-[MeshDownsampling]
-__many__ = int_list(min=3, max=3)
-
-[MeshClosing]
-__many__ = integer
-
-[Skeleton]
-allow_skel_gen = boolean
-
-[Views]
-use_large_fov_views_ct = boolean
-use_new_renderings_locs = boolean
-
-[Glia]
-prior_glia_removal = boolean
-"""
-    return config_str, configspec_str
+    default_conf.write_config(example_wd)
 
 
 def get_main_log():

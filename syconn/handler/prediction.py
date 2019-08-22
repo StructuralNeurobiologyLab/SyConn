@@ -649,7 +649,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     n_cores_per_job = global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE if\
         'example' not in global_params.config.working_dir else global_params.NCORES_PER_NODE
     qu.QSUB_script(multi_params, "predict_dense", n_max_co_processes=global_params.NGPU_TOTAL,
-                   n_cores=n_cores_per_job, remove_jobfolder=True)
+                   n_cores=n_cores_per_job, remove_jobfolder=True, log=log)
     log.info('Finished dense prediction of {} Chunks'.format(len(chunk_ids)))
 
 

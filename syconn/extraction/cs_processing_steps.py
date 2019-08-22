@@ -9,13 +9,14 @@ from collections import defaultdict
 import numpy as np
 import os
 from scipy import spatial
-from sklearn import ensemble, externals
+from sklearn import ensemble
 from sklearn.model_selection import cross_val_score
 from knossos_utils.chunky import load_dataset
 from knossos_utils import knossosdataset, skeleton_utils, skeleton
 from typing import Union, Optional, Dict, List, Callable, TYPE_CHECKING, Tuple
 knossosdataset._set_noprint(True)
 import time
+import joblib
 import datetime
 import tqdm
 import shutil
@@ -1276,6 +1277,7 @@ def create_syn_gt(conn: 'segmentation.SegmentationDataset', path_kzip: str) -> \
     Returns:
         The trained random forest classifier and the feature and label data.
     """
+    assert conn.type == 'syn_ssv'
     annos = skeleton_utils.loadj0126NML(path_kzip)
     if len(annos) != 1:
         raise ValueError('Zero or more than one annotation object in GT kzip.')
@@ -1292,6 +1294,15 @@ def create_syn_gt(conn: 'segmentation.SegmentationDataset', path_kzip: str) -> \
     labels = np.array(labels)
     label_coords = np.array(label_coords)
 
+    # get deterministic order by sorting by coordinate first and then seeded shuffling
+    ixs = [i[0] for i in sorted(enumerate(label_coords),
+                                key=lambda x: [x[1][0], x[1][1], x[1][2]])]
+    ixs_random = np.arange(len(ixs))
+    np.random.seed(0)
+    np.random.shuffle(ixs_random)
+    ixs = np.array(ixs)
+    label_coords = label_coords[ixs][ixs_random]
+    labels = labels[ixs][ixs_random]
     conn_kdtree = spatial.cKDTree(conn.rep_coords * conn.scaling)
     ds, list_ids = conn_kdtree.query(label_coords * conn.scaling)
 
@@ -1329,13 +1340,15 @@ def create_syn_gt(conn: 'segmentation.SegmentationDataset', path_kzip: str) -> \
     skel.add_annotation(anno)
     skel.to_kzip(mapped_synssv_objects_kzip)
     features = np.array(features)
-    rfc = ensemble.RandomForestClassifier(n_estimators=200, max_features='sqrt',
-                                          n_jobs=-1, random_state=0)
+    rfc = ensemble.RandomForestClassifier(n_estimators=400, max_features='sqrt',
+                                          n_jobs=-1, random_state=0,
+                                          oob_score=True)
     mask_annotated = (labels == "synaptic") | (labels == 'non-synaptic')
     v_features = features[mask_annotated]
     v_labels = labels[mask_annotated]
     v_labels = (v_labels == "synaptic").astype(np.int)
     score = cross_val_score(rfc, v_features, v_labels, cv=10)
+    log_extraction.info('RFC oob score: {:.4f}'.format(rfc.oob_score))
     log_extraction.info('RFC CV score +- std: {:.4f} +- {:.4f}'.format(
         np.mean(score), np.std(score)))
 
@@ -1349,7 +1362,7 @@ def create_syn_gt(conn: 'segmentation.SegmentationDataset', path_kzip: str) -> \
     model_base_dir = os.path.split(global_params.config.mpath_syn_rfc)[0]
     os.makedirs(model_base_dir, exist_ok=True)
 
-    externals.joblib.dump(rfc, global_params.config.mpath_syn_rfc)
+    joblib.dump(rfc, global_params.config.mpath_syn_rfc)
     log_extraction.info(f'Wrote parameters of trained RFC to '
                         f'{global_params.config.mpath_syn_rfc}.')
 
@@ -1697,7 +1710,7 @@ def _classify_synssv_objects_thread(args):
     sd_syn_ssv = segmentation.SegmentationDataset(obj_type="syn_ssv",
                                                   working_dir=wd,
                                                   version=obj_version)
-    rfc = externals.joblib.load(global_params.config.mpath_syn_rfc)
+    rfc = joblib.load(global_params.config.mpath_syn_rfc)
 
     for so_dir_path in so_dir_paths:
         this_attr_dc = AttributeDict(so_dir_path + "/attr_dict.pkl",
