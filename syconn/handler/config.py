@@ -4,14 +4,12 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-from configobj import ConfigObj
 from typing import Tuple, Optional, Union, Dict, Any, List
-import sys
-from validate import Validator
+import yaml
 import logging
+from logging import Logger
 import coloredlogs
 import datetime
-import pwd
 import numpy as np
 from termcolor import colored
 import os
@@ -22,27 +20,26 @@ __all__ = ['DynConfig', 'generate_default_conf', 'initialize_logging']
 
 class Config(object):
     """
-    Basic config object base on the package ``configobj``.
+    Basic config object based on yaml. If file ``config.yml`` does not exist
+    at `working_dir` :py:attr:`~initialized` will be False, but no error is
+    raised.
     """
-    def __init__(self, working_dir, validate=True, verbose=True):
+    def __init__(self, working_dir):
         self._config = None
         self._configspec = None
         self._working_dir = working_dir
         self.initialized = False
-        self.log_main = get_main_log()
         if self._working_dir is not None and len(self._working_dir) > 0:
-            self.parse_config(validate=validate)
-            self.initialized = True
-            if verbose:
-                self.log_main.info("Initialized stdout logging (level: {}). "
-                                   "Current working directory:"
-                                   " ".format(global_params.log_level) +
-                                   colored("'{}'".format(working_dir), 'red'))
+            self.parse_config()
+
+    def __eq__(self, other: 'Config') -> bool:
+        return other.entries == self.entries and \
+               other.path_config == self.path_config
 
     @property
-    def entries(self) -> Any:
+    def entries(self) -> dict:
         """
-        Entries stored in the ``config.ini`` file.
+        Entries stored in the ``config.yml`` file.
 
         Returns:
             All entries.
@@ -64,29 +61,9 @@ class Config(object):
     def path_config(self) -> str:
         """
         Returns:
-            Path to config file (``config.ini``).
+            Path to config file (``config.yml``).
         """
-        return self.working_dir + "/config.ini"
-
-    @property
-    def path_configspec(self) -> str:
-        """
-        Returns:
-            Path to specification file for all config. parameters
-            (``configspec.ini``).
-        """
-        return self.working_dir + "/configspec.ini"
-
-    @property
-    def is_valid(self) -> bool:
-        """
-        Valid configuration file.
-
-        Returns:
-            ``True`` of any section could be retrieved from the file,
-            ``False`` otherwise.
-        """
-        return len(self.sections) > 0
+        return self.working_dir + "/config.yml"
 
     @property
     def config_exists(self):
@@ -98,15 +75,6 @@ class Config(object):
         return os.path.exists(self.path_config)
 
     @property
-    def configspec_exists(self):
-        """
-        Returns:
-            ``True`` if config. specification file exists,
-            ``False`` otherwise.
-        """
-        return os.path.exists(self.path_configspec)
-
-    @property
     def sections(self) -> List[str]:
         """
         Returns:
@@ -114,57 +82,34 @@ class Config(object):
         """
         return list(self.entries.keys())
 
-    def parse_config(self, validate: bool = True):
+    def parse_config(self):
         """
         Reads the content stored in the config file.
-
-        Args:
-            validate: Checks if file is a valid config.
         """
-        assert self.path_config
-        assert self.path_configspec or not validate
-
-        if self.path_configspec is not None:
-            self._configspec = ConfigObj(self.path_configspec, list_values=False,
-                                         _inspec=True)
-        else:
-            self._configspec = None
-
-        config = ConfigObj(self.path_config, configspec=self._configspec)
-        if validate:
-            if config.validate(Validator()):
-                self._config = config
-            else:
-                self.log_main.error('ERROR: Could not parse config at '
-                                    '{}.'.format(self.path_config))
-        else:
-            self._config = config
+        try:
+            self._config = yaml.load(open(self.path_config, 'r'),
+                                     Loader=yaml.FullLoader)
+            self.initialized = True
+        except FileNotFoundError:
+            pass
 
     def write_config(self, target_dir=None):
         """
         Write config and configspec to disk.
 
         Args:
-            target_dir: If None, write config/configspec to
-                :py:attr:`~path_config`/:py:attr:`~path_configspec`. Else,
-                writes it to ``target_dir + 'config.ini'`` and
-                ``target_dir + 'configspec.ini'``, respectively.
+            target_dir: If None, write config to
+                :py:attr:`~path_config`. Else,
+                writes it to ``target_dir + 'config.yml'``
         """
         if self._config is None:
             raise ValueError('ConfigObj not yet parsed.')
         if target_dir is None:
             fname_conf = self.path_config
-            fname_confspec = self.path_configspec
         else:
-            fname_conf = target_dir + '/config.ini'
-            fname_confspec = target_dir + '/configspec.ini'
-        self._config.filename = fname_conf
-        self._config.write()
-        self._config.filename = self.path_config
-        if self._configspec is not None:
-            self._configspec.filename = fname_confspec
-            self._configspec.write()
-            self._config.filename = self.path_configspec
+            fname_conf = target_dir + '/config.yml'
+        with open(fname_conf, 'w') as f:
+            f.write(yaml.dump(self.entries, default_flow_style=False))
 
 
 class DynConfig(Config):
@@ -175,7 +120,6 @@ class DynConfig(Config):
     Todo:
         * Start to use ``__getitem__`` instead of :py:attr:`~entries`.
         * Adapt all ``global_params.config.`` usages accordingly.
-        * Consider ``.json`` instead of ``.ini``.
         * Do not replace any property call for now (e.g. `~allow_mesh_gen_cells`)
           because they convey default parameters for old datasets in case they
           are not present in the default ``config.ini``.
@@ -188,26 +132,51 @@ class DynConfig(Config):
             cfg = global_params.config  # this is the `DynConfig` object
 
     """
-    def __init__(self, wd: Optional[str] = None):
+    def __init__(self, wd: Optional[str] = None, log: Optional[Logger] = None):
         """
         Args:
             wd: Path to working directory
         """
+        verbose = False
         if wd is None:
             wd = global_params.wd
-            verbose = True
-        else:
-            verbose = False
-        super().__init__(wd, verbose=verbose)
+            verbose = True if wd is not None else False
+        super().__init__(wd)
         self._default_conf = None
+        if log is None:
+            log = logging.getLogger('syconn')
+            coloredlogs.install(level=self['log_level'], logger=log)
+            level = logging.getLevelName(self['log_level'])
+            log.setLevel(level)
+
+            if not self['disable_file_logging']:
+                # create file handler
+                log_dir = os.path.expanduser('~') + "/SyConn/logs/"
+
+                os.makedirs(log_dir, exist_ok=True)
+                fh = logging.FileHandler(log_dir + 'syconn.log')
+                fh.setLevel(level)
+
+                # add the handlers to log
+                if os.path.isfile(log_dir + 'syconn.log'):
+                    os.remove(log_dir + 'syconn.log')
+                log.addHandler(fh)
+                log.info("Initialized file logging. Log-files are stored at"
+                         " {}.".format(log_dir))
+        self.log_main = log
+        if verbose:
+            self.log_main.info("Initialized stdout logging (level: {}). "
+                               "Current working directory:"
+                               " ".format(self['log_level']) +
+                               colored("'{}'".format(self.working_dir), 'red'))
+            if self.initialized is False:
+                self.log_main.warning(f'Initialized config at {self.path_config} '
+                                      f'without initial file.')
 
     def __getitem__(self, item: str) -> Any:
         """
         If `item` is not set in this config, the return value will be taken from
          the default ``config.ini`` and ``configspec.ini``.
-
-        Todo:
-
 
         Args:
             item: Key of the requested value.
@@ -217,7 +186,7 @@ class DynConfig(Config):
         """
         try:
             return self.entries[item]
-        except KeyError:
+        except (KeyError, ValueError):
             return self.default_conf.entries[item]
 
     def _check_actuality(self):
@@ -231,9 +200,23 @@ class DynConfig(Config):
             len(os.environ['syconn_wd']) > 0 and os.environ['syconn_wd'] != "None":
             if super().working_dir != os.environ['syconn_wd']:
                 super().__init__(os.environ['syconn_wd'])
+                self.log_main.info("Initialized stdout logging (level: {}). "
+                                   "Current working directory:"
+                                   " ".format(self['log_level']) +
+                                   colored("'{}'".format(self.working_dir), 'red'))
+                if self.initialized is False:
+                    self.log_main.warning(f'Initialized config at {self.path_config} '
+                                          f'without initial file.')
         elif (global_params.wd is not None) and (len(global_params.wd) > 0) and \
                 (global_params.wd != "None") and (super().working_dir != global_params.wd):
             super().__init__(global_params.wd)
+            self.log_main.info("Initialized stdout logging (level: {}). "
+                               "Current working directory:"
+                               " ".format(self['log_level']) +
+                               colored("'{}'".format(self.working_dir), 'red'))
+            if self.initialized is False:
+                self.log_main.warning(f'Initialized config at {self.path_config} '
+                                      f'without initial file.')
 
     @property
     def default_conf(self) -> Config:
@@ -241,8 +224,7 @@ class DynConfig(Config):
         Load default ``config.ini`` if necessary.
         """
         if self._default_conf is None:
-            self._default_conf = Config(os.path.split(os.path.abspath(__file__))[0],
-                                        verbose=False)
+            self._default_conf = Config(os.path.split(os.path.abspath(__file__))[0])
             self._default_conf._working_dir = None
         return self._default_conf
 
@@ -266,7 +248,7 @@ class DynConfig(Config):
         Returns:
             Path to cell supervoxel segmentation ``KnossosDataset``.
         """
-        return self.entries['Paths']['kd_seg']
+        return self.entries['paths']['kd_seg']
 
     @property
     def kd_sym_path(self) -> str:
@@ -274,7 +256,7 @@ class DynConfig(Config):
         Returns:
             Path to synaptic sym. type probability map stored as ``KnossosDataset``.
         """
-        return self.entries['Paths']['kd_sym']
+        return self.entries['paths']['kd_sym']
 
     @property
     def kd_asym_path(self) -> str:
@@ -282,7 +264,7 @@ class DynConfig(Config):
         Returns:
             Path to synaptic asym. type probability map stored as ``KnossosDataset``.
         """
-        return self.entries['Paths']['kd_asym']
+        return self.entries['paths']['kd_asym']
 
     @property
     def kd_sj_path(self) -> str:
@@ -291,7 +273,7 @@ class DynConfig(Config):
             Path to synaptic junction probability map or binary predictions stored as
             ``KnossosDataset``.
         """
-        return self.entries['Paths']['kd_sj']
+        return self.entries['paths']['kd_sj']
 
     @property
     def kd_vc_path(self) -> str:
@@ -300,7 +282,7 @@ class DynConfig(Config):
             Path to vesicle cloud probability map or binary predictions stored as
             ``KnossosDataset``.
         """
-        return self.entries['Paths']['kd_vc']
+        return self.entries['paths']['kd_vc']
 
     @property
     def kd_mi_path(self) -> str:
@@ -309,7 +291,7 @@ class DynConfig(Config):
             Path to mitochondria probability map or binary predictions stored as
             ``KnossosDataset``.
         """
-        return self.entries['Paths']['kd_mi']
+        return self.entries['paths']['kd_mi']
 
     @property
     def kd_organells_paths(self) -> Dict[str, str]:
@@ -320,13 +302,8 @@ class DynConfig(Config):
             Dictionary containg the paths to ``KnossosDataset`` of available
             cellular containing ``global_params.existing_cell_organelles``.
         """
-        path_dict = {k: self.entries['Paths']['kd_{}'.format(k)] for k in
-                     global_params.existing_cell_organelles}
-        # path_dict = {
-        #     'kd_sj': self.kd_sj_path,
-        #     'kd_vc': self.kd_vc_path,
-        #     'kd_mi': self.kd_mi_path
-        # }
+        path_dict = {k: self.entries['paths']['kd_{}'.format(k)] for k in
+                     self['existing_cell_organelles']}
         return path_dict
 
     @property
@@ -338,13 +315,8 @@ class DynConfig(Config):
             Dictionary containing the paths to ``KnossosDataset`` of available
             cellular organelles ``global_params.existing_cell_organelles``.
         """
-        path_dict = {k: "{}/knossosdatasets/{}_seg/".format(self.working_dir, k) for k in
-                     global_params.existing_cell_organelles}
-        # path_dict = {
-        #     'kd_sj': self.kd_sj_path,
-        #     'kd_vc': self.kd_vc_path,
-        #     'kd_mi': self.kd_mi_path
-        # }
+        path_dict = {k: "{}/knossosdatasets/{}_seg/".format(
+            self.working_dir, k) for k in self['existing_cell_organelles']}
         return path_dict
 
     @property
@@ -357,23 +329,6 @@ class DynConfig(Config):
         # return "/tmp/{}_syconn/".format(pwd.getpwuid(os.getuid()).pw_name)
         return "{}/tmp/".format(self.working_dir)
 
-    @property
-    # TODO: Not necessarily needed anymore
-    def py36path(self) -> str:
-        """
-        Deprecated.
-
-        Returns:
-            Path to python3 interpreter.
-        """
-        if len(self.entries['Paths']['py36path']) != 0:
-            return self.entries['Paths']['py36path']  # python 3.6 path is available
-        else:  # python 3.6 path is not set, check current python
-            if sys.version_info[0] == 3 and sys.version_info[1] == 6:
-                return sys.executable
-        raise RuntimeError('Python 3.6 is not available. Please install SyConn'
-                           ' within python 3.6 or specify "py36path" in config.ini!')
-
     # TODO: Work-in usage of init_rag_path
     @property
     def init_rag_path(self) -> str:
@@ -382,7 +337,7 @@ class DynConfig(Config):
             Path to initial RAG.
         """
         self._check_actuality()
-        p = self.entries['Paths']['init_rag']
+        p = self.entries['paths']['init_rag']
         if len(p) == 0:
             p = self.working_dir + "rag.bz2"
         return p
@@ -527,7 +482,7 @@ class DynConfig(Config):
         computed from scratch, see :attr:`~syconn.handler.config.DynConf.use_new_meshing`.
         """
         try:
-            return self.entries['Mesh']['allow_mesh_gen_cells']
+            return self.entries['meshes']['allow_mesh_gen_cells']
         except KeyError:
             return False
 
@@ -541,7 +496,7 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.ini file.
         """
-        return self.entries['Skeleton']['allow_skel_gen']
+        return self.entries['skeleton']['allow_skel_gen']
 
     # New config attributes, enable backwards compat. in case these entries do not exist
     @property
@@ -554,7 +509,7 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
-            return self.entries['Dataset']['syntype_avail']
+            return self.entries['dataset']['syntype_avail']
         except KeyError:
             return True
 
@@ -567,7 +522,7 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
-            return self.entries['Views']['use_large_fov_views_ct']
+            return self.entries['views']['use_large_fov_views_ct']
         except KeyError:
             return True
 
@@ -581,7 +536,7 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
-            return self.entries['Views']['use_new_renderings_locs']
+            return self.entries['views']['use_new_renderings_locs']
         except KeyError:
             return False
 
@@ -595,7 +550,7 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
-            return self.entries['Mesh']['use_new_meshing']
+            return self.entries['meshes']['use_new_meshing']
         except KeyError:
             return False
 
@@ -607,8 +562,8 @@ class DynConfig(Config):
         Returns:
             Path to directory.
         """
-        return "%s/%s/" % (global_params.config.working_dir,  # self.temp_path,
-                           global_params.BATCH_PROC_SYSTEM)
+        return "%s/%s/" % (self.working_dir,
+                           self['batch_proc_system'])
 
     @property
     def prior_glia_removal(self) -> bool:
@@ -634,13 +589,26 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
-            return self.entries['Paths']['use_new_subfold']
+            return self['paths']['use_new_subfold']
         except KeyError:
             return False
 
+    @property
+    def batchjob_script_folder(self) -> str:
+        return os.path.abspath(os.path.dirname(os.path.abspath(__file__)) +
+                               "/../batchjob_scripts/")
 
-def generate_default_conf(example_wd: str, scaling: Union[Tuple, np.ndarray],
-                          py36path: str = "", syntype_avail: bool = True,
+    @property
+    def ncore_total(self) -> int:
+        return self['nnodes_total'] * self['ncores_per_node']
+
+    @property
+    def ngpu_total(self) -> int:
+        return self['nnodes_total'] * self['ngpus_per_node']
+
+
+def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
+                          syntype_avail: bool = True,
                           use_large_fov_views_ct: bool = False,
                           allow_skel_gen: bool = True,
                           use_new_renderings_locs: bool = False,
@@ -651,7 +619,7 @@ def generate_default_conf(example_wd: str, scaling: Union[Tuple, np.ndarray],
                           prior_glia_removal: bool = False,
                           use_new_meshing: bool = False,
                           allow_mesh_gen_cells: bool = True,
-                          use_new_subfold: bool = True):
+                          use_new_subfold: bool = True, force_overwrite=False):
     """
     Default SyConn config and variable type specifications. Paths to ``KnossosDatasets``
     containing various predictions, prob. maps and segmentations have to be given depending on
@@ -660,17 +628,14 @@ def generate_default_conf(example_wd: str, scaling: Union[Tuple, np.ndarray],
     ``init_rag`` can be set specifically in the config-file which is optional.
     By default it is set to ``init_rag = working_dir + "rag.bz2"``, which then
     requires manual generation of the file, see ``SyConn/scripts/example_run/start.py``.
-    Writes the files ``config.ini`` and ``configspec.ini`` to `example_wd`.
-
-    Notes:
-        * The parameter ``py36path`` is currently not in use.
+    Writes the files ``config.yml`` to `working_dir`.
 
     Todo:
         * load ``config.ini`` and ``configspec.ini`` and manipulate the given entries.
         * Switch to use only as a getter function and manipulate outside or using ``**kwargs``.
 
     Examples:
-        Example content of the `config.ini` file::
+        Example content of an initialized `config.yml` file::
 
             [Versions]
                 sv = 0
@@ -691,7 +656,6 @@ def generate_default_conf(example_wd: str, scaling: Union[Tuple, np.ndarray],
                 kd_vc = ~/SyConn/example_cube1/knossosdatasets/vc/
                 kd_mi = ~/SyConn/example_cube1/knossosdatasets/mi/
                 init_rag =
-                py36path =
                 use_new_subfold = True
 
             [Dataset]
@@ -733,9 +697,8 @@ def generate_default_conf(example_wd: str, scaling: Union[Tuple, np.ndarray],
                 prior_glia_removal = True
 
     Args:
-        example_wd:
+        working_dir: Folder of the working directory.
         scaling:
-        py36path:
         syntype_avail:
         use_large_fov_views_ct:
         allow_skel_gen:
@@ -751,77 +714,48 @@ def generate_default_conf(example_wd: str, scaling: Union[Tuple, np.ndarray],
         use_new_meshing:
         allow_mesh_gen_cells:
         use_new_subfold:
+        force_overwrite: Will overwrite existing ``config.yml`` file.
     """
     if kd_seg is None:
-        kd_seg = example_wd + 'knossosdatasets/seg/'
+        kd_seg = working_dir + 'knossosdatasets/seg/'
     if kd_sym is None:
-        kd_sym = example_wd + 'knossosdatasets/sym/'
+        kd_sym = working_dir + 'knossosdatasets/sym/'
     if kd_asym is None:
-        kd_asym = example_wd + 'knossosdatasets/asym/'
+        kd_asym = working_dir + 'knossosdatasets/asym/'
     if kd_sj is None:
-        kd_sj = example_wd + 'knossosdatasets/sj/'
+        kd_sj = working_dir + 'knossosdatasets/sj/'
     if kd_mi is None:
-        kd_mi = example_wd + 'knossosdatasets/mi/'
+        kd_mi = working_dir + 'knossosdatasets/mi/'
     if kd_vc is None:
-        kd_vc = example_wd + 'knossosdatasets/vc/'
+        kd_vc = working_dir + 'knossosdatasets/vc/'
 
-    default_conf = Config(os.path.split(os.path.abspath(__file__))[0],
-                          verbose=False)
+    default_conf = Config(os.path.split(os.path.abspath(__file__))[0])
     entries = default_conf.entries
-    entries['Paths']['kd_seg'] = kd_seg
-    entries['Paths']['kd_sym'] = kd_sym
-    entries['Paths']['kd_asym'] = kd_asym
-    entries['Paths']['kd_sj'] = kd_sj
-    entries['Paths']['kd_vc'] = kd_vc
-    entries['Paths']['kd_mi'] = kd_mi
-    entries['Paths']['init_rag'] = init_rag_p
-    entries['Paths']['py36path'] = py36path
-    entries['Paths']['use_new_subfold'] = use_new_subfold
+    entries['paths']['kd_seg'] = kd_seg
+    entries['paths']['kd_sym'] = kd_sym
+    entries['paths']['kd_asym'] = kd_asym
+    entries['paths']['kd_sj'] = kd_sj
+    entries['paths']['kd_vc'] = kd_vc
+    entries['paths']['kd_mi'] = kd_mi
+    entries['paths']['init_rag'] = init_rag_p
+    entries['paths']['use_new_subfold'] = use_new_subfold
 
-    entries['Dataset']['scaling'] = list(scaling)
-    entries['Dataset']['syntype_avail'] = syntype_avail
+    entries['scaling'] = list(scaling)
+    entries['syntype_avail'] = syntype_avail
 
-    entries['Mesh']['allow_mesh_gen_cells'] = allow_mesh_gen_cells
-    entries['Mesh']['use_new_meshing'] = use_new_meshing
+    entries['meshes']['allow_mesh_gen_cells'] = allow_mesh_gen_cells
+    entries['meshes']['use_new_meshing'] = use_new_meshing
 
-    entries['Skeleton']['allow_skel_gen'] = allow_skel_gen
+    entries['skeleton']['allow_skel_gen'] = allow_skel_gen
 
-    entries['Views']['use_large_fov_views_ct'] = use_large_fov_views_ct
-    entries['Views']['use_new_renderings_locs'] = use_new_renderings_locs
+    entries['views']['use_large_fov_views_ct'] = use_large_fov_views_ct
+    entries['views']['use_new_renderings_locs'] = use_new_renderings_locs
 
-    entries['Glia']['prior_glia_removal'] = prior_glia_removal
-
-    default_conf.write_config(example_wd)
-
-
-def get_main_log():
-    """
-    Initialize main log.
-
-    Returns:
-        Main log.
-
-    """
-    logger = logging.getLogger('syconn')
-    coloredlogs.install(level=global_params.log_level, logger=logger)
-    level = logging.getLevelName(global_params.log_level)
-    logger.setLevel(level)
-
-    if not global_params.DISABLE_FILE_LOGGING:
-        # create file handler which logs even debug messages
-        log_dir = os.path.expanduser('~') + "/SyConn/logs/"
-
-        os.makedirs(log_dir, exist_ok=True)
-        fh = logging.FileHandler(log_dir + 'syconn.log')
-        fh.setLevel(level)
-
-        # add the handlers to logger
-        if os.path.isfile(log_dir + 'syconn.log'):
-            os.remove(log_dir + 'syconn.log')
-        logger.addHandler(fh)
-        logger.info("Initialized file logging. Log-files are stored at"
-                    " {}.".format(log_dir))
-    return logger
+    entries['glia']['prior_glia_removal'] = prior_glia_removal
+    if os.path.isfile(default_conf.path_config) and not force_overwrite:
+        raise ValueError(f'Attempting to overwrite existing config file at '
+                         f'{default_conf.path_config}.')
+    default_conf.write_config(working_dir)
 
 
 def initialize_logging(log_name: str, log_dir: Optional[str] = None,
@@ -841,13 +775,13 @@ def initialize_logging(log_name: str, log_dir: Optional[str] = None,
 
     """
     if log_dir is None:
-        log_dir = global_params.default_log_dir
-    level = global_params.log_level
+        log_dir = global_params.config['default_log_dir']
+    level = global_params.config['log_level']
     logger = logging.getLogger(log_name)
     logger.setLevel(level)
-    coloredlogs.install(level=global_params.log_level, logger=logger,
+    coloredlogs.install(level=global_params.config['log_level'], logger=logger,
                         reconfigure=False)  # True possibly leads to stderr output
-    if not global_params.DISABLE_FILE_LOGGING or log_dir is not None:
+    if not global_params.config['disable_file_logging'] or log_dir is not None:
         # create file handler which logs even debug messages
         if log_dir is None:
             log_dir = os.path.expanduser('~') + "/.SyConn/logs/"

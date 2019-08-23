@@ -980,8 +980,8 @@ class SuperSegmentationObject(object):
             G = nx.read_edgelist(self.edgelist_path, nodetype=np.uint)
         # # Might be useful as soon as global graph path is available
         # else:
-        #     if os.path.isfile("{}neuron_rag_{}.bz2".format(
-        #             self.working_dir, global_params.rag_suffix)):
+        #     if os.path.isfile("{}neuron_rag.bz2".format(
+        #             self.working_dir):
         #         G_glob = nx.read_edgelist(self.working_dir + "neuron_rag.bz2",
         #                                   nodetype=np.uint)
         #         G = nx.Graph()

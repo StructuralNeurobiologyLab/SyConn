@@ -140,6 +140,8 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     allow_resubm_all_fail : bool
         Will resubmit failed jobs even if all failed. Useful for e.g. unexpected memory
         requirements.
+    log: Logger
+        Logger.
 
     Returns
     -------
@@ -153,7 +155,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         return batchjob_fallback(params, name, n_cores, suffix,
                                  script_folder, python_path, 
                                  remove_jobfolder=remove_jobfolder,
-                                 show_progress=show_progress)
+                                 show_progress=show_progress, log=log)
     if queue is None:
         queue = global_params.BATCH_QUEUE
     if pe is None:
@@ -403,9 +405,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
 
 def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
-                        additional_flags='', suffix="", job_name="default",
-                        script_folder=None, n_max_co_processes=None, use_dill=False,
-                        sge_additional_flags=None, iteration=0, max_iterations=3):
+                       additional_flags='', suffix="", job_name="default",
+                       script_folder=None, n_max_co_processes=None, use_dill=False,
+                       sge_additional_flags=None, iteration=0, max_iterations=3):
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
@@ -490,7 +492,7 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
 def batchjob_fallback(params, name, n_cores=1, suffix="",
                       script_folder=None, python_path=None,
-                      remove_jobfolder=False, show_progress=True):
+                      remove_jobfolder=False, show_progress=True, log=None):
     """
     # TODO: utilize log and error files ('path_to_err', path_to_log')
     Fallback method in case no batchjob submission system is available. Always uses
@@ -507,10 +509,13 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
     python_path : str
     remove_jobfolder : bool
     show_progress : bool
+    log: Logger
+        Logger.
 
     Returns
     -------
-
+    str
+        Path to output.
     """
     if python_path is None:
         python_path = python_path_global
@@ -518,8 +523,11 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
                                           name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
-    log_batchjob = initialize_logging("{}".format(name + suffix),
-                                      log_dir=job_folder)
+    if log is None:
+        log_batchjob = initialize_logging("{}".format(name + suffix),
+                                          log_dir=job_folder)
+    else:
+        log_batchjob = log
     n_max_co_processes = cpu_count()
     n_max_co_processes = np.min([cpu_count() // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
@@ -591,8 +599,8 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
                                                               job_folder)
         log_mp.warning(msg)
         log_batchjob.warning(msg)
-    log_batchjob.info('Finished "{}" after {:.2f}s.'.format(name, time.time()
-                                                            - start))
+    log_batchjob.debug('Finished "{}" after {:.2f}s.'.format(
+        name, time.time() - start))
     return path_to_out
 
 

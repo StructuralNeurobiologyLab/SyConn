@@ -1,7 +1,7 @@
 # Documentation
 
 ## Installation
-* Python 3.6
+* Python 3.6/3.7
 * The whole pipeline was designed and tested on Linux systems
 * SyConn is based on the packages [elektronn3](https://github.com/ELEKTRONN/elektronn3) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
 * [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.

@@ -14,7 +14,7 @@ import sys
 
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
-logging.basicConfig(filename=dir_path + '/unit_tests.log',
+logging.basicConfig(filename=dir_path + '/test_backend.log',
                     level=logging.DEBUG, filemode='w')
 
 test_p = dir_path + "/test.pkl"
@@ -168,9 +168,9 @@ def test_compression_and_decompression_for_mesh_dict():
     # checks if lock release after saving works by saving a second time without acquiring lock
     try:
         md.push()
-        logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 2 ' + str(e))
     except Exception as e:
-        assert str(e) ==  "Unable to release an unacquired lock"
+        logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 2 ' + str(e))
+        raise AssertionError
     logging.debug("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
 
     # checks mesh dict compression with highest entropy data
@@ -332,7 +332,6 @@ def test_compression_and_decompression_for_voxel_dictL():
     except Exception as e:
         logging.warning('FAILED: test_compression_and_decompression_for_voxel_dictL: STEP 2 ' + str(e))
         raise AssertionError
-
 
     # checks high entropy data
     try:

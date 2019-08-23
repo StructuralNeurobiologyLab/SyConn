@@ -18,7 +18,7 @@ from multiprocessing import Queue, Process
 
 from syconn.reps.segmentation_helper import find_missing_sv_views
 from syconn.reps.super_segmentation import SuperSegmentationObject
-from syconn.global_params import rag_suffix, RENDERING_MAX_NB_SV
+from syconn.global_params import RENDERING_MAX_NB_SV
 from syconn.proc.glia_splitting import qsub_glia_splitting, collect_glia_sv, \
     write_glia_rag, transform_rag_edgelist2pkl
 from syconn.reps.segmentation import SegmentationDataset
@@ -587,8 +587,7 @@ def run_create_neuron_ssd():
     """
     log = initialize_logging('create_neuron_ssd', global_params.config.working_dir + '/logs/',
                              overwrite=False)
-    suffix = global_params.rag_suffix
-    g_p = "{}/glia/neuron_rag{}.bz2".format(global_params.config.working_dir, suffix)
+    g_p = "{}/glia/neuron_rag.bz2".format(global_params.config.working_dir)
     rag_g = nx.read_edgelist(g_p, nodetype=np.uint)
     # e.g. if rag was not created by glia splitting procedure this filtering is required
 
@@ -765,7 +764,7 @@ def run_glia_splitting():
     # # here use reconnected RAG or initial rag
     recon_nx = G
     # create glia / neuron RAGs
-    write_glia_rag(recon_nx, global_params.min_cc_size_ssv, suffix=rag_suffix)
+    write_glia_rag(recon_nx, global_params.min_cc_size_ssv)
     log.info("Finished glia splitting. Resulting neuron and glia RAGs are stored at {}."
              "".format(global_params.config.working_dir + "/glia/"))
 

@@ -56,7 +56,7 @@ if os.environ['PYOPENGL_PLATFORM'] == 'egl':
             EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
             EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
             EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
-            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
+            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, EGL_FALSE,\
             EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
             EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY, EGL_TRUE, \
             eglGetDisplay, eglInitialize, eglChooseConfig, \
@@ -233,16 +233,20 @@ def init_ctx(ws, depth_map):
         configs = (EGLConfig * 1)()
 
         # Initialize EGL
-        if (MULTIGPU):
+        if MULTIGPU:
             dev_on_node = eglQueryDevicesEXT()
+            initialized = EGL_FALSE
             for i in range(0, len(dev_on_node)):
                 dsp = eglGetDisplay(dev_on_node[i])
                 try:
                     initialized = eglInitialize(dsp, major, minor)
-                    if (initialized == EGL_TRUE):
+                    if initialized == EGL_TRUE:
                         break
                 except:
                     pass
+            if initialized != EGL_TRUE:
+                raise ValueError('No EGL device found. Please try again after setting '
+                                 '"PYOPENGL_PLATFORM" to "osmesa".')
         else:
             dsp = eglGetDisplay(EGL_DEFAULT_DISPLAY)
             assert dsp != EGL_NO_DISPLAY, 'Invalid DISPLAY during egl init.'
