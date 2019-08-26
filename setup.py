@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 from distutils.extension import Extension
-import numpy
+# import numpy
 import os
 import glob
 
@@ -49,7 +49,7 @@ config = {
     'packages': find_packages(exclude=['scripts']), 'long_description': readme,
     'setup_requires': setup_requires, 'tests_require': ["pytest", ],
     'ext_modules': cython_out,
-    'include_dirs': [numpy.get_include(), ],
+    # 'include_dirs': [numpy.get_include(), ],
 }
 
 setup(**config)
