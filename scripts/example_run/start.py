@@ -41,7 +41,7 @@ if __name__ == '__main__':
     prior_glia_removal = True
     key_val_pairs_conf = [
         ('prior_glia_removal', prior_glia_removal),
-        ('pyopengl_platform', 'osmesa'),
+        ('pyopengl_platform', 'egl'),
         ('batch_proc_system', None),
         ('ncores_per_node', 20),
         ('ngpus_per_node', 1),

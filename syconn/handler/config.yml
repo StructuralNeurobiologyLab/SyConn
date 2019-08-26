@@ -115,7 +115,6 @@ meshes:
     vc: [4, 4, 2]
     mi: [8, 8, 4]
     cs: [2, 2, 1]
-    conn: [2, 2, 1]
     syn_ssv: [2, 2, 1]
 
   closings:
@@ -124,7 +123,6 @@ meshes:
     vc: 0
     mi: 0
     cs: 0
-    conn: 4
     syn_ssv: 0
 
   mesh_min_obj_vx: 100  # adapt to size threshold
@@ -207,7 +205,7 @@ compartments:
 celltype:
   view_properties_large:
     verbose: False
-    ws: (512, 512)
+    ws: [512, 512]
     nb_views_render: 6
     comp_window: 40960
     nb_views_model: 4
