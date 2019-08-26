@@ -31,4 +31,4 @@ vtki
 dill
 joblib
 seaborn
-yaml
+pyyaml

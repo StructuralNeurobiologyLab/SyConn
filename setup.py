@@ -40,7 +40,7 @@ config = {
                          'scikit-image', 'plyfile', 'termcolor',
                          'pytest', 'tqdm', 'dill', 'zmesh', 'seaborn',
                          'pytest-runner', 'prompt-toolkit', 'numba==0.45.0',
-                         'matplotlib', 'vtki', 'joblib', 'yaml'],
+                         'matplotlib', 'vtki', 'joblib', 'pyyaml'],
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_utils'
                          '/tarball/dev#egg=knossos_utils',
