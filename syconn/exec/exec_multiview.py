@@ -161,8 +161,6 @@ def run_axoness_prediction(max_n_jobs_gpu: Optional[int] = None,
         # TODO: using two GPUs on a single node seems to be error-prone
         #  -> wb13 froze when processing example_cube=2
         n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
-        if 'example_cube' in global_params.config.working_dir:
-            n_cores = global_params.config['ncores_per_node']  # do not run two predictions in parallel
         _ = qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3", log=log,
                            n_max_co_processes=global_params.config.ngpu_total,
                            n_cores=n_cores,
@@ -454,8 +452,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
                        remove_jobfolder=False)
     elif global_params.config['pyopengl_platform'] == 'egl':  # utilize 1 GPU per task
         # run EGL on single node: 20 parallel jobs
-        if global_params.config.working_dir is not None and 'example_cube' in \
-                global_params.config.working_dir:
+        if not qu.batchjob_enabled():
             n_cores = 1
             n_parallel_jobs = global_params.config['ncores_per_node']
             qu.QSUB_script(multi_params, "render_views", suffix='_big',
@@ -692,8 +689,6 @@ def run_glia_prediction(e3: bool = False):
         # TODO: using two GPUs on a single node seems to be error-prone
         #  -> wb13 froze when processing example_cube=2
         n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
-        if 'example_cube' in global_params.config.working_dir:
-            n_cores = global_params.config['ncores_per_node']  # do not run two predictions in parallel
         qu.QSUB_script(multi_params, "predict_sv_views_chunked_e3", log=log,
                        n_max_co_processes=global_params.config.ngpu_total,
                        script_folder=None, n_cores=n_cores,

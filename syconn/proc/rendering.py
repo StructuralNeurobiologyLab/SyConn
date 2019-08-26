@@ -14,9 +14,11 @@ import tqdm
 import shutil
 import warnings
 import glob
+import numpy as np
 from scipy.ndimage.filters import gaussian_filter
 
 from .image import rgb2gray, apply_clahe
+from ..mp.batchjob_utils import QSUB_script
 from . import log_proc
 from .. import global_params
 from ..handler.basics import flatten_list, chunkify_successive
@@ -41,27 +43,8 @@ except Exception as e:
 # can't load more than one platform simultaneously
 if os.environ['PYOPENGL_PLATFORM'] == 'egl':
     try:
-        from OpenGL.EGL import eglDestroyContext, eglSwapBuffers
-        from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
-            EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
-            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
-            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
-            EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
-            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
-            eglGetDisplay, eglInitialize, eglChooseConfig, \
-            eglBindAPI, eglCreatePbufferSurface, EGL_ALPHA_SIZE,\
-            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
-        from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
-            EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
-            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
-            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, EGL_FALSE,\
-            EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
-            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY, EGL_TRUE, \
-            eglGetDisplay, eglInitialize, eglChooseConfig, \
-            eglBindAPI, eglCreatePbufferSurface, \
-            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
+        from OpenGL.EGL import *
+        from .egl_ext import eglQueryDevicesEXT
         log_proc.info('EGL rendering enabled.')
     except ImportError as e:
         os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
@@ -75,8 +58,6 @@ else:
     msg = 'PYOpenGL environment has to be "egl" or "osmesa".'
     log_proc.error(msg)
     raise NotImplementedError(msg)
-import numpy as np
-from ..mp.batchjob_utils import QSUB_script
 try:
     import cPickle as pkl
 except ImportError:
@@ -84,8 +65,6 @@ except ImportError:
 
 # TODO: add all rendering params to config/global_params
 
-
-from .egl_ext import eglQueryDevicesEXT
 MULTIGPU = True  # probably fine to remove this, mechanism can always be enabled
 
 

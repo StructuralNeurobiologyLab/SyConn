@@ -43,7 +43,8 @@ try:
     import openmesh
 except ImportError as e:
     log_proc.error('ImportError. Could not import openmesh. '
-                   'Writing meshes will not be possible. {}'.format(e))
+                   'Writing meshes as `.obj` files will not be'
+                   ' possible. {}'.format(e))
 
 try:
     from .in_bounding_boxC import in_bounding_box

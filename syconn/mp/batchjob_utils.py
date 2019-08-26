@@ -33,10 +33,6 @@ BATCH_PROC_SYSTEM = global_params.config['batch_proc_system']
 
 
 def batchjob_enabled():
-    # disable QSUB/SLURM for example_run.py
-    if global_params.config.working_dir is None or 'example_cube' in \
-            global_params.config.working_dir:
-        return False
     if BATCH_PROC_SYSTEM is None:
         return False
     try:
