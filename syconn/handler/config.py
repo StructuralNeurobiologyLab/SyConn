@@ -867,24 +867,32 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
 
     Args:
         working_dir: Folder of the working directory.
-        scaling:
-        syntype_avail:
-        use_large_fov_views_ct:
-        allow_skel_gen:
-        use_new_renderings_locs:
-        kd_seg:
-        kd_sym:
-        kd_asym:
-        kd_sj:
-        kd_mi:
-        kd_vc:
-        init_rag_p:
-        prior_glia_removal:
-        use_new_meshing:
-        allow_mesh_gen_cells:
-        use_new_subfold:
+        scaling: Voxel size in NM.
+        syntype_avail: If True, synapse objects will contain additional type
+            property (symmetric vs asymmetric).
+        use_large_fov_views_ct: If True, uses on-the-fly, large view renderings
+            for predicting cell types.
+        allow_skel_gen: If True, allow cell skeleton generation from rendering
+            locations (inaccurate).
+        use_new_renderings_locs: If True, uses new heuristic for generating
+            rendering locations.
+        kd_seg: Path to the KnossosDataset which contains the cell segmentation.
+        kd_sym: Path to the symmetric type prediction.
+        kd_asym: Path to the asymmetric type prediction.
+        kd_sj: Path to the synaptic junction predictions.
+        kd_mi: Path to the mitochondria predictions.
+        kd_vc: Path to the vesicle cloud predictions.
+        init_rag_p: Path to the initial supervoxel graph.
+        prior_glia_removal: If True, applies glia separation before analysing
+            cell reconstructions.
+        use_new_meshing: If True, uses new meshing procedure based on `zmesh`.
+        allow_mesh_gen_cells: If True, meshing of cell supervoxels will be
+            permitted.
+        use_new_subfold: If True, similar object IDs will be stored in the same
+            storage file.
         force_overwrite: Will overwrite existing ``config.yml`` file.
-        key_value_pairs:
+        key_value_pairs: List of key-value pairs used to modify attributes in
+            the config file.
     """
     if kd_seg is None:
         kd_seg = working_dir + 'knossosdatasets/seg/'
@@ -946,9 +954,8 @@ def initialize_logging(log_name: str, log_dir: Optional[str] = None,
             state.
         overwrite: Overwrite previous log file.
 
-
     Returns:
-
+        The logger.
     """
     if log_dir is None:
         log_dir = global_params.config['default_log_dir']
