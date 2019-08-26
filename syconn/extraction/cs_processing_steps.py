@@ -64,7 +64,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
 
     multi_params = []
 
-    for ids_small_chunk in chunkify(ssd.ssv_ids, global_params.NCORE_TOTAL):
+    for ids_small_chunk in chunkify(ssd.ssv_ids, global_params.config.ncore_total):
         multi_params.append([wd, obj_version, ssd_version, ids_small_chunk])
 
     if not qu.batchjob_enabled():
@@ -81,7 +81,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
                                                   version=obj_version)
 
     multi_params = []
-    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, global_params.NCORE_TOTAL):
+    for so_dir_paths in chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total):
         multi_params.append([so_dir_paths, wd, obj_version,
                              ssd_version])
     if not qu.batchjob_enabled():
@@ -95,7 +95,7 @@ def collect_properties_from_ssv_partners(wd, obj_version=None, ssd_version=None,
     log_extraction.debug('Deleting cache dictionaries now.')
     # delete cache_dc
     sm.start_multiprocess_imap(_delete_all_cache_dc, ssd.ssv_ids,
-                               nb_cpus=global_params.NCORES_PER_NODE)
+                               nb_cpus=global_params.config['ncores_per_node'])
     log_extraction.debug('Deleted all cache dictionaries.')
 
 
@@ -135,11 +135,13 @@ def _collect_properties_from_ssv_partners_thread(args):
         celltypes = [ct] * len(ssv_synids)
 
         # # This does not allow to query a sliding window averaged prediction
-        # pred_key = global_params.view_properties_semsegax['semseg_key']
+        # pred_key = global_params.config['compartments']['view_properties_semsegax']['semseg_key']
         # curr_ax = ssv_o.semseg_for_coords(ssv_syncoords, pred_key,
-        #                                   **global_params.map_properties_semsegax)
-        pred_key_ax = "{}_avg{}".format(global_params.view_properties_semsegax['semseg_key'],
-                                        global_params.DIST_AXONESS_AVERAGING)
+        #                                   **global_params.config['compartments']['map_properties_semsegax'])
+        pred_key_ax = "{}_avg{}".format(global_params.config['compartments'][
+                                            'view_properties_semsegax']['semseg_key'],
+                                        global_params.config['compartments'][
+                                            'dist_axoness_averaging'])
         curr_ax, latent_morph = ssv_o.attr_for_coords(
             ssv_syncoords, attr_keys=[pred_key_ax, 'latent_morph'])
 
@@ -175,7 +177,7 @@ def _from_cell_to_syn_dict(args):
             synssv_o.load_attr_dict()
 
             sym_asym_ratio = synssv_o.attr_dict['syn_type_sym_ratio']
-            syn_sign = -1 if sym_asym_ratio > global_params.sym_thresh else 1
+            syn_sign = -1 if sym_asym_ratio > global_params.config['cell_objects']['sym_thresh'] else 1
 
             axoness = []
             latent_morph = []
@@ -285,14 +287,11 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
     cs_gap_nm :
     ssd_version :
     syn_version :
-    stride :
-    qsub_pe :
-    qsub_queue :
     resume_job :
     nb_cpus :
     n_max_co_processes :
-
-    n_folders_fs
+    log:
+    n_folders_fs:
 
     """
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
@@ -394,7 +393,7 @@ def _combine_and_split_syn_thread(args):
             this_syn_ixs, this_syn_ids_cnt = np.unique(synix_list[this_cc_mask],
                                                        return_counts=True)
             this_agg_syn_weights = this_syn_ids_cnt / np.sum(this_syn_ids_cnt)
-            if np.sum(this_syn_ids_cnt) < global_params.thresh_syn_size:
+            if np.sum(this_syn_ids_cnt) < global_params.config['cell_objects']['thresh_synssv_size']:
                 continue
             this_attr = syn_attr_list[this_syn_ixs]
             this_vx = voxel_list[this_cc_mask]
@@ -426,28 +425,32 @@ def _combine_and_split_syn_thread(args):
             syn_props_agg['cs_ids'] = syn_props_agg['cs_id']
             del syn_props_agg['cs_id']
             # calculate weighted mean of sj, cs and background ratios
-            syn_props_agg['sj_size_pseudo'] = this_agg_syn_weights * np.array(syn_props_agg[
-                                                                                'sj_size_pseudo'])
-            syn_props_agg['cs_size'] = this_agg_syn_weights * np.array(syn_props_agg['cs_size'])
-            syn_props_agg['id_sj_ratio'] = this_agg_syn_weights * np.array(syn_props_agg[
-                                                                              'id_sj_ratio'])
-            syn_props_agg['id_cs_ratio'] = this_agg_syn_weights * np.array(syn_props_agg[
-                                                                             'id_cs_ratio'])
+            syn_props_agg['sj_size_pseudo'] = this_agg_syn_weights * \
+                                              np.array(syn_props_agg['sj_size_pseudo'])
+            syn_props_agg['cs_size'] = this_agg_syn_weights * \
+                                       np.array(syn_props_agg['cs_size'])
+            syn_props_agg['id_sj_ratio'] = this_agg_syn_weights * \
+                                           np.array(syn_props_agg['id_sj_ratio'])
+            syn_props_agg['id_cs_ratio'] = this_agg_syn_weights * \
+                                           np.array(syn_props_agg['id_cs_ratio'])
             syn_props_agg['background_overlap_ratio'] = this_agg_syn_weights * np.array(
                 syn_props_agg['background_overlap_ratio'])
             sj_size_pseudo_norm = np.sum(syn_props_agg['sj_size_pseudo'])
             cs_size_norm = np.sum(syn_props_agg['cs_size'])
             sj_s_w = syn_props_agg['id_sj_ratio'] * syn_props_agg['sj_size_pseudo']
             syn_props_agg['id_sj_ratio'] = np.sum(sj_s_w) / sj_size_pseudo_norm
-            back_s_w = syn_props_agg['background_overlap_ratio'] * syn_props_agg['sj_size_pseudo']
+            back_s_w = syn_props_agg['background_overlap_ratio'] * \
+                       syn_props_agg['sj_size_pseudo']
             syn_props_agg['background_overlap_ratio'] = np.sum(back_s_w) / sj_size_pseudo_norm
             cs_s_w = syn_props_agg['id_cs_ratio'] * syn_props_agg['cs_size']
             syn_props_agg['id_cs_ratio'] = np.sum(cs_s_w) / cs_size_norm
 
             # type weights as weighted sum of syn fragments
             syn_props_agg['sym_prop'] = this_agg_syn_weights * np.array(syn_props_agg['sym_prop'])
-            sym_prop = np.sum(syn_props_agg['sym_prop'] * syn_props_agg['sj_size_pseudo']) / sj_size_pseudo_norm
-            syn_props_agg['asym_prop'] = this_agg_syn_weights * np.array(syn_props_agg['asym_prop'])
+            sym_prop = np.sum(syn_props_agg['sym_prop'] * syn_props_agg['sj_size_pseudo']) \
+                       / sj_size_pseudo_norm
+            syn_props_agg['asym_prop'] = this_agg_syn_weights * \
+                                         np.array(syn_props_agg['asym_prop'])
             asym_prop = np.sum(syn_props_agg['asym_prop'] * syn_props_agg['sj_size_pseudo']) / \
                         sj_size_pseudo_norm
             syn_props_agg['sym_prop'] = sym_prop
@@ -458,7 +461,7 @@ def _combine_and_split_syn_thread(args):
             else:
                 sym_ratio = sym_prop / float(asym_prop + sym_prop)
             syn_props_agg["syn_type_sym_ratio"] = sym_ratio
-            syn_sign = -1 if sym_ratio > global_params.sym_thresh else 1
+            syn_sign = -1 if sym_ratio > global_params.config['cell_objects']['sym_thresh'] else 1
             syn_props_agg["syn_sign"] = syn_sign
 
             del syn_props_agg['cs_size']
@@ -536,7 +539,7 @@ def filter_relevant_cs_agg(cs_agg, ssd):
 # TODO: Use this in case contact objects are required
 def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
                              cs_agg_version=None, n_folders_fs=10000,
-                             stride=1000, qsub_pe=None, qsub_queue=None,
+                             stride=1000,
                              nb_cpus=None, n_max_co_processes=None):
 
     ssd = super_segmentation.SuperSegmentationDataset(wd, version=ssd_version)
@@ -568,17 +571,14 @@ def combine_and_split_cs_agg(wd, cs_gap_nm=300, ssd_version=None,
                              cs_agg.version, cs.version, ssd.scaling, cs_gap_nm])
         i_block += 1
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess(_combine_and_split_cs_agg_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+    if not qu.batchjob_enabled():
+        sm.start_multiprocess(_combine_and_split_cs_agg_thread,
+                              multi_params, nb_cpus=nb_cpus)
 
-    elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "combine_and_split_cs_agg",
-                                     n_max_co_processes=n_max_co_processes,
-                                     remove_jobfolder=True)
     else:
-        raise Exception("QSUB not available")
+        qu.QSUB_script(multi_params, "combine_and_split_cs_agg",
+                       n_max_co_processes=n_max_co_processes,
+                       remove_jobfolder=True)
 
     return cs
 
@@ -729,7 +729,7 @@ def cc_large_voxel_lists(voxel_list, cs_gap_nm, max_concurrent_nodes=5000,
 # TODO: SegmentationDataset version of below, probably not necessary anymore
 def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
                              n_folders_fs=10000,
-                             stride=20, qsub_pe=None, qsub_queue=None,
+                             stride=20,
                              nb_cpus=None, n_max_co_processes=None):
     assert n_folders_fs % stride == 0
     raise DeprecationWarning('Currently not adapted to new subfold system')
@@ -748,18 +748,12 @@ def overlap_mapping_sj_to_cs(cs_sd, sj_sd, rep_coord_dist_nm=2000,
                              sj_sd.version, cs_sd.version,
                              rep_coord_dist_nm])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess(_overlap_mapping_sj_to_cs_thread,
-                                        multi_params, nb_cpus=nb_cpus)
-
-    elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "overlap_mapping_sj_to_cs",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
+    if not qu.batchjob_enabled():
+        sm.start_multiprocess(_overlap_mapping_sj_to_cs_thread,
+                              multi_params, nb_cpus=nb_cpus)
     else:
-        raise Exception("QSUB not available")
+        qu.QSUB_script(multi_params, "overlap_mapping_sj_to_cs",
+                       n_max_co_processes=n_max_co_processes)
 
 
 # TODO: SegmentationDataset version of below, probably not necessary anymore
@@ -780,7 +774,8 @@ def _overlap_mapping_sj_to_cs_thread(args):
 
     cs_id_assignment = np.linspace(0, len(cs_sd.ids), conn_sd.n_folders_fs+1).astype(np.int)
 
-    sj_kdtree = spatial.cKDTree(sj_sd.rep_coords[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']] * sj_sd.scaling)
+    sj_kdtree = spatial.cKDTree(sj_sd.rep_coords[sj_sd.sizes > sj_sd.config['cell_objects']
+    ["sizethresholds"]['sj']] * sj_sd.scaling)
 
     for i_cs_start_id, cs_start_id in enumerate(cs_id_assignment[block_start: block_end]):
         # TODO: change
@@ -832,7 +827,8 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
     cs_kdtree = spatial.cKDTree(cs.voxel_list * cs.scaling)
 
     if sj_kdtree is None:
-        sj_kdtree = spatial.cKDTree(sj_sd.rep_coords[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']] * sj_sd.scaling)
+        sj_kdtree = spatial.cKDTree(sj_sd.rep_coords[sj_sd.sizes > sj_sd.config['cell_objects']
+        ["sizethresholds"]['sj']] * sj_sd.scaling)
 
     cand_sj_ids_l = sj_kdtree.query_ball_point(cs.voxel_list * cs.scaling,
                                                r=rep_coord_dist_nm)
@@ -843,7 +839,8 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
     if len(u_cand_sj_ids) == 0:
         return []
 
-    u_cand_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']][np.array(list(u_cand_sj_ids))]
+    u_cand_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config['cell_objects']["sizethresholds"]
+    ['sj']][np.array(list(u_cand_sj_ids))]
 
     # log_extraction.debug("%d candidate sjs" % len(u_cand_sj_ids))
 
@@ -863,8 +860,8 @@ def overlap_mapping_sj_to_cs_single(cs, sj_sd, sj_kdtree=None, rep_coord_dist_nm
 
 
 def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
-                     n_chunk_jobs=1000, qsub_pe=None, qsub_queue=None,
-                     resume_job=False, nb_cpus=None, n_max_co_processes=None):
+                     n_chunk_jobs=1000, resume_job=False, nb_cpus=None,
+                     n_max_co_processes=None):
     """
     Creates a :class:`~syconn.reps.segmentation.SegmentationDataset`
     of type 'syn' objects from a ChunkDataset of type 'cs'
@@ -881,8 +878,6 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
     cs_cset :
     n_folders_fs :
     n_chunk_jobs :
-    qsub_pe :
-    qsub_queue :
     resume_job :
     nb_cpus :
     n_max_co_processes :
@@ -893,7 +888,7 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
     """
     wd = cs_sd.working_dir
 
-    rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']]
+    rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config['cell_objects']["sizethresholds"]['sj']]
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
     voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
     sd_syn = segmentation.SegmentationDataset("syn", working_dir=wd, version="0",
@@ -925,8 +920,8 @@ def syn_gen_via_cset(cs_sd, sj_sd, cs_cset, n_folders_fs=10000,
                                        multi_params, nb_cpus=n_max_co_processes)
 
     else:
-        _ = qu.QSUB_script(multi_params, "syn_gen_via_cset", pe=qsub_pe,
-                           queue=qsub_queue, resume_job=resume_job,
+        _ = qu.QSUB_script(multi_params, "syn_gen_via_cset",
+                           resume_job=resume_job,
                            script_folder=None, n_cores=nb_cpus,
                            n_max_co_processes=n_max_co_processes)
 
@@ -966,7 +961,7 @@ def syn_gen_via_cset_thread(args):
             bb = sj.bounding_box
             #  this SJ-CS overlap method will be outdated very soon
             if np.any(np.linalg.norm((bb[1] - bb[0]) * sd_syn.scaling) >
-                      global_params.thresh_sj_bbd_syngen):
+                      global_params.config['cell_objects']['thresh_sj_bbd_syngen']):
                 log_extraction.debug(
                     'Skipped huge SJ with size: {}, offset: {}, sj_id: {}, sj_c'
                     'oord: {}'.format(sj.size, sj.bounding_box[0], sj_id,
@@ -1018,9 +1013,7 @@ def syn_gen_via_cset_thread(args):
 
 def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                          trafo_dict_path=None, stride=100,
-                         qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                         n_max_co_processes=None):
-    # TODO: remove `qsub_pe`and `qsub_queue`
+                         nb_cpus=None, n_max_co_processes=None):
     """TODO: will be refactored into single method when generating syn objects
     Extract synapse type from KnossosDatasets. Stores sym.-asym. ratio in
     SJ object attribute dict.
@@ -1032,8 +1025,6 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
     kd_sym_path : str
     trafo_dict_path : dict
     stride : int
-    qsub_pe : str
-    qsub_queue : str
     nb_cpus : int
     n_max_co_processes : int
     """
@@ -1110,7 +1101,7 @@ def _extract_synapse_type_thread(args):
             else:
                 sym_ratio = sym_prop / float(asym_prop + sym_prop)
             so.attr_dict["syn_type_sym_ratio"] = sym_ratio
-            syn_sign = -1 if sym_ratio > global_params.sym_thresh else 1
+            syn_sign = -1 if sym_ratio > global_params.config['cell_objects']['sym_thresh'] else 1
             so.attr_dict["syn_sign"] = syn_sign
             this_attr_dc[so_id] = so.attr_dict
         this_attr_dc.push()
@@ -1119,12 +1110,11 @@ def _extract_synapse_type_thread(args):
 # TODO: KD version of above, probably not necessary anymore
 def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
                                     n_folders_fs=10000, n_chunk_jobs=1000,
-                                    qsub_pe=None, qsub_queue=None,
                                     nb_cpus=None, n_max_co_processes=None):
 
     wd = cs_sd.working_dir
 
-    rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config.entries['Sizethresholds']['sj']]
+    rel_sj_ids = sj_sd.ids[sj_sd.sizes > sj_sd.config['cell_objects']["sizethresholds"]['sj']]
 
     storage_location_ids = get_unique_subfold_ixs(n_folders_fs)
     voxel_rel_paths = [subfold_from_ix(ix, n_folders_fs) for ix in storage_location_ids]
@@ -1149,18 +1139,13 @@ def overlap_mapping_sj_to_cs_via_kd(cs_sd, sj_sd, cs_kd,
                              voxel_rel_path_blocks[i_block], conn_sd.version,
                              sj_sd.version, cs_sd.version, cs_kd.knossos_path])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-        results = sm.start_multiprocess(_overlap_mapping_sj_to_cs_via_kd_thread,
-                                        multi_params, nb_cpus=nb_cpus)
+    if not qu.batchjob_enabled():
+        sm.start_multiprocess(_overlap_mapping_sj_to_cs_via_kd_thread,
+                              multi_params, nb_cpus=nb_cpus)
 
-    elif qu.batchjob_enabled():
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "overlap_mapping_sj_to_cs_via_kd",
-                                     pe=qsub_pe, queue=qsub_queue,
-                                     script_folder=None,
-                                     n_max_co_processes=n_max_co_processes)
     else:
-        raise Exception("QSUB not available")
+        qu.QSUB_script(multi_params, "overlap_mapping_sj_to_cs_via_kd",
+                       n_max_co_processes=n_max_co_processes)
     return conn_sd
 
 
@@ -1421,20 +1406,18 @@ def map_objects_to_synssv(wd, obj_version=None, ssd_version=None,
     vc_version : str
     max_vx_dist_nm : float
     max_rep_coord_dist_nm : float
-    qsub_pe : str
-    qsub_queue : str
     nb_cpus : int
     n_max_co_processes : int
     """
     if max_rep_coord_dist_nm is None:
-        max_rep_coord_dist_nm = global_params.max_rep_coord_dist_nm
+        max_rep_coord_dist_nm = global_params.config['cell_objects']['max_rep_coord_dist_nm']
     if max_vx_dist_nm is None:
-        max_vx_dist_nm = global_params.max_vx_dist_nm
+        max_vx_dist_nm = global_params.config['cell_objects']['max_vx_dist_nm']
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version=obj_version)
 
     # chunk params
-    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.NCORE_TOTAL * 2)
+    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total * 2)
     multi_params = [(so_dir_paths, wd, obj_version, mi_version, vc_version,
                      ssd_version, max_vx_dist_nm, max_rep_coord_dist_nm) for
                     so_dir_paths in multi_params]
@@ -1674,15 +1657,13 @@ def classify_synssv_objects(wd, obj_version=None,log=None, nb_cpus=None,
     ----------
     wd : str
     obj_version : str
-    qsub_pe : str
-    qsub_queue : str
     nb_cpus : int
     n_max_co_processes : int
     """
     sd_syn_ssv = segmentation.SegmentationDataset("syn_ssv", working_dir=wd,
                                                   version=obj_version)
 
-    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.NCORE_TOTAL)
+    multi_params = chunkify(sd_syn_ssv.so_dir_paths, global_params.config.ncore_total)
     multi_params = [(so_dir_paths, wd, obj_version) for so_dir_paths in
                     multi_params]
 
@@ -1742,7 +1723,7 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
     threshold_syn : float
     """
     if threshold_syn is None:
-        threshold_syn = global_params.thresh_syn_proba
+        threshold_syn = global_params.config['cell_objects']['thresh_synssv_proba']
     if dest_folder is None:
         dest_folder = global_params.config.working_dir + '/connectivity_matrix/'
     os.makedirs(os.path.split(dest_folder)[0], exist_ok=True)
@@ -1784,9 +1765,9 @@ def export_matrix(obj_version=None, dest_folder=None, threshold_syn=None):
                header="x\ty\tz\tssv1\tssv2\tsize\tcomp1\tcomp2\tcelltype1\t"
                       "celltype2\tspiness1\tspiness2\tsynprob" +
                       "".join(["\tlatentmorph1_{}".format(ix) for ix in range(
-                          global_params.ndim_embedding)]) +
+                          global_params.config['tcmn']['ndim_embedding'])]) +
                       "".join(["\tlatentmorph2_{}".format(ix) for ix in range(
-                          global_params.ndim_embedding)])
+                          global_params.config['tcmn']['ndim_embedding'])])
                )
 
     ax_labels = np.array(["N/A", "D", "A", "S"])   # TODO: this is already defined in handler.multiviews!

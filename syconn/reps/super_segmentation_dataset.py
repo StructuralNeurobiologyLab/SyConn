@@ -162,7 +162,7 @@ class SuperSegmentationDataset(object):
         if scaling is None:
             try:
                 self._scaling = \
-                    np.array(self.config.entries["Dataset"]["scaling"])
+                    np.array(self.config['scaling'])
             except:
                 self._scaling = np.array([1, 1, 1])
         else:
@@ -170,7 +170,7 @@ class SuperSegmentationDataset(object):
 
         if version is None:
             try:
-                self._version = self.config.entries["Versions"][self.type]
+                self._version = self.config["versions"][self.type]
             except:
                 raise Exception("unclear value for version")
         elif version == "new":
@@ -193,7 +193,7 @@ class SuperSegmentationDataset(object):
 
         if version_dict is None:
             try:
-                self.version_dict = self.config.entries["Versions"]
+                self.version_dict = self.config["versions"]
             except:
                 raise Exception("No version dict specified in config")
         else:
@@ -670,7 +670,7 @@ def save_dataset_deep(ssd: SuperSegmentationDataset, extract_only: bool = False,
     """
     ssd.save_dataset_shallow()
     if n_jobs is None:
-        n_jobs = global_params.NCORE_TOTAL
+        n_jobs = global_params.config.ncore_total
     multi_params = chunkify(ssd.ssv_ids, n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict,
                      ssd.working_dir, extract_only, attr_keys,
@@ -837,13 +837,12 @@ def _export_ssv_to_knossosdataset_thread(args):
 
 
 def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
-                           stride=256, qsub_pe=None, qsub_queue=None,
-                           nb_cpus=None):
+                           stride=256, nb_cpus=None):
     ssd.save_dataset_shallow()
     sv_kd = kd_factory(sv_kd_path)
     if not os.path.exists(ssv_kd_path):
         ssv_kd = knossosdataset.KnossosDataset()
-        scale = np.array(global_params.config.entries["Dataset"]["scaling"],
+        scale = np.array(global_params.config['scaling'],
                          dtype=np.float32)
         ssv_kd.initialize_without_conf(ssv_kd_path, sv_kd.boundary, scale,
                                        sv_kd.experiment_name, mags=[1])
@@ -868,15 +867,12 @@ def convert_knossosdataset(ssd, sv_kd_path, ssv_kd_path,
                              sv_kd_path, ssv_kd_path, offsets,
                              size])
 
-    if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         sm.start_multiprocess(_convert_knossosdataset_thread,
                               multi_params, nb_cpus=nb_cpus)
 
-    elif qu.batchjob_enabled():
-        qu.QSUB_script(multi_params, "convert_knossosdataset")
-
     else:
-        raise Exception("QSUB not available")
+        qu.QSUB_script(multi_params, "convert_knossosdataset")
 
 
 def _convert_knossosdataset_thread(args):

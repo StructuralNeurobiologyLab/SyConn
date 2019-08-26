@@ -5,14 +5,14 @@
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld
 
-from ..global_params import backend
+from ..global_params import config
 from .base import FSBase, BTBase
 from ..handler.logger import log_main
 
 # init backend
-if backend == 'FS':
+if config['backend'] == 'FS':
     StorageClass = FSBase
-elif backend == 'BT':
+elif config['backend'] == 'BT':
     StorageClass = BTBase
 # init log
 log_backend = log_main

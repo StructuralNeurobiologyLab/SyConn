@@ -36,11 +36,11 @@ config = {
     'install_requires': [
                          'numpy==1.16.4', 'scipy', 'lz4', 'h5py', 'networkx', 'ipython',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
-                         'opencv-python', 'pyopengl', 'scikit-learn',
+                         'opencv-python', 'pyopengl', 'scikit-learn>=0.21.3',
                          'scikit-image', 'plyfile', 'termcolor',
                          'pytest', 'tqdm', 'dill', 'zmesh', 'seaborn',
                          'pytest-runner', 'prompt-toolkit', 'numba==0.45.0',
-                         'matplotlib', 'vtki', 'joblib'],
+                         'matplotlib', 'vtki', 'joblib', 'yaml'],
     'name': 'SyConn',
     'dependency_links': ['https://github.com/knossos-project/knossos_utils'
                          '/tarball/dev#egg=knossos_utils',

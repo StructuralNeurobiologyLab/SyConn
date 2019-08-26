@@ -1,5 +1,5 @@
 # General properties of the data set
-scaling: (1, 1, 1)
+scaling: [1, 1, 1]
 
 # File system, 'FS' is currently the only supported option
 backend: "FS"
@@ -8,18 +8,17 @@ backend: "FS"
 pyopengl_platform: 'egl'
 
 existing_cell_organelles: ['mi', 'sj', 'vc']
-syntype_avail: False
+syntype_avail:
 
 # Compute backend: 'QSUB', 'SLURM', None
 batch_proc_system: 'SLURM'  # If None, fall-back is single node multiprocessing
 
-# TODO refactor syconn and get rid of all qsub_pe and qsub_queue kwargs and is
 # the here defined parameters
 batch_pe: 'default'
 batch_queue: 'all.q'
 
 # TODO: Use computing settings everywhere
-mem_per_node: 249.5e3  # in MB
+mem_per_node: 249500  # in MB
 ncores_per_node: 20
 ngpus_per_node: 2
 nnodes_total: 17
@@ -28,8 +27,7 @@ nnodes_total: 17
 # 'None' disables logging of SyConn modules (e.g. proc, handler, ...) to files.
 # Logs of executed scripts (syconn/scripts) will be stored at the
 # working directory + '/logs/' nonetheless.
-default_log_dir: None
-# TODO: remove all verbose kwargs and verbose log.info and execute log.debug() instead
+default_log_dir:
 log_level: 10  # INFO: 20, DEBUG: 10
 # file logging for individual modules, and per job. Only use in case of
 # debugging with single core processing. Logs for scripts are located in 'SyConn/scripts/'
@@ -94,33 +92,31 @@ cell_objects:
   # used for agglomerating 'syn' objects (cell supervoxel-based synapse fragments)
   # into 'syn_ssv'
   cs_gap_nm: 250
-  CS_FILTERSIZE: [13, 13, 7]
-  CS_NCLOSING: 13
+  cs_filtersize: [13, 13, 7]
+  cs_nclosings: 13
   # Parameters of agglomerated synapses 'syn_ssv'
   # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
   # organelles to syn_ssv
   max_vx_dist_nm: 2000
   max_rep_coord_dist_nm: 4000
-  # TODO: changed 'thresh_syn' to 'thresh_synssv'
   thresh_synssv_proba: 0.5  # RFC probability used for classifying whether syn or not
   thresh_synssv_size: 10  # minimum number of voxel for synapses in SSVs, TODO: tweak, increase
   # above will be assigned synaptic sign (-1, inhibitory) and <= will be
   # (1, excitatory)
   sym_thresh: 0.225
 
-
 meshes:
-  allow_mesh_gen_cells: True
-  use_new_meshing: True
+  allow_mesh_gen_cells:
+  use_new_meshing:
 
   downsampling:
-    sv: (4, 4, 2)
-    sj: (2, 2, 1)
-    vc: (4, 4, 2)
-    mi: (8, 8, 4)
-    cs: (2, 2, 1)
-    conn: (2, 2, 1)
-    syn_ssv: (2, 2, 1)
+    sv: [4, 4, 2]
+    sj: [2, 2, 1]
+    vc: [4, 4, 2]
+    mi: [8, 8, 4]
+    cs: [2, 2, 1]
+    conn: [2, 2, 1]
+    syn_ssv: [2, 2, 1]
 
   closings:
     sv: 0
@@ -145,30 +141,30 @@ skeleton:
     spiness: 1000
 
 views:
-  use_large_fov_views_ct: False
-  use_new_renderings_locs: True
+  use_large_fov_views_ct:
+  use_new_renderings_locs:
   # TODO: move all default view parameters here
   nb_views: 2  # used for default view rendering (glia separation, spine detection)
 
 glia:
   prior_glia_removal: True
   # min. connected component size of glia nodes/SV after thresholding glia proba
-  min_cc_size_ssv: 8e3  # in nm; L1-norm on vertex bounding box
+  min_cc_size_ssv: 8000  # in nm; L1-norm on vertex bounding box
 
   # Threshold for glia classification
   glia_thresh: 0.161489
   # number of sv used during local rendering. The total number of SV used are
-  # SUBCC_SIZE_BIG_SSV + 2*(SUBCC_CHUNKE_SIZE_BIG_SSV-1)
-  SUBCC_SIZE_BIG_SSV: 35
-  RENDERING_MAX_NB_SV: 5e3
+  # subcc_size_big_ssv + 2*(subcc_chunk_size_big_ssv-1)
+  subcc_size_big_ssv: 35
+  rendering_max_nb_sv: 5000
   # number of SV for which views are rendered in one pass
-  SUBCC_CHUNK_SIZE_BIG_SSV: 9
+  subcc_chunk_size_big_ssv: 9
 
 # --------- SPINE PARAMETERS
 spines:
   min_spine_cc_size: 10
   min_edge_dist_spine_graph: 110
-  gt_path_spineseg: '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'  # TODO: add to config
+  gt_path_spineseg: '/wholebrain/scratch/areaxfs3/ssv_spgt/spgt_semseg/'
 
   # TODO: add view properties for spine prediction
   # mapping parameters of the semantic segmentation prediction to the cell mesh
@@ -179,8 +175,8 @@ spines:
     force_recompute: True
     k: 0
 
-  # no ignore labels used for the spine predictions because the predictions were propagated to
-  # unpredicted and background vertices via `semseg2mesh`
+  # mapping of vertex labels to skeleton nodes; ignore labels 4 (background)
+  # and 5 (unpredicted), use labels of the k-nearest vertices
   semseg2coords_spines:
     k: 50
     ds_vertices: 1
@@ -189,19 +185,19 @@ spines:
 
 compartments:
   dist_axoness_averaging: 10000  # also used for myelin averaging
-  gt_path_axonseg: '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/all_bouton_data/'  # TODO: add to config
+  gt_path_axonseg: '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/all_bouton_data/'
 
   # `k=0` will not map predictions to unpredicted vertices -> faster
   # `k` is the parameter used in `semseg2mesh`
   view_properties_semsegax:
     verbose: False
-    ws: (1024, 512)
+    ws: [1024, 512]
     nb_views: 3
     comp_window: 40960  # in NM
     semseg_key: 'axoness'
     k: 0
   # mapping of vertex labels to skeleton nodes; ignore labels 5 (background)
-  # and unpredicted (6), use labels of the k-nearest vertices
+  # and 6 (unpredicted), use labels of the k-nearest vertices
   map_properties_semsegax:
     k: 50
     ds_vertices: 1

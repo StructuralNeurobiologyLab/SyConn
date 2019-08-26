@@ -27,7 +27,7 @@ from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
 from .meshes import merge_meshes, MeshObject, calc_rot_matrices
 try:
     import os
-    os.environ['PYOPENGL_PLATFORM'] = global_params.PYOPENGL_PLATFORM
+    os.environ['PYOPENGL_PLATFORM'] = global_params.config['pyopengl_platform']
     import OpenGL
     OpenGL.USE_ACCELERATE = True  # unclear behavior
     from OpenGL.GL import *
@@ -565,7 +565,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     if os.environ['PYOPENGL_PLATFORM'] != 'egl':
         egl_args = None
     if nb_views is None:
-        nb_views = global_params.NB_VIEWS
+        nb_views = global_params.config['views']['nb_views']
     # center data
     assert isinstance(edge_lengths, np.ndarray)
     assert nb_simplices in [3, 4]
@@ -744,7 +744,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
         views at each coordinate
     """
     if nb_views is None:
-        nb_views = global_params.NB_VIEWS
+        nb_views = global_params.config['views']['nb_views']
     if np.isscalar(comp_window):
         edge_lengths = np.array([comp_window, comp_window / 2, comp_window])
     else:
@@ -929,7 +929,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
         log_proc.debug('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'
                        ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
-        nb_views = global_params.NB_VIEWS
+        nb_views = global_params.config['views']['nb_views']
     mesh = sso.mesh
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
@@ -1035,7 +1035,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
         log_proc.debug('Started "render_sso_coords_index_views" at {} locations for SSO {} using '
                        'PyOpenGL platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
-        nb_views = global_params.NB_VIEWS
+        nb_views = global_params.config['views']['nb_views']
     # tim = time.time()
     ind, vert, norm = sso.mesh
     # tim1 = time.time()
@@ -1131,7 +1131,7 @@ def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
     if ws is None:
         ws = (256, 128)
     if nb_views is None:
-        nb_views = global_params.NB_VIEWS
+        nb_views = global_params.config['views']['nb_views']
     ind, vert, _ = sso.mesh
     if len(vertex_labels) != len(vert) // 3:
         raise ValueError("Length of vertex labels and vertices "
@@ -1245,7 +1245,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
         log_proc.critical('No rendering locations found for SSV {}.'.format(ssv.id))
         # TODO: adapt hard-coded window size (256, 128) as soon as those are available in
         #  `global_params`
-        return np.ones((0, global_params.NB_VIEWS, 256, 128), dtype=np.uint8) * 255
+        return np.ones((0, global_params.config['views']['nb_views'], 256, 128), dtype=np.uint8) * 255
     params = np.array_split(rendering_locations, n_jobs)
 
     ssv_id = ssv.id
@@ -1326,7 +1326,7 @@ def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None
 
     """
     if n_jobs is None:
-        n_jobs = global_params.NCORES_PER_NODE // 10
+        n_jobs = global_params.config['ncores_per_node'] // 10
 
     if render_indexviews is False:
         if len(rendering_locations) > 360:

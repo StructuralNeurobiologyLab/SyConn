@@ -409,7 +409,7 @@ def prune_stub_branches(sso=None, nx_g=None, scal=None, len_thres=1000,
         pruned MST
     """
     if scal is None:
-        scal = global_params.config.entries['Dataset']['scaling']
+        scal = global_params.config['scaling']
     pruning_complete = False
 
     if preserve_annotations:
@@ -546,7 +546,7 @@ def skeleton_optimization(nx_g: nx.Graph,
         The modified cell reconstruction skeleton.
     """
     if scaling is None:
-        scaling = np.array(global_params.config['Dataset']['scaling'])
+        scaling = np.array(global_params.config['scaling'])
     start = time.time()
     n_nodes_start = nx_g.number_of_nodes()
     deg_2_nodes = set({k for k, v in nx_g.degree if v == 2})
@@ -739,7 +739,7 @@ def create_sso_skeletons_wrapper(ssvs: List['super_segmentation.SuperSegmentatio
         * Add sliding window majority vote for smoothing myelin prediction to ``global_params``.
     """
     if nb_cpus is None:
-        nb_cpus = global_params.NCORES_PER_NODE
+        nb_cpus = global_params.config['ncores_per_node']
     if dest_paths is not None:
         if not isinstance(dest_paths, Iterable):
             raise ValueError('Destination paths given but are not iterable.')
@@ -905,7 +905,7 @@ def sparsify_skeleton_fast(skel_nx: nx.Graph, scal: Optional[np.ndarray] = None,
     start = time.time()
     n_nodes_start = skel_nx.number_of_nodes()
     if scal is None:
-        scal = global_params.config.entries['Dataset']['scaling']
+        scal = global_params.config['scaling']
     change = 1
 
     while change > 0:
@@ -1666,7 +1666,7 @@ def majorityvote_skeleton_property(sso: 'super_segmentation.SuperSegmentationObj
     sso.skeleton["%s_avg%d" % (prop_key, max_dist)] = avg_prop
 
 
-def find_incomplete_ssv_views(ssd, woglia, n_cores=global_params.NCORES_PER_NODE):
+def find_incomplete_ssv_views(ssd, woglia, n_cores=global_params.config['ncores_per_node']):
     sd = ssd.get_segmentationdataset("sv")
     incomplete_sv_ids = find_missing_sv_views(sd, woglia, n_cores)
     missing_ssv_ids = set()
@@ -1679,7 +1679,7 @@ def find_incomplete_ssv_views(ssd, woglia, n_cores=global_params.NCORES_PER_NODE
     return list(missing_ssv_ids)
 
 
-def find_incomplete_ssv_skeletons(ssd, n_cores=global_params.NCORES_PER_NODE):
+def find_incomplete_ssv_skeletons(ssd, n_cores=global_params.config['ncores_per_node']):
     svs = np.concatenate([list(ssv.svs) for ssv in ssd.ssvs])
     incomplete_sv_ids = find_missing_sv_skeletons(svs, n_cores)
     missing_ssv_ids = set()
@@ -1692,7 +1692,7 @@ def find_incomplete_ssv_skeletons(ssd, n_cores=global_params.NCORES_PER_NODE):
     return list(missing_ssv_ids)
 
 
-def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=global_params.NCORES_PER_NODE):
+def find_missing_sv_attributes_in_ssv(ssd, attr_key, n_cores=global_params.config['ncores_per_node']):
     sd = ssd.get_segmentationdataset("sv")
     incomplete_sv_ids = find_missing_sv_attributes(sd, attr_key, n_cores)
     missing_ssv_ids = set()
@@ -2138,7 +2138,7 @@ def semseg_of_sso_nocache(sso, model, semseg_key: str, ws: Tuple[int, int],
 
             # get model for compartment detection
             m = get_semseg_axon_model()
-            view_props = global_params.view_properties_semsegax
+            view_props = global_params.config['compartments']['view_properties_semsegax']
             view_props["verbose"] = True
 
             # load SSO instance from k.zip file
@@ -2327,8 +2327,8 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject',
     if not recompute and ratio is not None:
         return ratio
 
-    pred_key_ax = "{}_avg{}".format(global_params.view_properties_semsegax['semseg_key'],
-                                    global_params.DIST_AXONESS_AVERAGING)
+    pred_key_ax = "{}_avg{}".format(global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
+                                    global_params.config['compartments']['dist_axoness_averaging'])
     if len(ssv.syn_ssv) == 0:
         return -1
     syn_axs = ssv.attr_for_coords([syn.rep_coord for syn in ssv.syn_ssv],

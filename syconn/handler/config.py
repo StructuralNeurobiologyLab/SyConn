@@ -149,7 +149,7 @@ class DynConfig(Config):
             level = logging.getLevelName(self['log_level'])
             log.setLevel(level)
 
-            if not self['disable_file_logging']:
+            if not self['disable_file_logging'] and verbose:
                 # create file handler
                 log_dir = os.path.expanduser('~') + "/SyConn/logs/"
 
@@ -186,7 +186,7 @@ class DynConfig(Config):
         """
         try:
             return self.entries[item]
-        except (KeyError, ValueError):
+        except (KeyError, ValueError, AttributeError):
             return self.default_conf.entries[item]
 
     def _check_actuality(self):
@@ -300,7 +300,7 @@ class DynConfig(Config):
 
         Returns:
             Dictionary containg the paths to ``KnossosDataset`` of available
-            cellular containing ``global_params.existing_cell_organelles``.
+            cellular containing ``global_params.config['existing_cell_organelles']``.
         """
         path_dict = {k: self.entries['paths']['kd_{}'.format(k)] for k in
                      self['existing_cell_organelles']}
@@ -313,7 +313,7 @@ class DynConfig(Config):
 
         Returns:
             Dictionary containing the paths to ``KnossosDataset`` of available
-            cellular organelles ``global_params.existing_cell_organelles``.
+            cellular organelles ``global_params.config['existing_cell_organelles']``.
         """
         path_dict = {k: "{}/knossosdatasets/{}_seg/".format(
             self.working_dir, k) for k in self['existing_cell_organelles']}
@@ -482,6 +482,8 @@ class DynConfig(Config):
         computed from scratch, see :attr:`~syconn.handler.config.DynConf.use_new_meshing`.
         """
         try:
+            if self.entries['meshes']['allow_mesh_gen_cells'] is None:
+                raise KeyError
             return self.entries['meshes']['allow_mesh_gen_cells']
         except KeyError:
             return False
@@ -509,6 +511,8 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
+            if self.entries['dataset']['syntype_avail'] is None:
+                raise KeyError
             return self.entries['dataset']['syntype_avail']
         except KeyError:
             return True
@@ -522,9 +526,11 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
+            if self.entries['views']['use_large_fov_views_ct'] is None:
+                raise KeyError
             return self.entries['views']['use_large_fov_views_ct']
         except KeyError:
-            return True
+            return False
 
     @property
     def use_new_renderings_locs(self) -> bool:
@@ -536,6 +542,8 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
+            if self.entries['views']['use_new_renderings_locs'] is None:
+                raise KeyError
             return self.entries['views']['use_new_renderings_locs']
         except KeyError:
             return False
@@ -550,6 +558,8 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
+            if self.entries['meshes']['use_new_meshing'] is None:
+                raise KeyError
             return self.entries['meshes']['use_new_meshing']
         except KeyError:
             return False
@@ -562,8 +572,7 @@ class DynConfig(Config):
         Returns:
             Path to directory.
         """
-        return "%s/%s/" % (self.working_dir,
-                           self['batch_proc_system'])
+        return f"{self.working_dir}/{self['batch_proc_system']}/"
 
     @property
     def prior_glia_removal(self) -> bool:
@@ -574,10 +583,8 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.ini file.
         """
-        try:
-            return self.entries['Glia']['prior_glia_removal']
-        except KeyError:
-            return True
+        return self.entries['glia']['prior_glia_removal']
+
 
     @property
     def use_new_subfold(self) -> bool:
@@ -589,7 +596,10 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
-            return self['paths']['use_new_subfold']
+            if self['paths']['use_new_subfold'] is not None:
+                return self['paths']['use_new_subfold']
+            else:
+                raise KeyError
         except KeyError:
             return False
 
@@ -619,7 +629,8 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
                           prior_glia_removal: bool = False,
                           use_new_meshing: bool = False,
                           allow_mesh_gen_cells: bool = True,
-                          use_new_subfold: bool = True, force_overwrite=False):
+                          use_new_subfold: bool = True, force_overwrite=False,
+                          key_value_pairs: Optional[List[tuple]] = None):
     """
     Default SyConn config and variable type specifications. Paths to ``KnossosDatasets``
     containing various predictions, prob. maps and segmentations have to be given depending on
@@ -715,6 +726,7 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
         allow_mesh_gen_cells:
         use_new_subfold:
         force_overwrite: Will overwrite existing ``config.yml`` file.
+        key_value_pairs:
     """
     if kd_seg is None:
         kd_seg = working_dir + 'knossosdatasets/seg/'
@@ -739,8 +751,9 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     entries['paths']['kd_mi'] = kd_mi
     entries['paths']['init_rag'] = init_rag_p
     entries['paths']['use_new_subfold'] = use_new_subfold
-
-    entries['scaling'] = list(scaling)
+    if type(scaling) is np.ndarray:
+        scaling = scaling.tolist()
+    entries['scaling'] = scaling
     entries['syntype_avail'] = syntype_avail
 
     entries['meshes']['allow_mesh_gen_cells'] = allow_mesh_gen_cells
@@ -752,6 +765,9 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     entries['views']['use_new_renderings_locs'] = use_new_renderings_locs
 
     entries['glia']['prior_glia_removal'] = prior_glia_removal
+    for k, v in key_value_pairs:
+        entries[k] = v
+    default_conf._working_dir = working_dir
     if os.path.isfile(default_conf.path_config) and not force_overwrite:
         raise ValueError(f'Attempting to overwrite existing config file at '
                          f'{default_conf.path_config}.')
@@ -767,7 +783,8 @@ def initialize_logging(log_name: str, log_dir: Optional[str] = None,
     Args:
         log_name: Name of the logger.
         log_dir: Set log_dir specifically. Will then create a filehandler and
-            ignore the state of global_params.DISABLE_FILE_LOGGING state.
+            ignore the state of ``global_params.config['disable_file_logging']``
+            state.
         overwrite: Overwrite previous log file.
 
 

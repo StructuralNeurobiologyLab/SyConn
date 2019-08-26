@@ -26,7 +26,7 @@ import networkx as nx
 import contextlib
 import tqdm
 import warnings
-from plyfile import PlyData, PlyElement
+from plyfile import PlyData
 from . import log_handler
 from .. import global_params
 
@@ -237,7 +237,7 @@ def coordpath2anno(coords, scaling=None, add_edges=True):
     SkeletonAnnotation
     """
     if scaling is None:
-        scaling = global_params.config.entries['Dataset']['scaling']
+        scaling = global_params.config['scaling']
     anno = SkeletonAnnotation()
     anno.scaling = scaling
     scaling = np.array(scaling, dtype=np.int)

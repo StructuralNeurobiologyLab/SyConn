@@ -7,7 +7,7 @@
 
 import numpy as np
 from collections import defaultdict
-from typing import Any
+from typing import Any, Tuple, Optional, Union, Dict, List
 from ..backend import log_backend
 try:
     from lz4.block import compress, decompress
@@ -51,10 +51,10 @@ class CompressedStorage(StorageClass):
     kwarg 'cache_decomp' can be enabled to cache decompressed arrays
     additionally (save decompressing time when accessing items frequently).
     """
-    def __init__(self, inp, **kwargs):
+    def __init__(self, inp: str, **kwargs):
         super(CompressedStorage, self).__init__(inp, **kwargs)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: Union[int, str]):
         try:
             return self._cache_dc[item]
         except KeyError:
@@ -67,7 +67,7 @@ class CompressedStorage(StorageClass):
             self._cache_dc[item] = decomp_arr
         return decomp_arr
 
-    def __setitem__(self, key, value):
+    def __setitem__(self, key: Union[int, str], value: np.ndarray):
         if type(value) is not np.ndarray:
             msg = "CompressedStorage supports np.array values only."
             log_backend.error(msg)
@@ -89,19 +89,17 @@ class VoxelStorageL(StorageClass):
     additionally (save decompressing time).
     """
 
-    def __init__(self, inp, **kwargs):
+    def __init__(self, inp: str, **kwargs):
         super(VoxelStorageL, self).__init__(inp, **kwargs)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: Union[int, str]):
         """
-        Parameters
-        ----------
-        item : int/str
 
-        Returns
-        -------
-        list of np.array, list of np.array
-            Decompressed voxel masks with corresponding offsets
+        Args:
+            item ():
+
+        Returns:
+            Decompressed voxel masks with corresponding offsets.
         """
         try:
             return self._cache_dc[item], self._dc_intern[item]["off"]
@@ -119,15 +117,16 @@ class VoxelStorageL(StorageClass):
             self._cache_dc[item] = decomp_arrs
         return decomp_arrs, offsets
 
-    def __setitem__(self, key, values):
+    def __setitem__(self, key: Union[int, str],
+                    values: Tuple[List[np.ndarray], List[np.ndarray]]):
         """
 
-        Parameters
-        ----------
-        key : int/str
-            E.g. SO ID.
-        values : list of np.array
-            E.g. voxel masks
+        Args:
+            key: E.g. SO ID.
+            values: E.g. voxel masks
+
+        Returns:
+
         """
         voxel_masks, offsets = values
         assert np.all([voxel_masks[0].dtype == v.dtype for v in voxel_masks])
@@ -144,7 +143,7 @@ class VoxelStorageL(StorageClass):
                         "off": offsets}
         self._dc_intern[key] = value_intern
 
-    def append(self, key, voxel_mask, offset):
+    def append(self, key: int, voxel_mask: np.ndarray, offset: np.ndarray):
         value_intern = self._dc_intern[key]
         dt = np.dtype(value_intern["dt"])
         sh = value_intern["sh"]
@@ -193,7 +192,7 @@ class VoxelStorageClass(VoxelStorageL):
     No locking provided in this class!
     """
 
-    def __init__(self, inp, **kwargs):
+    def __init__(self, inp: str, **kwargs):
         if "disable_locking" in kwargs:
             assert kwargs["disable_locking"], "Locking must be disabled " \
                                               "in this class. Use VoxelDictL " \
@@ -226,7 +225,8 @@ class VoxelStorageDyn(CompressedStorage):
 
     """
 
-    def __init__(self, inp, voxel_mode=True, voxeldata_path=None, **kwargs):
+    def __init__(self, inp: str, voxel_mode: bool = True,
+                 voxeldata_path: Optional[str] = None, **kwargs):
         super().__init__(inp, **kwargs)
         self.voxel_mode = voxel_mode
         if not 'meta' in self._dc_intern:
@@ -254,14 +254,14 @@ class VoxelStorageDyn(CompressedStorage):
             kd = kd_factory(voxeldata_path)
             self.voxeldata = kd
 
-    def __setitem__(self, key: str, value: Any):
+    def __setitem__(self, key: int, value: Any):
         if self.voxel_mode:
             raise RuntimeError('`VoxelStorageDyn.__setitem__` may only '
                                'be used when `voxel_mode=False`.')
         else:
             return super().__setitem__(key, value)
 
-    def __getitem__(self, item):
+    def __getitem__(self, item: int):
         if self.voxel_mode:
             res = []
             bbs = super().__getitem__(item)
@@ -388,7 +388,7 @@ class MeshStorage(StorageClass):
             mesh.append(np.zeros((0, ), dtype=np.uint8))
         if self._cache_decomp:
             self._cache_dc[key] = mesh
-        if len(mesh[2]) > 0 and len(mesh[1]) != len(mesh[2]):
+        if len(mesh[1]) != len(mesh[2]) > 0:
             log_backend.warning('Lengths of vertex array and length of normal'
                                 ' array differ!')
         # test if lengths of vertex and color array are identical or test

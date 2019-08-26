@@ -73,8 +73,10 @@ if __name__ == "__main__":
 
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
-    train_dataset = MultiviewData(train=True, transform=transform, base_dir=global_params.gt_path_spineseg)
-    valid_dataset = MultiviewData(train=False, transform=transform, base_dir=global_params.gt_path_spineseg)
+    train_dataset = MultiviewData(train=True, transform=transform, base_dir=global_params.config[
+        'spines']['gt_path_spineseg'])
+    valid_dataset = MultiviewData(train=False, transform=transform, base_dir=global_params.config[
+        'spines']['gt_path_spineseg'])
 
     # Set up optimization
     optimizer = optim.Adam(

@@ -15,7 +15,7 @@ fasteners
 numpy==1.16.4
 coloredlogs
 termcolor
-scikit-learn
+scikit-learn>=0.21.3
 scikit-image
 pyopengl
 opencv-python
@@ -31,3 +31,4 @@ vtki
 dill
 joblib
 seaborn
+yaml

@@ -68,13 +68,9 @@ if __name__ == '__main__':
     chunk_size = (256, 256, 256)
     n_folders_fs = 1000
     n_folders_fs_sc = 1000
+    # TODO: work-in `batchproc_system` and remove hacky if 'example_cube' in working_dir...
+    batchproc_system = None
     experiment_name = 'j0126_example'
-    # TODO: does not update correctly. add to config file
-    global_params.NCORES_PER_NODE = 20
-    global_params.NGPUS_PER_NODE = 1
-    global_params.NNODES_TOTAL = 1
-    global_params.NGPU_TOTAL = 1
-    global_params.NCORE_TOTAL = 20
 
     # PREPARE CONFIG
     if global_params.wd is not None:
@@ -84,7 +80,10 @@ if __name__ == '__main__':
         log.warning('Python version <3.6. This is untested!')
     generate_default_conf(example_wd, scaling=scale, use_new_renderings_locs=True,
                           use_large_fov_views_ct=False, use_new_meshing=use_new_meshing,
-                          allow_mesh_gen_cells=True, prior_glia_removal=prior_glia_removal)
+                          allow_mesh_gen_cells=True, prior_glia_removal=prior_glia_removal,
+                          key_value_pairs=[('ncores_per_node', 20), ('ngpus_per_node', 1),
+                                           ('nnodes_total', 1)],
+                          force_overwrite=True)
 
     global_params.wd = example_wd
     os.makedirs(global_params.config.temp_path, exist_ok=True)

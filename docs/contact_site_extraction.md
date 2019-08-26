@@ -30,7 +30,7 @@ The second step used the hdf5 chunk dataset and generates a segmentation dataset
     from syconn.extraction import cs_extraction_steps as ces
     ces.extract_agg_contact_sites(cset, working_dir,
                                   n_folders_fs=10000, suffix="",
-                                  n_max_co_processes=200, qsub_pe=my_qsub_pe)
+                                  n_max_co_processes=200)
 
 Next, the resulting contact sites are overlapped with synaptic
  junction objects (SJ) using the previous CS ChunkDataset, which will create

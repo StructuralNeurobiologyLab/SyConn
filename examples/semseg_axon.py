@@ -45,7 +45,7 @@ if __name__ == '__main__':
 
     # get model for compartment detection
 
-    view_props = global_params.view_properties_semsegax
+    view_props = global_params.config['compartments']['view_properties_semsegax']
     view_props["verbose"] = True
 
     # load SSO instance from k.zip file
@@ -57,7 +57,7 @@ if __name__ == '__main__':
 
     node_preds = sso.semseg_for_coords(
         sso.skeleton['nodes'], view_props['semseg_key'],
-        **global_params.map_properties_semsegax)
+        **global_params.config['compartments']['map_properties_semsegax'])
     sso.skeleton[view_props['semseg_key']] = node_preds
     sso.save_skeleton_to_kzip(dest_path=cell_kzip_fn_axon,
                               additional_keys=view_props['semseg_key'])

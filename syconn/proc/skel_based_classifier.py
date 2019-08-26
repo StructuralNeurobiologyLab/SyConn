@@ -157,8 +157,8 @@ class SkelClassifier(object):
             assert os.path.isfile(self.splitting_fname)
             self.splitting_dict = load_pkl2obj(self.splitting_fname)
 
-    def generate_data(self, feature_contexts_nm=(500, 1000, 2000, 4000, 8000), stride=10,
-                      qsub_pe=None, qsub_queue=None, nb_cpus=1, overwrite=True):
+    def generate_data(self, feature_contexts_nm=(500, 1000, 2000, 4000, 8000),
+                      stride=10, nb_cpus=1, overwrite=True):
         self.load_label_dict()
         self.load_splitting_dict()
         multi_params = []
@@ -174,44 +174,29 @@ class SkelClassifier(object):
                                      self.feat_path + "/features_%d_%d.npy",
                                     comment_converter[self.ssd_version], overwrite])
 
-        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-            results = sm.start_multiprocess(sbch.generate_clf_data_thread,
-                multi_params, nb_cpus=nb_cpus)
+        if not qu.batchjob_enabled():
+            sm.start_multiprocess(sbch.generate_clf_data_thread,
+                                  multi_params, nb_cpus=nb_cpus)
 
-        elif qu.batchjob_enabled():
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "generate_clf_data",
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None)
         else:
-            msg = "QSUB not available"
-            logger_skel.critical(msg)
-            raise Exception(msg)
+            qu.QSUB_script(multi_params, "generate_clf_data")
 
     def classifier_production(self, clf_name="rfc", n_estimators=2000,
-                              feature_contexts_nm=(500, 1000, 2000, 4000, 8000), qsub_pe=None,
-                              qsub_queue=None, nb_cpus=1, production=False):
+                              feature_contexts_nm=(500, 1000, 2000, 4000, 8000),
+                              nb_cpus=1, production=False):
         self.load_label_dict()
         multi_params = []
         for feature_context_nm in feature_contexts_nm:
             multi_params.append([self.working_dir, self.target_type,
                                  clf_name, n_estimators,
                                  feature_context_nm, production])
-        if (qsub_pe is None and qsub_queue is None) or not qu.batchjob_enabled():
-            results = sm.start_multiprocess(classifier_production_thread,
-                multi_params, nb_cpus=nb_cpus)
-
-        elif qu.batchjob_enabled():
-            path_to_out = qu.QSUB_script(multi_params,
-                                         "classifier_production",
-                                         n_cores=nb_cpus,
-                                         pe=qsub_pe, queue=qsub_queue,
-                                         script_folder=None)
+        if not qu.batchjob_enabled():
+            sm.start_multiprocess(classifier_production_thread,
+                                  multi_params, nb_cpus=nb_cpus)
 
         else:
-            msg = "QSUB not available"
-            logger_skel.critical(msg)
-            raise Exception(msg)
+            qu.QSUB_script(multi_params, "classifier_production",
+                           n_cores=nb_cpus)
 
     def create_splitting(self, ratios=(.6, .2, .2)):
         assert not os.path.isfile(self.splitting_fname), "Splitting file exists."
