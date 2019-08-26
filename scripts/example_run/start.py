@@ -67,21 +67,6 @@ if __name__ == '__main__':
     global_params.wd = example_wd
     os.makedirs(global_params.config.temp_path, exist_ok=True)
 
-    # check model existence
-    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype_e3',
-                      'mpath_axonsem', 'mpath_glia_e3', 'mpath_myelin',
-                      'mpath_tnet']:
-        mpath = getattr(global_params.config, mpath_key)
-        if not (os.path.isfile(mpath) or os.path.isdir(mpath)):
-            raise ValueError('Could not find model "{}". Make sure to copy the'
-                             ' "models" folder into the current working '
-                             'directory "{}".'.format(mpath, example_wd))
-
-    if not prior_glia_removal:
-        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_rag_path)
-    else:
-        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
-
     # keep imports here to guarantee correct usage of pyopengl platform if batch processing
     # system is None
     from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_prediction
@@ -105,6 +90,21 @@ if __name__ == '__main__':
         raise FileNotFoundError('Example data could not be found at "{}".'.format(h5_dir))
 
     os.makedirs(example_wd + '/glia/', exist_ok=True)
+
+    # check model existence
+    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype_e3',
+                      'mpath_axonsem', 'mpath_glia_e3', 'mpath_myelin',
+                      'mpath_tnet']:
+        mpath = getattr(global_params.config, mpath_key)
+        if not (os.path.isfile(mpath) or os.path.isdir(mpath)):
+            raise ValueError('Could not find model "{}". Make sure to copy the'
+                             ' "models" folder into the current working '
+                             'directory "{}".'.format(mpath, example_wd))
+
+    if not prior_glia_removal:
+        shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_rag_path)
+    else:
+        shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
 
     bb = parse_movement_area_from_zip(kzip_p)
     offset = np.array([0, 0, 0])

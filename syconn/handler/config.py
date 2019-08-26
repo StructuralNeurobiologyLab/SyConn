@@ -765,8 +765,9 @@ def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
     entries['views']['use_new_renderings_locs'] = use_new_renderings_locs
 
     entries['glia']['prior_glia_removal'] = prior_glia_removal
-    for k, v in key_value_pairs:
-        entries[k] = v
+    if key_value_pairs is not None:
+        for k, v in key_value_pairs:
+            entries[k] = v
     default_conf._working_dir = working_dir
     if os.path.isfile(default_conf.path_config) and not force_overwrite:
         raise ValueError(f'Attempting to overwrite existing config file at '

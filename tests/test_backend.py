@@ -21,6 +21,9 @@ test_p = dir_path + "/test.pkl"
 if os.path.isfile(test_p):
     os.remove(test_p)
 
+if os.path.isfile(dir_path + '.test.pkl.lk'):
+    os.remove(dir_path + '.test.pkl.lk')
+
 
 def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
 
@@ -42,8 +45,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
       """
 
     def create_LZ4Dict_wait_for_3s_then_close():
-
-        #created and locked LZ4Dict for 3s
+        # created and locked LZ4Dict for 3s
         pkl1 = CompressedStorage(test_p, read_only=False)
         pkl1[1] = np.ones((5, 5))
         time.sleep(3)
@@ -57,7 +59,7 @@ def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
             pkl2 = CompressedStorage(test_p, read_only=True, timeout=1,
                                      max_delay=1)  # timeout sets the maximum time before failing, not max_delay
 
-            logging.warning('FAILED: create_fail_expected_runtime_error_at_1s')
+            logging.warning('FAILED: create_fail_expected_runtime_error_at_1s' + str(e))
             q1.put(1)
         except RuntimeError as e:
             logging.info('PASSED: create_fail_expected_runtime_error_at_1s')
@@ -168,9 +170,11 @@ def test_compression_and_decompression_for_mesh_dict():
     # checks if lock release after saving works by saving a second time without acquiring lock
     try:
         md.push()
-    except Exception as e:
-        logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 2 ' + str(e))
+        logging.debug('FAILED: test_compression_and_decompression_for_mesh_dict: STEP 2 ')
         raise AssertionError
+    except Exception as e:
+        assert str(e) == "Unable to release an unacquired lock"
+
     logging.debug("MeshDict file size:\t%0.2f kB" % (os.path.getsize(test_p) / 1.e3))
 
     # checks mesh dict compression with highest entropy data
@@ -429,7 +433,7 @@ def test_read_txt_from_zip():
         remove_files_after_test(sys._getframe().f_code.co_name + '.zip')
     except Exception as e:
         remove_files_after_test(sys._getframe().f_code.co_name + '.zip')
-        logging.info("FAILED:" + sys._getframe().f_code.co_name)
+        logging.info("FAILED:" + sys._getframe().f_code.co_name + str(e))
         raise e
 
 
@@ -445,7 +449,7 @@ def test_remove_from_zip():
             zf.writestr(sys._getframe().f_code.co_name + '.txt', "testing_" + sys._getframe().f_code.co_name)
             zf.close()
         remove_from_zip(str(dir_path) + '/' + sys._getframe().f_code.co_name + '.zip',sys._getframe().f_code.co_name + '.txt' )
-        with pytest.raises(KeyError, message = " Expecting Key Error as the file should have been removed"):
+        with pytest.raises(KeyError):
             with zipfile.ZipFile(str(dir_path) + '/' + sys._getframe().f_code.co_name + '.zip', mode='r') as zf:
                 zf.open(sys._getframe().f_code.co_name + '.txt')
             remove_files_after_test(sys._getframe().f_code.co_name + '.zip')
@@ -454,7 +458,7 @@ def test_remove_from_zip():
         remove_files_after_test(sys._getframe().f_code.co_name + '.zip')
     except Exception as e:
         remove_files_after_test(sys._getframe().f_code.co_name + '.zip')
-        logging.info("FAILED:" + sys._getframe().f_code.co_name)
+        logging.info("FAILED:" + sys._getframe().f_code.co_name + str(e))
         raise e
 
 

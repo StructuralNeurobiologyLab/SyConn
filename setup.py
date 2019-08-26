@@ -1,6 +1,5 @@
 from setuptools import find_packages, setup
 from distutils.extension import Extension
-# import numpy
 import os
 import glob
 
@@ -37,8 +36,8 @@ config = {
                          'numpy==1.16.4', 'scipy', 'lz4', 'h5py', 'networkx', 'ipython',
                          'configobj', 'fasteners', 'flask', 'coloredlogs',
                          'opencv-python', 'pyopengl', 'scikit-learn>=0.21.3',
-                         'scikit-image', 'plyfile', 'termcolor',
-                         'pytest', 'tqdm', 'dill', 'zmesh', 'seaborn',
+                         'scikit-image', 'plyfile', 'termcolor', 'dill',
+                         'pytest', 'pytest-cov', 'tqdm', 'zmesh', 'seaborn',
                          'pytest-runner', 'prompt-toolkit', 'numba==0.45.0',
                          'matplotlib', 'vtki', 'joblib', 'pyyaml'],
     'name': 'SyConn',
@@ -47,9 +46,8 @@ config = {
                          'https://github.com/ELEKTRONN/elektronn3/'
                          'tarball/phil/#egg=elektronn3'],
     'packages': find_packages(exclude=['scripts']), 'long_description': readme,
-    'setup_requires': setup_requires, 'tests_require': ["pytest", ],
+    'setup_requires': setup_requires, 'tests_require': ['pytest', 'pytest-cov'],
     'ext_modules': cython_out,
-    # 'include_dirs': [numpy.get_include(), ],
 }
 
 setup(**config)

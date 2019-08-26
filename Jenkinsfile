@@ -8,7 +8,7 @@ pipeline {
     }
     stage('test') {
       steps {
-        sh 'pytest'
+        sh 'python -m pytest --junit-xml=pytest_unit.xml --cov=syconn || true # tests may fail'
       }
     }
   }

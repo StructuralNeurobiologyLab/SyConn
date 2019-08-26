@@ -22,7 +22,6 @@ def test_load_write_conf():
         pass
     conf = Config(test_dir)
     conf2 = Config(test_dir)
-    print(conf, conf2)
     assert conf == conf2
     entries = conf.entries
     entries['scaling'] = (2, 2, 2)
@@ -31,3 +30,7 @@ def test_load_write_conf():
     conf2 = Config(test_dir)
     assert conf == conf2
     os.remove(conf.path_config)
+
+
+if __name__ == '__main__':
+    test_load_write_conf()
