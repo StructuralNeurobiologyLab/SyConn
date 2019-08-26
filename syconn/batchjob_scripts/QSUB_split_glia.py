@@ -28,7 +28,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-scaling = global_params.config.entries['Dataset']['scaling']
+scaling = global_params.config['scaling']
 # TODO: This coulb be cunked by loading `mesh_bb` and glia prob. prediction cache arrays
 #  (might have to be create via `dataset_analysis`)
 for cc in args:

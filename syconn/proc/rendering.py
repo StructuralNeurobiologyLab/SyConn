@@ -14,9 +14,11 @@ import tqdm
 import shutil
 import warnings
 import glob
+import numpy as np
 from scipy.ndimage.filters import gaussian_filter
 
 from .image import rgb2gray, apply_clahe
+from ..mp.batchjob_utils import QSUB_script
 from . import log_proc
 from .. import global_params
 from ..handler.basics import flatten_list, chunkify_successive
@@ -27,7 +29,7 @@ from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
 from .meshes import merge_meshes, MeshObject, calc_rot_matrices
 try:
     import os
-    os.environ['PYOPENGL_PLATFORM'] = global_params.PYOPENGL_PLATFORM
+    os.environ['PYOPENGL_PLATFORM'] = global_params.config['pyopengl_platform']
     import OpenGL
     OpenGL.USE_ACCELERATE = True  # unclear behavior
     from OpenGL.GL import *
@@ -41,27 +43,8 @@ except Exception as e:
 # can't load more than one platform simultaneously
 if os.environ['PYOPENGL_PLATFORM'] == 'egl':
     try:
-        from OpenGL.EGL import eglDestroyContext, eglSwapBuffers
-        from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
-            EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
-            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
-            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, \
-            EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
-            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY,\
-            eglGetDisplay, eglInitialize, eglChooseConfig, \
-            eglBindAPI, eglCreatePbufferSurface, EGL_ALPHA_SIZE,\
-            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
-        from OpenGL.EGL import EGL_SURFACE_TYPE, EGL_PBUFFER_BIT, EGL_BLUE_SIZE, \
-            EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_DEPTH_SIZE, \
-            EGL_COLOR_BUFFER_TYPE, EGL_LUMINANCE_BUFFER, EGL_HEIGHT, \
-            EGL_RENDERABLE_TYPE, EGL_OPENGL_BIT, EGL_CONFORMANT, \
-            EGL_OPENGL_BIT, EGL_CONFIG_CAVEAT, EGL_NONE, EGL_FALSE,\
-            EGL_DEFAULT_DISPLAY, EGL_NO_CONTEXT, EGL_WIDTH, \
-            EGL_OPENGL_API, EGL_LUMINANCE_SIZE, EGL_NO_DISPLAY, EGL_TRUE, \
-            eglGetDisplay, eglInitialize, eglChooseConfig, \
-            eglBindAPI, eglCreatePbufferSurface, \
-            eglCreateContext, eglMakeCurrent, EGLConfig, EGL_RGB_BUFFER
+        from OpenGL.EGL import *
+        from .egl_ext import eglQueryDevicesEXT
         log_proc.info('EGL rendering enabled.')
     except ImportError as e:
         os.environ['PYOPENGL_PLATFORM'] = 'osmesa'
@@ -75,8 +58,6 @@ else:
     msg = 'PYOpenGL environment has to be "egl" or "osmesa".'
     log_proc.error(msg)
     raise NotImplementedError(msg)
-import numpy as np
-from ..mp.batchjob_utils import QSUB_script
 try:
     import cPickle as pkl
 except ImportError:
@@ -84,8 +65,6 @@ except ImportError:
 
 # TODO: add all rendering params to config/global_params
 
-
-from .egl_ext import eglQueryDevicesEXT
 MULTIGPU = True  # probably fine to remove this, mechanism can always be enabled
 
 
@@ -565,7 +544,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     if os.environ['PYOPENGL_PLATFORM'] != 'egl':
         egl_args = None
     if nb_views is None:
-        nb_views = global_params.NB_VIEWS
+        nb_views = global_params.config['views']['nb_views']
     # center data
     assert isinstance(edge_lengths, np.ndarray)
     assert nb_simplices in [3, 4]
@@ -744,7 +723,7 @@ def _render_mesh_coords(coords, mesh, clahe=False, verbose=False, ws=(256, 128),
         views at each coordinate
     """
     if nb_views is None:
-        nb_views = global_params.NB_VIEWS
+        nb_views = global_params.config['views']['nb_views']
     if np.isscalar(comp_window):
         edge_lengths = np.array([comp_window, comp_window / 2, comp_window])
     else:
@@ -929,7 +908,7 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
         log_proc.debug('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'
                        ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
-        nb_views = global_params.NB_VIEWS
+        nb_views = global_params.config['views']['nb_views']
     mesh = sso.mesh
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
@@ -1035,7 +1014,7 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
         log_proc.debug('Started "render_sso_coords_index_views" at {} locations for SSO {} using '
                        'PyOpenGL platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
     if nb_views is None:
-        nb_views = global_params.NB_VIEWS
+        nb_views = global_params.config['views']['nb_views']
     # tim = time.time()
     ind, vert, norm = sso.mesh
     # tim1 = time.time()
@@ -1089,7 +1068,6 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
                                    smooth_shade=False, views_key="index",
                                    nb_views=nb_views, comp_window=comp_window,
                                    return_rot_matrices=return_rot_matrices)
-
     if ix_views.shape[-1] == 3:
         ix_views = rgb2id_array(ix_views)[:, None]
     else:
@@ -1132,7 +1110,7 @@ def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
     if ws is None:
         ws = (256, 128)
     if nb_views is None:
-        nb_views = global_params.NB_VIEWS
+        nb_views = global_params.config['views']['nb_views']
     ind, vert, _ = sso.mesh
     if len(vertex_labels) != len(vert) // 3:
         raise ValueError("Length of vertex labels and vertices "
@@ -1246,7 +1224,7 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
         log_proc.critical('No rendering locations found for SSV {}.'.format(ssv.id))
         # TODO: adapt hard-coded window size (256, 128) as soon as those are available in
         #  `global_params`
-        return np.ones((0, global_params.NB_VIEWS, 256, 128), dtype=np.uint8) * 255
+        return np.ones((0, global_params.config['views']['nb_views'], 256, 128), dtype=np.uint8) * 255
     params = np.array_split(rendering_locations, n_jobs)
 
     ssv_id = ssv.id
@@ -1327,7 +1305,7 @@ def render_sso_coords_generic(ssv, working_dir, rendering_locations, n_jobs=None
 
     """
     if n_jobs is None:
-        n_jobs = global_params.NCORES_PER_NODE // 10
+        n_jobs = global_params.config['ncores_per_node'] // 10
 
     if render_indexviews is False:
         if len(rendering_locations) > 360:

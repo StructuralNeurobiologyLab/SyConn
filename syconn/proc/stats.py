@@ -20,7 +20,7 @@ from sklearn.ensemble import RandomForestClassifier
 import os
 from sklearn.preprocessing import label_binarize
 import seaborn as sns
-from sklearn.externals import joblib
+import joblib
 import matplotlib.patches as mpatches
 from . import log_proc
 

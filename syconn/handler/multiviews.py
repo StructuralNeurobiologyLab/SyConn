@@ -4,19 +4,18 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+from knossos_utils.skeleton_utils import load_skeleton
+from ..proc.graphs import bfs_smoothing
 import numpy as np
 from numba import jit
 from scipy import spatial
 from typing import Optional, Union, TYPE_CHECKING
 if TYPE_CHECKING:
-    from ..reps.super_segmentation import SuperSegmentationObject
-from knossos_utils.skeleton_utils import load_skeleton
-
-from ..proc.graphs import bfs_smoothing
+    from ..reps import super_segmentation
 
 
 def parse_skelnodes_labels_to_mesh(kzip_path: str,
-                                   sso: 'SuperSegmentationObject',
+                                   sso: 'super_segmentation.SuperSegmentationObject',
                                    gt_type: str,  n_voting: int = 40):
     """
 
@@ -291,7 +290,6 @@ def id2rgb_array(id_arr: np.ndarray):
     return rgb_arr.squeeze()
 
 
-@jit
 def id2rgb_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     """
     Transforms ID values into the array of RGBs labels based on the assumption
@@ -309,9 +307,9 @@ def id2rgb_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     np.array
         Unique RGB value for every ID [N, 3].
     """
-    if id_arr.squeeze().ndim > 1:
+    if id_arr.ndim > 1:
         raise ValueError("Unsupported index array shape.")
-    nb_ids = len(id_arr.squeeze())
+    nb_ids = len(id_arr)
     if nb_ids >= 256**3:
         raise ValueError("Overflow in vertex ID array.")
     x1 = np.arange(256).astype(np.uint8)
@@ -323,7 +321,6 @@ def id2rgb_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     return rgb_arr
 
 
-@jit
 def id2rgba_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     """
     Transforms ID values into the array of RGBs labels based on the assumption
@@ -341,9 +338,9 @@ def id2rgba_array_contiguous(id_arr: np.ndarray) -> np.ndarray:
     np.array
         Unique RGBA value for every ID [N, 4].
     """
-    if id_arr.squeeze().ndim > 1:
+    if id_arr.ndim > 1:
         raise ValueError("Unsupported index array shape.")
-    nb_ids = len(id_arr.squeeze())
+    nb_ids = len(id_arr)
     if nb_ids < 256**3 - 1:
         rgb_arr = id2rgb_array_contiguous(id_arr)
         return np.concatenate([rgb_arr, np.zeros((nb_ids, 1))], axis=1)
@@ -437,6 +434,7 @@ def rgba2id_array(rgb_arr: np.ndarray) -> np.ndarray:
     else:
         raise ValueError("Unsupported shape")
     rgb_arr_flat = rgb_arr.flatten().reshape((-1, 4))
+
     mask_arr = (rgb_arr_flat[:, 0] == 255) & (rgb_arr_flat[:, 1] == 255) & \
                (rgb_arr_flat[:, 2] == 255) & (rgb_arr_flat[:, 3] == 255)
     id_arr = np.zeros((len(rgb_arr_flat)), dtype=np.uint32)

@@ -10,7 +10,6 @@ import numpy as np
 
 from ..backend.storage import AttributeDict
 from .. import global_params
-from ..global_params import glia_thresh, RENDERING_MAX_NB_SV
 from ..handler.basics import load_pkl2obj, chunkify, flatten_list, \
     write_txt2kzip, write_obj2pkl
 from ..mp import batchjob_utils as qu
@@ -28,14 +27,15 @@ def qsub_glia_splitting():
     glia SVs.
     """
     cc_dict = load_pkl2obj(global_params.config.working_dir + "/glia/cc_dict_rag_graphs.pkl")
-    huge_ssvs = [it[0] for it in cc_dict.items() if len(it[1]) > RENDERING_MAX_NB_SV]
+    huge_ssvs = [it[0] for it in cc_dict.items() if len(it[1]) >
+                 global_params.config['glia']['rendering_max_nb_sv']]
     if len(huge_ssvs):
-        log_proc.info("{} huge SSVs detected (#SVs > {})".format(len(huge_ssvs),
-                                                         RENDERING_MAX_NB_SV))
+        log_proc.info("{} huge SSVs detected (#SVs > {})".format(
+            len(huge_ssvs), global_params.config['glia']['rendering_max_nb_sv']))
     chs = chunkify(sorted(list(cc_dict.values()), key=len, reverse=True),
-                   global_params.NCORE_TOTAL * 2)
+                   global_params.config.ncore_total * 2)
     qu.QSUB_script(chs, "split_glia", n_cores=1,
-                   n_max_co_processes=global_params.NCORE_TOTAL * 2,
+                   n_max_co_processes=global_params.config.ncore_total * 2,
                    remove_jobfolder=True)
 
 
@@ -55,16 +55,16 @@ def collect_glia_sv():
     # not contained in RAG
     # TODO: add start_multiprocess on a different node
     glia_preds_list = start_multiprocess(collect_gliaSV_helper_chunked, multi_params,
-                                         nb_cpus=global_params.NCORES_PER_NODE,
+                                         nb_cpus=global_params.config['ncores_per_node'],
                                          debug=False)
     glia_preds = {}
     for dc in glia_preds_list:
         glia_preds.update(dc)
     log_proc.info("Collected SV glianess.")
     # get SSV glia splits
-    chs = chunkify(list(cc_dict.keys()), global_params.NCORES_PER_NODE)
+    chs = chunkify(list(cc_dict.keys()), global_params.config['ncores_per_node'])
     glia_svs = np.concatenate(start_multiprocess(collect_gliaSV_helper, chs, debug=False,
-                                                 nb_cpus=global_params.NCORES_PER_NODE))
+                                                 nb_cpus=global_params.config['ncores_per_node']))
     log_proc.info("Collected SSV glia SVs.")
     # add missing SV glianess and store whole dataset classification
     missing_ids = np.setdiff1d(sds.ids, ids_in_rag)

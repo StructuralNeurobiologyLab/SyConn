@@ -59,7 +59,7 @@ for g in ch:
 # render huge SSVs in parallel, multiple jobs per SSV, use more threads than cores -> increase
 # GPU load
 render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True)
-n_parallel_jobs = global_params.NCORES_PER_NODE  # // global_params.NGPUS_PER_NODE
+n_parallel_jobs = global_params.config['ncores_per_node']  # // global_params.config['ngpus_per_node']
 for ssv in ssvs_large:
     render_sso_coords_multiprocessing(ssv, wd, n_parallel_jobs,
                                       render_indexviews=False, return_views=False,

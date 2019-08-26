@@ -93,7 +93,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
                     box_coords=[0, 0, 0], fit_box_size=True)
 
     if max_n_jobs is None:
-        max_n_jobs = global_params.NCORE_TOTAL * 2
+        max_n_jobs = global_params.config.ncore_total * 2
     if log is None:
         log = log_extraction
     if size is not None and offset is not None:
@@ -187,7 +187,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
             log.debug('Found existing KD at {}. Removing it now.'.format(path))
             shutil.rmtree(path)
         target_kd = knossosdataset.KnossosDataset()
-        scale = np.array(global_params.config.entries["Dataset"]["scaling"])
+        scale = np.array(global_params.config['scaling'])
         target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name,
                                           mags=[1, ])
         target_kd = knossosdataset.KnossosDataset()
@@ -201,7 +201,7 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
                   ' ({})'.format(cset.path_head_folder, target_kd.knossos_path))
 
     # Write SD
-    max_n_jobs = global_params.NNODES_TOTAL * 2
+    max_n_jobs = global_params.config['nnodes_total'] * 2
     path = "{}/knossosdatasets/syn_seg/".format(global_params.config.working_dir)
     path_cs = "{}/knossosdatasets/cs_seg/".format(global_params.config.working_dir)
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
@@ -213,8 +213,8 @@ def extract_contact_sites(n_max_co_processes: Optional[int] = None,
                                 multi_params, nb_cpus=1, debug=False)
     else:
         qu.QSUB_script(multi_params, "write_props_to_syn_singlenode", log=log,
-                       n_cores=global_params.NCORES_PER_NODE,
-                       n_max_co_processes=global_params.NNODES_TOTAL,
+                       n_cores=global_params.config['ncores_per_node'],
+                       n_max_co_processes=global_params.config['nnodes_total'],
                        remove_jobfolder=True)
 
     sd = segmentation.SegmentationDataset(working_dir=global_params.config.working_dir,
@@ -287,18 +287,19 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         _, bb_dc, _ = rep_helper.find_object_properties(contacts)
 
         # close gaps
+        n_closings = global_params.config['cell_objects']['cs_nclosings']
         for ix in bb_dc.keys():
             obj_start, obj_end = np.array(bb_dc[ix])
-            obj_start -= global_params.CS_NCLOSING
+            obj_start -= n_closings
             obj_start[obj_start < 0] = 0
-            obj_end += global_params.CS_NCLOSING
+            obj_end += n_closings
             # create slice obj
-            new_obj_slices = [slice(obj_start[ii], obj_end[ii], None) for
-                              ii in range(3)]
+            new_obj_slices = tuple(slice(obj_start[ii], obj_end[ii], None) for
+                                   ii in range(3))
             sub_vol = contacts[new_obj_slices]
             binary_mask = (sub_vol == ix).astype(np.int)
             res = scipy.ndimage.binary_closing(
-                binary_mask, iterations=global_params.CS_NCLOSING)
+                binary_mask, iterations=n_closings)
             # only update background or the objects itself
             proc_mask = (binary_mask == 1) | (sub_vol == 0)
             contacts[new_obj_slices][proc_mask] = res[proc_mask] * ix
@@ -311,8 +312,8 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
         size = np.array(chunk.size)
         start = time.time()
         # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction)
-        # syn_d = (kd_syn.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config.entries[
-        #     'Probathresholds']['sj']).astype(np.uint8)
+        # syn_d = (kd_syn.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
+        # 'cell_objects']["probathresholds"]['sj']).astype(np.uint8)
         syn_d = (kd_syn.from_overlaycubes_to_matrix(
             size, offset, datatype=np.uint64) > 0).astype(np.uint8)
         # get binary mask for symmetric and asymmetric syn. type per voxel
@@ -493,7 +494,7 @@ def _write_props_to_syn_singlenode_thread(args):
     n_folders_fs = args[1]
     knossos_path = args[2]
     knossos_path_cs = args[3]
-    nb_cpus = global_params.NCORES_PER_NODE
+    nb_cpus = global_params.config['ncores_per_node']
     # consider use of multiprocessing manager dict
     # get cached dicts
     dict_p = "{}/cs_prop_dict.pkl".format(global_params.config.temp_path)
@@ -765,8 +766,6 @@ def find_contact_sites(cset, knossos_path, filename='cs', n_max_co_processes=Non
     knossos_path :
     filename :
     n_max_co_processes :
-    qsub_pe :
-    qsub_queue :
     size :
     offset :
 
@@ -827,7 +826,8 @@ def detect_cs(arr):
     edges = edges.astype(np.uint32)
     arr = arr.astype(np.uint32)
     # TODO: add filter size to global_params
-    cs_seg = process_block_nonzero(edges, arr, global_params.CS_FILTERSIZE)
+    cs_seg = process_block_nonzero(edges, arr, global_params.config['cell_objects'][
+        'cs_filtersize'])
     return cs_seg
 
 
@@ -864,7 +864,7 @@ def extract_agg_contact_sites(cset, working_dir, filename='cs', hdf5name='cs',
         log.debug('Found existing KD at {}. Removing it now.'.format(path))
         shutil.rmtree(path)
     target_kd = knossosdataset.KnossosDataset()
-    scale = np.array(global_params.config.entries["Dataset"]["scaling"])
+    scale = np.array(global_params.config['scaling'])
     target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ])
     target_kd = knossosdataset.KnossosDataset()
     target_kd.initialize_from_knossos_path(path)

@@ -15,7 +15,6 @@ knossosdataset._set_noprint(True)
 from ..proc.meshes import mesh_area_calc
 
 from .. import global_params
-from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING
 from ..handler.basics import load_pkl2obj, write_obj2pkl, kd_factory
 from ..handler.multiviews import generate_rendering_locs
 from ..handler.config import DynConfig
@@ -100,7 +99,7 @@ class SegmentationObject(object):
             enable_locking:  If True, enables file locking.
         """
         if scaling is None:
-            scaling = global_params.config.entries["Dataset"]["scaling"]
+            scaling = global_params.config['scaling']
 
         self._id = int(obj_id)
         self._type = obj_type
@@ -151,7 +150,7 @@ class SegmentationObject(object):
 
         if version is None:
             try:
-                self._version = self.config.entries["Versions"][self.type]
+                self._version = self.config["versions"][self.type]
             except:
                 raise Exception("unclear value for version")
         else:
@@ -312,7 +311,7 @@ class SegmentationObject(object):
         if self._scaling is None:
             try:
                 self._scaling = \
-                    np.array(self.config.entries["Dataset"]["scaling"],
+                    np.array(self.config['scaling'],
                              dtype=np.float32)
             except:
                 self._scaling = np.array([1, 1, 1])
@@ -632,7 +631,7 @@ class SegmentationObject(object):
             return self._skeleton
 
     @property
-    def mesh_bb(self) -> float:
+    def mesh_bb(self) -> np.ndarray:
         """
         Bounding box of the object meshes (in nanometers). Approximately
         the same as scaled 'bounding_box'.
@@ -661,7 +660,6 @@ class SegmentationObject(object):
     @property
     def mesh_area(self) -> float:
         """
-
         Returns:
             Mesh surface area in um^2
         """
@@ -898,9 +896,9 @@ class SegmentationObject(object):
 
         """
         if n_closings is None:
-            n_closings = MESH_CLOSING[self.type]
+            n_closings = global_params.config['meshes']['closings'][self.type]
         if downsampling is None:
-            downsampling = MESH_DOWNSAMPLING[self.type]
+            downsampling = global_params.config['meshes']['downsampling'][self.type]
         # Set 'force_single_cc' to True in case of syn_ssv objects!
         if self.type == 'syn_ssv' and 'force_single_cc' not in kwargs:
             kwargs['force_single_cc'] = True
@@ -1432,7 +1430,7 @@ class SegmentationDataset(object):
 
         The 'mapping' attributes are only computed for cell supervoxels and not for cellular
         organelles (e.g. 'mi', 'vc', etc.; see
-        :py:attr:`~syconn.global_params.existing_cell_organelles`).
+        :py:attr:`~syconn.global_params.config['existing_cell_organelles']`).
 
         For the :class:`~syconn.reps.segmentation.SegmentationDataset` of type 'syn_ssv'
         (which represent the actual synapses between two cell reconstructions), the following
@@ -1467,7 +1465,7 @@ class SegmentationDataset(object):
             * 'syn_type_sym_ratio': ``sym_prop / float(asym_prop + sym_prop)``.
               See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread` .
             * 'syn_sign': Synaptic "sign" (-1: symmetric, +1: asymmetric). For threshold see
-              :py:attr:`~syconn.global_params.sym_thresh` .
+              :py:attr:`~syconn.global_params.config['cell_objects']['sym_thresh']` .
             * 'cs_ids': Contact site IDs associated with each 'syn_ssv' synapse.
             * 'id_cs_ratio': Overlap ratio between contact site and synaptic junction (sj)
               objects.
@@ -1537,7 +1535,7 @@ class SegmentationDataset(object):
 
         if version is None and create is False:
             try:
-                self._version = self.config.entries["Versions"][self.type]
+                self._version = self.config["versions"][self.type]
             except:
                 raise Exception("unclear value for version")
         elif version == "new":
@@ -1561,7 +1559,7 @@ class SegmentationDataset(object):
 
         if version_dict is None:
             try:
-                self.version_dict = self.config.entries["Versions"]
+                self.version_dict = self.config["versions"]
             except:
                 raise Exception("No version dict specified in config")
         else:
@@ -1794,7 +1792,7 @@ class SegmentationDataset(object):
         """
         if self._scaling is None:
             self._scaling = \
-                np.array(self.config.entries["Dataset"]["scaling"],
+                np.array(self.config['scaling'],
                          dtype=np.float32)
 
         return self._scaling

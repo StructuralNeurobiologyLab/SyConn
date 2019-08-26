@@ -4,6 +4,17 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
+from ..handler.config import initialize_logging
+from ..reps import log_reps
+from ..mp import batchjob_utils as qu
+from ..handler.basics import chunkify
+
+from ..handler import log_handler, log_main
+from .compression import load_from_h5py, save_to_h5py
+from .basics import read_txt_from_zip, get_filepaths_from_dir,\
+    parse_cc_dict_from_kzip
+from .. import global_params
+
 import re
 import numpy as np
 import os
@@ -16,24 +27,13 @@ from typing import Dict, List, Iterable, Union, Optional, Any, TYPE_CHECKING, Tu
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.decomposition import PCA
 from collections import Counter
+from knossos_utils.knossosdataset import KnossosDataset
+from sklearn.metrics import log_loss
+from scipy.stats import entropy
+from scipy.special import softmax
 from knossos_utils.chunky import ChunkDataset, save_dataset
 from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
-from knossos_utils.knossosdataset import KnossosDataset
-from sklearn.metrics import log_loss
-from scipy.special import softmax
-from syconn.handler.config import initialize_logging
-from syconn.reps import log_reps
-from syconn.mp import batchjob_utils as qu
-from syconn.handler.basics import chunkify
-from elektronn3.inference import Predictor
-
-from ..handler import log_handler
-from syconn.handler import log_main
-from .compression import load_from_h5py, save_to_h5py
-from .basics import read_txt_from_zip, get_filepaths_from_dir,\
-    parse_cc_dict_from_kzip
-from .. import global_params
 
 
 def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
@@ -72,7 +72,8 @@ def load_gt_from_kzip(zip_fname, kd_p, raw_data_offset=75, verbose=False,
         kd.initialize_from_knossos_path(curr_p)
         scaling = np.array(kd.scale, dtype=np.int)
         if np.isscalar(raw_data_offset):
-            raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling)
+            raw_data_offset = np.array(scaling[0] * raw_data_offset / scaling,
+                                       dtype=np.int)
             if verbose:
                 print('Using scale adapted raw offset:', raw_data_offset)
         elif len(raw_data_offset) != 3:
@@ -211,7 +212,8 @@ def predict_h5(h5_path, m_path, clf_thresh=None, mfp_active=False,
     save_to_h5py([raw, pred], dest_p, [hdf5_data_key, dest_hdf5_data_key])
 
 
-def overlaycubes2kzip(dest_p, vol, offset, kd_path):
+def overlaycubes2kzip(dest_p: str, vol: np.ndarray, offset: np.ndarray,
+                      kd_path: str):
     """
     Writes segmentation volume to kzip.
 
@@ -219,8 +221,8 @@ def overlaycubes2kzip(dest_p, vol, offset, kd_path):
     ----------
     dest_p : str
         path to k.zip
-    vol : np.array [X, Y, Z]
-        Segmentation or prediction (uint)
+    vol : np.array
+        Segmentation or prediction (unsigned integer, XYZ).
     offset : np.array
     kd_path : str
 
@@ -234,9 +236,10 @@ def overlaycubes2kzip(dest_p, vol, offset, kd_path):
                             mags=[1], data=vol)
 
 
-def xyz2zxy(vol):
+def xyz2zxy(vol: np.ndarray) -> np.ndarray:
     """
     Swaps axes to ELEKTRONN convention ([M, .., X, Y, Z] -> [M, .., Z, X, Y]).
+
     Parameters
     ----------
     vol : np.array [M, .., X, Y, Z]
@@ -252,9 +255,10 @@ def xyz2zxy(vol):
     return vol
 
 
-def zxy2xyz(vol):
+def zxy2xyz(vol: np.ndarray) -> np.ndarray:
     """
     Swaps axes to ELEKTRONN convention ([M, .., Z, X, Y] -> [M, .., X, Y, Z]).
+
     Parameters
     ----------
     vol : np.array [M, .., Z, X, Y]
@@ -431,7 +435,7 @@ def binarize_labels(labels: np.ndarray, foreground_ids: Iterable[int],
     return labels.astype(np.uint16)
 
 
-def parse_movement_area_from_zip(zip_fname):
+def parse_movement_area_from_zip(zip_fname: str) -> np.ndarray:
     """
     Parse MovementArea (e.g. bounding box of labeled volume) from annotation.xml
     in (k.)zip file.
@@ -542,22 +546,30 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                         target_channels: Optional[Iterable[Iterable[int]]] = None,
                         channel_thresholds: Optional[Iterable[Union[float, Any]]] = None,
                         log: Optional[Logger] = None, mag: int = 1,
-                        overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20)):
+                        overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
+                        cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
-    Helper function for dense dataset prediction. Runs prediction on whole
-    knossos dataset.
+    Helper function for dense dataset prediction. Runs predictions on the whole
+    knossos dataset located at `kd_path`.
+    Prediction results will be written to KnossosDatasets called `target_names`
+    at `target_path`. If no threshold and only one channel per `target_names`
+    is given, the resulting KnossosDataset will contain a probability map.
+    Otherwise the classification results will be written (to the raw channel).
 
     Args:
         kd_path: Path to knossos dataset .conf file.
         target_path: Destination folder for target knossos datasets containing
-            prediction.
+            the prediction.
         model_path: Path to elektronn3 model for predictions. Loaded via the
             :class:`~elektronn3.inference.inference.Predictor`.
-        n_channel: Number of channels predicted by model, e.g. ``n_channel=3``.
+        n_channel: Number of channels predicted by the model.
         target_names: Names of target knossos datasets, e.g.
-            ``target_names=['synapse_fb', 'synapse_type']``.
+            ``target_names=['synapse_fb', 'synapse_type']``. Defaults to
+            ``['pred']``. Length must match with `target_channels`.
         target_channels: Channel_ids in prediction for each target knossos data set
-            e.g. ``target_channels=[(0,),(1,2)]``.
+            e.g. ``target_channels=[(1, 2)]`` if prediction has two foreground labels.
+            Defaults to ``[[ix for ix in range(n_channel)]]``.
+            Length must match with `target_names`.
         channel_thresholds: Thresholds for channels: If None and number of channels
             for target kd is 1: probabilities are stored else: 0.5 as default
             e.g. ``channel_thresholds=[None,0.5,0.5]``.
@@ -572,6 +584,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                 tile_shape = (chunk_size / n_tiles).astype(np.int)
                 # the final input shape must be a multiple of tile_shape
                 overlap_shape = tile_shape // 2
+        cube_of_interest: Bounding box of the volume of interest (minimum and maximum
+            coordinate in voxels in the respective magnification (see kwarg `mag`).
 
     """
     if log is None:
@@ -583,14 +597,18 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     if target_names is None:
         target_names = ['pred']
     if target_channels is None:
-        target_channels = [[i] for i in range(n_channel)]
+        target_channels = [[ix for ix in range(n_channel)]]
+    if not len(target_names) == len(target_channels):
+        msg = 'For every target name the target channels have to be specified.'
+        log_reps.error(msg)
+        raise ValueError(msg)
     if channel_thresholds is None:
-        channel_thresholds = [None for i in range(n_channel)]
-
+        channel_thresholds = [None for _ in range(n_channel)]
     # init KnossosDataset:
     kd = KnossosDataset()
     kd.initialize_from_knossos_path(kd_path)
-
+    if cube_of_interest is None:
+        cube_of_interest = (np.zeros(3, ), kd.boundary // mag)
     # chunk properties:
     chunk_size = np.array([1024, 1024, 256], dtype=np.int)  # XYZ
     n_tiles = np.array([4, 4, 16])
@@ -603,8 +621,8 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
 
     # init ChunkDataset:
     cd = ChunkDataset()
-    cd.initialize(kd, kd.boundary//4, chunk_size, target_path + '/cd_tmp/',
-                  box_coords=np.zeros(3), list_of_coords=[],
+    cd.initialize(kd, cube_of_interest[1], chunk_size, target_path + '/cd_tmp/',
+                  box_coords=cube_of_interest[0], list_of_coords=[],
                   fit_box_size=True, overlap=overlap_shape)
     chunk_ids = list(cd.chunk_dict.keys())
     # init target KnossosDatasets:
@@ -616,27 +634,29 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     for path in target_kd_path_list:
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_without_conf(path, kd.boundary, kd.scale,
-                                          kd.experiment_name, [2**x for x in range(5)])
+                                          kd.experiment_name, [2**x for x in range(6)])
         target_kd = knossosdataset.KnossosDataset()
         target_kd.initialize_from_knossos_path(path)
     # init QSUB parameters
     multi_params = chunk_ids
-    # on avg. two jobs per GPU
-    multi_params = chunkify(multi_params, global_params.NGPU_TOTAL * 2)
+    # on avg. four jobs per worker/GPU - reduce overhead of initializing model
+    multi_params = chunkify(multi_params, global_params.config.ngpu_total)
     multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
                      overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
-                     target_kd_path_list, channel_thresholds, mag) for ch_ids in multi_params]
-    log.info('Starting dense prediction of {:d} chunks.'.format(len(chunk_ids)))
-    n_cores_per_job = global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE if\
-        not 'example' in global_params.config.working_dir else global_params.NCORES_PER_NODE
-    qu.QSUB_script(multi_params, "predict_dense", n_max_co_processes=global_params.NGPU_TOTAL,
-                   n_cores=n_cores_per_job, remove_jobfolder=True)
-    log.info('Finished dense prediction of {} Chunks'.format(len(chunk_ids)))
+                     target_kd_path_list, channel_thresholds, mag, cube_of_interest)
+                    for ch_ids in multi_params]
+    log.info('Starting dense prediction of {} in {:d} chunk(s).'.format(
+        ", ".join(target_names), len(chunk_ids)))
+    n_cores_per_job = global_params.config['ncores_per_node'] //global_params.config['ngpus_per_node'] if\
+        'example' not in global_params.config.working_dir else global_params.config['ncores_per_node']
+    qu.QSUB_script(multi_params, "predict_dense", n_max_co_processes=global_params.config.ngpu_total,
+                   n_cores=n_cores_per_job, remove_jobfolder=True, log=log)
+    log.info('Finished dense prediction of {}'.format(", ".join(target_names)))
 
 
 def dense_predictor(args):
     """
-    TODO: Threshold mechanism requires refactoring.
+    TODO: Downsampling mechanism requires refactoring.
 
     Parameters
     ----------
@@ -659,8 +679,9 @@ def dense_predictor(args):
 
     """
   
-    chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles, tile_shape, chunk_size,\
-    n_channel, target_channels, target_kd_path_list, channel_thresholds, mag = args
+    chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles,\
+    tile_shape, chunk_size, n_channel, target_channels, target_kd_path_list, \
+    channel_thresholds, mag, cube_of_interest = args
 
     # init KnossosDataset:
     kd = KnossosDataset()
@@ -668,8 +689,9 @@ def dense_predictor(args):
 
     # init ChunkDataset:
     cd = ChunkDataset()
-    cd.initialize(kd, kd.boundary//mag, chunk_size, target_p + '/cd_tmp/', box_coords=np.zeros(3),
-                  fit_box_size=True, overlap=overlap_shape, list_of_coords=[])
+    cd.initialize(kd, cube_of_interest[1], chunk_size, target_p + '/cd_tmp/',
+                  box_coords=cube_of_interest[0], list_of_coords=[],
+                  fit_box_size=True, overlap=overlap_shape)
 
     # init Target KnossosDataset
     target_kd_dict = {}
@@ -679,6 +701,7 @@ def dense_predictor(args):
         target_kd_dict[path] = target_kd
 
     # init Predictor
+    from elektronn3.inference import Predictor
     # TODO: be consistent with the axis order: either ZYX or ZXY
     out_shape = (chunk_size + 2 * np.array(overlap_shape)).astype(np.int)[::-1]  # ZYX
     out_shape = np.insert(out_shape, 0, n_channel)  # output must equal chunk size
@@ -702,23 +725,26 @@ def dense_predictor(args):
             ids = target_channels[j]
             path = target_kd_path_list[j]
             data = np.zeros_like(pred[0]).astype(np.uint8)
-            n = 0
-            for i in ids:
-                t = channel_thresholds[i]
-                if t is not None or len(ids) > i:
+            for label in ids:
+                t = channel_thresholds[label]
+                # if threshold is given or multiple target labels per dataset
+                # store classification restuls
+                if t is not None or len(ids) > 1:
                     if t is None:
                         t = 255 / 2
                     if t < 1.:
                         t = 255 * t
-                    data += ((pred[i] > t) * n).astype(np.uint8)
-                    n += 1
+                    pred_mask = pred[label] > t
+                    data[pred_mask] = label
                 else:
-                    data = pred[i]
+                    # no thresholding and only one label in the target KnossosDataset
+                    # -> store probability map.
+                    data = pred[label]
             target_kd_dict[path].from_matrix_to_cubes(
                 ch.coordinates, data=data, data_mag=mag, mags=[mag, mag*2, mag*4],
-                fast_downsampling=False,
+                fast_downsampling=True,
                 overwrite=True, upsample=False,
-                nb_threads=global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE,
+                nb_threads=global_params.config['ncores_per_node']//global_params.config['ngpus_per_node'],
                 as_raw=True, datatype=np.uint8)
 
 
@@ -824,7 +850,8 @@ def prediction_helper(raw, model, override_mfp=True,
     return zxy2xyz(pred)
 
 
-def chunk_pred(ch, model, debug=False):
+def chunk_pred(ch: 'chunky.Chunk', model: 'torch.nn.Module',
+               debug: bool = False):
     """
     Helper function to write chunks.
 
@@ -832,6 +859,7 @@ def chunk_pred(ch, model, debug=False):
     ----------
     ch : Chunk
     model : str or model object
+    debug: bool
     """
     raw = ch.raw_data()
     pred = prediction_helper(raw, model) * 255
@@ -846,7 +874,7 @@ class NeuralNetworkInterface(object):
     Inference class for elektronn2 models, support will end at some point.
     Switching to 'InferenceModel' in elektronn3.model.base in the long run.
     """
-    def __init__(self, model_path, arch='marvin', imposed_batch_size=1,
+    def __init__(self, model_path, arch='', imposed_batch_size=1,
                  channels_to_load=(0, 1, 2, 3), normal=False, nb_labels=2,
                  normalize_data=False, normalize_func=None, init_gpu=None):
         self.imposed_batch_size = imposed_batch_size
@@ -1230,30 +1258,28 @@ def certainty_estimate(inp: np.ndarray, is_logit: bool = False) -> float:
         1. If `is_logit` is True, Generate pseudo-probabilities from the
            input using softmax.
         2. Sum the evidence per class and rescale.
-        3. Compare the sorted evidence to the ideal outcome
-           (one-hot vector) via logloss.
-        4. Scale the logloss with the worst outcome (equal probabilities)
-           and subtract it from 1.
+        3. Compute the entropy, scale it with the maximum entropy (equal
+           probabilities) and subtract it from 1.
     Args:
         inp: 2D array of prediction results (N: number of samples,
             C: Number of classes)
         is_logit: If True, applies ``softmax(inp, axis=1)``.
 
     Returns:
-        Certainty measure based on the logloss of a set of (independent)
+        Certainty measure based on the entropy of a set of (independent)
         predictions.
     """
+    if not inp.ndim == 2:
+        raise ValueError('Input is not two dimensional.')
     if is_logit:
         proba = softmax(inp, axis=1)
     else:
         proba = inp
+    # sum probabilities across samples
     proba = np.sum(proba, axis=0)
-    # sort. Ideally, result should be one-hot vector
-    proba = np.sort(proba)[::-1] / np.sum(proba)
-    if np.max(proba) == 1:
-        return 1
-    y_true = np.zeros_like(proba)
-    y_true[0] = 1
-    loss = log_loss(y_true, proba)
-    loss_worst = log_loss(y_true, np.ones_like(y_true) / len(y_true))
-    return 1 - loss / loss_worst
+    # normalize
+    proba = proba / np.sum(proba)
+    # maximum entropy at equal probabilities: -sum(1/N*ln(1/N) = ln(N)
+    entr_max = np.log(len(proba))
+    entr_norm = entropy(proba) / entr_max
+    return 1 - entr_norm

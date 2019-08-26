@@ -4,16 +4,6 @@
 # Copyright (c) 2016 - now
 # Max-Planck-Institute of Neurobiology, Munich, Germany
 # Authors: Philipp Schubert, Joergen Kornfeld
-
-import glob
-import numpy as np
-from scipy import ndimage
-import os
-from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union
-if TYPE_CHECKING:
-    from ..reps.segmentation import SegmentationObject, SegmentationDataset
-    from ..reps.super_segmentation import SuperSegmentationObject
-
 from ..backend.storage import AttributeDict, CompressedStorage, MeshStorage,\
     VoxelStorage, SkeletonStorage, VoxelStorageDyn
 from ..handler.basics import chunkify
@@ -21,8 +11,17 @@ from ..mp.mp_utils import start_multiprocess_imap
 from . import log_reps
 from .. import global_params
 
+import glob
+import numpy as np
+from scipy import ndimage
+import os
+from typing import TYPE_CHECKING, Dict, Optional, Tuple, List, Union
+if TYPE_CHECKING:
+    from ..reps import segmentation
 
-def glia_pred_so(so: 'SegmentationObject', thresh: float, pred_key_appendix: str) -> int:
+
+def glia_pred_so(so: 'segmentation.SegmentationObject', thresh: float,
+                 pred_key_appendix: str) -> int:
     """
     Perform the glia classification of a cell supervoxel (0: neuron, 1: glia).
 
@@ -79,7 +78,7 @@ def acquire_obj_ids(sd: 'SegmentationDataset'):
         np.save(sd.path_ids, sd._ids)
 
 
-def save_voxels(so: 'SegmentationObject', bin_arr: np.ndarray,
+def save_voxels(so: 'segmentation.SegmentationObject', bin_arr: np.ndarray,
                 offset: np.ndarray, overwrite: bool = False):
     """
     Helper function to save SegmentationObject voxels.
@@ -106,7 +105,7 @@ def save_voxels(so: 'SegmentationObject', bin_arr: np.ndarray,
     voxel_dc.push(so.voxel_path)
 
 
-def load_voxels(so: 'SegmentationObject',
+def load_voxels(so: 'segmentation.SegmentationObject',
                 voxel_dc: Optional[Dict] = None) -> np.ndarray:
     """
     Helper function to load voxels of a SegmentationObject as 3D array.
@@ -162,7 +161,7 @@ def load_voxels(so: 'SegmentationObject',
 
 
 def load_voxels_downsampled(
-        so: 'SegmentationObject',
+        so: 'segmentation.SegmentationObject',
         downsampling: Tuple[int, int, int] = (2, 2, 1)) -> Union[np.ndarray, List]:
     if isinstance(so.voxels, int):
         return []
@@ -170,7 +169,7 @@ def load_voxels_downsampled(
     return so.voxels[::downsampling[0], ::downsampling[1], ::downsampling[2]]
 
 
-def load_voxel_list(so):
+def load_voxel_list(so: 'segmentation.SegmentationObject'):
     """
     Helper function to load voxels of a SegmentationObject.
 
@@ -239,7 +238,8 @@ def load_voxel_list_downsampled_adapt(so, downsampling=(2, 2, 1)):
     return voxel_list
 
 
-def load_mesh(so: 'SegmentationObject', recompute: bool = False)\
+def load_mesh(so: 'segmentation.SegmentationObject',
+              recompute: bool = False)\
         -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Load mesh of SegmentationObject.
@@ -290,7 +290,7 @@ def load_mesh(so: 'SegmentationObject', recompute: bool = False)\
     return indices, vertices, normals
 
 
-def load_skeleton(so: 'SegmentationObject', recompute: bool = False) \
+def load_skeleton(so: 'segmentation.SegmentationObject', recompute: bool = False) \
         -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
 
@@ -333,7 +333,7 @@ def load_skeleton(so: 'SegmentationObject', recompute: bool = False) \
     return nodes, diameters, edges
 
 
-def save_skeleton(so: 'SegmentationObject', overwrite: bool = False):
+def save_skeleton(so: 'segmentation.SegmentationObject', overwrite: bool = False):
     skeleton_dc = SkeletonStorage(so.skeleton_path, read_only=False,
                                   disable_locking=not so.enable_locking)
     if not overwrite and so.id in skeleton_dc:

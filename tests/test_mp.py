@@ -16,10 +16,9 @@ def chunks(l, n):
         yield l[i:i + n]
 
 
-def test_func(x):
+def func(x):
     for i in range(100):
         _ = np.linalg.norm(np.sqrt(x ** 2) * 5 / x * x ** 2 - x + x, axis=0)
-    return
 
 
 if __name__ == '__main__':
@@ -30,13 +29,13 @@ if __name__ == '__main__':
 
     start = time.time()
     for d in data:
-        test_func(d)
+        func(d)
     dt_single = time.time() - start
 
     start = time.time()
     print("Starting MP with {} workers.".format(n_worker))
     pool = Pool(processes=n_worker)
-    pool.map(test_func, data)
+    pool.map(func, data)
     dt_mp = time.time() - start
 
     print('Single process:\t{:.4f} s\n'

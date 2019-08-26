@@ -16,7 +16,7 @@ from ..mp import mp_utils as sm
 from.checking_helper import find_missing_overlaycubes_thread
 
 
-def find_missing_overlaycubes(path, stride=100, qsub_pe=None, qsub_queue=None,
+def find_missing_overlaycubes(path, stride=100,
                               nb_cpus=1, n_max_co_processes=100):
     if "mag" in path:
         paths = glob.glob(path + "/*/*/*/")

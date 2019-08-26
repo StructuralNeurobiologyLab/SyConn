@@ -24,9 +24,9 @@ from torch import nn
 from torch import optim
 from torch.utils.data.dataset import random_split
 try:
-    from elektronn3.training.loss import DiceLoss
-except ImportError:
     from elektronn3.modules.loss import DiceLoss
+except ImportError:
+    from elektronn3.training.loss import DiceLoss
 from elektronn3.training import metrics
 from elektronn3.models.fcn_2d import *
 from elektronn3.models.unet import UNet
@@ -141,20 +141,20 @@ if __name__ == "__main__":
 
     # Specify data set
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
-    # global_params.gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_1024'
-    # global_params.gt_path_axonseg = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_1024_with_BOUTONS'
-    global_params.gt_path_axonseg = \
+    # global_params.config['compartments']['gt_path_axonseg'] = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_1024'
+    # global_params.config['compartments']['gt_path_axonseg'] = '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/gt_h5_files_80nm_1024_with_BOUTONS'
+    global_params.config['compartments']['gt_path_axonseg'] = \
         '/wholebrain/scratch/areaxfs3/ssv_semsegaxoness/all_bouton_data_40nm/'
     # num_workers must be <=1 for MultiviewDataCached class
-    train_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'',
+    train_dataset = MultiviewDataCached(base_dir=global_params.config['compartments']['gt_path_axonseg']+'',
                                         train=True, inp_key='raw', target_key='label',
                                         transform=transform, num_read_limit=args.num_repeat)
-    valid_dataset = MultiviewDataCached(base_dir=global_params.gt_path_axonseg+'',
+    valid_dataset = MultiviewDataCached(base_dir=global_params.config['compartments']['gt_path_axonseg']+'',
                                         train=False, inp_key='raw', target_key='label',
                                         transform=transform, num_read_limit=1)
     # ic(train_dataset.__len__(), valid_dataset.__len__())
-    # train_dataset = ModMultiviewData(train=True, transform=transform, base_dir=global_params.gt_path_axonseg)
-    # valid_dataset = ModMultiviewData(train=False, transform=transform, base_dir=global_params.gt_path_axonseg)
+    # train_dataset = ModMultiviewData(train=True, transform=transform, base_dir=global_params.config['compartments']['gt_path_axonseg'])
+    # valid_dataset = ModMultiviewData(train=False, transform=transform, base_dir=global_params.config['compartments']['gt_path_axonseg'])
 
     # criterion = LovaszLoss().to(device)
     criterion = DiceLoss().to(device)

@@ -117,7 +117,7 @@ if __name__ == '__main__':
                 ii].attr_dict  # copy mapped object info
 
         # render views with EGL
-        print('{} neuron rendering'.format(global_params.PYOPENGL_PLATFORM))
+        print('{} neuron rendering'.format(global_params.config['pyopengl_platform']))
         for ii in range(3):
             start = time.time()
             for ssv_tmp in ssvs_tmp:

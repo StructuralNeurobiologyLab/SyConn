@@ -25,8 +25,7 @@ from ..proc.meshes import mesh_creator_sso
 
 
 def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=None,
-                                           n_jobs=None, qsub_pe=None,
-                                           qsub_queue=None, nb_cpus=None):
+                                           n_jobs=None, nb_cpus=None):
     """
 
     Parameters
@@ -36,8 +35,6 @@ def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=No
     n_jobs : int
     n_max_co_processes : int
         Number of parallel jobs
-    qsub_pe : Optional[str]
-    qsub_queue : Optional[str]
     nb_cpus : int
         cpus per job when using BatchJob
     """
@@ -46,7 +43,7 @@ def aggregate_segmentation_object_mappings(ssd, obj_types, n_max_co_processes=No
         assert obj_type in ssd.version_dict
     assert "sv" in ssd.version_dict
     if n_jobs is None:
-        n_jobs = global_params.NCORE_TOTAL * 2
+        n_jobs = global_params.config.ncore_total * 2
 
     multi_params = basics.chunkify(ssd.ssv_ids, n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
@@ -99,8 +96,8 @@ def _aggregate_segmentation_object_mappings_thread(args):
         ssv.save_attr_dict()
 
 
-def apply_mapping_decisions(ssd, obj_types, n_jobs=None, qsub_pe=None,
-                            qsub_queue=None, nb_cpus=None, n_max_co_processes=None):
+def apply_mapping_decisions(ssd, obj_types, n_jobs=None,
+                            nb_cpus=None, n_max_co_processes=None):
     """
     Requires prior execution of `aggregate_segmentation_object_mappings`.
 
@@ -109,14 +106,13 @@ def apply_mapping_decisions(ssd, obj_types, n_jobs=None, qsub_pe=None,
     ssd : SuperSegmentationDataset
     obj_types : List[str]
     n_jobs : int
-    qsub_pe : Optional[str]
-    qsub_queue : Optional[str]
     nb_cpus : int
+    n_max_co_processes: int
     """
     for obj_type in obj_types:
         assert obj_type in ssd.version_dict
     if n_jobs is None:
-        n_jobs = global_params.NCORE_TOTAL * 2
+        n_jobs = global_params.config.ncore_total * 2
     multi_params = basics.chunkify(ssd.ssv_ids, n_jobs)
     multi_params = [(ssv_id_block, ssd.version, ssd.version_dict, ssd.working_dir,
                      obj_types, ssd.type) for ssv_id_block in multi_params]
@@ -174,7 +170,7 @@ def _apply_mapping_decisions_thread(args):
 
             if lower_ratio is None:
                 try:
-                    lower_ratio = ssv.config.entries["LowerMappingRatios"][
+                    lower_ratio = ssv.config['cell_objects']["lower_mapping_ratios"][
                         obj_type]
                 except:
                     msg = "Lower ratio undefined. SSV {}.".format(ssv_id)
@@ -183,7 +179,7 @@ def _apply_mapping_decisions_thread(args):
 
             if upper_ratio is None:
                 try:
-                    upper_ratio = ssv.config.entries["UpperMappingRatios"][
+                    upper_ratio = ssv.config['cell_objects']["upper_mapping_ratios"][
                         obj_type]
                 except:
                     log_proc.error("Upper ratio undefined - 1. assumed. "
@@ -192,7 +188,7 @@ def _apply_mapping_decisions_thread(args):
 
             if sizethreshold is None:
                 try:
-                    sizethreshold = ssv.config.entries["Sizethresholds"][
+                    sizethreshold = ssv.config['cell_objects']["sizethresholds"][
                         obj_type]
                 except:
                     msg = "Size threshold undefined. SSV {}.".format(ssv_id)
@@ -205,7 +201,7 @@ def _apply_mapping_decisions_thread(args):
                 for i_so_id in range(
                         len(ssv.attr_dict["mapping_%s_ids" % obj_type])):
                     so_id = ssv.attr_dict["mapping_%s_ids" % obj_type][i_so_id]
-                    obj_version = ssv.config.entries["Versions"][obj_type]
+                    obj_version = ssv.config["versions"][obj_type]
                     this_so = segmentation.SegmentationObject(
                         so_id, obj_type,
                         version=obj_version,
@@ -241,7 +237,7 @@ def _apply_mapping_decisions_thread(args):
 
 
 def map_synssv_objects(synssv_version=None, stride=100, log=None,
-                       nb_cpus=None, n_max_co_processes=global_params.NCORE_TOTAL,
+                       nb_cpus=None, n_max_co_processes=global_params.config.ncore_total,
                        syn_threshold=None):
     """
     Map synn_ssv objects to all SSO objects contained in SSV SuperSegmentationDataset.
@@ -250,8 +246,6 @@ def map_synssv_objects(synssv_version=None, stride=100, log=None,
     ----------
     synssv_version : str
     stride : int
-    qsub_pe : str
-    qsub_queue : str
     nb_cpus : int
     n_max_co_processes : int
     syn_threshold : float
@@ -261,7 +255,7 @@ def map_synssv_objects(synssv_version=None, stride=100, log=None,
 
     """
     if syn_threshold is None:
-        syn_threshold = global_params.thresh_syn_proba
+        syn_threshold = global_params.config['cell_objects']['thresh_synssv_proba']
     ssd = SuperSegmentationDataset(global_params.config.working_dir)
     multi_params = []
     for ssv_id_block in [ssd.ssv_ids[i:i + stride]

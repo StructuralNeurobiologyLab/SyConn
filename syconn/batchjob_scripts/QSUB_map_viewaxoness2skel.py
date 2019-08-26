@@ -28,7 +28,7 @@ with open(path_storage_file, 'rb') as f:
 
 ssv_ixs = args[0]
 pred_key_appendix = args[1]
-max_dist = global_params.DIST_AXONESS_AVERAGING
+max_dist = global_params.config['compartments']['dist_axoness_averaging']
 for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
     sso.load_skeleton()
