@@ -447,7 +447,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
     log.info('Started rendering of {} SSVs. '.format(np.sum(size_mask)))
 
     if global_params.config['pyopengl_platform'] == 'osmesa':  # utilize all CPUs
-        qu.QSUB_script(multi_params, "render_views", log=log, suffix='_big',
+        qu.QSUB_script(multi_params, "render_views", log=log, suffix='_small',
                        n_max_co_processes=global_params.config.ncore_total,
                        remove_jobfolder=False)
     elif global_params.config['pyopengl_platform'] == 'egl':  # utilize 1 GPU per task
@@ -455,7 +455,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
         if not qu.batchjob_enabled():
             n_cores = 1
             n_parallel_jobs = global_params.config['ncores_per_node']
-            qu.QSUB_script(multi_params, "render_views", suffix='_big',
+            qu.QSUB_script(multi_params, "render_views", suffix='_small',
                            n_max_co_processes=n_parallel_jobs, log=log,
                            additional_flags="--gres=gpu:2",
                            n_cores=n_cores, remove_jobfolder=True)
@@ -463,7 +463,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
         else:
             n_cores = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
             n_parallel_jobs = global_params.config.ngpu_total
-            qu.QSUB_script(multi_params, "render_views_egl", suffix='_big',
+            qu.QSUB_script(multi_params, "render_views_egl", suffix='_small',
                            n_max_co_processes=n_parallel_jobs, log=log,
                            additional_flags="--gres=gpu:1",
                            n_cores=n_cores, remove_jobfolder=True)
@@ -527,9 +527,9 @@ def _run_neuron_rendering_big_helper(max_n_jobs: Optional[int] = None):
         multi_params = chunkify(multi_params, max_n_jobs)
         # list of SSV IDs and SSD parameters need to be given to a single QSUB job
         multi_params = [(ixs, sso_kwargs, render_kwargs) for ixs in multi_params]
-        qu.QSUB_script(multi_params, "render_views",
+        qu.QSUB_script(multi_params, "render_views", suffix='_big',
                        n_max_co_processes=n_parallel_jobs, log=log,
-                       additional_flags="--gres=gpu:1", suffix='_big',
+                       additional_flags="--gres=gpu:1",
                        n_cores=n_cores, remove_jobfolder=True)
         # # render index-views only
         for ssv_id in big_ssv:

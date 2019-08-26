@@ -9,7 +9,6 @@ from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
 import numpy as np
 import os
-import subprocess
 import glob
 import shutil
 import sys
