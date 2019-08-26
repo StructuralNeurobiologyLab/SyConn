@@ -3,7 +3,7 @@ pipeline {
   stages {
     stage('build') {
       steps {
-        sh 'python setup.py develop'
+        sh 'pip install -e .'
       }
     }
     stage('test') {
