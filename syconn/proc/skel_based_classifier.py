@@ -137,7 +137,7 @@ class SkelClassifier(object):
         paths = glob.glob(self.clf_path + "/*{}*.pkl".format(clf_name))
         feature_contexts = set()
         for path in paths:
-            fc = int(re.findall("[\d]+", os.path.basename(path))[-1])
+            fc = int(re.findall(r"[\d]+", os.path.basename(path))[-1])
             feature_contexts.add(fc)
 
         return np.array(list(feature_contexts))

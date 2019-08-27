@@ -354,7 +354,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         if iteration == 1:
             params_orig_id = np.arange(len(params))
         for p in out_files:
-            job_id = int(re.findall("[\d]+", p)[-1])
+            job_id = int(re.findall(r"[\d]+", p)[-1])
             index = np.nonzero(params_orig_id == job_id)[0]  # still an array, "[0]" only gives
             # us the first dimension
             assert len(index) == 1  # must be one hit and one only
@@ -470,7 +470,7 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         checklist = np.zeros(len(params), dtype=np.bool)
 
         for p in out_files:
-            checklist[int(re.findall("[\d]+", p)[-1])] = True
+            checklist[int(re.findall(r"[\d]+", p)[-1])] = True
 
         missed_params = [params[ii] for ii in range(len(params)) if not checklist[ii]]
         orig_job_ids = np.arange(len(params))[~checklist]
@@ -677,7 +677,7 @@ def delete_jobs_by_name(job_name):
     for line in iter(process.stdout.readline, ''):
         curr_line = str(line)
         if job_name[:10] in curr_line:
-            job_ids.append(re.findall("[\d]+", curr_line)[0])
+            job_ids.append(re.findall(r"[\d]+", curr_line)[0])
 
     if BATCH_PROC_SYSTEM == 'QSUB':
         cmd_del = "qdel "

@@ -179,7 +179,7 @@ class SuperSegmentationDataset(object):
             for other_dataset in other_datasets:
                 try:
                     other_version = \
-                        int(re.findall("[\d]+",
+                        int(re.findall(r"[\d]+",
                                        os.path.basename(other_dataset))[-1])
                     if max_version < other_version:
                         max_version = other_version

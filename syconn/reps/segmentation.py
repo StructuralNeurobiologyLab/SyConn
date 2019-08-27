@@ -259,7 +259,7 @@ class SegmentationObject(object):
             if bp == self.so_storage_path_base:
                 self._n_folders_fs = 100000
             else:
-                self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
+                self._n_folders_fs = int(re.findall(r'[\d]+', bp)[-1])
 
         return self._n_folders_fs
 
@@ -1548,7 +1548,7 @@ class SegmentationDataset(object):
 
             for other_dataset in other_datasets:
                 other_version = \
-                    int(re.findall("[\d]+",
+                    int(re.findall(r"[\d]+",
                                    os.path.basename(other_dataset.strip('/')))[-1])
                 if max_version < other_version:
                     max_version = other_version
@@ -1615,7 +1615,7 @@ class SegmentationDataset(object):
             if bp == self.so_storage_path_base:
                 self._n_folders_fs = 100000
             else:
-                self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
+                self._n_folders_fs = int(re.findall(r'[\d]+', bp)[-1])
 
         return self._n_folders_fs
 

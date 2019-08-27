@@ -209,7 +209,7 @@ def get_paths_of_skelID(id_list, traced_skel_dir):
         paths of skeletons in id_list
     """
     mapped_skel_paths = get_filepaths_from_dir(traced_skel_dir)
-    mapped_skel_ids = re.findall('iter_\d+_(\d+)', ''.join(mapped_skel_paths))
+    mapped_skel_ids = re.findall(r'iter_\d+_(\d+)', ''.join(mapped_skel_paths))
     wanted_paths = []
     for skelID in id_list:
         try:
@@ -663,7 +663,7 @@ def get_skelID_from_path(skel_path):
     int
         skeleton ID
     """
-    return int(re.findall('iter_0_(\d+)', skel_path)[0])
+    return int(re.findall(r'iter_0_(\d+)', skel_path)[0])
 
 
 def safe_copy(src, dest, safe=True):
@@ -736,7 +736,7 @@ def prase_cc_dict_from_txt(txt):
             curr_line = line.decode()
         else:
             curr_line = line
-        line_nb = np.array(re.findall("(\d+)", curr_line), dtype=np.uint)
+        line_nb = np.array(re.findall(r"(\d+)", curr_line), dtype=np.uint)
         curr_ixs = line_nb[3:]
         cc_ix = line_nb[0]
         curr_ixs = curr_ixs[curr_ixs != 0]
