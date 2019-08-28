@@ -15,7 +15,6 @@ import itertools
 
 from ..mp.mp_utils import start_multiprocess_obj
 from .. import global_params
-from ..global_params import min_cc_size_ssv, glia_thresh
 from ..mp.mp_utils import start_multiprocess_imap as start_multiprocess
 from . import log_proc
 
@@ -312,7 +311,10 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
         if glia_dict[n] != 0:
             g_neuron.remove_node(n)
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
-    if np.all(np.array(list(neuron2ccsize_dict.values())) <= min_cc_size_ssv): # no significant neuron SV
+    if np.all(np.array(list(neuron2ccsize_dict.values())) <=
+              global_params.config['glia']['min_cc_size_ssv']): # no
+    # significant
+        # neuron SV
         if return_removed_nodes:
             return [], [list(g.nodes())]
         return []
@@ -323,14 +325,15 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
         if glia_dict[n] == 0:
             g_glia.remove_node(n)
     glia2ccsize_dict = create_ccsize_dict(g_glia, size_dict)
-    if np.all(np.array(list(glia2ccsize_dict.values())) <= min_cc_size_ssv): # no significant glia SV
+    if np.all(np.array(list(glia2ccsize_dict.values())) <=
+              global_params.config['glia']['min_cc_size_ssv']): # no significant glia SV
         if return_removed_nodes:
             return [list(g.nodes())], []
         return [list(g.nodes())]
 
     tiny_glia_fragments = []
     for n in g_glia.nodes():
-        if glia2ccsize_dict[n] < min_cc_size_ssv:
+        if glia2ccsize_dict[n] < global_params.config['glia']['min_cc_size_ssv']:
             tiny_glia_fragments += [n]
 
     # create new neuron graph without sufficiently big glia connected components
@@ -343,7 +346,7 @@ def remove_glia_nodes(g, size_dict, glia_dict, return_removed_nodes=False,
     neuron2ccsize_dict = create_ccsize_dict(g_neuron, size_dict)
     g_tmp = g_neuron.copy()
     for n in g_tmp.nodes():
-        if neuron2ccsize_dict[n] < min_cc_size_ssv:
+        if neuron2ccsize_dict[n] < global_params.config['glia']['min_cc_size_ssv']:
             g_neuron.remove_node(n)
 
     # create new glia graph with remaining nodes
@@ -504,7 +507,7 @@ def write_sopath2skeleton(so_path, dest_path, scaling=None, comment=None):
     comment : str
     """
     if scaling is None:
-        scaling = np.array(global_params.config["Dataset"]["scaling"])
+        scaling = np.array(global_params.config['scaling'])
     skel = Skeleton()
     anno = SkeletonAnnotation()
     anno.scaling = scaling
@@ -541,7 +544,7 @@ def coordpath2anno(coords, scaling=None):
     SkeletonAnnotation
     """
     if scaling is None:
-        scaling = global_params.config["Dataset"]["scaling"]
+        scaling = global_params.config['scaling']
     anno = SkeletonAnnotation()
     anno.scaling = scaling
     rep_nodes = []
@@ -655,7 +658,7 @@ def draw_glia_graph(G, dest_path, min_sv_size=0, ext_glia=None, iterations=150, 
 
 def nxGraph2kzip(g, coords, kzip_path):
     import tqdm
-    scaling = global_params.config.entries['Dataset']['scaling']()
+    scaling = global_params.config['scaling']
     coords = coords / scaling
     skel = Skeleton()
     anno = SkeletonAnnotation()

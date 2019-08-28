@@ -39,7 +39,7 @@ else:
     render_kwargs = dict(add_cellobjects=True, woglia=True, overwrite=True)
 
 # render huge SSVs in parallel, multiple jobs per SSV
-n_parallel_jobs = global_params.NCORES_PER_NODE  # // global_params.NGPUS_PER_NODE  # Assumes
+n_parallel_jobs = global_params.config['ncores_per_node']  # // global_params.config['ngpus_per_node']  # Assumes
 
 ssvs_large = []
 ssvs_small = []

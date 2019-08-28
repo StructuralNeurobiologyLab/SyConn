@@ -164,7 +164,7 @@ def load_cached_data_dict(wd=None, syn_version=None, thresh_syn_prob=None,
     if wd is None:
         wd = global_params.config.working_dir
     if thresh_syn_prob is None:
-        thresh_syn_prob = global_params.thresh_syn_proba
+        thresh_syn_prob = global_params.config['cell_objects']['thresh_synssv_proba']
     start = time.time()
     csd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=wd,
                                            version=syn_version)

@@ -453,8 +453,8 @@ def parse_movement_area_from_zip(zip_fname: str) -> np.ndarray:
     line = re.findall("MovementArea (.*)/>", anno_str)
     assert len(line) == 1
     line = line[0]
-    bb_min = np.array([re.findall('min.\w="(\d+)"', line)], dtype=np.uint)
-    bb_max = np.array([re.findall('max.\w="(\d+)"', line)], dtype=np.uint)
+    bb_min = np.array([re.findall(r'min.\w="(\d+)"', line)], dtype=np.uint)
+    bb_max = np.array([re.findall(r'max.\w="(\d+)"', line)], dtype=np.uint)
     # Movement area is stored with 0-indexing! No adjustment needed
     return np.concatenate([bb_min, bb_max])
 
@@ -640,22 +640,22 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     # init QSUB parameters
     multi_params = chunk_ids
     # on avg. four jobs per worker/GPU - reduce overhead of initializing model
-    multi_params = chunkify(multi_params, global_params.NGPU_TOTAL)
+    multi_params = chunkify(multi_params, global_params.config.ngpu_total)
     multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
                      overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
                      target_kd_path_list, channel_thresholds, mag, cube_of_interest)
                     for ch_ids in multi_params]
-    log.info('Starting dense prediction of {:d} chunks.'.format(len(chunk_ids)))
-    n_cores_per_job = global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE if\
-        'example' not in global_params.config.working_dir else global_params.NCORES_PER_NODE
-    qu.QSUB_script(multi_params, "predict_dense", n_max_co_processes=global_params.NGPU_TOTAL,
+    log.info('Starting dense prediction of {} in {:d} chunk(s).'.format(
+        ", ".join(target_names), len(chunk_ids)))
+    n_cores_per_job = global_params.config['ncores_per_node'] //global_params.config['ngpus_per_node'] if\
+        'example' not in global_params.config.working_dir else global_params.config['ncores_per_node']
+    qu.QSUB_script(multi_params, "predict_dense", n_max_co_processes=global_params.config.ngpu_total,
                    n_cores=n_cores_per_job, remove_jobfolder=True, log=log)
-    log.info('Finished dense prediction of {} Chunks'.format(len(chunk_ids)))
+    log.info('Finished dense prediction of {}'.format(", ".join(target_names)))
 
 
 def dense_predictor(args):
     """
-    TODO: Threshold mechanism requires refactoring.
     TODO: Downsampling mechanism requires refactoring.
 
     Parameters
@@ -744,7 +744,7 @@ def dense_predictor(args):
                 ch.coordinates, data=data, data_mag=mag, mags=[mag, mag*2, mag*4],
                 fast_downsampling=True,
                 overwrite=True, upsample=False,
-                nb_threads=global_params.NCORES_PER_NODE//global_params.NGPUS_PER_NODE,
+                nb_threads=global_params.config['ncores_per_node']//global_params.config['ngpus_per_node'],
                 as_raw=True, datatype=np.uint8)
 
 

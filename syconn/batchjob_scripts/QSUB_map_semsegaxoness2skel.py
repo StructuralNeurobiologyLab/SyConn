@@ -29,9 +29,9 @@ with open(path_storage_file, 'rb') as f:
 
 ssv_ixs = args[0]
 pred_key_appendix = args[1]
-map_properties = global_params.map_properties_semsegax
-pred_key = global_params.view_properties_semsegax['semseg_key']
-max_dist = global_params.DIST_AXONESS_AVERAGING
+map_properties = global_params.config['compartments']['map_properties_semsegax']
+pred_key = global_params.config['compartments']['view_properties_semsegax']['semseg_key']
+max_dist = global_params.config['compartments']['dist_axoness_averaging']
 for ix in ssv_ixs:
     sso = SuperSegmentationObject(ix, working_dir=global_params.config.working_dir)
     sso.load_skeleton()
@@ -39,8 +39,8 @@ for ix in ssv_ixs:
         print("Skeleton of SSV %d has zero or less than two nodes." % ix)
         continue
     # vertex predictions
-    node_preds = sso.semseg_for_coords(sso.skeleton['nodes'],
-                                       semseg_key=global_params.view_properties_semsegax['semseg_key'],
+    node_preds = sso.semseg_for_coords(
+        sso.skeleton['nodes'], semseg_key=global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
                                        **map_properties)
 
     # perform average only on axon dendrite and soma predictions

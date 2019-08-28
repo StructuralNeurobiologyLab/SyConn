@@ -27,7 +27,7 @@ with open(path_storage_file, 'rb') as f:
         except EOFError:
             break
 
-n_cores = min(global_params.NCORES_PER_NODE // 2, 10)
+n_cores = min(global_params.config['ncores_per_node'] // 2, 10)
 obj_id_chs = args[0]
 params = args[1:]
 n_elements_per_job = min(len(obj_id_chs) // n_cores, 15)

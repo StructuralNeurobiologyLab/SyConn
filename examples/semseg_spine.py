@@ -40,7 +40,7 @@ if __name__ == '__main__':
                           model=m,  nb_views=2, comp_window=8e3)
     node_preds = sso.semseg_for_coords(
         sso.skeleton['nodes'], "spinesstest",
-        **global_params.semseg2coords_spines)
+        **global_params.config['spines']['semseg2coords_spines'])
     sso.skeleton["spinesstest"] = node_preds
     sso.save_skeleton_to_kzip(dest_path=cell_kzip_fn_spines,
                               additional_keys=["spinesstest"])

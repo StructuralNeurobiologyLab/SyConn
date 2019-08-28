@@ -33,9 +33,9 @@ working_dir = so_kwargs['working_dir']
 global_params.wd = working_dir
 kwargs = args[2]
 
-n_parallel_jobs = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE # -> uses more threads than available (increase
+n_parallel_jobs = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node'] # -> uses more threads than available (increase
 if 'add_cellobjects' in kwargs and kwargs['add_cellobjects']:
-    n_parallel_jobs = global_params.NCORES_PER_NODE // global_params.NGPUS_PER_NODE
+    n_parallel_jobs = global_params.config['ncores_per_node'] // global_params.config['ngpus_per_node']
 # usage of GPU)
 multi_params = ch
 # this creates a list of lists of SV IDs

@@ -28,7 +28,6 @@ from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip
 from .image import apply_pca
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
-from ..global_params import MESH_MIN_OBJ_VX
 from .. import global_params
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 try:
@@ -44,7 +43,8 @@ try:
     import openmesh
 except ImportError as e:
     log_proc.error('ImportError. Could not import openmesh. '
-                   'Writing meshes will not be possible. {}'.format(e))
+                   'Writing meshes as `.obj` files will not be'
+                   ' possible. {}'.format(e))
 
 try:
     from .in_bounding_boxC import in_bounding_box
@@ -363,9 +363,9 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
         return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
                np.zeros((0,), dtype=np.float32)
     try:
-        min_obj_vx = global_params.config.entries['Sizethresholds'][obj.type]
+        min_obj_vx = global_params.config['cell_objects']["sizethresholds"][obj.type]
     except KeyError:
-        min_obj_vx = MESH_MIN_OBJ_VX
+        min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
     try:
         indices, vertices, normals = triangulation(
             obj.voxel_list, downsampling=downsampling, n_closings=n_closings,
@@ -909,8 +909,6 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
     verbose : bool
     invert_vertex_order: Invert the vertex order.
     """
-    if not force_overwrite:
-        raise NotImplementedError('Currently modification of data in existing kzip is not implemented.')
     tmp_paths = []
     if verbose:
         log_proc.info('Generating ply files.')
@@ -1034,7 +1032,7 @@ def mesh_creator_sso(ssv):
 
 def mesh_chunk(args):
     attr_dir, obj_type = args
-    scaling = global_params.config.entries['Dataset']['scaling']
+    scaling = global_params.config['scaling']
     ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
     obj_ixs = list(ad.keys())
     if len(obj_ixs) == 0:
@@ -1059,17 +1057,17 @@ def mesh_chunk(args):
         # create mesh
 
         try:
-            min_obj_vx = global_params.config.entries['Sizethresholds'][obj_type]
+            min_obj_vx = global_params.config['cell_objects']["sizethresholds"][obj_type]
         except KeyError:
-            min_obj_vx = MESH_MIN_OBJ_VX
+            min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
         if obj_type == 'sv':
             decimate_mesh = 0.3  # remove 30% of the verties  # TODO: add to global params
         else:
             decimate_mesh = 0
         try:
             indices, vertices, normals = triangulation(
-                voxel_list, downsampling=global_params.config['MeshDownsampling'][obj_type],
-                n_closings=global_params.config['MeshClosing'][obj_type],
+                voxel_list, downsampling=global_params.config['meshes']['downsampling'][obj_type],
+                n_closings=global_params.config['meshes']['closings'][obj_type],
                 force_single_cc=obj_type == 'syn_ssv', decimate_mesh=decimate_mesh)
             vertices += 1  # account for knossos 1-indexing
             vertices = np.round(vertices * scaling)

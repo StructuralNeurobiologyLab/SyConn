@@ -26,13 +26,13 @@ with open(path_storage_file, 'rb') as f:
             break
 
 ch = args[0]
-missing = semsegaxoness_predictor([ch, global_params.NCORES_PER_NODE //
-                                   global_params.NGPUS_PER_NODE])
+missing = semsegaxoness_predictor([ch, global_params.config['ncores_per_node'] //
+                                   global_params.config['ngpus_per_node']])
 if len(missing) > 0:
     print('WARNING: Restarting sem. seg. prediction for {} SSVs ({}).'.format(
         len(missing), str(missing)))
-    missing = semsegaxoness_predictor([[m[0] for m in missing], global_params.NCORES_PER_NODE //
-                                       global_params.NGPUS_PER_NODE])
+    missing = semsegaxoness_predictor([[m[0] for m in missing], global_params.config['ncores_per_node'] //
+                                       global_params.config['ngpus_per_node']])
 if len(missing) > 0:
     print('ERROR: Sem. seg. prediction of {} SSVs ({}) failed.'.format(
         len(missing), str(missing)))

@@ -99,7 +99,7 @@ class SegmentationObject(object):
             enable_locking:  If True, enables file locking.
         """
         if scaling is None:
-            scaling = global_params.config.entries["Dataset"]["scaling"]
+            scaling = global_params.config['scaling']
 
         self._id = int(obj_id)
         self._type = obj_type
@@ -150,7 +150,7 @@ class SegmentationObject(object):
 
         if version is None:
             try:
-                self._version = self.config.entries["Versions"][self.type]
+                self._version = self.config["versions"][self.type]
             except:
                 raise Exception("unclear value for version")
         else:
@@ -259,7 +259,7 @@ class SegmentationObject(object):
             if bp == self.so_storage_path_base:
                 self._n_folders_fs = 100000
             else:
-                self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
+                self._n_folders_fs = int(re.findall(r'[\d]+', bp)[-1])
 
         return self._n_folders_fs
 
@@ -311,7 +311,7 @@ class SegmentationObject(object):
         if self._scaling is None:
             try:
                 self._scaling = \
-                    np.array(self.config.entries["Dataset"]["scaling"],
+                    np.array(self.config['scaling'],
                              dtype=np.float32)
             except:
                 self._scaling = np.array([1, 1, 1])
@@ -896,9 +896,9 @@ class SegmentationObject(object):
 
         """
         if n_closings is None:
-            n_closings = global_params.config['MeshClosing'][self.type]
+            n_closings = global_params.config['meshes']['closings'][self.type]
         if downsampling is None:
-            downsampling = global_params.config['MeshDownsampling'][self.type]
+            downsampling = global_params.config['meshes']['downsampling'][self.type]
         # Set 'force_single_cc' to True in case of syn_ssv objects!
         if self.type == 'syn_ssv' and 'force_single_cc' not in kwargs:
             kwargs['force_single_cc'] = True
@@ -1430,7 +1430,7 @@ class SegmentationDataset(object):
 
         The 'mapping' attributes are only computed for cell supervoxels and not for cellular
         organelles (e.g. 'mi', 'vc', etc.; see
-        :py:attr:`~syconn.global_params.existing_cell_organelles`).
+        :py:attr:`~syconn.global_params.config['existing_cell_organelles']`).
 
         For the :class:`~syconn.reps.segmentation.SegmentationDataset` of type 'syn_ssv'
         (which represent the actual synapses between two cell reconstructions), the following
@@ -1465,7 +1465,7 @@ class SegmentationDataset(object):
             * 'syn_type_sym_ratio': ``sym_prop / float(asym_prop + sym_prop)``.
               See :func:`~syconn.extraction.cs_processing_steps._extract_synapse_type_thread` .
             * 'syn_sign': Synaptic "sign" (-1: symmetric, +1: asymmetric). For threshold see
-              :py:attr:`~syconn.global_params.sym_thresh` .
+              :py:attr:`~syconn.global_params.config['cell_objects']['sym_thresh']` .
             * 'cs_ids': Contact site IDs associated with each 'syn_ssv' synapse.
             * 'id_cs_ratio': Overlap ratio between contact site and synaptic junction (sj)
               objects.
@@ -1535,7 +1535,7 @@ class SegmentationDataset(object):
 
         if version is None and create is False:
             try:
-                self._version = self.config.entries["Versions"][self.type]
+                self._version = self.config["versions"][self.type]
             except:
                 raise Exception("unclear value for version")
         elif version == "new":
@@ -1548,7 +1548,7 @@ class SegmentationDataset(object):
 
             for other_dataset in other_datasets:
                 other_version = \
-                    int(re.findall("[\d]+",
+                    int(re.findall(r"[\d]+",
                                    os.path.basename(other_dataset.strip('/')))[-1])
                 if max_version < other_version:
                     max_version = other_version
@@ -1559,7 +1559,7 @@ class SegmentationDataset(object):
 
         if version_dict is None:
             try:
-                self.version_dict = self.config.entries["Versions"]
+                self.version_dict = self.config["versions"]
             except:
                 raise Exception("No version dict specified in config")
         else:
@@ -1615,7 +1615,7 @@ class SegmentationDataset(object):
             if bp == self.so_storage_path_base:
                 self._n_folders_fs = 100000
             else:
-                self._n_folders_fs = int(re.findall('[\d]+', bp)[-1])
+                self._n_folders_fs = int(re.findall(r'[\d]+', bp)[-1])
 
         return self._n_folders_fs
 
@@ -1792,7 +1792,7 @@ class SegmentationDataset(object):
         """
         if self._scaling is None:
             self._scaling = \
-                np.array(self.config.entries["Dataset"]["scaling"],
+                np.array(self.config['scaling'],
                          dtype=np.float32)
 
         return self._scaling
