@@ -383,7 +383,6 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
         name of file when added to zip
     force_overwrite : bool
     """
-    # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
     if os.path.isfile(kzip_path):
         try:
             if force_overwrite:
@@ -438,16 +437,10 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     verbose : bool
     force_overwrite : bool
     """
-    # This should now work
-    # if not force_overwrite:
-    #     log_handler.warning('Currently modification of data '
-    #                         'in already existing kzip is still tested. "remove_from_zip" has to be adapted to'
-    #                         ' work on all files in kzip.')
     nb_files = len(fpaths)
     if verbose:
         log_handler.info('Writing {} files to .zip.'.format(nb_files))
         pbar = tqdm.tqdm(total=nb_files)
-    # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
     if os.path.isfile(kzip_path):
         try:
             if force_overwrite:
@@ -509,7 +502,6 @@ def remove_from_zip(zipfname, *filenames):
     filenames : list of str
         files to delete
     """
-    # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
     tempdir = tempfile.mkdtemp()
     try:
         tempname = os.path.join(tempdir, 'new.zip')
@@ -531,9 +523,8 @@ def write_obj2pkl(path, objects):
     ----------
     objects : object
     path : str
-        destianation
+        Destination.
     """
-    # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
     gc.disable()
     if isinstance(path, str):
         with open(path, 'wb') as output:
@@ -602,10 +593,6 @@ def chunkify_successive(l, n):
     """Yield successive n-sized chunks from l."""
     for i in range(0, len(l), n):
         yield l[i:i + n]
-
-
-def chunkify_successive_split(l, n):
-    return[np.array_split(l, n)]
 
 
 def flatten_list(lst):

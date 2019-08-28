@@ -909,8 +909,6 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
     verbose : bool
     invert_vertex_order: Invert the vertex order.
     """
-    if not force_overwrite:
-        raise NotImplementedError('Currently modification of data in existing kzip is not implemented.')
     tmp_paths = []
     if verbose:
         log_proc.info('Generating ply files.')

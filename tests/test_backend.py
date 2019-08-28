@@ -26,7 +26,6 @@ if os.path.isfile(dir_path + '.test.pkl.lk'):
 
 
 def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
-
     """
       Creates a file then blocks it for 3 seconds. In parallel it creates 3 files.
       First one after 1s , 2nd after 2 seconds and the third one after 3s.
