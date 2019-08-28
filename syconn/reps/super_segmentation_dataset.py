@@ -61,7 +61,7 @@ class SuperSegmentationDataset(object):
               classes). In the example run there are currently 9 predicted classes:
               STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, INT=8.
             * 'syn_ssv': Synapse IDs assigned to each SSV.
-            * 'syn_sign_ratio': Area-weighted atio of symmetric synapses, see
+            * 'syn_sign_ratio': Area-weighted ratio of symmetric synapses, see
               :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.syn_sign_ratio`.
             * 'sj': Synaptic junction object IDs which were mapped to each SSV. These are used
               for view rendering and also to generate the 'syn_ssv' objects in combination
@@ -116,12 +116,12 @@ class SuperSegmentationDataset(object):
                 there is no real use-case for this.
             version_dict: Dictionary which contains the versions of other dataset types which share
                 the same working directory.
-            sv_mapping: Dictionary mapping sueprvoxel IDs (key) to the super-supervoxel ID it
+            sv_mapping: Dictionary mapping supervoxel IDs (key) to the super-supervoxel ID it
                 belongs to.
             scaling: Array defining the voxel size in XYZ. Default is taken from the
                 `config.ini` file.
             config: Config. object, see :class:`~syconn.handler.config.DynConfig`.
-            sso_caching: WIP, enabes caching mechanisms in SuperSegmentationObjects returned via
+            sso_caching: WIP, enables caching mechanisms in SuperSegmentationObjects returned via
                 `get_super_segmentation_object`
             sso_locking: If True, locking is enabled for SSV files.
 
