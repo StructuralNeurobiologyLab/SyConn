@@ -2,6 +2,7 @@ m2r
 sphinx >=1.7.5
 sphinx-autodoc-typehints >=1.3.0
 
+cython
 h5py
 matplotlib
 tqdm
@@ -9,7 +10,6 @@ scipy
 networkx
 zmesh
 lz4
-configobj
 flask
 fasteners
 numpy==1.16.4
@@ -23,6 +23,7 @@ numba==0.45.0
 plyfile
 pytest
 pytest-runner
+pytest-cov
 prompt-toolkit
 vtki
 dill

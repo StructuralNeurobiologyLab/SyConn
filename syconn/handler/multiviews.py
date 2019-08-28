@@ -183,7 +183,7 @@ def int2str_converter(label: int, gt_type: str):
         elif label == 3:
             return "other"
         else:
-            return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
+            return -1  # TODO: Check if somewhere -1 is already used, otherwise return "N/A"
     elif gt_type == 'ctgt':
         if label == 1:
             return "MSN"
@@ -194,7 +194,7 @@ def int2str_converter(label: int, gt_type: str):
         elif label == 3:
             return "INT"
         else:
-            return -1  # TODO: Check if somewhere -1 is handled, otherwise return "N/A"
+            return -1  # TODO: Check if somewhere -1 is already used, otherwise return "N/A"
     elif gt_type == 'ctgt_v2':
         l_dc_inv = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7)
         l_dc_inv["?"] = 8
@@ -231,7 +231,6 @@ def img_rand_coloring(img: np.ndarray) -> np.ndarray:
         rnd_col_dc[ix] = rand_col
     # set background to white
     rnd_col_dc[np.max(img)] = np.array([255, 255, 255])
-    orig_shape = img.shape
     img = img.flatten()
     orig_shape_col = colored_img.shape
     colored_img = colored_img.flatten().reshape(-1, 3)
@@ -256,8 +255,8 @@ def id2rgb(vertex_id):
         RGB values [1, 3].
     """
     red = vertex_id % 256
-    green = (vertex_id/256) % 256
-    blue = (vertex_id/256/256) % 256
+    green = (vertex_id / 256) % 256
+    blue = (vertex_id / 256 / 256) % 256
     colour = np.array([red, green, blue], dtype=np.uint8)
     return colour.squeeze()
 
