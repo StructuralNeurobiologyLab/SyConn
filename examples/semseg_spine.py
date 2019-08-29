@@ -36,6 +36,12 @@ if __name__ == '__main__':
     # run prediction and store result in new kzip
     cell_kzip_fn_spines = cell_kzip_fn[:-6] + '_spines.k.zip'
     semseg_of_sso_nocache(sso, dest_path=cell_kzip_fn_spines, verbose=True,
-                          semseg_key="spinesstest", n_avg=5, ws=(256, 128),
+                          semseg_key="spinesstest", k=0, ws=(256, 128),
                           model=m,  nb_views=2, comp_window=8e3)
+    node_preds = sso.semseg_for_coords(
+        sso.skeleton['nodes'], "spinesstest",
+        **global_params.config['spines']['semseg2coords_spines'])
+    sso.skeleton["spinesstest"] = node_preds
+    sso.save_skeleton_to_kzip(dest_path=cell_kzip_fn_spines,
+                              additional_keys=["spinesstest"])
 

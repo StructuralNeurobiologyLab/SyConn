@@ -38,6 +38,7 @@ class SyConnGateInteraction(object):
         self.session = requests.Session()
         self.ssv_from_sv_cache = dict()
         self.ct_from_cache = dict()
+        self.ctcertain_from_cache = dict()
         self.svs_from_ssv = dict()
         self.synthresh = synthresh
         self.axodend_only = axodend_only
@@ -170,9 +171,15 @@ class SyConnGateInteraction(object):
         """
         # if not ssv_id in self.ct_from_cache:
         r = self.session.get(self.server + '/ct_of_ssv/{0}'.format(ssv_id))
-        self.ct_from_cache[ssv_id] = json.loads(r.content)["ct"]
+        dc = json.loads(r.content)
+        self.ct_from_cache[ssv_id] = dc["ct"]
+        if 'certainty' in dc:
+            certainty = '{:.3f}'.format(dc["certainty"])
+        else:
+            certainty = 'nan'
+        self.ctcertain_from_cache[ssv_id] = certainty
         print("Celltype: {}".format(self.ct_from_cache[ssv_id]))
-        return self.ct_from_cache[ssv_id]
+        return self.ct_from_cache[ssv_id], certainty
 
     def get_all_syn_metda_data(self):
         """
@@ -182,7 +189,6 @@ class SyConnGateInteraction(object):
 
         """
         params = {'synthresh': self.synthresh, 'axodend_only': self.axodend_only}
-        # r = self.session.get('{}/all_syn_meta/{:d}'.format(self.server, int(self.synthresh * 1000)))
         r = self.session.get('{}/all_syn_meta/{}'.format(self.server, json.dumps(params)))
         return json.loads(r.content)
 
@@ -423,8 +429,8 @@ class main_class(QtGui.QDialog):
                 True)
 
         inp_str = self.syn_selector.model().itemData(index)[0]
-        ssv1 = int(re.findall('\((\d+),', inp_str)[0])
-        ssv2 = int(re.findall(', (\d+)\)', inp_str)[0])
+        ssv1 = int(re.findall(r'\((\d+),', inp_str)[0])
+        ssv2 = int(re.findall(r', (\d+)\)', inp_str)[0])
         ix = index.row()
         tree_id = hash((ssv1, ssv2))
         syn_id = self.all_syns['ids'][ix]
@@ -766,8 +772,8 @@ class main_class(QtGui.QDialog):
         return
 
     def update_celltype(self, ssv_id):
-        ct = self.syconn_gate.get_celltype_of_ssv(ssv_id)
-        self.celltype_field.setText("CellType: {}".format(ct))
+        ct, certainty = self.syconn_gate.get_celltype_of_ssv(ssv_id)
+        self.celltype_field.setText("CellType: {} ({})".format(ct, certainty))
 
     def ssv_to_knossos(self, ssv_id):
         start = time.time()

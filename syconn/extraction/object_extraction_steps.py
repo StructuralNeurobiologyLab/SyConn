@@ -34,6 +34,7 @@ from syconn.reps.rep_helper import find_object_properties
 try:
     from vigra.filters import gaussianSmoothing
 except ImportError as e:
+    gaussianSmoothing = None
     log_handler.error('ImportError. Could not import VIGRA. '
                       '`object_segmentation` will not be possible. {}'.format(e))
 
@@ -48,8 +49,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
                         swapdata=False, prob_kd_path_dict=None,
                         membrane_filename=None, membrane_kd_path=None,
                         hdf5_name_membrane=None, fast_load=False, suffix="",
-                        qsub_pe=None, qsub_queue=None, nb_cpus=None,
-                        n_max_co_processes=None, transform_func=None,
+                        nb_cpus=None, n_max_co_processes=None, transform_func=None,
                         transform_func_kwargs=None, transf_func_kd_overlay=None,
                         load_from_kd_overlaycubes=False, n_chunk_jobs=None):
     """
@@ -84,7 +84,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
         Defines the sigmas of the gaussian filters applied to the probability
         maps. Has to be the same length as hdf5names. If None no gaussian filter
         is applied
-    thresholds: list of float
+    thresholds: list of float or np.ndarray
         Threshold for cutting the probability map. Has to be the same length as
         hdf5names. If None zeros are used instead (not recommended!)
     chunk_list: list of
@@ -113,10 +113,6 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
         from them.
     suffix: str
         Suffix for the intermediate results
-    qsub_pe: str or None
-        qsub parallel environment
-    qsub_queue: str or None
-        qsub queue
     transform_func: callable
         Segmentation method which is applied
     transform_func_kwargs : dict
@@ -146,7 +142,7 @@ def object_segmentation(cset, filename, hdf5names, overlap="auto", sigmas=None,
         raise Exception("Number of thresholds, sigmas and HDF5 names does not "
                         "match!")
     if n_chunk_jobs is None:
-        n_chunk_jobs = global_params.NCORE_TOTAL
+        n_chunk_jobs = global_params.config.ncore_total
 
     if chunk_list is None:
         chunk_list = [ii for ii in range(len(cset.chunk_dict))]
@@ -326,8 +322,7 @@ def _gauss_threshold_connected_components_thread(args):
 
 
 def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
-                       chunk_translator, debug, suffix="", nb_cpus=None,
-                       qsub_pe=None, qsub_queue=None, n_max_co_processes=100,
+                       chunk_translator, debug, suffix="", n_max_co_processes=100,
                        n_chunk_jobs=None):
     """
     Makes labels unique across chunks
@@ -353,15 +348,12 @@ def make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
         allows for better error messages
     suffix: str
         Suffix for the intermediate results
-    qsub_pe: str or None
-        qsub parallel environment
-    qsub_queue: str or None
-        qsub queue
-
+    n_chunk_jobs: int
+        Number of total jobs.
     """
 
     if n_chunk_jobs is None:
-        n_chunk_jobs = global_params.NCORE_TOTAL
+        n_chunk_jobs = global_params.config.ncore_total
     chunk_blocks = basics.chunkify(chunk_list, n_chunk_jobs)
     multi_params_glob = []
     for chunk_sub in chunk_blocks:
@@ -412,7 +404,7 @@ def _make_unique_labels_thread(func_args):
 
 
 def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
-                     overlap, debug, suffix="", qsub_pe=None, qsub_queue=None,
+                     overlap, debug, suffix="",
                      n_max_co_processes=100, nb_cpus=None, n_erosion=0,
                      overlap_thresh=0, n_chunk_jobs=None):
     """
@@ -439,10 +431,12 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
         allows for better error messages
     suffix: str
         Suffix for the intermediate results
-    qsub_pe: str or None
-        qsub parallel environment
-    qsub_queue: str or None
-        qsub queue
+    n_max_co_processes: int
+        Maximum number of parallel workers.
+    nb_cpus: int
+        Number of cores used per worker.
+    n_chunk_jobs: int
+        Number of total jobs.
     n_erosion : int
         Number of erosions applied to the segmentation of unique_components0 to avoid
         segmentation artefacts caused by start location dependency in chunk data array.
@@ -456,7 +450,7 @@ def make_stitch_list(cset, filename, hdf5names, chunk_list, stitch_overlap,
         Dictionary of overlapping component ids
     """
     if n_chunk_jobs is None:
-        n_chunk_jobs = global_params.NCORE_TOTAL
+        n_chunk_jobs = global_params.config.ncore_total
     chunk_blocks = basics.chunkify(chunk_list, n_chunk_jobs)
     multi_params = []
 
@@ -648,8 +642,7 @@ def make_merge_list(hdf5names, stitch_list, max_labels):
 
 
 def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
-                     debug, suffix="", qsub_pe=None, qsub_queue=None,
-                     n_max_co_processes=100, nb_cpus=None,
+                     debug, suffix="", n_max_co_processes=100,
                      n_chunk_jobs=None):
     """
     Applies merge list to all chunks
@@ -672,10 +665,10 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
         allows for better error messages
     suffix: str
         Suffix for the intermediate results
-    qsub_pe: str or None
-        qsub parallel environment
-    qsub_queue: str or None
-        qsub queue
+    n_max_co_processes: int
+        Number of parallel workers.
+    n_chunk_jobs: int
+        Number of total jobs.
     """
 
     multi_params = []
@@ -685,23 +678,21 @@ def apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
     pkl.dump(merge_list_dict, f)
     f.close()
     if n_chunk_jobs is None:
-        n_chunk_jobs = global_params.NCORE_TOTAL
+        n_chunk_jobs = global_params.config.ncore_total
     chunk_blocks = basics.chunkify(chunk_list, n_chunk_jobs)
 
     for i_job in range(len(chunk_blocks)):
-        multi_params.append([[cset.chunk_dict[nb_chunk] for nb_chunk in chunk_blocks[i_job]], filename, hdf5names,
-                             merge_list_dict_path, suffix])
+        multi_params.append([[cset.chunk_dict[nb_chunk] for nb_chunk in chunk_blocks[i_job]],
+                             filename, hdf5names, merge_list_dict_path, suffix])
 
     if not qu.batchjob_enabled():
-        results = sm.start_multiprocess_imap(_apply_merge_list_thread,
-                                             multi_params, debug=debug,
-                                             nb_cpus=n_max_co_processes,)
+        sm.start_multiprocess_imap(_apply_merge_list_thread, multi_params,
+                                   debug=debug, nb_cpus=n_max_co_processes)
 
     else:
-        path_to_out = qu.QSUB_script(multi_params,
-                                     "apply_merge_list", suffix=filename,
-                                     n_max_co_processes=n_max_co_processes,
-                                     remove_jobfolder=True)
+        qu.QSUB_script(multi_params, "apply_merge_list", suffix=filename,
+                       n_max_co_processes=n_max_co_processes,
+                       remove_jobfolder=True)
 
 
 def _apply_merge_list_thread(args):
@@ -710,8 +701,6 @@ def _apply_merge_list_thread(args):
     hdf5names = args[2]
     merge_list_dict_path = args[3]
     postfix = args[4]
-
-
 
     merge_list_dict = pkl.load(open(merge_list_dict_path, 'rb'))
     for chunk in chunks:
@@ -738,12 +727,10 @@ def _apply_merge_list_thread(args):
 
 
 def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
-                   n_folders_fs=10000, debug=False,
-                   workfolder=None, overlaydataset_path=None,
-                   chunk_list=None, suffix="", n_chunk_jobs=2000,
-                   use_work_dir=True, qsub_pe=None, qsub_queue=None,
-                   n_max_co_processes=None, nb_cpus=None, transform_func=None,
-                   transform_func_kwargs=None):  # TODO: nb_cpus=1 when memory consumption fixed
+                   n_folders_fs=10000, debug=False, workfolder=None,
+                   overlaydataset_path=None, chunk_list=None, suffix="",
+                   n_chunk_jobs=2000, use_work_dir=True, n_max_co_processes=None,
+                   nb_cpus=None, transform_func=None, transform_func_kwargs=None):
     """
     Extracts voxels for each component id
 
@@ -763,10 +750,6 @@ def extract_voxels(cset, filename, hdf5names=None, dataset_names=None,
         allows for better error messages
     suffix: str
         Suffix for the intermediate results
-    qsub_pe: str or None
-        qsub parallel environment
-    qsub_queue: str or None
-        qsub queue
     nb_cpus : int
         number of parallel jobs
     transform_func_kwargs : dict
@@ -850,8 +833,6 @@ def _extract_voxels_thread(args):
     n_folders_fs = args[8]
     transform_func = args[9]
     transform_func_kwargs = args[10]
-    # TODO: finish support for syn object extraction -- do not extract all voxels, instead compute bounding box
-    # TODO: and enable dynamic queries via VoxelStorage only if neccessary
 
     map_dict = {}
     for hdf5_name in hdf5names:
@@ -909,7 +890,8 @@ def _extract_voxels_thread(args):
                 id_mask_offset = np.min(sv_coords, axis=0)
                 abs_offset = (chunk.coordinates + id_mask_offset).astype(np.int)
                 id_mask_coords = sv_coords - id_mask_offset
-                size = np.max(sv_coords, axis=0) - id_mask_offset + (1, 1, 1)
+                size = np.max(sv_coords, axis=0) - id_mask_offset + \
+                       np.array([1, 1, 1], dtype=np.int)
                 id_mask_coords = np.transpose(id_mask_coords)
                 id_mask = np.zeros(tuple(size), dtype=bool)
                 id_mask[id_mask_coords[0, :], id_mask_coords[1, :], id_mask_coords[2, :]] = True
@@ -943,7 +925,7 @@ def _extract_voxels_thread(args):
 
 def combine_voxels(workfolder, hdf5names, dataset_names=None,
                    n_folders_fs=10000, n_chunk_jobs=2000, nb_cpus=None, sd_version=0,
-                   qsub_pe=None, qsub_queue=None, n_max_co_processes=None):
+                   n_max_co_processes=None):
     """
     Extracts voxels for each component id and ceates a SegmentationDataset of type hdf5names.
     SegmentationDataset(s) will always have version 0!
@@ -957,12 +939,7 @@ def combine_voxels(workfolder, hdf5names, dataset_names=None,
     sd_version : int or str
         0 by default
     n_folders_fs : int
-    stride : int
     nb_cpus : int
-    qsub_pe: str or None
-        qsub parallel environment
-    qsub_queue: str or None
-        qsub queue
     n_max_co_processes : int
 
     """
@@ -1061,10 +1038,11 @@ def _combine_voxels_thread(args):
 
 
 def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
-                   n_folders_fs=10000, workfolder=None, overlaydataset_path=None,
-                   chunk_list=None, suffix="", n_chunk_jobs=2000, sd_version=0,
-                   use_work_dir=True, n_cores=1,
-                   n_max_co_processes=None):
+                            n_folders_fs=10000, workfolder=None,
+                            overlaydataset_path=None, chunk_list=None,
+                            suffix="", n_chunk_jobs=2000, sd_version=0,
+                            use_work_dir=True, n_cores=1,
+                            n_max_co_processes=None):
     """
     Creates a SegmentationDataset of type dataset_names
 
@@ -1083,11 +1061,8 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
     suffix :
     n_chunk_jobs :
     use_work_dir :
-    qsub_pe :
-    qsub_queue :
     n_cores :
     n_max_co_processes :
-    nb_cpus :
 
     Returns
     -------
@@ -1145,9 +1120,11 @@ def extract_voxels_combined(cset, filename, hdf5names=None, dataset_names=None,
 def _extract_voxels_combined_thread(args):
     overlaydataset_path = args[5]
     if overlaydataset_path is None:
-        log_handler.warning('Using `VoxelStorage` fallback in `_extract_voxels_combined_thread`. To enable '
-                            '`VoxelStorageDyn` storing less data redundantly use KnossosDataset as '
-                            'segmentation source (see kwarg `overlaydataset_path`).')
+        log_handler.warning('Using `VoxelStorage` fallback in '
+                            '`_extract_voxels_combined_thread`. To enable '
+                            '`VoxelStorageDyn` storing less data redundantly '
+                            'use KnossosDataset as segmentation source '
+                            '(see kwarg `overlaydataset_path`).')
         return _extract_voxels_combined_thread_OLD(args)
     else:
         return _extract_voxels_combined_thread_NEW(args)
@@ -1182,8 +1159,8 @@ def _extract_voxels_combined_thread_NEW(args):
                     this_segmentation = kd.from_overlaycubes_to_matrix(chunk.size,
                                                                        chunk.coordinates,
                                                                        datatype=np.uint32)
-
-                segobj_res = find_object_properties(this_segmentation)  # returns 3 dicts: rep coord, bounding box, size
+                # returns 3 dicts: rep coord, bounding box, size
+                segobj_res = find_object_properties(this_segmentation)
                 rep_coords = segobj_res[0]
                 bbs = segobj_res[1]
                 sizes = segobj_res[2]
@@ -1262,7 +1239,8 @@ def _extract_voxels_combined_thread_OLD(args):
                 id_mask_offset = np.min(sv_coords, axis=0)
                 abs_offset = (chunk.coordinates + id_mask_offset).astype(np.int)
                 id_mask_coords = sv_coords - id_mask_offset
-                size = np.max(sv_coords, axis=0) - id_mask_offset + (1, 1, 1)
+                size = np.max(sv_coords, axis=0) - id_mask_offset + np.array([1, 1, 1],
+                                                                             dtype=np.int)
                 id_mask_coords = np.transpose(id_mask_coords)
                 id_mask = np.zeros(tuple(size), dtype=bool)
                 id_mask[id_mask_coords[0, :], id_mask_coords[1, :], id_mask_coords[2, :]] = True
@@ -1280,10 +1258,10 @@ def _extract_voxels_combined_thread_OLD(args):
 
 
 def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
-                      offset=None, size=None, n_max_co_processes=None,
-                      stride=[4 * 128, 4 * 128, 4 * 128], overwrite=False,
-                      as_raw=False, fast_downsampling=False, n_max_job=None,
-                      unified_labels=False, orig_dtype=np.uint8, log=None):
+                               offset=None, size=None, n_max_co_processes=None,
+                               stride=(4 * 128, 4 * 128, 4 * 128), overwrite=False,
+                               as_raw=False, fast_downsampling=False, n_max_job=None,
+                               unified_labels=False, orig_dtype=np.uint8, log=None):
     """
     Batchjob version of `ChunkDataset` `export_cset_to_kd` method, see knossos_utils.chunky for
     details.
@@ -1304,6 +1282,8 @@ def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
     overwrite :
     unified_labels :
     orig_dtype :
+    log:
+    n_max_job
 
     Returns
     -------
@@ -1315,7 +1295,7 @@ def export_cset_to_kd_batchjob(cset, kd, name, hdf5names, n_cores=1,
         raise ImportError('Could not import `_export_cset_as_kd_thread` from '
                           '`knossos_utils.chunky`.')
     if n_max_job is None:
-        n_max_job = global_params.NCORE_TOTAL
+        n_max_job = global_params.config.ncore_total
     if offset is None or size is None:
         offset = np.zeros(3, dtype=np.int)
         size = np.copy(kd.boundary)

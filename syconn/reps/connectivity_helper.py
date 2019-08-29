@@ -153,6 +153,7 @@ def load_cached_data_dict(wd=None, syn_version=None, thresh_syn_prob=None,
     wd : str
     syn_version : str
     thresh_syn_prob : float
+        All synapses below `thresh_syn_prob` will be filtered.
     axodend_only: If True, returns only axo-dendritic synapse, all
         synapses otherwise.
 
@@ -163,7 +164,7 @@ def load_cached_data_dict(wd=None, syn_version=None, thresh_syn_prob=None,
     if wd is None:
         wd = global_params.config.working_dir
     if thresh_syn_prob is None:
-        thresh_syn_prob = global_params.thresh_syn_proba
+        thresh_syn_prob = global_params.config['cell_objects']['thresh_synssv_proba']
     start = time.time()
     csd = segmentation.SegmentationDataset(obj_type='syn_ssv', working_dir=wd,
                                            version=syn_version)
@@ -202,7 +203,7 @@ def load_cached_data_dict(wd=None, syn_version=None, thresh_syn_prob=None,
     log_reps.debug('Getting {1} objects took: {0}'.format(time.time() - start,
                                                           len(csd.ids)))
 
-    idx_filter = cd_dict['synaptivity_proba'] > thresh_syn_prob
+    idx_filter = cd_dict['synaptivity_proba'] >= thresh_syn_prob
     cd_dict['neuron_partner_ax_0'][cd_dict['neuron_partner_ax_0'] == 3] = 1
     cd_dict['neuron_partner_ax_0'][cd_dict['neuron_partner_ax_0'] == 4] = 1
     cd_dict['neuron_partner_ax_1'][cd_dict['neuron_partner_ax_1'] == 3] = 1

@@ -101,7 +101,7 @@ class ConnectivityMatrix(object):
 
         if version is None:
             try:
-                self._version = self.config.entries["Versions"][self.type]
+                self._version = self.config["versions"][self.type]
             except:
                 raise Exception("unclear value for version")
         elif version == "new":
@@ -110,7 +110,7 @@ class ConnectivityMatrix(object):
             max_version = -1
             for other_dataset in other_datasets:
                 other_version = \
-                    int(re.findall("[\d]+",
+                    int(re.findall(r"[\d]+",
                                    os.path.basename(other_dataset))[-1])
                 if max_version < other_version:
                     max_version = other_version
@@ -121,13 +121,13 @@ class ConnectivityMatrix(object):
 
         if self._ssd_version is None:
             try:
-                self._ssd_version = self.config.entries["Versions"]["ssv"]
+                self._ssd_version = self.config["versions"]["ssv"]
             except:
                 raise Exception("No version dict specified in config")
 
         if self._sj_version is None:
             try:
-                self._sj_version = self.config.entries["Versions"]["sj"]
+                self._sj_version = self.config["versions"]["sj"]
             except:
                 raise Exception("No version dict specified in config")
 
@@ -167,7 +167,7 @@ class ConnectivityMatrix(object):
     @property
     def sj_ids(self):
         if self._sj_ids is None:
-            t = self.config.entries["Sizethresholds"]["sj"]
+            t = self.config['cell_objects']["sizethresholds"]["sj"]
             self._sj_ids = np.load(self.sj_dataset.path + "/ids.npy")
             sizes = np.load(self.sj_dataset.path + "/sizes.npy")
             self._sj_ids = self._sj_ids[sizes > t]

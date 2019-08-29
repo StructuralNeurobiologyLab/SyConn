@@ -118,7 +118,7 @@ class FSBase(StorageBase):
     kwarg 'cache_decomp' can be enabled to cache decompressed arrays
     additionally (save decompressing time when accessing items frequently).
     """
-    def __init__(self, inp_p : str, cache_decomp: bool = False,
+    def __init__(self, inp_p: str, cache_decomp: bool = False,
                  read_only: bool = True, max_delay: int = 100,
                  timeout: int = 1000, disable_locking: bool = False,
                  max_nb_attempts: int = 100):
@@ -134,7 +134,7 @@ class FSBase(StorageBase):
             max_nb_attempts: Number of total attempts
         """
         super(FSBase, self).__init__(cache_decomp)
-        if not LOCKING or global_params.DISABLE_LOCKING:
+        if not LOCKING or global_params.config['disable_locking']:
             disable_locking = True
         self.read_only = read_only
         self.a_lock = None

@@ -58,7 +58,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     assert gt_type in ["axgt", "spgt"], "Currently only spine and axon GT is supported"
     n_labels = 5 if gt_type == "axgt" else 4
     palette = generate_palette(n_labels)
-    sso_id = int(re.findall("/(\d+).", kzip_path)[0])
+    sso_id = int(re.findall(r"/(\d+).", kzip_path)[0])
     sso = SuperSegmentationObject(sso_id, version=ssd_version)
     if initial_run:  # use default SSD version
         orig_sso = SuperSegmentationObject(sso_id)
@@ -158,7 +158,7 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
     -------
 
     """
-    sso_ids = [int(re.findall("/(\d+).", kzip_path)[0]) for kzip_path in kzip_paths]
+    sso_ids = [int(re.findall(r"/(\d+).", kzip_path)[0]) for kzip_path in kzip_paths]
     ssd = SuperSegmentationDataset()
     if not np.all([ssv.lookup_in_attribute_dict("size") is not None for ssv in
                    ssd.get_super_segmentation_object(sso_ids)]):
@@ -188,7 +188,7 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
     # all_index_views = []  # Removed index views
     print("Writing views.")
     for ii in range(len(kzip_paths)):
-        sso_id = int(re.findall("/(\d+).", kzip_paths[ii])[0])
+        sso_id = int(re.findall(r"/(\d+).", kzip_paths[ii])[0])
         dest_p = "{}/{}/".format(dest_p_cache, sso_id)
         raw_v = np.load(dest_p + "raw.npy")
         label_v = np.load(dest_p + "label.npy")
@@ -243,7 +243,7 @@ def gt_generation_helper(args):
                                                                n_voting, nb_views, ws, comp_window,
                                                                out_path=dest_dir) # out_path set, colored meshes will be written out
 
-    sso_id = int(re.findall("/(\d+).", kzip_path)[0])
+    sso_id = int(re.findall(r"/(\d+).", kzip_path)[0])
     dest_p = "{}/{}/".format(dest_dir, sso_id)
     if not os.path.isdir(dest_p):
         os.makedirs(dest_p)
@@ -259,7 +259,7 @@ def gt_generation_helper(args):
     # raw_views = merge_axis02(raw_views)[:, :, None][:10]
     # label_views = merge_axis02(label_views)[:, :, None][:10]
     # index_views = merge_axis02(index_views)[:, :, None][:10]
-    # sso_id = int(re.findall("/(\d+).", kzip_path)[0])
+    # sso_id = int(re.findall(r"/(\d+).", kzip_path)[0])
     # h5py_path = os.path.expanduser("~") + "/spiness_skels_biggercontext/{}/view_imgs_{}/".format(sso_id, n_voting)
     # if not os.path.isdir(h5py_path):
     #     os.makedirs(h5py_path)

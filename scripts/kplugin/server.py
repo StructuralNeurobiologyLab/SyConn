@@ -134,7 +134,8 @@ def route_hello():
 
 
 class SyConnBackend(object):
-    def __init__(self, syconn_path='', logger=None, synthresh=0.5, axodend_only=True):
+    def __init__(self, syconn_path: str = '', logger=None, synthresh=0.5,
+                 axodend_only=True):
         """
         Initializes a SyConn backend for operation.
         This includes in-memory initialization of the
@@ -145,7 +146,11 @@ class SyConnBackend(object):
         might be served.
         All backend functions must return dicts.
 
-        :param syconn_path: str
+        Args:
+            syconn_path:
+            logger:
+            synthresh: All synapses below `synthresh` will be excluded.
+            axodend_only: If True, only axo-dendritic synapses will be loaded.
         """
         self.logger = logger
         self.logger.info('Initializing SyConn backend')
@@ -242,17 +247,17 @@ class SyConnBackend(object):
         if skeleton is None:
             return {}
         skel_attr = ["nodes", "edges", "diameters"]
-        pred_key_ax = "{}_avg{}".format(global_params.view_properties_semsegax['semseg_key'],
-                                        global_params.DIST_AXONESS_AVERAGING)
+        pred_key_ax = "{}_avg{}".format(global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
+                                        global_params.config['compartments']['dist_axoness_averaging'])
         keys = [
                 # "axoness_avg{}".format(avg_dst),
                 # "axoness_avg{}_comp_maj".format(avg_dst),
-                global_params.view_properties_semsegax['semseg_key'],
+                global_params.config['compartments']['view_properties_semsegax']['semseg_key'],
                 pred_key_ax,
                 'myelin_avg10000',  # TODO: use global_params.py value !
                 'myelin',  # TODO: use global_params.py value !
-                "axoness_k{}".format(global_params.map_properties_semsegax['k']),
-                "axoness_k{}_comp_maj".format(global_params.map_properties_semsegax['k'])]
+                "axoness_k{}".format(global_params.config['compartments']['map_properties_semsegax']['k']),
+                "axoness_k{}_comp_maj".format(global_params.config['compartments']['map_properties_semsegax']['k'])]
         for k in keys:
             if k in skeleton:
                 skel_attr.append(k)
@@ -452,14 +457,16 @@ class SyConnBackend(object):
             # ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             # label = ct_label_dc[l]
             label = int2str_converter(l, gt_type='ctgt_v2')
+            certainty = ssv.certainty_celltype()
         elif "celltype_cnn" in ssv.attr_dict:
             ct_label_dc = {0: "EA", 1: "MSN", 2: "GP", 3: "INT"}
             l = ssv.attr_dict["celltype_cnn"]
             label = ct_label_dc[l]
+            certainty = 'nan'
         else:
             log_gate.warning("Celltype prediction not present in attribute "
                              "dict of SSV {} at {}.".format(ssv_id, ssv.attr_dict_path))
-        return {'ct': label}
+        return {'ct': label, 'certainty': certainty}
 
     def svs_of_ssv(self, ssv_id):
         """

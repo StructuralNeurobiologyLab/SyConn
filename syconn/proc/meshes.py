@@ -28,7 +28,6 @@ from ..proc import log_proc
 from ..handler.basics import write_data2kzip, data2kzip
 from .image import apply_pca
 from ..backend.storage import AttributeDict, MeshStorage, VoxelStorage
-from ..global_params import MESH_DOWNSAMPLING, MESH_CLOSING, MESH_MIN_OBJ_VX
 from .. import global_params
 from ..mp.mp_utils import start_multiprocess_obj, start_multiprocess_imap
 try:
@@ -44,7 +43,8 @@ try:
     import openmesh
 except ImportError as e:
     log_proc.error('ImportError. Could not import openmesh. '
-                   'Writing meshes will not be possible. {}'.format(e))
+                   'Writing meshes as `.obj` files will not be'
+                   ' possible. {}'.format(e))
 
 try:
     from .in_bounding_boxC import in_bounding_box
@@ -210,7 +210,7 @@ def triangulation_wrapper(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=F
                   decimate_mesh=0, gradient_direction='ascent',
                   force_single_cc=False):
     # TODO: write wrapper method to handle triangulation of big objects by
-    #  recusrive chunking. The resulting meshes can be merged via `merge_meshes`
+    #  recursive chunking. The resulting meshes can be merged via `merge_meshes`
     return
 
 
@@ -252,7 +252,7 @@ def triangulation(pts, downsampling=(1, 1, 1), n_closings=0, single_cc=False,
     if boundaryDistanceTransform is None:
         raise ImportError('"boundaryDistanceTransform" could not be imported from VIGRA. '
                           'Please install vigra, see SyConn documentation.')
-    assert type(downsampling) == tuple, "Downsampling has to be of type 'tuple'"
+    assert type(downsampling) in (tuple, list), "Downsampling has to be of type 'tuple' or list"
     assert (pts.ndim == 2 and pts.shape[1] == 3) or pts.ndim == 3, \
         "Point cloud used for mesh generation has wrong shape."
     if pts.ndim == 2:
@@ -363,9 +363,9 @@ def get_object_mesh(obj, downsampling, n_closings, decimate_mesh=0,
         return np.zeros((0,), dtype=np.int32), np.zeros((0,), dtype=np.int32),\
                np.zeros((0,), dtype=np.float32)
     try:
-        min_obj_vx = global_params.config.entries['Sizethresholds'][obj.type]
+        min_obj_vx = global_params.config['cell_objects']["sizethresholds"][obj.type]
     except KeyError:
-        min_obj_vx = MESH_MIN_OBJ_VX
+        min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
     try:
         indices, vertices, normals = triangulation(
             obj.voxel_list, downsampling=downsampling, n_closings=n_closings,
@@ -757,7 +757,8 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     return all_ind, all_vert, all_norm
 
 
-def make_ply_string(dest_path, indices, vertices, rgba_color):
+def make_ply_string(dest_path, indices, vertices, rgba_color,
+                    invert_vertex_order=False):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -768,6 +769,7 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
     indices : np.array
     vertices : np.array
     rgba_color : Tuple[uint8] or np.array
+    invert_vertex_order: Invert the vertex order.
 
     Returns
     -------
@@ -776,6 +778,8 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
     # create header
     vertices = vertices.astype(np.float32)
     indices = indices.astype(np.int32)
+    if not rgba_color.ndim == 2:
+        rgba_color = np.array(rgba_color, dtype=np.int).reshape((-1, 4))
     if not indices.ndim == 2:
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
@@ -790,8 +794,6 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
                   'or every vertex!'
             log_proc.error(msg)
             raise ValueError(msg)
-    if not rgba_color.ndim == 2:
-        rgba_color = np.array(rgba_color, dtype=np.int).reshape((-1, 4))
     if type(rgba_color) is list:
         rgba_color = np.array(rgba_color, dtype=np.uint8)
         log_proc.warn("Color input is list. It will now be converted "
@@ -805,7 +807,9 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
                       "min/max of data: {}, {}".format(rgba_color.min(),
                                                        rgba_color.max()))
         rgba_color = np.array(rgba_color, dtype=np.uint8)
-    # ply file requires 1D object arrays,
+
+    # ply file requires 1D object arrays
+    ordering = -1 if invert_vertex_order else 1
     vertices = np.concatenate([vertices.astype(np.object),
                                rgba_color.astype(np.object)], axis=1)
     vertices = np.array([tuple(el) for el in vertices],
@@ -813,13 +817,14 @@ def make_ply_string(dest_path, indices, vertices, rgba_color):
                                ('red', 'u1'), ('green', 'u1'), ('blue', 'u1'),
                                ('alpha', 'u1')])
     # ply file requires 1D object arrays.
-    indices = np.array([tuple([el], ) for el in indices],
+    indices = np.array([tuple([el[::ordering]], ) for el in indices],
                        dtype=[('vertex_indices', 'i4', (3,))])
     PlyData([PlyElement.describe(vertices, 'vertex'),
              PlyElement.describe(indices, 'face')]).write(dest_path)
 
 
-def make_ply_string_wocolor(dest_path, indices, vertices):
+def make_ply_string_wocolor(dest_path, indices, vertices,
+                            invert_vertex_order=False):
     """
     Creates a ply str that can be included into a .k.zip for rendering
     in KNOSSOS.
@@ -827,8 +832,10 @@ def make_ply_string_wocolor(dest_path, indices, vertices):
 
     Parameters
     ----------
+    dest_path:
     indices : iterable of indices (int)
     vertices : iterable of vertices (int)
+    invert_vertex_order: Invert the vertex order.
 
     Returns
     -------
@@ -841,14 +848,15 @@ def make_ply_string_wocolor(dest_path, indices, vertices):
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
+    ordering = -1 if invert_vertex_order else 1
     vertices = np.array([tuple(el) for el in vertices], dtype=[('x', 'f4'), ('y', 'f4'), ('z', 'f4')])
-    indices = np.array([tuple([el], ) for el in indices],dtype=[('vertex_indices', 'i4', (3,))])
+    indices = np.array([tuple([el[::ordering]], ) for el in indices], dtype=[('vertex_indices', 'i4', (3,))])
     PlyData([PlyElement.describe(vertices, 'vertex'),
              PlyElement.describe(indices, 'face')]).write(dest_path)
 
 
 def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
-                    force_overwrite=False):
+                    force_overwrite=False, invert_vertex_order=True):
     """
     Writes mesh as .ply's to k.zip file.
 
@@ -862,6 +870,9 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
     color : tuple or np.array
         rgba between 0 and 255
     ply_fname : str
+    force_overwrite: bool
+    invert_vertex_order: bool
+        Invert the vertex order.
     """
     if len(vert) == 0:
         log_proc.warn("'write_mesh2kzip' called with empty vertex array. Did not"
@@ -869,15 +880,18 @@ def write_mesh2kzip(k_path, ind, vert, norm, color, ply_fname,
         return
     tmp_dest_p = '{}_{}'.format(k_path, ply_fname)
     if color is not None:
-        make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color)
+        make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color,
+                        invert_vertex_order=invert_vertex_order)
     else:
-        make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32))
+        make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32),
+                                invert_vertex_order=invert_vertex_order)
     write_data2kzip(k_path, tmp_dest_p, ply_fname,
                     force_overwrite=force_overwrite)
 
 
 def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
-                      force_overwrite=True, verbose=True):
+                      force_overwrite=True, verbose=True,
+                      invert_vertex_order=True):
     """
     Writes meshes as .ply's to k.zip file.
 
@@ -893,9 +907,8 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
     ply_fnames : list of str
     force_overwrite : bool
     verbose : bool
+    invert_vertex_order: Invert the vertex order.
     """
-    if not force_overwrite:
-        raise NotImplementedError('Currently modification of data in existing kzip is not implemented.')
     tmp_paths = []
     if verbose:
         log_proc.info('Generating ply files.')
@@ -912,9 +925,11 @@ def write_meshes2kzip(k_path, inds, verts, norms, colors, ply_fnames,
             log_proc.warning("Mesh with zero-length vertex array. Skipping.")
             continue
         if color is not None:
-            make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color)
+            make_ply_string(tmp_dest_p, ind, vert.astype(np.float32), color,
+                            invert_vertex_order=invert_vertex_order)
         else:
-            make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32))
+            make_ply_string_wocolor(tmp_dest_p, ind, vert.astype(np.float32),
+                                    invert_vertex_order=invert_vertex_order)
         tmp_paths.append(tmp_dest_p)
         write_out_ply_fnames.append(ply_fname)
         if verbose:
@@ -1017,7 +1032,7 @@ def mesh_creator_sso(ssv):
 
 def mesh_chunk(args):
     attr_dir, obj_type = args
-    scaling = global_params.config.entries['Dataset']['scaling']
+    scaling = global_params.config['scaling']
     ad = AttributeDict(attr_dir + "/attr_dict.pkl", disable_locking=True)
     obj_ixs = list(ad.keys())
     if len(obj_ixs) == 0:
@@ -1042,16 +1057,17 @@ def mesh_chunk(args):
         # create mesh
 
         try:
-            min_obj_vx = global_params.config.entries['Sizethresholds'][obj_type]
+            min_obj_vx = global_params.config['cell_objects']["sizethresholds"][obj_type]
         except KeyError:
-            min_obj_vx = MESH_MIN_OBJ_VX
+            min_obj_vx = global_params.config['meshes']['mesh_min_obj_vx']
         if obj_type == 'sv':
             decimate_mesh = 0.3  # remove 30% of the verties  # TODO: add to global params
         else:
             decimate_mesh = 0
         try:
             indices, vertices, normals = triangulation(
-                voxel_list, downsampling=MESH_DOWNSAMPLING[obj_type], n_closings=MESH_CLOSING[obj_type],
+                voxel_list, downsampling=global_params.config['meshes']['downsampling'][obj_type],
+                n_closings=global_params.config['meshes']['closings'][obj_type],
                 force_single_cc=obj_type == 'syn_ssv', decimate_mesh=decimate_mesh)
             vertices += 1  # account for knossos 1-indexing
             vertices = np.round(vertices * scaling)

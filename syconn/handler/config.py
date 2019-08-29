@@ -4,44 +4,42 @@
 # Copyright (c) 2016 - now
 # Max Planck Institute of Neurobiology, Martinsried, Germany
 # Authors: Sven Dorkenwald, Philipp Schubert, Joergen Kornfeld
-from configobj import ConfigObj
 from typing import Tuple, Optional, Union, Dict, Any, List
-import sys
-from validate import Validator
+import yaml
 import logging
+from logging import Logger
 import coloredlogs
 import datetime
-import pwd
 import numpy as np
 from termcolor import colored
 import os
 from .. import global_params
 
-__all__ = ['DynConfig', 'get_default_conf_str', 'initialize_logging']
+__all__ = ['DynConfig', 'generate_default_conf', 'initialize_logging']
 
 
 class Config(object):
     """
-    Basic config object base on the package ``configobj``.
+    Basic config object based on yaml. If file ``config.yml`` does not exist
+    at `working_dir` :py:attr:`~initialized` will be False, but no error is
+    raised.
     """
-    def __init__(self, working_dir, validate=True, verbose=True):
-        self._entries = {}
+    def __init__(self, working_dir):
+        self._config = None
+        self._configspec = None
         self._working_dir = working_dir
         self.initialized = False
-        self.log_main = get_main_log()
         if self._working_dir is not None and len(self._working_dir) > 0:
-            self.parse_config(validate=validate)
-            self.initialized = True
-            if verbose:
-                self.log_main.info("Initialized stdout logging (level: {}). "
-                                   "Current working directory:"
-                                   " ".format(global_params.log_level) +
-                                   colored("'{}'".format(working_dir), 'red'))
+            self.parse_config()
+
+    def __eq__(self, other: 'Config') -> bool:
+        return other.entries == self.entries and \
+               other.path_config == self.path_config
 
     @property
-    def entries(self) -> Any:
+    def entries(self) -> dict:
         """
-        Entries stored in the config.ini file.
+        Entries stored in the ``config.yml`` file.
 
         Returns:
             All entries.
@@ -49,7 +47,7 @@ class Config(object):
         if not self.initialized:
             raise ValueError('Config object was not initialized. "entries" '
                              'are not available.')
-        return self._entries
+        return self._config
 
     @property
     def working_dir(self) -> str:
@@ -63,29 +61,9 @@ class Config(object):
     def path_config(self) -> str:
         """
         Returns:
-            Path to config file (``config.ini``).
+            Path to config file (``config.yml``).
         """
-        return self.working_dir + "/config.ini"
-
-    @property
-    def path_configspec(self) -> str:
-        """
-        Returns:
-            Path to specification file for all config. parameters
-            (``configspec.ini``).
-        """
-        return self.working_dir + "/configspec.ini"
-
-    @property
-    def is_valid(self) -> bool:
-        """
-        Valid configuration file.
-
-        Returns:
-            ``True`` of any section could be retrieved from the file,
-            ``False`` otherwise.
-        """
-        return len(self.sections) > 0
+        return self.working_dir + "/config.yml"
 
     @property
     def config_exists(self):
@@ -97,15 +75,6 @@ class Config(object):
         return os.path.exists(self.path_config)
 
     @property
-    def configspec_exists(self):
-        """
-        Returns:
-            ``True`` if config. specification file exists,
-            ``False`` otherwise.
-        """
-        return os.path.exists(self.path_configspec)
-
-    @property
     def sections(self) -> List[str]:
         """
         Returns:
@@ -113,42 +82,47 @@ class Config(object):
         """
         return list(self.entries.keys())
 
-    def parse_config(self, validate: bool = True):
+    def parse_config(self):
         """
         Reads the content stored in the config file.
+        """
+        try:
+            self._config = yaml.load(open(self.path_config, 'r'),
+                                     Loader=yaml.FullLoader)
+            self.initialized = True
+        except FileNotFoundError:
+            pass
+
+    def write_config(self, target_dir=None):
+        """
+        Write config and configspec to disk.
 
         Args:
-            validate: Checks if file is a valid config.
+            target_dir: If None, write config to
+                :py:attr:`~path_config`. Else,
+                writes it to ``target_dir + 'config.yml'``
         """
-        assert self.path_config
-        assert self.path_configspec or not validate
-
-        if validate:
-            configspec = ConfigObj(self.path_configspec, list_values=False,
-                                   _inspec=True)
-            config = ConfigObj(self.path_config, configspec=configspec)
-
-            if config.validate(Validator()):
-                self._entries = config
-            else:
-                self.log_main.error('ERROR: Could not parse config at '
-                                    '{}.'.format(self.path_config))
+        if self._config is None:
+            raise ValueError('ConfigObj not yet parsed.')
+        if target_dir is None:
+            fname_conf = self.path_config
         else:
-            self._entries = ConfigObj(self.path_config)
-
-    def write_config(self):
-        # TODO: implement string conversion
-        raise NotImplementedError
-        # with open(self.working_dir + 'config.ini', 'w') as f:
-            # f.write(config_str)
-        # with open(self.working_dir + 'configspec.ini', 'w') as f:
-            # f.write(configspec_str)
+            fname_conf = target_dir + '/config.yml'
+        with open(fname_conf, 'w') as f:
+            f.write(yaml.dump(self.entries, default_flow_style=False))
 
 
 class DynConfig(Config):
     """
     Enables dynamic and SyConn-wide update of working directory 'wd' and provides an
     interface to all working directory dependent parameters.
+
+    Todo:
+        * Start to use ``__getitem__`` instead of :py:attr:`~entries`.
+        * Adapt all ``global_params.config.`` usages accordingly.
+        * Do not replace any property call for now (e.g. `~allow_mesh_gen_cells`)
+          because they convey default parameters for old datasets in case they
+          are not present in the default ``config.ini``.
 
     Examples:
         To initialize a working directory at the beginning of your script, run::
@@ -158,17 +132,62 @@ class DynConfig(Config):
             cfg = global_params.config  # this is the `DynConfig` object
 
     """
-    def __init__(self, wd: Optional[str] = None):
+    def __init__(self, wd: Optional[str] = None, log: Optional[Logger] = None):
         """
         Args:
             wd: Path to working directory
         """
+        verbose = False
         if wd is None:
             wd = global_params.wd
-            verbose = True
-        else:
-            verbose = False
-        super().__init__(wd, verbose=verbose)
+            verbose = True if wd is not None else False
+        super().__init__(wd)
+        self._default_conf = None
+        if log is None:
+            log = logging.getLogger('syconn')
+            coloredlogs.install(level=self['log_level'], logger=log)
+            level = logging.getLevelName(self['log_level'])
+            log.setLevel(level)
+
+            if not self['disable_file_logging'] and verbose:
+                # create file handler
+                log_dir = os.path.expanduser('~') + "/SyConn/logs/"
+
+                os.makedirs(log_dir, exist_ok=True)
+                fh = logging.FileHandler(log_dir + 'syconn.log')
+                fh.setLevel(level)
+
+                # add the handlers to log
+                if os.path.isfile(log_dir + 'syconn.log'):
+                    os.remove(log_dir + 'syconn.log')
+                log.addHandler(fh)
+                log.info("Initialized file logging. Log-files are stored at"
+                         " {}.".format(log_dir))
+        self.log_main = log
+        if verbose:
+            self.log_main.info("Initialized stdout logging (level: {}). "
+                               "Current working directory:"
+                               " ".format(self['log_level']) +
+                               colored("'{}'".format(self.working_dir), 'red'))
+            if self.initialized is False:
+                self.log_main.warning(f'Initialized config at {self.path_config} '
+                                      f'without initial file.')
+
+    def __getitem__(self, item: str) -> Any:
+        """
+        If `item` is not set in this config, the return value will be taken from
+         the default ``config.ini`` and ``configspec.ini``.
+
+        Args:
+            item: Key of the requested value.
+
+        Returns:
+            The value which corresponds to `item`.
+        """
+        try:
+            return self.entries[item]
+        except (KeyError, ValueError, AttributeError):
+            return self.default_conf.entries[item]
 
     def _check_actuality(self):
         """
@@ -181,9 +200,33 @@ class DynConfig(Config):
             len(os.environ['syconn_wd']) > 0 and os.environ['syconn_wd'] != "None":
             if super().working_dir != os.environ['syconn_wd']:
                 super().__init__(os.environ['syconn_wd'])
+                self.log_main.info("Initialized stdout logging (level: {}). "
+                                   "Current working directory:"
+                                   " ".format(self['log_level']) +
+                                   colored("'{}'".format(self.working_dir), 'red'))
+                if self.initialized is False:
+                    self.log_main.warning(f'Initialized config at {self.path_config} '
+                                          f'without initial file.')
         elif (global_params.wd is not None) and (len(global_params.wd) > 0) and \
                 (global_params.wd != "None") and (super().working_dir != global_params.wd):
             super().__init__(global_params.wd)
+            self.log_main.info("Initialized stdout logging (level: {}). "
+                               "Current working directory:"
+                               " ".format(self['log_level']) +
+                               colored("'{}'".format(self.working_dir), 'red'))
+            if self.initialized is False:
+                self.log_main.warning(f'Initialized config at {self.path_config} '
+                                      f'without initial file.')
+
+    @property
+    def default_conf(self) -> Config:
+        """
+        Load default ``config.ini`` if necessary.
+        """
+        if self._default_conf is None:
+            self._default_conf = Config(os.path.split(os.path.abspath(__file__))[0])
+            self._default_conf._working_dir = None
+        return self._default_conf
 
     @property
     def entries(self):
@@ -205,7 +248,7 @@ class DynConfig(Config):
         Returns:
             Path to cell supervoxel segmentation ``KnossosDataset``.
         """
-        return self.entries['Paths']['kd_seg']
+        return self.entries['paths']['kd_seg']
 
     @property
     def kd_sym_path(self) -> str:
@@ -213,7 +256,7 @@ class DynConfig(Config):
         Returns:
             Path to synaptic sym. type probability map stored as ``KnossosDataset``.
         """
-        return self.entries['Paths']['kd_sym']
+        return self.entries['paths']['kd_sym']
 
     @property
     def kd_asym_path(self) -> str:
@@ -221,7 +264,7 @@ class DynConfig(Config):
         Returns:
             Path to synaptic asym. type probability map stored as ``KnossosDataset``.
         """
-        return self.entries['Paths']['kd_asym']
+        return self.entries['paths']['kd_asym']
 
     @property
     def kd_sj_path(self) -> str:
@@ -230,7 +273,7 @@ class DynConfig(Config):
             Path to synaptic junction probability map or binary predictions stored as
             ``KnossosDataset``.
         """
-        return self.entries['Paths']['kd_sj']
+        return self.entries['paths']['kd_sj']
 
     @property
     def kd_vc_path(self) -> str:
@@ -239,7 +282,7 @@ class DynConfig(Config):
             Path to vesicle cloud probability map or binary predictions stored as
             ``KnossosDataset``.
         """
-        return self.entries['Paths']['kd_vc']
+        return self.entries['paths']['kd_vc']
 
     @property
     def kd_mi_path(self) -> str:
@@ -248,7 +291,7 @@ class DynConfig(Config):
             Path to mitochondria probability map or binary predictions stored as
             ``KnossosDataset``.
         """
-        return self.entries['Paths']['kd_mi']
+        return self.entries['paths']['kd_mi']
 
     @property
     def kd_organells_paths(self) -> Dict[str, str]:
@@ -257,15 +300,10 @@ class DynConfig(Config):
 
         Returns:
             Dictionary containg the paths to ``KnossosDataset`` of available
-            cellular containing ``global_params.existing_cell_organelles``.
+            cellular containing ``global_params.config['existing_cell_organelles']``.
         """
-        path_dict = {k: self.entries['Paths']['kd_{}'.format(k)] for k in
-                     global_params.existing_cell_organelles}
-        # path_dict = {
-        #     'kd_sj': self.kd_sj_path,
-        #     'kd_vc': self.kd_vc_path,
-        #     'kd_mi': self.kd_mi_path
-        # }
+        path_dict = {k: self.entries['paths']['kd_{}'.format(k)] for k in
+                     self['existing_cell_organelles']}
         return path_dict
 
     @property
@@ -275,15 +313,10 @@ class DynConfig(Config):
 
         Returns:
             Dictionary containing the paths to ``KnossosDataset`` of available
-            cellular organelles ``global_params.existing_cell_organelles``.
+            cellular organelles ``global_params.config['existing_cell_organelles']``.
         """
-        path_dict = {k: "{}/knossosdatasets/{}_seg/".format(self.working_dir, k) for k in
-                     global_params.existing_cell_organelles}
-        # path_dict = {
-        #     'kd_sj': self.kd_sj_path,
-        #     'kd_vc': self.kd_vc_path,
-        #     'kd_mi': self.kd_mi_path
-        # }
+        path_dict = {k: "{}/knossosdatasets/{}_seg/".format(
+            self.working_dir, k) for k in self['existing_cell_organelles']}
         return path_dict
 
     @property
@@ -296,23 +329,6 @@ class DynConfig(Config):
         # return "/tmp/{}_syconn/".format(pwd.getpwuid(os.getuid()).pw_name)
         return "{}/tmp/".format(self.working_dir)
 
-    @property
-    # TODO: Not necessarily needed anymore
-    def py36path(self) -> str:
-        """
-        Deprecated.
-
-        Returns:
-            Path to python3 interpreter.
-        """
-        if len(self.entries['Paths']['py36path']) != 0:
-            return self.entries['Paths']['py36path']  # python 3.6 path is available
-        else:  # python 3.6 path is not set, check current python
-            if sys.version_info[0] == 3 and sys.version_info[1] == 6:
-                return sys.executable
-        raise RuntimeError('Python 3.6 is not available. Please install SyConn'
-                           ' within python 3.6 or specify "py36path" in config.ini!')
-
     # TODO: Work-in usage of init_rag_path
     @property
     def init_rag_path(self) -> str:
@@ -321,7 +337,7 @@ class DynConfig(Config):
             Path to initial RAG.
         """
         self._check_actuality()
-        p = self.entries['Paths']['init_rag']
+        p = self.entries['paths']['init_rag']
         if len(p) == 0:
             p = self.working_dir + "rag.bz2"
         return p
@@ -431,8 +447,6 @@ class DynConfig(Config):
     @property
     def mpath_glia_e3(self) -> str:
         """
-        Trained on a large field of view.
-
         Returns:
             Path to model trained to classify local 2D projections into glia
             vs. neuron (img2scalar).
@@ -442,13 +456,20 @@ class DynConfig(Config):
     @property
     def mpath_myelin(self) -> str:
         """
-        Trained on a large field of view.
-
         Returns:
-            Path to model trained to identify myelinated cell parts within 3D
-            image data.
+            Path to model trained on identifying myelinated cell parts
+            within 3D EM raw data.
         """
         return self.model_dir + '/myelin/model.pt'
+
+    @property
+    def mpath_syntype(self) -> str:
+        """
+        Returns:
+            Path to model trained on identifying synapse types (symmetric
+            vs. asymmetric) within 3D EM raw data.
+        """
+        return self.model_dir + '/syntype/model_best.pt'
 
     @property
     def mpath_syn_rfc(self) -> str:
@@ -461,7 +482,9 @@ class DynConfig(Config):
         computed from scratch, see :attr:`~syconn.handler.config.DynConf.use_new_meshing`.
         """
         try:
-            return self.entries['Mesh']['allow_mesh_gen_cells']
+            if self.entries['meshes']['allow_mesh_gen_cells'] is None:
+                raise KeyError
+            return self.entries['meshes']['allow_mesh_gen_cells']
         except KeyError:
             return False
 
@@ -475,7 +498,7 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.ini file.
         """
-        return self.entries['Skeleton']['allow_skel_gen']
+        return self.entries['skeleton']['allow_skel_gen']
 
     # New config attributes, enable backwards compat. in case these entries do not exist
     @property
@@ -488,7 +511,9 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
-            return self.entries['Dataset']['syntype_avail']
+            if self.entries['dataset']['syntype_avail'] is None:
+                raise KeyError
+            return self.entries['dataset']['syntype_avail']
         except KeyError:
             return True
 
@@ -501,9 +526,11 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
-            return self.entries['Views']['use_large_fov_views_ct']
+            if self.entries['views']['use_large_fov_views_ct'] is None:
+                raise KeyError
+            return self.entries['views']['use_large_fov_views_ct']
         except KeyError:
-            return True
+            return False
 
     @property
     def use_new_renderings_locs(self) -> bool:
@@ -515,7 +542,9 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
-            return self.entries['Views']['use_new_renderings_locs']
+            if self.entries['views']['use_new_renderings_locs'] is None:
+                raise KeyError
+            return self.entries['views']['use_new_renderings_locs']
         except KeyError:
             return False
 
@@ -529,7 +558,9 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
-            return self.entries['Mesh']['use_new_meshing']
+            if self.entries['meshes']['use_new_meshing'] is None:
+                raise KeyError
+            return self.entries['meshes']['use_new_meshing']
         except KeyError:
             return False
 
@@ -541,8 +572,7 @@ class DynConfig(Config):
         Returns:
             Path to directory.
         """
-        return "%s/%s/" % (global_params.config.working_dir, # self.temp_path,
-                           global_params.BATCH_PROC_SYSTEM)
+        return f"{self.working_dir}/{self['batch_proc_system']}/"
 
     @property
     def prior_glia_removal(self) -> bool:
@@ -553,10 +583,8 @@ class DynConfig(Config):
         Returns:
             Value stored at the config.ini file.
         """
-        try:
-            return self.entries['Glia']['prior_glia_removal']
-        except KeyError:
-            return True
+        return self.entries['glia']['prior_glia_removal']
+
 
     @property
     def use_new_subfold(self) -> bool:
@@ -568,266 +596,349 @@ class DynConfig(Config):
             Value stored at the config.ini file.
         """
         try:
-            return self.entries['Paths']['use_new_subfold']
+            if self['paths']['use_new_subfold'] is not None:
+                return self['paths']['use_new_subfold']
+            else:
+                raise KeyError
         except KeyError:
             return False
 
+    @property
+    def batchjob_script_folder(self) -> str:
+        return os.path.abspath(os.path.dirname(os.path.abspath(__file__)) +
+                               "/../batchjob_scripts/")
 
-def get_default_conf_str(example_wd: str, scaling: Union[Tuple, np.ndarray],
-                         py36path: str = "", syntype_avail: bool = True,
-                         use_large_fov_views_ct: bool = False,
-                         allow_skel_gen: bool = True,
-                         use_new_renderings_locs: bool = False,
-                         kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
-                         kd_asym: Optional[str] = None,
-                         kd_sj: Optional[str] = None,  kd_mi: Optional[str] = None,
-                         kd_vc: Optional[str] = None, init_rag_p: str = "",
-                         prior_glia_removal: bool = False,
-                         use_new_meshing: bool = False,
-                         allow_mesh_gen_cells: bool = True,
-                         use_new_subfold: bool = True) -> Tuple[str, str]:
+    @property
+    def ncore_total(self) -> int:
+        return self['nnodes_total'] * self['ncores_per_node']
+
+    @property
+    def ngpu_total(self) -> int:
+        return self['nnodes_total'] * self['ngpus_per_node']
+
+
+def generate_default_conf(working_dir: str, scaling: Union[Tuple, np.ndarray],
+                          syntype_avail: bool = True,
+                          use_large_fov_views_ct: bool = False,
+                          allow_skel_gen: bool = True,
+                          use_new_renderings_locs: bool = True,
+                          kd_seg: Optional[str] = None, kd_sym: Optional[str] = None,
+                          kd_asym: Optional[str] = None,
+                          kd_sj: Optional[str] = None,  kd_mi: Optional[str] = None,
+                          kd_vc: Optional[str] = None, init_rag_p: str = "",
+                          prior_glia_removal: bool = True,
+                          use_new_meshing: bool = True,
+                          allow_mesh_gen_cells: bool = True,
+                          use_new_subfold: bool = True, force_overwrite=False,
+                          key_value_pairs: Optional[List[tuple]] = None):
     """
-    Default SyConn config and variable type specifications. Paths to ``KnossosDatasets``
-    containing various predictions, prob. maps and segmentations have to be given depending on
-    what specifically is going to be processed. See ``SyConn/scripts/example_run/start.py``
-    for an example.
+    Generates the default SyConn configuration file, including paths to
+    ``KnossosDatasets`` of e.g. cellular organelle predictions/prob.
+    maps and the cell supervoxel segmentation, general settings for
+    OpenGL (egl vs osmesa), the scheduling system (SLURM vs QSUB vs None) and
+    various parameters for processing the data. See
+    ``SyConn/scripts/example_run/start.py`` for an example.
     ``init_rag`` can be set specifically in the config-file which is optional.
-    By default it is set to ``init_rag = working_dir + "rag.bz2"``, which then
-    requires manual generation of the file, see ``SyConn/scripts/example_run/start.py``.
-    The parameter ``py36path`` is currently not in use.
+    By default it is set to ``init_rag = working_dir + "rag.bz2"``. SyConn then
+    will require an edge list of the supervoxel graph, see also
+    ``SyConn/scripts/example_run/start.py``.
+    Writes the file ``config.yml`` to `working_dir` after adapting the
+    attributes as given by the method input. This file can also only contain
+    the values of attributes which should differ from the default config
+    at ``SyConn/syconn/handlers/config.yml``. SyConn refers to the latter in
+    a parameter cannot be found in the config file inside the currently active
+    working directory.
 
     Examples:
-        Example content of the `config.ini` file::
+        Example content of an initialized `config.yml` file::
 
-            [Versions]
-                sv = 0
-                vc = 0
-                sj = 0
-                syn = 0
-                syn_ssv = 0
-                mi = 0
-                ssv = 0
-                ax_gt = 0
-                cs = 0
+            # General properties of the data set
+            scaling: [1, 1, 1]
 
-            [Paths]
-                kd_seg = ~/SyConn/example_cube1/knossosdatasets/seg/
-                kd_sym = ~/SyConn/example_cube1/knossosdatasets/sym/
-                kd_asym = ~/SyConn/example_cube1/knossosdatasets/asym/
-                kd_sj = ~/SyConn/example_cube1/knossosdatasets/sj/
-                kd_vc = ~/SyConn/example_cube1/knossosdatasets/vc/
-                kd_mi = ~/SyConn/example_cube1/knossosdatasets/mi/
-                init_rag =
-                py36path =
-                use_new_subfold = True
+            # File system, 'FS' is currently the only supported option
+            backend: "FS"
 
-            [Dataset]
-                scaling = 10, 10, 20
-                syntype_avail = True
+            # OpenGL platform: 'egl' (GPU support) or 'osmesa' (CPU rendering)
+            pyopengl_platform: 'egl'
 
-            [LowerMappingRatios]
-                mi = 0.5
-                sj = 0.1
-                vc = 0.5
+            existing_cell_organelles: ['mi', 'sj', 'vc']
+            syntype_avail:
 
-            [UpperMappingRatios]
-                mi = 1.
-                sj = 0.9
-                vc = 1.
+            # Compute backend: 'QSUB', 'SLURM', None
+            batch_proc_system: 'SLURM'  # If None, fall-back is single node multiprocessing
 
-            [Sizethresholds]
-                mi = 2786
-                sj = 498
-                vc = 1584
+            # the here defined parameters
+            batch_pe: 'default'
+            batch_queue: 'all.q'
 
-            [Probathresholds]
-                mi = 0.428571429
-                sj = 0.19047619
-                vc = 0.285714286
+            mem_per_node: 249500  # in MB
+            ncores_per_node: 20
+            ngpus_per_node: 2
+            nnodes_total: 17
 
-            [Mesh]
-                allow_mesh_gen_cells = True
-                use_new_meshing = True
+            # --------- LOGGING
+            # 'None' disables logging of SyConn modules (e.g. proc, handler, ...) to files.
+            # Logs of executed scripts (syconn/scripts) will be stored at the
+            # working directory + '/logs/' nonetheless.
+            default_log_dir:
+            log_level: 10  # INFO: 20, DEBUG: 10
+            # file logging for individual modules, and per job. Only use in case of
+            # debugging with single core processing. Logs for scripts are
+            # located in 'SyConn/scripts/' will be stored at wd + '/logs/'.
+            disable_file_logging: True
 
-            [Skeleton]
-                allow_skel_gen = True
+            # File locking - True is untested yet.
+            disable_locking: False
 
-            [Views]
-                use_large_fov_views_ct = False
-                use_new_renderings_locs = True
+            # Data paths
+            paths:
+              kd_seg:
+              kd_sym:
+              kd_asym:
+              kd_sj:
+              kd_vc:
+              kd_mi:
+              init_rag:
+              use_new_subfold:
 
-            [Glia]
-                prior_glia_removal = True
+            # (Super-)SegmentationDataset versions
+            versions:
+              sv: 0
+              vc: 0
+              sj: 0
+              syn: 0
+              syn_ssv: 0
+              mi: 0
+              ssv: 0
+              ax_gt: 0
+              cs: 0
+
+            # Cell object properties
+            cell_objects:
+              lower_mapping_ratios:
+                mi: 0.5
+                sj: 0.1
+                vc: 0.5
+
+              upper_mapping_ratios:
+                mi: 1.
+                sj: 0.9
+                vc: 1.
+
+              sizethresholds:
+                mi: 2786
+                sj: 498
+                vc: 1584
+
+              probathresholds:
+                mi: 0.428571429
+                sj: 0.19047619
+                vc: 0.285714286
+
+              # bounding box criteria for mapping mitochondria objects
+              thresh_mi_bbd_mapping: 25000  # bounding box diagonal in NM
+
+              # --------- CONTACT SITE AND SYNAPSE PARAMETERS
+              # Synaptic junction bounding box diagonal threshold in nm; objects above will
+              # not be used during `syn_gen_via_cset`
+              thresh_sj_bbd_syngen: 25000  # bounding box diagonal in NM
+              # used for agglomerating 'syn' objects (cell supervoxel-based synapse fragments)
+              # into 'syn_ssv'
+              cs_gap_nm: 250
+              cs_filtersize: [13, 13, 7]
+              cs_nclosings: 13
+              # Parameters of agglomerated synapses 'syn_ssv'
+              # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
+              # organelles to syn_ssv
+              max_vx_dist_nm: 2000
+              max_rep_coord_dist_nm: 4000
+              thresh_synssv_proba: 0.5  # RFC probability used for classifying whether syn or not
+              thresh_synssv_size: 10  # minimum number of voxel for synapses in SSVs,
+              # above will be assigned synaptic sign (-1, inhibitory) and <= will be
+              # (1, excitatory)
+              sym_thresh: 0.225
+
+            meshes:
+              allow_mesh_gen_cells:
+              use_new_meshing:
+
+              downsampling:
+                sv: [4, 4, 2]
+                sj: [2, 2, 1]
+                vc: [4, 4, 2]
+                mi: [8, 8, 4]
+                cs: [2, 2, 1]
+                syn_ssv: [2, 2, 1]
+
+              closings:
+                sv: 0
+                s: 0
+                vc: 0
+                mi: 0
+                cs: 0
+                syn_ssv: 0
+
+              mesh_min_obj_vx: 100  # adapt to size threshold
+
+              meshing_props:
+                normals: True
+                simplification_factor: 300
+                max_simplification_error: 40
+
+            skeleton:
+              allow_skel_gen: True
+              feature_context_rfc: # in NM
+                axoness: 8000
+                spiness: 1000
+
+            views:
+              use_large_fov_views_ct:
+              use_new_renderings_locs:
+              nb_views: 2  # used for default view rendering (glia separation, spine detection)
+
+            glia:
+              prior_glia_removal: True
+              # min. connected component size of glia nodes/SV after thresholding glia proba
+              min_cc_size_ssv: 8000  # in nm; L1-norm on vertex bounding box
+
+              # Threshold for glia classification
+              glia_thresh: 0.161489
+              # number of sv used during local rendering. The total number of SV used are
+              # subcc_size_big_ssv + 2*(subcc_chunk_size_big_ssv-1)
+              subcc_size_big_ssv: 35
+              rendering_max_nb_sv: 5000
+              # number of SV for which views are rendered in one pass
+              subcc_chunk_size_big_ssv: 9
+
+            # --------- SPINE PARAMETERS
+            spines:
+              min_spine_cc_size: 10
+              min_edge_dist_spine_graph: 110
+              gt_path_spineseg:
+
+              # mapping parameters of the semantic segmentation prediction to the cell mesh
+              # Note: ``k>0`` means that the predictions are propagated to unpredicted and backround labels
+              # via nearest neighbors.
+              semseg2mesh_spines:
+                semseg_key: "spiness"
+                force_recompute: True
+                k: 0
+
+              # mapping of vertex labels to skeleton nodes; ignore labels 4 (background)
+              # and 5 (unpredicted), use labels of the k-nearest vertices
+              semseg2coords_spines:
+                k: 50
+                ds_vertices: 1
+                ignore_labels: [4, 5]
+
+
+            compartments:
+              dist_axoness_averaging: 10000  # also used for myelin averaging
+              gt_path_axonseg:
+
+              # `k=0` will not map predictions to unpredicted vertices -> faster
+              # `k` is the parameter used in `semseg2mesh`
+              view_properties_semsegax:
+                verbose: False
+                ws: [1024, 512]
+                nb_views: 3
+                comp_window: 40960  # in NM
+                semseg_key: 'axoness'
+                k: 0
+              # mapping of vertex labels to skeleton nodes; ignore labels 5 (background)
+              # and 6 (unpredicted), use labels of the k-nearest vertices
+              map_properties_semsegax:
+                k: 50
+                ds_vertices: 1
+                ignore_labels: [5, 6]
+
+
+            celltype:
+              view_properties_large:
+                verbose: False
+                ws: [512, 512]
+                nb_views_render: 6
+                comp_window: 40960
+                nb_views_model: 4
+
+            # --------- MORPHOLOGY EMBEDDING
+            tcmn:
+              ndim_embedding: 10
 
     Args:
-        example_wd:
-        scaling:
-        py36path:
-        syntype_avail:
-        use_large_fov_views_ct:
-        allow_skel_gen:
-        use_new_renderings_locs:
-        kd_seg:
-        kd_sym:
-        kd_asym:
-        kd_sj:
-        kd_mi:
-        kd_vc:
-        init_rag_p:
-        prior_glia_removal:
-        use_new_meshing:
-        allow_mesh_gen_cells:
-        use_new_subfold:
-
-    Returns:
-        Content of config.ini and configspec.ini
+        working_dir: Folder of the working directory.
+        scaling: Voxel size in NM.
+        syntype_avail: If True, synapse objects will contain additional type
+            property (symmetric vs asymmetric).
+        use_large_fov_views_ct: If True, uses on-the-fly, large view renderings
+            for predicting cell types.
+        allow_skel_gen: If True, allow cell skeleton generation from rendering
+            locations (inaccurate).
+        use_new_renderings_locs: If True, uses new heuristic for generating
+            rendering locations.
+        kd_seg: Path to the KnossosDataset which contains the cell segmentation.
+        kd_sym: Path to the symmetric type prediction.
+        kd_asym: Path to the asymmetric type prediction.
+        kd_sj: Path to the synaptic junction predictions.
+        kd_mi: Path to the mitochondria predictions.
+        kd_vc: Path to the vesicle cloud predictions.
+        init_rag_p: Path to the initial supervoxel graph.
+        prior_glia_removal: If True, applies glia separation before analysing
+            cell reconstructions.
+        use_new_meshing: If True, uses new meshing procedure based on `zmesh`.
+        allow_mesh_gen_cells: If True, meshing of cell supervoxels will be
+            permitted.
+        use_new_subfold: If True, similar object IDs will be stored in the same
+            storage file.
+        force_overwrite: Will overwrite existing ``config.yml`` file.
+        key_value_pairs: List of key-value pairs used to modify attributes in
+            the config file.
     """
     if kd_seg is None:
-        kd_seg = example_wd + 'knossosdatasets/seg/'
+        kd_seg = working_dir + 'knossosdatasets/seg/'
     if kd_sym is None:
-        kd_sym = example_wd + 'knossosdatasets/sym/'
+        kd_sym = working_dir + 'knossosdatasets/sym/'
     if kd_asym is None:
-        kd_asym = example_wd + 'knossosdatasets/asym/'
+        kd_asym = working_dir + 'knossosdatasets/asym/'
     if kd_sj is None:
-        kd_sj = example_wd + 'knossosdatasets/sj/'
+        kd_sj = working_dir + 'knossosdatasets/sj/'
     if kd_mi is None:
-        kd_mi = example_wd + 'knossosdatasets/mi/'
+        kd_mi = working_dir + 'knossosdatasets/mi/'
     if kd_vc is None:
-        kd_vc = example_wd + 'knossosdatasets/vc/'
-    config_str = """[Versions]
-sv = 0
-vc = 0
-sj = 0
-syn = 0
-syn_ssv = 0
-mi = 0
-ssv = 0
-ax_gt = 0
-cs = 0
+        kd_vc = working_dir + 'knossosdatasets/vc/'
 
-[Paths]
-kd_seg = {}
-kd_sym = {}
-kd_asym = {}
-kd_sj = {}
-kd_vc = {}
-kd_mi = {}
-init_rag = {}
-py36path = {}
-use_new_subfold = {}
+    default_conf = Config(os.path.split(os.path.abspath(__file__))[0])
+    entries = default_conf.entries
+    entries['paths']['kd_seg'] = kd_seg
+    entries['paths']['kd_sym'] = kd_sym
+    entries['paths']['kd_asym'] = kd_asym
+    entries['paths']['kd_sj'] = kd_sj
+    entries['paths']['kd_vc'] = kd_vc
+    entries['paths']['kd_mi'] = kd_mi
+    entries['paths']['init_rag'] = init_rag_p
+    entries['paths']['use_new_subfold'] = use_new_subfold
+    if type(scaling) is np.ndarray:
+        scaling = scaling.tolist()
+    entries['scaling'] = scaling
+    entries['syntype_avail'] = syntype_avail
 
-[Dataset]
-scaling = {}, {}, {}
-syntype_avail = {}
+    entries['meshes']['allow_mesh_gen_cells'] = allow_mesh_gen_cells
+    entries['meshes']['use_new_meshing'] = use_new_meshing
 
-[LowerMappingRatios]
-mi = 0.5
-sj = 0.1
-vc = 0.5
+    entries['skeleton']['allow_skel_gen'] = allow_skel_gen
 
-[UpperMappingRatios]
-mi = 1.
-sj = 0.9
-vc = 1.
+    entries['views']['use_large_fov_views_ct'] = use_large_fov_views_ct
+    entries['views']['use_new_renderings_locs'] = use_new_renderings_locs
 
-[Sizethresholds]
-mi = 2786
-sj = 498
-vc = 1584
-
-[Probathresholds]
-mi = 0.428571429
-sj = 0.19047619
-vc = 0.285714286
-
-[Mesh]
-allow_mesh_gen_cells = {}
-use_new_meshing = {}
-
-[Skeleton]
-allow_skel_gen = {}
-
-[Views]
-use_large_fov_views_ct = {}
-use_new_renderings_locs = {}
-
-[Glia]
-prior_glia_removal = {}
-    """.format(kd_seg, kd_sym, kd_asym, kd_sj, kd_vc, kd_mi, init_rag_p,
-               py36path, use_new_subfold, scaling[0], scaling[1], scaling[2],
-               str(syntype_avail), str(allow_mesh_gen_cells), str(use_new_meshing),
-               str(allow_skel_gen), str(use_large_fov_views_ct),
-               str(use_new_renderings_locs), str(prior_glia_removal))
-
-    configspec_str = """
-[Versions]
-__many__ = string
-
-[Paths]
-__many__ = string
-use_new_subfold = boolean
-
-[Dataset]
-scaling = float_list(min=3, max=3)
-syntype_avail = boolean
-
-[LowerMappingRatios]
-__many__ = float
-
-[UpperMappingRatios]
-__many__ = float
-
-[Sizethresholds]
-__many__ = integer
-
-[Probathresholds]
-__many__ = float
-
-[Mesh]
-allow_mesh_gen_cells = boolean
-use_new_meshing = boolean
-
-[Skeleton]
-allow_skel_gen = boolean
-
-[Views]
-use_large_fov_views_ct = boolean
-use_new_renderings_locs = boolean
-
-[Glia]
-prior_glia_removal = boolean
-"""
-    return config_str, configspec_str
-
-
-def get_main_log():
-    """
-    Initialize main log.
-
-    Returns:
-        Main log.
-
-    """
-    logger = logging.getLogger('syconn')
-    coloredlogs.install(level=global_params.log_level, logger=logger)
-    level = logging.getLevelName(global_params.log_level)
-    logger.setLevel(level)
-
-    if not global_params.DISABLE_FILE_LOGGING:
-        # create file handler which logs even debug messages
-        log_dir = os.path.expanduser('~') + "/SyConn/logs/"
-
-        os.makedirs(log_dir, exist_ok=True)
-        fh = logging.FileHandler(log_dir + 'syconn.log')
-        fh.setLevel(level)
-
-        # add the handlers to logger
-        if os.path.isfile(log_dir + 'syconn.log'):
-            os.remove(log_dir + 'syconn.log')
-        logger.addHandler(fh)
-        logger.info("Initialized file logging. Log-files are stored at"
-                    " {}.".format(log_dir))
-    return logger
+    entries['glia']['prior_glia_removal'] = prior_glia_removal
+    if key_value_pairs is not None:
+        for k, v in key_value_pairs:
+            entries[k] = v
+    default_conf._working_dir = working_dir
+    if os.path.isfile(default_conf.path_config) and not force_overwrite:
+        raise ValueError(f'Attempting to overwrite existing config file at '
+                         f'{default_conf.path_config}.')
+    default_conf.write_config(working_dir)
 
 
 def initialize_logging(log_name: str, log_dir: Optional[str] = None,
@@ -839,21 +950,21 @@ def initialize_logging(log_name: str, log_dir: Optional[str] = None,
     Args:
         log_name: Name of the logger.
         log_dir: Set log_dir specifically. Will then create a filehandler and
-            ignore the state of global_params.DISABLE_FILE_LOGGING state.
+            ignore the state of ``global_params.config['disable_file_logging']``
+            state.
         overwrite: Overwrite previous log file.
 
-
     Returns:
-
+        The logger.
     """
     if log_dir is None:
-        log_dir = global_params.default_log_dir
-    level = global_params.log_level
+        log_dir = global_params.config['default_log_dir']
+    level = global_params.config['log_level']
     logger = logging.getLogger(log_name)
     logger.setLevel(level)
-    coloredlogs.install(level=global_params.log_level, logger=logger,
+    coloredlogs.install(level=global_params.config['log_level'], logger=logger,
                         reconfigure=False)  # True possibly leads to stderr output
-    if not global_params.DISABLE_FILE_LOGGING or log_dir is not None:
+    if not global_params.config['disable_file_logging'] or log_dir is not None:
         # create file handler which logs even debug messages
         if log_dir is None:
             log_dir = os.path.expanduser('~') + "/.SyConn/logs/"
@@ -883,7 +994,8 @@ class TimeFilter(logging.Filter):
         except AttributeError:
           last = record.relativeCreated
 
-        delta = datetime.datetime.fromtimestamp(record.relativeCreated/1000.0) - datetime.datetime.fromtimestamp(last/1000.0)
+        delta = datetime.datetime.fromtimestamp(record.relativeCreated/1000.0) - \
+                datetime.datetime.fromtimestamp(last/1000.0)
 
         record.relative = '{0:.1f}'.format(delta.seconds / 60.)
 

@@ -60,14 +60,6 @@ syconn.reps.rep\_helper module
     :undoc-members:
     :show-inheritance:
 
-syconn.reps.rep\_helper module
-------------------------------
-
-.. automodule:: syconn.reps.rep_helper
-    :members:
-    :undoc-members:
-    :show-inheritance:
-
 Module contents
 ---------------
 

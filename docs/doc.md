@@ -1,7 +1,7 @@
 # Documentation
 
 ## Installation
-* Python 3.6
+* Python 3.6/3.7
 * The whole pipeline was designed and tested on Linux systems
 * SyConn is based on the packages [elektronn3](https://github.com/ELEKTRONN/elektronn3) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
 * [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.
@@ -24,17 +24,18 @@ sh install.sh
 2.b) Or alternatively run these commands to install them manually:
 
 ```
-conda install cmake
 conda install vigra -c conda-forge
-conda install mesa -c menpo
+conda install mesa -c anaconda
 conda install osmesa -c menpo
 conda install freeglut
 conda install pyopengl
 conda install snappy
 conda install python-snappy
+conda install numba==0.45.0 llvmlite==0.29
 conda install tensorboard tensorflow
-conda install -c conda-forge sip=4.18.1
-conda install gcc_impl_linux-64 gcc_linux-64 gxx_impl_linux-64 gxx_linux-64
+
+# the following torch setting seems to be more stable for new GPU/driver
+echo y | conda install pytorch==1.1.0 torchvision cudatoolkit=10.0 -c pytorch
 
 git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
 cd SyConn
@@ -53,7 +54,7 @@ python start.py
 The example script analyzes the EM data based on KnossosDatasets (see `knossos_utils`) of the cell segmentation, probability maps of sub-cellular structures
 (mitochondria, vesicle clouds and synaptic junctions) and synapse type (inhibitory, excitatory).
 
-On a machine with 20 CPUs (Intel(R) Xeon(R) @ 2.60GHz) and 2 GPUs (GeForce GTX 980 Ti) SyConn
+On a machine with 20 CPUs (Intel Xeon @ 2.60GHz) and 2 GPUs (GeForce GTX 980 Ti) SyConn
 finished the following analysis steps for an example cube of shape \[2180 2180 1140] after 02h:16min:52s.
 
 \[0/8] Preparation                       00h:07min:21s                   5%

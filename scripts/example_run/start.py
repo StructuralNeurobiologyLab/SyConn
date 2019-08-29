@@ -9,20 +9,17 @@ from knossos_utils import knossosdataset
 knossosdataset._set_noprint(True)
 import numpy as np
 import os
-import subprocess
 import glob
 import shutil
 import sys
 import time
 import argparse
 
-from syconn.handler.prediction import parse_movement_area_from_zip
-from syconn.handler.config import get_default_conf_str, initialize_logging
-from syconn.handler.compression import load_from_h5py
 from syconn import global_params
-from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_prediction
+from syconn.handler.config import generate_default_conf, initialize_logging
 
 if __name__ == '__main__':
+    # pare arguments
     parser = argparse.ArgumentParser(description='SyConn example run')
     parser.add_argument('--working_dir', type=str, default='',
                         help='Working directory of SyConn')
@@ -34,7 +31,45 @@ if __name__ == '__main__':
     if args.working_dir == "":  # by default use cube dependent working dir
         args.working_dir = "/wholebrain/scratch/mariakaw/example_cube{}/".format(example_cube_id)
     example_wd = os.path.expanduser(args.working_dir) + "/"
+
+    # set up basic parameter, log, working directory and config file
     log = initialize_logging('example_run', log_dir=example_wd + '/logs/')
+    experiment_name = 'j0126_example'
+    scale = np.array([10, 10, 20])
+    prior_glia_removal = True
+    key_val_pairs_conf = [
+        ('prior_glia_removal', prior_glia_removal),
+        ('pyopengl_platform', 'egl'),
+        ('batch_proc_system', None),
+        ('ncores_per_node', 20),
+        ('ngpus_per_node', 1),
+        ('nnodes_total', 1),
+    ]
+    chunk_size = (256, 256, 256)
+    n_folders_fs = 1000
+    n_folders_fs_sc = 1000
+    curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
+    h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
+    kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
+
+    if not (sys.version_info[0] == 3 and sys.version_info[1] >= 6):
+        log.critical('Python version <3.6. This is untested!')
+
+    generate_default_conf(example_wd, scale,
+                          key_value_pairs=key_val_pairs_conf,
+                          force_overwrite=True)
+
+    if global_params.wd is not None:
+        log.critical('Example run started. Working directory was overwritten and set'
+                     ' to "{}".'.format(example_wd))
+    global_params.wd = example_wd
+    os.makedirs(global_params.config.temp_path, exist_ok=True)
+
+    # keep imports here to guarantee correct usage of pyopengl platform if batch processing
+    # system is None
+    from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_prediction
+    from syconn.handler.prediction import parse_movement_area_from_zip
+    from syconn.handler.compression import load_from_h5py
 
     marysia_time = time.time()
     # PREPARE TOY DATA
@@ -42,10 +77,6 @@ if __name__ == '__main__':
 
     time_stamps = [time.time()]
     step_idents = ['t-0']
-
-    curr_dir = os.path.dirname(os.path.realpath(__file__)) + '/'
-    h5_dir = curr_dir + '/data{}/'.format(example_cube_id)
-    kzip_p = curr_dir + '/example_cube{}.k.zip'.format(example_cube_id)
 
     # copy models to working directory
     if os.path.isdir(curr_dir + '/models/') and not os.path.isdir(example_wd + '/models/'):
@@ -59,47 +90,10 @@ if __name__ == '__main__':
 
     os.makedirs(example_wd + '/glia/', exist_ok=True)
 
-    bb = parse_movement_area_from_zip(kzip_p)
-    prior_glia_removal = True
-    use_new_meshing = True
-    offset = np.array([0, 0, 0])
-    bd = bb[1] - bb[0]
-    scale = np.array([10, 10, 20])
-    chunk_size = (256, 256, 256)
-    n_folders_fs = 1000
-    n_folders_fs_sc = 1000
-    experiment_name = 'j0126_example'
-    global_params.NCORE_TOTAL = 20
-    global_params.NGPU_TOTAL = 2
-    global_params.NNODES_TOTAL = 1
-
-    # PREPARE CONFIG
-    if global_params.wd is not None:
-        log.critical('Example run started. Working directory was overwritten and set'
-                     ' to "{}".'.format(example_wd))
-    if not (sys.version_info[0] == 3 and sys.version_info[1] == 6):
-        py36path = subprocess.check_output(
-            'source deactivate; source activate py36;f which python',
-            shell=True).decode().replace('\n', '')
-    else:
-        py36path = ""
-    config_str, configspec_str = get_default_conf_str(example_wd, scaling=scale,
-                                                      py36path=py36path,
-                                                      use_new_renderings_locs=True,
-                                                      use_large_fov_views_ct=False,
-                                                      use_new_meshing=use_new_meshing,
-                                                      allow_mesh_gen_cells=True,
-                                                      prior_glia_removal=prior_glia_removal)
-    with open(example_wd + 'config.ini', 'w') as f:
-        f.write(config_str)
-    with open(example_wd + 'configspec.ini', 'w') as f:
-        f.write(configspec_str)
-
-    global_params.wd = example_wd
-    os.makedirs(global_params.config.temp_path, exist_ok=True)
-
-    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype',
-                      'mpath_axoness', 'mpath_glia']:
+    # check model existence
+    for mpath_key in ['mpath_spiness', 'mpath_syn_rfc', 'mpath_celltype_e3',
+                      'mpath_axonsem', 'mpath_glia_e3', 'mpath_myelin',
+                      'mpath_tnet']:
         mpath = getattr(global_params.config, mpath_key)
         if not (os.path.isfile(mpath) or os.path.isdir(mpath)):
             raise ValueError('Could not find model "{}". Make sure to copy the'
@@ -110,6 +104,10 @@ if __name__ == '__main__':
         shutil.copy(h5_dir + "/neuron_rag.bz2", global_params.config.init_rag_path)
     else:
         shutil.copy(h5_dir + "/rag.bz2", global_params.config.init_rag_path)
+
+    bb = parse_movement_area_from_zip(kzip_p)
+    offset = np.array([0, 0, 0])
+    bd = bb[1] - bb[0]
 
     # INITIALIZE DATA
     kd = knossosdataset.KnossosDataset()

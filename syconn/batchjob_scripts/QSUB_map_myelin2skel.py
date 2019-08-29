@@ -36,8 +36,9 @@ ssd = SuperSegmentationDataset(working_dir=working_dir, version=version,
 for ssv in ssd.get_super_segmentation_object(ssv_ids):
     ssv.load_skeleton()
     ssv.skeleton["myelin"] = map_myelin2coords(ssv.skeleton["nodes"], mag=4)
-    majorityvote_skeleton_property(ssv, prop_key='myelin',
-                                   max_dist=global_params.DIST_AXONESS_AVERAGING)
+    majorityvote_skeleton_property(
+        ssv, prop_key='myelin', max_dist=global_params.config['compartments'][
+            'dist_axoness_averaging'])
     ssv.save_skeleton()
 
 with open(path_out_file, "wb") as f:

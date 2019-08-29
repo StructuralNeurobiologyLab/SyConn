@@ -13,7 +13,7 @@ from multiprocessing import Process
 import shutil
 import networkx as nx
 import numpy as np
-from typing import Optional, Callable, Tuple
+from typing import Optional, Callable, Tuple, Dict, Any
 from syconn import global_params
 from syconn.extraction import object_extraction_wrapper as oew
 from syconn.proc import sd_proc
@@ -44,11 +44,11 @@ def sd_init(co: str, max_n_jobs: int, log: Optional[Logger] = None):
     if not global_params.config.use_new_meshing and (co != "sv" or (co == "sv" and
             global_params.config.allow_mesh_gen_cells)):
         _ = qu.QSUB_script(multi_params, "mesh_caching", suffix=co, remove_jobfolder=False,
-                           n_max_co_processes=global_params.NCORE_TOTAL, log=log)
+                           n_max_co_processes=global_params.config.ncore_total, log=log)
 
     if co == "sv":
         _ = qu.QSUB_script(multi_params, "sample_location_caching",
-                           n_max_co_processes=global_params.NCORE_TOTAL,
+                           n_max_co_processes=global_params.config.ncore_total,
                            suffix=co, remove_jobfolder=True, log=log)
 
     # write mesh properties to attribute dictionaries if old meshing is active
@@ -64,11 +64,11 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
     Initializes a per-object segmentation KnossosDataset for the given supervoxel type
     `co` based on an initial prediction which location has to be defined in the config.ini file
     for the `co` object, e.g. `kd_mi` for `co='mi'`
-    (see :func:`~syconn.handler.config.get_default_conf_str`). Results will be stored as a
+    (see :func:`~syconn.handler.config.generate_default_conf`). Results will be stored as a
     KnossosDataset at `"{}/knossosdatasets/{}_seg/".format(global_params.config.working_dir, co)`.
     Appropriate parameters have to be set inside the config.ini file, see
     :func:`~syconn.extraction.object_extraction_wrapper.generate_subcell_kd_from_proba`
-    or :func:`~syconn.handler.config.get_default_conf_str` for more details.
+    or :func:`~syconn.handler.config.generate_default_conf` for more details.
 
     Args:
         co: Type of cell organelle supervoxels, e.g 'mi' for mitochondria or 'vc' for
@@ -87,9 +87,12 @@ def kd_init(co, chunk_size, transf_func_kd_overlay: Optional[Callable],
         cube_of_interest_bb=cube_of_interest_bb, log=log)
 
 
-def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=10000, max_n_jobs=None,
-                          load_cellorganelles_from_kd_overlaycubes=False,
-                          transf_func_kd_overlay=None, cube_of_interest_bb=None):
+def init_cell_subcell_sds(chunk_size: Optional[Tuple[int, int, int]] = None,
+                          n_folders_fs: int = 10000, n_folders_fs_sc: int = 10000,
+                          max_n_jobs: Optional[int] = None,
+                          load_cellorganelles_from_kd_overlaycubes: bool = False,
+                          transf_func_kd_overlay: Optional[Dict[Any, Callable]] = None,
+                          cube_of_interest_bb: Optional[np.ndarray] = None):
     """
     Todo:
         * Don't extract sj objects and replace their use-cases with syn objects (?).
@@ -107,29 +110,30 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
         transf_func_kd_overlay: Transformation applied on the prob. map or segmentation
             data.
         cube_of_interest_bb: Bounding of the (sub-) volume of the dataset
-            which is processed.
+            which is processed (minimum and maximum coordinates in mag1 voxels,
+            XYZ).
     """
     log = initialize_logging('create_sds', global_params.config.working_dir +
                              '/logs/', overwrite=True)
     if transf_func_kd_overlay is None:
-        transf_func_kd_overlay = {k: None for k in global_params.existing_cell_organelles}
+        transf_func_kd_overlay = {k: None for k in global_params.config['existing_cell_organelles']}
     if chunk_size is None:
         chunk_size = [512, 512, 512]
     if max_n_jobs is None:
-        max_n_jobs = global_params.NCORE_TOTAL * 2
-        # loading cached data or adapt number of jobs/cache size dynamically, dependent on the
-        # dataset
+        max_n_jobs = global_params.config.ncore_total * 2
+        # loading cached data or adapt number of jobs/cache size dynamically,
+        # dependent on the dataset
     kd = kd_factory(global_params.config.kd_seg_path)
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
 
     log.info('Converting predictions of cellular organelles to KnossosDatasets for every'
-             'type available: {}.'.format(global_params.existing_cell_organelles))
+             'type available: {}.'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
     ps = [Process(target=kd_init, args=[co, chunk_size, transf_func_kd_overlay,
                                         load_cellorganelles_from_kd_overlaycubes,
                                         cube_of_interest_bb, log])
-          for co in global_params.existing_cell_organelles]
+          for co in global_params.config['existing_cell_organelles']]
     for p in ps:
         p.start()
         time.sleep(5)
@@ -138,7 +142,7 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
     log.info('Finished KD generation after {:.0f}s.'.format(time.time() - start))
 
     log.info('Generating SegmentationDatasets for subcellular structures {} and'
-             ' cell supervoxels'.format(global_params.existing_cell_organelles))
+             ' cell supervoxels.'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
     sd_proc.map_subcell_extract_props(
         global_params.config.kd_seg_path, global_params.config.kd_organelle_seg_paths,
@@ -148,10 +152,10 @@ def init_cell_subcell_sds(chunk_size=None, n_folders_fs=10000, n_folders_fs_sc=1
              ''.format(time.time() - start))
 
     log.info('Caching properties of subcellular structures {} and cell'
-             ' supervoxels'.format(global_params.existing_cell_organelles))
+             ' supervoxels'.format(global_params.config['existing_cell_organelles']))
     start = time.time()
     ps = [Process(target=sd_init, args=[co, max_n_jobs, log])
-          for co in ["sv"] + global_params.existing_cell_organelles]
+          for co in ["sv"] + global_params.config['existing_cell_organelles']]
     for p in ps:
         p.start()
         time.sleep(5)
@@ -204,7 +208,7 @@ def run_create_rag():
               "on bounding box diagonal of corresponding SVs.")
     before_cnt = len(G.nodes())
     for ix in list(G.nodes()):
-        if ccsize_dict[ix] < global_params.min_cc_size_ssv:
+        if ccsize_dict[ix] < global_params.config['glia']['min_cc_size_ssv']:
             G.remove_node(ix)
     cc_gs = list(nx.connected_component_subgraphs(G))
     log.info("Removed {} SVs from RAG because of size. Final RAG contains {}"

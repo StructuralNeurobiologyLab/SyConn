@@ -29,14 +29,10 @@ from .. import global_params
 from .mp_utils import start_multiprocess_imap
 from . import log_mp
 
-BATCH_PROC_SYSTEM = global_params.BATCH_PROC_SYSTEM
+BATCH_PROC_SYSTEM = global_params.config['batch_proc_system']
 
 
 def batchjob_enabled():
-    # disable QSUB/SLURM for example_run.py
-    if global_params.config.working_dir is None or 'example_cube' in \
-            global_params.config.working_dir:
-        return False
     if BATCH_PROC_SYSTEM is None:
         return False
     try:
@@ -56,7 +52,7 @@ def batchjob_enabled():
     return True
 
 
-path_to_scripts_default = global_params.batchjob_script_folder
+path_to_scripts_default = global_params.config.batchjob_script_folder
 username = getpass.getuser()
 python_path_global = sys.executable
 
@@ -108,7 +104,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         directory in which the QSUB_* file is located
     n_max_co_processes: int or None
         limits the number of processes that are executed on the cluster at the 
-        same time; None: use global_params.NCORE_TOTAL // number of cores per job (n_cores)
+        same time; None: use global_params.config.ncore_total // number of cores per job (n_cores)
     iteration : int
         This counter stores how often QSUB_script was called for the same job
          submission. E.g. if jobs fail during a submission, it will be repeated
@@ -132,12 +128,16 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         Sends an notification email after completion. Currently does not contain any
         information about the job name, required time or CPU/MEM usage.
         TODO: use SLURM JobArrays to enable detailed notification emails
+    remove_jobfolder: bool
+        Remove the created folder after successfully processing.
     use_dill : bool
     show_progress : bool
         Currently only applies for `batchjob_fallback`
     allow_resubm_all_fail : bool
         Will resubmit failed jobs even if all failed. Useful for e.g. unexpected memory
         requirements.
+    log: Logger
+        Logger.
 
     Returns
     -------
@@ -151,11 +151,11 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         return batchjob_fallback(params, name, n_cores, suffix,
                                  script_folder, python_path, 
                                  remove_jobfolder=remove_jobfolder,
-                                 show_progress=show_progress)
+                                 show_progress=show_progress, log=log)
     if queue is None:
-        queue = global_params.BATCH_QUEUE
+        queue = global_params.config['batch_queue']
     if pe is None:
-        pe = global_params.BATCH_PE
+        pe = global_params.config['batch_pe']
     if resume_job:
         return resume_QSUB_script(
             params, name, queue=queue, pe=pe, max_iterations=max_iterations,
@@ -175,7 +175,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
     else:
         log_batchjob = log
     if n_max_co_processes is None:
-        n_max_co_processes = np.min([global_params.NCORE_TOTAL // n_cores,
+        n_max_co_processes = np.min([global_params.config.ncore_total // n_cores,
                                      len(params)])
     n_max_co_processes = np.max([n_max_co_processes, 1])
     log_batchjob.info('Started BatchJob script "{}" with {} tasks using {}'
@@ -240,11 +240,12 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
             # Node memory limit is 250,000M and not 250G! ->
             # max memory per core is 250000M/20, leave safety margin
             mem_lim = int(
-                global_params.MEM_PER_NODE * n_cores / global_params.NCORES_PER_NODE)
+                global_params.config['mem_per_node'] * n_cores /
+                global_params.config['ncores_per_node'])
             additional_flags += ' --mem={}M'.format(mem_lim)
             log_batchjob.info(
                 'Memory requirements were not set explicitly. Setting to 250,000 MB'
-                ' * n_cores / {} = {} MB'.format(global_params.NCORES_PER_NODE,
+                ' * n_cores / {} = {} MB'.format(global_params.config['ncores_per_node'],
                                                  mem_lim))
 
     log_batchjob.info("Number of jobs for {}-script: {}".format(name, len(params)))
@@ -353,7 +354,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         if iteration == 1:
             params_orig_id = np.arange(len(params))
         for p in out_files:
-            job_id = int(re.findall("[\d]+", p)[-1])
+            job_id = int(re.findall(r"[\d]+", p)[-1])
             index = np.nonzero(params_orig_id == job_id)[0]  # still an array, "[0]" only gives
             # us the first dimension
             assert len(index) == 1  # must be one hit and one only
@@ -371,9 +372,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         # the available amount of memory per job, ONLY VALID IF '--mem' was not specified explicitly!
         n_cores += 2  # increase number of cores per job by at least 2
         # TODO: activate again
-        # n_cores = np.max([np.min([global_params.NCORES_PER_NODE, float(n_max_co_processes) //
+        # n_cores = np.max([np.min([global_params.config['ncores_per_node'], float(n_max_co_processes) //
         #                           len(missed_params)]), n_cores])
-        n_cores = np.min([n_cores, global_params.NCORES_PER_NODE])
+        n_cores = np.min([n_cores, global_params.config['ncores_per_node']])
         n_cores = int(n_cores)
         # remove existing memory and cpus-per-task flags:
         if '--mem=' in additional_flags:
@@ -382,7 +383,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         if '--cpus-per-task' in additional_flags:
             m = re.search('(?<=--cpus-per-task=)\w+', additional_flags)
             additional_flags = additional_flags.replace('--cpus-per-task=' + m.group(0), '')
-        if n_cores == global_params.NCORES_PER_NODE:
+        if n_cores == global_params.config['ncores_per_node']:
             if not '--mem=' in additional_flags:
                 additional_flags += ' --mem=0'
             else:
@@ -401,9 +402,9 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
 
 def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
-                        additional_flags='', suffix="", job_name="default",
-                        script_folder=None, n_max_co_processes=None, use_dill=False,
-                        sge_additional_flags=None, iteration=0, max_iterations=3):
+                       additional_flags='', suffix="", job_name="default",
+                       script_folder=None, n_max_co_processes=None, use_dill=False,
+                       sge_additional_flags=None, iteration=0, max_iterations=3):
     """
     QSUB handler - takes parameter list like normal multiprocessing job and
     runs them on the specified cluster
@@ -469,7 +470,7 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         checklist = np.zeros(len(params), dtype=np.bool)
 
         for p in out_files:
-            checklist[int(re.findall("[\d]+", p)[-1])] = True
+            checklist[int(re.findall(r"[\d]+", p)[-1])] = True
 
         missed_params = [params[ii] for ii in range(len(params)) if not checklist[ii]]
         orig_job_ids = np.arange(len(params))[~checklist]
@@ -488,7 +489,7 @@ def resume_QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
 
 def batchjob_fallback(params, name, n_cores=1, suffix="",
                       script_folder=None, python_path=None,
-                      remove_jobfolder=False, show_progress=True):
+                      remove_jobfolder=False, show_progress=True, log=None):
     """
     # TODO: utilize log and error files ('path_to_err', path_to_log')
     Fallback method in case no batchjob submission system is available. Always uses
@@ -505,10 +506,13 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
     python_path : str
     remove_jobfolder : bool
     show_progress : bool
+    log: Logger
+        Logger.
 
     Returns
     -------
-
+    str
+        Path to output.
     """
     if python_path is None:
         python_path = python_path_global
@@ -516,8 +520,11 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
                                           name, suffix)
     if os.path.exists(job_folder):
         shutil.rmtree(job_folder, ignore_errors=True)
-    log_batchjob = initialize_logging("{}".format(name + suffix),
-                                      log_dir=job_folder)
+    if log is None:
+        log_batchjob = initialize_logging("{}".format(name + suffix),
+                                          log_dir=job_folder)
+    else:
+        log_batchjob = log
     n_max_co_processes = cpu_count()
     n_max_co_processes = np.min([cpu_count() // n_cores, n_max_co_processes])
     n_max_co_processes = np.min([n_max_co_processes, len(params)])
@@ -571,16 +578,26 @@ def batchjob_fallback(params, name, n_cores=1, suffix="",
     out_str = start_multiprocess_imap(fallback_exec, multi_params, debug=False,
                                       nb_cpus=n_max_co_processes,
                                       show_progress=show_progress)
-    if len("".join(out_str)) > 0:
-        log_batchjob.error('Errors occurred during "{}".:\n{}'.format(name, out_str))
     out_files = glob.glob(path_to_out + "*.pkl")
     if len(out_files) < len(params):
-        raise ValueError('{}/{} Batchjob fallback worker failed.'.format(len(params) - len(
-            out_files), len(params)))
-    if len("".join(out_str)) == 0:
+        # report errors
+        msg = 'Critical errors occurred during "{}". {}/{} Batchjob fallback worker ' \
+              'failed.\n{}'.format(name, len(params) - len(out_files),
+                                   len(params), out_str)
+        log_mp.error(msg)
+        log_batchjob.error(msg)
+        raise ValueError(msg)
+    elif len("".join(out_str)) == 0:
         if remove_jobfolder:
             shutil.rmtree(job_folder, ignore_errors=True)
-    log_batchjob.debug('Finished "{}" after {:.2f}s.'.format(name, time.time() - start))
+    else:
+        msg = 'Uncritical warnings/errors occurred during ' \
+              '"{}".:\n{} See logs at {} for details.'.format(name, out_str,
+                                                              job_folder)
+        log_mp.warning(msg)
+        log_batchjob.warning(msg)
+    log_batchjob.debug('Finished "{}" after {:.2f}s.'.format(
+        name, time.time() - start))
     return path_to_out
 
 
@@ -592,23 +609,15 @@ def fallback_exec(cmd_exec):
                           stderr=subprocess.PIPE)
     out, err = ps.communicate()
     out_str = ""
-    if log_mp.level == 10:
-        reported = False
-        if 'error' in out.decode().lower() or \
-                'error' in err.decode().lower() or 'killed' in\
-                out.decode().lower() or 'killed' in err.decode().lower():
-            log_mp.error(out.decode())
-            log_mp.error(err.decode())
-            reported = True
-            out_str = out.decode() + err.decode()
-        if not reported and ('warning' in out.decode().lower() or
-                             'warning' in err.decode().lower()):
-            log_mp.warning(out.decode())
-            log_mp.warning(err.decode())
-            out_str = out.decode() + err.decode()
-    if 'error' in err.decode().lower():
-        log_mp.error(out.decode())
-        log_mp.error(err.decode())
+    reported = False
+    if 'error' in out.decode().lower() or 'error' in err.decode().lower() \
+    or 'killed' in out.decode().lower() or 'killed' in err.decode().lower() \
+    or 'segmentation fault' in out.decode().lower() \
+    or 'segmentation fault' in err.decode().lower():
+        reported = True
+        out_str = out.decode() + err.decode()
+    if not reported and ('warning' in out.decode().lower() or
+                         'warning' in err.decode().lower()):
         out_str = out.decode() + err.decode()
     return out_str
 
@@ -668,7 +677,7 @@ def delete_jobs_by_name(job_name):
     for line in iter(process.stdout.readline, ''):
         curr_line = str(line)
         if job_name[:10] in curr_line:
-            job_ids.append(re.findall("[\d]+", curr_line)[0])
+            job_ids.append(re.findall(r"[\d]+", curr_line)[0])
 
     if BATCH_PROC_SYSTEM == 'QSUB':
         cmd_del = "qdel "

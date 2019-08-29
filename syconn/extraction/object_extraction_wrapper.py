@@ -66,7 +66,7 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
     See :func:`~syconn.extraction.object_extraction_wrapper.from_probabilities_to_kd` for details of
     the conversion process from the initial probability map to the SV segmentation. Default:
     thresholding and connected components, thresholds are set via the `config.ini` file, check
-    ``syconn.global_params.config.entries["Probathresholds"]`` of an initialized
+    ``syconn.global_params.config['cell_objects']["probathresholds"]`` of an initialized
     :calss:`~syconn.handler.config.DynConfig` object.
 
     Parameters
@@ -96,7 +96,7 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
              '{} chunks.'.format(co, len(cd.chunk_dict)))
     prob_kd_path_dict = {co: getattr(global_params.config, 'kd_{}_path'.format(co))}
     # This creates a SegmentationDataset of type 'co'
-    prob_thresh = global_params.config.entries["Probathresholds"][co]  # get probability threshold
+    prob_thresh = global_params.config['cell_objects']["probathresholds"][co]  # get probability threshold
 
     # `from_probabilities_to_objects` will export a KD at `path`, remove if already existing
     path = global_params.config.kd_organelle_seg_paths[co]
@@ -104,7 +104,7 @@ def generate_subcell_kd_from_proba(co, chunk_size=None, transf_func_kd_overlay=N
         log.debug('Found existing KD at {}. Removing it now.'.format(path))
         shutil.rmtree(path)
     target_kd = knossosdataset.KnossosDataset()
-    scale = np.array(global_params.config.entries["Dataset"]["scaling"], dtype=np.float32)
+    scale = np.array(global_params.config['scaling'], dtype=np.float32)
     target_kd.initialize_without_conf(path, kd.boundary, scale, kd.experiment_name, mags=[1, ])
     target_kd = knossosdataset.KnossosDataset()
     target_kd.initialize_from_knossos_path(path)
@@ -185,10 +185,6 @@ def from_probabilities_to_kd(cset, filename, hdf5names,
         data in the saved chunk
     suffix: str
         Suffix for the intermediate results
-    qsub_pe: str or None
-        qsub parallel environment
-    qsub_queue: str or None
-        qsub queue
     transform_func: callable
         Segmentation method which is applied
     func_kwargs : dict
@@ -304,7 +300,7 @@ def from_probabilities_to_kd(cset, filename, hdf5names,
     time_start = time.time()
     oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                            chunk_translator, debug, suffix=suffix,
-                           n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
+                           n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
     #
@@ -338,7 +334,7 @@ def from_probabilities_to_kd(cset, filename, hdf5names,
 
     time_start = time.time()
     oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
-                         debug, suffix=suffix, nb_cpus=nb_cpus,
+                         debug, suffix=suffix,
                          n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
@@ -432,10 +428,6 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
         data in the saved chunk
     suffix: str
         Suffix for the intermediate results
-    qsub_pe: str or None
-        qsub parallel environment
-    qsub_queue: str or None
-        qsub queue
     transform_func: callable
         Segmentation method which is applied
     func_kwargs : dict
@@ -550,7 +542,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
     time_start = time.time()
     oes.make_unique_labels(cset, filename, hdf5names, chunk_list, max_nb_dict,
                            chunk_translator, debug, suffix=suffix,
-                           n_max_co_processes=n_max_co_processes, nb_cpus=nb_cpus)
+                           n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("unique labels")
     #
@@ -584,7 +576,7 @@ def from_probabilities_to_objects(cset, filename, hdf5names, object_names=None,
 
     time_start = time.time()
     oes.apply_merge_list(cset, chunk_list, filename, hdf5names, merge_list_dict,
-                         debug, suffix=suffix, nb_cpus=nb_cpus,
+                         debug, suffix=suffix,
                          n_max_co_processes=n_max_co_processes)
     all_times.append(time.time() - time_start)
     step_names.append("apply merge list")
@@ -638,7 +630,7 @@ def from_probabilities_to_objects_parameter_sweeping(
         cset, filename, hdf5names, nb_thresholds, overlap="auto", sigmas=None,
         chunk_list=None, swapdata=0, label_density=np.ones(3), offset=None,
         size=None, membrane_filename=None, membrane_kd_path=None,
-        hdf5_name_membrane=None, qsub_pe=None, qsub_queue=None):
+        hdf5_name_membrane=None):
     """
     Sweeps over different thresholds. Each objectextraction resutls are saved in
     a seperate folder, all intermediate steps are saved with a different suffix
@@ -688,10 +680,6 @@ def from_probabilities_to_objects_parameter_sweeping(
         data in the saved chunk
     suffix: str
         Suffix for the intermediate results
-    qsub_pe: str
-        qsub parallel environment name
-    qsub_queue: str or None
-        qsub queue name
     """
     # TODO: currently not used and needs to be refactored
     thresholds = np.array(
@@ -755,10 +743,6 @@ def from_ids_to_objects(cset, filename, hdf5names=None, n_folders_fs=10000, data
     workfolder : str
         Directory in which to store results. By default this is set to
         `global_params.config.working_dir`.
-    qsub_pe: str or None
-        qsub parallel environment
-    qsub_queue: str or None
-        qsub queue
     n_max_co_processes: int or None
         Total number of parallel processes that should be running on the cluster.
     n_chunk_jobs: int
