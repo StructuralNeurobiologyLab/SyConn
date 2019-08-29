@@ -170,8 +170,12 @@ class DynConfig(Config):
                                " ".format(self['log_level']) +
                                colored("'{}'".format(self.working_dir), 'red'))
             if self.initialized is False:
-                self.log_main.warning(f'Initialized config at {self.path_config} '
-                                      f'without initial file.')
+                from syconn import handler
+                default_conf_p = os.path.dirname(handler.__file__) + 'config.yml'
+                self.log_main.warning(f'Initialized working directory without '
+                                      f'existing config file at'
+                                      f' {self.path_config}. Using default '
+                                      f'parameters as defined in {default_conf_p}.')
 
     def __getitem__(self, item: str) -> Any:
         """
@@ -189,6 +193,26 @@ class DynConfig(Config):
         except (KeyError, ValueError, AttributeError):
             return self.default_conf.entries[item]
 
+    def __setitem__(self, key: str, value: Any) -> Any:
+        """
+        If `item` is not set in this config, the return value will be taken from
+         the default ``config.ini`` and ``configspec.ini``.
+
+        Args:
+            item: Key of the requested value.
+
+        Returns:
+            The value which corresponds to `item`.
+        """
+        self.log_main.warning('Modifying DynConfig items via `__setitem__` '
+                              'is currently experimental. To change config '
+                              'parameters please make changes in the '
+                              'corresponding config.yml entries.')
+        try:
+            self.entries[key] = value
+        except (KeyError, ValueError, AttributeError):
+            self.default_conf.entries[key] = value
+
     def _check_actuality(self):
         """
         Checks os.environ and global_params and triggers an update if the therein
@@ -205,8 +229,12 @@ class DynConfig(Config):
                                    " ".format(self['log_level']) +
                                    colored("'{}'".format(self.working_dir), 'red'))
                 if self.initialized is False:
-                    self.log_main.warning(f'Initialized config at {self.path_config} '
-                                          f'without initial file.')
+                    from syconn import handler
+                    default_conf_p = os.path.dirname(handler.__file__) + 'config.yml'
+                    self.log_main.warning(f'Initialized working directory without '
+                                          f'existing config file at'
+                                          f' {self.path_config}. Using default '
+                                          f'parameters as defined in {default_conf_p}.')
         elif (global_params.wd is not None) and (len(global_params.wd) > 0) and \
                 (global_params.wd != "None") and (super().working_dir != global_params.wd):
             super().__init__(global_params.wd)
@@ -215,8 +243,12 @@ class DynConfig(Config):
                                " ".format(self['log_level']) +
                                colored("'{}'".format(self.working_dir), 'red'))
             if self.initialized is False:
-                self.log_main.warning(f'Initialized config at {self.path_config} '
-                                      f'without initial file.')
+                from syconn import handler
+                default_conf_p = os.path.dirname(handler.__file__) + 'config.yml'
+                self.log_main.warning(f'Initialized working directory without '
+                                      f'existing config file at'
+                                      f' {self.path_config}. Using default '
+                                      f'parameters as defined in {default_conf_p}.')
 
     @property
     def default_conf(self) -> Config:

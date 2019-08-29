@@ -4,9 +4,11 @@ import os
 import glob
 
 # catch ImportError during the readthedocs build.
+# TODO: pytest stuff can probably be removed from `setup_requires`
 try:
     from Cython.Build import cythonize
-    setup_requires = ['pytest', 'pytest-cov', "pytest-runner", "cython>=0.23"]
+    setup_requires = ['pytest', 'pytest-cov', "pytest-runner", 'pytest-xdist',
+                      "cython>=0.23"]
     ext_modules = [Extension("*", [fname],
                              extra_compile_args=["-std=c++11"], language='c++')
                    for fname in glob.glob('syconn/*/*.pyx', recursive=True)]
@@ -16,7 +18,7 @@ try:
                            'cdivision': False, 'overflowcheck': True})
 except ImportError as e:
     print("WARNING: Could not build cython modules. {}".format(e))
-    setup_requires = ['pytest', 'pytest-cov', "pytest-runner"]
+    setup_requires = ['pytest', 'pytest-cov', "pytest-runner", 'pytest-xdist']
     cython_out = None
 readme_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md')
 with open(readme_file) as f:
@@ -52,7 +54,8 @@ setup(
                       'seaborn', 'pytest-runner', 'prompt-toolkit',
                       'numba==0.45.0', 'matplotlib', 'vtki', 'joblib',
                       'pyyaml', 'cython'],
-    setup_requires=setup_requires, tests_require=['pytest', 'pytest-cov'],
+    setup_requires=setup_requires, tests_require=['pytest', 'pytest-cov',
+                                                  'pytest-xdist'],
     ext_modules=cython_out,
     entry_points={
         'console_scripts': [

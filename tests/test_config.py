@@ -29,7 +29,7 @@ def test_load_write_conf():
     assert conf == conf2, "Mismatch between config objects after re-loading " \
                           "modified config file."
     os.remove(conf.path_config)
-    print('PASSED: Load and write `Config` class.')
+    logging.info('PASSED: Load and write `Config` class.')
 
 
 if __name__ == '__main__':
