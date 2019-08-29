@@ -41,6 +41,7 @@ dir_path = os.path.dirname(os.path.realpath(__file__))
 #           ''.format(np.sum(views != views2) / np.prod(views.shape)))
 #     assert np.all(views == views2)
 
+
 @pytest.mark.filterwarnings("ignore:Modifying DynConfig items via")
 def test_raw_and_index_rendering_osmesa():
     from syconn import global_params
