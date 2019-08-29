@@ -457,7 +457,7 @@ def _run_neuron_rendering_small_helper(max_n_jobs: Optional[int] = None):
             n_parallel_jobs = global_params.config['ncores_per_node']
             qu.QSUB_script(multi_params, "render_views", suffix='_small',
                            n_max_co_processes=n_parallel_jobs, log=log,
-                           additional_flags="--gres=gpu:2",
+                           additional_flags="--gres=gpu:2", disable_batchjob=True,
                            n_cores=n_cores, remove_jobfolder=True)
         # run on whole cluster
         else:
