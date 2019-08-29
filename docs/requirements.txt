@@ -24,6 +24,7 @@ plyfile
 pytest
 pytest-runner
 pytest-cov
+pytest-xdist
 prompt-toolkit
 vtki
 dill

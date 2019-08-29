@@ -9,7 +9,7 @@ pipeline {
     }
     stage('test') {
       steps {
-        sh 'python -m pytest --junit-xml=pytest_unit.xml --cov=syconn'
+        sh 'python -m pytest --junit-xml=pytest_unit.xml'
       }
     }
   }
