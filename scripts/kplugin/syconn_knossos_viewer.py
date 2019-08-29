@@ -429,8 +429,8 @@ class main_class(QtGui.QDialog):
                 True)
 
         inp_str = self.syn_selector.model().itemData(index)[0]
-        ssv1 = int(re.findall('\((\d+),', inp_str)[0])
-        ssv2 = int(re.findall(', (\d+)\)', inp_str)[0])
+        ssv1 = int(re.findall(r'\((\d+),', inp_str)[0])
+        ssv2 = int(re.findall(r', (\d+)\)', inp_str)[0])
         ix = index.row()
         tree_id = hash((ssv1, ssv2))
         syn_id = self.all_syns['ids'][ix]

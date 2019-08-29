@@ -27,6 +27,7 @@ from ..backend.storage import CompressedStorage
 from ..handler.multiviews import generate_palette, remap_rgb_labelviews,\
     rgb2id_array, id2rgb_array_contiguous, rgba2id_array, id2rgba_array_contiguous
 from .meshes import merge_meshes, MeshObject, calc_rot_matrices
+# TODO: seperate EGL and OSMESA code to allow switching platforms after import
 try:
     import os
     os.environ['PYOPENGL_PLATFORM'] = global_params.config['pyopengl_platform']
@@ -64,9 +65,7 @@ except ImportError:
     import pickle as pkl
 
 # TODO: add all rendering params to config/global_params
-
 MULTIGPU = True  # probably fine to remove this, mechanism can always be enabled
-
 
 # ------------------------------------ General rendering code ------------------------------------------
 # structure definition of rendering data array

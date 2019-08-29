@@ -209,7 +209,7 @@ def get_paths_of_skelID(id_list, traced_skel_dir):
         paths of skeletons in id_list
     """
     mapped_skel_paths = get_filepaths_from_dir(traced_skel_dir)
-    mapped_skel_ids = re.findall('iter_\d+_(\d+)', ''.join(mapped_skel_paths))
+    mapped_skel_ids = re.findall(r'iter_\d+_(\d+)', ''.join(mapped_skel_paths))
     wanted_paths = []
     for skelID in id_list:
         try:
@@ -383,7 +383,6 @@ def texts2kzip(kzip_path, texts, fnames_in_zip, force_overwrite=False):
         name of file when added to zip
     force_overwrite : bool
     """
-    # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
     if os.path.isfile(kzip_path):
         try:
             if force_overwrite:
@@ -438,16 +437,10 @@ def data2kzip(kzip_path, fpaths, fnames_in_zip=None, force_overwrite=True,
     verbose : bool
     force_overwrite : bool
     """
-    # This should now work
-    # if not force_overwrite:
-    #     log_handler.warning('Currently modification of data '
-    #                         'in already existing kzip is still tested. "remove_from_zip" has to be adapted to'
-    #                         ' work on all files in kzip.')
     nb_files = len(fpaths)
     if verbose:
         log_handler.info('Writing {} files to .zip.'.format(nb_files))
         pbar = tqdm.tqdm(total=nb_files)
-    # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
     if os.path.isfile(kzip_path):
         try:
             if force_overwrite:
@@ -509,7 +502,6 @@ def remove_from_zip(zipfname, *filenames):
     filenames : list of str
         files to delete
     """
-    # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
     tempdir = tempfile.mkdtemp()
     try:
         tempname = os.path.join(tempdir, 'new.zip')
@@ -531,9 +523,8 @@ def write_obj2pkl(path, objects):
     ----------
     objects : object
     path : str
-        destianation
+        Destination.
     """
-    # with DelayedInterrupt([signal.SIGTERM, signal.SIGINT]):
     gc.disable()
     if isinstance(path, str):
         with open(path, 'wb') as output:
@@ -604,10 +595,6 @@ def chunkify_successive(l, n):
         yield l[i:i + n]
 
 
-def chunkify_successive_split(l, n):
-    return[np.array_split(l, n)]
-
-
 def flatten_list(lst):
     """
     Flattens list of lists. Same ordering as np.concatenate
@@ -663,7 +650,7 @@ def get_skelID_from_path(skel_path):
     int
         skeleton ID
     """
-    return int(re.findall('iter_0_(\d+)', skel_path)[0])
+    return int(re.findall(r'iter_0_(\d+)', skel_path)[0])
 
 
 def safe_copy(src, dest, safe=True):
@@ -736,7 +723,7 @@ def prase_cc_dict_from_txt(txt):
             curr_line = line.decode()
         else:
             curr_line = line
-        line_nb = np.array(re.findall("(\d+)", curr_line), dtype=np.uint)
+        line_nb = np.array(re.findall(r"(\d+)", curr_line), dtype=np.uint)
         curr_ixs = line_nb[3:]
         cc_ix = line_nb[0]
         curr_ixs = curr_ixs[curr_ixs != 0]

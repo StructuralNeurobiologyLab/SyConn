@@ -21,12 +21,11 @@ test_p = dir_path + "/test.pkl"
 if os.path.isfile(test_p):
     os.remove(test_p)
 
-if os.path.isfile(dir_path + '.test.pkl.lk'):
-    os.remove(dir_path + '.test.pkl.lk')
+if os.path.isfile(dir_path + '/.test.pkl.lk'):
+    os.remove(dir_path + '/.test.pkl.lk')
 
 
 def test_created_then_blocking_LZ4Dict_for_3s_2_fail_then_one_successful():
-
     """
       Creates a file then blocks it for 3 seconds. In parallel it creates 3 files.
       First one after 1s , 2nd after 2 seconds and the third one after 3s.
@@ -212,9 +211,9 @@ def test_compression_and_decompression_for_voxel_dict():
         # tests least entropy data
         start = time.time()
         vd = VoxelStorage(test_p, read_only=False, cache_decomp=True)
-        voxel_masks = [np.zeros((512, 512, 256)).astype(np.uint8),
-                       np.zeros((300, 400, 200)).astype(np.uint8)] * 5
-        offsets = np.random.randint(0, 1000, (10, 3))
+        voxel_masks = [np.zeros((128, 128, 100)).astype(np.uint8),
+                       np.zeros((10, 50, 20)).astype(np.uint8)] * 2
+        offsets = np.random.randint(0, 1000, (4, 3))
         logging.debug("VoxelDict arr size (zeros):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in voxel_masks]) / 1.e3))
         logging.debug("VoxelDict arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
         start_comp = time.time()
@@ -241,9 +240,9 @@ def test_compression_and_decompression_for_voxel_dict():
             assert np.allclose(vd[8192734][0][i], voxel_masks[i])
         assert np.allclose(vd[8192734][1], offsets)
         logging.info("... passed.")
-        voxel_masks = [np.zeros((512, 512, 256)).astype(np.uint8),
-                       np.zeros((300, 400, 200)).astype(np.uint8)] * 5
-        offsets = np.random.randint(1000, 2000, (10, 3))
+        voxel_masks = [np.zeros((128, 128, 100)).astype(np.uint8),
+                       np.zeros((10, 50, 20)).astype(np.uint8)] * 2
+        offsets = np.random.randint(1000, 2000, (4, 3))
         start_appending = time.time()
         for i_voxel_mask in range(len(voxel_masks)):
             vd.append(8192734, voxel_masks[i_voxel_mask], offsets[i_voxel_mask])
@@ -259,9 +258,9 @@ def test_compression_and_decompression_for_voxel_dict():
     # checks high entropy data
     try:
         vd = VoxelStorage(test_p, read_only=False)
-        voxel_masks = [np.random.randint(0, 1, (512, 512, 256)).astype(np.uint8),
-                       np.random.randint(0, 1, (300, 400, 200)).astype(np.uint8)] * 5
-        offsets = np.random.randint(0, 1000, (10, 3))
+        voxel_masks = [np.random.randint(0, 1, (128, 128, 100)).astype(np.uint8),
+                       np.random.randint(0, 1, (10, 50, 20)).astype(np.uint8)] * 2
+        offsets = np.random.randint(0, 1000, (4, 3))
         logging.debug("\nVoxelDict arr size (random):\t%0.2f kB" %
                      (np.sum([a.__sizeof__() for a in voxel_masks]) / 1.e3))
         logging.debug("VoxelDict arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
@@ -294,9 +293,9 @@ def test_compression_and_decompression_for_voxel_dictL():
     try:
         start = time.time()
         vd = VoxelStorageL(test_p, read_only=False, cache_decomp=True)
-        voxel_masks = [np.zeros((512, 512, 256)).astype(np.uint8),
-                       np.zeros((300, 400, 200)).astype(np.uint8)] * 5
-        offsets = np.random.randint(0, 1000, (10, 3))
+        voxel_masks = [np.zeros((128, 128, 100)).astype(np.uint8),
+                       np.zeros((10, 50, 20)).astype(np.uint8)] * 2
+        offsets = np.random.randint(0, 1000, (4, 3))
         logging.debug("VoxelDictL arr size (zeros):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in voxel_masks]) / 1.e3))
         logging.debug("VoxelDictL arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
         start_comp = time.time()
@@ -322,9 +321,9 @@ def test_compression_and_decompression_for_voxel_dictL():
             assert np.allclose(vd[8192734][0][i], voxel_masks[i])
         assert np.allclose(vd[8192734][1], offsets)
         logging.info("... passed.")
-        voxel_masks = [np.zeros((512, 512, 256)).astype(np.uint8),
-                       np.zeros((300, 400, 200)).astype(np.uint8)] * 5
-        offsets = np.random.randint(1000, 2000, (10, 3))
+        voxel_masks = [np.zeros((128, 128, 100)).astype(np.uint8),
+                       np.zeros((10, 50, 20)).astype(np.uint8)] * 2
+        offsets = np.random.randint(1000, 2000, (4, 3))
         start_appending = time.time()
         for i_voxel_mask in range(len(voxel_masks)):
             vd.append(8192734, voxel_masks[i_voxel_mask], offsets[i_voxel_mask])
@@ -340,9 +339,9 @@ def test_compression_and_decompression_for_voxel_dictL():
     # checks high entropy data
     try:
         vd = VoxelStorageL(test_p, read_only=False)
-        voxel_masks = [np.random.randint(0, 1, (512, 512, 256)).astype(np.uint8),
-                       np.random.randint(0, 1, (300, 400, 200)).astype(np.uint8)] * 5
-        offsets = np.random.randint(0, 1000, (10, 3))
+        voxel_masks = [np.random.randint(0, 1, (128, 128, 100)).astype(np.uint8),
+                       np.random.randint(0, 1, (10, 50, 20)).astype(np.uint8)] * 2
+        offsets = np.random.randint(0, 1000, (4, 3))
         logging.debug("\nVoxelDictL arr size (random):\t%0.2f kB" % (np.sum([a.__sizeof__() for a in voxel_masks]) / 1.e3))
         logging.debug("VoxelDictL arr size (zeros):\t%s" % (([a.shape for a in voxel_masks])))
         vd[8192734] = [voxel_masks, offsets]

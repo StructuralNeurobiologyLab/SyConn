@@ -3,12 +3,13 @@ pipeline {
   stages {
     stage('build') {
       steps {
+        sh 'pip install -r docs/requirements.txt'
         sh 'pip install -e .'
       }
     }
     stage('test') {
       steps {
-        sh 'python -m pytest --junit-xml=pytest_unit.xml --cov=syconn || true # tests may fail'
+        sh 'python -m pytest --junit-xml=pytest_unit.xml'
       }
     }
   }

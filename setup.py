@@ -4,9 +4,11 @@ import os
 import glob
 
 # catch ImportError during the readthedocs build.
+# TODO: pytest stuff can probably be removed from `setup_requires`
 try:
     from Cython.Build import cythonize
-    setup_requires = ["pytest-runner", "cython>=0.23"]
+    setup_requires = ['pytest', 'pytest-cov', "pytest-runner", 'pytest-xdist',
+                      "cython>=0.23"]
     ext_modules = [Extension("*", [fname],
                              extra_compile_args=["-std=c++11"], language='c++')
                    for fname in glob.glob('syconn/*/*.pyx', recursive=True)]
@@ -16,38 +18,47 @@ try:
                            'cdivision': False, 'overflowcheck': True})
 except ImportError as e:
     print("WARNING: Could not build cython modules. {}".format(e))
-    setup_requires = ["pytest-runner"]
+    setup_requires = ['pytest', 'pytest-cov', "pytest-runner", 'pytest-xdist']
     cython_out = None
 readme_file = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'README.md')
 with open(readme_file) as f:
     readme = f.read()
 
-config = {
-    'description': 'Analysis pipeline for EM raw data based on deep and '
-                   'supervised learning to extract high level biological'
-                   'features and connectivity. ',
-    'author': 'Philipp Schubert, Sven Dorkenwald, Joergen Kornfeld',
-    'url': 'https://structuralneurobiologylab.github.io/SyConn/',
-    'download_url': 'https://github.com/StructuralNeurobiologyLab/SyConn.git',
-    'author_email': 'pschubert@neuro.mpg.de',
-    'version': '0.2',
-    'license': 'GPLv2',
-    'install_requires': [
-                         'numpy==1.16.4', 'scipy', 'lz4', 'h5py', 'networkx', 'ipython',
-                         'configobj', 'fasteners', 'flask', 'coloredlogs',
-                         'opencv-python', 'pyopengl', 'scikit-learn>=0.21.3',
-                         'scikit-image', 'plyfile', 'termcolor', 'dill',
-                         'pytest', 'pytest-cov', 'tqdm', 'zmesh', 'seaborn',
-                         'pytest-runner', 'prompt-toolkit', 'numba==0.45.0',
-                         'matplotlib', 'vtki', 'joblib', 'pyyaml'],
-    'name': 'SyConn',
-    'dependency_links': ['https://github.com/knossos-project/knossos_utils'
-                         '/tarball/dev#egg=knossos_utils',
-                         'https://github.com/ELEKTRONN/elektronn3/'
-                         'tarball/phil/#egg=elektronn3'],
-    'packages': find_packages(exclude=['scripts']), 'long_description': readme,
-    'setup_requires': setup_requires, 'tests_require': ['pytest', 'pytest-cov'],
-    'ext_modules': cython_out,
-}
-
-setup(**config)
+setup(
+    name='SyConn',
+    version='0.2',
+    description='Analysis pipeline for EM raw data based on deep and '
+                'supervised learning to extract high level biological'
+                'features and connectivity.',
+    long_description=readme,
+    long_description_content_type='text/markdown',
+    url='https://structuralneurobiologylab.github.io/SyConn/',
+    download_url='https://github.com/StructuralNeurobiologyLab/SyConn.git',
+    author='Philipp Schubert, Joergen Kornfeld',
+    author_email='pschubert@neuro.mpg.de',
+    classifiers=[
+        'Development Status :: 4 - Beta',
+        'Intended Audience :: Neuroscientists',
+        'Topic :: Connectomics :: Analysis Tools',
+        'License :: OSI Approved :: GPL-2.0 License',
+        'Programming Language :: Python :: 3.6',
+        'Programming Language :: Python :: 3.7',
+    ],
+    keywords='machinelearning imageprocessing connectomics',
+    packages=find_packages(exclude=['scripts']),
+    python_requires='>=3.6, <4',
+    install_requires=['numpy==1.16.4', 'scipy', 'lz4', 'h5py', 'networkx',
+                      'fasteners', 'flask', 'coloredlogs', 'opencv-python',
+                      'pyopengl', 'scikit-learn>=0.21.3', 'scikit-image',
+                      'plyfile', 'termcolor', 'dill', 'tqdm', 'zmesh',
+                      'seaborn', 'pytest-runner', 'prompt-toolkit',
+                      'numba==0.45.0', 'matplotlib', 'vtki', 'joblib',
+                      'pyyaml', 'cython'],
+    setup_requires=setup_requires, tests_require=['pytest', 'pytest-cov',
+                                                  'pytest-xdist'],
+    ext_modules=cython_out,
+    entry_points={
+        'console_scripts': [
+        ],
+    },
+)

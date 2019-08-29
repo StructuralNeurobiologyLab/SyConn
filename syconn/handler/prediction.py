@@ -453,8 +453,8 @@ def parse_movement_area_from_zip(zip_fname: str) -> np.ndarray:
     line = re.findall("MovementArea (.*)/>", anno_str)
     assert len(line) == 1
     line = line[0]
-    bb_min = np.array([re.findall('min.\w="(\d+)"', line)], dtype=np.uint)
-    bb_max = np.array([re.findall('max.\w="(\d+)"', line)], dtype=np.uint)
+    bb_min = np.array([re.findall(r'min.\w="(\d+)"', line)], dtype=np.uint)
+    bb_max = np.array([re.findall(r'max.\w="(\d+)"', line)], dtype=np.uint)
     # Movement area is stored with 0-indexing! No adjustment needed
     return np.concatenate([bb_min, bb_max])
 
