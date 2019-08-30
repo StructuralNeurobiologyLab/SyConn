@@ -1528,9 +1528,6 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
      of a single 'syn_ssv' object.
     Used for sparse acquisition of synapse type ground truth.
 
-    Todo:
-        * Verify synapse type label.
-
     Args:
         syn_ssv: The synapse supervoxel object used to fetch the segmentation data.
         syntype_label: If None, uses ``syn_sign`` stored in ``syn_ssv.attr_dict``
@@ -1570,7 +1567,70 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
     kd.initialize_from_conf(global_params.config.kd_seg_path)
     raw = kd.from_raw_cubes_to_matrix(size_raw, coord_raw)
     if syntype_label is None:
-        if 'syn_sign' not in syn_ssv.attr_dict:
+        syn_sign = syn_ssv.lookup_in_attribute_dict('syn_sign')
+        if syn_sign is None:
+            raise ValueError(f'Key "syn_sign" does not exist in AttributeDict of'
+                             f' {str(syn_ssv)}.')
+        syntype_label = 1 if syn_ssv.attr_dict["syn_sign"] == 1 else 2
+    segmentation[segmentation == 1] = syntype_label
+    return raw, segmentation
+
+
+def fetch_single_synssv_typseg_enahnced(
+        syn_ssv: SegmentationObject, syntype_label: Optional[int] = None,
+        raw_offset: Tuple[int, int, int] = (50, 50, 25), pad_offset: int = 0,
+        pad_value: int = 0, ignore_offset: int = 0, ignore_value: int = -1,
+        n_closings: int = 0, n_dilations: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Retrieve the type segmentation data (0: background, 1: asymmetric, 2: symmetric)
+     of a single 'syn_ssv' object.
+    Used for sparse acquisition of synapse type ground truth.
+
+    Args:
+        syn_ssv: The synapse supervoxel object used to fetch the segmentation data.
+        syntype_label: If None, uses ``syn_sign`` stored in ``syn_ssv.attr_dict``
+            and transforms the object segmentation into the respective label
+            (1: symmetric, 2: asymmetric).
+        raw_offset: Offset used for fetching the raw data. Raw cube shape will be
+            the segmentation cube shape + 2*raw_offset
+        pad_offset: Number of voxels padded with 0-value around the synapse
+            segmentation. If `n_closings` is given, `pad_offset` will be set
+             to ``max([pad_offset, n_closings])``.
+        pad_value: Value used for padding.
+        ignore_offset: Number of voxels padded with `ignore_value` around the
+            padded synapse segmentation.
+        ignore_value: Value used for ignore-padding.
+        n_closings: Number of closings performed on the segmentation.
+        n_dilations: Number of dilations performed before closing.
+
+    Returns:
+        Volumetric raw and segmentation data.
+    """
+    pad_offset = max([pad_offset, n_closings])
+    raw_offset = np.array(raw_offset) + pad_offset + ignore_offset
+    coord_raw = syn_ssv.bounding_box[0] - raw_offset
+    size_raw = syn_ssv.bounding_box[1] - syn_ssv.bounding_box[0] + 2 * raw_offset
+    segmentation = syn_ssv.voxels.astype(np.uint16)
+    segmentation = np.pad(segmentation, pad_offset, 'constant',
+                          constant_values=pad_value)  # volumetric binary mask
+    if n_dilations > 0:
+        segmentation = ndimage.binary_dilation(segmentation.astype(np.bool),
+                                               iterations=n_dilations).astype(np.uint16)
+    if n_closings > 0:
+        segmentation = ndimage.binary_closing(segmentation.astype(np.bool),
+                                              iterations=n_closings).astype(np.uint16)
+    segmentation = np.pad(segmentation, ignore_offset, 'constant',
+                          constant_values=ignore_value)
+    kd = KnossosDataset()
+    kd.initialize_from_conf(global_params.config.kd_seg_path)
+    raw = kd.from_raw_cubes_to_matrix(size_raw, coord_raw)
+    syn_ssv.load_attr_dict()
+    ssv_ids = syn_ssv.attr_dict['neuron_partners']
+    seg = kd.from_overlaycubes_to_matrix(size_raw, coord_raw)
+
+    if syntype_label is None:
+        syn_sign = syn_ssv.lookup_in_attribute_dict('syn_sign')
+        if syn_sign is None:
             raise ValueError(f'Key "syn_sign" does not exist in AttributeDict of'
                              f' {str(syn_ssv)}.')
         syntype_label = 1 if syn_ssv.attr_dict["syn_sign"] == 1 else 2
