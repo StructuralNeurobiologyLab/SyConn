@@ -172,51 +172,51 @@ if __name__ == '__main__':
     exec_syns.run_syn_generation(chunk_size=chunk_size, n_folders_fs=n_folders_fs_sc)
     time_stamps.append(time.time())
     step_idents.append('Synapse detection')
-    #
-    # log.info('Step 5/8 - Axon prediction')
-    # exec_multiview.run_semsegaxoness_prediction()
-    # exec_multiview.run_semsegaxoness_mapping()
-    # time_stamps.append(time.time())
-    # step_idents.append('Axon prediction')
-    #
-    # log.info('Step 6/8 - Spine prediction')
-    # exec_multiview.run_spiness_prediction()
-    # time_stamps.append(time.time())
-    # step_idents.append('Spine prediction')
-    #
-    # log.info('Step 7/9 - Morphology extraction')
-    # exec_multiview.run_morphology_embedding()
-    # time_stamps.append(time.time())
-    # step_idents.append('Morphology extraction')
-    #
-    # log.info('Step 8/9 - Celltype analysis')
-    # exec_multiview.run_celltype_prediction()
-    # time_stamps.append(time.time())
-    # step_idents.append('Celltype analysis')
-    #
-    # log.info('Step 9/9 - Matrix export')
-    # exec_syns.run_matrix_export()
-    # time_stamps.append(time.time())
-    # step_idents.append('Matrix export')
-    #
-    # time_stamps = np.array(time_stamps)
-    # dts = time_stamps[1:] - time_stamps[:-1]
-    # dt_tot = time_stamps[-1] - time_stamps[0]
-    # dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
-    # time_summary_str = "\nEM data analysis of experiment '{}' finished after" \
-    #                    " {}.\n".format(experiment_name, dt_tot_str)
-    # n_steps = len(step_idents[1:]) - 1
-    # for i in range(len(step_idents[1:])):
-    #     step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
-    #     step_dt_perc = int(dts[i] / dt_tot * 100)
-    #     step_str = "[{}/{}] {}\t\t\t{}\t\t\t{}%\n".format(
-    #         i, n_steps, step_idents[i+1], step_dt, step_dt_perc)
-    #     time_summary_str += step_str
-    # log.info(time_summary_str)
-    # log.info('Setting up flask server for inspection. Annotated cell reconst'
-    #          'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
-    #          ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
-    # fname_server = os.path.dirname(os.path.abspath(__file__)) + \
-    #                '/../kplugin/server.py'
-    # os.system('python {} --working_dir={} --port=10001'.format(
-    #     fname_server, example_wd))
+
+    log.info('Step 5/8 - Axon prediction')
+    exec_multiview.run_semsegaxoness_prediction()
+    exec_multiview.run_semsegaxoness_mapping()
+    time_stamps.append(time.time())
+    step_idents.append('Axon prediction')
+
+    log.info('Step 6/8 - Spine prediction')
+    exec_multiview.run_spiness_prediction()
+    time_stamps.append(time.time())
+    step_idents.append('Spine prediction')
+
+    log.info('Step 7/9 - Morphology extraction')
+    exec_multiview.run_morphology_embedding()
+    time_stamps.append(time.time())
+    step_idents.append('Morphology extraction')
+
+    log.info('Step 8/9 - Celltype analysis')
+    exec_multiview.run_celltype_prediction()
+    time_stamps.append(time.time())
+    step_idents.append('Celltype analysis')
+
+    log.info('Step 9/9 - Matrix export')
+    exec_syns.run_matrix_export()
+    time_stamps.append(time.time())
+    step_idents.append('Matrix export')
+
+    time_stamps = np.array(time_stamps)
+    dts = time_stamps[1:] - time_stamps[:-1]
+    dt_tot = time_stamps[-1] - time_stamps[0]
+    dt_tot_str = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dt_tot))
+    time_summary_str = "\nEM data analysis of experiment '{}' finished after" \
+                       " {}.\n".format(experiment_name, dt_tot_str)
+    n_steps = len(step_idents[1:]) - 1
+    for i in range(len(step_idents[1:])):
+        step_dt = time.strftime("%Hh:%Mmin:%Ss", time.gmtime(dts[i]))
+        step_dt_perc = int(dts[i] / dt_tot * 100)
+        step_str = "[{}/{}] {}\t\t\t{}\t\t\t{}%\n".format(
+            i, n_steps, step_idents[i+1], step_dt, step_dt_perc)
+        time_summary_str += step_str
+    log.info(time_summary_str)
+    log.info('Setting up flask server for inspection. Annotated cell reconst'
+             'ructions and wiring can be analyzed via the KNOSSOS-SyConn plugin'
+             ' at `SyConn/scripts/kplugin/syconn_knossos_viewer.py`.')
+    fname_server = os.path.dirname(os.path.abspath(__file__)) + \
+                   '/../kplugin/server.py'
+    os.system('python {} --working_dir={} --port=10001'.format(
+        fname_server, example_wd))
