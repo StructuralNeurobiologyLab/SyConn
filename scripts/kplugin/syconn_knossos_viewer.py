@@ -722,14 +722,22 @@ class main_class(QtGui.QDialog):
 
     def show_button_neurite_clicked(self):
         try:
-            self.ssv_selected1 = int(self.direct_ssv_id_input.text)
+            #self.ssv_selected1 = int(self.direct_ssv_id_input.text)
+            ssvs = [x.strip() for x in self.direct_ssv_id_input.text.split(',')]
+            ssvs = map(int, ssvs)
         except:
             pass
 
-        if self.ssv_selected1:
-            self.ssv_to_knossos(self.ssv_selected1)
-            self.ssv_skel_to_knossos_tree(self.ssv_selected1)
-            self.update_celltype(self.ssv_selected1)
+        # if self.ssv_selected1:
+        #     self.ssv_to_knossos(self.ssv_selected1)
+        #     self.ssv_skel_to_knossos_tree(self.ssv_selected1)
+        #     self.update_celltype(self.ssv_selected1)
+
+        for ssv in ssvs:
+            self.ssv_to_knossos(ssv)
+            self.ssv_skel_to_knossos_tree(ssv)
+            self.update_celltype(ssv)
+            self.ssv_selected1 = ssv
         return
 
     def show_button_synapse_clicked(self):
