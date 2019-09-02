@@ -10,7 +10,7 @@ from syconn.proc.meshes import merge_meshes
 def merge_superseg_objects(cell_obj1, cell_obj2):
 
     # TODO: test why working_dir='/tmp/' raise some errors
-    # merged_cell = SuperSegmentationObject(ssv_id=-1, working_dir='/tmp/', version='tmp') 
+    # merge meshes
     merged_cell = SuperSegmentationObject(ssv_id=-1, working_dir=None, version='tmp')
     for mesh_type in ['sv', 'sj', 'syn_ssv', 'vc', 'mi']:
         # TEST
@@ -25,7 +25,16 @@ def merge_superseg_objects(cell_obj1, cell_obj2):
         #         print("shape1: {}, shape2: {}".format( items[0].shape, items[0].shape ))
         # TEST
         merged_cell._meshes[mesh_type] = merge_meshes(cell_obj1.load_mesh(mesh_type), cell_obj2.load_mesh(mesh_type))
-        
+    
+    # merge skeletons
+    merged_cell.skeleton = {}
+    cell_obj1.load_skeleton()
+    cell_obj2.load_skeleton()
+    merged_cell.skeleton['edges'] = np.concatenate([cell_obj1.skeleton['edges'],
+                                                    cell_obj2.skeleton['edges'] +
+                                                    len(cell_obj1.skeleton['nodes'])])  # additional offset
+    merged_cell.skeleton['nodes'] = np.concatenate([cell_obj1.skeleton['nodes'],
+                                                    cell_obj2.skeleton['nodes']])
     return merged_cell
 
 
@@ -45,24 +54,26 @@ if __name__=="__main__":
         # TEST
         # cell_obj: SuperSegmentationObject
         cell_obj1, cell_obj2 = ssd.get_super_segmentation_object([c1, c2])
-
-        # TODO: implement a method (merge_superseg_objects) which merges 2 cell objects into a single
-        #       object (2x  SuperSegmentationObject -> 1x SuperSegmentationObject)
-        # Important: Merge skeleton AND mesh (for now, there will be more)
         merged_cell = merge_superseg_objects(cell_obj1, cell_obj2)
         # TEST
-        print("---------------------------------------------")
-        for key in merged_cell._meshes:
-            if key != 'conn':
-                print(key)
-                for item in merged_cell._meshes[key]:
-                    print("shape: {}".format(item.shape))
-        print("--------------------------------------------")
-        print("")
+        # print("---------------------------------------------")
+        # for key in merged_cell._meshes:
+        #     if key != 'conn':
+        #         print(key)
+        #         for item in merged_cell._meshes[key]:
+        #             print("shape: {}".format(item.shape))
+        # print("--------------------------------------------")
+        # print("")
         # TEST
         # merged_cell.load_skeleton()
 
-        # cell_nodes = merged_cell.skeleton['nodes'] * merged_cell.scaling  # coordinates of all nodes
+        cell_nodes = merged_cell.skeleton['nodes'] * merged_cell.scaling  # coordinates of all nodes
+        # TEST
+        print("cell1_node shape: {}, cell2_node shape: {}".format(cell_obj1.skeleton['nodes'].shape, \
+                                                                  cell_obj2.skeleton['nodes'].shape))
+        print("cell_nodes type: {}, shape: {}".format(type(cell_nodes), cell_nodes.shape))
+        # TEST
+
         # node_labels = np.zero((len(cell_nodes), )) * -1  # this should store 1 for false merger,
         # # 0 for true merger (and -1 for ignore, optional!)
 
@@ -87,15 +98,6 @@ if __name__=="__main__":
         # cell_obj1.save_skeleton_to_kzip(fname, additional_keys=['merger_gt'])
         # merged_cell.meshes2kzip(fname)
 
-
-
-
-# # code snippet for merging two skeletons:
-#    cell_obj1.skeleton['edges'] = np.concatenate([cell_obj1.skeleton['edges'],
-#                                                  cell_obj2.skeleton['edges'] +
-#                                                  len(cell_obj1.skeleton['node'])])  # additional offset
-#    cell_obj1.skeleton['nodes'] = np.concatenate([cell_obj1.skeleton['nodes'],
-#                                                  cell_obj2.skeleton['nodes']])
 
 # The following meshes need to merged. For that see the method: merge_meshes in proc/meshes.py
 # for example:
