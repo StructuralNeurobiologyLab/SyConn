@@ -13,18 +13,12 @@ def merge_superseg_objects(cell_obj1, cell_obj2):
     # merge meshes
     merged_cell = SuperSegmentationObject(ssv_id=-1, working_dir=None, version='tmp')
     for mesh_type in ['sv', 'sj', 'syn_ssv', 'vc', 'mi']:
-        # TEST
-        # mesh1 = cell_obj1.load_mesh(mesh_type)
-        # mesh2 = cell_obj2.load_mesh(mesh_type)
-        # print(">>>>mesh_type: {}".format(mesh_type))
-        # if mesh1 is None:
-        #     print("mesh1 is None")
-        # else:
-        #     print("type: {}, len: {}".format( type(mesh1), len(mesh1) ))
-        #     for items in zip(mesh1, mesh2):
-        #         print("shape1: {}, shape2: {}".format( items[0].shape, items[0].shape ))
-        # TEST
-        merged_cell._meshes[mesh_type] = merge_meshes(cell_obj1.load_mesh(mesh_type), cell_obj2.load_mesh(mesh_type))
+        mesh1 = cell_obj1.load_mesh(mesh_type)
+        mesh2 = cell_obj2.load_mesh(mesh_type)
+        ind_lst = [mesh1[0], mesh2[0]]
+        vert_lst = [mesh1[1], mesh2[1]]
+        merged_cell._meshes[mesh_type] = merge_meshes(ind_lst, vert_lst)
+        merged_cell._meshes[mesh_type] += ([None, None], ) # add normals
     
     # merge skeletons
     merged_cell.skeleton = {}
@@ -32,77 +26,50 @@ def merge_superseg_objects(cell_obj1, cell_obj2):
     cell_obj2.load_skeleton()
     merged_cell.skeleton['edges'] = np.concatenate([cell_obj1.skeleton['edges'],
                                                     cell_obj2.skeleton['edges'] +
-                                                    len(cell_obj1.skeleton['nodes'])])  # additional offset
+                                                    len(cell_obj1.skeleton['nodes'])]) # additional offset
     merged_cell.skeleton['nodes'] = np.concatenate([cell_obj1.skeleton['nodes'],
                                                     cell_obj2.skeleton['nodes']])
+    merged_cell.skeleton['diameters'] = np.concatenate([cell_obj1.skeleton['diameters'],
+                                                        cell_obj2.skeleton['diameters']])
     return merged_cell
 
 
 if __name__=="__main__":
 
-    ssd = SuperSegmentationDataset()  # class holding all cell representations
+    ssd = SuperSegmentationDataset() # class holding all cell representations
 
-    sd_synssv = SegmentationDataset(obj_type='syn_ssv')  # class holding all synapse candidates between cells
+    sd_synssv = SegmentationDataset(obj_type='syn_ssv') # class holding all synapse candidates between cells
 
     for syn_id in sd_synssv.ids[:2]:  # some arbitrary synapse IDs
         syn_obj = sd_synssv.get_segmentation_object(syn_id)
         syn_obj.load_attr_dict()
         c1, c2 = syn_obj.attr_dict['neuron_partners']
-        # TEST
-        print(">>>>>>>>>>> syn_id: {}".format(syn_id))
-        # print("Neuron_parners: {}, {}".format(c1, c2))
-        # TEST
-        # cell_obj: SuperSegmentationObject
+
         cell_obj1, cell_obj2 = ssd.get_super_segmentation_object([c1, c2])
         merged_cell = merge_superseg_objects(cell_obj1, cell_obj2)
-        # TEST
-        # print("---------------------------------------------")
-        # for key in merged_cell._meshes:
-        #     if key != 'conn':
-        #         print(key)
-        #         for item in merged_cell._meshes[key]:
-        #             print("shape: {}".format(item.shape))
-        # print("--------------------------------------------")
-        # print("")
-        # TEST
-        # merged_cell.load_skeleton()
 
-        cell_nodes = merged_cell.skeleton['nodes'] * merged_cell.scaling  # coordinates of all nodes
-        # TEST
-        print("cell1_node shape: {}, cell2_node shape: {}".format(cell_obj1.skeleton['nodes'].shape, \
-                                                                  cell_obj2.skeleton['nodes'].shape))
-        print("cell_nodes type: {}, shape: {}".format(type(cell_nodes), cell_nodes.shape))
-        # TEST
+        cell_nodes = merged_cell.skeleton['nodes'] * merged_cell.scaling # coordinates of all nodes
 
-        # node_labels = np.zero((len(cell_nodes), )) * -1  # this should store 1 for false merger,
-        # # 0 for true merger (and -1 for ignore, optional!)
+        # labels:
+        # 1 for false-merger, 0 for true merger, -1 for ignore
+        node_labels = np.zeros((len(cell_nodes), )) #* -1
 
-        # syn_coord = syn_obj.rep_coord * merged_cell.scaling
+        syn_coord = syn_obj.rep_coord * merged_cell.scaling
 
-        # # find medium cube around artificial merger and set it to 0
-        # kdtree = cKDTree(...)  # initialize tree with all cell skeleton nodes
-        # ixs = kdtree.query_ball_point(..., r=20e3) ## 20e3 nanometer  # find all skeleton nodes which are close to the
-        # # synapse
-        # node_labels[ixs] = 0
+        # find medium cube around artificial merger and set it to 0 (true merger)
+        kdtree = cKDTree(cell_nodes)
+        # find all skeleton nodes which are close to the synapse
+        ixs = kdtree.query_ball_point(syn_coord, r=20e3) ## 20e3 nanometer  
+        node_labels[ixs] = 1 # correct: 0
 
-        # # find small cube around artificial merger and set it to 1
-        # kdtree = cKDTree(...)  # initialize tree with all cell skeleton nodes
-        # ixs = kdtree.query_ball_point(..., r=5e3)  # find all skeleton nodes which are close to the
-        # # synapse
-        # node_labels[ixs] = 1
-        # merged_cell.skeleton['merger_gt'] = node_labels
+        # find small cube around artificial merger and set it to 1 (false merger)
+        kdtree = cKDTree(cell_nodes)
+        # find all skeleton nodes which are close to the synapse
+        ixs = kdtree.query_ball_point(syn_coord, r=5e3) 
+        node_labels[ixs] = 2 # correct: 1
+        # write out annotated skeletons to ['merger_gt']
+        merged_cell.skeleton['merger_gt'] = node_labels
 
-        # # write out annotated skeletons (see additional_keys=['merger_gt'])
-        # # TODO: out in only a single kzip file
-        # fname = f'syn{syn_obj.id}_cells{cell_obj1.id}_{cell_obj2.id}'
-        # cell_obj1.save_skeleton_to_kzip(fname, additional_keys=['merger_gt'])
-        # merged_cell.meshes2kzip(fname)
-
-
-# The following meshes need to merged. For that see the method: merge_meshes in proc/meshes.py
-# for example:
-# merged_cell = SuperSegmentationObject(..., working_dir='~/tmp/', version='tmp')
-# for mesh_type in ['mi', 'sv', 'vc', 'sj', 'syn_ssv']:
-#   merged_cell._meshes[mesh_type] = merge_meshes(cell_obj1.load_mesh(mesh_type), \
-#   cell_obj2.load_mesh(mesh_type))
-
+        fname1 = f'syn{syn_obj.id}_cells{cell_obj1.id}_{cell_obj2.id}.k.zip'
+        # merged_cell.save_skeleton_to_kzip(fname, additional_keys=['merger_gt'])
+        merged_cell.meshes2kzip(fname1)
