@@ -310,7 +310,13 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         time.sleep(0.05)
 
     log_batchjob.info("All jobs are submitted: %s" % name)
+    marysia_time = time.time()
+    marysia_time_0 = marysia_time
+    i = 0
     while True:
+        marysia_time = marysia_time + marysia_time_0
+        log_batchjob.info("marysia_time= {:.2f} s cirka {:.2f} ".format(marysia_time, i))
+        i += 1
         nb_rp = number_of_running_processes(job_name)
         # check actually running files
         if nb_rp == 0:

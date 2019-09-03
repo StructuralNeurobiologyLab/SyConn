@@ -245,6 +245,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
+
     cd_dir = "{}/chunkdatasets/tmp/".format(global_params.config.temp_path)
     cd = chunky.ChunkDataset()
     cd.initialize(kd, kd.boundary, chunk_size, cd_dir,
@@ -267,6 +268,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
                     for chs, worker_nr in zip(multi_params, range(len(multi_params)))]
 
     if qu.batchjob_enabled():
+        print("\n\n\n n_cores=", n_cores, "\n\n\n n_max_co_processes= ", n_max_co_processes)
         path_to_out = qu.QSUB_script(
             multi_params, "map_subcell_extract_props", n_cores=n_cores,
             n_max_co_processes=n_max_co_processes)
@@ -279,6 +281,7 @@ def map_subcell_extract_props(kd_seg_path, kd_organelle_paths, n_folders_fs=1000
         results = sm.start_multiprocess_imap(
             _map_subcell_extract_props_thread, multi_params, nb_cpus=n_max_co_processes,
             verbose=True, debug=False)
+
     all_times.append(time.time() - start)
     step_names.append("extract and map segmentation objects")
 
@@ -1005,7 +1008,7 @@ def binary_filling_cs(cs_sd, n_iterations=13, stride=1000,
                              n_iterations])
 
     # Running workers
-    if qu.batchjob_enabled():
+    if not qu.batchjob_enabled():
         sm.start_multiprocess(_binary_filling_cs_thread,
                               multi_params, nb_cpus=nb_cpus)
 
@@ -1262,3 +1265,4 @@ def mesh_proc_chunked(working_dir, obj_type, nb_cpus=None):
     print("Processing %d mesh dicts of %s." % (len(multi_params), obj_type))
     sm.start_multiprocess_imap(mesh_chunk, multi_params, nb_cpus=nb_cpus,
                                debug=False)
+

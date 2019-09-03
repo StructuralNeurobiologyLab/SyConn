@@ -20,7 +20,6 @@ import scipy.ndimage
 import h5py
 from knossos_utils import knossosdataset
 from knossos_utils import chunky
-
 knossosdataset._set_noprint(True)
 import os
 from ..backend.storage import AttributeDict, VoxelStorageDyn, VoxelStorage
@@ -29,11 +28,10 @@ from ..mp import batchjob_utils as qu
 from ..handler import compression, basics
 from ..reps import segmentation
 from ..handler.basics import kd_factory, chunkify
-from .object_extraction_steps import export_cset_to_kd_batchjob
+from . object_extraction_steps import export_cset_to_kd_batchjob
 from . import log_extraction
 from .object_extraction_wrapper import from_ids_to_objects, calculate_chunk_numbers_for_box
 from ..mp.mp_utils import start_multiprocess_imap
-
 try:
     from .block_processing_C import process_block_nonzero, extract_cs_syntype
 except ImportError as e:
@@ -75,7 +73,7 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     if cube_of_interest_bb is None:
         cube_of_interest_bb = [np.zeros(3, dtype=np.int), kd.boundary]
     if chunk_size is None:
-        chunk_size = (512, 512, 512)
+        chunk_size=(512, 512, 512)
     size = cube_of_interest_bb[1] - cube_of_interest_bb[0] + 1
     offset = cube_of_interest_bb[0]
 
@@ -109,11 +107,11 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
 
     if not qu.batchjob_enabled():
         results = start_multiprocess_imap(_contact_site_extraction_thread, multi_params,
-                                          debug=False, nb_cpus=n_max_co_processes)
+                                    debug=False, nb_cpus=n_max_co_processes)
     else:
 
         path_to_out = qu.QSUB_script(multi_params, "contact_site_extraction",
-                                     n_max_co_processes=n_max_co_processes, log=log)
+                           n_max_co_processes=n_max_co_processes, log=log)
         out_files = glob.glob(path_to_out + "/*")
         results = []
         for out_file in out_files:
@@ -132,11 +130,10 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
         pkl.dump(cs_ids_workers, f)
     del cs_ids_workers
 
-    # TODO: The comment was removed!
-    # log.info('Finished cs ({}) and syn ({}) extraction.'.format(
-    #     len(cs_props[0]), len(syn_props[0])))
-    # if len(syn_props[0]) == 0:
-    #     log.critical('WARNING: Did not find any synapses during extraction step.')
+    log.info('Finished cs ({}) and syn ({}) extraction.'.format(
+        len(cs_props[0]), len(syn_props[0])))
+    if len(syn_props[0]) == 0:
+        log.critical('WARNING: Did not find any synapses during extraction step.')
     # TODO: extract syn objects! maybe replace sj_0 Segmentation dataset by the overlapping CS<->
     #  sj objects -> run syn. extraction and sd_generation in parallel and return mi_0, vc_0 and
     #  syn_0 -> use syns as new sjs during rendering!
@@ -171,10 +168,10 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
     path = "{}/knossosdatasets/syn_seg/".format(global_params.config.working_dir)
     path_cs = "{}/knossosdatasets/cs_seg/".format(global_params.config.working_dir)
     storage_location_ids = rep_helper.get_unique_subfold_ixs(n_folders_fs)
-    multi_params = [(sv_id_block, n_folders_fs, path, path_cs) for sv_id_block in basics.chunkify(
-        storage_location_ids, max_n_jobs)]
     # multi_params = [(sv_id_block, n_folders_fs, path, path_cs) for sv_id_block in basics.chunkify(
-    #     storage_location_ids, 1)]
+    #     storage_location_ids, max_n_jobs)]
+    multi_params = [(sv_id_block, n_folders_fs, path, path_cs) for sv_id_block in basics.chunkify(
+        storage_location_ids, 1)]
     if not qu.batchjob_enabled():
         start_multiprocess_imap(_write_props_to_syn_thread,
                                 multi_params, nb_cpus=n_max_co_processes, debug=False)
@@ -194,6 +191,7 @@ def extract_contact_sites(n_max_co_processes=None, chunk_size=None,
 def _contact_site_extraction_thread(args):
     chunks = args[0]
     knossos_path = args[1]
+    print("\n\n\n args[2]= ", args[2])
     worker_id = args[2]
 
     kd = kd_factory(knossos_path)
@@ -242,7 +240,8 @@ def _contact_site_extraction_thread(args):
         cum_dt_data += time.time() - start
         start = time.time()
         # this counts SJ foreground voxels overlapping with the CS objects and the asym and sym voxels
-        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt = extract_cs_syntype(contacts, syn_d, asym_d, sym_d)
+        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt = extract_cs_syntype(contacts, syn_d, asym_d,
+                                                                      sym_d)
         cum_dt_proc += time.time() - start
         os.makedirs(chunk.folder, exist_ok=True)
         compression.save_to_h5py([contacts],
@@ -262,24 +261,24 @@ def _contact_site_extraction_thread(args):
     #                      "s. {} cs and {} syn. {}".format(
     #     cum_dt_data, cum_dt_proc, len(cs_props[0]), len(syn_props[0]), syn_d.max()))
 
-    cs_ids_in_worker = list(cs_props[0].keys())
+    cs_ids_in_worker = cs_props[0].keys()
 
-    dict_p = "{}/cs_prop_dict_worker_{}.pkl".format(global_params.config.temp_path, str(worker_id))
+    dict_p = "{}/cs_prop_dict_worker_{}.pkl".format(global_params.config.temp_path, worker_id)
     with open(dict_p, "wb") as f:
         pkl.dump(cs_props, f)
     del cs_props
 
-    dict_p = "{}/syn_prop_dict_worker_{}.pkl".format(global_params.config.temp_path, str(worker_id))
+    dict_p = "{}/syn_prop_dict_worker_{}.pkl".format(global_params.config.temp_path, worker_id)
     with open(dict_p, "wb") as f:
         pkl.dump(syn_props, f)
-    del syn_props
+    del cs_props
 
-    dict_p = "{}/cs_sym_cnt_worker_{}.pkl".format(global_params.config.temp_path, str(worker_id))
+    dict_p = "{}/cs_sym_cnt_worker_{}.pkl".format(global_params.config.temp_path, worker_id)
     with open(dict_p, "wb") as f:
         pkl.dump(tot_sym_cnt, f)
     del tot_sym_cnt
 
-    dict_p = "{}/cs_asym_cnt_worker_{}.pkl".format(global_params.config.temp_path, str(worker_id))
+    dict_p = "{}/cs_asym_cnt_worker_{}.pkl".format(global_params.config.temp_path, worker_id)
     with open(dict_p, "wb") as f:
         pkl.dump(tot_asym_cnt, f)
     del tot_asym_cnt
@@ -308,12 +307,10 @@ def _write_props_to_syn_thread(args):
     for obj_id_mod in cs_ids_ch:
         obj_keys.append(dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)])
 
-    obj_keys = np.concatenate(obj_keys)
     necessary_workers = []
     for key in obj_keys:
         necessary_workers.append(cs_ids_workers[key])
 
-    necessary_workers = np.concatenate(necessary_workers)
     necessary_workers = np.unique(necessary_workers)
 
     cs_props = [{}, defaultdict(list), {}]
@@ -322,26 +319,25 @@ def _write_props_to_syn_thread(args):
     cs_asym_cnt = {}
 
     for worker_id in necessary_workers:
-        worker_id = int(worker_id)
-        dict_p = "{}/cs_prop_dict_worker_{}.pkl".format(global_params.config.temp_path, str(worker_id))
+        dict_p = "{}/cs_prop_dict_worker_{}.pkl".format(global_params.config.temp_path, worker_id)
         with open(dict_p, "rb") as f:
             curr_cs_props = pkl.load(f)
         merge_prop_dicts([cs_props, curr_cs_props])
         del curr_cs_props
 
-        dict_p = "{}/syn_prop_dict_worker_{}.pkl".format(global_params.config.temp_path, str(worker_id))
+        dict_p = "{}/syn_prop_dict_worker_{}.pkl".format(global_params.config.temp_path, worker_id)
         with open(dict_p, "rb") as f:
             curr_syn_props = pkl.load(f)
         merge_prop_dicts([syn_props, curr_syn_props])
         del curr_syn_props
 
-        dict_p = "{}/cs_sym_cnt_worker_{}.pkl".format(global_params.config.temp_path, str(worker_id))
+        dict_p = "{}/cs_sym_cnt_worker_{}.pkl".format(global_params.config.temp_path, worker_id)
         with open(dict_p, "rb") as f:
             sym_cnt = pkl.load(f)
         merge_type_dicts([cs_sym_cnt, sym_cnt])
         del sym_cnt
 
-        dict_p = "{}/cs_asym_cnt_worker_{}.pkl".format(global_params.config.temp_path, str(worker_id))
+        dict_p = "{}/cs_asym_cnt_worker_{}.pkl".format(global_params.config.temp_path, worker_id)
         with open(dict_p, "rb") as f:
             asym_cnt = pkl.load(f)
         merge_type_dicts([cs_asym_cnt, asym_cnt])
@@ -352,8 +348,7 @@ def _write_props_to_syn_thread(args):
                                           working_dir=global_params.config.working_dir, version=0)
 
     sd_cs = segmentation.SegmentationDataset(n_folders_fs=n_folders_fs, obj_type='cs',
-                                             working_dir=global_params.config.working_dir, version=0)
-
+                                          working_dir=global_params.config.working_dir, version=0)
     # iterate over the subcellular SV ID chunks
     for obj_id_mod in cs_ids_ch:
         obj_keys = dest_dc[rep_helper.subfold_from_ix(obj_id_mod, n_folders_fs)]
@@ -379,8 +374,6 @@ def _write_props_to_syn_thread(args):
                                       read_only=False, disable_locking=True)
         for cs_id in obj_keys:
             # write cs to dict
-            if cs_id not in cs_props[0]:
-                continue
             rp_cs = cs_props[0][cs_id]
             bbs_cs = np.concatenate(cs_props[1][cs_id])
             size_cs = cs_props[2][cs_id]
@@ -418,17 +411,17 @@ def _write_props_to_syn_thread(args):
             # TODO: these should be refactored at some point, currently its not the same
             #  as before because the bounding box of the overlap object is used instead of
             #  the SJ bounding box. ALso the background ratio was adapted
-            n_vxs_in_sjbb = np.prod(bb[1] - bb[0])  # number of CS voxels in syn BB
+            n_vxs_in_sjbb = np.prod(bb[1] - bb[0]) # number of CS voxels in syn BB
             id_ratio = size_cs / n_vxs_in_sjbb  # this is the fraction of CS voxels within the syn BB
             cs_ratio = size / size_cs  # number of overlap voxels (syn voxels) divided by cs size
             background_overlap_ratio = 1 - id_ratio  # TODO: not the same as before anymore: local
             # inverse 'CS' density: c_cs_ids[u_cs_ids == 0] / n_vxs_in_sjbb  (previous version)
             add_feat_dict = {'sj_id': cs_id, 'cs_id': cs_id,
-                             'id_sj_ratio': id_ratio,
-                             'sj_size_pseudo': n_vxs_in_sjbb,
-                             'id_cs_ratio': cs_ratio,
-                             'cs_size': size_cs,
-                             'background_overlap_ratio': background_overlap_ratio}
+                            'id_sj_ratio': id_ratio,
+                            'sj_size_pseudo': n_vxs_in_sjbb,
+                            'id_cs_ratio': cs_ratio,
+                            'cs_size': size_cs,
+                            'background_overlap_ratio': background_overlap_ratio}
             this_attr_dc[cs_id].update(add_feat_dict)
             voxel_dc[cs_id] = bbs
             voxel_dc.increase_object_size(cs_id, size)
@@ -443,6 +436,7 @@ def _write_props_to_syn_thread(args):
 
 
 def load_h5_spec_dict(obj_keys, file):
+
     out_dict = [{}, defaultdict(list), {}]
     for obj_key in obj_keys:
         cs_props[0][obj_key] = file['0'][obj_key][:]

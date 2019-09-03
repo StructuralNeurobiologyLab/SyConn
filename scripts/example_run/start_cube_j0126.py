@@ -28,14 +28,13 @@ from syconn.exec import exec_init, exec_syns, exec_multiview, exec_dense_predict
 # TODO add materialize button and store current process in config.ini
 #  -> allows to resume interrupted processes
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='SyConn example run')
-    parser.add_argument('--working_dir', type=str, default='',
-                        help='Working directory of SyConn')
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(description='SyConn example run')
+    # parser.add_argument('--working_dir', type=str, default='',
+    #                     help='Working directory of SyConn')
+    # args = parser.parse_args()
 
     # ----------------- DEFAULT WORKING DIRECTORY ---------------------
     # TODO: if this is changed, ALSO ADAPT THE RAG SOURCE FILE SOME LINES BELOW
-    # working_dir = "/wholebrain/songbird/j0126/areaxfs_v10_v4b_base_20180214_full_agglo_cbsplit/"
     working_dir = "/wholebrain/scratch/mariakaw/example_cube_start_cube_j0126/"
 
     # copy rag to its locations inside the WD
@@ -57,12 +56,15 @@ if __name__ == '__main__':
     use_new_meshing = True
     scale = np.array([10, 10, 20])
     chunk_size = (512, 512, 512)
-    # bb = [np.array((500, 500, 500)), np.array((2500, 2500, 2500))]
-    bb = None
 
     n_folders_fs = 10000
     n_folders_fs_sc = 10000
     experiment_name = 'j0126'
+    bb = [np.array((500, 500, 500)), np.array((2500, 2500, 2500))]
+
+    global_params.NCORES_PER_NODE = 20
+    global_params.NGPUS_PER_NODE = 2
+    global_params.NNODES_TOTAL = 6
 
     # The transform functions will be applied when loading the segmentation data of cell organelles
     # in order to convert them into binary fore- and background
@@ -84,9 +86,6 @@ if __name__ == '__main__':
     time_stamps = [time.time()]
     step_idents = ['t-0']
     log.info('Step 0/8 - Preparation')
-
-    bd = None
-    bb = None
 
     # Preparing config
     # currently this is were SyConn looks for the neuron rag
@@ -153,12 +152,11 @@ if __name__ == '__main__':
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs_sc=n_folders_fs_sc,
                                     n_folders_fs=n_folders_fs, cube_of_interest_bb=bb,
                                     load_cellorganelles_from_kd_overlaycubes=False)
+    # # TODO: uncomment
+    # exec_init.run_create_rag()
+    # time_stamps.append(time.time())
+    # step_idents.append('SD generation')
 
-    # TODO: uncomment
-    exec_init.run_create_rag()
-    time_stamps.append(time.time())
-    step_idents.append('SD generation')
-    print("\n\n\n HAPPY END \n\n\n")
     # if global_params.config.prior_glia_removal:
     #     log.info('Step 1.5/8 - Glia separation')
     #     # TODO: uncomment
