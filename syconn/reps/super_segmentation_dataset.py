@@ -459,7 +459,8 @@ class SuperSegmentationDataset(object):
     def get_super_segmentation_object(self, obj_id: Union[int, Iterable[int]],
                                       new_mapping: bool = False,
                                       caching: Optional[bool] = None,
-                                      create: bool = False):
+                                      create: bool = False)\
+            -> Union[SuperSegmentationObject, List[SuperSegmentationObject]]:
         """
         Factory method for
         :class:`~syconn.reps.super_segmentation_object.SuperSegmentationObject`s.
@@ -480,7 +481,8 @@ class SuperSegmentationDataset(object):
             * Set the default value of `caching` to False, PS 20Feb2019
 
         Returns:
-
+            SuperSegmentationObject(s) corresponding to the given `obj_id`
+            (int or Iterable[int]).
         """
         if caching is None:
             caching = self.sso_caching

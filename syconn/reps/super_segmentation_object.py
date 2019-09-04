@@ -37,7 +37,7 @@ from ..backend.storage import CompressedStorage, MeshStorage
 from ..proc.graphs import split_glia, split_subcc_join, create_graph_from_coords
 from ..proc.meshes import write_mesh2kzip, merge_someshes, \
     compartmentalize_mesh, mesh2obj_file, write_meshes2kzip
-from ..proc.rendering import render_sampled_sso, multi_view_sso, \
+from ..proc.rendering import render_sampled_sso, load_rendering_func, \
     render_sso_coords, render_sso_coords_index_views
 from ..mp import batchjob_utils as qu
 from ..mp import mp_utils as sm
@@ -3072,7 +3072,8 @@ class SuperSegmentationObject(object):
 
     def render_ortho_views_vis(self, dest_folder=None, colors=None, ws=(2048, 2048),
                                obj_to_render=("sv", )):
-        from scipy.misc import imsave
+        multi_view_sso = load_rendering_func('multi_view_sso')
+        from scipy.misc import imsave  # TODO: use new imageio package
         if colors is None:
             colors = {"sv": (0.5, 0.5, 0.5, 0.5), "mi": (0, 0, 1, 1),
                       "vc": (0, 1, 0, 1), "sj": (1, 0, 0, 1)}

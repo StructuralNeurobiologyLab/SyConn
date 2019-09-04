@@ -19,9 +19,15 @@ from syconn.reps.super_segmentation_helper import syn_sign_ratio_celltype
 from syconn.reps.segmentation import SegmentationDataset
 from syconn import global_params
 from syconn.handler import log_main as log_cnn
+try:
+    from vigra.filters import boundaryVectorDistanceTransform
+    import vigra
+except ImportError as e:
+    log_cnn.error(str(e))
 import os
 import threading
 from sklearn.model_selection import train_test_split
+from sklearn.decomposition import PCA
 try:
     from torch.utils.data import Dataset
     from elektronn3.data.transforms import Identity
@@ -1576,11 +1582,13 @@ def fetch_single_synssv_typseg(syn_ssv: SegmentationObject,
     return raw, segmentation
 
 
-def fetch_single_synssv_typseg_enahnced(
-        syn_ssv: SegmentationObject, syntype_label: Optional[int] = None,
+def fetch_single_synssv_typseg_enhanced(
+        syn_ssv: SegmentationObject, pre_synapse,
+        syntype_label: Optional[int] = None,
         raw_offset: Tuple[int, int, int] = (50, 50, 25), pad_offset: int = 0,
         pad_value: int = 0, ignore_offset: int = 0, ignore_value: int = -1,
-        n_closings: int = 0, n_dilations: int = 0) -> Tuple[np.ndarray, np.ndarray]:
+        n_closings: int = 0, n_dilations: int = 0)\
+        -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Retrieve the type segmentation data (0: background, 1: asymmetric, 2: symmetric)
      of a single 'syn_ssv' object.
@@ -1588,6 +1596,7 @@ def fetch_single_synssv_typseg_enahnced(
 
     Args:
         syn_ssv: The synapse supervoxel object used to fetch the segmentation data.
+        pre_synapse: ID of the presynaptic SSV object.
         syntype_label: If None, uses ``syn_sign`` stored in ``syn_ssv.attr_dict``
             and transforms the object segmentation into the respective label
             (1: symmetric, 2: asymmetric).
@@ -1604,7 +1613,9 @@ def fetch_single_synssv_typseg_enahnced(
         n_dilations: Number of dilations performed before closing.
 
     Returns:
-        Volumetric raw and segmentation data.
+        Volumetric raw and vector field pointing to the nearest boundary pixels
+        of the pre-synaptic cell and the mask of the entire synapse. The vector
+        field is set to 0 where no synapse is present
     """
     pad_offset = max([pad_offset, n_closings])
     raw_offset = np.array(raw_offset) + pad_offset + ignore_offset
@@ -1624,10 +1635,44 @@ def fetch_single_synssv_typseg_enahnced(
     kd = KnossosDataset()
     kd.initialize_from_conf(global_params.config.kd_seg_path)
     raw = kd.from_raw_cubes_to_matrix(size_raw, coord_raw)
+
+    # get the SSV IDs ordering given the PCA vector (ID1 points towards ID2)
+    seg_cell = kd.from_overlaycubes_to_matrix(np.array(segmentation.shape),
+                                              syn_ssv.bounding_box[0] -
+                                              pad_offset - ignore_offset)
     syn_ssv.load_attr_dict()
     ssv_ids = syn_ssv.attr_dict['neuron_partners']
-    seg = kd.from_overlaycubes_to_matrix(size_raw, coord_raw)
+    if pre_synapse not in ssv_ids:
+        raise ValueError('Pre-synaptic SSV ID is not present in the '
+                         '"neuron_partners" attribute if the given synapse:'
+                         f'{ssv_ids}.')
+    ssd = SuperSegmentationDataset()
+    sv_ids_present = np.unique(seg_cell)
+    for ssv in ssd.get_super_segmentation_object(ssv_ids):
+        for ix in ssv.sv_ids:
+            if ix not in sv_ids_present:
+                continue
+            seg_cell[seg_cell == ix] = ssv.id
 
+    # Find if vector connecting the two cells (3rd PC of the synapse) is
+    # pointing towards cell1 or cell2 (< 0 means pointing away, > 0 pointing towards it)
+    ssv1_seg = (seg_cell == pre_synapse).astype(np.float32)
+    # erode SSV supervoxel
+    iterations = 13
+    ssv1_seg_tmp = ndimage.binary_erosion(ssv1_seg, iterations=iterations)
+    while 1 not in ssv1_seg_tmp:
+        iterations -= 1
+        if iterations < 0:
+            raise ValueError
+        ssv1_seg_tmp = ndimage.binary_erosion(ssv1_seg, iterations=iterations)
+    ssv1_seg = ssv1_seg_tmp
+    assert 1 in ssv1_seg
+    ssv1_seg = vigra.VigraArray((ssv1_seg != 1).astype(np.float32),
+                                axistags=vigra.defaultAxistags('xyz'))
+    # get the vectorial distances to the pre-synaptic supervoxels for all other voxels.
+    vecdist = boundaryVectorDistanceTransform(ssv1_seg, boundary='OuterBoundary')
+    vecdist = np.array(vecdist, dtype=np.float32)
+    vecdist[(segmentation != 1)] = 0
     if syntype_label is None:
         syn_sign = syn_ssv.lookup_in_attribute_dict('syn_sign')
         if syn_sign is None:
@@ -1635,7 +1680,7 @@ def fetch_single_synssv_typseg_enahnced(
                              f' {str(syn_ssv)}.')
         syntype_label = 1 if syn_ssv.attr_dict["syn_sign"] == 1 else 2
     segmentation[segmentation == 1] = syntype_label
-    return raw, segmentation
+    return raw, vecdist, segmentation
 
 
 def parse_gt_usable_synssv(mask_celltypes: bool = True,

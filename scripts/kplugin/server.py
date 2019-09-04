@@ -186,9 +186,6 @@ class SyConnBackend(object):
         mesh = ssv._load_obj_mesh_compr("sv")
         mesh = {'vertices': mesh[1],
                 'indices': mesh[0],
-                # TODO: examine the existing normals more closely -> find_meshes seems to create
-                #  different normals than K (face orientation is correct though)
-                # 'normals': mesh[2] if len(mesh) == 2 else []}
                 'normals': []}
         dtime = time.time() - start
         self.logger.info('Got ssv mesh {} after {:.2f}'.format(ssv_id, dtime))
@@ -275,8 +272,7 @@ class SyConnBackend(object):
         :param ssv_id: int
         :return: dict
         """
-        # TODO: examine the existing normals more closely -> find_meshes seems to create
-        #  different normals than K (face orientation is correct though)
+        # not needed for K
         return b""
         start = time.time()
         self.logger.info('Loading ssv {} mesh normals'.format(ssv_id))
