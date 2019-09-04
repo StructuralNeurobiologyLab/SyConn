@@ -8,19 +8,19 @@ pipeline {
   stages {
     stage('build') {
       steps {
-            sh '''conda create --yes -n pysyintegration python
-                conda activate pysyintegration
-                pip install -r requirements.txt
-                pip install -e .
-                '''
+        sh '''conda create --yes -n pysyintegration python
+            conda activate pysyintegration
+            pip install -r requirements.txt
+            pip install -e .
+            '''
       }
     }
     stage('test') {
       steps {
-              sh '''
-                conda activate pysyintegration
-                python -m pytest --junit-xml=pytest_unit.xml
-                '''
+          sh '''
+            conda activate pysyintegration
+            python -m pytest --junit-xml=pytest_unit.xml
+            '''
       }
     }
   }
@@ -29,7 +29,7 @@ pipeline {
         sh 'conda remove --yes -n pysyintegration --all'
     }
     failure {
-        echo "Send e-mail, when failed"
+        echo "Error while removing conda environment."
     }
   }
 }
