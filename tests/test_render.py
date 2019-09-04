@@ -82,6 +82,39 @@ def test_raw_and_index_rendering_egl():
     # TODO: add further property tests, e.g. dtype, value range ...
 
 
+@pytest.mark.filterwarnings("ignore:Modifying DynConfig items via")
+def test_egl_and_osmesa_sawp_and_equivalence():
+    from syconn import global_params
+    global_params.config['pyopengl_platform'] = 'egl'
+    from syconn.proc.ssd_assembly import init_sso_from_kzip
+    from syconn.proc.rendering import render_sso_coords, \
+        render_sso_coords_index_views
+    import os
+    import numpy as np
+    fname = os.path.dirname(__file__) + '/renderexample.k.zip'
+    assert os.path.isfile(fname)
+    ssv = init_sso_from_kzip(fname, sso_id=1)
+    rendering_locations = np.concatenate(ssv.sample_locations())
+    index_views = render_sso_coords_index_views(ssv, rendering_locations,
+                                                verbose=True)
+    raw_views = render_sso_coords(ssv, rendering_locations, verbose=True)
+
+    global_params.config['pyopengl_platform'] = 'osmesa'
+    index_views_osmesa = render_sso_coords_index_views(ssv, rendering_locations,
+                                                verbose=True)
+    raw_views_osmesa = render_sso_coords(ssv, rendering_locations, verbose=True)
+    nb_of_pixels = np.prod(raw_views.shape)
+    # fraction of different vertex indices must be below 1 out of 100k
+    assert np.sum(index_views != index_views_osmesa) / nb_of_pixels < 1e-5
+    # maximum deviation of depth value must be smaller
+    assert np.max(((raw_views-raw_views_osmesa)**2)**0.5) == 1
+    # affected pixels must be below 0.05
+    assert np.sum(raw_views != raw_views_osmesa) / nb_of_pixels < 0.05
+
+
 if __name__ == '__main__':
     test_raw_and_index_rendering_osmesa()
+    test_raw_and_index_rendering_egl()
+    test_egl_and_osmesa_sawp_and_equivalence()
+
 

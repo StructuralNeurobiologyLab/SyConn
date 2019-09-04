@@ -1146,8 +1146,9 @@ class SegmentationObject(object):
             attr_key: Attribute key to look for.
 
         Returns:
-            Value of `attr_key` in :py:attr:`~attr_dict`. If key does not exist
-            locally, tries to load from :py:attr:`~attr_dict_path`.
+            Value of `attr_key` in :py:attr:`~attr_dict` or None if it does not
+            exist. If key does not exist in :py:attr:`~attr_dict`, tries to
+            load from :py:attr:`~attr_dict_path`.
         """
         if len(self.attr_dict) == 0:
             self.load_attr_dict()

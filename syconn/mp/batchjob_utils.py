@@ -346,7 +346,7 @@ def QSUB_script(params, name, queue=None, pe=None, n_cores=1, priority=0,
         msg = 'All submitted jobs have failed. Re-submission will not be initiated.' \
               ' Please check your submitted code.'
         log_batchjob.error(msg)
-        raise Exception(msg)
+        raise RuntimeError(msg)
     if len(out_files) < len(params):
         log_batchjob.error("%d jobs appear to have failed." % (len(params) - len(out_files)))
         checklist = np.zeros(len(params), dtype=np.bool)
