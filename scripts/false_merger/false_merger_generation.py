@@ -1,6 +1,5 @@
 from syconn import global_params
-# global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v6/'
-global_params.wd = '/home/kloping/wholebrain/songbird/j0126/areaxfs_v6/' # local test
+global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v6/'
 import numpy as np
 from scipy.spatial import cKDTree
 
