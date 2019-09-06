@@ -1,5 +1,6 @@
 from syconn import global_params
 global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v6/'
+# global_params.wd = '/home/kloping/wholebrain/songbird/j0126/areaxfs_v6/'  # local test
 import numpy as np
 from scipy.spatial import cKDTree
 
@@ -60,13 +61,13 @@ if __name__=="__main__":
         kdtree = cKDTree(cell_nodes)
         # find all skeleton nodes which are close to the synapse
         ixs = kdtree.query_ball_point(syn_coord, r=20e3) ## 20e3 nanometer  
-        node_labels[ixs] = 1 # correct: 0
+        node_labels[ixs] = int(1) # correct: 0
 
         # find small cube around artificial merger and set it to 1 (false merger)
         kdtree = cKDTree(cell_nodes)
         # find all skeleton nodes which are close to the synapse
         ixs = kdtree.query_ball_point(syn_coord, r=5e3) 
-        node_labels[ixs] = 2 # correct: 1
+        node_labels[ixs] = int(2) # correct: 1
         # write out annotated skeletons to ['merger_gt']
         merged_cell.skeleton['merger_gt'] = node_labels
 

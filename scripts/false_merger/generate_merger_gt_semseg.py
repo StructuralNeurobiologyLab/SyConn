@@ -69,17 +69,17 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     sso = init_sso_from_kzip(kzip_path, sso_id=1)
     print("SSO: {}".format(type(sso)))
 
-    if initial_run:  # use default SSD version
-        # orig_sso = SuperSegmentationObject(sso_id)
-        orig_sso1 = SuperSegmentationObject(sso_id1)
-        orig_sso2 = SuperSegmentationObject(sso_id2)
-        # orig_sso.copy2dir(dest_dir=sso.ssv_dir, safe=False)
-        orig_sso1.copy2dir(dest_dir=sso1.ssv_dir, safe=False)
-        orig_sso2.copy2dir(dest_dir=sso2.ssv_dir, safe=False)
-    if not sso1.attr_dict_exists or not sso2.attr_dict_exists:
-        msg = 'Attribute dict of original SSV was not copied successfully ' \
-              'to target SSD.'
-        raise ValueError(msg)
+    # if initial_run:  # use default SSD version
+    #     # orig_sso = SuperSegmentationObject(sso_id)
+    #     orig_sso1 = SuperSegmentationObject(sso_id1)
+    #     orig_sso2 = SuperSegmentationObject(sso_id2)
+    #     # orig_sso.copy2dir(dest_dir=sso.ssv_dir, safe=False)
+    #     orig_sso1.copy2dir(dest_dir=sso.ssv_dir, safe=False)
+    #     orig_sso2.copy2dir(dest_dir=sso.ssv_dir, safe=False)
+    # if not sso.attr_dict_exists:
+    #     msg = 'Attribute dict of original SSV was not copied successfully ' \
+    #           'to target SSD.'
+    #     raise ValueError(msg)
     sso.load_attr_dict()
     indices, vertices, normals = sso.mesh
 
@@ -96,7 +96,8 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
 
     node_coords = np.array([n.getCoordinate() * sso.scaling for n in skel_nodes])
     # node_labels = np.array([str2intconverter(n.getComment(), gt_type) for n in skel_nodes], dtype=np.int)
-    node_labels = np.array([int(n.data['merger_gt']) for n in skel_nodes], dtype=np.int)
+    # node_labels = np.array([int(n.data['merger_gt']) for n in skel_nodes], dtype=np.int)
+    node_labels = np.array([int(n.data['merger_gt'][0]) for n in skel_nodes], dtype=np.int)
     node_coords = node_coords[(node_labels != -1)]
     node_labels = node_labels[(node_labels != -1)]
 
@@ -221,8 +222,8 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
         all_raw_views.append(raw_v)
         all_label_views.append(label_v)
         # @debug
-        print("all_raw_views: {}".format(all_raw_views))
-        print("all_label_views: {}".format(all_label_views))
+        print("all_raw_views: {}".format(len(all_raw_views)))
+        print("all_label_views: {}".format(len(all_label_views)))
         # all_index_views.append(index_v)  # Removed index views
 
     # all_raw_views = np.concatenate(all_raw_views)
@@ -412,12 +413,16 @@ if __name__ == "__main__":
         comp_window = 10240 * 3
         ws = (256, 128)
         n_views = 3
-        label_file_folder = "/wholebrain/u/yliu/develop/SyConn/scripts/false_merger"
-        file_names = ["/syn169316_cells17456256_17435397.k.zip",
-                      "/syn669316_cells31272448_26034194.k.zip"]
+        # label_file_folder = "/wholebrain/u/yliu/develop/SyConn/scripts/false_merger"
+        label_file_folder = "/home/kloping/mpi_develop/develop/SyConn/scripts/false_merger" # local test
+        file_names = ["/syn169316_cells17456256_17435397.k.zip"]
+                      # "/syn669316_cells31272448_26034194.k.zip"]
         file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
         GT_generation_from_kzip(file_paths, 'merger_gt', 'merger_gt', n_views, ws=ws, comp_window=comp_window)
 
+    ###########################
+    # actual block
+    ###########################
     if 0:
         comp_window = 10240 * 3  # 40 nm pixel size
         ws = (256, 128)
