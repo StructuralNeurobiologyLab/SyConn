@@ -1,5 +1,6 @@
 from syconn import global_params
-global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v6/'
+# global_params.wd = '/wholebrain/songbird/j0126/areaxfs_v6/'
+global_params.wd = '/home/kloping/wholebrain/songbird/j0126/areaxfs_v6/' # local test
 import numpy as np
 from scipy.spatial import cKDTree
 
@@ -40,7 +41,7 @@ if __name__=="__main__":
 
     sd_synssv = SegmentationDataset(obj_type='syn_ssv') # class holding all synapse candidates between cells
 
-    for syn_id in sd_synssv.ids[:2]:  # some arbitrary synapse IDs
+    for syn_id in sd_synssv.ids[1:2]:  # some arbitrary synapse IDs
         syn_obj = sd_synssv.get_segmentation_object(syn_id)
         syn_obj.load_attr_dict()
         c1, c2 = syn_obj.attr_dict['neuron_partners']
@@ -70,6 +71,6 @@ if __name__=="__main__":
         # write out annotated skeletons to ['merger_gt']
         merged_cell.skeleton['merger_gt'] = node_labels
 
-        fname1 = f'syn{syn_obj.id}_cells{cell_obj1.id}_{cell_obj2.id}.k.zip'
-        # merged_cell.save_skeleton_to_kzip(fname, additional_keys=['merger_gt'])
-        merged_cell.meshes2kzip(fname1)
+        fname = f'syn{syn_obj.id}_cells{cell_obj1.id}_{cell_obj2.id}.k.zip'
+        merged_cell.save_skeleton_to_kzip(fname, additional_keys=['merger_gt'])
+        merged_cell.meshes2kzip(fname)
