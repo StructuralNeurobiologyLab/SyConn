@@ -71,7 +71,7 @@ if __name__=="__main__":
         merged_cell.skeleton['merger_gt'] = node_labels
 
         # write all data to kzip (skeleton and mesh)
-        fname = f'test_meta_syn{syn_obj.id}_cells{cell_obj1.id}_{cell_obj2.id}.k.zip'
+        fname = f'syn{syn_obj.id}_cells{cell_obj1.id}_{cell_obj2.id}.k.zip'
 
         target_fnames = []
         tmp_dest_p = []
