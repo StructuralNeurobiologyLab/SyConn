@@ -70,6 +70,20 @@ if __name__=="__main__":
         # write out annotated skeletons to ['merger_gt']
         merged_cell.skeleton['merger_gt'] = node_labels
 
-        fname = f'syn{syn_obj.id}_cells{cell_obj1.id}_{cell_obj2.id}.k.zip'
+        # write all data to kzip (skeleton and mesh)
+        fname = f'test_meta_syn{syn_obj.id}_cells{cell_obj1.id}_{cell_obj2.id}.k.zip'
+
+        target_fnames = []
+        tmp_dest_p = []
+        tmp_dest_p.append('{}_{}.pkl'.format(fname, 'meta'))
+        target_fnames.append('{}.pkl'.format('meta'))
+        write_obj2pkl(tmp_dest_p[-1], {'version_dict': merged_cell.version_dict,
+                                       'scaling': merged_cell.scaling,
+                                       'working_dir': merged_cell.working_dir,
+                                       'sso_id': merged_cell.id})
+
+        data2kzip(fname, tmp_dest_p, target_fnames)
+
         merged_cell.save_skeleton_to_kzip(fname, additional_keys=['merger_gt'])
         merged_cell.meshes2kzip(fname)
+
