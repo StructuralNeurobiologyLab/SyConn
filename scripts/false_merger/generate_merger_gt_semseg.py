@@ -222,49 +222,49 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
         all_raw_views.append(raw_v)
         all_label_views.append(label_v)
         # @debug
-        print("all_raw_views: {}".format(len(all_raw_views)))
-        print("all_label_views: {}".format(len(all_label_views)))
+        print("all_raw_views: {}".format(type(all_raw_views)))
+        print("all_label_views: {}".format(type(all_label_views)))
         # all_index_views.append(index_v)  # Removed index views
 
-    # all_raw_views = np.concatenate(all_raw_views)
-    # all_label_views = np.concatenate(all_label_views)
-    # # all_index_views = np.concatenate(all_index_views)  # Removed index views
-    # print("{} view locations collected. Shuffling views.".format(len(all_label_views)))
-    # np.random.seed(0)
-    # ixs = np.arange(len(all_raw_views))
-    # np.random.shuffle(ixs)
-    # all_raw_views = all_raw_views[ixs]
-    # all_label_views = all_label_views[ixs]
-    # # all_index_views = all_index_views[ixs]  # Removed index views
-    # print("Swapping axes.")
-    # all_raw_views = all_raw_views.swapaxes(2, 1)
-    # all_label_views = all_label_views.swapaxes(2, 1)
-    # # all_index_views = all_index_views.swapaxes(2, 1)  # Removed index views
-    # print("Reshaping arrays.")
-    # all_raw_views = all_raw_views.reshape((-1, 4, ws[1], ws[0]))
-    # all_label_views = all_label_views.reshape((-1, 1, ws[1], ws[0]))
-    # # # all_index_views = all_index_views.reshape((-1, 1, 128, 256))  # Removed index views
-    # # # all_raw_views = np.concatenate([all_raw_views, all_index_views], axis=1)  # Removed index views
-    # raw_train, raw_valid, label_train, label_valid = train_test_split(all_raw_views,
-    #                                                                   all_label_views, train_size=0.9,
-    #                                                                   shuffle=False)
-    # # # raw_valid, raw_test, label_valid, label_test = train_test_split(raw_other, label_other, train_size=0.5, shuffle=False)  # Removed index views
-    # print("Writing h5 files.")
-    # os.makedirs(dest_dir, exist_ok=True)
-    # # chunk output data
-    # for ii in range(5):
-    #     save_to_h5py([raw_train[ii::5]], dest_dir + "/raw_train_{}_{}.h5".format(ii, h5_suffix),
-    #                  ["raw"])
-    #     save_to_h5py([raw_valid[ii::5]], dest_dir + "/raw_valid_{}_{}.h5".format(ii, h5_suffix),
-    #                  ["raw"])
-    #     # save_to_h5py([raw_test], dest_dir + "/raw_test.h5",
-    #     # ["raw"])  # Removed index views
-    #     save_to_h5py([label_train[ii::5]], dest_dir + "/label_train_{}_{}.h5".format(ii, h5_suffix),
-    #                  ["label"])
-    #     save_to_h5py([label_valid[ii::5]], dest_dir + "/label_valid_{}_{}.h5".format(ii, h5_suffix),
-    #                  ["label"])
-    # # save_to_h5py([label_test], dest_dir + "/label_test.h5",
-    # # ["label"])  # Removed index views
+    all_raw_views = np.concatenate(all_raw_views)
+    all_label_views = np.concatenate(all_label_views)
+    # all_index_views = np.concatenate(all_index_views)  # Removed index views
+    print("{} view locations collected. Shuffling views.".format(len(all_label_views)))
+    np.random.seed(0)
+    ixs = np.arange(len(all_raw_views))
+    np.random.shuffle(ixs)
+    all_raw_views = all_raw_views[ixs]
+    all_label_views = all_label_views[ixs]
+    # all_index_views = all_index_views[ixs]  # Removed index views
+    print("Swapping axes.")
+    all_raw_views = all_raw_views.swapaxes(2, 1)
+    all_label_views = all_label_views.swapaxes(2, 1)
+    # all_index_views = all_index_views.swapaxes(2, 1)  # Removed index views
+    print("Reshaping arrays.")
+    all_raw_views = all_raw_views.reshape((-1, 4, ws[1], ws[0]))
+    all_label_views = all_label_views.reshape((-1, 1, ws[1], ws[0]))
+    # # all_index_views = all_index_views.reshape((-1, 1, 128, 256))  # Removed index views
+    # # all_raw_views = np.concatenate([all_raw_views, all_index_views], axis=1)  # Removed index views
+    raw_train, raw_valid, label_train, label_valid = train_test_split(all_raw_views,
+                                                                      all_label_views, train_size=0.9,
+                                                                      shuffle=False)
+    # # raw_valid, raw_test, label_valid, label_test = train_test_split(raw_other, label_other, train_size=0.5, shuffle=False)  # Removed index views
+    print("Writing h5 files.")
+    os.makedirs(dest_dir, exist_ok=True)
+    # chunk output data
+    for ii in range(5):
+        save_to_h5py([raw_train[ii::5]], dest_dir + "/raw_train_{}_{}.h5".format(ii, h5_suffix),
+                     ["raw"])
+        save_to_h5py([raw_valid[ii::5]], dest_dir + "/raw_valid_{}_{}.h5".format(ii, h5_suffix),
+                     ["raw"])
+        # save_to_h5py([raw_test], dest_dir + "/raw_test.h5",
+        # ["raw"])  # Removed index views
+        save_to_h5py([label_train[ii::5]], dest_dir + "/label_train_{}_{}.h5".format(ii, h5_suffix),
+                     ["label"])
+        save_to_h5py([label_valid[ii::5]], dest_dir + "/label_valid_{}_{}.h5".format(ii, h5_suffix),
+                     ["label"])
+    # save_to_h5py([label_test], dest_dir + "/label_test.h5",
+    # ["label"])  # Removed index views
 
 def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
                   n_voting=40, ws=(256, 128), comp_window=8e3, h5_suffix=""):
@@ -356,6 +356,7 @@ def GT_generation(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
                      ["label"])
         save_to_h5py([label_valid[ii::5]], dest_dir + "/label_valid_{}_{}.h5".format(ii, h5_suffix),
                      ["label"])
+        print("dest_dir_{}: {}".format(ii, dest_dir))
     # save_to_h5py([label_test], dest_dir + "/label_test.h5",
     # ["label"])  # Removed index views
 
