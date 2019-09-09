@@ -41,7 +41,8 @@ if __name__=="__main__":
 
     sd_synssv = SegmentationDataset(obj_type='syn_ssv') # class holding all synapse candidates between cells
 
-    for syn_id in sd_synssv.ids[1:2]:  # some arbitrary synapse IDs
+    # 200 ~ 5000 cells
+    for syn_id in sd_synssv.ids[1:10]:  # some arbitrary synapse IDs
         syn_obj = sd_synssv.get_segmentation_object(syn_id)
         syn_obj.load_attr_dict()
         c1, c2 = syn_obj.attr_dict['neuron_partners']
@@ -52,22 +53,22 @@ if __name__=="__main__":
         cell_nodes = merged_cell.skeleton['nodes'] * merged_cell.scaling # coordinates of all nodes
 
         # labels:
-        # 1 for false-merger, 0 for true merger, -1 for ignore
+        # 2 for false-merger, 1 for true merger, 0 for ignore
         node_labels = np.zeros((len(cell_nodes), )) #* -1
 
         syn_coord = syn_obj.rep_coord * merged_cell.scaling
 
-        # find medium cube around artificial merger and set it to 0 (true merger)
+        # find medium cube around artificial merger and set it to 1 (true merger)
         kdtree = cKDTree(cell_nodes)
         # find all skeleton nodes which are close to the synapse
-        ixs = kdtree.query_ball_point(syn_coord, r=20e3) ## 20e3 nanometer  
-        node_labels[ixs] = int(1) # correct: 0
+        ixs = kdtree.query_ball_point(syn_coord, r=30e3) ## nanometer
+        node_labels[ixs] = int(1)
 
-        # find small cube around artificial merger and set it to 1 (false merger)
+        # find small cube around artificial merger and set it to 2 (false merger)
         kdtree = cKDTree(cell_nodes)
         # find all skeleton nodes which are close to the synapse
-        ixs = kdtree.query_ball_point(syn_coord, r=5e3) 
-        node_labels[ixs] = int(2) # correct: 1
+        ixs = kdtree.query_ball_point(syn_coord, r=1.5e3) ## nanometer
+        node_labels[ixs] = int(2)
         # write out annotated skeletons to ['merger_gt']
         merged_cell.skeleton['merger_gt'] = node_labels
 
@@ -87,4 +88,4 @@ if __name__=="__main__":
 
         merged_cell.save_skeleton_to_kzip(fname, additional_keys=['merger_gt'])
         merged_cell.meshes2kzip(fname)
-
+        # TODO: export2kzip should run through
