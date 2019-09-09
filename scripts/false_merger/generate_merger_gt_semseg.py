@@ -63,11 +63,11 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
 
     # @debug
     # sso_id = int(re.findall(r"/(\d+).", kzip_path)[0])
-    sso_id1 = int(re.findall(r"(\d+)", kzip_path)[1])
-    sso_id2 = int(re.findall(r"(\d+)", kzip_path)[2])
+    # sso_id1 = int(re.findall(r"(\d+)", kzip_path)[1])
+    # sso_id2 = int(re.findall(r"(\d+)", kzip_path)[2])
+    merged_sso_id = re.findall(r"(\d+)", kzip_path)[1:]
 
     sso = init_sso_from_kzip(kzip_path, sso_id=1)
-    print("SSO: {}".format(type(sso)))
 
     # if initial_run:  # use default SSD version
     #     # orig_sso = SuperSegmentationObject(sso_id)
@@ -111,16 +111,17 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
     color_array = palette[vertex_labels].astype(np.float32) / 255.
 
     if out_path is not None:
-        if gt_type == 'spgt':  #
+        if gt_type == 'spgt':  # RBG-A value
             colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1], [0.05, 0.6, 0.6, 1], [0.9, 0.9, 0.9, 1]]
         elif gt_type == 'merger_gt':
-            colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1]]
+                     # ignore (green)     , true-merger(grey) , false-merger(red)
+            colors = [[0.5, 0.5, 0.5, 0.4], [0.5, 0.5, 0.5, 0.4], [0.96, 0.14, 0.347, 1]]
         else:# dendrite, axon, soma, bouton, terminal, background
             colors = [[0.6, 0.6, 0.6, 1], [0.9, 0.2, 0.2, 1], [0.1, 0.1, 0.1, 1],
                       [0.05, 0.6, 0.6, 1], [0.6, 0.05, 0.05, 1], [0.9, 0.9, 0.9, 1]]
         colors = (np.array(colors) * 255).astype(np.uint8)
         color_array_mesh = colors[vertex_labels][:, 0]  # TODO: check why only first element, maybe colors introduces an additional axis
-        write_mesh2kzip("{}/sso_{}_gtlabels.k.zip".format(out_path, sso.id),
+        write_mesh2kzip("{}/sso_{}_gtlabels.k.zip".format(out_path, '_'.join(merged_sso_id)),
                         sso.mesh[0], sso.mesh[1], sso.mesh[2], color_array_mesh,
                         ply_fname="gtlabels.ply")
 
@@ -374,7 +375,7 @@ def gt_generation_helper(args):
         os.makedirs(dest_p)
     np.save(dest_p + "raw.npy", raw_views)
     np.save(dest_p + "label.npy", label_views)
-    save_to_h5py([raw_views, label_views.astype(np.uint8)], dest_dir + "/data_{}.h5".format(sso_id),
+    save_to_h5py([raw_views, label_views.astype(np.uint8)], dest_dir + "/data_{}.h5".format('_'.join(sso_id)),
                  ["raw", "label"])
     # np.save(dest_p + "index.npy", index_views)
 
@@ -413,9 +414,12 @@ if __name__ == "__main__":
     if 1:
         comp_window = 10240 * 3
         ws = (256, 128)
+        dest_gt_dir = "/wholebrain/scratch/yliu/false_merger/{}".format(ws[0]) #output directory
+        os.makedirs(dest_gt_dir, exist_ok=True)
+
         n_views = 3
-        # label_file_folder = "/wholebrain/u/yliu/develop/SyConn/scripts/false_merger"
-        label_file_folder = "/home/kloping/mpi_develop/develop/SyConn/scripts/false_merger" # local test
+        label_file_folder = "/wholebrain/u/yliu/develop/SyConn/scripts/false_merger"
+        # label_file_folder = "/home/kloping/mpi_develop/develop/SyConn/scripts/false_merger" # local test
         file_names = ["/syn169316_cells17456256_17435397.k.zip"]
                       # "/syn669316_cells31272448_26034194.k.zip"]
         file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
@@ -427,7 +431,7 @@ if __name__ == "__main__":
     if 0:
         comp_window = 10240 * 3  # 40 nm pixel size
         ws = (256, 128)
-        dest_gt_dir = "/wholebrain/scratch/yliu/script/false_merger/{}".format(ws[0]) #output directory
+        dest_gt_dir = "/wholebrain/scratch/yliu/false_merger/{}".format(ws[0]) #output directory
         os.makedirs(dest_gt_dir, exist_ok=True)
         global_params.wd = "/wholebrain/scratch/areaxfs3/"
         assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
