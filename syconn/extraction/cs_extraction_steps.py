@@ -268,48 +268,30 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
     cum_dt_data = 0
     cum_dt_proc = 0
     cum_dt_proc2 = 0
+    cs_filtersize = np.array(global_params.config['cell_objects']['cs_filtersize'])
     for chunk in chunks:
-        overlap = np.array([6, 6, 3], dtype=np.int)
-        offset = np.array(chunk.coordinates - overlap)
-        size = 2 * overlap + np.array(chunk.size)
+        # additional overlap, e.g. to prevent boundary artifacts by dilation/closing
+        # TODO: if this is set to 0, `detect_cs` still returns a black boundary region
+        #  although it already incorporates an additional offset (-> stencil_offset)
+        overlap = max(cs_filtersize) // 2
+        offset = np.array(chunk.coordinates - overlap)  # also used for loading synapse data
+        size = 2 * overlap + np.array(chunk.size)  # also used for loading synapse data
         start = time.time()
+
+        stencil_offset = (cs_filtersize - 1) // 2
+
         data = kd.from_overlaycubes_to_matrix(
-            size, offset, datatype=np.uint64).astype(np.uint32)
+            size + 2 * stencil_offset, offset - stencil_offset,
+            datatype=np.uint64).astype(np.uint32)
         cum_dt_data += time.time() - start
         start = time.time()
-        # contacts has size according to chunk.size!
+        # contacts has size as given with `size`, because it performs valid conv.
+        # -> contacts result is cropped by stencil_offset on each side
         contacts = np.asarray(detect_cs(data))
         cum_dt_proc += time.time() - start
 
-        # returns rep. coords, bounding box and size for every ID in contacts
-        # used to get location of every contact site to perform closing operation
-        start = time.time()
-        _, bb_dc, _ = rep_helper.find_object_properties(contacts)
-
-        # close gaps
-        n_closings = global_params.config['cell_objects']['cs_nclosings']
-        for ix in bb_dc.keys():
-            obj_start, obj_end = np.array(bb_dc[ix])
-            obj_start -= n_closings
-            obj_start[obj_start < 0] = 0
-            obj_end += n_closings
-            # create slice obj
-            new_obj_slices = tuple(slice(obj_start[ii], obj_end[ii], None) for
-                                   ii in range(3))
-            sub_vol = contacts[new_obj_slices]
-            binary_mask = (sub_vol == ix).astype(np.int)
-            res = scipy.ndimage.binary_closing(
-                binary_mask, iterations=n_closings)
-            # only update background or the objects itself
-            proc_mask = (binary_mask == 1) | (sub_vol == 0)
-            contacts[new_obj_slices][proc_mask] = res[proc_mask] * ix
-        cum_dt_proc2 += time.time() - start
-
         # store syn information as: synaptic voxel (1), symmetric type (2)
         # and asymmetric type (3)
-        # TODO: adapt in case data format of input changes!
-        offset = np.array(chunk.coordinates).astype(np.int)
-        size = np.array(chunk.size)
         start = time.time()
         # TODO: use prob maps in kd.kd_sj_path (proba maps -> get rid of SJ extraction)
         # syn_d = (kd_syn.from_raw_cubes_to_matrix(size, offset) > 255 * global_params.config[
@@ -327,23 +309,56 @@ def _contact_site_extraction_thread(args: Union[tuple, list]) \
             sym_d = np.zeros_like(syn_d)
             asym_d = np.zeros_like(syn_d)
         cum_dt_data += time.time() - start
+
+        # TODO: refactor such that CS are not dilated / closed? This would require an independent
+        #  property analysis.
+        # close gaps of contact sites prior to overlapping synaptic junction map with contact sites
+        start = time.time()
+        # returns rep. coords, bounding box and size for every ID in contacts
+        # used to get location of every contact site to perform closing operation
+        _, bb_dc, _ = rep_helper.find_object_properties(contacts)
+        n_closings = min(cs_filtersize)
+        for ix in bb_dc.keys():
+            obj_start, obj_end = np.array(bb_dc[ix])
+            obj_start -= n_closings
+            obj_start[obj_start < 0] = 0
+            obj_end += n_closings
+            # create slice obj
+            new_obj_slices = tuple(slice(obj_start[ii], obj_end[ii], None) for
+                                   ii in range(3))
+            sub_vol = contacts[new_obj_slices]
+            binary_mask = (sub_vol == ix).astype(np.int)
+            res = scipy.ndimage.binary_closing(
+                binary_mask, iterations=n_closings)
+            # TODO: add to parameters
+            res = scipy.ndimage.binary_dilation(
+                res, iterations=2)
+            # only update background or the objects itself
+            proc_mask = (binary_mask == 1) | (sub_vol == 0)
+            contacts[new_obj_slices][proc_mask] = res[proc_mask] * ix
+        cum_dt_proc2 += time.time() - start
+
         start = time.time()
         # this counts SJ foreground voxels overlapping with the CS objects
-        # and the asym and sym voxels
-        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt = extract_cs_syntype(contacts, syn_d, asym_d,
-                                                                      sym_d)
+        # and the asym and sym voxels, do not use overlap here!
+        curr_cs_p, curr_syn_p, asym_cnt, sym_cnt = extract_cs_syntype(
+            contacts[overlap:-overlap, overlap:-overlap, overlap:-overlap],
+            syn_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
+            asym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap],
+            sym_d[overlap:-overlap, overlap:-overlap, overlap:-overlap])
         cum_dt_proc += time.time() - start
         os.makedirs(chunk.folder, exist_ok=True)
-        compression.save_to_h5py([contacts],
-                                 chunk.folder +
-                                 "cs.h5", ['cs'])
-        contacts[syn_d == 0] = 0  # syn segmentation only contain the overlap voxels between SJ
-        # and CS
-        compression.save_to_h5py([contacts],
-                                 chunk.folder +
-                                 "syn.h5", ['syn'])
-        merge_prop_dicts([cs_props, curr_cs_p], offset=offset)
-        merge_prop_dicts([syn_props, curr_syn_p], offset=offset)
+        compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
+                                  overlap:-overlap]], chunk.folder + "cs.h5",
+                                 ['cs'], overwrite=True)
+        # syn segmentation only contain the overlap voxels between SJ and CS
+        contacts[syn_d == 0] = 0
+        compression.save_to_h5py([contacts[overlap:-overlap, overlap:-overlap,
+                                  overlap:-overlap]], chunk.folder + "syn.h5",
+                                 ['syn'], overwrite=True)
+        # overlap was removed for the analysis of the object properties
+        merge_prop_dicts([cs_props, curr_cs_p], offset=offset + overlap)
+        merge_prop_dicts([syn_props, curr_syn_p], offset=offset + overlap)
         merge_type_dicts([tot_asym_cnt, asym_cnt])
         merge_type_dicts([tot_sym_cnt, sym_cnt])
         del curr_cs_p, curr_syn_p, asym_cnt, sym_cnt
@@ -825,7 +840,6 @@ def detect_cs(arr):
     edges = scipy.ndimage.convolve(arr.astype(np.int), jac) < 0
     edges = edges.astype(np.uint32)
     arr = arr.astype(np.uint32)
-    # TODO: add filter size to global_params
     cs_seg = process_block_nonzero(edges, arr, global_params.config['cell_objects'][
         'cs_filtersize'])
     return cs_seg

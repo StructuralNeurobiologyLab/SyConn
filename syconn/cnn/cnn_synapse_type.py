@@ -19,7 +19,7 @@ from torch import optim
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name',
-                    default='syntype_unet_sameConv_noBN_fancydice_gt3_bs4_inmem_run2',
+                    default='syntype_unet_sameConv_BN_fancydice_gt4_bs4_inmem_noctgt',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=500,
@@ -87,7 +87,7 @@ model = UNet(
     start_filts=28,
     planar_blocks=(0,),
     activation='relu',
-    batch_norm=False,
+    batch_norm=True,
     # conv_mode='valid',
     #up_mode='resizeconv_nearest',  # Enable to avoid checkerboard artifacts
     adaptive=False  # Experimental. Disable if results look weird.
@@ -115,15 +115,15 @@ save_root = os.path.expanduser('~/e3_training/')
 os.makedirs(save_root, exist_ok=True)
 data_root = os.path.expanduser('/ssdscratch/pschuber/songbird/j0126/GT/synapsetype_gt/')
 
-gt_dir = data_root + '/Segmentierung_von_Synapsentypen_v3/'
+gt_dir = data_root + '/Segmentierung_von_Synapsentypen_v4/'
 fnames = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
 gt_dir = data_root + '/synssv_reconnects_nosomamerger/'
-fnames_files = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
-random_ixs = np.arange(len(fnames_files))
-np.random.seed(0)
-np.random.shuffle(fnames_files)
-fnames_files = np.array(fnames_files)[random_ixs].tolist()
-fnames += fnames_files[:900]
+# fnames_files = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
+# random_ixs = np.arange(len(fnames_files))
+# np.random.seed(0)
+# np.random.shuffle(fnames_files)
+# fnames_files = np.array(fnames_files)[random_ixs].tolist()
+# fnames += fnames_files[:900]
 
 input_h5data = [(f, 'raw') for f in fnames + fnames[-1:]]
 target_h5data = [(f, 'label') for f in fnames + fnames[-1:]]

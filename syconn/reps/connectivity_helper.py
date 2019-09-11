@@ -9,45 +9,20 @@ import time
 import numpy as np
 import networkx as nx
 import pandas as pd
+import matplotlib
+matplotlib.use("Agg", warn=False, force=True)
+import matplotlib.colors as mcolors
+import matplotlib.pyplot as plt
+from matplotlib import gridspec
+import itertools
+from collections import defaultdict
+from scipy import ndimage
 
 from ..reps import super_segmentation as ss
 from ..reps import segmentation
 from . import log_reps
 from .. import global_params
-
-
-def extract_connectivity_thread(args):
-    """
-    Used within :class:`~syconn.reps.connectivity.ConnectivityMatrix`.
-
-    Args:
-        args:
-
-    Returns:
-
-    """
-    sj_obj_ids = args[0]
-    sj_version = args[1]
-    ssd_version = args[2]
-    working_dir = args[3]
-
-    ssd = ss.SuperSegmentationDataset(working_dir,
-                                      version=ssd_version)
-
-    sd = segmentation.SegmentationDataset("sj", version=sj_version,
-                                          working_dir=working_dir)
-
-    cons = []
-    for sj_obj_id in sj_obj_ids:
-        sj = sd.get_segmentation_object(sj_obj_id)
-        con = extract_connectivity_information(sj, ssd)
-        if con is not None:
-            if len(cons) == 0:
-                cons = con
-            else:
-                cons = np.concatenate((cons, con))
-
-    return cons
+from ..handler.multiviews import int2str_converter
 
 
 def sv_id_to_partner_ids_vec(cs_ids):
@@ -56,57 +31,6 @@ def sv_id_to_partner_ids_vec(cs_ids):
                              (cs_ids - np.left_shift(sv_ids, 32))[:, None]),
                             axis=1)
     return sv_ids
-
-
-def extract_connectivity_information(sj, ssd):
-    sj.load_attr_dict()
-
-    if not "connectivity" in sj.attr_dict:
-        return
-
-    ss_con_ids = ssd.id_changer[np.array(list(sj.attr_dict["connectivity"].keys()),
-                                         dtype=np.int)]
-    if len(ss_con_ids) == 0:
-        return
-
-    con_cnts = np.array(sj.attr_dict["connectivity"].values(), dtype=np.int)
-
-    # Removing intracellular sjs
-    ss_con_cnts = con_cnts[ss_con_ids[:, 0] != ss_con_ids[:, 1]]
-    if len(ss_con_cnts) == 0:
-        return
-
-    ss_con_ids = ss_con_ids[ss_con_ids[:, 0] != ss_con_ids[:, 1]]
-
-    # Adding the counts up
-    cs_ids = np.left_shift(np.max(ss_con_ids, axis=1), 32) + \
-             np.min(ss_con_ids, axis=1)
-    unique_cs_ids, idx = np.unique(cs_ids, return_inverse=True)
-    cs_con_cnts = np.bincount(idx, ss_con_cnts)
-    cs_con_cnts = cs_con_cnts / np.sum(cs_con_cnts)
-
-    # Going back to ssd domain
-    sso_ids = np.right_shift(unique_cs_ids, 32)
-    sso_ids = np.concatenate((sso_ids[:, None],
-                              (unique_cs_ids -
-                               np.left_shift(sso_ids, 32))[:, None]), axis=1)
-
-    # Threshold overlap
-    sso_ids = sso_ids[cs_con_cnts > .3]
-
-    if len(sso_ids) == 0:
-        return
-
-    cs_con_cnts = cs_con_cnts[cs_con_cnts > .3]
-    cs_con_cnts /= np.sum(cs_con_cnts)
-
-    sizes = sj.size * cs_con_cnts * np.product(sj.scaling) / 1e9
-
-    sj_ids = np.array([sj.id] * len(sizes))
-    sj_types = np.array([sj.attr_dict["type_ratio"]] * len(sizes))
-    sj_coords = np.array([sj.rep_coord] * len(sizes))
-
-    return np.concatenate([sso_ids, sj_ids[:, None], sizes[:, None], sj_types[:, None], sj_coords], axis=1)
 
 
 def connectivity_to_nx_graph(cd_dict):
@@ -172,11 +96,12 @@ def load_cached_data_dict(wd=None, syn_version=None, thresh_syn_prob=None,
     cd_dict['ids'] = csd.load_cached_data('id')
     # in um2, overlap of cs and sj
     cd_dict['syn_size'] =\
-        csd.load_cached_data('mesh_area') / 2  # as used in syn_analysis.py -> export_matrix
+        csd.load_cached_data('mesh_area') / 2  # as used in export_matrix
     cd_dict['synaptivity_proba'] = \
         csd.load_cached_data('syn_prob')
+    # -1 for inhibitory, +1 for excitatory
     cd_dict['syn_sign'] = \
-        csd.load_cached_data('syn_sign').astype(np.int)  # -1 for inhibitory, +1 for excitatory
+        csd.load_cached_data('syn_sign').astype(np.int)
     cd_dict['coord_x'] = \
         csd.load_cached_data('rep_coord')[:, 0].astype(np.int)
     cd_dict['coord_y'] = \
@@ -223,70 +148,249 @@ def load_cached_data_dict(wd=None, syn_version=None, thresh_syn_prob=None,
                    '(changes only if "axodend_only=True").'
                    ''.format(len(idx_filter), n_syns, thresh_syn_prob,
                              n_syns, n_syns_after_axdend))
-
     return cd_dict
 
 
-def connectivity_exporter(human_cell_type_labels=True,
-                          cell_type_map={0: 'EA', 1: 'MSN', 2: 'GP', 3: 'INT'},
-                          human_pre_post_labels=True,
-                          pre_post_map={1: 'pre', 0: 'post'},
-                          only_axo_dendritric=True,
-                          out_path = None, no_ids=True, only_synapses=True):
+def generate_wiring_diagram(**load_cached_data_dict_kwargs):
     """
-    Exports connectivity information to a csv file.
+    Assumes label 1 in 'partner_axoness' represents axon compartments. Does not
+    support ``axodend_only=False``!
 
-    -------
+    Args:
+        **load_cached_data_dict_kwargs: See :func:`~load_cached_data_dict`
+
+    Returns:
+        A 2D wiring diagram as returned in the working directory.
 
     """
-    if out_path is None:
-        out_path = global_params + '/connectivity_matrix/j0126_matrix_v1.csv'
-    # parse contact site segmentation dataset
-    df_dict = load_cached_data_dict()
+    if 'axodend_only=True' in load_cached_data_dict_kwargs:
+        raise ValueError("'axodend_only=False' is not supported!")
+    cd_dict = load_cached_data_dict(**load_cached_data_dict_kwargs)
+    # analyze scope of underlying data
+    all_ssv_ids = set(cd_dict['ssv_partner_0'].tolist()).union(set(cd_dict['ssv_partner_1']))
+    n_cells = len(all_ssv_ids)
+    wiring = np.zeros((n_cells, n_cells))
+    celltypes = np.unique([cd_dict['neuron_partner_ct_0'], cd_dict['neuron_partner_ct_1']])
+    ssvs_flattened = []
+    boarders = []
+    # create list of cells used for celltype-sorted x and y axis
+    for ct in celltypes:
+        l0 = cd_dict['ssv_partner_0'][cd_dict['neuron_partner_ct_0'] == ct]
+        l1 = cd_dict['ssv_partner_1'][cd_dict['neuron_partner_ct_1'] == ct]
+        curr_ct_ssvs = np.unique(np.concatenate([l0, l1])).tolist()
+        ssvs_flattened += curr_ct_ssvs
+        boarders.append(len(curr_ct_ssvs))
+    boarders = np.cumsum(boarders)
+    assert boarders[-1] == len(wiring)
+    # sum per-cell-pair synaptic connections multiplied by synaptic sign (-1 or 1)
+    cum_syn_dc = defaultdict(list)
+    # synapse size: in um2, mesh area of the overlap between cs and sj divided by 2
+    for ii, syn_size in enumerate(cd_dict['syn_size']):
+        cell_pair = (cd_dict['ssv_partner_0'][ii], cd_dict['ssv_partner_1'][ii])
+        if cd_dict['neuron_partner_ax_1'][ii] == 1:
+            cell_pair = cell_pair[::-1]
+        elif cd_dict['neuron_partner_ax_0'][ii] == 1:
+            pass
+        else:
+            raise ValueError('No axon prediction found within synapse.')
+        cum_syn_dc[cell_pair].append(syn_size * cd_dict['syn_sign'][ii])
+    cum_syn_dc = dict(cum_syn_dc)
+    rev_map = {ssvs_flattened[ii]: ii for ii in range(n_cells)}
+    for pre_id, post_id in cum_syn_dc:
+        pre_ix = rev_map[pre_id]
+        post_ix = rev_map[post_id]
+        syns = cum_syn_dc[(pre_id, post_id)]
+        syns_pos = np.sum([syn for syn in syns if syn > 0])
+        syns_neg = np.abs(np.sum([syn for syn in syns if syn < 0]))
+        sign = -1 if syns_neg > syns_pos else 1
+        wiring[post_ix, pre_ix] = sign * (syns_pos + syns_neg)
+    ct_boarders = [(int2str_converter(celltypes[ii], gt_type='ctgt_v2'), boarders[ii]) for ii in
+                   range(len(
+        celltypes))]
+    log_reps.info(f'Found the following cell types (label, starting index in '
+                  f'wiring diagram: {ct_boarders}')
+    return wiring, boarders[:-1]
 
-    if only_synapses == False:
-        start = time.time()
-        df = pd.DataFrame(df_dict)
-        df.to_csv(out_path, index=False)
-        log_reps.debug('Export to csv took: {0}'.format(time.time() - start))
+
+def plot_wiring(path, wiring, den_borders, ax_borders, entry_width=7,
+                cum=False, cum_size=0):
+    """Plot type sorted connectivity matrix and save to figures folder in
+    working directory
+    # TODO: `entry_width` should be auto-adapted by wiring.shape
+    Parameters
+    ----------
+    path: Path to directory.
+    wiring : np.array
+        quadratic 2D array of size #cells x #cells, x-axis: dendrite partners,
+         y: axon partners.
+    den_borders:
+    cell type boarders on post synaptic site
+    ax_borders:
+        cell type boarders on pre synaptic site
+    """
+    if cum:
+        entry_width = 1
+    intensity_plot = np.array(wiring)
+    intensity_plot_neg = intensity_plot < 0
+    intensity_plot_pos = intensity_plot > 0
+
+    borders = [0] + list(ax_borders) + [intensity_plot.shape[1]]
+    for i_border in range(1, len(borders)):
+        start = borders[i_border - 1]
+        end = borders[i_border]
+        sign = np.sum(intensity_plot_pos[:, start: end]) - \
+               np.sum(intensity_plot_neg[:, start: end]) > 0
+        # adapt either negative or positive elements according to the majority vote
+        if sign:
+            intensity_plot[:, start: end][intensity_plot[:, start: end] < 0] *= -1
+        else:
+            intensity_plot[:, start: end][intensity_plot[:, start: end] > 0] *= -1
+
+    intensity_plot_neg = intensity_plot[intensity_plot < 0]
+    intensity_plot_pos = intensity_plot[intensity_plot > 0]
+
+    int_cut_pos = np.mean(intensity_plot_pos) + np.std(intensity_plot_pos)
+    int_cut_neg = np.abs(np.mean(intensity_plot_neg)) + np.std(intensity_plot_neg)
+
+    log_reps.info(f'1-sigma cut-off for excitatory cells: {int_cut_pos}')
+    log_reps.info(f'1-sigma cut-off for inhibitory cells: {int_cut_neg}')
+    log_reps.debug(f'Initial wiring diagram shape: {intensity_plot.shape}')
+
+    if not cum:
+        # TODO: refactor, this becomes slow for shapes > (10k, 10k)
+        for k, b in enumerate(den_borders):
+            b += k * entry_width
+            intensity_plot = np.concatenate(
+                (intensity_plot[:b, :], np.zeros((entry_width, intensity_plot.shape[1])),
+                 intensity_plot[b:, :]), axis=0)
+
+        for k, b in enumerate(ax_borders):
+            b += k * entry_width
+            intensity_plot = np.concatenate(
+                (intensity_plot[:, :b], np.zeros((intensity_plot.shape[0], entry_width)),
+                 intensity_plot[:, b:]), axis=1)
+
+        log_reps.debug(f'Wiring diagram shape after adding hline columns and '
+                       f'rows: {intensity_plot.shape}')
     else:
+        log_reps.debug(f'Wiring diagram shape after adding hline columns and '
+                       f'rows: {intensity_plot.shape}')
+    # balance positive and negative values so that 0 remains white
+    # TODO: the above should happen, but something else is done, re-work
+    bin_intensity_plot = intensity_plot != 0
+    bin_intensity_plot = bin_intensity_plot.astype(np.float)
+    intensity_plot = ndimage.convolve(intensity_plot, np.ones((entry_width, entry_width)))
+    bin_intensity_plot = ndimage.convolve(bin_intensity_plot, np.ones((entry_width, entry_width)))
+    intensity_plot /= bin_intensity_plot
 
-        idx_filter = df_dict['synaptivity_proba'] > 0.5
-        #  & (df_dict['syn_size'] < 5.)
+    matplotlib.rcParams.update({'font.size': 14})
+    fig = plt.figure()
+    # Create scatter plot, why?
+    gs = gridspec.GridSpec(1, 2, width_ratios=[20, 1])
+    gs.update(wspace=0.05, hspace=0.08)
+    ax = plt.subplot(gs[0, 0], frameon=False)
 
-        for k, v in df_dict.items():
-            df_dict[k] = v[idx_filter]
+    cax = ax.matshow(intensity_plot.transpose(1, 0),
+                     cmap=diverge_map(),
+                     extent=[0, intensity_plot.shape[0], intensity_plot.shape[1], 0],
+                     interpolation="none", vmin=-int_cut_neg,
+                     vmax=int_cut_pos)
+    ax.set_xlabel('Post', fontsize=18)
+    ax.set_ylabel('Pre', fontsize=18)
+    ax.set_xlim(0, intensity_plot.shape[0])
+    ax.set_ylim(0, intensity_plot.shape[1])
+    plt.grid(False)
+    plt.axis('off')
 
-        log_reps.debug('{0} synapses of'
-              '{1} contact sites'.format(sum(idx_filter),
-                                         len(idx_filter)))
-        if no_ids:
-            del df_dict['ids']
+    if cum:
+        for k, b in enumerate(den_borders):
+            plt.axvline(b, color='k', lw=0.5, snap=False,
+                        antialiased=True)
+        for k, b in enumerate(ax_borders):
+            plt.axhline(b, color='k', lw=0.5, snap=False,
+                        antialiased=True)
+    else:
+        for k, b in enumerate(den_borders):
+            b += k * entry_width
+            plt.axvline(b + 0.5, color='k', lw=0.5, snap=False,
+                        antialiased=True)
+        for k, b in enumerate(ax_borders):
+            b += k * entry_width
+            plt.axhline(b + 0.5, color='k', lw=0.5, snap=False,
+                        antialiased=True)
 
-        if human_cell_type_labels:
-            df_dict['neuron_partner_ct_0'] = np.array([cell_type_map[int(el)] for el in
-                                              df_dict['neuron_partner_ct_0']])
-            df_dict['neuron_partner_ct_1'] = np.array([cell_type_map[int(el)] for el in
-                                              df_dict['neuron_partner_ct_1']])
+    cbar_ax = plt.subplot(gs[0, 1])
+    cbar_ax.yaxis.set_ticks_position('none')
+    cb = fig.colorbar(cax, cax=cbar_ax, ticks=[])
+    plt.close()
 
-        if only_axo_dendritric:
-            idx_filter = (df_dict['neuron_partner_ax_0']
-                         + df_dict['neuron_partner_ax_1']) == 1
+    if cum:
+        fig.savefig(path + "/matrix_cum_%d_%d_%d.png" % (
+            cum_size, int(int_cut_neg*100000), int(int_cut_pos*100000)), dpi=600)
+    else:
+        fig.savefig(path + "/matrix_%d_%d_%d.png" % (
+            intensity_plot.shape[0], int(int_cut_neg*100000), int(int_cut_pos*100000)), dpi=600)
 
-            for k, v in df_dict.items():
-                df_dict[k] = v[idx_filter]
 
-            log_reps.debug('{0} axo-dendritic synapses'.format(sum(idx_filter)))
+def plot_cum_wiring(path, intensity_plot, boarders):
+    """
+    Sum of synaptic area between pair-wise cell types.
 
-        if human_pre_post_labels:
-            df_dict['neuron_partner_ax_0'] = np.array([pre_post_map[int(el)] for el in
-                                              df_dict['neuron_partner_ax_0']])
-            df_dict['neuron_partner_ax_1'] = np.array([pre_post_map[int(el)] for el in
-                                              df_dict['neuron_partner_ax_1']])
+    Args:
+        path:
+        intensity_plot:
+        boarders:
 
-        start = time.time()
-        df = pd.DataFrame(df_dict)
-        df.to_csv(out_path, index=False)
-        log_reps.debug('Export to csv took: {0}'.format(time.time() - start))
-    return
+    Returns:
 
+    """
+    cum_matrix = np.zeros([len(boarders) + 1, len(boarders) + 1])
+
+    borders = [0] + list(boarders) + [intensity_plot.shape[1]]
+
+    for i_ax_border in range(1, len(borders)):
+        for i_de_border in range(1, len(borders)):
+            ax_start = borders[i_ax_border - 1]
+            ax_end = borders[i_ax_border]
+            de_start = borders[i_de_border - 1]
+            de_end = borders[i_de_border]
+            cum = intensity_plot[de_start: de_end, ax_start: ax_end].flatten()
+            pos = np.sum([el for el in cum if el > 0])
+            neg = np.abs(np.sum([el for el in cum if el < 0]))
+            sign = -1 if neg > pos else 1
+            # TODO: why was this a density?
+            cum = sign * (pos + neg) #/ (ax_end - ax_start) / (de_end - de_start)
+            cum_matrix[i_de_border-1, i_ax_border-1] = cum
+
+    log_reps.debug(range(1, len(boarders)+1))
+    plot_wiring(path, cum_matrix, range(1, len(boarders)+1), range(1, len(boarders)+1),
+                cum=True, cum_size=intensity_plot.shape[0])
+
+
+def make_colormap(seq):
+    """Return a LinearSegmentedColormap
+    seq: a sequence of floats and RGB-tuples. The floats should be increasing
+    and in the interval (0,1).
+    """
+    seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
+    cdict = {'red': [], 'green': [], 'blue': []}
+    for i, item in enumerate(seq):
+        if isinstance(item, float):
+            r1, g1, b1 = seq[i - 1]
+            r2, g2, b2 = seq[i + 1]
+            cdict['red'].append([item, r1, r2])
+            cdict['green'].append([item, g1, g2])
+            cdict['blue'].append([item, b1, b2])
+    return mcolors.LinearSegmentedColormap('CustomMap', cdict)
+
+
+def diverge_map(high=(239/255., 65/255., 50/255.),
+                low=(39/255., 184/255., 148/255.)):
+    """Low and high are colors that will be used for the two
+    ends of the spectrum. they can be either color strings
+    or rgb color tuples
+    """
+    c = mcolors.ColorConverter().to_rgb
+    if isinstance(low, str): low = c(low)
+    if isinstance(high, str): high = c(high)
+    return make_colormap([low, c('white'), 0.5, c('white'), high])

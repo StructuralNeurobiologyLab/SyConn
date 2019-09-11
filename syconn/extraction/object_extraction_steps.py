@@ -540,7 +540,7 @@ def _make_stitch_list_thread(args):
                     basics.load_from_h5py(compare_chunk.folder + filename +
                                           "_unique_components%s.h5"
                                           % suffix, hdf5names)
-                # erode segmentaiton once to avoid start location dependent segmentation artefacts
+                # erode segmentation once to avoid start location dependent segmentation artifacts
                 for kk in range(len(cc_data_list_to_compare)):
                     cc_data_list_to_compare[kk] = multi_mop(scipy.ndimage.binary_erosion, cc_data_list_to_compare[kk],
                                                             n_iters=n_erosion, use_find_objects=True,

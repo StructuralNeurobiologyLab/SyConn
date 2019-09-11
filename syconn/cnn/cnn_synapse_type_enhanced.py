@@ -21,18 +21,29 @@ class HybridDiceLoss(torch.nn.Module):
         self.dice_syntype = DiceLossFancy(
             apply_softmax=True, weights=torch.tensor([0.33, 0.33, 0.33, 0]).to(device),
             ignore_index=3)
-        weights = torch.tensor([1.] * 10 + [0., ]).to(device)
-        self.dice_celltype = DiceLossFancy(
-            apply_softmax=True, weights=weights, ignore_index=10)
-        self.dice_celltype2 = DiceLossFancy(
-            apply_softmax=True, weights=weights, ignore_index=10)
-        self.mse = torch.nn.MSELoss()  # use `reduce` kwarg?
+        weights = torch.tensor([1.] * 10 + [0., ]).to(device) / 10.
+        # self.dice_celltype = DiceLossFancy(
+        #     apply_softmax=True, weights=weights, ignore_index=10)
+        # self.dice_celltype2 = DiceLossFancy(
+        #     apply_softmax=True, weights=weights, ignore_index=10)
+        self.mse = torch.nn.MSELoss(reduction='mean')
+        self.counter = 0  # half time after 5000 steps: 0.000138629
 
-    def forward(self, output, target, downscale_fact=0.1):
+    def forward(self, output, target, downscale_fact=1):
+        """
+
+        Args:
+            output: output shape: B, OUT_C, Z, Y, X with OUT_C: vec. field 0-2,
+                syntype 3-6, celltype 7-17 and 18-28.
+            target: target shape: B, C, Z, Y, X with C: vector field 0-2,
+                syntype label 3, cell type labels 4-5.
+            downscale_fact: Used to prevent NaN losses.
+
+        Returns:
+
+        """
         # target shape: B, C, Z, Y, X
-        # output shape: B, OUT_C, Z, Y, X
-        # C: vector field 0-2, syntype label 3, celltype labels 4-5
-        # OUT_C: vec. field 0-2, syntype 3-6, celltype 7-17 and 18-28
+
         vec_field_d = output[:, :3]
         vec_field_t = target[:, :3]
         # scale target vectors
@@ -40,28 +51,30 @@ class HybridDiceLoss(torch.nn.Module):
         syntype_d = output[:, 3:7]
         syntype_l = target[:, 3]
         loss_syntype = self.dice_syntype(syntype_d, syntype_l)
-        celltype_d = output[:, 7:18]
-        celltype_l = target[:, 4]
-        loss_celltype = self.dice_celltype(celltype_d, celltype_l)
-        celltype_d2 = output[:, 18:]
-        celltype_l2 = target[:, 5]
-        loss_celltype2 = self.dice_celltype2(celltype_d2, celltype_l2)
+        # celltype_d = output[:, 7:18]
+        # celltype_l = target[:, 4]
+        # loss_celltype = self.dice_celltype(celltype_d, celltype_l)
+        # celltype_d2 = output[:, 18:]
+        # celltype_l2 = target[:, 5]
+        # loss_celltype2 = self.dice_celltype2(celltype_d2, celltype_l2)
         if torch.isnan(loss_vec):
             raise ValueError('Vectorial loss is NaN.')
         if torch.isnan(loss_syntype):
             raise ValueError('Synapsetype loss is NaN.')
-        if torch.isnan(loss_celltype):
-            raise ValueError('Celltype loss is NaN.')
-        if torch.isnan(loss_celltype2):
-            raise ValueError('Celltype 2 loss is NaN.')
-        return loss_vec + loss_syntype + loss_celltype + loss_celltype2
+        # if torch.isnan(loss_celltype):
+        #     raise ValueError('Celltype loss is NaN.')
+        # if torch.isnan(loss_celltype2):
+        #     raise ValueError('Celltype 2 loss is NaN.')
+        ct_ramp_fact = max(0, 1 - np.e**(-0.000017329*self.counter))  # half time every 40k steps
+        self.counter += 1
+        return loss_vec + loss_syntype #+ ct_ramp_fact * (loss_celltype + loss_celltype2)
 
 
 # TODO: Make torch and numpy RNG seed configurable
 parser = argparse.ArgumentParser(description='Train a network.')
 parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
 parser.add_argument('-n', '--exp-name',
-                    default='syntype_unet_sameConv_BN_fancydice_gt3_enhanced_bs4_inmem_10xmsefact',
+                    default='syntype_unet_sameConv_noBN_fancydice_gtALL_enhanced_bs4_noct_adam',
                     help='Manually set experiment name')
 parser.add_argument(
     '-s', '--epoch-size', type=int, default=500,
@@ -111,12 +124,12 @@ torch.backends.cudnn.benchmark = True  # Improves overall performance in *most* 
 
 model = UNet(
     in_channels=1,
-    out_channels=29,  # vec. field 0-2, syntype 3-6, celltype 7-17 and 18-28
+    out_channels=7,  # vec. field 0-2, syntype 3-6, celltype 7-17 and 18-28
     n_blocks=4,
     start_filts=28,
     planar_blocks=(0,),
     activation='relu',
-    batch_norm=True,
+    batch_norm=False,
     adaptive=False  # Experimental. Disable if results look weird.
 ).to(device)
 
@@ -141,17 +154,17 @@ save_root = os.path.expanduser('~/e3_training/')
 os.makedirs(save_root, exist_ok=True)
 data_root = os.path.expanduser('/ssdscratch/pschuber/songbird/j0126/GT/synapsetype_gt/')
 
-gt_dir = data_root + '/synssv_reconnects_nosomamerger_enhanced/'
+gt_dir = data_root + '/synssv_reconnects_nosomamerger_enhanced_ALL/'
 fnames_files = sorted([gt_dir + f for f in os.listdir(gt_dir) if f.endswith('.h5')])
 random_ixs = np.arange(len(fnames_files))
 np.random.seed(0)
 np.random.shuffle(fnames_files)
 fnames_files = np.array(fnames_files)[random_ixs].tolist()
-fnames = fnames_files[:950]
+fnames = fnames_files[:850]
 
-input_h5data = [(f, 'raw') for f in fnames + fnames[-5:]]
-target_h5data = [(f, 'label') for f in fnames + fnames[-5:]]
-valid_indices = np.arange(len(target_h5data) - 5, len(target_h5data))
+input_h5data = [(f, 'raw') for f in fnames + fnames[-20:]]
+target_h5data = [(f, 'label') for f in fnames + fnames[-20:]]
+valid_indices = np.arange(len(target_h5data) - 20, len(target_h5data))
 
 max_steps = args.max_steps
 max_runtime = args.max_runtime
@@ -222,11 +235,19 @@ preview_batch = get_preview_batch(
     preview_shape=(48, 144, 144),
 )
 
-optimizer = Padam(
+# optimizer = Padam(
+#     model.parameters(),
+#     lr=2e-3,
+#     weight_decay=0.5e-4,
+#     partial=1/4,
+# )
+
+# Set up optimization
+optimizer = optim.Adam(
     model.parameters(),
-    lr=2e-3,
     weight_decay=0.5e-4,
-    partial=1/4,
+    lr=2e-3,
+    amsgrad=True
 )
 
 lr_stepsize = 200

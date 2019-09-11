@@ -235,7 +235,8 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
         ws = (256, 128)
     if verbose:
         log_proc.debug('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'
-                       ' platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
+                       ' platform "{}".'.format(
+            len(coords), sso.id, global_params.config['pyopengl_platform']))
     if nb_views is None:
         nb_views = global_params.config['views']['nb_views']
     mesh = sso.mesh
@@ -342,7 +343,8 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
         ws = (256, 128)
     if verbose:
         log_proc.debug('Started "render_sso_coords_index_views" at {} locations for SSO {} using '
-                       'PyOpenGL platform "{}".'.format(len(coords), sso.id, os.environ['PYOPENGL_PLATFORM']))
+                       'PyOpenGL platform "{}".'.format(len(coords), sso.id,
+                                                        global_params.config['pyopengl_platform']))
     if nb_views is None:
         nb_views = global_params.config['views']['nb_views']
     # tim = time.time()

@@ -93,7 +93,7 @@ cell_objects:
   # into 'syn_ssv'
   cs_gap_nm: 250
   cs_filtersize: [13, 13, 7]
-  cs_nclosings: 13
+  cs_nclosings: 7  # TODO: bind to cs_filtersize
   # Parameters of agglomerated synapses 'syn_ssv'
   # mapping parameters in 'map_objects_to_synssv'; assignment of cellular
   # organelles to syn_ssv

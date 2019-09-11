@@ -641,21 +641,21 @@ class SuperSegmentationObject(object):
                              ''.format(data_type))
 
     #                                                                 PROPERTIES
-
     @property
-    def cell_type(self):
-        log_reps.warning('DEPRECATED USE OF `cell_type` attribute in SSV'
-                         ' {}'.format(self.id))
-        if self.cell_type_ratios is not None:
-            return np.argmax(self.cell_type_ratios)
-        else:
-            return None
+    def celltype(self, key: Optional[str] = None) -> int:
+        """
+        Returns the cell type classification result. Default: CMN model, if
+        `key` is specified returns the corresponding value loaded
+        by :func:`~lookup_in_attribute_dict`.
+        Args:
+            key: Key where classification result is stored.
 
-    @property
-    def cell_type_ratios(self):
-        log_reps.warning('DEPRECATED USE OF `cell_type_ratios` attribute in SSV'
-                         ' {}'.format(self.id))
-        return self.lookup_in_attribute_dict("cell_type_ratios")
+        Returns:
+            Cell type classification.
+        """
+        if key is None:
+            key = 'celltype_cnn_e3'
+        return self.lookup_in_attribute_dict(key)
 
     def weighted_graph(self, add_node_attr: Iterable[str] = ()) -> nx.Graph:
         """

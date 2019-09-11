@@ -779,14 +779,15 @@ def make_ply_string(dest_path, indices, vertices, rgba_color,
     vertices = vertices.astype(np.float32)
     indices = indices.astype(np.int32)
     if not rgba_color.ndim == 2:
-        rgba_color = np.array(rgba_color, dtype=np.int).reshape((-1, 4))
+        rgba_color = np.array(rgba_color, dtype=np.uint8).reshape((
+            -1, 4))
     if not indices.ndim == 2:
         indices = np.array(indices, dtype=np.int).reshape((-1, 3))
     if not vertices.ndim == 2:
         vertices = np.array(vertices, dtype=np.float32).reshape((-1, 3))
-    if len(rgba_color) != len(vertices) and len(rgba_color) == 4:
+    if len(rgba_color) != len(vertices) and len(rgba_color) == 1 and rgba_color.shape[1] == 4:
         # TODO: create per tree color instead of per vertex color
-        rgba_color = np.array([rgba_color for i in range(len(vertices))],
+        rgba_color = np.array([rgba_color[0] for i in range(len(vertices))],
                               dtype=np.uint8)
     else:
         if not (len(rgba_color) == len(vertices) and len(rgba_color[0]) == 4):
