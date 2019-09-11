@@ -733,7 +733,8 @@ class CelltypeViews(MultiViewData):
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
         self.reduce_context = reduce_context
-        self.cache_size = 2000 * 2  # random permutations/subset in selected SSV views, RandomFlip augmentation etc.
+        self.cache_size = 3000 * 2  # random permutations/subset in selected SSV views,
+        # RandomFlip augmentation etc.
         self.max_nb_cache_uses = self.cache_size
         self.current_cache_uses = 0
         assert n_classes == len(class_weights)
@@ -790,7 +791,8 @@ class CelltypeViews(MultiViewData):
             self.valid_l = self.valid_l[ixs]
         # NOTE: also performs 'naive_view_normalization'
         if self.view_cache[source] is None or self.current_cache_uses == self.max_nb_cache_uses:
-            sample_fac = np.max([int(self.nb_views / 20), 1])  # draw more ssv if number of views is high
+            sample_fac = np.max([int(self.nb_views / 10), 2])  # draw more ssv if number of views
+            # is high
             nb_ssv = self.n_classes * sample_fac
             sample_ixs = []
             l = []
@@ -847,7 +849,7 @@ class CelltypeViews(MultiViewData):
             d = d[:, :, :, ::self.reduce_context_fact, ::self.reduce_context_fact]
         if self.binary_views:
             d[d < 1.0] = 0
-        self.current_cache_uses += 1
+        self.current_cache_uses += batch_size
         if self.raw_only:
             return d[:, :1], l
         return tuple([d, l, syn_signs])
@@ -876,7 +878,8 @@ class CelltypeViews(MultiViewData):
             self.valid_l = self.valid_l[ixs]
         # NOTE: also performs 'naive_view_normalization'
         if self.view_cache[source] is None or self.current_cache_uses == self.max_nb_cache_uses:
-            sample_fac = np.max([int(self.nb_views / 20), 1])  # draw more ssv if number of views is high
+            sample_fac = np.max([int(self.nb_views / 10), 2])  # draw more ssv if number of views
+            # is high
             nb_ssv = self.n_classes * sample_fac
             sample_ixs = []
             l = []
@@ -915,6 +918,7 @@ class CelltypeViews(MultiViewData):
                 views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
                 self.view_cache[source][ii] = views
             self.label_cache[source] = l
+            print(f'Cache support: {np.unique(l, return_counts=True)}')
             # TODO: behaviour is highly dependent on sklearn version!
             # draw big cache batch from current SSOs from which training batches are drawn
             self.current_cache_uses = 0
@@ -932,7 +936,7 @@ class CelltypeViews(MultiViewData):
             d = d[:, :, :, ::self.reduce_context_fact, ::self.reduce_context_fact]
         if self.binary_views:
             d[d < 1.0] = 0
-        self.current_cache_uses += 1
+        self.current_cache_uses += batch_size
         if self.raw_only:
             return d[:, :1], l
         return tuple([d, l])

@@ -38,7 +38,7 @@ version = args[2]
 ssvs_large = []
 ssvs_small = []
 for g in ch:
-    # only generate SSV temporarily but do not write it to FS
+    # only generate SSV temporarily but do not write it to the file system
     # corresponding SVs are parsed explicitly ('sv_ids=sv_ixs')
     sv_ixs = np.sort(list(g.nodes()))
     sso = SuperSegmentationObject(sv_ixs[0], working_dir=wd, version=version,
@@ -50,12 +50,11 @@ for g in ch:
         new_G.add_edge(sso.get_seg_obj("sv", e[0]),
                        sso.get_seg_obj("sv", e[1]))
     sso._rag = new_G
-    if len(sso.sample_locations()) > np.inf:
-        # TODO: Currently does not work with `version=tmp`. Add as parameter to global_params.py
+    if len(sso.sample_locations()) > 1000:
+        #  TODO: Add as parameter to global_params.py
         ssvs_large.append(sso)
     else:
         ssvs_small.append(sso)
-
 # render huge SSVs in parallel, multiple jobs per SSV, use more threads than cores -> increase
 # GPU load
 render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True)
@@ -64,7 +63,6 @@ for ssv in ssvs_large:
     render_sso_coords_multiprocessing(ssv, wd, n_parallel_jobs,
                                       render_indexviews=False, return_views=False,
                                       render_kwargs=render_kwargs)
-
 render_kwargs = dict(add_cellobjects=False, woglia=False, overwrite=True,
                      skip_indexviews=True)
 # render small SSVs in parallel, one job per SSV
@@ -80,6 +78,5 @@ if len(ssvs_small) != 0:
         n_max_co_processes=n_parallel_jobs)
     folder_del = os.path.abspath(path_out + "/../")
     shutil.rmtree(folder_del, ignore_errors=True)
-
 with open(path_out_file, "wb") as f:
     pkl.dump("0", f)

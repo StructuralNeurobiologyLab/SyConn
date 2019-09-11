@@ -23,6 +23,7 @@ from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 from elektronn3.training.metrics import channel_metric
 from elektronn3.training import metrics
+import adabound
 
 
 def get_model():
@@ -35,7 +36,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
     parser.add_argument('-n', '--exp-name',
-                        default="celltype_GTv3_nclasscorrected_CV2_sgd_bs20_nbviews10",
+                        default="celltype_GTv3_nclasscorrected_CV2_adabound_bs20_nbviews10",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=5000000,
@@ -68,11 +69,11 @@ if __name__ == "__main__":
     max_steps = args.max_steps
     lr = 0.008
     lr_stepsize = 500
-    lr_dec = 0.995
+    lr_dec = 0.997
     batch_size = 20
 
     model = get_model()
-    if 0: #torch.cuda.device_count() > 1:
+    if torch.cuda.device_count() > 1:
         print("Let's use", torch.cuda.device_count(), "GPUs!")
         batch_size = batch_size * torch.cuda.device_count()
         # dim = 0 [20, xxx] -> [10, ...], [10, ...] on 2 GPUs
@@ -102,12 +103,13 @@ if __name__ == "__main__":
         train=False, transform=transform, use_syntype_scal=use_syntype_scal, **data_init_kwargs)
 
     # Set up optimization
-    optimizer = optim.SGD(
-        model.parameters(),
-        weight_decay=0.5e-4,
-        lr=lr,
-        # amsgrad=True
-    )
+    # optimizer = optim.SGD(
+    #     model.parameters(),
+    #     weight_decay=0.5e-4,
+    #     lr=lr,
+    #     # amsgrad=True
+    # )
+    optimizer = adabound.AdaBound(model.parameters(), lr=1e-3, final_lr=0.1)
     lr_sched = optim.lr_scheduler.StepLR(optimizer, lr_stepsize, lr_dec)
     schedulers = {'lr': lr_sched}
     # All these metrics assume a binary classification problem. If you have

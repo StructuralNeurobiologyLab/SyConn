@@ -237,9 +237,12 @@ def render_sso_coords(sso, coords, add_cellobjects=True, verbose=False, clahe=Fa
         log_proc.debug('Started "render_sso_coords" at {} locations for SSO {} using PyOpenGL'
                        ' platform "{}".'.format(
             len(coords), sso.id, global_params.config['pyopengl_platform']))
+        start = time.time()
     if nb_views is None:
         nb_views = global_params.config['views']['nb_views']
     mesh = sso.mesh
+    if verbose:
+        log_proc.debug(f'Loaded cell mesh after {time.time() - start} s.')
     if cellobjects_only:
         assert add_cellobjects, "Add cellobjects must be True when rendering" \
                                 "cellobjects only."
@@ -518,7 +521,8 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
     wd : string
         working directory for accessing data
     rendering_locations: array of locations to be rendered
-        if not given, rendering locations are retrieved from the SSV's SVs. Results will be stored at SV locations.
+        if not given, rendering locations are retrieved from the SSV's SVs.
+        Results will be stored at SV locations.
     n_jobs : int
         number of parallel jobs running on same node of cluster
     n_cores : int
@@ -567,7 +571,8 @@ def render_sso_coords_multiprocessing(ssv, wd, n_jobs, n_cores=1, rendering_loca
     sso_kwargs = {'ssv_id': ssv_id,
                   'working_dir': working_dir,
                   "version": ssv.version,
-                  'nb_cpus': n_cores}
+                  'nb_cpus': n_cores,
+                  'sv_ids': [sv.id for sv in ssv.svs]}
     # TODOO: refactor kwargs!
     render_kwargs_def = {'add_cellobjects': True, 'verbose': verbose, 'clahe': False,
                       'ws': None, 'cellobjects_only': False, 'wire_frame': False,

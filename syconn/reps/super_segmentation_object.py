@@ -568,7 +568,7 @@ class SuperSegmentationObject(object):
         Returns:
             Three flat arrays: indices, vertices, normals
         """
-        if not mesh_type in self._meshes:
+        if mesh_type not in self._meshes:
             return None
         if self._meshes[mesh_type] is None:
             if not self.mesh_caching:
@@ -932,7 +932,7 @@ class SuperSegmentationObject(object):
         return SegmentationObject(obj_id=obj_id, obj_type=obj_type,
                                   version=self.version_dict[obj_type],
                                   working_dir=self.working_dir, create=False,
-                                  scaling=self.scaling,
+                                  scaling=self.scaling, config=self.config,
                                   enable_locking=self.enable_locking_so)
 
     def get_seg_dataset(self, obj_type: str) -> SegmentationDataset:
@@ -2419,7 +2419,7 @@ class SuperSegmentationObject(object):
         """
         if dest_path is None:
             dest_path = self.skeleton_kzip_path
-        for ot in ["sj", "vc", "mi", "sv"]:  # determins rendering order in KNOSSOS
+        for ot in ["sj", "vc", "mi", "sv"]:  # determines rendering order in KNOSSOS
             if ot == "sj" and synssv_instead_sj:
                 ot = 'syn_ssv'
             self.mesh2kzip(obj_type=ot, dest_path=dest_path, ext_color=sv_color if

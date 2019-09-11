@@ -63,7 +63,7 @@ class Config(object):
         Returns:
             Path to config file (``config.yml``).
         """
-        return self.working_dir + "/config.yml"
+        return self._working_dir + "/config.yml"
 
     @property
     def config_exists(self):
@@ -220,35 +220,28 @@ class DynConfig(Config):
         """
         # first check if working directory was set in environ,
         # else check if it was changed in memory.
+        new_wd = None
         if 'syconn_wd' in os.environ and os.environ['syconn_wd'] is not None and \
             len(os.environ['syconn_wd']) > 0 and os.environ['syconn_wd'] != "None":
             if super().working_dir != os.environ['syconn_wd']:
-                super().__init__(os.environ['syconn_wd'])
-                self.log_main.info("Initialized stdout logging (level: {}). "
-                                   "Current working directory:"
-                                   " ".format(self['log_level']) +
-                                   colored("'{}'".format(self.working_dir), 'red'))
-                if self.initialized is False:
-                    from syconn import handler
-                    default_conf_p = os.path.dirname(handler.__file__) + 'config.yml'
-                    self.log_main.warning(f'Initialized working directory without '
-                                          f'existing config file at'
-                                          f' {self.path_config}. Using default '
-                                          f'parameters as defined in {default_conf_p}.')
+                new_wd = os.environ['syconn_wd']
         elif (global_params.wd is not None) and (len(global_params.wd) > 0) and \
                 (global_params.wd != "None") and (super().working_dir != global_params.wd):
-            super().__init__(global_params.wd)
-            self.log_main.info("Initialized stdout logging (level: {}). "
-                               "Current working directory:"
-                               " ".format(self['log_level']) +
-                               colored("'{}'".format(self.working_dir), 'red'))
-            if self.initialized is False:
-                from syconn import handler
-                default_conf_p = os.path.dirname(handler.__file__) + 'config.yml'
-                self.log_main.warning(f'Initialized working directory without '
-                                      f'existing config file at'
-                                      f' {self.path_config}. Using default '
-                                      f'parameters as defined in {default_conf_p}.')
+            new_wd = global_params.wd
+        if new_wd is None:
+            return
+        super().__init__(new_wd)
+        self.log_main.info("Initialized stdout logging (level: {}). "
+                           "Current working directory:"
+                           " ".format(self['log_level']) +
+                           colored("'{}'".format(new_wd), 'red'))
+        if self.initialized is False:
+            from syconn import handler
+            default_conf_p = os.path.dirname(handler.__file__) + 'config.yml'
+            self.log_main.warning(f'Initialized working directory without '
+                                  f'existing config file at'
+                                  f' {self.path_config}. Using default '
+                                  f'parameters as defined in {default_conf_p}.')
 
     @property
     def default_conf(self) -> Config:

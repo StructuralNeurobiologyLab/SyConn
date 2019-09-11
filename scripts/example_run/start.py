@@ -40,11 +40,11 @@ if __name__ == '__main__':
     prior_glia_removal = True
     key_val_pairs_conf = [
         ('prior_glia_removal', prior_glia_removal),
-        ('pyopengl_platform', 'egl'),
-        ('batch_proc_system', None),
+        ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
+        ('batch_proc_system', 'SLURM'),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
         ('ngpus_per_node', 2),
-        ('nnodes_total', 1),
+        ('nnodes_total', 4),
     ]
     chunk_size = (256, 256, 256)
     n_folders_fs = 1000

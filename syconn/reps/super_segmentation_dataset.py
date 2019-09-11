@@ -138,8 +138,8 @@ class SuperSegmentationDataset(object):
         self._config = config
 
         if working_dir is None:
-            if global_params.wd is not None or version == 'tmp':
-                self._working_dir = global_params.wd
+            if version == 'tmp' or global_params.config.working_dir is not None:
+                self._working_dir = global_params.config.working_dir
             else:
                 msg = "No working directory (wd) given. It has to be" \
                       " specified either in global_params, via kwarg " \
@@ -501,7 +501,8 @@ class SuperSegmentationDataset(object):
                                               mesh_caching=caching,
                                               view_caching=caching,
                                               enable_locking_so=False,
-                                              enable_locking=self.sso_locking)
+                                              enable_locking=self.sso_locking,
+                                              config=self.config)
             else:
                 sso = SuperSegmentationObject(obj_id,
                                               self.version,
@@ -515,7 +516,8 @@ class SuperSegmentationDataset(object):
                                               mesh_caching=caching,
                                               view_caching=caching,
                                               enable_locking_so=False,
-                                              enable_locking=self.sso_locking)
+                                              enable_locking=self.sso_locking,
+                                              config=self.config)
             sso._dataset = self
         else:
             sso = []

@@ -156,7 +156,9 @@ class SyConnBackend(object):
         self.logger.info('Initializing SyConn backend')
 
         self.ssd = ss.SuperSegmentationDataset(syconn_path,
-                                               sso_locking=False)
+                                               # deal with concurrency issues
+                                               sso_locking=False,
+                                               sso_caching=True)
 
         self.logger.info('SuperSegmentation dataset initialized.')
 

@@ -910,9 +910,9 @@ class main_class(QtGui.QDialog):
             neuron_id = self.obj_id_offs + ssv_id + 4
 
             params = [(self, ssv_id, neuron_id, 'sv', (128, 128, 128, 128)),
-                      (self, ssv_id, mi_id, 'mi', (0, 0, 255, 255)),
-                      (self, ssv_id, vc_id, 'vc', (0, 255, 0, 255)),
-                      (self, ssv_id, sj_id, 'sj', (0, 0, 0, 255))]
+                      (self, ssv_id, mi_id, 'mi', (0, 153, 255, 255)),
+                      (self, ssv_id, vc_id, 'vc', (int(0.175 * 255), int(0.585 * 255), int(0.301 * 255), 255)),
+                      (self, ssv_id, sj_id, 'sj', (240, 50, 50, 255))]
             #print('starting downloads')
             #time.sleep(1)
             start = time.time()
