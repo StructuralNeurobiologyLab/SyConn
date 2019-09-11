@@ -1,200 +1,75 @@
+# Dependencies marked with "(optional)" are not required for core functionality
+# and can be commented out if there are conflicts.
+
 name: pysy
 channels:
-  - menpo
+  - pytorch
   - conda-forge
   - defaults
+  - menpo
 dependencies:
-  - _tflow_select=2.3.0=mkl
-  - absl-py=0.7.0=py36_0
-  - astor=0.7.1=py36_0
-  - binutils_impl_linux-64=2.31.1=h6176602_1
-  - binutils_linux-64=2.31.1=h6176602_6
-  - blas=1.0=mkl
-  - boost=1.68.0=py36h8619c78_1001
-  - boost-cpp=1.68.0=h11c811c_1000
-  - bzip2=1.0.6=h14c3975_1002
-  - c-ares=1.15.0=h7b6447c_1
-  - ca-certificates=2019.1.23=0
-  - certifi=2019.3.9=py36_0
-  - cmake=3.12.2=h52cb24c_0
-  - cryptacular=1.4.1=py36h7b6447c_1
-  - cudatoolkit=9.2=0
-  - cudnn=6.0=0
-  - expat=2.2.6=he6710b0_0
-  - fftw=3.3.8=h14c3975_1002
-  - freeglut=3.0.0=hf484d3e_5
-  - gast=0.2.2=py36_0
-  - gcc_impl_linux-64=7.3.0=habb00fd_1
-  - gcc_linux-64=7.3.0=h553295d_6
-  - grpcio=1.16.1=py36hf8bcb03_1
-  - gxx_impl_linux-64=7.3.0=hdf63c60_1
-  - gxx_linux-64=7.3.0=h553295d_6
-  - hdf5=1.10.3=hba1933b_1001
-  - icu=58.2=hf484d3e_1000
-  - intel-openmp=2019.1=144
-  - jpeg=9c=h14c3975_1001
-  - krb5=1.16.1=h173b8e3_7
-  - libcurl=7.64.0=h20c2e04_2
-  - libedit=3.1.20181209=hc058e9b_0
-  - libffi=3.2.1=hd88cf55_4
-  - libgcc-ng=8.2.0=hdf63c60_1
-  - libgfortran-ng=7.2.0=hdf63c60_3
-  - libgpuarray=0.6.9=0
-  - libpng=1.6.36=h84994c4_1000
-  - libprotobuf=3.6.1=hd408876_0
-  - libssh2=1.8.0=h1ba5d50_4
-  - libstdcxx-ng=8.2.0=hdf63c60_1
-  - libtiff=4.0.10=h648cc4a_1001
-  - llvm=3.3=0
-  - markdown=3.0.1=py36_0
-  - mesa=10.5.4=0
-  - mkl=2019.1=144
-  - mkl-service=1.1.2=py36he904b0f_5
-  - mkl_fft=1.0.10=py36ha843d7b_0
-  - mkl_random=1.0.2=py36hd81dba3_0
-  - ncurses=6.1=he6710b0_1
-  - nose=1.3.7=py36_2
-  - openssl=1.1.1b=h7b6447c_1
-  - osmesa=12.2.2.dev=0
-  - pbkdf2=1.3=py36_1
-  - pip=19.0.1=py36_0
-  - pygpu=0.6.9=py36_0
-  - pyopengl=3.1.1a1=py36_0
-  - python=3.6.8=h0371630_0
-  - python-snappy=0.5.3=py36he6710b0_0
-  - readline=7.0=h7b6447c_5
-  - rhash=1.3.8=h1ba5d50_0
-  - setuptools=40.7.3=py36_0
-  - six=1.12.0=py36_0
-  - snappy=1.1.7=hbae5bb6_3
-  - sqlite=3.26.0=h7b6447c_0
-  - system=5.8=2
-  - termcolor=1.1.0=py36_1
-  - tk=8.6.8=hbc83047_0
-  - vigra=1.11.1=py36hb287d74_1007
-  - werkzeug=0.14.1=py36_0
-  - wheel=0.32.3=py36_0
-  - xz=5.2.4=h14c3975_4
-  - zlib=1.2.11=h7b6447c_3
-  - pip:
-    - alabaster==0.7.12
-    - anykeystore==0.2
-    - atomicwrites==1.3.0
-    - attrs==18.2.0
-    - babel==2.6.0
-    - backcall==0.1.0
-    - bcrypt==3.1.6
-    - cffi==1.12.1
-    - chardet==3.0.4
-    - click==7.0
-    - cloudpickle==0.8.0
-    - coloredlogs==10.0
-    - colorlog==4.0.2
-    - configobj==5.0.6
-    - cycler==0.10.0
-    - cython==0.29.5
-    - dask==1.1.1
-    - decorator==4.3.2
-    - defusedxml==0.5.0
-    - dill==0.2.9
-    - docutils==0.14
-    - fasteners==0.14.1
-    - flask==1.0.2
-    - future==0.17.1
-    - h5py==2.9.0
-    - humanfriendly==4.17
-    - hupper==1.5
-    - idna==2.8
-    - imageio==2.5.0
-    - imagesize==1.1.0
-    - ipython==6.5.0
-    - ipython-genutils==0.2.0
-    - itsdangerous==1.1.0
-    - jedi==0.13.2
-    - jinja2==2.10
-    - keras-applications==1.0.7
-    - keras-preprocessing==1.0.9
-    - kiwisolver==1.0.1
-    - llvmlite==0.26.0
-    - lz4==2.1.6
-    - m2r==0.2.1
-    - mako==1.0.7
-    - markupsafe==1.1.0
-    - matplotlib==3.0.2
-    - mistune==0.8.4
-    - monotonic==1.5
-    - more-itertools==6.0.0
-    - networkx==2.2
-    - numba==0.41.0
-    - numpy==1.16.0
-    - oauthlib==3.0.1
-    - opencv-python==4.0.0.21
-    - openmesh==1.1.3
-    - packaging==19.0
-    - pandas==0.24.1
-    - parso==0.3.4
-    - pastedeploy==2.0.1
-    - pexpect==4.6.0
-    - pickleshare==0.7.5
-    - pillow==5.4.1
-    - plaster==1.0
-    - plaster-pastedeploy==0.6
-    - pluggy==0.8.1
-    - plyfile==0.7
-    - prompt-toolkit==1.0.15
-    - protobuf==3.6.1
-    - psutil==5.5.0
-    - ptyprocess==0.6.0
-    - py==1.7.0
-    - pycparser==2.19
-    - pydotplus==2.0.2
-    - pygments==2.3.1
-    - pyparsing==2.3.1
-    - pyramid==1.10.2
-    - pyramid-mailer==0.15.1
-    - pytest==4.2.1
-    - pytest-runner==4.4
-    - python-dateutil==2.8.0
-    - python3-openid==3.1.0
-    - pytz==2018.9
-    - pywavelets==1.0.1
-    - repoze-sendmail==4.4.1
-    - requests==2.21.0
-    - requests-oauthlib==1.2.0
-    - scikit-image==0.14.2
-    - scikit-learn==0.19.1
-    - scipy==1.2.1
-    - seaborn==0.9.0
-    - simplegeneric==0.8.1
-    - sklearn==0.0
-    - snowballstemmer==1.2.1
-    - sphinx==1.8.4
-    - sphinx-autodoc-typehints==1.6.0
-    - sphinxcontrib-websupport==1.1.0
-    - sqlalchemy==1.2.18
-    - tbb==2019.0
-    - tensorboard==1.12.2
-    - tensorboardx==1.6
-    - tensorflow==1.12.0
-    - theano==0.8.2
-    - toolz==0.9.0
-    - torch==1.0.1.post2
-    - torchvision==0.2.1
-    - tqdm==4.31.1
-    - traitlets==4.3.2
-    - transaction==2.4.0
-    - translationstring==1.3
-    - urllib3==1.24.1
-    - velruse==1.1.1
-    - venusian==1.2.0
-    - vtk==8.1.2
-    - vtki==0.16.8
-    - wcwidth==0.1.7
-    - webob==1.8.5
-    - wtforms==2.2.1
-    - wtforms-recaptcha==0.3.2
-    - zope-deprecation==4.4.0
-    - zope-interface==4.6.0
-    - zope-sqlalchemy==1.1
-prefix: /u/pschuber/anaconda3/envs/pysy
+  # From -c pytorch
+  - pytorch =1.1  # (version depends on elektronn3 revision)
+  - torchvision
 
+  # From conda-forge and defaults
+  - python >=3.7  # (3.6 should also work)
+  - pip
+  - vigra
+  - freeglut
+  - pyopengl
+  - python-snappy
+  - m2r
+  - ipython
+  - h5py
+  - matplotlib
+  - tqdm
+  - scipy
+  - networkx
+  - m2r
+  - lz4
+  - flask
+  - fasteners
+  - numpy
+  - coloredlogs
+  - termcolor
+  - scikit-learn
+  - scikit-image
+  - pyopengl
+  - opencv
+  - numba
+  - openmesh-python
+  - prompt_toolkit
+  - vtki
+  - dill
+  - joblib
+  - seaborn
+  - pyyaml
+  - cython
+
+  # From -c menpo
+  - osmesa
+
+  # For running a tensorboard server (optional):
+  # (Currently disabled due to dependency conflicts. Please install tensorboard separately)
+  # - tensorflow
+  # - tensorboard
+
+  # For tests (optional):
+  - pytest
+  - pytest-runner
+  - pytest-cov
+  - pytest-xdist
+
+  # For docs (optional):
+  - sphinx
+  - sphinx_rtd_theme
+  - sphinx-autodoc-typehints
+
+  # Required dependencies that are not yet available via conda:
+  - pip:
+    - zmesh
+    - plyfile
+
+    - git+https://github.com/ELEKTRONN/elektronn3.git@phil#egg=elektronn3
+    - git+https://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
