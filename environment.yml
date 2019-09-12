@@ -46,14 +46,10 @@ dependencies:
   - seaborn
   - pyyaml
   - cython
+  - colorlog
 
   # From -c menpo
   - osmesa
-
-  # For running a tensorboard server (optional):
-  # (Currently disabled due to dependency conflicts. Please install tensorboard separately)
-  # - tensorflow
-  # - tensorboard
 
   # For tests (optional):
   - pytest
@@ -71,5 +67,12 @@ dependencies:
     - zmesh
     - plyfile
 
+    # For running a tensorboard server (optional):
+    # (Installing these via pip because currently conda packages are broken)
+    # TODO: Move these up to conda once they work again
+    - tensorflow
+    - tensorboard
+
+    # Pre-release packages
     - git+https://github.com/ELEKTRONN/elektronn3.git@phil#egg=elektronn3
     - git+https://github.com/knossos-project/knossos_utils@dev#egg=knossos_utils
