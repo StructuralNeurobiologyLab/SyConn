@@ -48,8 +48,8 @@ def model_performance(proba, labels, model_dir=None, prefix="", n_labels=3,
                   "\n%0.6f %0.6f %0.6f %0.6f %0.6f %d\n\n" \
                  % (fscore_beta, t_opt, f[np.argmax(f)], rec[np.argmax(f)],
                     prec[np.argmax(f)], roc_auc, len(proba))
-    header += classification_report(labels, np.argmax(proba, axis=1), digits=4,
-                                target_names=target_names)
+    header += classification_report(labels, np.argmax(proba, axis=1), labels=np.arange(len(target_names)),
+                                    digits=4, target_names=target_names)
     header += "acc.: %0.4f" % accuracy_score(labels, np.argmax(proba, axis=1))
     header += "\n-------------------------------\n"
     log_proc.info(header)

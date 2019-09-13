@@ -768,16 +768,16 @@ def merge_someshes(sos, nb_simplices=3, nb_cpus=1, color_vals=None,
     else:
         all_vert = np.concatenate(vert_lst)
     if len(ind_lst) == 0:
-        all_ind = np.zeros((0,))
+        all_ind = np.zeros((0,), dtype=np.uint)
     else:
         all_ind = np.concatenate(ind_lst)
-    # store index and vertex offset of every partial mesh
-    vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(
-        np.uint)
-    ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
-    for i in range(0, len(vert_lst)):
-        start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]
-        all_ind[start_ix:end_ix] += vert_offset[i]
+        # store index and vertex offset of every partial mesh
+        vert_offset = np.cumsum([0, ] + [len(verts) // nb_simplices for verts in vert_lst]).astype(
+            np.uint)
+        ind_ixs = np.cumsum([0, ] + [len(inds) for inds in ind_lst])
+        for i in range(0, len(vert_lst)):
+            start_ix, end_ix = ind_ixs[i], ind_ixs[i+1]
+            all_ind[start_ix:end_ix] += vert_offset[i]
 
     assert len(all_vert) == len(all_norm) or len(all_norm) == 0, \
         "Length of combined normals and vertices differ."

@@ -3061,7 +3061,8 @@ class SuperSegmentationObject(object):
         if not largeFoV:
             if view_props is None:
                 view_props = {}
-            return ssh.predict_sso_celltype(self, model, **view_props)  # OLD
+            return ssh.predict_sso_celltype(
+                self, model, pred_key_appendix=pred_key_appendix, **view_props)  # OLD
         if view_props is None:
             view_props = global_params.config['celltype']['view_properties_large']
         ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,

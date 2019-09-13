@@ -110,8 +110,8 @@ def nodes_in_pathlength(anno, max_path_len):
 
 
 def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
-                         model: 'Module', nb_views: int = 20,
-                         overwrite: bool = False):
+                         model: 'Module', nb_views: int = 20, use_syntype=True,
+                         overwrite: bool = False, pred_key_appendix=""):
     """
     Celltype prediction based on local views and synapse type ratio feature.
     Uses on file system cached views (also used for axon and spine prediction).
@@ -124,18 +124,20 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
     model : nn.Module
     nb_views : int
     overwrite : bool
+    pred_key_appendix : str
 
     Returns
     -------
 
     """
     sso.load_attr_dict()
-    if not overwrite and "celltype_cnn_e3" in sso.attr_dict:
+    pred_key = "celltype_cnn_e3" + pred_key_appendix
+    if not overwrite and pred_key in sso.attr_dict:
         return
     from ..handler.prediction import naive_view_normalization_new
     inp_d = sso_views_to_modelinput(sso, nb_views)
     inp_d = naive_view_normalization_new(inp_d)
-    if global_params.config.syntype_available:
+    if global_params.config.syntype_available and use_syntype:
         synsign_ratio = np.array([syn_sign_ratio_celltype(sso)] * len(inp_d))[..., None]
         res = model.predict_proba((inp_d, synsign_ratio))
     else:
@@ -143,8 +145,8 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
     clf = np.argmax(res, axis=1)
     ls, cnts = np.unique(clf, return_counts=True)
     pred = ls[np.argmax(cnts)]
-    sso.save_attributes(["celltype_cnn_e3"], [pred])
-    sso.save_attributes(["celltype_cnn_e3_probas"], [res])
+    sso.save_attributes([pred_key], [pred])
+    sso.save_attributes([f"{pred_key}_probas"], [res])
 
 
 def sso_views_to_modelinput(sso: 'super_segmentation.SuperSegmentationObject',

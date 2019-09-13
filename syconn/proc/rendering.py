@@ -356,10 +356,14 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
     # if verbose:
     #     print("Time for initialising MESH {:.2f}s."
     #                        "".format(tim1 - tim))
-    if len(vert) == 0:
+    if len(vert) == 0 or len(coords) == 0:
         msg = "No mesh for SSO {} found with {} locations.".format(sso, len(coords))
         log_proc.critical(msg)
-        return np.ones((len(coords), nb_views, ws[1], ws[0], 3), dtype=np.uint8) * 255
+        res = np.ones((len(coords), nb_views, ws[1], ws[0], 3), dtype=np.uint8) * 255
+        if not return_rot_matrices:
+            return res
+        else:
+            return np.zeros((len(coords), 16), dtype=np.uint8), res
     try:
         # color_array = id2rgba_array_contiguous(np.arange(len(ind) // 3))
         color_array = id2rgba_array_contiguous(np.arange(len(vert) // 3))
@@ -414,7 +418,6 @@ def render_sso_coords_index_views(sso, coords, verbose=False, ws=None,
                           '{}, {}; SSV ID {}'.format(
             scnd_largest, len(vert) // 3, sso.id))
     return ix_views
-
 
 
 def render_sso_coords_label_views(sso, vertex_labels, coords, verbose=False,
