@@ -101,7 +101,10 @@ if __name__ == "__main__":
     
     print("Generating merged cells")
     # 200 ~ 5000 cells
-    for syn_id in sd_synssv.ids[:2]:  # some arbitrary synapse IDs
+    count = 0
+    progress = 0
+    sampled_ids = sd_synssv.ids[:100]
+    for syn_id in sampled_ids:
         syn_obj = sd_synssv.get_segmentation_object(syn_id)
         syn_obj.load_attr_dict()
         c1, c2 = syn_obj.attr_dict['neuron_partners']
@@ -159,3 +162,11 @@ if __name__ == "__main__":
         merged_cell.save_skeleton_to_kzip(fname, additional_keys=['merger_gt'])
         merged_cell.meshes2kzip(fname)
         # TODO: export2kzip should run through
+
+        count += 1
+        if count == sampled_ids // 10:
+            count = 0
+            progress += 1
+            print("{}/{} cells generated".format(progress * 10, len(sampled_ids)))
+
+
