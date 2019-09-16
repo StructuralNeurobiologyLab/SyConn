@@ -249,6 +249,8 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
     raw_train, raw_valid, label_train, label_valid = train_test_split(all_raw_views,
                                                                       all_label_views, train_size=0.9,
                                                                       shuffle=False)
+    raw_train, raw_valid = raw_train.astype(np.uint8), raw_valid.astype(np.uint8)
+    label_train, label_valid = label_train.astype(np.uint8), label_valid.astype(np.uint8)
     # # raw_valid, raw_test, label_valid, label_test = train_test_split(raw_other, label_other, train_size=0.5, shuffle=False)  # Removed index views
     print("Writing h5 files.")
     os.makedirs(dest_dir, exist_ok=True)
@@ -415,6 +417,7 @@ if __name__ == "__main__":
         comp_window = 10240 * 3
         ws = (256, 128)
         dest_gt_dir = "/wholebrain/scratch/yliu/false_merger/{}".format(ws[0]) #output directory
+        # dest_gt_dir = "/home/kloping/wholebrain/scratch/yliu/false_merger/{}".format(ws[0])  # local test: output directory
         os.makedirs(dest_gt_dir, exist_ok=True)
 
         n_views = 3
