@@ -3049,8 +3049,9 @@ class SuperSegmentationObject(object):
     def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
                              largeFoV=False):
         """
-        Infer celltype classification via `model` (stored as `celltype_cnn_e3` and `celltype_cnn_e3_probas`)
-        and an optional cell embedding via `model_tnet` (stored as `latent_morph_ct`).
+        Infer celltype classification via `model` (stored as ``celltype_cnn_e3`` and
+        ``celltype_cnn_e3_probas`` in the :py:attr:`~attr_dict`) and an optional
+        cell morphology embedding via `model_tnet` (stored as ``latent_morph_ct``).
 
         Parameters
         ----------
