@@ -47,15 +47,8 @@ setup(
     keywords='machinelearning imageprocessing connectomics',
     packages=find_packages(exclude=['scripts']),
     python_requires='>=3.6, <4',
-    install_requires=['numpy==1.16.4', 'scipy', 'lz4', 'h5py', 'networkx',
-                      'fasteners', 'flask', 'coloredlogs', 'opencv-python',
-                      'pyopengl', 'scikit-learn>=0.21.3', 'scikit-image',
-                      'plyfile', 'termcolor', 'dill', 'tqdm', 'zmesh',
-                      'seaborn', 'pytest-runner', 'prompt-toolkit',
-                      'numba==0.45.0', 'matplotlib', 'vtki', 'joblib',
-                      'pyyaml', 'cython'],
-    setup_requires=setup_requires, tests_require=['pytest', 'pytest-cov',
-                                                  'pytest-xdist'],
+    setup_requires=setup_requires,
+    tests_require=['pytest', 'pytest-cov', 'pytest-xdist'],
     ext_modules=cython_out,
     entry_points={
         'console_scripts': [
