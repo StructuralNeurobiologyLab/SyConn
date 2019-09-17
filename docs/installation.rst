@@ -7,45 +7,23 @@ Installation
 Setup
 =====
 
-We recommend installing the latest Anaconda release. Then set up the python environment:
+Before you can set up SyConn, ensure that the
+`conda <https://docs.conda.io/projects/conda/en/latest/user-guide/install/>`_
+package manager is installed on your system.
+Then you can install SyConn and all of its dependencies into a new conda
+`environment <https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/environments.html>`_
+named "pysy" by running::
 
-    conda create -n pysy anaconda
-
-    source activate pysy
-
-Then install all prerequisites and finally git clone and install syconn:
-
-
-    conda install vigra -c conda-forge
-
-    conda install mesa -c anaconda
-
-    conda install osmesa -c menpo
-
-    conda install freeglut
-
-    conda install pyopengl
-
-    conda install snappy
-
-    conda install python-snappy
-
-    conda install numba==0.45.0 llvmlite==0.29
-
-    conda install tensorboard tensorflow
-
-    # the following torch setting seems to be more stable for new GPU/driver
-    conda install pytorch==1.1.0 torchvision cudatoolkit=10.0 -c pytorch
-
-    git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
-
+    git clone https://github.com/StructuralNeurobiologyLab/SyConn
     cd SyConn
+    conda env create -f environment.yml -n pysy
+    conda activate pysy
+    pip install --no-deps -v -e .
 
-    pip install -r requirements.txt
 
-    pip install .
+The last command will install SyConn in
+`editable <https://pip.pypa.io/en/stable/reference/pip_install/#editable-installs>`_
+mode, which is useful for development on SyConn itself. If you want to install
+it as a regular read-only package instead, replace the last command with::
 
-Or alternatively with the developer flag:
-
-    pip install -e .
-
+    pip install --no-deps -v .

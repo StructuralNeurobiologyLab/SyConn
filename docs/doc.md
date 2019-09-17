@@ -6,42 +6,27 @@
 * SyConn is based on the packages [elektronn3](https://github.com/ELEKTRONN/elektronn3) and [knossos-utils](https://github.com/knossos-project/knossos_utils)
 * [KNOSSOS](http://knossostool.org/) is used for visualization and annotation of 3D EM data sets.
 
-1.We recommend installing Anaconda and setting up a python environment:
+Before you can set up SyConn, ensure that the
+[conda](https://docs.conda.io/projects/conda/en/latest/user-guide/install/)
+package manager is installed on your system.
+Then you can install SyConn and all of its dependencies into a new conda
+[environment](https://docs.conda.io/projects/conda/en/latest/user-guide/concepts/environments.html)
+named "pysy" by running::
 
-```
-conda create -n pysy python=3.6 anaconda
-conda activate pysy
-```
+    git clone https://github.com/StructuralNeurobiologyLab/SyConn
+    cd SyConn
+    conda env create -f environment.yml -n pysy
+    conda activate pysy
+    pip install --no-deps -v -e .
 
-2.a) Either git clone and install syconn with all prerequisites:
 
-```
-git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
-cd SyConn
-sh install.sh
-```
+The last command will install SyConn in
+[editable](https://pip.pypa.io/en/stable/reference/pip_install/#editable-installs)
+mode, which is useful for development on SyConn itself. If you want to install
+it as a regular read-only package instead, replace the last command with::
 
-2.b) Or alternatively run these commands to install them manually:
+    pip install --no-deps -v .
 
-```
-conda install vigra -c conda-forge
-conda install mesa -c anaconda
-conda install osmesa -c menpo
-conda install freeglut
-conda install pyopengl
-conda install snappy
-conda install python-snappy
-conda install numba==0.45.0 llvmlite==0.29
-conda install tensorboard tensorflow
-
-# the following torch setting seems to be more stable for new GPU/driver
-echo y | conda install pytorch==1.1.0 torchvision cudatoolkit=10.0 -c pytorch
-
-git clone https://github.com/StructuralNeurobiologyLab/SyConn.git
-cd SyConn
-pip install -r requirements.txt
-pip install -e .
-```
 
 
 ## Example run
