@@ -1447,8 +1447,8 @@ class SuperSegmentationObject(object):
             weighted: Compute synapse-area weighted ratio.
             recompute: Ignore existing value.
             comp_types: All synapses that are formed on any of the
-                functional compartment types given in `comp_types` on the cell
-                reconstruction are used for computing the ratio (0: dendrite,
+                functional compartment types given in `comp_types` are used
+                for computing the ratio (0: dendrite,
                 1: axon, 2: soma). Default: [1, ].
             comp_types_partner: Compartment type of the partner cell. Default:
                 [0, ].
@@ -1478,10 +1478,11 @@ class SuperSegmentationObject(object):
                 continue
             if ax[other_cell_ix] not in comp_types_partner:
                 continue
-            if ax[other_cell_ix] != 1:
-                continue
             syn_signs.append(syn.attr_dict["syn_sign"])
             syn_sizes.append(syn.mesh_area / 2)
+        log_reps.debug(f'Used {len(syn_signs)} with a total size of '
+                       f'{np.sum(syn_sizes)} um^2 between {comp_types} '
+                       f'(this cell) and {comp_types_partner} (other cells).')
         if len(syn_signs) == 0 or np.sum(syn_sizes) == 0:
             return -1
         syn_signs = np.array(syn_signs)
@@ -2564,19 +2565,22 @@ class SuperSegmentationObject(object):
             Color for each possible prediction value (range(np.max(preds))
         k : int
             Number of nearest neighbors (average prediction)
+
         Returns
         -------
         None or [np.array, np.array, np.array]
         """
-        if not ply_fname.endswith(".ply"):
+        if ply_fname is not None and not ply_fname.endswith(".ply"):
             ply_fname += ".ply"
+        if dest_path is not None and ply_fname is None:
+            msg = "Specify 'ply_fanme' in order to save colored " \
+                  "mesh to k.zip."
+            log_reps.error(msg)
+            raise ValueError(msg)
         mesh = self.mesh
         col = colorcode_vertices(mesh[1].reshape((-1, 3)), pred_coords,
                                  preds, colors=colors, k=k)
-        if dest_path is None or ply_fname is None:
-            if not dest_path is None and ply_fname is None:
-                log_reps.warning("Specify 'ply_fanme' in order to save colored"
-                                 " mesh to k.zip.")
+        if dest_path is None:
             return mesh[0], mesh[1], col
         else:
             write_mesh2kzip(dest_path, mesh[0], mesh[1], mesh[2], col,
@@ -2619,8 +2623,8 @@ class SuperSegmentationObject(object):
         coords = sm.start_multiprocess_obj("rep_coord", params,
                                            nb_cpus=self.nb_cpus)
         coords = np.array(coords)
-        params = [[sv, {"thresh": thresh, "pred_key_appendix":
-            pred_key_appendix}] for sv in self.svs]
+        params = [[sv, {"thresh": thresh, "pred_key_appendix": pred_key_appendix}]
+                  for sv in self.svs]
         glia_preds = sm.start_multiprocess_obj("glia_pred", params,
                                                nb_cpus=self.nb_cpus)
         glia_preds = np.array(glia_preds)
@@ -3043,7 +3047,7 @@ class SuperSegmentationObject(object):
                                  '"predict_nodes" instead!')
 
     def predict_celltype_cnn(self, model, pred_key_appendix, model_tnet=None, view_props=None,
-                             largeFoV=True):
+                             largeFoV=False):
         """
         Infer celltype classification via `model` (stored as `celltype_cnn_e3` and `celltype_cnn_e3_probas`)
         and an optional cell embedding via `model_tnet` (stored as `latent_morph_ct`).
@@ -3056,6 +3060,7 @@ class SuperSegmentationObject(object):
         view_props : Optional[dict]
             Dictionary which contains view properties. If None, default defined in
             `global_params.py` will be used.
+        largeFoV : bool
 
         """
         if not largeFoV:
@@ -3068,6 +3073,9 @@ class SuperSegmentationObject(object):
         ssh.celltype_of_sso_nocache(self, model, pred_key_appendix=pred_key_appendix,
                                     overwrite=False, **view_props)
         if model_tnet is not None:
+            view_props = dict(view_props)  # create copy
+            if 'use_syntype' in view_props:
+                del view_props['use_syntype']
             ssh.view_embedding_of_sso_nocache(self, model_tnet, pred_key_appendix=pred_key_appendix,
                                               overwrite=True, **view_props)
 

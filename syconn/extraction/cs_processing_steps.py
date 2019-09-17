@@ -278,7 +278,7 @@ def combine_and_split_syn(wd, cs_gap_nm=300, ssd_version=None, syn_version=None,
 
     All objects of the resulting 'syn_ssv' SegmentationDataset contain the
     following attributes:
-    ['sj_ids', 'cs_ids', 'id_sj_ratio', 'id_cs_ratio', 'background_overlap_ratio',
+    ['syn_sign', 'syn_type_sym_ratio', 'sj_ids', 'cs_ids', 'id_sj_ratio', 'id_cs_ratio', 'background_overlap_ratio',
     'neuron_partners']
 
     Parameters
@@ -1013,7 +1013,8 @@ def syn_gen_via_cset_thread(args):
 
 def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
                          trafo_dict_path=None, stride=100,
-                         nb_cpus=None, n_max_co_processes=None):
+                         nb_cpus=None, n_max_co_processes=None,
+                         sym_label=1, asym_label=1):
     """TODO: will be refactored into single method when generating syn objects
     Extract synapse type from KnossosDatasets. Stores sym.-asym. ratio in
     SJ object attribute dict.
@@ -1027,6 +1028,10 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
     stride : int
     nb_cpus : int
     n_max_co_processes : int
+    sym_label: int
+        Label of symmetric class within `kd_sym_path`.
+    asym_label: int
+        Label of asymmetric class within `kd_asym_path`.
     """
     assert "syn_ssv" in sj_sd.version_dict
     paths = sj_sd.so_dir_paths
@@ -1035,7 +1040,8 @@ def extract_synapse_type(sj_sd, kd_asym_path, kd_sym_path,
     multi_params = []
     for path_block in [paths[i:i + stride] for i in range(0, len(paths), stride)]:
         multi_params.append([path_block, sj_sd.version, sj_sd.working_dir,
-                             kd_asym_path, kd_sym_path, trafo_dict_path])
+                             kd_asym_path, kd_sym_path, trafo_dict_path,
+                             sym_label, asym_label])
 
     # Running workers - Extracting mapping
     if not qu.batchjob_enabled():
@@ -1054,6 +1060,8 @@ def _extract_synapse_type_thread(args):
     kd_asym_path = args[3]
     kd_sym_path = args[4]
     trafo_dict_path = args[5]
+    sym_label = args[6]
+    asym_label = args[7]
 
     if trafo_dict_path is not None:
         with open(trafo_dict_path, "rb") as f:
@@ -1085,11 +1093,11 @@ def _extract_synapse_type_thread(args):
             # TODO: remvoe try-except
             if global_params.config.syntype_available:
                 try:
-                    asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl))
-                    sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl))
+                    asym_prop = np.mean(kd_asym.from_raw_cubes_to_list(vxl) == asym_label)
+                    sym_prop = np.mean(kd_sym.from_raw_cubes_to_list(vxl) == sym_label)
                 except:
                     log_extraction.error("Failed to read raw cubes during synapse type "
-                                   "extraction.")
+                                         "extraction.")
                     sym_prop = 0
                     asym_prop = 0
             else:

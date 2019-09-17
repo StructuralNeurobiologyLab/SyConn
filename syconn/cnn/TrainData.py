@@ -733,7 +733,7 @@ class CelltypeViews(MultiViewData):
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
         self.reduce_context = reduce_context
-        self.cache_size = 5000 * 2  # random permutations/subset in selected SSV views,
+        self.cache_size = 3000 * 2  # random permutations/subset in selected SSV views,
         # RandomFlip augmentation etc.
         self.max_nb_cache_uses = self.cache_size
         self.current_cache_uses = 0
@@ -878,7 +878,7 @@ class CelltypeViews(MultiViewData):
             self.valid_l = self.valid_l[ixs]
         # NOTE: also performs 'naive_view_normalization'
         if self.view_cache[source] is None or self.current_cache_uses == self.max_nb_cache_uses:
-            sample_fac = np.max([int(self.nb_views / 10), 3])  # draw more ssv if number of views
+            sample_fac = np.max([int(self.nb_views / 10), 2])  # draw more ssv if number of views
             # is high
             nb_ssv = self.n_classes * sample_fac
             sample_ixs = []

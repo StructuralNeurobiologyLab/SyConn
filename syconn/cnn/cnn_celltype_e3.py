@@ -18,7 +18,7 @@ import os
 import torch
 from torch import nn
 from torch import optim
-from elektronn3.models.simple import StackedConv2ScalarWithLatentAdd, Conv3DLayer
+from elektronn3.models.simple import StackedConv2ScalarWithLatentAdd, Conv3DLayer, StackedConv2Scalar
 from elektronn3.data.transforms import RandomFlip
 from elektronn3.data import transforms
 from elektronn3.training.metrics import channel_metric
@@ -26,49 +26,9 @@ from elektronn3.training import metrics
 import adabound
 
 
-class StackedConv2Scalar(nn.Module):
-    def __init__(self, in_channels, n_classes, dropout_rate=0.01, act='relu'):
-        super().__init__()
-        if act == 'relu':
-            act = nn.ReLU()
-        elif act == 'leaky_relu':
-            act = nn.LeakyReLU()
-        self.seq = nn.Sequential(
-            Conv3DLayer(in_channels, 20, (1, 5, 5), pooling=(1, 2, 2),
-                        dropout_rate=dropout_rate, act=act),
-            Conv3DLayer(20, 30, (1, 5, 5), pooling=(1, 2, 2),
-                        dropout_rate=dropout_rate, act=act),
-            Conv3DLayer(30, 40, (1, 4, 4), pooling=(1, 2, 2),
-                        dropout_rate=dropout_rate, act=act),
-            Conv3DLayer(40, 50, (1, 4, 4), pooling=(1, 2, 2),
-                        dropout_rate=dropout_rate, act=act),
-            Conv3DLayer(50, 60, (1, 2, 2), pooling=(1, 2, 2),
-                        dropout_rate=dropout_rate, act=act),
-            Conv3DLayer(60, 70, (1, 2, 2), pooling=(1, 2, 2),
-                        dropout_rate=dropout_rate, act=act),
-            Conv3DLayer(70, 70, (1, 1, 1), pooling=(1, 1, 1),
-                        dropout_rate=dropout_rate, act=act),
-        )
-        self.adaptavgpool = nn.AdaptiveAvgPool1d(100)  # does not seem to work properly
-        self.fc = nn.Sequential(
-            nn.Linear(100, 50),
-            act,
-            nn.Linear(50, 30),
-            act,
-            nn.Linear(30, n_classes),
-        )
-
-    def forward(self, x):
-        x = self.seq(x)
-        x = x.view(x.size()[0], 1, -1)  # AdaptiveAvgPool1d requires input of shape B C D
-        x = self.adaptavgpool(x)
-        x = self.fc(x.squeeze(1))  # remove auxiliary axis -> B C with C = n_classes
-        return x
-
-
 def get_model():
-    # model = StackedConv2ScalarWithLatentAdd(in_channels=4, n_classes=10, n_scalar=1)
-    model = StackedConv2Scalar(in_channels=4, n_classes=8)
+    model = StackedConv2ScalarWithLatentAdd(in_channels=4, n_classes=8, n_scalar=1)
+    # model = StackedConv2Scalar(in_channels=4, n_classes=8)
     return model
 
 
@@ -76,7 +36,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Train a network.')
     parser.add_argument('--disable-cuda', action='store_true', help='Disable CUDA')
     parser.add_argument('-n', '--exp-name',
-                        default="celltype_GTv4_nclasscorrected_CV2_sgd_bs40_nbviews20_biggercache",
+                        default="celltype_GTv4_syntype_CV1_sgd_bs40_nbviews20",
                         help='Manually set experiment name')
     parser.add_argument(
         '-m', '--max-steps', type=int, default=5000000,
@@ -98,8 +58,8 @@ if __name__ == "__main__":
     import elektronn3
     elektronn3.select_mpl_backend('agg')
     from elektronn3.training import Backup
-    # from elektronn3.training.trainer_scalarinput import Trainer
-    from elektronn3.training.trainer import Trainer
+    from elektronn3.training.trainer_scalarinput import Trainer
+    # from elektronn3.training.trainer import Trainer
 
     torch.manual_seed(0)
 
@@ -123,11 +83,11 @@ if __name__ == "__main__":
     data_init_kwargs = {"raw_only": False, "nb_views": 20, 'train_fraction': None,
                         'nb_views_renderinglocations': 4, #'view_key': "4_large_fov",
                         "reduce_context": 0, "reduce_context_fact": 1, 'ctgt_key': "ctgt_v4",
-                        'random_seed': 0,
-                        "binary_views": False, "n_classes": n_classes, 'class_weights': [1] * n_classes}
+                        'random_seed': 0, "binary_views": False,
+                        "n_classes": n_classes, 'class_weights': [1] * n_classes}
 
     if args.resume is not None:  # Load pretrained network
-        print('Resuming model from {}.'.format(s.path.expanduser(args.resume)))
+        print('Resuming model from {}.'.format(os.path.expanduser(args.resume)))
         try:  # Assume it's a state_dict for the model
             model.load_state_dict(torch.load(os.path.expanduser(args.resume)))
         except _pickle.UnpicklingError as exc:
@@ -135,7 +95,7 @@ if __name__ == "__main__":
             model = torch.jit.load(os.path.expanduser(args.resume), map_location=device)
 
     # Specify data set
-    use_syntype_scal = False
+    use_syntype_scal = True
     transform = transforms.Compose([RandomFlip(ndim_spatial=2), ])
     train_dataset = CelltypeViewsE3(
         train=True, transform=transform, use_syntype_scal=use_syntype_scal, **data_init_kwargs)

@@ -43,45 +43,45 @@ if __name__ == "__main__":
     gt_version = "ctgt_v4"
     new_ssd = SuperSegmentationDataset(working_dir=WD, version=gt_version)
 
-    ssd = SuperSegmentationDataset(working_dir=WD)
-    orig_ssvs = ssd.get_super_segmentation_object(ssv_ids)
-    for ssv in orig_ssvs:
-        if not (ssv.id in ssd.ssv_ids and os.path.isfile(ssv.attr_dict_path)):
-            msg = 'GT file contains SSV with ID {} which is not part of the ' \
-                  'used SSD.'.format(ssv.id)
-            log_main.warning(msg)
-            raise ValueError(msg)
-    copy_ssvs2new_SSD_simple(orig_ssvs, new_version=gt_version,
-                             target_wd=WD, safe=False)  # `safe=False` will overwrite existing data
-    new_ssd.save_dataset_deep(extract_only=True, )
+    # ssd = SuperSegmentationDataset(working_dir=WD)
+    # orig_ssvs = ssd.get_super_segmentation_object(ssv_ids)
+    # for ssv in orig_ssvs:
+    #     if not (ssv.id in ssd.ssv_ids and os.path.isfile(ssv.attr_dict_path)):
+    #         msg = 'GT file contains SSV with ID {} which is not part of the ' \
+    #               'used SSD.'.format(ssv.id)
+    #         log_main.warning(msg)
+    #         raise ValueError(msg)
+    # copy_ssvs2new_SSD_simple(orig_ssvs, new_version=gt_version,
+    #                          target_wd=WD, safe=False)  # `safe=False` will overwrite existing data
+    # new_ssd.save_dataset_deep(extract_only=True, )
+    #
+    # pbar = tqdm.tqdm(total=len(ssv_ids))
+    # for ii, ssv_id in enumerate(ssv_ids):
+    #     ssv = new_ssd.get_super_segmentation_object(ssv_id)
+    #     ssv.save_attributes(["cellttype_gt"], [ssv_labels[ii]])
+    #     # # previous run for "normal" bootstrap N-view predictions
+    #     ssv._render_rawviews(4, verbose=True, force_recompute=True)  # TODO: Make sure that copied files are always the same if `force_recompute` is set to False!
+    #     # # Large FoV bootstrapping
+    #     # # downsample vertices and get ~3 locations per comp_window
+    #     verts = ssv.mesh[1].reshape(-1, 3)
+    #     comp_window = 40960  # nm  -> pixel size: 80 nm
+    #     rendering_locs = generate_rendering_locs(verts, comp_window)
+    #     views = render_sso_coords(ssv, rendering_locs, verbose=True, ws=(512, 512), add_cellobjects=True,
+    #                               return_rot_mat=False, comp_window=comp_window, nb_views=4)
+    #     ssv.save_views(views, view_key="4_large_fov")
+    #
+    #     pbar.update()
+    # label_dc = {ssv_ids[kk]: ssv_labels[kk] for kk in range(len(ssv_ids))}
+    # write_obj2pkl(new_ssd.path + "/{}_labels.pkl".format(gt_version),
+    #              label_dc)
+    #
+    # X_train, X_test, y_train, y_test = train_test_split(
+    #     list(label_dc.keys()), list(label_dc.values()), test_size=0.50,
+    #     random_state=0, stratify=list(label_dc.values()))
+    # split_dc = {"train": X_train, "valid": X_test, "test": []}
+    # write_obj2pkl(path=new_ssd.path + "/{}_splitting.pkl".format(gt_version),
+    #               objects=split_dc)
 
-    pbar = tqdm.tqdm(total=len(ssv_ids))
-    for ii, ssv_id in enumerate(ssv_ids):
-        ssv = new_ssd.get_super_segmentation_object(ssv_id)
-        ssv.save_attributes(["cellttype_gt"], [ssv_labels[ii]])
-        # # previous run for "normal" bootstrap N-view predictions
-        ssv._render_rawviews(4, verbose=True, force_recompute=True)  # TODO: Make sure that copied files are always the same if `force_recompute` is set to False!
-        # # Large FoV bootstrapping
-        # # downsample vertices and get ~3 locations per comp_window
-        verts = ssv.mesh[1].reshape(-1, 3)
-        comp_window = 40960  # nm  -> pixel size: 80 nm
-        rendering_locs = generate_rendering_locs(verts, comp_window)
-        views = render_sso_coords(ssv, rendering_locs, verbose=True, ws=(512, 512), add_cellobjects=True,
-                                  return_rot_mat=False, comp_window=comp_window, nb_views=4)
-        ssv.save_views(views, view_key="4_large_fov")
-
-        pbar.update()
-    label_dc = {ssv_ids[kk]: ssv_labels[kk] for kk in range(len(ssv_ids))}
-    write_obj2pkl(new_ssd.path + "/{}_labels.pkl".format(gt_version),
-                 label_dc)
-
-    X_train, X_test, y_train, y_test = train_test_split(
-        list(label_dc.keys()), list(label_dc.values()), test_size=0.50,
-        random_state=0, stratify=list(label_dc.values()))
-    split_dc = {"train": X_train, "valid": X_test, "test": []}
-    write_obj2pkl(path=new_ssd.path + "/{}_splitting.pkl".format(gt_version),
-                  objects=split_dc)
-    raise()
     # test prediction, copy trained models, see paths to 'models' folder defined in global_params.config
     from syconn.handler.prediction import get_celltype_model_large_e3, \
         get_tripletnet_model_large_e3, get_celltype_model_e3
@@ -90,12 +90,12 @@ if __name__ == "__main__":
     from syconn.reps.super_segmentation import SuperSegmentationDataset, SuperSegmentationObject
     import tqdm
     split_dc = load_pkl2obj(path=new_ssd.path + "/{}_splitting.pkl".format(gt_version))
-    for m_name in ['celltype_GTv3_nclasscorrected_CV1_sgd_bs20_nbviews10',
-                   'celltype_GTv3_nclasscorrected_CV2_adabound_bs20_nbviews10',
-                   'celltype_GTv3_nclasscorrected_CV2_adabound_bs60_nbviews10',
-                   'celltype_GTv3_nclasscorrected_CV2_adabound_bs60_nbviews10_biggercache',
-                   'celltype_GTv3_nclasscorrected_CV2_sgd_bs20_nbviews10',
-                   'celltype_GTv3_nclasscorrected_CV1_adam_bs20_nbviews10']:
+    for m_name in ['celltype_GTv4_nclasscorrected_CV1_sgd_bs20_nbviews20',
+                   'celltype_GTv4_nclasscorrected_CV2_adabound_bs40_nbviews20_biggercache',
+                   'celltype_GTv4_nclasscorrected_CV2_sgd_bs20_nbviews20',
+                   'celltype_GTv4_nclasscorrected_CV2_adabound_bs20_nbviews20',
+                   'celltype_GTv4_nclasscorrected_CV2_adabound_bs40_nbviews20',
+                   'celltype_GTv4_nclasscorrected_CV2_sgd_bs40_nbviews20_biggercache']:
         m_path = '/wholebrain/u/pschuber/e3_training/' + m_name
         m = InferenceModel(m_path)
 
@@ -110,7 +110,8 @@ if __name__ == "__main__":
 
         # use appropriate validation set, according to the cross validation used.
         # TODO: change back to predict validation set, currently evaluates on training set for
-        #  sanity checks
+        #  sanity checks, for 'celltype_GTv4' models CV1 <=> CV2 swapped, due to wrong keyword
+        #  argument during DataClass init. in the trainer script.
         ssv_ids = split_dc['valid'] if 'CV2' in m_name else split_dc['train']
         pbar = tqdm.tqdm(total=len(ssv_ids))
 
@@ -167,11 +168,10 @@ if __name__ == "__main__":
         # pred_proba_large = np.array(pred_proba_large)
         pred_proba = np.array(pred_proba)
         gt_l = np.array(gt_l)
-        str2int_label = dict(STN=0, DA=1, MSN=2, LMAN=3, HVC=4, GP=5, FS=6, TAN=7, INT=8)
         int2str_label = {v: k for k, v in str2int_label.items()}
         dest_p = f"/wholebrain/scratch/pschuber/celltype_comparison/{m_name}/"
         os.makedirs(dest_p, exist_ok=True)
-        target_names = [int2str_label[kk] for kk in range(9)]
+        target_names = [int2str_label[kk] for kk in range(8)]
         #
         # # large
         # classes, c_cnts = np.unique(np.argmax(pred_proba_large, axis=1), return_counts=True)
@@ -179,14 +179,14 @@ if __name__ == "__main__":
         #               'distribution [labels, counts]: {}, {}'.format(classes, c_cnts))
         # model_performance(pred_proba_large, gt_l, dest_p n_labels=9,
         #                   target_names=target_names, prefix="large_")
-        #
+
         # standard
         classes, c_cnts = np.unique(pred_l, return_counts=True)
         log_main.info('Successful prediction [standard] with the following cell type class '
                       'distribution [labels, counts]: {}, {}'.format(classes, c_cnts))
-        model_performance(pred_proba, gt_l, dest_p, n_labels=9,
+        model_performance(pred_proba, gt_l, dest_p, n_labels=8,
                           target_names=target_names)
-        #
+
         # # tSNE
         # tsne_kwargs = {"n_components": 3, "random_state": 1, "perplexity": 30,
         #                "n_iter": 500}

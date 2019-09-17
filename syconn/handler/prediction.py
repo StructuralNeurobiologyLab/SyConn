@@ -581,7 +581,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                         target_channels: Optional[Iterable[Iterable[int]]] = None,
                         channel_thresholds: Optional[Iterable[Union[float, Any]]] = None,
                         log: Optional[Logger] = None, mag: int = 1,
-                        overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
+                        #overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
                         cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
     Helper function for dense dataset prediction. Runs predictions on the whole
@@ -609,8 +609,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
             for target kd is 1: probabilities are stored else: 0.5 as default
             e.g. ``channel_thresholds=[None,0.5,0.5]``.
         log: Logger.
-        mag: Data mag. level.
-        overlap_shape_tiles: Overlap in voxels [XYZ] used for each tile predicted during inference.
+        mag: Data magnification level.
+        overlap_shape_tiles: [WIP] Overlap in voxels [XYZ] used for each
+            tile predicted during inference.
             Currently the following chunk/tile properties are used additionally
             (`overlap_shape` is the per-chunk overlap)::
 
@@ -619,6 +620,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                 tile_shape = (chunk_size / n_tiles).astype(np.int)
                 # the final input shape must be a multiple of tile_shape
                 overlap_shape = tile_shape // 2
+
         cube_of_interest: Bounding box of the volume of interest (minimum and maximum
             coordinate in voxels in the respective magnification (see kwarg `mag`).
 
@@ -645,10 +647,10 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     if cube_of_interest is None:
         cube_of_interest = (np.zeros(3, ), kd.boundary // mag)
 
-    overlap_shape_tiles = np.array([30, 30, 20])
+    overlap_shape_tiles = np.array([30, 31, 20])
     overlap_shape = overlap_shape_tiles
     chunk_size = np.array([1024, 1024, 512])
-    tile_shape = [271, 271, 138]
+    tile_shape = [271, 181, 138]
 
     cd = ChunkDataset()
     cd.initialize(kd, cube_of_interest[1], chunk_size, target_path + '/cd_tmp/',
@@ -751,14 +753,14 @@ def dense_predictor(args):
         coords = np.array(np.array(ch.coordinates) - np.array(ol),
                           dtype=np.int)
         raw = kd.from_raw_cubes_to_matrix(size, coords, mag=mag)
-        start = time.time()
+        # start = time.time()
         pred = dense_predicton_helper(raw.astype(np.float32) / 255., predictor)
-        dt = time.time() - start
-        print(f'Finished prediction after {dt}s, thats'
-              f' {np.prod(out_shape[1:]) / dt / 1e6} MVx/s')
+        # dt = time.time() - start
+        # print(f'Finished prediction after {dt}s, thats'
+        #       f' {np.prod(out_shape[1:]) / dt / 1e6} MVx/s')
         # slice out the original input volume along XYZ, i.e. the last three axes
         pred = pred[..., ol[0]:-ol[0], ol[1]:-ol[1], ol[2]:-ol[2]]
-        start = time.time()
+        # start = time.time()
         for j in range(len(target_channels)):
             ids = target_channels[j]
             path = target_kd_path_list[j]
@@ -784,8 +786,8 @@ def dense_predictor(args):
                 overwrite=True, upsample=False,
                 nb_threads=global_params.config['ncores_per_node']//global_params.config['ngpus_per_node'],
                 as_raw=True, datatype=np.uint8)
-        dt = time.time() - start
-        print(f'Finished writing data after {dt}s.')
+        # dt = time.time() - start
+        # print(f'Finished writing data after {dt}s.')
 
 
 def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor') -> np.ndarray:
