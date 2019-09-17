@@ -237,18 +237,25 @@ if elektronn3_avail:
                 self,
                 train=True,
                 transform: Callable = Identity(),
+                use_syntype_scal=False,
                 **kwargs
         ):
             super().__init__()
             self.train = train
+            self.use_syntype_scal = use_syntype_scal
             self.transform = transform
             # TODO: add gt paths to config
             self.ctv = CelltypeViews(None, None, **kwargs)
 
         def __getitem__(self, index):
-            inp, target, syn_signs = self.ctv.getbatch_alternative(1, source='train' if self.train else 'valid')
-            inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
-            return inp[0], target.squeeze().astype(np.int), syn_signs[0].astype(np.float32)  # target should just be a scalar
+            if self.use_syntype_scal:
+                inp, target, syn_signs = self.ctv.getbatch_alternative(1, source='train' if self.train else 'valid')
+                inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
+                return inp[0], target.squeeze().astype(np.int), syn_signs[0].astype(np.float32)  # target should just be a scalar
+            else:
+                inp, target = self.ctv.getbatch_alternative_noscal(1, source='train' if self.train else 'valid')
+                inp, _ = self.transform(inp, None)  # Do not flip target label ^.^
+                return inp[0], target.squeeze().astype(np.int)
 
         def __len__(self):
             """Determines epoch size(s)"""
@@ -493,7 +500,7 @@ class Data(object):
             log_cnn.debug("Reseeding RNG in Process with PID: {}".format(self.pid))
 
     def __repr__(self):
-        return "%i-class Data Set: #training examples: %i and #validing: %i" \
+        return "%i-class Data Set: #training examples: %i and #validation: %i" \
         %(self.n_lab, self._training_count, len(self.valid_d))
 
     def getbatch(self, batch_size, source='train'):
@@ -587,10 +594,7 @@ class MultiViewData(Data):
                 raise ValueError('Value fraction can only be set if splitting dict is not available.')
             self.splitting_dict = load_pkl2obj(self.gt_dir +
                                                "%s_splitting.pkl" % gt_type)
-        classes, c_cnts = np.unique([self.label_dict[ix] for ix in
-                                 self.splitting_dict['train']], return_counts=True)
-        print('SSV class distribution in training set [labels, counts]: {}, {}'
-              ''.format(classes, c_cnts))
+
         self.ssd = SuperSegmentationDataset(working_dir, version=gt_type)
         if not load_data:
             self.test_d = np.zeros((1, 1))
@@ -602,7 +606,10 @@ class MultiViewData(Data):
             self.example_shape = self.train_d[:1].shape
             super(MultiViewData, self).__init__()
             return
-
+        for k, v in self.splitting_dict.items():
+            classes, c_cnts = np.unique([self.label_dict[ix] for ix in
+                                         self.splitting_dict[k]], return_counts=True)
+            print(f"{k} [labels, counts]: {classes}, {c_cnts}")
         # train data
         # get views of each SV
         self.train_d = [self.ssd.get_super_segmentation_object(ix).load_views(**view_kwargs)
@@ -726,7 +733,8 @@ class CelltypeViews(MultiViewData):
         self.nb_cpus = nb_cpus
         self.raw_only = raw_only
         self.reduce_context = reduce_context
-        self.cache_size = 2000 * 2  # random permutations/subset in selected SSV views, RandomFlip augmentation etc.
+        self.cache_size = 3000 * 2  # random permutations/subset in selected SSV views,
+        # RandomFlip augmentation etc.
         self.max_nb_cache_uses = self.cache_size
         self.current_cache_uses = 0
         assert n_classes == len(class_weights)
@@ -753,6 +761,10 @@ class CelltypeViews(MultiViewData):
         self.train_d = self.train_d[:, None]
         self.valid_d = self.valid_d[:, None]
         self.test_d = self.test_d[:, None]
+        for k, v in self.splitting_dict.items():
+            classes, c_cnts = np.unique([self.label_dict[ix] for ix in
+                                         self.splitting_dict[k]], return_counts=True)
+            print(f"{k} [labels, counts]: {classes}, {c_cnts}")
         super(MultiViewData, self).__init__()
 
     def getbatch_alternative(self, batch_size, source='train'):
@@ -779,14 +791,15 @@ class CelltypeViews(MultiViewData):
             self.valid_l = self.valid_l[ixs]
         # NOTE: also performs 'naive_view_normalization'
         if self.view_cache[source] is None or self.current_cache_uses == self.max_nb_cache_uses:
-            sample_fac = np.max([int(self.nb_views / 20), 1])  # draw more ssv if number of views is high
+            sample_fac = np.max([int(self.nb_views / 10), 2])  # draw more ssv if number of views
+            # is high
             nb_ssv = self.n_classes * sample_fac
             sample_ixs = []
             l = []
             labels2draw = np.arange(self.n_classes)
             np.random.shuffle(labels2draw)  # change order
             for i in labels2draw:
-                curr_nb_samples = nb_ssv // self.n_classes * self.class_weights[i]
+                curr_nb_samples = max(nb_ssv // self.n_classes * self.class_weights[i], 1)
                 try:
                     if source == "train":
                         sample_ixs.append(np.random.choice(self.train_d[self.train_l == i],
@@ -836,10 +849,97 @@ class CelltypeViews(MultiViewData):
             d = d[:, :, :, ::self.reduce_context_fact, ::self.reduce_context_fact]
         if self.binary_views:
             d[d < 1.0] = 0
-        self.current_cache_uses += 1
+        self.current_cache_uses += batch_size
         if self.raw_only:
             return d[:, :1], l
         return tuple([d, l, syn_signs])
+
+    def getbatch_alternative_noscal(self, batch_size, source='train'):
+        """
+        Preliminary tests showed inferior performance of models trained with sampling
+        batches with this method compared to "getbatch" below. Might be due to less
+        stochasticity (bigger cache).
+
+        Parameters
+        ----------
+        batch_size :
+        source :
+
+        Returns
+        -------
+
+        """
+        self._reseed()
+        if source == 'valid':
+            nb = len(self.valid_l)
+            ixs = np.arange(nb)
+            np.random.shuffle(ixs)
+            self.valid_d = self.valid_d[ixs]
+            self.valid_l = self.valid_l[ixs]
+        # NOTE: also performs 'naive_view_normalization'
+        if self.view_cache[source] is None or self.current_cache_uses == self.max_nb_cache_uses:
+            sample_fac = np.max([int(self.nb_views / 10), 2])  # draw more ssv if number of views
+            # is high
+            nb_ssv = self.n_classes * sample_fac
+            sample_ixs = []
+            l = []
+            labels2draw = np.arange(self.n_classes)
+            np.random.shuffle(labels2draw)  # change order
+            for i in labels2draw:
+                curr_nb_samples = max(nb_ssv // self.n_classes * self.class_weights[i], 1)
+                try:
+                    if source == "train":
+                        sample_ixs.append(np.random.choice(self.train_d[self.train_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    elif source == "valid":
+                        sample_ixs.append(np.random.choice(self.valid_d[self.valid_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    elif source == "test":
+                        sample_ixs.append(np.random.choice(self.test_d[self.test_l == i],
+                                                           curr_nb_samples, replace=True).tolist())
+                        l += [[i] * curr_nb_samples]
+                    else:
+                        raise NotImplementedError
+                except ValueError:  # requested class does not exist in current dataset
+                    pass
+            ssos = []
+            sample_ixs = np.concatenate(sample_ixs)
+            l = np.concatenate(l)
+            for ix in sample_ixs:
+                sso = self.ssd.get_super_segmentation_object(ix)
+                sso.nb_cpus = self.nb_cpus
+                ssos.append(sso)
+            self.view_cache[source] = [sso.load_views(view_key=self.view_key) for sso in ssos]
+            for ii in range(len(self.view_cache[source])):
+                views = self.view_cache[source][ii]
+                views = naive_view_normalization_new(views)
+                views = views.swapaxes(1, 0).reshape((4, -1, 128, 256))
+                self.view_cache[source][ii] = views
+            self.label_cache[source] = l
+            print(f'Cache support: {np.unique(l, return_counts=True)}')
+            # TODO: behaviour is highly dependent on sklearn version!
+            # draw big cache batch from current SSOs from which training batches are drawn
+            self.current_cache_uses = 0
+            self.sample_weights[source] = compute_class_weight('balanced',
+                                                               np.unique(self.label_cache[source]),
+                                                               self.label_cache[source])
+        ixs = np.random.choice(np.arange(len(self.view_cache[source])), batch_size, replace=False)
+        d, l = transform_celltype_data_views_alternative_noscal(
+            [self.view_cache[source][ix] for ix in ixs], [self.label_cache[source][ix] for ix in ixs],
+            batch_size, self.nb_views)
+        if self.reduce_context > 0:
+            d = d[:, :, :, (self.reduce_context/2):(-self.reduce_context/2),
+                self.reduce_context:-self.reduce_context]
+        if self.reduce_context_fact > 1:
+            d = d[:, :, :, ::self.reduce_context_fact, ::self.reduce_context_fact]
+        if self.binary_views:
+            d[d < 1.0] = 0
+        self.current_cache_uses += batch_size
+        if self.raw_only:
+            return d[:, :1], l
+        return tuple([d, l])
 
     def getbatch(self, batch_size, source='train'):
         self._reseed()
@@ -1060,6 +1160,44 @@ def transform_celltype_data_views_alternative(sso_views, labels, syn_signs, batc
             new_synsigns[cnt:(curr_nb_samples + cnt)] = new_synsigns[random_ix]
             cnt += curr_nb_samples
     return tuple([orig_views, new_labels, new_synsigns])
+
+
+def transform_celltype_data_views_alternative_noscal(sso_views, labels, batch_size,
+                                                 nb_views):
+    orig_views = np.zeros((batch_size, 4, nb_views, 128, 256), dtype=np.float32)
+    new_labels = np.zeros((batch_size, 1), dtype=np.int16)
+    cnt = 0
+    # sample_fac_sv = np.max([int(nb_views / 10), 1]) # draw more SV if #views is high
+    for ii, views in enumerate(sso_views):
+        curr_nb_samples = int(np.min([np.floor(views.shape[1]/nb_views), batch_size-cnt, batch_size//len(sso_views)]))
+        curr_nb_samples = np.max([curr_nb_samples, 1])
+        if curr_nb_samples == 0:
+            continue
+        view_sampling = np.random.choice(np.arange(views.shape[1]),
+                                         curr_nb_samples*nb_views, replace=False)
+        orig_views[cnt:(curr_nb_samples+cnt)] = views[:, view_sampling].reshape((4, curr_nb_samples,
+                                                                                 nb_views, 128, 256)).swapaxes(1, 0)
+        new_labels[cnt:(curr_nb_samples+cnt)] = labels[ii]
+        cnt += curr_nb_samples
+        if cnt == batch_size:
+            break
+    if cnt == 0:
+        print("--------------------------------------" 
+              "Number of views in batch is zero. " 
+              "Missing views and labels were filled with 0."
+              "--------------------------------------")
+    elif cnt < batch_size:
+        # print "--------------------------------------" \
+        #       "%d/%d samples were collected initially. Filling up missing" \
+        #       "samples with random set of those." \
+        #       "--------------------------------------" % (cnt, batch_size)
+        while cnt != batch_size:
+            curr_nb_samples = 1
+            random_ix = np.random.choice(np.arange(cnt), 1, replace=False)
+            orig_views[cnt:(curr_nb_samples + cnt)] = orig_views[random_ix]
+            new_labels[cnt:(curr_nb_samples + cnt)] = new_labels[random_ix]
+            cnt += curr_nb_samples
+    return tuple([orig_views, new_labels])
 
 
 def transform_celltype_data(ssos, labels, batch_size, nb_views, nb_cpus=1,

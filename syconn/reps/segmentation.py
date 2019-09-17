@@ -947,7 +947,7 @@ class SegmentationObject(object):
         elif self.type == "syn":
             color = (150, 50, 200, 255)
         elif self.type == "syn_ssv":
-            color = (150, 50, 200, 255)
+            color = (240, 50, 50, 255)
         elif self.type == "sj":
             color = (int(0.849 * 255), int(0.138 * 255), int(0.133 * 255), 255)
         elif self.type == "vc":

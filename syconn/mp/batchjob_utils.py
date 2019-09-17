@@ -32,7 +32,7 @@ from . import log_mp
 
 def batchjob_enabled():
     batch_proc_system = global_params.config['batch_proc_system']
-    if batch_proc_system is None:
+    if batch_proc_system is None or batch_proc_system == 'None':
         return False
     try:
         if batch_proc_system == 'QSUB':

@@ -1,10 +1,8 @@
 pipeline {
   agent any
-
   environment {
       PATH="/u/pschuber//anaconda3/bin:$PATH"
     }
-
   stages {
     stage('build') {
       steps {

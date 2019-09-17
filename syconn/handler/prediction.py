@@ -273,6 +273,41 @@ def zxy2xyz(vol: np.ndarray) -> np.ndarray:
     return vol
 
 
+def xyz2zyx(vol: np.ndarray) -> np.ndarray:
+    """
+    Swaps axes to ELEKTRONN convention ([M, .., X, Y, Z] -> [M, .., Z, X, Y]).
+
+    Parameters
+    ----------
+    vol : np.array [M, .., X, Y, Z]
+
+    Returns
+    -------
+    np.array [M, .., Z, X, Y]
+    """
+    # assert vol.ndim == 3  # removed for multi-channel support
+    # adapt data to ELEKTRONN conventions (speed-up)
+    vol = vol.swapaxes(-1, -3)  # [..., z, y, x]
+    return vol
+
+
+def zyx2xyz(vol: np.ndarray) -> np.ndarray:
+    """
+    Swaps axes to ELEKTRONN convention ([M, .., Z, X, Y] -> [M, .., X, Y, Z]).
+
+    Parameters
+    ----------
+    vol : np.array [M, .., Z, X, Y]
+
+    Returns
+    -------
+    np.array [M, .., X, Y, Z]
+    """
+    # assert vol.ndim == 3  # removed for multi-channel support
+    vol = vol.swapaxes(-1, -3)  # [..., x, y, z]
+    return vol
+
+
 def create_h5_from_kzip(zip_fname: str, kd_p: str,
                         foreground_ids: Optional[Iterable[int]] = None,
                         overwrite: bool = True, raw_data_offset: int = 75,
@@ -546,7 +581,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                         target_channels: Optional[Iterable[Iterable[int]]] = None,
                         channel_thresholds: Optional[Iterable[Union[float, Any]]] = None,
                         log: Optional[Logger] = None, mag: int = 1,
-                        overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
+                        #overlap_shape_tiles: Tuple[int, int, int] = (40, 40, 20),
                         cube_of_interest: Optional[Tuple[np.ndarray]] = None):
     """
     Helper function for dense dataset prediction. Runs predictions on the whole
@@ -574,8 +609,9 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
             for target kd is 1: probabilities are stored else: 0.5 as default
             e.g. ``channel_thresholds=[None,0.5,0.5]``.
         log: Logger.
-        mag: Data mag. level.
-        overlap_shape_tiles: Overlap in voxels [XYZ] used for each tile predicted during inference.
+        mag: Data magnification level.
+        overlap_shape_tiles: [WIP] Overlap in voxels [XYZ] used for each
+            tile predicted during inference.
             Currently the following chunk/tile properties are used additionally
             (`overlap_shape` is the per-chunk overlap)::
 
@@ -584,6 +620,7 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
                 tile_shape = (chunk_size / n_tiles).astype(np.int)
                 # the final input shape must be a multiple of tile_shape
                 overlap_shape = tile_shape // 2
+
         cube_of_interest: Bounding box of the volume of interest (minimum and maximum
             coordinate in voxels in the respective magnification (see kwarg `mag`).
 
@@ -604,22 +641,17 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         raise ValueError(msg)
     if channel_thresholds is None:
         channel_thresholds = [None for _ in range(n_channel)]
-    # init KnossosDataset:
+
     kd = KnossosDataset()
     kd.initialize_from_knossos_path(kd_path)
     if cube_of_interest is None:
         cube_of_interest = (np.zeros(3, ), kd.boundary // mag)
-    # chunk properties:
-    chunk_size = np.array([1024, 1024, 256], dtype=np.int)  # XYZ
-    n_tiles = np.array([4, 4, 16])
-    if 'example' in global_params.config.working_dir:
-        chunk_size = np.array([512, 512, 256], dtype=np.int)  # XYZ
-        n_tiles = np.array([4, 4, 16])
-    tile_shape = (chunk_size / n_tiles).astype(np.int)
-    # the final input shape must be a multiple of tile_shape
-    overlap_shape = tile_shape // 2
 
-    # init ChunkDataset:
+    overlap_shape_tiles = np.array([30, 31, 20])
+    overlap_shape = overlap_shape_tiles
+    chunk_size = np.array([1024, 1024, 512])
+    tile_shape = [271, 181, 138]
+
     cd = ChunkDataset()
     cd.initialize(kd, cube_of_interest[1], chunk_size, target_path + '/cd_tmp/',
                   box_coords=cube_of_interest[0], list_of_coords=[],
@@ -639,7 +671,6 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
         target_kd.initialize_from_knossos_path(path)
     # init QSUB parameters
     multi_params = chunk_ids
-    # on avg. four jobs per worker/GPU - reduce overhead of initializing model
     multi_params = chunkify(multi_params, global_params.config.ngpu_total)
     multi_params = [(ch_ids, kd_path, target_path, model_path, overlap_shape,
                      overlap_shape_tiles, tile_shape, chunk_size, n_channel, target_channels,
@@ -650,13 +681,13 @@ def predict_dense_to_kd(kd_path: str, target_path: str, model_path: str,
     n_cores_per_job = global_params.config['ncores_per_node'] //global_params.config['ngpus_per_node'] if\
         'example' not in global_params.config.working_dir else global_params.config['ncores_per_node']
     qu.QSUB_script(multi_params, "predict_dense", n_max_co_processes=global_params.config.ngpu_total,
-                   n_cores=n_cores_per_job, remove_jobfolder=True, log=log)
+                   n_cores=n_cores_per_job, remove_jobfolder=True, log=log,
+                   additional_flags="--gres=gpu:1")
     log.info('Finished dense prediction of {}'.format(", ".join(target_names)))
 
 
 def dense_predictor(args):
     """
-    TODO: Downsampling mechanism requires refactoring.
 
     Parameters
     ----------
@@ -678,7 +709,10 @@ def dense_predictor(args):
     -------
 
     """
-  
+    # TODO: remove chunk necessity
+    # TODO: clean up (e.g. redundant chunk sizes, ...)
+    # TODO: do not use xyz2zxy but just invert order..
+    #
     chunk_ids, kd_p, target_p, model_p, overlap_shape, overlap_shape_tiles,\
     tile_shape, chunk_size, n_channel, target_channels, target_kd_path_list, \
     channel_thresholds, mag, cube_of_interest = args
@@ -710,6 +744,7 @@ def dense_predictor(args):
                           apply_softmax=True)
     predictor.model.ae = False
     # predict Chunks:
+    print(f'Starting prediction of {len(chunk_ids)} Chunks with size {chunk_size}.')
     for ch_id in chunk_ids:
         ch = cd.chunk_dict[ch_id]
         ol = ch.overlap
@@ -718,9 +753,14 @@ def dense_predictor(args):
         coords = np.array(np.array(ch.coordinates) - np.array(ol),
                           dtype=np.int)
         raw = kd.from_raw_cubes_to_matrix(size, coords, mag=mag)
+        # start = time.time()
         pred = dense_predicton_helper(raw.astype(np.float32) / 255., predictor)
+        # dt = time.time() - start
+        # print(f'Finished prediction after {dt}s, thats'
+        #       f' {np.prod(out_shape[1:]) / dt / 1e6} MVx/s')
         # slice out the original input volume along XYZ, i.e. the last three axes
         pred = pred[..., ol[0]:-ol[0], ol[1]:-ol[1], ol[2]:-ol[2]]
+        # start = time.time()
         for j in range(len(target_channels)):
             ids = target_channels[j]
             path = target_kd_path_list[j]
@@ -746,6 +786,8 @@ def dense_predictor(args):
                 overwrite=True, upsample=False,
                 nb_threads=global_params.config['ncores_per_node']//global_params.config['ngpus_per_node'],
                 as_raw=True, datatype=np.uint8)
+        # dt = time.time() - start
+        # print(f'Finished writing data after {dt}s.')
 
 
 def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor') -> np.ndarray:
@@ -759,12 +801,12 @@ def dense_predicton_helper(raw: np.ndarray, predictor: 'Predictor') -> np.ndarra
         The inference result in CXYZ as uint8 between 0..255.
     """
     # transform raw data
-    raw = xyz2zxy(raw)
+    raw = xyz2zyx(raw)
     # predict: pred of the form (N, C, [D,], H, W)
     pred = predictor.predict(raw[None, None])
     pred = np.array(pred[0]) * 255  # remove N-axis
     pred = pred.astype(np.uint8)
-    pred = zxy2xyz(pred)
+    pred = zyx2xyz(pred)
     return pred
 
 
@@ -1022,7 +1064,7 @@ def get_celltype_model_e3():
         log_main.error(msg)
         raise ImportError(msg)
     path = global_params.config.mpath_celltype_e3
-    m = InferenceModel(path)
+    m = InferenceModel(path, bs=40)
     return m
 
 

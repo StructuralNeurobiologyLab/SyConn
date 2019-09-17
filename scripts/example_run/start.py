@@ -40,10 +40,10 @@ if __name__ == '__main__':
     prior_glia_removal = True
     key_val_pairs_conf = [
         ('prior_glia_removal', prior_glia_removal),
-        ('pyopengl_platform', 'egl'),
-        ('batch_proc_system', None),
+        ('pyopengl_platform', 'egl'),  # 'osmesa' or 'egl'
+        ('batch_proc_system', None),  # None, 'SLURM' or 'QSUB'
         ('ncores_per_node', 20),
-        ('ngpus_per_node', 1),
+        ('ngpus_per_node', 2),
         ('nnodes_total', 1),
     ]
     chunk_size = (256, 256, 256)
@@ -151,11 +151,11 @@ if __name__ == '__main__':
              ' SyConn pipeline.'.format(bd))
     log.info('Example data will be processed in "{}".'.format(example_wd))
 
-    # START SyConn
-    log.info('Step 0/8 - Predicting sub-cellular structures')
-    exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
-    time_stamps.append(time.time())
-    step_idents.append('Dense predictions')
+    # # START SyConn
+    # log.info('Step 0/8 - Predicting sub-cellular structures')
+    # exec_dense_prediction.predict_myelin()  # myelin is not needed before `run_create_neuron_ssd`
+    # time_stamps.append(time.time())
+    # step_idents.append('Dense predictions')
 
     log.info('Step 1/8 - Creating SegmentationDatasets (incl. SV meshes)')
     exec_init.init_cell_subcell_sds(chunk_size=chunk_size, n_folders_fs=n_folders_fs,

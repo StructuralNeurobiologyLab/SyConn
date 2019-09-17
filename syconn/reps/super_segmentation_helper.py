@@ -110,8 +110,8 @@ def nodes_in_pathlength(anno, max_path_len):
 
 
 def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
-                         model: 'Module', nb_views: int = 20,
-                         overwrite: bool = False):
+                         model: 'Module', nb_views: int = 20, use_syntype=True,
+                         overwrite: bool = False, pred_key_appendix=""):
     """
     Celltype prediction based on local views and synapse type ratio feature.
     Uses on file system cached views (also used for axon and spine prediction).
@@ -124,18 +124,22 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
     model : nn.Module
     nb_views : int
     overwrite : bool
+    use_syntype : bool
+        Use the type of the pre-synapses.
+    pred_key_appendix : str
 
     Returns
     -------
 
     """
     sso.load_attr_dict()
-    if not overwrite and "celltype_cnn_e3" in sso.attr_dict:
+    pred_key = "celltype_cnn_e3" + pred_key_appendix
+    if not overwrite and pred_key in sso.attr_dict:
         return
     from ..handler.prediction import naive_view_normalization_new
     inp_d = sso_views_to_modelinput(sso, nb_views)
     inp_d = naive_view_normalization_new(inp_d)
-    if global_params.config.syntype_available:
+    if global_params.config.syntype_available and use_syntype:
         synsign_ratio = np.array([syn_sign_ratio_celltype(sso)] * len(inp_d))[..., None]
         res = model.predict_proba((inp_d, synsign_ratio))
     else:
@@ -143,8 +147,8 @@ def predict_sso_celltype(sso: 'super_segmentation.SuperSegmentationObject',
     clf = np.argmax(res, axis=1)
     ls, cnts = np.unique(clf, return_counts=True)
     pred = ls[np.argmax(cnts)]
-    sso.save_attributes(["celltype_cnn_e3"], [pred])
-    sso.save_attributes(["celltype_cnn_e3_probas"], [res])
+    sso.save_attributes([pred_key], [pred])
+    sso.save_attributes([f"{pred_key}_probas"], [res])
 
 
 def sso_views_to_modelinput(sso: 'super_segmentation.SuperSegmentationObject',
@@ -1994,7 +1998,7 @@ def semseg2mesh(sso, semseg_key, nb_views=None, dest_path=None, k=1,
 
 def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
                             comp_window, pred_key_appendix="", verbose=False,
-                            overwrite=True):
+                            overwrite=True, use_syntype=True):
     """
     Renders raw views at rendering locations determined by `comp_window`
     and according to given view properties without storing them on the file
@@ -2018,6 +2022,8 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
     verbose : bool
         Adds progress bars for view generation.
     overwrite : bool
+    use_syntype : bool
+        Use type of presynaptic synapses.
 
     Returns
     -------
@@ -2047,9 +2053,12 @@ def celltype_of_sso_nocache(sso, model, ws, nb_views_render, nb_views_model,
 
     from ..handler.prediction import naive_view_normalization_new
     inp_d = sso_views_to_modelinput(sso, nb_views_model, view_key=tmp_view_key)
-    synsign_ratio = np.array([syn_sign_ratio_celltype(sso)] * len(inp_d))[..., None]
     inp_d = naive_view_normalization_new(inp_d)
-    res = model.predict_proba((inp_d, synsign_ratio), bs=5)
+    if use_syntype:
+        synsign_ratio = np.array([syn_sign_ratio_celltype(sso)] * len(inp_d))[..., None]
+        res = model.predict_proba((inp_d, synsign_ratio), bs=40)
+    else:
+        res = model.predict_proba(inp_d, bs=40)
     clf = np.argmax(res, axis=1)
     ls, cnts = np.unique(clf, return_counts=True)
     pred = ls[np.argmax(cnts)]
@@ -2287,7 +2296,7 @@ def syn_sign_ratio_celltype(ssv: 'super_segmentation.SuperSegmentationObject',
     Ratio of symmetric synapses (between 0 and 1; -1 if no synapse objects)
     on specified functional compartments (`comp_types`) of the cell
     reconstruction. Does not include compartment information of the partner
-    cell. See :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.syn_sign_ration`
+    cell. See :func:`~syconn.reps.super_segmentation_object.SuperSegmentationObject.syn_sign_ratio`
      for this.
 
     Todo:

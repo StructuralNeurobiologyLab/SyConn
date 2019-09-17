@@ -434,8 +434,7 @@ def multi_view_mesh_coords(mesh, coords, rot_matrices, edge_lengths, alpha=None,
     np.array
         Returns array of views, else None
     """
-    if os.environ['PYOPENGL_PLATFORM'] != 'egl':
-        egl_args = None
+    egl_args = None
     if nb_views is None:
         nb_views = global_params.config['views']['nb_views']
     # center data
