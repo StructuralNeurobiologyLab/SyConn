@@ -18,7 +18,7 @@ named "pysy" by running::
     cd SyConn
     conda env create -f environment.yml -n pysy
     conda activate pysy
-    pip install -v -e --no-deps .
+    pip install --no-deps -v -e .
 
 
 The last command will install SyConn in
@@ -26,4 +26,4 @@ The last command will install SyConn in
 mode, which is useful for development on SyConn itself. If you want to install
 it as a regular read-only package instead, replace the last command with::
 
-    pip install -v --no-deps .
+    pip install --no-deps -v .
