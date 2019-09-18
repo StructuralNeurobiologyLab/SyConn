@@ -103,11 +103,18 @@ if __name__ == "__main__":
     # 200 ~ 5000 cells
     count = 0
     progress = 0
+    cell_combinations = set()
     sampled_ids = sd_synssv.ids[:100]
     for syn_id in sampled_ids:
         syn_obj = sd_synssv.get_segmentation_object(syn_id)
         syn_obj.load_attr_dict()
         c1, c2 = syn_obj.attr_dict['neuron_partners']
+        cell_combinations.add((c1, c2))
+
+        # check if the combination [c1, c2] already exist:
+        for comb in cell_combinations:
+            if c1 in comb and c2 in comb:
+                continue
 
         cell_obj1, cell_obj2 = ssd.get_super_segmentation_object([c1, c2])
         merged_cell = merge_superseg_objects(cell_obj1, cell_obj2)
