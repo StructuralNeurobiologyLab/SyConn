@@ -23,17 +23,39 @@ from syconn.mp.mp_utils import start_multiprocess_imap
 import re
 from multiprocessing import cpu_count
 import os, glob
+import zipfile
 # from scipy.misc import imsave
 from imageio import imwrite
 from sklearn.model_selection import train_test_split
 import glob
 global initial_run
 
+
+def check_kzip_completeness(data_path: str, fnames: list):
+    """
+    Check the completeness of the kzip file, each kzip file must contain:
+    meta.pkl, mi.pkl, sj.pkl, sv.pkl, sv.pkl, vc.pkl and annotation.xml
+    """
+    filtered_fnames = []
+    for file_name in fnames:
+        kzip_path = data_path + '/' + file_name
+        zip = zipfile.ZipFile(kzip_path)
+        files = zip.namelist()
+
+        if zip is not None and set(files) == {'meta.pkl', 'annotation.xml', 'sj.ply', 'vc.ply', 'mi.ply', 'sv.ply'}:
+            filtered_fnames.append(file_name)
+
+    return filtered_fnames
+
 def get_all_fname(data_path):
+    """
+    Get file names in the given path
+    """
     fnames = []
     cell_combinations = set()
     os.chdir(data_path)
 
+    # count = 0
     for file in glob.glob("*.k.zip"):
         # filter out duplicate merged_cells
         cell_ids = re.findall(r"(\d+)", data_path + file)[1:]
@@ -41,10 +63,8 @@ def get_all_fname(data_path):
             continue
         cell_combinations.add(tuple(cell_ids))
 
-        fnames.append(file)
-
-    print("data dir: {}".format(data_path))
-    print("files in total: {}".format(len(fnames)))
+        fnames.append('/' + file)
+        # count += 1
     return fnames
 
 
@@ -180,7 +200,7 @@ def generate_label_views(kzip_path, ssd_version, gt_type, n_voting=40, nb_views=
 
 
 def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir=None,
-                  n_voting=40, ws=(256, 128), comp_window=8e3, h5_suffix=""):
+                  n_voting=0, ws=(256, 128), comp_window=8e3, h5_suffix=""):
     """
     Generates a .npy GT file from all kzip paths.
 
@@ -241,8 +261,8 @@ def GT_generation_from_kzip(kzip_paths, ssd_version, gt_type, nb_views, dest_dir
         all_raw_views.append(raw_v)
         all_label_views.append(label_v)
         # @debug
-        print("all_raw_views: {}".format(type(all_raw_views)))
-        print("all_label_views: {}".format(type(all_label_views)))
+        # print("all_raw_views: {}".format(type(all_raw_views)))
+        # print("all_label_views: {}".format(type(all_label_views)))
         # all_index_views.append(index_v)  # Removed index views
 
     all_raw_views = np.concatenate(all_raw_views)
@@ -428,6 +448,7 @@ def gt_generation_helper(args):
 
 
 if __name__ == "__main__":
+
     #############################
     # Unit test
     ############################
@@ -443,32 +464,12 @@ if __name__ == "__main__":
         n_views = 3
         label_file_folder = "/wholebrain/u/yliu/develop/SyConn/scripts/false_merger/generated_cells"
         # label_file_folder = "/home/kloping/mpi_develop/develop/SyConn/scripts/false_merger" # local test
-        # file_names = ["/syn169316_cells17456256_17435397.k.zip"]
-        #               # "/syn669316_cells31272448_26034194.k.zip"]  # Test
-        file_names = get_all_fname(label_file_folder)
+        # file_names = ["/syn78739_cells33286658_30666759.k.zip",
+        #               "/syn669316_cells31272448_26034194.k.zip",
+        #               "syn373853_cells8636931_3062786.k.zip"]  # Test
+        all_file_names = get_all_fname(label_file_folder)
+        file_names = check_kzip_completeness(label_file_folder, all_file_names)
         file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
-        GT_generation_from_kzip(file_paths, 'merger_gt', 'merger_gt', n_views, ws=ws, comp_window=comp_window)
-
-    ###########################
-    # actual block
-    ###########################
-    if 0:
-        comp_window = 10240 * 3  # 40 nm pixel size
-        ws = (256, 128)
-        dest_gt_dir = "/wholebrain/scratch/yliu/false_merger/{}".format(ws[0]) #output directory
-        os.makedirs(dest_gt_dir, exist_ok=True)
-        global_params.wd = "/wholebrain/scratch/areaxfs3/"
-        assert global_params.wd == "/wholebrain/scratch/areaxfs3/"
-        initial_run = False
-        n_views = 3
-        # Kzip
-        label_file_folder = "/wholebrain/scratch/areaxfs3/ssv_spgt/" \
-                            "spiness_skels_annotated/"
-        file_names = ["/27965455.039.k.zip",
-                      "/23044610.037.k.zip", "/4741011.074.k.zip",
-                      "/18279774.089.k.zip", "/26331138.046.k.zip"]
-        file_paths = [label_file_folder + "/" + fname for fname in file_names][::-1]
-     #  GT_generation_from_kzip(kzip_paths, ssd_version, gt_type,    nb_views, dest_dir=None, n_voting=40, ws=(256, 128), comp_window=8e3, h5_suffix="")
         GT_generation_from_kzip(file_paths, 'merger_gt', 'merger_gt', n_views, ws=ws, comp_window=comp_window)
 
     # spiness
